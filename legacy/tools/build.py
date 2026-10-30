@@ -70,4 +70,9 @@ s=s.replace('/* ===== Alfa Romeo Stradale 1967 (imported model) ===== */','/* ==
 s=s.replace('/vec3(.237,.505,.68)','/vec3(.215,.468,.586)').replace('/vec3(.066,.309,.382)','/vec3(.079,.292,.343)')
 import names;s=names.apply(s)
 s=s.replace(M,'if(window.__TEST)window.__ev=s=>eval(s);'+M,1) if M in s else s
+# local vendored libraries (offline-capable, no CDN dependency); inline-script imports resolve against the page URL
+s=s.replace('https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/','../lib/three/jsm/')
+s=s.replace('https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js','../lib/three/build/three.module.js')
+s=s.replace('https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.16/build/index.module.js','../lib/bvh/index.module.js')
+assert 'cdn.jsdelivr' not in s
 open(P('index.html'),'w').write(s);print('built index.html',len(s))
