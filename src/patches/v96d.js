@@ -1,0 +1,2 @@
+/* ===== v96d: our own world texture set (bone / gunmetal / slate / brass, worn edges) — terrain colour means for distance blending ===== */
+Object.assign(TMEAN77,{"tmud":[0.407,0.329,0.262],"tsand":[0.852,0.789,0.646],"tsand2":[0.619,0.555,0.452],"tsnow":[0.883,0.903,0.919],"tdry":[0.575,0.496,0.323],"tforest":[0.311,0.264,0.194],"wood":[0.43,0.307,0.22],"tgrass":[0.388,0.42,0.222],"cliffa":[0.416,0.426,0.443],"cliffb":[0.361,0.283,0.226],"cdmg":[0.611,0.6,0.57],"cgold":[0.667,0.654,0.619],"crun":[0.626,0.623,0.605],"tice":[0.698,0.801,0.853],"twet":[0.254,0.225,0.205]});

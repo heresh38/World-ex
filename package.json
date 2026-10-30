@@ -1,0 +1,16 @@
+{
+  "name": "open-world-drive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sci-fi open-world driving and looter-shooter in one HTML page (Three.js).",
+  "scripts": {
+    "build": "python3 tools/build.py",
+    "serve": "python3 -m http.server 8765",
+    "test": "node tools/test/smoke.js",
+    "preview": "python3 tools/preview.py",
+    "textures": "python3 tools/texgen95.py tex && python3 tools/texgen97.py tex"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
+  }
+}
