@@ -5,7 +5,7 @@ const KEY = 'worldex_save_v1';
 
 export const DEFAULT_SETTINGS = {
   quality: 'medium', resScale: 1, dynamicRes: true, sens: 1.0, invertY: false, fov: 70,
-  master: .8, music: .6, sfx: .9, muted: false, showFps: false,
+  master: .8, music: .6, sfx: .9, muted: false, showFps: false, view: 'first',
 };
 
 let uid = Date.now() % 100000;

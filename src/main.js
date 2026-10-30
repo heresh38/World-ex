@@ -10,6 +10,8 @@ import { Combat } from './game/combat.js';
 import { EnemyManager } from './game/enemies.js';
 import { Vehicles } from './game/vehicles.js';
 import { FX } from './game/fx.js';
+import { Viewmodel } from './game/viewmodel.js';
+import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 import { ShipWorld } from './worlds/ship.js';
@@ -23,7 +25,7 @@ const MODELS = [
   ['ship_interior', 'ship_interior.glb', 10], ['player_female', 'player_female.glb', 5], ['player_male', 'player_male.glb', 5],
   ['enemy_trooper', 'enemy_trooper.glb', 4], ['enemy_brute', 'enemy_brute.glb', 4], ['npc_vendor', 'npc_vendor.glb', 4],
   ['car_sport', 'car_sport.glb', 2], ['car_utility', 'car_utility.glb', 2], ['ship_jumper', 'ship_jumper.glb', 2],
-  ['ship_dropship', 'ship_dropship.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
+  ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]),
 ];
 const TEXTURES = ['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss', 'facade_e', 'ribbon_e'];
@@ -46,6 +48,8 @@ class Game {
     this.time = 0; this.fps = 60; this.state = 'boot'; this.paused = false;
     this.scene = null; this.world = null;
     this.input.onLockChange = locked => this.onLockChange(locked);
+    this.touch = isTouchDevice() ? new TouchControls(this) : null;
+    if (this.touch && !sv) { this.save.settings.quality = 'medium'; this.save.settings.fov = 74; }
     addEventListener('keydown', e => this.onKey(e));
     window.__game = this;
     this.loop = this.loop.bind(this);
@@ -103,7 +107,7 @@ class Game {
     // reuse the engineering panel over the title
     this.menus.hideTitle();
     this.openStationPanelOnly('engineering');
-    this.menus.panel.querySelector('.pn-foot').innerHTML = '<kbd>Esc</kbd>Back to title';
+    this.menus.panel.querySelector('.pn-foot').innerHTML = '<button class="btn" data-act="leave">Back to title</button>';
   }
 
   titleCredits() {
@@ -113,7 +117,7 @@ class Game {
       <p class="guide"><b>Design, code, models and sound</b> — made for this project. Every character, weapon, vehicle, building, machine and texture was modelled with Python scripts run in headless Blender (<b>tools/blender</b>). Every sound is synthesised live with WebAudio.</p>
       <p class="guide"><b>Engine</b> — Three.js r${THREE.REVISION}.</p>
       <p class="guide"><b>Fonts</b> — Rajdhani and Inter (Google Fonts, falls back to system fonts offline).</p></div>
-      <div class="pn-foot"><kbd>Esc</kbd>Back to title</div></div>`;
+      <div class="pn-foot"><button class="btn" data-act="leave">Back to title</button></div></div>`;
   }
 
   // ---------------------------------------------------------------- start / travel
@@ -142,6 +146,8 @@ class Game {
     this.combat = new Combat(this);
     this.enemies = new EnemyManager(this);
     this.vehicles = new Vehicles(this);
+    this.viewmodel = new Viewmodel(this);
+    this.viewmodel.recolor(this.save.character);
     this.player.setBody(this.save.character.body);
     await this.enterWorld('ship', p => this.menus.loading(.7 + p * .3, 'Preparing decks'));
     this.menus.hideLoading();
@@ -189,6 +195,8 @@ class Game {
     this.fx = new FX(w.scene);
     await w.build(progress);
     w.scene.add(this.player.avatar.root);
+    // shadow cameras also see layer 1, where the player's body lives in first person
+    w.scene.traverse(o => { if (o.isLight && o.shadow) o.shadow.camera.layers.enable(1); });
     const sp = w.spawn();
     this.player.spawn(sp.pos, sp.yaw);
     this.player.armed = w.combat;
@@ -207,6 +215,30 @@ class Game {
     // compile shaders up front so the first frame does not hitch
     try { this.renderer.r.compile(w.scene, this.camera); } catch (e) { /* optional */ }
     this.persist();
+  }
+
+  // ---------------------------------------------------------------- first / third person
+  // First person is the default. The third-person view stays available on T (and in the settings).
+  firstPerson() {
+    const p = this.player;
+    return !!p && this.save.settings.view !== 'third' && p.mode === 'foot' && !p.dead && !this.stationId;
+  }
+
+  toggleView() {
+    const s = this.save.settings;
+    s.view = s.view === 'third' ? 'first' : 'third';
+    this.hud.toast(s.view === 'third' ? 'Third-person view' : 'First-person view');
+    this.player.snapCamera = true;
+    this.setAvatarLayer(); this.persist();
+  }
+
+  // In first person the body moves to layer 1: the camera skips it but it still casts a shadow.
+  setAvatarLayer() {
+    const p = this.player; if (!p || !p.avatar) return;
+    const fp = this.firstPerson();
+    if (fp === this._fpLayer && p.avatar === this._fpAvatar) return;
+    this._fpLayer = fp; this._fpAvatar = p.avatar;
+    p.avatar.root.traverse(o => { if (o.isMesh) { if (fp) o.layers.set(1); else o.layers.set(0); } });
   }
 
   // ---------------------------------------------------------------- ship stations
@@ -405,6 +437,7 @@ class Game {
   pause() {
     if (this.state !== 'play' || this.stationId) return;
     this.paused = true; this.input.enabled = false; this.input.unlock();
+    if (this.touch) this.touch.show(false);
     this.menus.showPause();
   }
 
@@ -429,7 +462,7 @@ class Game {
     }
     if (this.state === 'loading') { this.input.endFrame(); return; }
     if (!this.paused) this.update(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.camera, this.viewmodel && this.viewmodel.active ? this.viewmodel.scene : null);
     this.renderer.govern(dt);
     this.input.endFrame();
   }
@@ -454,6 +487,7 @@ class Game {
       else if (carNear) this.vehicles.enter(carNear);
     }
     if (canAct && input.pressed('KeyV') && w.allowCars) this.vehicles.summon();
+    if (input.enabled && !this.stationId && input.pressed('KeyT')) this.toggleView();
     p.update(dt, input, w.collision);
     this.weapons.update(dt, input);
     this.vehicles.update(dt, input);
@@ -475,6 +509,9 @@ class Game {
       this.camera.quaternion.slerpQuaternions(f.q0, f.q, k);
       this.camera.fov = f.fov0 + (55 - f.fov0) * k; this.camera.updateProjectionMatrix();
     }
+    this.setAvatarLayer();
+    this.viewmodel.update(dt, input);
+    if (this.touch) { this.touch.show(!this.stationId && !p.dead); this.touch.update(); }
     this.fx.update(dt, (x, z) => w.collision.ground(x, z));
     this.hud.markers = w.markers();
     this.objT = (this.objT || 0) - dt;
@@ -495,8 +532,9 @@ document.getElementById('title').addEventListener('click', e => {
   if (!e.target.closest('[data-act]')) game.startGame(false);
 });
 
-// wardrobe: drag to spin the character
+// wardrobe: drag to spin the character (mouse or touch)
 let drag = null;
-addEventListener('mousedown', e => { if (game.stationId === 'wardrobe' && !e.target.closest('.pn')) drag = e.clientX; });
-addEventListener('mousemove', e => { if (drag !== null) { game.wardrobeSpin = (game.wardrobeSpin || 0) + (e.clientX - drag) * .01; drag = e.clientX; } });
-addEventListener('mouseup', () => { drag = null; });
+addEventListener('pointerdown', e => { if (game.stationId === 'wardrobe' && !e.target.closest('.pn,.wallet')) drag = e.clientX; });
+addEventListener('pointermove', e => { if (drag !== null) { game.wardrobeSpin = (game.wardrobeSpin || 0) + (e.clientX - drag) * .01; drag = e.clientX; } });
+addEventListener('pointerup', () => { drag = null; });
+addEventListener('pointercancel', () => { drag = null; });

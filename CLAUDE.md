@@ -21,6 +21,11 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - `ship_interior.py` also writes `ship_interior.json`: AABB colliders, station points and light anchors (already in three space).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
 
+## Camera
+First person is the primary view (`settings.view = 'first'`), third person is a toggle (T) that may be removed later.
+In first person the body moves to layer 1 (shadows only) and `src/game/viewmodel.js` draws the Blender arms + gun in a
+second render pass with depth cleared. Touch controls live in `src/ui/touch.js` and feed the same `Input` state.
+
 ## Code map
 - `src/main.js` Game: boot → title (live 3D) → loading (byte-level progress) → worlds; stations, progression, saving, loop.
 - `src/core/` renderer (bloom/FXAA/governor), input (pointer lock), audio (all procedural WebAudio), assets, physics

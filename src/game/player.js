@@ -29,7 +29,9 @@ export class Player {
     if (old) { old.dispose(); }
     this.g.scene && this.g.scene.add(this.avatar.root);
     this.avatar.recolor(this.g.save.character);
+    this.g.viewmodel && this.g.viewmodel.recolor(this.g.save.character);
     this.g.weapons && this.g.weapons.refreshModel();
+    this.g.setAvatarLayer && this.g.setAvatarLayer();
   }
 
   addToScene(scene) { scene.add(this.avatar.root); }
@@ -60,17 +62,19 @@ export class Player {
     if (this.dead) { av.update(dt); return; }
     const k = c => input.key(c);
     let mx = (k('KeyD') ? 1 : 0) - (k('KeyA') ? 1 : 0), mz = (k('KeyW') ? 1 : 0) - (k('KeyS') ? 1 : 0);
+    if (input.axisX || input.axisY) { mx = input.axisX; mz = input.axisY; }
     if (!input.enabled) mx = mz = 0;
     const moving = mx || mz;
     this.aiming = this.armed && input.enabled && input.rmb;
-    this.running = moving && k('ShiftLeft') && !this.aiming && mz >= 0 || moving && k('ShiftRight');
+    this.running = moving && (k('ShiftLeft') || input.axisRun) && !this.aiming && mz >= 0 || moving && k('ShiftRight');
     if (this.g.weapons && this.g.weapons.firingRecently()) this.running = false;
     const speed = this.aiming ? AIMWALK : this.running ? RUN : WALK;
     // camera-relative move direction
     _f.set(-Math.sin(this.camYaw), 0, -Math.cos(this.camYaw));
     _r.set(-_f.z, 0, _f.x);
     _d.set(0, 0, 0).addScaledVector(_f, mz).addScaledVector(_r, mx);
-    if (_d.lengthSq() > 0) _d.normalize();
+    if (_d.lengthSq() > 1) _d.normalize();
+    else if (_d.lengthSq() > 0 && !(input.axisX || input.axisY)) _d.normalize();
     const accel = this.grounded ? 14 : 3;
     this.vel.x += (_d.x * speed - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (_d.z * speed - this.vel.z) * Math.min(1, accel * dt);
@@ -83,12 +87,13 @@ export class Player {
     this.airTime = this.grounded ? 0 : this.airTime + dt;
     if (this.pos.y < -60) { this.pos.y = world.ground(this.pos.x, this.pos.z) + 2; this.vel.set(0, 0, 0); }
     // facing: strafe while aiming/firing, otherwise turn toward travel
-    const faceCam = this.aiming || (this.g.weapons && this.g.weapons.firingRecently());
+    const fp = this.g.firstPerson();
+    const faceCam = fp || this.aiming || (this.g.weapons && this.g.weapons.firingRecently());
     let target = this.yaw;
     if (moving) target = Math.atan2(_d.x, _d.z);
     if (faceCam) target = Math.atan2(_f.x, _f.z);
     let dy = target - this.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    this.yaw += dy * Math.min(1, (faceCam ? 20 : 11) * dt);
+    if (fp) this.yaw = target; else this.yaw += dy * Math.min(1, (faceCam ? 20 : 11) * dt);
     av.root.position.copy(this.pos); av.root.rotation.y = this.yaw;
     // animation
     const hs = Math.hypot(this.vel.x, this.vel.z);
@@ -147,6 +152,16 @@ export class Player {
       dist = 7.5; side = 0;
     } else if (this.mode === 'seat') {
       _p.copy(this.pos).y += 1.3; dist = 2.6; side = .3;
+    } else if (this.g.firstPerson()) {
+      // first person: eye height from the body frame, a little head bob while moving
+      const eye = this.avatar.modelName === 'player_male' ? 1.66 : 1.58;
+      const hs = Math.hypot(this.vel.x, this.vel.z);
+      this.headBob = (this.headBob || 0) + (this.grounded ? dt * hs * 1.15 : 0);
+      const bob = this.aiming ? 0 : Math.abs(Math.sin(this.headBob)) * .035 * Math.min(1, hs / 7);
+      cam.position.set(this.pos.x, this.pos.y + eye + bob, this.pos.z);
+      this.camCur = 0; this.snapCamera = false;
+      this.finishCamera(dt, cam);
+      return;
     } else {
       if (this.aiming) { dist = 1.75; side = .58; pivotH = 1.58; }
       if (this.dead) { dist = 5; side = 0; pivotH = .8; }
@@ -170,6 +185,10 @@ export class Player {
     cam.position.copy(_p).addScaledVector(_d, this.camCur);
     const gy = world.ground(cam.position.x, cam.position.z) + .3;
     if (cam.position.y < gy) cam.position.y = gy;
+    this.finishCamera(dt, cam);
+  }
+
+  finishCamera(dt, cam) {
     // shake + recoil kick
     this.shake = Math.max(0, this.shake - dt * 2.5); this.recoil = Math.max(0, this.recoil - dt * 6);
     const sk = this.shake * this.shake * .06;

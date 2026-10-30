@@ -1,6 +1,6 @@
 # WORLD EX — Frontier Protocol
 
-A third-person sci-fi looter shooter in the browser (Three.js r186). You live aboard your own ship, the **Wayfarer**.
+A first-person sci-fi looter shooter in the browser (with an optional third-person view) (Three.js r186). You live aboard your own ship, the **Wayfarer**.
 Walk its decks to reach every system that used to sit in the main menu, then jump to **Earth**, a city hub,
 or to one of five **frontier worlds** whose terrain is generated endlessly in every direction.
 
@@ -27,7 +27,8 @@ Everything is local (three.js is vendored in `lib/`), so it runs offline. The fo
 |---|---|
 | W A S D | Walk (drive in a car) |
 | Shift | Run (boost in a car) |
-| Mouse | Look / aim (third-person camera, never clips through walls) |
+| Mouse | Look / aim |
+| T | Switch between first person (default) and third person (the third-person camera never clips through walls) |
 | Space | Jump (handbrake in a car) |
 | E | Interact: stations, caches, enter/exit cars, return to orbit |
 | Left / Right mouse | Fire / aim down sights |
@@ -36,6 +37,20 @@ Everything is local (three.js is vendored in `lib/`), so it runs offline. The fo
 | V | Summon your hover car (Earth and planets) |
 | Esc | Pause / leave a station |
 | F3 | FPS counter |
+
+## Phones (iPhone)
+Open the game in Safari and turn the phone sideways. Use **Share → Add to Home Screen** to play full screen.
+| Control | Action |
+|---|---|
+| Left side | Floating stick: move. Push it to the top edge, or tap the bolt button, to sprint |
+| Right side | Drag to look. You can drag while holding the fire button |
+| Large amber button | Fire |
+| Corner-brackets button | Aim down sights (toggle) |
+| Arrow button | Jump (handbrake in a car) |
+| **E** button | Interact: glows when something is in reach; also enter and exit cars |
+| Top-right row | Switch weapon, summon car, first/third person, pause |
+In a car the stick steers and accelerates and the bolt button boosts. Every station panel has a **Leave station** button.
+If there is no sound, check the phone's silent switch.
 
 ## The ship (replaces the main menu)
 | Old menu screen | Where it lives now |

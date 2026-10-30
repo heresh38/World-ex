@@ -6,6 +6,7 @@ export class Input {
     this.mx = 0; this.my = 0; this.wheel = 0;
     this.lmb = false; this.rmb = false; this.lmbHit = false;
     this.locked = false; this.enabled = true;
+    this.axisX = 0; this.axisY = 0; this.axisRun = false; this.touch = false;   // analog stick (touch)
     this.onLockChange = null;
     addEventListener('keydown', e => {
       if (e.code === 'Tab' || e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
@@ -35,6 +36,7 @@ export class Input {
   }
 
   lock() {
+    if (this.touch) return;
     try {
       const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
       if (p && p.catch) p.catch(() => { try { this.canvas.requestPointerLock(); } catch (e) { /* ignore */ } });

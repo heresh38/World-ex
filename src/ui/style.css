@@ -169,3 +169,65 @@ p.guide b{color:var(--bone)}
 .wallet{position:absolute;right:4vw;top:52px;text-align:right;font-size:14px;letter-spacing:.2em;color:var(--dim)}
 .wallet b{color:var(--gold);font-size:22px;margin-left:8px}
 @media (max-width:820px){.pn{width:100vw;padding:28px 18px}.h-compass{width:300px;margin-left:-150px}.l-tip{display:none}}
+
+/* ---------- touch controls (phones) ---------- */
+#touch{position:fixed;inset:0;z-index:5;pointer-events:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#touch .t-look{position:absolute;left:42%;right:0;top:0;bottom:0;pointer-events:auto;touch-action:none}
+#touch .t-stick{position:absolute;left:0;top:30%;bottom:0;width:42%;pointer-events:auto;touch-action:none}
+#touch .t-base,#touch .t-knob{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .15s}
+#touch .t-base{width:120px;height:120px;border:2px solid rgba(236,230,216,.35);background:rgba(5,7,12,.25)}
+#touch .t-knob{width:54px;height:54px;background:rgba(236,230,216,.55);box-shadow:0 0 14px rgba(0,0,0,.4)}
+#touch .t-stick.on .t-base,#touch .t-stick.on .t-knob{opacity:1}
+#touch .t-stick:not(.on):after{content:'MOVE';position:absolute;left:calc(64px + env(safe-area-inset-left,0px));bottom:calc(64px + env(safe-area-inset-bottom,0px));width:96px;height:96px;margin:-48px;border-radius:50%;border:2px dashed rgba(236,230,216,.22);display:grid;place-items:center;font:600 11px var(--font);letter-spacing:.3em;color:rgba(236,230,216,.4)}
+#touch button{pointer-events:auto;touch-action:none;border:0;padding:0;display:grid;place-items:center;color:var(--bone);background:rgba(5,7,12,.42);border:1.5px solid rgba(236,230,216,.32);border-radius:50%;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(4px)}
+#touch button svg{width:52%;height:52%}
+#touch button b{font:700 20px var(--font)}
+#touch button.on{background:rgba(236,230,216,.32);border-color:var(--bone)}
+#touch .t-btns{position:absolute;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:230px;height:200px;pointer-events:none}
+#touch .tb{position:absolute}
+#touch .fire{width:84px;height:84px;right:0;bottom:22px;border-color:rgba(255,174,47,.7)}
+#touch .fire svg{color:var(--amber)}
+#touch .aim{width:58px;height:58px;right:96px;bottom:4px}
+#touch.aiming .aim{background:rgba(227,194,108,.4);border-color:var(--gold)}
+#touch .jump{width:58px;height:58px;right:96px;bottom:74px}
+#touch .reload{width:48px;height:48px;right:20px;bottom:120px}
+#touch .sprint{width:48px;height:48px;right:160px;bottom:118px}
+#touch.sprinting .sprint{background:rgba(26,216,255,.35);border-color:var(--cyan)}
+#touch .use{width:58px;height:58px;right:162px;bottom:40px;opacity:.35}
+#touch.can-use .use{opacity:1;border-color:var(--gold);animation:usepulse 1.2s ease-in-out infinite}
+@keyframes usepulse{50%{box-shadow:0 0 0 6px rgba(227,194,108,.18)}}
+#touch.unarmed .fire,#touch.unarmed .aim,#touch.unarmed .reload{display:none}
+#touch.car .aim,#touch.car .reload,#touch.car .fire{display:none}
+#touch .t-top{position:absolute;right:calc(14px + env(safe-area-inset-right,0px));top:calc(10px + env(safe-area-inset-top,0px));display:flex;gap:8px;pointer-events:none}
+#touch .ts{width:40px;height:40px}
+#touch:not(.cars) [data-b="car"]{display:none}
+#touch.unarmed [data-b="swap"]{display:none}
+#touch .t-rotate{display:none}
+#touch.portrait .t-rotate{display:grid;place-content:center;gap:14px;text-align:center;position:fixed;inset:0;background:rgba(2,3,8,.92);pointer-events:auto;font:600 14px var(--font);letter-spacing:.3em;text-transform:uppercase;color:var(--bone);z-index:3}
+#touch.portrait .t-rotate div{font-size:54px;color:var(--gold);animation:spin 2.4s ease-in-out infinite}
+body.touch .h-hint,body.touch .kbd-hint{display:none}
+body.touch #prompt{top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+body.touch #prompt kbd{border-color:var(--gold);color:var(--gold)}
+
+/* compact HUD on landscape phones */
+@media (max-height:500px){
+  .h-loc{left:calc(14px + env(safe-area-inset-left,0px));top:10px;font-size:10px}.h-loc b{font-size:14px}
+  .h-obj{left:calc(14px + env(safe-area-inset-left,0px));top:48px;width:220px}.h-obj .o{font-size:11px;margin-bottom:4px}.h-obj .o small{display:none}
+  .h-obj .o:nth-child(n+3){display:none}
+  .h-compass{top:8px;width:260px;margin-left:-130px}
+  .h-vitals{width:200px;left:50%;margin-left:-100px;bottom:calc(10px + env(safe-area-inset-bottom,0px))}.h-vitals .lv{font-size:10px;text-align:center}.h-vitals .lv b{font-size:13px}
+  body.touch .h-vitals{bottom:auto;top:calc(34px + env(safe-area-inset-top,0px))}
+  body.touch .h-weap{left:auto;right:calc(250px + env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+  .h-weap .slot{font-size:10px}.h-weap .slot:not(.on){display:none}.h-weap .ammo{font-size:26px}.h-weap .ammo small{font-size:13px}
+  .h-feed{top:30%;width:220px}.h-feed div{font-size:11px}
+  .h-banner b{font-size:22px}.h-banner small{font-size:10px}
+  .h-car{bottom:auto;top:60px;font-size:24px}
+  .pn{width:100vw;padding:14px max(16px,env(safe-area-inset-left,0px)) 10px}
+  .pn-h{font-size:28px}.pn-d{margin-bottom:10px;font-size:12px}.pn-tabs button{padding:6px 10px;font-size:12px}
+  .wallet{top:14px;font-size:11px}.wallet b{font-size:15px}
+  .t-brand{font-size:56px}.t-sub{margin:8px 0 18px}.t-btn{font-size:17px;padding:6px 0 6px 18px}
+  .l-dest{font-size:38px}.l-desc{margin:8px 0 16px;font-size:13px}.l-glyph{display:none}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+  .big-stat b{font-size:20px}
+}
+.pn-foot{display:flex;align-items:center;gap:12px}

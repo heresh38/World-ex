@@ -44,6 +44,7 @@ export class Car {
       thr = (input.key('KeyW') ? 1 : 0) - (input.key('KeyS') ? 1 : 0);
       st = (input.key('KeyA') ? 1 : 0) - (input.key('KeyD') ? 1 : 0);
       boost = input.key('ShiftLeft') || input.key('ShiftRight'); brake = input.key('Space');
+      if (input.axisX || input.axisY) { thr = Math.abs(input.axisY) > .2 ? Math.sign(input.axisY) : 0; st = -input.axisX; }
     }
     const fwd = _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     let vf = this.vel.x * fwd.x + this.vel.z * fwd.z;
@@ -98,8 +99,10 @@ export class Vehicles {
     let pos = null;
     for (const off of [[3.5, 0], [-3.5, 0], [0, 4.5], [0, -4.5], [6, 0], [-6, 0]]) {
       const x = p.pos.x + Math.cos(yaw) * off[0] + Math.sin(yaw) * off[1], z = p.pos.z - Math.sin(yaw) * off[0] + Math.cos(yaw) * off[1];
-      const near = [...g.world.collision.near(x, z, 2)].some(b => b.max.y > g.world.collision.ground(x, z) + .9 && x > b.min.x - 1.5 && x < b.max.x + 1.5 && z > b.min.z - 1.5 && z < b.max.z + 1.5);
-      if (!near) { pos = new THREE.Vector3(x, g.world.collision.ground(x, z), z); break; }
+      const sy = g.world.collision.support(x, z, p.pos.y);
+      if (Math.abs(sy - p.pos.y) > 1) continue;
+      const near = [...g.world.collision.near(x, z, 2)].some(b => b.max.y > sy + .9 && b.min.y < sy + 2 && x > b.min.x - 1.5 && x < b.max.x + 1.5 && z > b.min.z - 1.5 && z < b.max.z + 1.5);
+      if (!near) { pos = new THREE.Vector3(x, sy, z); break; }
     }
     if (!pos) { g.hud.toast('No room to land the car here'); g.audio.ui('deny'); return; }
     this.mine = this.spawn(g.save.car.model, g.save.car.paint, pos, yaw);
@@ -129,7 +132,7 @@ export class Vehicles {
     let out = c.pos.clone().addScaledVector(side, 2.4);
     if ([...g.world.collision.near(out.x, out.z, 1)].some(b => out.x > b.min.x - .4 && out.x < b.max.x + .4 && out.z > b.min.z - .4 && out.z < b.max.z + .4 && b.max.y > out.y + .5))
       out = c.pos.clone().addScaledVector(side, -2.4);
-    out.y = g.world.collision.ground(out.x, out.z);
+    out.y = g.world.collision.support(out.x, out.z, c.pos.y);
     p.pos.copy(out); p.vel.set(0, 0, 0); p.yaw = c.yaw;
     p.avatar.root.position.copy(out); p.avatar.root.rotation.set(0, c.yaw, 0);
     g.audio.updateCar(false, 0); g.audio.door();

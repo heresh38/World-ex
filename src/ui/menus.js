@@ -30,7 +30,7 @@ export class Menus {
         <button class="t-btn" data-act="title-settings">Settings</button>
         <button class="t-btn" data-act="title-credits">Credits</button>
       </div>
-      <div class="t-press">Click to begin</div>
+      <div class="t-press">${document.body.classList.contains('touch') ? 'Tap to begin' : 'Click to begin'}</div>
       <div class="t-foot">Build 1.0 · All models made in Blender<br>Three.js r${this.g.THREE_REV}</div>
       <div class="t-overlay"></div>`;
   }
@@ -81,7 +81,7 @@ export class Menus {
     const g = this.g;
     const t = tabs ? `<div class="pn-tabs">${tabs.map(([k, l]) => `<button class="${this.tab === k ? 'on' : ''}" data-act="tab" data-v="${k}">${l}</button>`).join('')}</div>` : '';
     return `<div class="pn"><div class="pn-k">${esc(kicker)}</div><div class="pn-h">${esc(title)}</div><div class="pn-d">${desc}</div>${t}
-      <div class="pn-body">${body}</div><div class="pn-foot"><kbd>Esc</kbd>Leave station ${foot}</div></div>
+      <div class="pn-body">${body}</div><div class="pn-foot"><button class="btn" data-act="leave">Leave station</button><span class="kbd-hint"><kbd>Esc</kbd></span> ${foot}</div></div>
       <div class="wallet">CREDITS<b>${g.save.credits.toLocaleString()}</b><br>ALLOY<b>${g.save.alloy}</b><br>POWER<b>${g.power()}</b></div>`;
   }
 
@@ -152,7 +152,7 @@ export class Menus {
   }
 
   controlsHtml() {
-    const K = [['W A S D', 'Move'], ['Shift', 'Run / boost in car'], ['Mouse', 'Look / aim'], ['Space', 'Jump / handbrake'], ['E', 'Interact, enter / exit car'], ['Left mouse', 'Fire'], ['Right mouse', 'Aim down sights'], ['R', 'Reload'], ['1 2 3 / Wheel', 'Switch weapon'], ['V', 'Summon hover car'], ['Esc', 'Pause / leave station'], ['F3', 'FPS counter']];
+    const K = [['W A S D', 'Move'], ['Shift', 'Run / boost in car'], ['T', 'Switch first / third person'], ['Mouse', 'Look / aim'], ['Space', 'Jump / handbrake'], ['E', 'Interact, enter / exit car'], ['Left mouse', 'Fire'], ['Right mouse', 'Aim down sights'], ['R', 'Reload'], ['1 2 3 / Wheel', 'Switch weapon'], ['V', 'Summon hover car'], ['Esc', 'Pause / leave station'], ['F3', 'FPS counter']];
     return `<div class="keys">${K.map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('')}</div>`;
   }
 
@@ -178,6 +178,7 @@ export class Menus {
       body = `<div class="set"><span>Quality preset</span><select data-set="quality">${['low', 'medium', 'high'].map(q => `<option ${s.quality === q ? 'selected' : ''} value="${q}">${q}</option>`).join('')}</select><span></span></div>
         ${range(['resScale', 'Render scale'], .5, 1, .05, v => Math.round(v * 100) + '%')}
         ${tog('dynamicRes', 'Hold 60 fps (dynamic res)')}
+        <div class="set"><span>Camera</span><div class="row"><button class="btn ${s.view !== 'third' ? 'pri' : ''}" data-act="view" data-v="first">First person</button><button class="btn ${s.view === 'third' ? 'pri' : ''}" data-act="view" data-v="third">Third person</button></div><span></span></div>
         ${range(['fov', 'Field of view'], 55, 95, 1, v => v)}
         ${tog('showFps', 'Show FPS')}
         <p class="guide" style="margin-top:12px">Low: no bloom, 1K shadows. Medium: bloom, FXAA, 2K shadows. High: 4K shadows and 1.5× pixel density.</p>`;
@@ -294,6 +295,7 @@ export class Menus {
       case 'title-settings': g.titleSettings(); return;
       case 'title-credits': g.titleCredits(); return;
       case 'resume': g.resume(); return;
+      case 'leave': g.closeStation(); return;
       case 'pause-settings': this.hidePause(); g.paused = false; g.openStationPanelOnly('engineering'); return;
       case 'orbit': this.hidePause(); g.paused = false; g.travel('ship'); return;
       case 'quit': g.quitToTitle(); return;
@@ -304,6 +306,7 @@ export class Menus {
       case 'body': sv.character.body = v; g.player.setBody(v); g.player.avatar.play('IdleRelaxed', 0); g.placeInWardrobe(); break;
       case 'color': sv.character[t.dataset.k] = v; g.player.avatar.recolor(sv.character); break;
       case 'toggle': sv.settings[v] = !sv.settings[v]; g.applySettings(v); break;
+      case 'view': if ((sv.settings.view === 'third') !== (v === 'third')) g.toggleView(); break;
       case 'wipe':
         if (t.dataset.armed) { g.wipe(); return; }
         t.dataset.armed = '1'; t.textContent = 'Click again to erase everything'; return;

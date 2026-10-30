@@ -48,6 +48,10 @@ export class Renderer {
     this.composer = new EffectComposer(this.r, rt);
     this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
     this.composer.addPass(this.renderPass);
+    // first-person viewmodel: drawn after the world with depth cleared so it never clips into walls
+    this.overlayPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
+    this.overlayPass.clear = false; this.overlayPass.clearDepth = true; this.overlayPass.enabled = false;
+    this.composer.addPass(this.overlayPass);
     this.bloom = null;
     if (q.bloom) {
       const bp = this.bloomParams || [0.35, 1.0, 0.4];
@@ -94,9 +98,11 @@ export class Renderer {
     if (s !== this.scale) { this.scale = s; this.resize(); }
   }
 
-  render(scene, camera) {
+  render(scene, camera, overlay = null) {
     this.scene = scene; this.camera = camera;
     this.renderPass.scene = scene; this.renderPass.camera = camera;
+    this.overlayPass.enabled = !!overlay;
+    if (overlay) { this.overlayPass.scene = overlay; this.overlayPass.camera = camera; }
     this.composer.render();
   }
 }

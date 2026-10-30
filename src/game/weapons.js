@@ -35,10 +35,13 @@ export class Weapons {
 
   refreshModel() {
     const p = this.g.player; if (!p || !p.avatar) return;
+    const w0 = p.armed ? this.equipped() : null;
+    if (this.g.viewmodel) this.g.viewmodel.setWeapon(w0);
     if (!p.armed) { p.avatar.attachGun(null); return; }
     const w = this.equipped(); if (!w) { p.avatar.attachGun(null); return; }
     const A = ARCHETYPES[w.arch];
     p.avatar.attachGun(A.model, mesh => Weapons.styleMesh(mesh, w));
+    this.g.setAvatarLayer && this.g.setAvatarLayer();
   }
 
   static styleMesh(mesh, w) {
@@ -98,7 +101,7 @@ export class Weapons {
   }
 
   startReload(S) {
-    this.reloading = S.reload; this.burstLeft = 0; this.g.audio.reload(0);
+    this.reloading = this.reloadTotal = S.reload; this.burstLeft = 0; this.g.audio.reload(0);
   }
 
   fire(w, A, S, a) {
@@ -107,7 +110,8 @@ export class Weapons {
     g.save.stats.shots++;
     p.recoil = Math.min(1.5, p.recoil + (A.recoil || (A.dmg > 100 ? 1 : .35)) / S.spread * .3 + .15);
     p.camPitch += (w.arch === 'sniper' || w.arch === 'handcannon' ? .012 : .0035) * (p.aiming ? .6 : 1);
-    p.avatar.muzzleWorld(_m);
+    if (g.firstPerson()) { g.viewmodel.muzzleWorld(_m); g.viewmodel.kick(w.arch === 'sniper' || w.arch === 'rocket' || w.arch === 'shotgun' ? 3 : w.arch === 'handcannon' ? 2.2 : 1); }
+    else p.avatar.muzzleWorld(_m);
     p.camForward(_d);
     g.fx.muzzle(_m, _d, w.arch === 'rocket' ? 0xffa040 : 0xffc070);
     g.audio.shot(A.sound);

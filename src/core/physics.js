@@ -52,6 +52,15 @@ export class CollisionWorld {
     return Math.max(g, this.floorY);
   }
 
+  // Height you would stand on at (x,z) coming from height y: terrain or the top of a box within reach below.
+  support(x, z, y) {
+    let s = this.ground(x, z);
+    for (const b of this.near(x, z, 0)) {
+      if (x >= b.min.x && x <= b.max.x && z >= b.min.z && z <= b.max.z && b.max.y <= y + .6 && b.max.y > s) s = b.max.y;
+    }
+    return s;
+  }
+
   // Resolve a capsule at pos (feet) moving; returns {grounded, groundY}. Mutates pos.
   moveCapsule(pos, vel, r, h, dt, step = .45) {
     pos.x += vel.x * dt; pos.z += vel.z * dt; pos.y += vel.y * dt;
