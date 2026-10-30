@@ -155,7 +155,7 @@ def main():
         # feather an ellipse: inside = photo, outside = flat skin tone (so the head sides match the face)
         yy, xx = np.mgrid[0:512, 0:512]
         e = ((xx - 256) / 236.0) ** 2 + ((yy - 262) / 250.0) ** 2
-        m = np.clip((e - .62) / .38, 0, 1)[..., None]
+        m = np.clip((e - .8) / .2, 0, 1)[..., None]
         out = crop[..., :3] * (1 - m) + tone[None, None, :] * m
         save(out, 'char_' + name)
     # skin tones for the materials

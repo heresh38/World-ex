@@ -24,7 +24,7 @@ def calibrate_face_uv(o, hr, cz, sex):
     """Re-map the head's planar UVs so the photo's eyes and chin land on the sculpted eyes and chin."""
     uc, ue, ve, vc = CALIB[sex]
     x_eye = .3 * .82 * hr
-    z_eye = cz + .157 * hr; z_chin = cz - .98 * hr
+    z_eye = cz + .157 * hr; z_chin = cz - 1.05 * hr
     me = o.data; uv = me.uv_layers.active
     for poly in me.polygons:
         for li in poly.loop_indices:
@@ -797,15 +797,20 @@ class Builder:
             a = -2.4 + 4.8 * j / (count - 1) + rnd.uniform(-.06, .06)     # around the hairline, front=0
             hl = C + Vector((math.sin(a) * hr * .8, -math.cos(a) * hr * .9, hr * (.55 if abs(a) < 1.2 else .1 + .3 * (1 - abs(a) / 2.4))))
             end = tie if tie is not None else C + Vector((math.sin(a) * hr * .55, hr * .9, -hr * .25))
-            pts = []
+            pts, nrm = [], []
             for i in range(9):
                 t = i / 8
                 q = hl.lerp(end, t)
                 d = (q - C)
-                q = C + d.normalized() * hr * lift * (1 + .05 * math.sin(t * math.pi))
-                pts.append(q)
-            nrm = [(p - C).normalized() for p in pts]
-            w = [hr * .5 * (1 - .55 * i / 8) for i in range(9)]
+                # project onto the head's own ellipsoid (narrow sides, tall crown) so the hair hugs the skull
+                e = Vector((d.x / (hr * .82), d.y / (hr * (1.0 if d.y > 0 else .92)), d.z / (hr * 1.12))).normalized()
+                lift_t = lift * (1 + .03 * math.sin(t * math.pi)) if t < .9 or tie is None else 1.0
+                p = C + Vector((e.x * hr * .82, e.y * hr * (1.0 if d.y > 0 else .92), e.z * hr * 1.12)) * lift_t
+                if tie is not None and t >= .9:
+                    p = q
+                pts.append(p)
+                nrm.append(Vector((e.x / .82, e.y, e.z / 1.12)).normalized())
+            w = [hr * .42 * (1 - .75 * i / 8) for i in range(9)]
             parts.append(card('scalp', pts, w, mat, nrm))
         return parts
 
@@ -837,8 +842,24 @@ class Builder:
         path = bezier([tie, tie + Vector((-.01, .07, .045)), Vector((-.04, .15, z['neck'] + .02)), Vector((-.07, .17, z['chest'] - .05)),
                        Vector((-.1, .19, z['crotch'])), Vector((-.12, .15, z['knee'] + .03))], 40)
         n = len(path)
-        radii = [(.02 + .03 * math.sin(min(1, i / (n * .22)) * math.pi / 2)) * (1 - .8 * max(0, (i / n - .3) / .7)) * k / .93 for i in range(n)]
-        tail = card_bundle('pony', path, radii, cardm, 14, twist=.18, core=core, seed=3)
+        radii = [(.024 + .052 * math.sin(min(1, i / (n * .2)) * math.pi / 2)) * (1 - .78 * max(0, (i / n - .32) / .68)) * k / .93 for i in range(n)]
+        tail = card_bundle('pony', path, radii, cardm, 24, twist=.16, core=core, seed=3)
+        path2 = [p + Vector((.012, .01, 0)) * min(1, i / 6) for i, p in enumerate(path)]
+        tail += card_bundle('pony2', path2, [r * .8 for r in radii], cardm, 12, twist=-.12, seed=4)
+        # long side locks framing the face, falling in front of the shoulders to the chest
+        for sx in (1, -1):
+            for j in range(3):
+                top = Vector((sx * hr * (.62 + .06 * j), -hr * (.45 - .08 * j), cz + hr * .35))
+                pts = hq_bez = bezier([top, Vector((sx * hr * (.92 + .05 * j), -hr * (.42 - .06 * j), cz - hr * .55)),
+                                       Vector((sx * hr * (1.15 + .1 * j), -hr * (.55 - .1 * j), z['neck'] - .02)),
+                                       Vector((sx * hr * (1.35 + .12 * j), -hr * .7, z['chest'] + .03 - .03 * j))], 18)
+                nrm = [Vector((sx * .5, -1, 0)).normalized()] * len(pts)
+                tail.append(card('sidelock', pts, [.034 * k * (1 - .6 * i / len(pts)) for i in range(len(pts))], cardm, nrm))
+        # side-swept fringe across the forehead
+        for j in range(5):
+            x0 = -hr * .5 + j * hr * .22
+            pts = bezier([Vector((x0 - hr * .2, -hr * .7, cz + hr * .78)), Vector((x0 + hr * .05, -hr * .93, cz + hr * .52)), Vector((x0 + hr * .28, -hr * .9, cz + hr * .36))], 8)
+            tail.append(card('fringe', pts, [.036 * k * (1 - .5 * i / len(pts)) for i in range(len(pts))], cardm, [Vector((0, -1, .3)).normalized()] * len(pts)))
         tiering = bl.torus('tie', .024 * k, .008, tie + Vector((0, .006, .006)), flat('tie_pink', '#d9a3c8', 0, .5), rot=(.8, 0, 0), maj=14, mn=5)
         scalp = self.scalp_cards(cardm, tie, 30, seed=2)
         bangs = []

@@ -80,7 +80,7 @@ def skin_body(P, name='body', levels=2):
                    (0, .012, z['chin'] + .01), (0, .012, z['chin'] + .05)],
                   [(.15 * k * (1.06 if f else .98), .1 * k), (.122 * k * tw, .09 * k),
                    (.112 * k * tw, .085 * k), (.13 * k * tw, .095 * k), (.142 * k * tw, .1 * k), (.148 * k * tw, .095 * k),
-                   (.058 * k, .058 * k), (.052 * k, .052 * k), (.045 * k, .045 * k)])
+                   (.05 * k, .05 * k), (.046 * k, .046 * k), (.04 * k, .04 * k)])
     pelvis, chestv = spine[0], spine[5]
     for side, sx in (('L', 1), ('R', -1)):
         # arm: shoulder cap from the upper chest
