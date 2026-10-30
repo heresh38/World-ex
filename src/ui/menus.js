@@ -287,7 +287,10 @@ export class Menus {
     g.audio.ui('click');
     switch (act) {
       case 'title-play': g.startGame(false); return;
-      case 'title-new': if (confirm('Start a new game? Your current progress will be erased.')) g.startGame(true); return;
+      case 'title-new':
+        // two-step confirm inside the page (browser dialogs are not available everywhere)
+        if (t.dataset.armed) { g.startGame(true); return; }
+        t.dataset.armed = '1'; t.textContent = 'Click again to erase progress'; return;
       case 'title-settings': g.titleSettings(); return;
       case 'title-credits': g.titleCredits(); return;
       case 'resume': g.resume(); return;
@@ -301,7 +304,9 @@ export class Menus {
       case 'body': sv.character.body = v; g.player.setBody(v); g.player.avatar.play('IdleRelaxed', 0); g.placeInWardrobe(); break;
       case 'color': sv.character[t.dataset.k] = v; g.player.avatar.recolor(sv.character); break;
       case 'toggle': sv.settings[v] = !sv.settings[v]; g.applySettings(v); break;
-      case 'wipe': if (confirm('Erase all progress?')) { g.wipe(); return; } break;
+      case 'wipe':
+        if (t.dataset.armed) { g.wipe(); return; }
+        t.dataset.armed = '1'; t.textContent = 'Click again to erase everything'; return;
       case 'pick': this.sel = v; break;
       case 'equip': {
         const w = sv.inventory.find(x => x.uid === v); const slot = ARCHETYPES[w.arch].slot;
