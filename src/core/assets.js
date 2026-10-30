@@ -83,7 +83,11 @@ export class Assets {
             m.transparent = true; m.depthWrite = false; o.castShadow = false;
           }
           if (/glass|holo|canopy/.test(m.name)) { o.castShadow = false; m.envMapIntensity = 1.5; }
-          if (m.emissive && m.emissiveIntensity > 0 && m.emissive.getHex() !== 0) o.castShadow = false;
+          if (m.emissive && m.emissiveIntensity > 0 && m.emissive.getHex() !== 0) {
+            o.castShadow = false;
+            // Blender emission strengths are authored for Cycles; scale them so only the hottest parts bloom
+            m.emissiveIntensity = Math.min(2.4, m.emissiveIntensity * .38);
+          }
         }
       }
     });

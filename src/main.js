@@ -202,7 +202,7 @@ class Game {
     this.audio.ambience(id === 'ship' ? 'ship' : id === 'earth' ? 'city' : 'wind');
     this.audio.musicKind = null; this.audio.music(id === 'ship' ? 'ship' : id === 'earth' ? 'earth' : 'planet');
     if (id === 'ship') this.audio.weldLoop();
-    this.renderer.setBloom(id === 'ship' ? .55 : .4, id === 'ship' ? .9 : .95);
+    this.renderer.setBloom(id === 'ship' ? .38 : .3, 1.0, .4);
     this.renderer.r.toneMappingExposure = id === 'ship' ? 1.0 : 1.05;
     // compile shaders up front so the first frame does not hitch
     try { this.renderer.r.compile(w.scene, this.camera); } catch (e) { /* optional */ }

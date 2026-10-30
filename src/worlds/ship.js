@@ -40,7 +40,7 @@ export class ShipWorld extends World {
       if (/floor/.test(n)) { o.castShadow = false; o.material.envMapIntensity = .8; }
       if (/wall|ceil/.test(n)) o.material.envMapIntensity = .5;
       if (/light_panel|neon|screen|holo/.test(n)) { o.castShadow = false; o.receiveShadow = false; }
-      if (n === 'holo') { o.material.transparent = true; o.material.depthWrite = false; o.material.blending = THREE.AdditiveBlending; }
+      if (n === 'holo') { o.material.transparent = true; o.material.opacity = .35; o.material.depthWrite = false; o.material.blending = THREE.AdditiveBlending; o.material.emissiveIntensity = .5; }
     });
     sc.add(ship);
     this.ship = ship;
@@ -139,7 +139,7 @@ export class ShipWorld extends World {
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       uniforms: { c: { value: new THREE.Color(1.0, .9, .75) }, top: { value: top } },
       vertexShader: 'varying float vY;varying vec3 vN,vV;void main(){vY=position.y;vec4 mv=modelViewMatrix*vec4(position,1.);vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}',
-      fragmentShader: 'uniform vec3 c;uniform float top;varying float vY;varying vec3 vN,vV;void main(){float f=smoothstep(0.,top,vY)*.75+.25;float edge=pow(1.-abs(dot(vN,vV)),1.5);gl_FragColor=vec4(c*.028*f*(.4+edge),1.);}',
+      fragmentShader: 'uniform vec3 c;uniform float top;varying float vY;varying vec3 vN,vV;void main(){float f=smoothstep(0.,top,vY)*.75+.25;float edge=pow(1.-abs(dot(vN,vV)),1.5);gl_FragColor=vec4(c*.016*f*(.4+edge),1.);}',
     });
     for (let x = -10; x <= 10; x += 4) for (let z = -6; z >= -28; z -= 4) {
       const m = new THREE.Mesh(geo, mat); m.position.set(x, 0, z); m.renderOrder = 6; m.frustumCulled = false;

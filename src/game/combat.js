@@ -123,7 +123,7 @@ export class Combat {
     obj.traverse(o => {
       if (o.isMesh) {
         o.material = o.material.clone(); o.castShadow = false;
-        if (/core_glow|ammo_glow/.test(o.material.name)) { o.material.color.set(color); o.material.emissive.set(color); o.material.emissiveIntensity = type === 'core' ? 5 : 2; }
+        if (/core_glow|ammo_glow/.test(o.material.name)) { o.material.color.set(color); o.material.emissive.set(color); o.material.emissiveIntensity = type === 'core' ? 2.2 : 1.2; }
       }
     });
     obj.position.copy(pos); obj.position.x += (Math.random() - .5); obj.position.z += (Math.random() - .5);

@@ -74,7 +74,7 @@ export class Car {
     this.bob += dt * 2.4;
     this.root.position.set(p.x, p.y + .25 + Math.sin(this.bob) * .05, p.z);
     this.root.rotation.set(this.pitch, this.yaw, this.roll, 'YXZ');
-    if (this.glow) this.glow.emissiveIntensity = 6 + Math.abs(vf) * .12 + Math.sin(this.bob * 7) * .4;
+    if (this.glow) this.glow.emissiveIntensity = 1.6 + Math.abs(vf) * .04 + Math.sin(this.bob * 7) * .15;
     this.speed = Math.abs(vf);
     if (driving) this.g.save.stats.carDistance += this.speed * dt;
   }

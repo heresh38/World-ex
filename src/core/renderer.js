@@ -50,7 +50,8 @@ export class Renderer {
     this.composer.addPass(this.renderPass);
     this.bloom = null;
     if (q.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.55, 0.5, 0.92);
+      const bp = this.bloomParams || [0.35, 1.0, 0.4];
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), bp[0], bp[2], bp[1]);
       this.composer.addPass(this.bloom);
     }
     this.composer.addPass(new OutputPass());
@@ -61,7 +62,8 @@ export class Renderer {
     }
   }
 
-  setBloom(strength, threshold = 0.92, radius = 0.5) {
+  setBloom(strength, threshold = 1.0, radius = 0.4) {
+    this.bloomParams = [strength, threshold, radius];
     if (!this.bloom) return;
     this.bloom.strength = strength; this.bloom.threshold = threshold; this.bloom.radius = radius;
   }

@@ -73,7 +73,7 @@ export class EarthWorld extends World {
     const facadeE = T.facade_e, ribbonE = T.ribbon_e;
     for (const v of variants) for (const m of v.meshes) {
       const mt = m.material;
-      if (mt.name === 'facade') { mt.color.set(0x8f969f); mt.roughness = .35; mt.metalness = .5; mt.emissiveMap = facadeE; mt.emissive = new THREE.Color(1, .85, .6); mt.emissiveIntensity = 1.1; mt.needsUpdate = true; }
+      if (mt.name === 'facade') { mt.color.set(0x8f969f); mt.roughness = .35; mt.metalness = .5; mt.emissiveMap = facadeE; mt.emissive = new THREE.Color(1, .85, .6); mt.emissiveIntensity = .9; mt.needsUpdate = true; }
       if (mt.name === 'ribbon') { mt.color.set(0x9aa1aa); mt.roughness = .3; mt.metalness = .45; mt.emissiveMap = ribbonE; mt.emissive = new THREE.Color(1, .9, .75); mt.emissiveIntensity = .9; mt.needsUpdate = true; }
     }
     const lots = [];

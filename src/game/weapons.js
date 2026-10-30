@@ -43,7 +43,7 @@ export class Weapons {
 
   static styleMesh(mesh, w) {
     const m = mesh.material, rc = RARITY[w.rarity].color;
-    if (m.name === 'gun_glow') { m.color.set(rc); m.emissive.set(rc); m.emissiveIntensity = 3.5; }
+    if (m.name === 'gun_glow') { m.color.set(rc); m.emissive.set(rc); m.emissiveIntensity = 1.8; }
     if (m.name === 'gun_body') { const sh = SHADERS.find(s => s.id === w.shader) || SHADERS[0]; m.color.set(sh.body); }
   }
 
