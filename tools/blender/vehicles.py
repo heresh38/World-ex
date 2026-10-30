@@ -111,7 +111,7 @@ def jumpship(name='ship_jumper', hull='#e8e2d4', accent='#c79a45', glowc='#1ad8f
     P = bl.palette()
     hull_m = bl.mat('ship_hull', hull, .3, .35, image='panel_c.jpg', normal='panel_n.jpg')
     acc = bl.mat('ship_accent', accent, .9 if not enemy else .5, .3)
-    glow = bl.mat('ship_glow', glowc, 0, .3, emit=glowc, strength=9)
+    glow = bl.mat('ship_glow', glowc, 0, .3, emit=glowc, strength=3.5)
     glass = bl.mat('ship_glass', '#0a1016', .6, .04, emit='#0b2a3a', strength=.4)
     parts = []
     L = 16 if not enemy else 13

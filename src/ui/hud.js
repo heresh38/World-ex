@@ -46,6 +46,7 @@ export class HUD {
     this.vitEl.style.display = combat ? '' : 'none';
     this.weapEl.style.display = combat ? '' : 'none';
     this.crossEl.style.display = combat ? '' : 'none';
+    this.el.querySelector('.h-compass').style.display = combat ? '' : 'none';
     this.dirty = true;
   }
 

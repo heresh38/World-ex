@@ -175,9 +175,9 @@ export class EarthWorld extends World {
     // ---------------- skyway traffic (flying lanes above the roads)
     this.traffic = [];
     const models = ['car_sport', 'car_utility'], paints = ['#a3121f', '#2a4f7a', '#e8e2d4', '#1c1f24', '#c79a45', '#2f6b55', '#6a4fa0'];
-    for (let k = 0; k < 22; k++) {
+    for (let k = 0; k < 16; k++) {
       const c = A.clone(models[k % 2]);
-      c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); if (o.material.name === 'car_paint') o.material.color.set(paints[k % paints.length]); o.castShadow = k % 3 === 0; } });
+      c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); if (o.material.name === 'car_paint') o.material.color.set(paints[k % paints.length]); o.castShadow = false; } });
       const axis = k % 2, lane = (Math.floor(rnd() * (2 * N + 2)) - N - 1 + .5) * PITCH, dir = rnd() < .5 ? 1 : -1;
       const alt = 9 + (k % 4) * 5;
       sc.add(c);

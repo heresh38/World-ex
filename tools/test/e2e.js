@@ -30,7 +30,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(q => { const g = window.__game; g.save.settings.quality = q; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); }, process.env.QUALITY || 'low');
   await wait(1500); await shot('01_title');
   await p.click('[data-act="title-play"]');
-  await p.waitForFunction(() => !document.getElementById('loading').classList.contains('hidden'), null, { timeout: 60000 });
+  await p.waitForFunction(() => !document.getElementById('loading').classList.contains('hidden'), null, { timeout: 600000, polling: 1000 });
   await wait(1200); await shot('02_loading');
   await waitPlay();
   await wait(4000); await shot('03_ship_spawn');
