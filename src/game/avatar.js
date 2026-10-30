@@ -37,34 +37,99 @@ export class Avatar {
         if (/hair_card/.test(m.name) || m.alphaTest > 0) { m.alphaTest = .5; m.transparent = false; m.depthWrite = true; m.side = THREE.DoubleSide; o.castShadow = true; }
       }
     });
-    // HQ characters: outfits (O_*), hair styles (H_*), body regions (B_*) are switched by setLook()
-    this.meta = null; this.parts = { O: {}, H: {}, B: {} };
+    // player bodies (v3): body regions B_*, clothing/hair items C_<slot>__<item>, face morph targets, see players.py
+    this.meta = null; this.regions = {}; this.items = {}; this.morphMeshes = []; this.parts = { O: {}, H: {} };
     this.model.traverse(o => {
+      const lp = /^(O|H)_(.+)$/.exec(o.name);
+      if (lp) this.parts[lp[1]][lp[2]] = o;
       if (o.userData && o.userData.worldex) { try { this.meta = JSON.parse(o.userData.worldex); } catch (e) { /* ignore */ } }
-      const m = /^(O|H|B)_(.+)$/.exec(o.name);
-      if (m) this.parts[m[1]][m[2]] = o;
+      let m = /^B_(.+)$/.exec(o.name);
+      if (m) this.regions[m[1]] = o;
+      m = /^C_([a-z]+)__(.+)$/.exec(o.name);
+      if (m) (this.items[m[1]] = this.items[m[1]] || {})[m[2]] = o;
+      if (o.isMesh && o.morphTargetDictionary && o.morphTargetInfluences) this.morphMeshes.push(o);
     });
+    for (const mat of this.allMats) {
+      if (/^(brow|lash)$/.test(mat.name)) {
+        mat.alphaTest = mat.name === 'brow' ? .28 : .35; mat.transparent = false; mat.depthWrite = true; mat.side = THREE.DoubleSide;
+        if (mat.map) { mat.map = mat.map.clone(); mat.map.needsUpdate = true; }
+      }
+    }
+    this.wear = {};
     this.current = null; this.aimPitch = 0; this.aimYawOffset = 0;
     this.gun = null; this.gunOffset = null;
     this.play('IdleRelaxed', 0);
   }
 
-  get outfits() { return this.meta ? Object.keys(this.meta.outfits) : []; }
-  get hairStyles() { return this.meta ? this.meta.hair : []; }
-
-  // Show one outfit + one hair style; hide the body regions the outfit covers.
+  // civilians (civilians.py): outfits O_*, hair H_*; each outfit lists the body regions it covers
+  get outfits() { return this.meta && this.meta.outfits ? Object.keys(this.meta.outfits) : []; }
+  get hairStyles() { return this.meta && this.meta.hair ? this.meta.hair : []; }
   setLook(outfit, hair) {
-    if (!this.meta) return;
+    if (!this.meta || !this.meta.outfits) return;
     if (!this.meta.outfits[outfit]) outfit = this.outfits[0];
     if (!this.meta.hair.includes(hair)) hair = this.meta.hair[0];
     const hide = new Set(this.meta.outfits[outfit]);
     for (const [k, o] of Object.entries(this.parts.O)) o.visible = k === outfit;
     for (const [k, o] of Object.entries(this.parts.H)) o.visible = k === hair;
-    for (const [k, o] of Object.entries(this.parts.B)) o.visible = !hide.has(k);
+    for (const [k, o] of Object.entries(this.regions)) o.visible = !hide.has(k);
     this.outfit = outfit; this.hair = hair;
   }
 
-  // Wardrobe tints multiply the original materials; null/undefined keeps the original look.
+  get isPlayerBody() { return !!(this.meta && this.meta.v === 3); }
+  get wardrobe() { return (this.meta && this.meta.wardrobe) || {}; }
+  get defaults() { return (this.meta && this.meta.defaults) || {}; }
+
+  // One item (or 'none') per slot; hides the body regions the chosen items fully cover.
+  setWear(wear) {
+    if (!this.isPlayerBody) return {};
+    const out = {};
+    const hide = new Set(); let hideHair = false;
+    for (const slot of Object.keys(this.items)) {
+      let it = wear && wear[slot] !== undefined ? wear[slot] : this.defaults[slot];
+      if (it !== 'none' && !this.items[slot][it]) it = this.defaults[slot] || 'none';
+      out[slot] = it || 'none';
+      const info = (this.wardrobe[slot] || {})[out[slot]];
+      if (info) { info.hide.forEach(r => hide.add(r)); if (info.hideHair) hideHair = true; }
+    }
+    for (const [slot, list] of Object.entries(this.items)) {
+      for (const [id, o] of Object.entries(list)) o.visible = out[slot] === id && !(slot === 'hair' && hideHair);
+    }
+    for (const [r, o] of Object.entries(this.regions)) o.visible = !hide.has(r);
+    this.wear = out;
+    return out;
+  }
+
+  setMorph(name, v) {
+    for (const o of this.morphMeshes) {
+      const i = o.morphTargetDictionary[name];
+      if (i !== undefined) o.morphTargetInfluences[i] = v;
+    }
+  }
+
+  // face: {group: presetName|null}, sliders: {name: -1..1}
+  setFace(face = {}, sliders = {}) {
+    if (!this.isPlayerBody) return;
+    const M = this.meta.morphs;
+    for (const [g, list] of Object.entries(M.groups)) for (const n of list) this.setMorph(n, face[g] === n ? 1 : 0);
+    for (const n of M.sliders) this.setMorph(n, +(sliders[n] || 0));
+  }
+
+  // Skin, eyes, hair and brow colour, brow style, per-slot clothing tints and the glow colour.
+  applyCharacter(c) {
+    if (!this.isPlayerBody) { this.recolor(c); return; }
+    c.wear = this.setWear(c.wear);
+    this.setFace(c.face, c.sliders);
+    const set = (name, hex) => { if (!hex) return; for (const m of this.allMats) if (m.name === name) m.color.set(hex); };
+    set('skin', c.skin); set('eye_iris', c.eyes); set('hair', c.hairColor); set('brow', c.hairColor);
+    for (const m of this.allMats) {
+      if (m.name === 'brow' && m.map) m.map.offset.y = .25 * ((c.brow | 0) % 4);
+      const t = /^(?:cloth_|armor_primary__)([a-z]+)$/.exec(m.name);
+      if (t) { m.color.copy(m.userData.base); const hex = c.tints && c.tints[t[1]]; if (hex) m.color.multiply(new THREE.Color(hex)); }
+    }
+    this.recolor({ glow: c.glow });
+  }
+
+  // Tints multiply the original materials; null/undefined keeps the original look.
   recolor(c) {
     const tint = (prefix, hex, emissive = false) => {
       for (const m of this.allMats) {
@@ -74,7 +139,7 @@ export class Avatar {
         if (emissive && m.emissive) { m.emissive.copy(m.userData.baseEmissive || m.emissive); if (hex) m.emissive.set(hex); }
       }
     };
-    tint('armor_primary', c.primary); tint('armor_secondary', c.secondary);
+    if (!this.isPlayerBody) { tint('armor_primary', c.primary); tint('armor_secondary', c.secondary); }
     tint('glow', c.glow, true);
     if (this.mats.visor && c.glow) this.mats.visor.emissive.set(c.glow).multiplyScalar(.6);
   }

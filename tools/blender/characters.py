@@ -168,7 +168,7 @@ def build_mesh(b, mats):
         add(bl.box('toecap', (.09 * s, .06, .06 * s), Vector((q0.x, -.15 * s, .05)), P, bevel=.02), 'foot.' + side)
 
 
-def make_armature(b):
+def make_armature(b, pole_angle=-90):
     ad = bpy.data.armatures.new('rig')
     arm = bpy.data.objects.new('Armature', ad)
     bpy.context.scene.collection.objects.link(arm)
@@ -205,7 +205,7 @@ def make_armature(b):
         c.name = 'IK'
         c.target = arm; c.subtarget = 'ik_hand.' + side
         c.pole_target = arm; c.pole_subtarget = 'pole.' + side
-        c.pole_angle = math.radians(-90 if side == 'L' else -90)
+        c.pole_angle = math.radians(pole_angle)
         c.chain_count = 2
         c.influence = 0.0
     bpy.ops.object.mode_set(mode='OBJECT')

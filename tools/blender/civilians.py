@@ -8,7 +8,7 @@ import bpy, math, os, sys, json
 import numpy as np
 from mathutils import Vector
 sys.path.insert(0, os.path.dirname(__file__))
-import bl, human, characters, characters_hq as hq
+import bl, human, characters, npc_kit as hq
 
 
 def painted_face(name, male):

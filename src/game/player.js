@@ -33,12 +33,10 @@ export class Player {
     this.g.setAvatarLayer && this.g.setAvatarLayer();
   }
 
-  // outfit + hair + tints from the save
+  // body, face, colours and clothing from the save
   applyLook() {
     const c = this.g.save.character;
-    this.avatar.setLook(c.outfit, c.hair);
-    c.outfit = this.avatar.outfit || c.outfit; c.hair = this.avatar.hair || c.hair;
-    this.avatar.recolor(c);
+    this.avatar.applyCharacter(c);
     this.g.viewmodel && this.g.viewmodel.recolor(c);
   }
 
@@ -162,7 +160,7 @@ export class Player {
       _p.copy(this.pos).y += 1.3; dist = 2.6; side = .3;
     } else if (this.g.firstPerson()) {
       // first person: eye height from the body frame, a little head bob while moving
-      const eye = this.avatar.modelName === 'player_male' ? 1.66 : 1.58;
+      const eye = this.avatar.modelName === 'player_male' ? 1.72 : 1.57;
       const hs = Math.hypot(this.vel.x, this.vel.z);
       this.headBob = (this.headBob || 0) + (this.grounded ? dt * hs * 1.15 : 0);
       const bob = this.aiming ? 0 : Math.abs(Math.sin(this.headBob)) * .035 * Math.min(1, hs / 7);

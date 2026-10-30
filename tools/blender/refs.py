@@ -1,7 +1,7 @@
-"""Cuts texture swatches and face plates out of the owner's reference art (art/reference/*.jpg) inside Blender.
+"""Cuts texture swatches out of the owner's reference art (art/reference/*.jpg) inside Blender.
 
-Every crop box is in source pixels (x0, y0, x1, y1). Face plates are feathered into the sampled skin tone so the
-projected face blends into the head with no visible edge. Output: assets/textures/char_<name>.jpg.
+Every crop box is in source pixels (x0, y0, x1, y1). Output: assets/textures/char_<name>.jpg (used by wardrobe.py and
+civilians.py).
 """
 import bpy, os, sys
 import numpy as np
@@ -57,13 +57,6 @@ SWATCHES = {
     'cargo_pants': ('male_field_jacket', (700, 420, 748, 520), (256, 512), 'canvas'),
     'boot_black': ('male_field_jacket', (630, 642, 668, 700), (256, 256), 'stretch'),
 }
-
-FACES = {
-    # name: (image, box, skin sample box)
-    'face_female': ('female_knit', (670, 50, 760, 146), (712, 116, 722, 122)),
-    'face_male': ('male_vanguard', (806, 140, 1006, 360), (880, 290, 900, 300)),
-}
-
 
 def load(name):
     img = bpy.data.images.load(os.path.join(REF, name + '.jpg'), check_existing=True)
@@ -130,13 +123,6 @@ def save(arr, name):
     return path
 
 
-def skin_tone(name):
-    img, box, sbox = FACES[name]
-    a = load(img)
-    x0, y0, x1, y1 = sbox
-    return a[y0:y1, x0:x1, :3].reshape(-1, 3).mean(0)
-
-
 def main():
     for name, (img, box, size, mode) in SWATCHES.items():
         a = load(img)
@@ -147,22 +133,6 @@ def main():
         elif mode in ('rib', 'knit', 'canvas'):
             crop = fabric(crop, mode)
         save(crop, 'char_' + name)
-    for name, (img, box, sbox) in FACES.items():
-        a = load(img)
-        x0, y0, x1, y1 = box
-        crop = resize(a[y0:y1, x0:x1], (512, 512))
-        tone = skin_tone(name)
-        # feather an ellipse: inside = photo, outside = flat skin tone (so the head sides match the face)
-        yy, xx = np.mgrid[0:512, 0:512]
-        e = ((xx - 256) / 236.0) ** 2 + ((yy - 262) / 250.0) ** 2
-        m = np.clip((e - .8) / .2, 0, 1)[..., None]
-        out = crop[..., :3] * (1 - m) + tone[None, None, :] * m
-        save(out, 'char_' + name)
-    # skin tones for the materials
-    import json
-    tones = {n: [float(c) for c in skin_tone(n)] for n in FACES}
-    json.dump(tones, open(os.path.join(bl.TEXTURES, 'char_skin_tones.json'), 'w'))
-    print(tones)
 
 
 if __name__ == '__main__':

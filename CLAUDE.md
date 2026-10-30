@@ -22,9 +22,16 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
 
 ## Characters
-`tools/blender/refs.py` cuts face plates/swatches from `art/reference` (owner's art, allowed); `characters_hq.py` builds the
-players (outfits O_*, hair H_*, body regions B_* switched by `Avatar.setLook`, meta in the armature's `worldex` extra);
-`civilians.py` builds pedestrians (tinted by prefix skin/hair/shirt/pants/shoes). Old `characters.py` still makes enemies.
+Players are built by `players.py` (base body, regions `B_*`, eyes, brows, lashes, face morphs from `face.py`) and
+`wardrobe.py` (hair and clothing as `C_<slot>__<item>`). The anatomy is signed-distance fields in `anatomy.py`,
+meshed by `sdf.py` (Surface Nets + narrow band). Meta (wardrobe items with the regions they hide, defaults, morph groups)
+lives in the armature's `worldex` extra. `Avatar.applyCharacter(save.character)` applies the look, using character v3:
+skin, eyes, hairColor, brow, face presets, sliders, wear per slot and tints per slot. Material names are an API for runtime
+tints: `skin`, `eye_iris`, `hair`, `brow`, `cloth_<slot>`, `armor_primary__<slot>`, `glow`. Run with `-- female|male --fast`
+for quick checks; `sdfview.py` previews a field without Blender. `refs.py` cuts fabric swatches from `art/reference`
+(owner's art, allowed). `civilians.py` builds the pedestrians with `npc_kit.py` (tinted by prefix skin/hair/shirt/pants/shoes).
+`characters.py` still makes the enemies. The player rig uses the IK pole angle of 90 degrees, which keeps the elbows down
+and the upper-arm twist small for skinned shoulders.
 
 ## Earth (free roam)
 `src/worlds/meridian/`: `layout.js` (heightmap, highways, lanes, villages/farms, districts), `population.js` (pedestrians),

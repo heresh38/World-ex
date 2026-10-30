@@ -44,10 +44,17 @@ export function randomArch(rnd = Math.random, slot = null) {
   return keys[Math.floor(rnd() * keys.length)];
 }
 
+// Player look: body frame, skin, face morphs, colours and one item per clothing slot (null wear = the model's defaults).
+export function defaultCharacter(body = 'female') {
+  const m = body === 'male';
+  return { v: 3, body, skin: m ? '#c08560' : '#e2b394', eyes: m ? '#6b8a5a' : '#6f8fae', hairColor: m ? '#2a211c' : '#3b2a22', brow: m ? 2 : 0,
+    face: { nose: null, mouth: null, eyes: null, ears: null }, sliders: {}, wear: null, tints: {}, glow: null };
+}
+
 export function newSave() {
   const s = {
     v: 1, created: Date.now(),
-    character: { v: 2, body: 'female', outfit: 'circuit_coat', hair: 'ponytail', primary: null, secondary: null, glow: null },
+    character: defaultCharacter('female'),
     car: { model: 'car_sport', paint: '#a3121f' },
     level: 1, xp: 0, credits: 500, alloy: 20,
     inventory: [], equipped: [null, null, null],
@@ -80,10 +87,9 @@ export function load() {
     const s = JSON.parse(raw);
     if (!s || s.v !== 1) return null;
     s.settings = { ...DEFAULT_SETTINGS, ...s.settings };
-    if (!s.character || s.character.v !== 2) {
-      // characters were rebuilt from the owner's reference art: keep the frame, reset looks to the originals
-      const body = (s.character && s.character.body) || 'female';
-      s.character = { v: 2, body, outfit: body === 'male' ? 'vanguard' : 'circuit_coat', hair: body === 'male' ? 'short' : 'ponytail', primary: null, secondary: null, glow: null };
+    if (!s.character || s.character.v !== 3) {
+      // new customisable base bodies: keep the frame, start from the default look
+      s.character = defaultCharacter((s.character && s.character.body) || 'female');
     }
     s.stats = { ...newSave().stats, ...s.stats };
     return s;

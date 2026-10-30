@@ -48,6 +48,16 @@ export const SHADERS = [
 ];
 
 export const ARMOR_COLORS = ['#e8e2d4', '#3a3f47', '#1b2440', '#8c1d26', '#2f6b55', '#b58a3c', '#6a4fa0', '#d9d4c8', '#14161a', '#c76a2a', '#2a6fa8', '#7a7f87'];
+// character creator palettes
+export const SKIN_TONES = ['#f6d5c2', '#eec1a2', '#e2b394', '#d39b78', '#c08560', '#a86d4a', '#8d5638', '#6e4029', '#55301e', '#c9b6c9', '#9fb4c8', '#b7c9a8'];
+export const EYE_COLORS = ['#6f8fae', '#4f7a9e', '#7aa6c2', '#6b8a5a', '#8aa05a', '#7a5a3a', '#4a3424', '#9a8a6a', '#8a8f99', '#c27a2a', '#b46cff', '#ff4a3d', '#e8f4ff', '#ffe066'];
+export const HAIR_COLORS = ['#141110', '#2a211c', '#3b2a22', '#5a3c28', '#7a5434', '#a8794c', '#d6b07a', '#e8d6b0', '#9a9a9a', '#e8e8e8', '#8c1d26', '#c4553a', '#b9a3e8', '#3a6fd8', '#2f8a6a', '#e86aa8'];
+export const SLOT_ORDER = ['head', 'top', 'vest', 'outer', 'dress', 'hands', 'legs', 'feet'];
+export const SLOT_LABELS = { hair: 'Hair', head: 'Headwear', top: 'Shirt', vest: 'Vest & harness', outer: 'Coat', dress: 'Dress', hands: 'Gloves', legs: 'Pants', feet: 'Shoes' };
+export const FACE_LABELS = { nose: 'Nose', mouth: 'Mouth', eyes: 'Eye shape', ears: 'Ears' };
+export const SLIDER_LABELS = { jaw_width: 'Jaw width', chin_length: 'Chin length', chin_width: 'Chin width', cheekbones: 'Cheekbones',
+  brow_height: 'Brow height', eye_spacing: 'Eye spacing', face_width: 'Face width', nose_size: 'Nose size' };
+export const BROW_LABELS = ['Natural', 'Arched', 'Straight', 'Bold'];
 export const GLOW_COLORS = ['#1ad8ff', '#ffae2f', '#ff2fa8', '#7dffb0', '#b46cff', '#ff4a3d', '#ffffff', '#ffe066'];
 export const PAINTS = ['#a3121f', '#2a4f7a', '#e8e2d4', '#1c1f24', '#c79a45', '#2f6b55', '#6a4fa0', '#d96a1b', '#8a9099', '#0f4b5c'];
 

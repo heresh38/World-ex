@@ -4,7 +4,7 @@ A first-person sci-fi looter shooter in the browser (with an optional third-pers
 Walk its decks to reach every system that used to sit in the main menu, then jump to **Earth**, a city hub,
 or to one of five **frontier worlds** whose terrain is generated endlessly in every direction.
 
-Every 3D model (the female and male player characters, the civilians, enemies, guns, hover cars, ships, buildings, machines,
+Every 3D model (the female and male player base bodies with their clothing and hair, the civilians, enemies, guns, hover cars, ships, buildings, machines,
 props, pickups) and every texture is made by Python scripts run in headless Blender (`tools/blender/`).
 Every sound is synthesised live with WebAudio.
 
@@ -57,7 +57,7 @@ If there is no sound, check the phone's silent switch.
 |---|---|
 | Play / Teleport / World map | **Captain's chair** on the bridge: navigation to Earth and the frontier worlds |
 | Home / Help / About | **Briefing table** in the commons: contracts (bounties), field guide, controls |
-| Character | **Wardrobe pod**: female or male frame, armour and light colours (drag to turn) |
+| Character | **Wardrobe pod**: body, face shape, eyes, brows, hair and clothing slots (drag to turn) |
 | Settings / Controls | **Engineering terminal**: graphics presets, render scale, 60 fps governor, FOV, audio, sensitivity |
 | Stats | **Service record** console |
 | Arsenal | **Armory rack** in the hangar: loadout by slot, with weapon stats and perks |
@@ -75,9 +75,21 @@ and a hover car whose clear-coat paint reflects the hangar (its environment map 
   (generator, turret, squad, a locked cache), roaming drones and loose supply caches. Rewards grow with distance from the landing zone.
 
 ## Player characters
-The female and male characters are rebuilt from the owner's reference art in `art/reference/`. The face plates are projected from those photos and calibrated to the sculpted heads. Fabric and armour swatches are cut from the same images. Hair uses alpha-tested strand cards. The wardrobe pod switches frame, outfit and hair style, and tints the materials ("original" keeps the reference colours):
-* Female: Circuit Coat, Circuit Crop, White Knit, Off Duty; high ponytail or long straight hair.
-* Male: Vanguard Plate, Ranger Armour, Field Jacket.
+The players are new base bodies (female and male) sculpted as signed-distance fields in `tools/blender/anatomy.py`,
+meshed with Surface Nets at high resolution (head 0.9 mm, hands 1.2 mm, body 3.4 mm), decimated, and given seam-free
+normals from the field. Skin weights are analytic, so the head, hands, feet and body meet without seams. The look is
+built in the **wardrobe pod**, where the camera moves close on the face for face and hair:
+* **Body**: female or male frame, skin tone.
+* **Face**: nose, mouth, eye-shape and ear presets (button, aquiline, broad, full lips, almond, hooded, pointed or elven ears…),
+  eye colour, four brow styles, and fine-tuning sliders (jaw, chin, cheekbones, brow height, eye spacing, face width,
+  nose size). These are glTF morph targets, built as smooth warps in `tools/blender/face.py`.
+* **Hair**: styles (female: high ponytail with lilac braid, bob, pixie; male: side part, buzz, swept back, or shaved) and colour.
+* **Clothing**, one piece per slot with a colour tint each: headwear, shirt, vest and harness, coat, gloves, pants and shoes.
+  The defaults are the full sets from the owner's references in `art/reference/`. The female wears the ribbed
+  high-neck top, ribbed leggings with knee guards, the navy-and-gold circuit coat, an olive harness, armoured gauntlets and
+  tech boots. The male wears the black undersuit, the vanguard plate (chest, abdomen bands, layered pauldrons and a core light),
+  tactical gloves, armoured trousers and combat boots, plus an optional closed pioneer helmet.
+  New pieces are added in `tools/blender/wardrobe.py`.
 
 ## Loot
 Weapons: auto rifle, pulse rifle, scout rifle, hand cannon, shotgun, sniper and rocket launcher. Rarity runs Common, Uncommon, Rare,
@@ -98,7 +110,6 @@ ammo and credits. Power = the average of your equipped weapons. Progress saves t
 | `lib/` | Vendored three.js + three-mesh-bvh |
 | `tools/test/e2e.js` | Playwright end-to-end test (title → ship stations → Earth combat and car → planet streaming → ship) |
 | `tools/test/meridian.js`, `mobile.js` | Free-roam Earth test, iPhone touch test |
-| `tools/test/charview.html` | three.js character viewer (`?m=player_female&o=knit&h=ponytail&v=face`) |
 | `art/reference/` | The owner's character reference images used by `tools/blender/refs.py` |
 | `legacy/` | The previous single-file engine, kept for reference (still builds with `legacy/tools/build.py`) |
 

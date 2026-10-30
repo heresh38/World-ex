@@ -276,8 +276,16 @@ class Game {
     const p = this.player, V = a => new THREE.Vector3(a[0], a[1], a[2]);
     p.pos.copy(V(st.stand)); p.yaw = Math.PI / 2; p.mode = 'seat';
     p.avatar.root.position.copy(p.pos); p.avatar.root.rotation.set(0, p.yaw, 0); p.avatar.play('IdleRelaxed', .2);
-    this.focusOn(p.pos.clone().add(new THREE.Vector3(3.1, 1.25, 0)), p.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), true);
     this.wardrobeSpin = 0;
+    this.wardrobeFocus((this.menus.open === 'wardrobe' && this.menus.tab) || 'face');
+  }
+
+  // wardrobe camera: close on the face for face/hair, full body otherwise
+  wardrobeFocus(tab) {
+    const p = this.player; if (this.stationId !== 'wardrobe') return;
+    const hz = this.save.character.body === 'male' ? 1.72 : 1.57;
+    if (tab === 'face' || tab === 'hair') this.focusOn(p.pos.clone().add(new THREE.Vector3(1.05, hz + .1, 0)), p.pos.clone().add(new THREE.Vector3(0, hz + .04, 0)), true);
+    else this.focusOn(p.pos.clone().add(new THREE.Vector3(3.1, 1.25, 0)), p.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), true);
   }
 
   // Blend the camera to a framed shot of a station (time based, so it lands the same at any frame rate).

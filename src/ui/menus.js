@@ -1,10 +1,10 @@
 // Title screen, loading screen, pause menu and every ship-station panel (the old main menu, moved aboard).
-import { DESTINATIONS, ARCHETYPES, RARITY, PERKS, SLOT_NAMES, SHADERS, ARMOR_COLORS, GLOW_COLORS, PAINTS, TIPS } from '../game/data.js';
+import { DESTINATIONS, ARCHETYPES, RARITY, PERKS, SLOT_NAMES, SHADERS, ARMOR_COLORS, GLOW_COLORS, PAINTS, TIPS,
+  SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS } from '../game/data.js';
+import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter } from '../game/state.js';
 
-const OUTFIT_NAMES = { circuit_coat: 'Circuit Coat', circuit_crop: 'Circuit Crop', knit: 'White Knit', offduty: 'Off Duty',
-  vanguard: 'Vanguard Plate', ranger: 'Ranger Armour', field: 'Field Jacket' };
-const HAIR_NAMES = { ponytail: 'High Ponytail', long: 'Long & Straight', short: 'Short' };
-import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel } from '../game/state.js';
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const presetName = id => cap(id.split('_').slice(1).join(' '));
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const $ = id => document.getElementById(id);
@@ -160,22 +160,44 @@ export class Menus {
     return `<div class="keys">${K.map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('')}</div>`;
   }
 
-  // Wardrobe pod (old Character screen)
+  // Wardrobe pod: character creator (body, face, hair) and clothing slots
   st_wardrobe() {
     const c = this.g.save.character, av = this.g.player.avatar;
-    const label = s => `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px">${s}</div>`;
-    const orig = key => `<div class="sw ${!c[key] ? 'on' : ''}" title="Original" style="background:linear-gradient(135deg,#fff 45%,#c33 46%,#c33 54%,#fff 55%)" data-act="color" data-k="${key}" data-v=""></div>`;
-    const sw = (key, list) => `<div class="swatches">${orig(key)}${list.map(h => `<div class="sw ${c[key] === h ? 'on' : ''}" style="background:${h}" data-act="color" data-k="${key}" data-v="${h}"></div>`).join('')}</div>`;
-    const btns = (act, list, cur) => `<div class="row" style="margin:8px 0 16px">${list.map(([id, name]) => `<button class="btn ${cur === id ? 'pri' : ''}" data-act="${act}" data-v="${id}">${name}</button>`).join('')}</div>`;
-    const outfits = (av.outfits || []).map(id => [id, OUTFIT_NAMES[id] || id]);
-    const hair = (av.hairStyles || []).map(id => [id, HAIR_NAMES[id] || id]);
-    const body = `${label('FRAME')}${btns('body', [['female', 'Female'], ['male', 'Male']], c.body)}
-      ${label('OUTFIT')}${btns('outfit', outfits, c.outfit)}
-      ${hair.length > 1 ? label('HAIR') + btns('hair', hair, c.hair) : ''}
-      ${label('PRIMARY TINT')}${sw('primary', ARMOR_COLORS)}
-      ${label('SECONDARY TINT')}${sw('secondary', ARMOR_COLORS)}
-      ${label('LIGHTS')}${sw('glow', GLOW_COLORS)}`;
-    return this.frame('Wardrobe pod', 'Appearance', 'Changes apply instantly. Turn around in the pod with the mouse.', body);
+    if (!['body', 'face', 'hair', 'wear', 'lights'].includes(this.tab)) this.tab = 'face';
+    const label = s => `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px;margin-top:6px">${s}</div>`;
+    const swatches = (act, list, cur, k = '', orig = false) => `<div class="swatches">${orig ? `<div class="sw ${!cur ? 'on' : ''}" title="Original" style="background:linear-gradient(135deg,#fff 45%,#c33 46%,#c33 54%,#fff 55%)" data-act="${act}" data-k="${k}" data-v=""></div>` : ''}${list.map(h => `<div class="sw ${cur === h ? 'on' : ''}" style="background:${h}" data-act="${act}" data-k="${k}" data-v="${h}"></div>`).join('')}</div>`;
+    const btns = (act, list, cur, k = '') => `<div class="row" style="margin:8px 0 14px;flex-wrap:wrap">${list.map(([id, name]) => `<button class="btn ${cur === id ? 'pri' : ''}" data-act="${act}" data-k="${k}" data-v="${id}">${esc(name)}</button>`).join('')}</div>`;
+    const meta = av.meta || {}, M = meta.morphs || { groups: {}, sliders: [] };
+    let body = '';
+    if (this.tab === 'body') {
+      body = `${label('FRAME')}${btns('body', [['female', 'Female'], ['male', 'Male']], c.body)}
+        ${label('SKIN TONE')}${swatches('skin', SKIN_TONES, c.skin)}
+        <div class="row" style="margin-top:16px"><button class="btn" data-act="charreset">Reset look to default</button></div>`;
+    } else if (this.tab === 'face') {
+      for (const [g, list] of Object.entries(M.groups)) {
+        body += label((FACE_LABELS[g] || g).toUpperCase()) + btns('face', [['', 'Default'], ...list.map(n => [n, presetName(n)])], (c.face && c.face[g]) || '', g);
+      }
+      body += label('EYE COLOUR') + swatches('eyecol', EYE_COLORS, c.eyes);
+      body += label('BROWS') + btns('brow', BROW_LABELS.map((n, i) => [String(i), n]), String(c.brow | 0));
+      body += label('FINE TUNING') + M.sliders.map(n => `<div class="set"><span>${SLIDER_LABELS[n] || n}</span><input type="range" min="-1" max="1" step=".05" value="${(c.sliders && c.sliders[n]) || 0}" data-slider="${n}"><span class="v">${(+((c.sliders && c.sliders[n]) || 0)).toFixed(2)}</span></div>`).join('');
+    } else if (this.tab === 'hair') {
+      const hair = Object.entries(av.wardrobe.hair || {}).map(([id, d]) => [id, d.label]);
+      body = `${label('STYLE')}${btns('wear', [['none', 'Shaved'], ...hair], (c.wear || {}).hair, 'hair')}
+        ${label('COLOUR')}${swatches('haircol', HAIR_COLORS, c.hairColor)}`;
+    } else if (this.tab === 'wear') {
+      for (const slot of SLOT_ORDER) {
+        const items = Object.entries(av.wardrobe[slot] || {}).map(([id, d]) => [id, d.label]);
+        const cur = (c.wear || {})[slot] || 'none';
+        body += label((SLOT_LABELS[slot] || slot).toUpperCase());
+        if (!items.length) { body += `<p class="guide" style="margin:6px 0 12px">No ${(SLOT_LABELS[slot] || slot).toLowerCase()} yet — more pieces are coming.</p>`; continue; }
+        body += btns('wear', [['none', 'None'], ...items], cur, slot);
+        if (cur !== 'none') body += swatches('tint', ARMOR_COLORS, (c.tints || {})[slot], slot, true);
+      }
+    } else {
+      body = `${label('ARMOUR LIGHTS')}${swatches('color', GLOW_COLORS, c.glow, 'glow', true)}`;
+    }
+    const tabs = [['body', 'Body'], ['face', 'Face'], ['hair', 'Hair'], ['wear', 'Clothing'], ['lights', 'Lights']];
+    return this.frame('Wardrobe pod', 'Appearance', 'Shape your face, pick hair and clothing piece by piece. Drag to turn around.', body, tabs);
   }
 
   // Engineering terminal (old Settings + Controls)
@@ -284,6 +306,13 @@ export class Menus {
 
   // ------------------------------------------------------------------ events
   onInput(e) {
+    const sl = e.target.dataset.slider;
+    if (sl) {
+      const c = this.g.save.character; (c.sliders = c.sliders || {})[sl] = +e.target.value;
+      this.g.player.avatar.setFace(c.face, c.sliders);
+      const v = e.target.parentElement.querySelector('.v'); if (v) v.textContent = (+e.target.value).toFixed(2);
+      return;
+    }
     const k = e.target.dataset.set; if (!k) return;
     const s = this.g.save.settings;
     s[k] = e.target.type === 'range' ? +e.target.value : e.target.value;
@@ -309,15 +338,21 @@ export class Menus {
       case 'pause-settings': this.hidePause(); g.paused = false; g.openStationPanelOnly('engineering'); return;
       case 'orbit': this.hidePause(); g.paused = false; g.travel('ship'); return;
       case 'quit': g.quitToTitle(); return;
-      case 'tab': this.tab = v; this.sel = null; break;
+      case 'tab': this.tab = v; this.sel = null; if (this.open === 'wardrobe') g.wardrobeFocus(v); break;
       case 'dest': this.sel = v; break;
       case 'launch': g.audio.ui('confirm'); g.closeStation(); g.travel(v); return;
       case 'claim': g.claimContract(+v); break;
       case 'body':
-        if (sv.character.body !== v) { sv.character.body = v; sv.character.outfit = v === 'male' ? 'vanguard' : 'circuit_coat'; sv.character.hair = v === 'male' ? 'short' : 'ponytail'; }
-        g.player.setBody(v); g.player.avatar.play('IdleRelaxed', 0); g.placeInWardrobe(); g.setAvatarLayer(); break;
-      case 'outfit': sv.character.outfit = v; g.player.applyLook(); g.weapons.refreshModel(); break;
-      case 'hair': sv.character.hair = v; g.player.applyLook(); break;
+        if (sv.character.body !== v) sv.character = defaultCharacter(v);
+        g.player.setBody(v); g.player.avatar.play('IdleRelaxed', 0); g.placeInWardrobe(); g.setAvatarLayer(); g.weapons.refreshModel(); break;
+      case 'charreset': sv.character = defaultCharacter(sv.character.body); g.player.applyLook(); break;
+      case 'skin': sv.character.skin = v; g.player.applyLook(); break;
+      case 'eyecol': sv.character.eyes = v; g.player.applyLook(); break;
+      case 'haircol': sv.character.hairColor = v; g.player.applyLook(); break;
+      case 'brow': sv.character.brow = +v; g.player.applyLook(); break;
+      case 'face': (sv.character.face = sv.character.face || {})[t.dataset.k] = v || null; g.player.applyLook(); break;
+      case 'wear': (sv.character.wear = sv.character.wear || {})[t.dataset.k] = v; g.player.applyLook(); g.weapons.refreshModel(); break;
+      case 'tint': (sv.character.tints = sv.character.tints || {})[t.dataset.k] = v || null; g.player.applyLook(); break;
       case 'color': sv.character[t.dataset.k] = v || null; g.player.applyLook(); break;
       case 'toggle': sv.settings[v] = !sv.settings[v]; g.applySettings(v); break;
       case 'view': if ((sv.settings.view === 'third') !== (v === 'third')) g.toggleView(); break;
