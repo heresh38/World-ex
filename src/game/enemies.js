@@ -33,6 +33,13 @@ export class Enemy {
       const sub = { drone: 'PR_drone', turret: 'PR_turret', generator: 'PR_generator' }[type];
       this.obj = game.assets.clone('props_world', sub);
       this.head = this.obj.getObjectByName('turret_head');
+      if (opts.police) {
+        // city security drone: same airframe, white and blue livery, no loot
+        this.police = true; this.T = { ...this.T, name: 'Security Drone', loot: 0 };
+        this.obj.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); const m = o.material;
+          if (m.emissive && m.emissive.r > .5 && m.emissive.b < .5) { m.color.set('#3aa0ff'); m.emissive.set('#3aa0ff'); }
+          else if (m.name === 'enemy_plate') m.color.set('#d9dde2'); } });
+      }
       this.muzzle = this.obj.getObjectByName('turret_muzzle');
       if (type === 'drone') { this.pos.y += 6 + Math.random() * 3; this.hover = this.pos.y - game.world.collision.ground(pos.x, pos.z); }
     }
@@ -106,6 +113,7 @@ export class Enemy {
       if (this.type === 'generator') g.combat.splash(p, 7, 60, 'world');
     }
     g.onEnemyKilled(this, crit);
+    if (this.police && g.world.wanted) g.world.wanted.onPoliceKilled();
     g.combat.drop(this.center(_v).clone(), this.type, this.level, this.T.loot);
     this.onDeath && this.onDeath(this);
   }

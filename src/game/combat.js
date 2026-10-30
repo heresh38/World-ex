@@ -46,7 +46,7 @@ export class Combat {
       if (h && h.dist < best) { best = h.dist; tgt = t; crit = h.crit; }
     }
     const wh = this.g.world.collision.raycast(o, d, best);
-    if (wh && wh.dist < best) return { hit: true, dist: wh.dist, point: wh.point, normal: wh.normal, terrain: wh.terrain };
+    if (wh && wh.dist < best) return { hit: true, dist: wh.dist, point: wh.point, normal: wh.normal, terrain: wh.terrain, box: wh.box };
     const point = o.clone().addScaledVector(d, best);
     if (tgt) return { target: tgt, crit, dist: best, point };
     return { dist: max, point };

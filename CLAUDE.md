@@ -21,6 +21,15 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - `ship_interior.py` also writes `ship_interior.json`: AABB colliders, station points and light anchors (already in three space).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
 
+## Characters
+`tools/blender/refs.py` cuts face plates/swatches from `art/reference` (owner's art, allowed); `characters_hq.py` builds the
+players (outfits O_*, hair H_*, body regions B_* switched by `Avatar.setLook`, meta in the armature's `worldex` extra);
+`civilians.py` builds pedestrians (tinted by prefix skin/hair/shirt/pants/shoes). Old `characters.py` still makes enemies.
+
+## Earth (free roam)
+`src/worlds/meridian/`: `layout.js` (heightmap, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
+`traffic.js` (lane cars, hijack), `wanted.js` (stars + security drones). Assets: `rural.py` (RU_* kit). No missions on Earth.
+
 ## Camera
 First person is the primary view (`settings.view = 'first'`), third person is a toggle (T) that may be removed later.
 In first person the body moves to layer 1 (shadows only) and `src/game/viewmodel.js` draws the Blender arms + gun in a

@@ -231,3 +231,9 @@ body.touch #prompt kbd{border-color:var(--gold);color:var(--gold)}
   .big-stat b{font-size:20px}
 }
 .pn-foot{display:flex;align-items:center;gap:12px}
+
+/* wanted level + minimap (free-roam Earth) */
+.h-wanted{position:absolute;right:34px;top:226px;font-size:24px;letter-spacing:4px;color:rgba(236,230,216,.25);text-shadow:0 1px 3px #000}
+.h-wanted span.on{color:#ffcf3f;text-shadow:0 0 10px rgba(255,180,40,.8),0 1px 3px #000;animation:pulse 1s ease-in-out infinite}
+.h-mini{position:absolute;right:30px;top:40px;width:180px;height:180px;border-radius:50%;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+body.touch .h-wanted{top:calc(58px + env(safe-area-inset-top,0px));right:calc(18px + env(safe-area-inset-right,0px));font-size:18px}

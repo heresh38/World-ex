@@ -4,7 +4,7 @@ A first-person sci-fi looter shooter in the browser (with an optional third-pers
 Walk its decks to reach every system that used to sit in the main menu, then jump to **Earth**, a city hub,
 or to one of five **frontier worlds** whose terrain is generated endlessly in every direction.
 
-Every 3D model (the female and male player characters, enemies, guns, hover cars, ships, buildings, machines,
+Every 3D model (the female and male player characters, the civilians, enemies, guns, hover cars, ships, buildings, machines,
 props, pickups) and every texture is made by Python scripts run in headless Blender (`tools/blender/`).
 Every sound is synthesised live with WebAudio.
 
@@ -68,11 +68,16 @@ The hangar has big skylights casting sun shafts and shadows, a welding robot thr
 and a hover car whose clear-coat paint reflects the hangar (its environment map is captured from the scene).
 
 ## Worlds
-* **Earth: New Meridian City.** A grid city of instanced Blender towers at golden hour, with skyway traffic, pedestrians, parked cars,
-  the spaceport (your jumpship and the Quartermaster vendor) and a raider incursion in the north-east district that regroups after you clear it.
+* **Earth: New Meridian** is a free-roam island about 2.8 km across, with no missions. It has the city in the middle (instanced towers, parks, skyway traffic, the spaceport with your jumpship and the Quartermaster), the villages of Harrow, Millbrook and Eastwell, four farms with barns, silos, crops and fences, forests, a wind farm on the hills, a lake and the bay all around. Highways join everything together.
+  Pedestrians fill the sidewalks, village lanes and farmyards, and hover-car traffic follows the roads. You can shoot civilians, run them over, or hijack any car (press **E** at a car in traffic and the driver bails out). Crimes raise a **wanted level** (up to five stars), and city security drones hunt you until you lie low. A rotating minimap shows where you are.
 * **Frontier worlds:** Ares Verge, Vesper, Thalassa Reach, Pyrrhos and Nyx Expanse. Terrain streams in 64 m chunks seeded by
   (planet, chunk), so it is endless but stable. Each world has its own palette, sky, flora, hazards (lava on Pyrrhos), raider outposts
   (generator, turret, squad, a locked cache), roaming drones and loose supply caches. Rewards grow with distance from the landing zone.
+
+## Player characters
+The female and male characters are rebuilt from the owner's reference art in `art/reference/`. The face plates are projected from those photos and calibrated to the sculpted heads. Fabric and armour swatches are cut from the same images. Hair uses alpha-tested strand cards. The wardrobe pod switches frame, outfit and hair style, and tints the materials ("original" keeps the reference colours):
+* Female: Circuit Coat, Circuit Crop, White Knit, Off Duty; high ponytail or long straight hair.
+* Male: Vanguard Plate, Ranger Armour, Field Jacket.
 
 ## Loot
 Weapons: auto rifle, pulse rifle, scout rifle, hand cannon, shotgun, sniper and rocket launcher. Rarity runs Common, Uncommon, Rare,
@@ -92,6 +97,9 @@ ammo and credits. Power = the average of your equipped weapons. Progress saves t
 | `assets/models`, `assets/textures` | Generated GLBs, layout JSON and baked textures |
 | `lib/` | Vendored three.js + three-mesh-bvh |
 | `tools/test/e2e.js` | Playwright end-to-end test (title → ship stations → Earth combat and car → planet streaming → ship) |
+| `tools/test/meridian.js`, `mobile.js` | Free-roam Earth test, iPhone touch test |
+| `tools/test/charview.html` | three.js character viewer (`?m=player_female&o=knit&h=ponytail&v=face`) |
+| `art/reference/` | The owner's character reference images used by `tools/blender/refs.py` |
 | `legacy/` | The previous single-file engine, kept for reference (still builds with `legacy/tools/build.py`) |
 
 ## Rebuild the assets

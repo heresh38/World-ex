@@ -63,10 +63,11 @@ fs.mkdirSync(OUT, { recursive: true });
   await waitPlay(); await wait(5000); await shot('07_earth_spawn');
   await ev(() => { const g = window.__game; g.input.locked = true; g.input.enabled = true; g.player.camYaw = Math.PI; g.player.camPitch = .25; });
   await wait(2500); await shot('08_earth_skyline');
-  // fight: put the player near the incursion and shoot
+  // fight: spawn a raider near the player and shoot it
   const fight = await ev(async () => {
-    const g = window.__game, c = g.world.incursionCenter;
-    g.player.pos.set(c.x - 30, 0, c.z + 30); g.player.avatar.root.position.copy(g.player.pos);
+    const g = window.__game, V = g.player.pos.constructor;
+    g.player.pos.set(-150, 0, 60); g.player.avatar.root.position.copy(g.player.pos);
+    g.enemies.spawn('trooper', new V(-150, 0, 40), 2);
     const e = g.enemies.list.find(e => e.alive && e.type === 'trooper');
     const dx = e.pos.x - g.player.pos.x, dz = e.pos.z - g.player.pos.z;
     g.player.camYaw = Math.atan2(-dx, -dz); g.player.camPitch = -.05;
@@ -85,8 +86,8 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('09_earth_fight');
   // car
   const car = await ev(async () => {
-    const g = window.__game; g.player.pos.set(20, 0, 30); g.player.avatar.root.position.copy(g.player.pos);
-    const c = g.vehicles.nearest(g.player.pos, 10); if (!c) return 'no car';
+    const g = window.__game; const c = g.vehicles.cars.find(c => !c.ai && c.alive); if (!c) return 'no car';
+    g.player.pos.copy(c.pos).add(new (c.pos.constructor)(2.5, 0, 0)); g.player.avatar.root.position.copy(g.player.pos);
     g.vehicles.enter(c); g.input.down.add('KeyW');
     await new Promise(r => setTimeout(r, 3000));
     g.input.down.delete('KeyW');

@@ -25,7 +25,8 @@ const MODELS = [
   ['ship_interior', 'ship_interior.glb', 10], ['player_female', 'player_female.glb', 5], ['player_male', 'player_male.glb', 5],
   ['enemy_trooper', 'enemy_trooper.glb', 4], ['enemy_brute', 'enemy_brute.glb', 4], ['npc_vendor', 'npc_vendor.glb', 4],
   ['car_sport', 'car_sport.glb', 2], ['car_utility', 'car_utility.glb', 2], ['ship_jumper', 'ship_jumper.glb', 2],
-  ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
+  ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
+  ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]),
 ];
 const TEXTURES = ['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss', 'facade_e', 'ribbon_e'];
@@ -381,6 +382,7 @@ class Game {
   }
 
   onPlayerDeath() {
+    if (this.world.wanted) this.world.wanted.reset();
     this.hud.banner('You fell', 'Ghost-shell revival in 4 seconds', 4);
     this.input.enabled = true;
     setTimeout(async () => {

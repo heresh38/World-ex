@@ -25,12 +25,15 @@ export class HUD {
       <div class="h-banner"><small></small><b></b></div>
       <div class="h-hint"></div>
       <div class="h-nums"></div>
-      <div class="h-fps hidden"></div>`;
+      <div class="h-fps hidden"></div>
+      <div class="h-wanted"></div>
+      <canvas class="h-mini hidden" width="180" height="180"></canvas>`;
     const q = s => this.el.querySelector(s);
     this.dmgEl = q('.h-dmg'); this.locEl = q('.h-loc'); this.objEl = q('.h-obj'); this.compEl = q('.h-compass .strip');
     this.crossEl = q('.h-cross'); this.hitEl = q('.h-hit'); this.feedEl = q('.h-feed'); this.vitEl = q('.h-vitals');
     this.weapEl = q('.h-weap'); this.carEl = q('.h-car'); this.banEl = q('.h-banner'); this.hintEl = q('.h-hint');
     this.numsEl = q('.h-nums'); this.fpsEl = q('.h-fps');
+    this.wantedEl = q('.h-wanted'); this.miniEl = q('.h-mini'); this.mini = this.miniEl.getContext('2d');
     this.nums = []; this.bars = [];
     this.dirty = true; this.t = 0; this.markers = [];
     this.combatMode = false;
@@ -152,10 +155,13 @@ export class HUD {
     }
     this.updateBars();
     if (this.combatMode) this.updateCompass();
+    this.updateMinimap();
     if (!(this.dirty || this.t > .12)) return;
     this.t = 0; this.dirty = false;
     if (g.save.settings.showFps) { this.fpsEl.classList.remove('hidden'); this.fpsEl.textContent = Math.round(g.fps) + ' fps · ' + Math.round(g.renderer.scale * 100) + '%'; }
     else this.fpsEl.classList.add('hidden');
+    const wl = g.world && g.world.wanted ? g.world.wanted.level : 0;
+    if (wl !== this.wl) { this.wl = wl; this.wantedEl.innerHTML = wl ? Array.from({ length: 5 }, (_, i) => `<span class="${i < wl ? 'on' : ''}">\u2605</span>`).join('') : ''; }
     if (!this.combatMode) return;
     const s = g.save;
     this.vitEl.innerHTML = `<div class="lv"><b>${g.power()}</b>POWER · LEVEL ${s.level}</div>
@@ -178,6 +184,29 @@ export class HUD {
     if (car) this.carEl.innerHTML = `${Math.round(car.speed * 3.6)}<small>KM/H · ${car.S.name}</small><div class="bar sh" style="width:180px;margin-left:auto"><i style="width:${Math.max(0, car.hp / car.S.hp * 100)}%"></i></div>`;
     this.crossEl.style.display = this.combatMode && !car && p.armed && !p.dead ? '' : 'none';
     this.weapEl.style.display = this.combatMode && !car ? '' : 'none';
+  }
+
+  // rotating minimap around the player (worlds that provide one)
+  updateMinimap() {
+    const g = this.g, mm = g.world && g.world.minimap;
+    const show = !!mm && this.combatMode && !document.body.classList.contains('touch');
+    this.miniEl.classList.toggle('hidden', !show);
+    if (!show) return;
+    const x = this.mini, S = 180, p = g.player, c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
+    const zoom = p.mode === 'car' ? 1.6 : 2.6;                     // map pixels per minimap pixel scale
+    x.save(); x.clearRect(0, 0, S, S);
+    x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); x.clip();
+    x.fillStyle = '#1e465c'; x.fillRect(0, 0, S, S);
+    x.translate(S / 2, S / 2); x.rotate(p.camYaw); x.scale(zoom, zoom);
+    x.translate(-(c.x + mm.half) * mm.scale, -(c.z + mm.half) * mm.scale);
+    x.drawImage(mm.canvas, 0, 0);
+    // blips
+    const blip = (wx, wz, col, r = 2.2) => { x.fillStyle = col; x.beginPath(); x.arc((wx + mm.half) * mm.scale, (wz + mm.half) * mm.scale, r / zoom * 1.6, 0, 7); x.fill(); };
+    for (const m of this.markers) blip(m.pos.x, m.pos.z, m.color, 3);
+    x.restore();
+    // player arrow (camera-up)
+    x.fillStyle = '#e3c26c'; x.beginPath(); x.moveTo(S / 2, S / 2 - 8); x.lineTo(S / 2 + 5, S / 2 + 6); x.lineTo(S / 2, S / 2 + 3); x.lineTo(S / 2 - 5, S / 2 + 6); x.closePath(); x.fill();
+    x.strokeStyle = 'rgba(236,230,216,.5)'; x.lineWidth = 2; x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); x.stroke();
   }
 
   updateBars() {

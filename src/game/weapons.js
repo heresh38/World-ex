@@ -115,6 +115,7 @@ export class Weapons {
     p.camForward(_d);
     g.fx.muzzle(_m, _d, w.arch === 'rocket' ? 0xffa040 : 0xffc070);
     g.audio.shot(A.sound);
+    g.world.onGunshot && g.world.onGunshot(_m.clone());
     if (A.projectile) { this.launchRocket(_m.clone(), this.aimPoint(), S, w); return; }
     const pellets = A.pellets || 1;
     let anyHit = false, crit = false, killed = false;
@@ -143,6 +144,12 @@ export class Weapons {
         if (out.killed) this.onKill(w, res.crit, res.target);
       } else if (res.hit) {
         g.fx.impact(end, res.normal, res.terrain ? 'dirt' : 'metal');
+        // shooting up a car in traffic
+        if (res.box && res.box.car && res.box.car.alive) {
+          const car = res.box.car; car.damage(S.dmg * .6);
+          if (!car.alive && g.world.wanted) g.world.wanted.crime(1, end);
+          if (car.traffic) car.traffic.stopT = 4;
+        }
       }
     }
     if (anyHit) { g.save.stats.hits++; g.hud.hitMarker(crit, killed); g.audio.hit(crit, killed); }

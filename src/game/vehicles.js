@@ -67,7 +67,7 @@ export class Car {
     this.vel.y = 0;
     world.moveCapsule(p, this.vel, 1.25, 1.4, dt, .9);
     const after = Math.hypot(this.vel.x, this.vel.z);
-    if (before - after > 10 && driving) { this.damage((before - after) * 1.5); this.g.player.shake = Math.min(1, (before - after) / 25); this.g.audio.land(); }
+    if (before - after > 10 && driving) { this.damage((before - after) * 1.5); this.g.player.shake = Math.min(1, (before - after) / 25); this.g.audio.land(); this.g.world.onCrash && this.g.world.onCrash(p.clone()); }
     // align to terrain slope
     const h0 = world.ground(p.x + nf.x * 2, p.z + nf.z * 2), h1 = world.ground(p.x - nf.x * 2, p.z - nf.z * 2);
     this.pitch += (Math.atan2(h1 - h0, 4) - this.pitch) * Math.min(1, dt * 5);
@@ -118,6 +118,7 @@ export class Vehicles {
 
   enter(c) {
     const g = this.g, p = g.player;
+    if (c.ai && g.world.traffic) g.world.traffic.hijack(c);   // a moving car: the driver bails out
     this.current = c; p.mode = 'car';
     p.avatar.attachGun(null);
     p.avatar.play('Sit', .2);
@@ -141,7 +142,7 @@ export class Vehicles {
 
   update(dt, input) {
     const g = this.g, p = g.player;
-    for (const c of this.cars) if (c.alive) c.update(dt, c === this.current, input);
+    for (const c of this.cars) if (c.alive && !c.ai) c.update(dt, c === this.current, input);
     if (this.current) {
       const c = this.current;
       if (c.seat) { c.seat.getWorldPosition(_v); c.root.getWorldQuaternion(_q); }

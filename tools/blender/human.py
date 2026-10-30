@@ -52,7 +52,7 @@ class Proportions:
         return J
 
 
-def skin_body(P, name='body'):
+def skin_body(P, name='body', levels=2):
     """Skin-modifier body without head (neck stub). Returns the evaluated, subdivided mesh object."""
     J = P.joints()
     H, f = P.H, P.f
@@ -116,7 +116,7 @@ def skin_body(P, name='body'):
     for i, r in enumerate(rad):
         sv[i].radius = r
     sv[spine[0]].use_root = True
-    sub = o.modifiers.new('sub', 'SUBSURF'); sub.levels = 2; sub.render_levels = 2
+    sub = o.modifiers.new('sub', 'SUBSURF'); sub.levels = levels; sub.render_levels = levels
     for m in list(o.modifiers):
         bpy.ops.object.modifier_apply(modifier=m.name)
     o.select_set(False)
