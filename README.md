@@ -8,6 +8,14 @@ Every 3D model (the female and male player characters, enemies, guns, hover cars
 props, pickups) and every texture is made by Python scripts run in headless Blender (`tools/blender/`).
 Every sound is synthesised live with WebAudio.
 
+| | |
+|---|---|
+| ![Title](docs/screenshots/a_title.jpg) | ![Hangar](docs/screenshots/b_hangar_wide.jpg) |
+| ![Garage](docs/screenshots/d_car.jpg) | ![Commons](docs/screenshots/e_commons.jpg) |
+| ![Earth](docs/screenshots/h_earth.jpg) | ![Thalassa Reach](docs/screenshots/h_thalassa.jpg) |
+
+*(Captured with headless software rendering at the High preset.)*
+
 ## Run it
 ```bash
 python3 -m http.server 8765        # then open http://localhost:8765/

@@ -140,7 +140,8 @@ def jumpship(name='ship_jumper', hull='#e8e2d4', accent='#c79a45', glowc='#1ad8f
         # engines
         parts.append(bl.cyl('engine', .85, 4.0, (sx * 2.6, L / 2 - 2.6, 2.3), P['gunmetal'], 20, rot=(R90, 0, 0)))
         parts.append(bl.cyl('enginering', .95, .5, (sx * 2.6, L / 2 - .7, 2.3), acc, 20, rot=(R90, 0, 0)))
-        parts.append(bl.cyl('engineglow', .7, .1, (sx * 2.6, L / 2 - .4, 2.3), glow, 20, rot=(R90, 0, 0)))
+        parts.append(bl.cyl('nozzle', .8, .6, (sx * 2.6, L / 2 - .2, 2.3), P['dark'], 20, rot=(R90, 0, 0), r2=.62))
+        parts.append(bl.cyl('engineglow', .45, .05, (sx * 2.6, L / 2 - .55, 2.3), glow, 20, rot=(R90, 0, 0)))
         # landing struts
         for sy in (-L / 2 + 3, L / 2 - 4):
             parts.append(bl.box('strut', (.25, .25, 1.5), (sx * 1.5, sy, .8), P['dark']))
