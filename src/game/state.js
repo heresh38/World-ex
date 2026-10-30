@@ -47,7 +47,7 @@ export function randomArch(rnd = Math.random, slot = null) {
 export function newSave() {
   const s = {
     v: 1, created: Date.now(),
-    character: { body: 'female', primary: '#e8e2d4', secondary: '#3a3f47', glow: '#1ad8ff' },
+    character: { v: 2, body: 'female', outfit: 'circuit_coat', hair: 'ponytail', primary: null, secondary: null, glow: null },
     car: { model: 'car_sport', paint: '#a3121f' },
     level: 1, xp: 0, credits: 500, alloy: 20,
     inventory: [], equipped: [null, null, null],
@@ -80,6 +80,11 @@ export function load() {
     const s = JSON.parse(raw);
     if (!s || s.v !== 1) return null;
     s.settings = { ...DEFAULT_SETTINGS, ...s.settings };
+    if (!s.character || s.character.v !== 2) {
+      // characters were rebuilt from the owner's reference art: keep the frame, reset looks to the originals
+      const body = (s.character && s.character.body) || 'female';
+      s.character = { v: 2, body, outfit: body === 'male' ? 'vanguard' : 'circuit_coat', hair: body === 'male' ? 'short' : 'ponytail', primary: null, secondary: null, glow: null };
+    }
     s.stats = { ...newSave().stats, ...s.stats };
     return s;
   } catch (e) { return null; }

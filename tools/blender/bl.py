@@ -284,7 +284,7 @@ def tri_count():
 def export(fname, animations=False, selected=None):
     path = os.path.join(MODELS, fname)
     kw = dict(filepath=path, export_format='GLB', export_apply=True, export_yup=True,
-              export_extras=True, export_image_format='JPEG', export_jpeg_quality=85,
+              export_extras=True, export_image_format='AUTO', export_jpeg_quality=85,
               export_animations=animations, export_lights=False, export_cameras=False)
     if animations:
         kw.update(export_animation_mode='ACTIONS', export_force_sampling=True, export_optimize_animation_size=True)

@@ -8,12 +8,16 @@ sys.path.insert(0, os.path.dirname(__file__))
 import bl
 
 args = sys.argv[sys.argv.index('--') + 1:]
+RES = int(os.environ.get('RES', '360'))
+SAMPLES = int(os.environ.get('SAMPLES', '12'))
 out, items = args[0], args[1:]
 tiles = []
 for i, it in enumerate(items):
     parts = it.split(':')
     path = parts[0]; action = parts[1] if len(parts) > 1 else None; frame = int(parts[2]) if len(parts) > 2 else 1
     view = parts[3] if len(parts) > 3 else 'q'
+    zoom = float(parts[4]) if len(parts) > 4 else 1.0
+    focus_z = float(parts[5]) if len(parts) > 5 else None
     bl.reset()
     bpy.ops.import_scene.gltf(filepath=path if os.path.isabs(path) else os.path.join(bl.MODELS, path))
     objs = [o for o in bpy.context.scene.objects]
@@ -36,9 +40,10 @@ for i, it in enumerate(items):
             for v in oe.to_mesh().vertices:
                 w = o.matrix_world @ v.co
                 lo = Vector(map(min, lo, w)); hi = Vector(map(max, hi, w))
-    c = (lo + hi) / 2; r = max((hi - lo).length / 2, .1)
-    sc.render.engine = 'CYCLES'; sc.cycles.samples = 12; sc.cycles.device = 'CPU'
-    sc.render.resolution_x = sc.render.resolution_y = 360
+    c = (lo + hi) / 2; r = max((hi - lo).length / 2, .1) / zoom
+    if focus_z is not None: c.z = focus_z
+    sc.render.engine = 'CYCLES'; sc.cycles.samples = SAMPLES; sc.cycles.device = 'CPU'
+    sc.render.resolution_x = sc.render.resolution_y = RES
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
     dirs = {'q': Vector((1.0, -1.6, .7)), 'f': Vector((0, -1, .15)), 's': Vector((1, 0, .1)), 't': Vector((0.01, -.01, 1)),
             'b': Vector((-.6, 1.4, .5))}
@@ -59,7 +64,7 @@ for i, it in enumerate(items):
     tiles.append(p)
 # contact sheet
 imgs = [bpy.data.images.load(p) for p in tiles]
-n = len(imgs); W = 360
+n = len(imgs); W = RES
 import numpy as np
 sheet = np.zeros((W, W * n, 4), dtype=np.float32)
 for i, im in enumerate(imgs):

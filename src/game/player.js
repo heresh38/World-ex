@@ -28,10 +28,18 @@ export class Player {
     this.avatar = new Avatar(this.g.assets, model);
     if (old) { old.dispose(); }
     this.g.scene && this.g.scene.add(this.avatar.root);
-    this.avatar.recolor(this.g.save.character);
-    this.g.viewmodel && this.g.viewmodel.recolor(this.g.save.character);
+    this.applyLook();
     this.g.weapons && this.g.weapons.refreshModel();
     this.g.setAvatarLayer && this.g.setAvatarLayer();
+  }
+
+  // outfit + hair + tints from the save
+  applyLook() {
+    const c = this.g.save.character;
+    this.avatar.setLook(c.outfit, c.hair);
+    c.outfit = this.avatar.outfit || c.outfit; c.hair = this.avatar.hair || c.hair;
+    this.avatar.recolor(c);
+    this.g.viewmodel && this.g.viewmodel.recolor(c);
   }
 
   addToScene(scene) { scene.add(this.avatar.root); }

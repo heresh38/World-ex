@@ -25,26 +25,57 @@ export class Avatar {
     this.handR = this.bones.handR || this.bones['hand.R'];
     this.spine = this.bones.spine; this.chest = this.bones.chest; this.head = this.bones.head;
     // own copies of materials so recolouring one avatar never affects another
-    this.mats = {};
+    this.mats = {}; this.allMats = [];
     this.model.traverse(o => {
       if (o.isMesh) {
         o.material = o.material.clone();
-        this.mats[o.material.name] = o.material;
+        const m = o.material;
+        this.mats[m.name] = m; this.allMats.push(m);
+        m.userData.base = m.color.clone();
+        if (m.emissive) m.userData.baseEmissive = m.emissive.clone();
+        // strand cards: alpha tested, both faces, and they cast shadows like solid hair
+        if (/hair_card/.test(m.name) || m.alphaTest > 0) { m.alphaTest = .5; m.transparent = false; m.depthWrite = true; m.side = THREE.DoubleSide; o.castShadow = true; }
       }
+    });
+    // HQ characters: outfits (O_*), hair styles (H_*), body regions (B_*) are switched by setLook()
+    this.meta = null; this.parts = { O: {}, H: {}, B: {} };
+    this.model.traverse(o => {
+      if (o.userData && o.userData.worldex) { try { this.meta = JSON.parse(o.userData.worldex); } catch (e) { /* ignore */ } }
+      const m = /^(O|H|B)_(.+)$/.exec(o.name);
+      if (m) this.parts[m[1]][m[2]] = o;
     });
     this.current = null; this.aimPitch = 0; this.aimYawOffset = 0;
     this.gun = null; this.gunOffset = null;
     this.play('IdleRelaxed', 0);
   }
 
+  get outfits() { return this.meta ? Object.keys(this.meta.outfits) : []; }
+  get hairStyles() { return this.meta ? this.meta.hair : []; }
+
+  // Show one outfit + one hair style; hide the body regions the outfit covers.
+  setLook(outfit, hair) {
+    if (!this.meta) return;
+    if (!this.meta.outfits[outfit]) outfit = this.outfits[0];
+    if (!this.meta.hair.includes(hair)) hair = this.meta.hair[0];
+    const hide = new Set(this.meta.outfits[outfit]);
+    for (const [k, o] of Object.entries(this.parts.O)) o.visible = k === outfit;
+    for (const [k, o] of Object.entries(this.parts.H)) o.visible = k === hair;
+    for (const [k, o] of Object.entries(this.parts.B)) o.visible = !hide.has(k);
+    this.outfit = outfit; this.hair = hair;
+  }
+
+  // Wardrobe tints multiply the original materials; null/undefined keeps the original look.
   recolor(c) {
-    const set = (n, hex, emissive = false) => {
-      const m = this.mats[n]; if (!m || !hex) return;
-      m.color.set(hex);
-      if (emissive) { m.emissive.set(hex); }
+    const tint = (prefix, hex, emissive = false) => {
+      for (const m of this.allMats) {
+        if (m.name !== prefix && !m.name.startsWith(prefix + '__')) continue;
+        m.color.copy(m.userData.base);
+        if (hex) m.color.multiply(new THREE.Color(hex));
+        if (emissive && m.emissive) { m.emissive.copy(m.userData.baseEmissive || m.emissive); if (hex) m.emissive.set(hex); }
+      }
     };
-    set('armor_primary', c.primary); set('armor_secondary', c.secondary);
-    set('glow', c.glow, true);
+    tint('armor_primary', c.primary); tint('armor_secondary', c.secondary);
+    tint('glow', c.glow, true);
     if (this.mats.visor && c.glow) this.mats.visor.emissive.set(c.glow).multiplyScalar(.6);
   }
 

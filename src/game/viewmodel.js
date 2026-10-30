@@ -29,11 +29,20 @@ export class Viewmodel {
     this.active = false;
   }
 
+  // first-person sleeves follow the outfit you wear (and any wardrobe tint)
   recolor(c) {
+    const P = {
+      circuit_coat: ['#3a3d44', '#2b2e33', '#1ad8ff'], circuit_crop: ['#3a3d44', '#2b2e33', '#1ad8ff'],
+      knit: ['#e9e4dc', '#d9b8a4', '#ffd6e8'], offduty: ['#2a2b2e', '#c99b84', '#ffae2f'],
+      vanguard: ['#3b4a60', '#202226', '#e8f4ff'], ranger: ['#8b7150', '#4c4a35', '#7fd0ff'], field: ['#8b7a5a', '#3a3d2c', '#9fd8a0'],
+    }[c.outfit] || ['#e8e2d4', '#3a3f47', '#1ad8ff'];
+    const tint = (base, t) => { const col = new THREE.Color(base); if (t) col.multiply(new THREE.Color(t)); return col; };
     const m = this.mats;
-    if (m.armor_primary) m.armor_primary.color.set(c.primary);
-    if (m.armor_secondary) m.armor_secondary.color.set(c.secondary);
-    if (m.glow) { m.glow.color.set(c.glow); m.glow.emissive.set(c.glow); }
+    if (m.armor_primary) m.armor_primary.color.copy(tint(P[0], c.primary));
+    if (m.armor_secondary) m.armor_secondary.color.copy(tint(P[1], c.secondary));
+    if (m.undersuit) m.undersuit.color.set(P[1]);
+    const g = c.glow || P[2];
+    if (m.glow) { m.glow.color.set(g); m.glow.emissive.set(g); }
   }
 
   setWeapon(w) {
