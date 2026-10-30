@@ -142,6 +142,8 @@ def main():
         props.crystal('PR_crystal_%d' % i, 200 + i, c).location = nx()
     for i, (st, gl) in enumerate((('#3d6b3a', '#7dffb0'), ('#5a3a6b', '#ff7ae0'), ('#6b5a3a', '#ffd27a'))):
         props.alien_plant('PR_plant_%d' % i, 300 + i, st, gl).location = nx()
+    props.data_core().location = nx()
+    props.ammo_box().location = nx()
     bl.export('props_world.glb')
 
 

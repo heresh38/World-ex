@@ -170,12 +170,12 @@ def main():
     p = setup()
     # --- ship / industrial hull panels: plate grid with seams, rivets and grime
     def panel_h(g):
-        b = g.brick(.25, .125, offset=.5, mortar=.012)
+        b = g.brick(.5, .25, offset=.5, mortar=.008)
         n = g.noise(24, 3, .5, 1)
         return g.math('ADD', g.math('MULTIPLY', b.outputs['Fac'], -1.0), g.math('MULTIPLY', n, .08))
 
     def panel_c(g):
-        b = g.brick(.25, .125, offset=.5, mortar=.012, c1=(.62, .63, .64), c2=(.5, .52, .54), bias=0)
+        b = g.brick(.5, .25, offset=.5, mortar=.008, c1=(.66, .67, .68), c2=(.58, .6, .62), bias=0)
         grime = g.ramp(g.noise(6, 6, .62, 2), [(.35, '#ffffff'), (.75, '#8a8478')])
         c = g.mix(b.outputs['Color'], grime, 1.0, 'MULTIPLY')
         return g.mix(c, (.12, .12, .13), b.outputs['Fac'])
@@ -183,13 +183,13 @@ def main():
 
     # --- floor: diamond-tread steel
     def tread_h(g):
-        v = g.voronoi(16, 3, 'F1', 'Distance')
+        v = g.voronoi(40, 3, 'F1', 'Distance')
         return g.math('SUBTRACT', 1.0, g.math('MULTIPLY', v, 2.2))
 
     def tread_c(g):
         wear = g.ramp(g.noise(10, 6, .6, 4), [(.3, '#4a4d52'), (.7, '#7c7f84')])
-        v = g.voronoi(16, 3, 'F1', 'Distance')
-        return g.mix(wear, (.75, .76, .78), g.math('LESS_THAN', v, .18))
+        v = g.voronoi(40, 3, 'F1', 'Distance')
+        return g.mix(wear, (.75, .76, .78), g.math('LESS_THAN', v, .25))
     bake(p, 'tread', tread_c, tread_h, strength=.8)
 
     # --- concrete

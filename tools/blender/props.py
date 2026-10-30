@@ -383,3 +383,23 @@ def alien_plant(name, seed, stem='#3d6b3a', glow='#7dffb0'):
         P.append(bl.box('leaf', (.8, .25, .03), (math.cos(a) * .45, math.sin(a) * .45, .15), sm, rot=(0, .3, a)))
     _pack(r, P)
     return r
+
+
+def data_core(name='PR_core'):
+    """Loot data core: faceted crystal in a brass cage. Material 'core_glow' is tinted by rarity in-engine."""
+    m = M(); r = _root(name, solid=False)
+    glow = bl.mat('core_glow', '#ffffff', 0, .2, emit='#ffffff', strength=4)
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=.22)
+    c = bpy.context.object; c.scale = (1, 1, 1.5); c = bl._finish(c, glow, 'core')
+    P = [c, bl.torus('cage1', .26, .015, (0, 0, 0), m['brass'], rot=(R90, 0, 0), maj=16, mn=4),
+         bl.torus('cage2', .26, .015, (0, 0, 0), m['brass'], rot=(R90, 0, R90), maj=16, mn=4)]
+    _pack(r, P)
+    return r
+
+
+def ammo_box(name='PR_ammo'):
+    m = M(); r = _root(name, solid=False)
+    _pack(r, [bl.box('case', (.42, .26, .22), (0, 0, .11), m['gunmetal'], bevel=.02),
+              bl.box('lid', (.44, .28, .05), (0, 0, .24), m['hull'], bevel=.015),
+              bl.box('stripe', (.43, .27, .04), (0, 0, .12), bl.mat('ammo_glow', '#ffffff', 0, .4, emit='#ffffff', strength=3))])
+    return r

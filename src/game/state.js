@@ -1,0 +1,109 @@
+// Persistent player state (localStorage) + loot generation.
+import { ARCHETYPES, RARITY, PERKS, weaponName, CONTRACT_POOL } from './data.js';
+
+const KEY = 'worldex_save_v1';
+
+export const DEFAULT_SETTINGS = {
+  quality: 'medium', resScale: 1, dynamicRes: true, sens: 1.0, invertY: false, fov: 70,
+  master: .8, music: .6, sfx: .9, muted: false, showFps: false,
+};
+
+let uid = Date.now() % 100000;
+export function mulberry(a) {
+  return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+
+export function makeWeapon(arch, rarity, power, rnd = Math.random) {
+  const A = ARCHETYPES[arch];
+  const perkIds = Object.keys(PERKS);
+  const perks = [];
+  for (let i = 0; i < RARITY[rarity].perks; i++) {
+    let p; let guard = 0;
+    do { p = perkIds[Math.floor(rnd() * perkIds.length)]; } while (perks.includes(p) && guard++ < 20);
+    perks.push(p);
+  }
+  const roll = () => 0.9 + rnd() * 0.2;
+  return {
+    uid: 'w' + (uid++) + Math.floor(rnd() * 1000), arch, rarity, power: Math.round(power), perks,
+    name: weaponName(arch, rarity, rnd), shader: 'bone',
+    stats: { dmg: roll(), rpm: 0.95 + rnd() * 0.1, stability: roll(), range: roll(), handling: roll() },
+  };
+}
+
+export function rollRarity(bonus = 0, rnd = Math.random) {
+  const r = rnd() + bonus;
+  if (r > 0.985) return 4;
+  if (r > 0.9) return 3;
+  if (r > 0.68) return 2;
+  if (r > 0.38) return 1;
+  return 0;
+}
+
+export function randomArch(rnd = Math.random, slot = null) {
+  const keys = Object.keys(ARCHETYPES).filter(k => slot === null || ARCHETYPES[k].slot === slot);
+  return keys[Math.floor(rnd() * keys.length)];
+}
+
+export function newSave() {
+  const s = {
+    v: 1, created: Date.now(),
+    character: { body: 'female', primary: '#e8e2d4', secondary: '#3a3f47', glow: '#1ad8ff' },
+    car: { model: 'car_sport', paint: '#a3121f' },
+    level: 1, xp: 0, credits: 500, alloy: 20,
+    inventory: [], equipped: [null, null, null],
+    stats: { kills: 0, precision: 0, deaths: 0, caches: 0, generators: 0, drones: 0, brutes: 0, shots: 0, hits: 0, distance: 0, carDistance: 0, time: 0, visited: [], creditsEarned: 0, bestStreak: 0 },
+    contracts: [], contractsDone: 0,
+    settings: { ...DEFAULT_SETTINGS },
+    lastDest: null,
+  };
+  const starters = [makeWeapon('auto', 1, 10), makeWeapon('handcannon', 1, 10), makeWeapon('rocket', 0, 10)];
+  starters[0].name = 'Ashen Oath'; starters[1].name = 'Last Lantern'; starters[2].name = 'Iron Verdict';
+  s.inventory.push(...starters);
+  s.equipped = starters.map(w => w.uid);
+  refreshContracts(s);
+  return s;
+}
+
+export function refreshContracts(s) {
+  while (s.contracts.length < 3) {
+    const pool = CONTRACT_POOL.filter(c => !s.contracts.some(x => x.id === c.id));
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    const n = c.n[Math.floor(Math.random() * c.n.length)];
+    s.contracts.push({ id: c.id, text: c.text.replace('{n}', n), n, p: 0, reward: c.reward + n * 10, done: false });
+  }
+}
+
+export function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || s.v !== 1) return null;
+    s.settings = { ...DEFAULT_SETTINGS, ...s.settings };
+    s.stats = { ...newSave().stats, ...s.stats };
+    return s;
+  } catch (e) { return null; }
+}
+
+export function save(s) {
+  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ }
+}
+
+export function wipe() { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } }
+
+export const xpForLevel = l => 600 + l * 250;
+
+export function weaponStats(w) {
+  const A = ARCHETYPES[w.arch], R = RARITY[w.rarity], st = w.stats;
+  const has = p => w.perks.includes(p);
+  return {
+    dmg: A.dmg * R.mult * st.dmg * (1 + w.power / 200),
+    rpm: A.rpm * st.rpm,
+    mag: Math.round(A.mag * (has('overflow') ? 1.4 : 1)),
+    reserve: A.reserve,
+    reload: A.reload * (has('quickdraw') ? .65 : 1) / (0.9 + st.handling * .1),
+    range: A.range * st.range,
+    spread: A.spread * (has('steady') ? .6 : 1) / st.stability,
+    crit: A.crit * (has('deadeye') ? 1.25 : 1),
+  };
+}

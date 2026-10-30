@@ -1,0 +1,85 @@
+# WORLD EX — Frontier Protocol
+
+A third-person sci-fi looter shooter in the browser (Three.js r186). You live aboard your own ship, the **Wayfarer**.
+Walk its decks to reach every system that used to sit in the main menu, then jump to **Earth**, a city hub,
+or to one of five **frontier worlds** whose terrain is generated endlessly in every direction.
+
+Every 3D model (the female and male player characters, enemies, guns, hover cars, ships, buildings, machines,
+props, pickups) and every texture is made by Python scripts run in headless Blender (`tools/blender/`).
+Every sound is synthesised live with WebAudio.
+
+## Run it
+```bash
+python3 -m http.server 8765        # then open http://localhost:8765/
+```
+Everything is local (three.js is vendored in `lib/`), so it runs offline. The fonts fall back to system fonts if Google Fonts is unreachable.
+
+## Controls
+| Key | Action |
+|---|---|
+| W A S D | Walk (drive in a car) |
+| Shift | Run (boost in a car) |
+| Mouse | Look / aim (third-person camera, never clips through walls) |
+| Space | Jump (handbrake in a car) |
+| E | Interact: stations, caches, enter/exit cars, return to orbit |
+| Left / Right mouse | Fire / aim down sights |
+| R | Reload |
+| 1 2 3 / wheel | Switch weapon (Primary, Special, Heavy) |
+| V | Summon your hover car (Earth and planets) |
+| Esc | Pause / leave a station |
+| F3 | FPS counter |
+
+## The ship (replaces the main menu)
+| Old menu screen | Where it lives now |
+|---|---|
+| Play / Teleport / World map | **Captain's chair** on the bridge: navigation to Earth and the frontier worlds |
+| Home / Help / About | **Briefing table** in the commons: contracts (bounties), field guide, controls |
+| Character | **Wardrobe pod**: female or male frame, armour and light colours (drag to turn) |
+| Settings / Controls | **Engineering terminal**: graphics presets, render scale, 60 fps governor, FOV, audio, sensitivity |
+| Stats | **Service record** console |
+| Arsenal | **Armory rack** in the hangar: loadout by slot, with weapon stats and perks |
+| Gunsmith | **Gunsmith bench**: infuse power, dismantle for alloy, weapon shaders |
+| Vehicles | **Hover car** on the hangar pad: chassis and paint |
+
+The hangar has big skylights casting sun shafts and shadows, a welding robot throwing sparks that bloom,
+and a hover car whose clear-coat paint reflects the hangar (its environment map is captured from the scene).
+
+## Worlds
+* **Earth: New Meridian City.** A grid city of instanced Blender towers at golden hour, with skyway traffic, pedestrians, parked cars,
+  the spaceport (your jumpship and the Quartermaster vendor) and a raider incursion in the north-east district that regroups after you clear it.
+* **Frontier worlds:** Ares Verge, Vesper, Thalassa Reach, Pyrrhos and Nyx Expanse. Terrain streams in 64 m chunks seeded by
+  (planet, chunk), so it is endless but stable. Each world has its own palette, sky, flora, hazards (lava on Pyrrhos), raider outposts
+  (generator, turret, squad, a locked cache), roaming drones and loose supply caches. Rewards grow with distance from the landing zone.
+
+## Loot
+Weapons: auto rifle, pulse rifle, scout rifle, hand cannon, shotgun, sniper and rocket launcher. Rarity runs Common, Uncommon, Rare,
+Legendary, Exotic, with random perks and stat rolls. Enemies drop data cores (coloured by rarity, with a light beam for Rare and up),
+ammo and credits. Power = the average of your equipped weapons. Progress saves to `localStorage`.
+
+## Layout
+| Path | What it is |
+|---|---|
+| `index.html` | Game page |
+| `src/main.js` | Boot, title, loading, travel, stations, loop, progression |
+| `src/core/` | Renderer + post FX (bloom, FXAA, dynamic resolution), input, procedural audio, asset loader, collision world |
+| `src/game/` | Player controller and camera, avatar, weapons, combat, enemies, vehicles, FX, data, save state |
+| `src/worlds/` | Ship hub, Earth city, procedural planets, skies |
+| `src/ui/` | HUD, menus/station panels, CSS |
+| `tools/blender/` | Headless Blender scripts that build every model and texture (`build_all.sh`) |
+| `assets/models`, `assets/textures` | Generated GLBs, layout JSON and baked textures |
+| `lib/` | Vendored three.js + three-mesh-bvh |
+| `tools/test/e2e.js` | Playwright end-to-end test (title → ship stations → Earth combat and car → planet streaming → ship) |
+| `legacy/` | The previous single-file engine, kept for reference (still builds with `legacy/tools/build.py`) |
+
+## Rebuild the assets
+```bash
+pip install bpy            # Blender as a Python module (or use a Blender install)
+bash tools/blender/build_all.sh
+```
+The scripts are run as `blender --background --python tools/blender/<script>.py`. `tools/blender/preview.py` renders contact sheets with Cycles to check models.
+
+## Test
+```bash
+python3 -m http.server 8765 &
+NODE_PATH=$(npm root -g) node tools/test/e2e.js     # screenshots in test-out/
+```
