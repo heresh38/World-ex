@@ -106,10 +106,12 @@ fs.mkdirSync(OUT, { recursive: true });
         await new Promise(r => setTimeout(r, 450));
         maxRounds = Math.max(maxRounds, g.weapons.rounds.length); maxGoo = Math.max(maxGoo, g.weapons.goo.length);
       }
+      // goo is slow and the software-rendered sim runs behind real time: wait until everything has landed
+      for (let k = 0; k < 120 && (g.weapons.goo.length || g.weapons.rounds.length); k++) await new Promise(r => setTimeout(r, 250));
       await new Promise(r => setTimeout(r, 2500));
       const fxo = g.fx, stains = fxo.slimeLife ? Array.from(fxo.slimeLife).filter(v => v > 0).length : 0;
       return { dist, hp0: Math.round(hp0), hp1: Math.round(e.hp), alive: e.alive, damage: Math.round(hp0 - e.hp), maxRounds, maxGoo,
-        stains, afflicted: g.weapons.afflicted.size, drop: A.grav ? 'gravity' : 'straight', vel: A.vel };
+        stains, afflicted: g.weapons.afflicted.size, fade: document.getElementById('fade').classList.contains('on'), dead: !!pl.dead, hp: Math.round(pl.health), drop: A.grav ? 'gravity' : 'straight', vel: A.vel };
     }, arch);
     await shot(`w_${arch}_fire`);
     results[arch] = { ...info, ...fire };
@@ -125,9 +127,8 @@ fs.mkdirSync(OUT, { recursive: true });
       const w = st.makeWeapon(arch, 1, 10), A = data.ARCHETYPES[arch], S = st.weaponStats(w);
       const o = g.player.pos.clone().add(new V(0, 400, 0)), d = new V(1, 0, 0);
       g.weapons.spawnRound(o, o, d, S, w, A, { hit: false });
-      const r = g.weapons.rounds[g.weapons.rounds.length - 1], t0 = performance.now();
-      await new Promise(res => setTimeout(res, 400));
-      const t = (performance.now() - t0) / 1000;
+      const r = g.weapons.rounds[g.weapons.rounds.length - 1];
+      for (let k = 0; k < 80 && r.dist < 300 && g.weapons.rounds.includes(r); k++) await new Promise(res => setTimeout(res, 100));
       out[arch] = { vel: A.vel, dist: Math.round(r.dist), dropM: +(o.y - r.p.y).toFixed(3), expectedAtDist: +(.5 * 9.81 * (r.dist / A.vel) ** 2 * (A.grav ?? 1)).toFixed(3) };
     }
     return out;

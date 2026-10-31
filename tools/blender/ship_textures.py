@@ -301,8 +301,7 @@ def hull_plate(p):
     h -= .04 * chips
     streak = fnoise(6, 4, 7, aniso=(1, .12))
     base = plain('#e8e5de') * (1 + .03 * pid)[..., None]
-    base = lerp(base, plain('#6f757d'), accent * .9)
-    base = lerp(base, plain('#c9a227'), fill(rect(0, .515, 1, .525)) * .9)
+    base = lerp(base, plain('#b9bec4'), accent * .8)    # a slightly darker plate row (livery stripes are modelled)
     base = lerp(base, plain('#73777d'), chips)
     base = lerp(base, plain('#2a2c30'), seams * .85)
     base *= (1 - np.clip((streak - .55) * 1.5, 0, .25))[..., None]
@@ -541,15 +540,16 @@ def stencil_atlas():
 
 
 def main():
+    """All sets, or only the ones named after '--' (shipwall hullplate grate padding paintmetal deckplate rubbermat stencil)."""
+    only = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    only = [w for w in only if w]
     p = setup()
-    ship_wall(p)
-    hull_plate(p)
-    grate(p)
-    padding(p)
-    paint_metal(p)
-    deck_plate(p)
-    rubber_mat(p)
-    stencil_atlas()
+    for name, fn in (('shipwall', ship_wall), ('hullplate', hull_plate), ('grate', grate), ('padding', padding),
+                     ('paintmetal', paint_metal), ('deckplate', deck_plate), ('rubbermat', rubber_mat)):
+        if not only or name in only:
+            fn(p)
+    if not only or 'stencil' in only:
+        stencil_atlas()
 
 
 if __name__ == '__main__':

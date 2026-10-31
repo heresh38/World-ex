@@ -1359,7 +1359,7 @@ class Rover(Car):
         s_hp = self.s_hp
         s_dash = s_hp - .74
         # dash: a padded beam across the tub with the cluster and a screen
-        P.append(boxo('dash', (1.48, .32, .3), (0, yd(s_dash - .14), belt - .05), T['dash_soft'], bevel=.05, segs=3, uvs=.3))
+        P.append(boxo('dash', (1.48, .32, .3), (0, yd(s_dash - .2), belt - .05), T['dash_soft'], bevel=.05, segs=3, uvs=.3))
         P.append(boxo('dashlow', (1.4, .3, .35), (0, yd(s_dash - .2), fl + .2), T['dash_lower'], bevel=.04, uvs=.3))
         gz, tilt = belt + .14, .3
         q = MB()
@@ -1368,7 +1368,7 @@ class Rover(Car):
         ids = [q.vert(gp(0, 0)), q.vert(gp(1, 0)), q.vert(gp(1, 1)), q.vert(gp(0, 1))]
         q.face(ids, 'gauges', [(1, 0), (0, 0), (0, 1), (1, 1)])
         P.append(q.build('gauge', M))
-        P.append(boxo('podr', (.36, .14, .2), (xs, yd(s_dash - .06), gz), T['dash_soft'], bevel=.03, segs=3, rot=(tilt, 0, 0)))
+        P.append(boxo('podr', (.36, .14, .2), (xs, yd(s_dash - .11), gz), T['dash_soft'], bevel=.03, segs=3, rot=(tilt, 0, 0)))
         self.needles = [(k, Vector((xs + (u - .5) * gw * -1, yd(s_dash) - .003, gz)), tilt) for k, u in (('S', .25), ('R', .75))]
         sq = MB()
         sp = lambda u, v: ((u - .5) * .24, yd(s_dash) - .02 - (v - .5) * .13 * math.sin(.25), belt + .05 + (v - .5) * .13 * math.cos(.25))

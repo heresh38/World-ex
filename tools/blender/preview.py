@@ -43,6 +43,7 @@ for i, it in enumerate(items):
     c = (lo + hi) / 2; r = max((hi - lo).length / 2, .1) / zoom
     if focus_z is not None: c.z = focus_z
     sc.render.engine = 'CYCLES'; sc.cycles.samples = SAMPLES; sc.cycles.device = 'CPU'
+    sc.cycles.transparent_max_bounces = 128   # dense alpha-card foliage (trees.py) needs many transparent layers
     sc.render.resolution_x = sc.render.resolution_y = RES
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
     dirs = {'q': Vector((1.0, -1.6, .7)), 'f': Vector((0, -1, .15)), 's': Vector((1, 0, .1)), 't': Vector((0.01, -.01, 1)),
@@ -54,9 +55,10 @@ for i, it in enumerate(items):
     for loc, e in (((3, -4, 6), 900), ((-4, 2, 3), 300)):
         L = bpy.data.objects.new('l', bpy.data.lights.new('l', 'POINT')); L.data.energy = e * r * r
         L.location = c + Vector(loc) * r; sc.collection.objects.link(L)
-    w = bpy.data.worlds.new('w'); sc.world = w; w.color = (.15, .16, .2)
+    BG = tuple(float(x) for x in os.environ.get('BG', '.15,.16,.2').split(','))   # e.g. BG=.45,.6,.8 for a sky
+    w = bpy.data.worlds.new('w'); sc.world = w; w.color = BG
     try:
-        w.node_tree.nodes['Background'].inputs[0].default_value = (.15, .16, .2, 1)
+        w.node_tree.nodes['Background'].inputs[0].default_value = (*BG, 1)
     except Exception:
         pass
     p = os.path.join(os.path.dirname(out), '_tile%d.png' % i)

@@ -642,9 +642,11 @@ export class EarthWorld extends World {
 
   parkAirportCars(rnd, paints) {
     const O = AIRPORT, g = this.g;
+    let n = 0;      // a handful: every car is a full drivable vehicle
     for (const [x0, z0, x1, z1] of this.airport.lots) for (const [z, yaw] of [[z0 + 5.5, Math.PI], [z1 - 5.5, 0]]) {
       for (let x = x0 + 4.35; x < x1 - 4; x += 5.4) {
-        if (rnd() < .45) continue;
+        if (rnd() < .8 || n >= 10) continue;
+        n++;
         g.vehicles.spawn(rnd() < .6 ? 'car_sport' : 'car_utility', paints[Math.floor(rnd() * paints.length)], new THREE.Vector3(O.x + x, 0, O.z + z), yaw);
       }
     }

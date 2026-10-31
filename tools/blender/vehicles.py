@@ -184,5 +184,6 @@ if __name__ == '__main__':
     if 'legacy' in what:
         car('car_sport', paint='#a3121f', style='sport')        # skyway hover cars (Earth decoration)
         car('car_utility', L=5.0, W=1.05, H=.75, paint='#2a4f7a', style='utility')
-        jumpship()
+        import jumpship as _js   # the Wayfarer's landing craft has its own detailed builder
+        _js.build()
         jumpship('ship_dropship', hull='#3a3a40', accent='#5d1c1c', glowc='#ff3326', enemy=True)
