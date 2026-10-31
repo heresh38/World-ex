@@ -4,7 +4,7 @@ One shared 20-bone skeleton. Armour is built from bevelled segments, each rigidl
 (segmented sci-fi plate armour, so no visible skinning artefacts). Arm poses for the "armed" clips are
 solved with IK chains toward grip targets parented to the chest, then baked to plain keyframes.
 
-Clips: Idle, Walk, Run, Jump, IdleRelaxed, WalkRelaxed, RunRelaxed, Sit, Death.
+Clips: Idle, Walk, Run, Jump, IdleRelaxed, WalkRelaxed, RunRelaxed, Sit, Death (players also get gendered gaits + Slide).
 Recolourable material slots (by name): armor_primary, armor_secondary, undersuit, trim, visor, glow.
 """
 import bpy, math, os, sys
@@ -226,30 +226,56 @@ def wq(arm, bone, rots):
 X, Y, Z = (1, 0, 0), (0, 1, 0), (0, 0, 1)
 
 
-def pose_fn(clip):
+# Gait styles for the player bodies (None = the shared neutral gait used by enemies and NPC rigs).
+#   stance: thigh abduction (+ wider, - narrower / cross-over), roll: pelvis roll, yaw: pelvis yaw, sway: lateral hip
+#   shift (m), counter: chest counter-rotation, bob: vertical bob scale, impact: heel-strike dip, arm: arm swing scale,
+#   abd: arm abduction, bend: elbow bend
+STYLES = {
+    None: dict(stance=0, roll=0, yaw=1.0, sway=0, counter=0, bob=1.0, impact=0, arm=1.0, abd=7, bend=12),
+    'male': dict(stance=3.5, roll=1.5, yaw=1.1, sway=.006, counter=7, bob=1.3, impact=.008, arm=1.25, abd=12, bend=16),
+    'female': dict(stance=-2.6, roll=5.5, yaw=1.45, sway=.016, counter=2.5, bob=.7, impact=0, arm=.8, abd=4, bend=20),
+}
+
+
+def pose_fn(clip, style=None):
     """Returns f(phase)->dict(bone -> rots or ('loc', vec)) plus IK influence."""
     S = math.sin
     T = 2 * math.pi
+    G = STYLES[style]
 
     def legs(p, amp, knee, lift=0.0):
         d = {}
-        for side, off in (('L', 0), ('R', math.pi)):
+        for side, off, sx in (('L', 0, 1), ('R', math.pi, -1)):
             ph = T * p + off
             sw = amp * S(ph)                     # + = forward
             kb = knee * max(0.0, S(ph + 1.2)) + 6  # knee bends during forward swing
-            d['thigh.' + side] = [(X, -sw - lift)]
+            d['thigh.' + side] = ([(Y, -sx * G['stance'])] if G['stance'] else []) + [(X, -sw - lift)]
             d['shin.' + side] = [(X, kb + lift * 1.6)]
             d['foot.' + side] = [(X, -(kb - sw) * .35)]
         return d
 
     def arms_relaxed(p, amp):
         d = {}
+        amp = amp * G['arm']
         for side, off, sx in (('L', math.pi, 1), ('R', 0, -1)):
             sw = amp * S(T * p + off)
-            d['upperarm.' + side] = [(Y, -sx * 7), (X, -sw)]
-            d['forearm.' + side] = [(X, -12 - max(0, sw) * .8)]
-            d['hand.' + side] = [(X, -5)]
+            d['upperarm.' + side] = [(Y, -sx * G['abd']), (X, -sw)]
+            d['forearm.' + side] = [(X, -G['bend'] - max(0, sw) * .8)]
+            d['hand.' + side] = [(X, -5), (Y, sx * 4 * S(T * p + off)) if style == 'female' else (X, 0)]
         return d
+
+    def gait(d, p, loc, k):
+        """Pelvis roll/yaw/sway and chest counter-rotation for a walk (k=1) or run (k~1.6)."""
+        if style is None:
+            return
+        yaw = (5 * k) * G['yaw'] * S(T * p)
+        roll = G['roll'] * math.cos(T * p) * (1 if k < 1.3 else .6)
+        d['hips'] = [(Z, yaw), (Y, roll)] + ([(X, 8)] if k > 1.3 else [])
+        d['spine'] = [(Z, -yaw * .7), (Y, -roll * .8), (X, 3 if k < 1.3 else 6)]
+        loc.x = G['sway'] * S(T * p) * (1 if k < 1.3 else .5)
+        if G['impact']:
+            ph = (2 * p) % 1.0
+            loc.z -= G['impact'] * k * math.exp(-((ph - .25) / .07) ** 2)
 
     def f(p):
         d = {}; ik = 1.0; loc = Vector((0, 0, 0)); ry = 0
@@ -265,29 +291,59 @@ def pose_fn(clip):
             else:
                 d['chest'] = [(X, 4 + b), (Z, -14)]; d['spine'] = [(Z, -8)]; d['head'] = [(Z, 20), (X, -2)]
         elif clip in ('Walk', 'WalkRelaxed'):
-            d.update(legs(p, 24, 34))
-            loc.z = .022 * math.cos(2 * T * p) - .03
+            d.update(legs(p, 24 if style != 'female' else 22, 34))
+            loc.z = .022 * G['bob'] * math.cos(2 * T * p) - .03
             d['hips'] = [(Z, 5 * S(T * p))]
             d['spine'] = [(Z, -4 * S(T * p)), (X, 3)]
+            gait(d, p, loc, 1.0)
+            cy = -G['counter'] * S(T * p)
             if clip == 'WalkRelaxed':
                 ik = 0.0; d.update(arms_relaxed(p, 20))
+                if G['counter']:
+                    d['chest'] = [(Z, cy)]
             else:
-                d['chest'] = [(X, 4), (Z, -12)]; d['head'] = [(Z, 16)]
+                d['chest'] = [(X, 4), (Z, -12 + cy * .4)]; d['head'] = [(Z, 16 - cy * .4)]
         elif clip in ('Run', 'RunRelaxed'):
-            d.update(legs(p, 42, 78))
-            loc.z = .045 * math.cos(2 * T * p) - .06
+            d.update(legs(p, 42 if style != 'female' else 38, 78 if style != 'female' else 86))
+            loc.z = .045 * G['bob'] * math.cos(2 * T * p) - .06
             d['hips'] = [(Z, 8 * S(T * p)), (X, 8)]
             d['spine'] = [(Z, -7 * S(T * p)), (X, 6)]
+            gait(d, p, loc, 1.6)
+            cy = -G['counter'] * 1.3 * S(T * p)
             if clip == 'RunRelaxed':
                 ik = 0.0; d.update(arms_relaxed(p, 50))
-                for side in 'LR':
-                    d['forearm.' + side] = [(X, -70)]
+                for side, sx in (('L', 1), ('R', -1)):
+                    d['forearm.' + side] = [(X, -70 - (10 if style == 'male' else 0) - (8 if style == 'female' else 0))]
+                    if style == 'female':      # arms closer to the body, forearms swing across a little
+                        d['upperarm.' + side] = [(Y, -sx * 2)] + d['upperarm.' + side][1:] + [(Z, sx * 8)]
+                if G['counter']:
+                    d['chest'] = [(Z, cy), (X, 4)]
             else:
-                d['chest'] = [(X, 6), (Z, -12)]; d['head'] = [(X, -10), (Z, 14)]
+                d['chest'] = [(X, 6), (Z, -12 + cy * .4)]; d['head'] = [(X, -10), (Z, 14 - cy * .4)]
         elif clip == 'Jump':
-            d.update({'thigh.L': [(X, -50)], 'shin.L': [(X, 75)], 'thigh.R': [(X, -10)], 'shin.R': [(X, 40)],
-                      'foot.L': [(X, -15)], 'spine': [(X, 6)], 'chest': [(X, 4), (Z, -12)]})
-            loc.z = -.02
+            if style == 'male':      # powerful tuck, knees apart
+                d.update({'thigh.L': [(Y, -6), (X, -58)], 'shin.L': [(X, 88)], 'thigh.R': [(Y, 6), (X, -8)], 'shin.R': [(X, 48)],
+                          'foot.L': [(X, -12)], 'spine': [(X, 10)], 'chest': [(X, 6), (Z, -12)], 'head': [(X, -6)]})
+                loc.z = -.04
+            elif style == 'female':  # knees together, trailing leg tucked behind, toes pointed
+                d.update({'thigh.L': [(Y, 3), (X, -46)], 'shin.L': [(X, 92)], 'thigh.R': [(Y, -3), (X, -6)], 'shin.R': [(X, 74)],
+                          'foot.L': [(X, 22)], 'foot.R': [(X, 30)], 'hips': [(Z, -6)], 'spine': [(X, 3), (Z, 4)],
+                          'chest': [(X, 2), (Z, -12)]})
+                loc.z = -.01
+            else:
+                d.update({'thigh.L': [(X, -50)], 'shin.L': [(X, 75)], 'thigh.R': [(X, -10)], 'shin.R': [(X, 40)],
+                          'foot.L': [(X, -15)], 'spine': [(X, 6)], 'chest': [(X, 4), (Z, -12)]})
+                loc.z = -.02
+        elif clip == 'Slide':
+            # running slide: lead leg out in front, the other tucked under, torso leaning back, left hand trailing low
+            v = S(T * p)
+            d.update({'hips': [(X, -24), (Z, 6)], 'thigh.L': [(Y, -4), (X, -56)], 'shin.L': [(X, 8)], 'foot.L': [(X, -12)],
+                      'thigh.R': [(Y, 6), (X, -34)], 'shin.R': [(X, 112)], 'foot.R': [(X, 20)],
+                      'spine': [(X, -6), (Z, -4)], 'chest': [(X, -4), (Z, -6)], 'head': [(X, 22 + .8 * v), (Z, 6)]})
+            ik = 0.0
+            d['upperarm.L'] = [(Y, -38), (X, 28)]; d['forearm.L'] = [(X, -12)]; d['hand.L'] = [(Y, -10)]
+            d['upperarm.R'] = [(X, -48), (Y, 22)]; d['forearm.R'] = [(X, -42)]; d['hand.R'] = [(X, -10)]
+            loc.z = -.66 + .004 * v; loc.y = .02
         elif clip == 'Sit':
             d.update({'thigh.L': [(X, -88), (Y, -4)], 'thigh.R': [(X, -88), (Y, 4)], 'shin.L': [(X, 82)],
                       'shin.R': [(X, 82)], 'foot.L': [(X, -8)], 'foot.R': [(X, -8)], 'spine': [(X, -4)],
@@ -315,16 +371,18 @@ def pose_fn(clip):
 
 CLIPS = {'Idle': 2.4, 'Walk': 1.05, 'Run': .68, 'Jump': .5, 'IdleRelaxed': 3.0, 'WalkRelaxed': 1.1,
          'RunRelaxed': .7, 'Sit': 4.0, 'Death': 1.2}
+PLAYER_CLIPS = dict(CLIPS, Slide=.8)
 
 
-def animate(arm, scale):
+def animate(arm, scale, style=None, clips=None):
+    """style: None (neutral, shared by enemies/NPC rigs), 'male' or 'female' (player bodies, with the extra Slide clip)."""
     arm.animation_data_create()
     acts = []
-    for clip, dur in CLIPS.items():
+    for clip, dur in (clips or CLIPS).items():
         act = bpy.data.actions.new(clip)
         act.use_fake_user = True
         arm.animation_data.action = act
-        f = pose_fn(clip)
+        f = pose_fn(clip, style)
         nfr = max(2, round(dur * FPS))
         steps = 8 if clip not in ('Death',) else 12
         for i in range(steps + 1):

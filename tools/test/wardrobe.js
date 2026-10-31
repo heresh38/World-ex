@@ -17,6 +17,33 @@ fs.mkdirSync(OUT, { recursive: true });
   const wait = ms => p.waitForTimeout(ms);
   const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 82, timeout: 300000 }); console.log('shot', n); };
   const click = async sel => { await p.click(sel, { timeout: 60000 }); await wait(700); };
+  // every hair style of the current body (hair tab open), plus a turned-around view of each
+  const hairTour = async tag => {
+    await click('[data-act="tab"][data-v="hair"]');
+    const ids = await ev(() => Object.keys(window.__game.player.avatar.wardrobe.hair || {}));
+    console.log('hair styles', tag, ids.join(', '));
+    for (const id of ids) {
+      await click(`[data-act="wear"][data-k="hair"][data-v="${id}"]`);
+      const vis = await ev(id => { const o = window.__game.player.avatar.items.hair[id]; let v = 0; o.traverse(m => { if (m.isMesh && m.visible) v++; }); return v; }, id);
+      if (!vis) errs.push('hair ' + id + ' not visible');
+      await shot(`h_${tag}_${id}`);
+      await ev(() => { const a = window.__game.player.avatar; a.root.rotation.y += 2.4; });
+      await wait(400); await shot(`h_${tag}_${id}_back`);
+      await ev(() => { const a = window.__game.player.avatar; a.root.rotation.y -= 2.4; });
+    }
+  };
+  // every clothing item per slot (wear tab), screenshot each
+  const wearTour = async tag => {
+    await click('[data-act="tab"][data-v="wear"]');
+    const W = await ev(() => Object.fromEntries(Object.entries(window.__game.player.avatar.wardrobe).filter(([k]) => k !== 'hair' && !k.startsWith('under')).map(([k, v]) => [k, Object.keys(v)])));
+    console.log('wardrobe', tag, JSON.stringify(W));
+    for (const [slot, ids] of Object.entries(W)) {
+      for (const id of ids) { await click(`[data-act="wear"][data-k="${slot}"][data-v="${id}"]`); await shot(`c_${tag}_${slot}_${id}`); }
+      if (slot === 'head' || slot === 'dress' || slot === 'outer') await click(`[data-act="wear"][data-k="${slot}"][data-v="none"]`);
+    }
+    const mask = await ev(() => window.__game.player.avatar.coverU && window.__game.player.avatar.coverU.value);
+    console.log('skin cover mask', tag, mask);
+  };
 
   await p.goto(BASE + '/index.html');
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 300000, polling: 500 });
@@ -46,6 +73,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await click('[data-act="wear"][data-k="hair"][data-v="bob"]');
   await click('[data-act="haircol"][data-v="#b9a3e8"]');
   await shot('w03_hair_bob');
+  await hairTour('female');
   // clothing: default set, then strip to the base body, then mixed
   await click('[data-act="tab"][data-v="wear"]');
   await shot('w04_wear_default');
@@ -59,6 +87,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await click('[data-act="tab"][data-v="body"]');
   await click('[data-act="skin"][data-v="#8d5638"]');
   await shot('w06_base_body');
+  await wearTour('female');
   // male frame
   await click('[data-act="body"][data-v="male"]');
   await wait(3000);
@@ -67,6 +96,8 @@ fs.mkdirSync(OUT, { recursive: true });
   await click('[data-act="wear"][data-k="head"][data-v="pioneer"]');
   await shot('w08_male_helmet');
   await click('[data-act="wear"][data-k="head"][data-v="none"]');
+  await hairTour('male');
+  await wearTour('male');
   await click('[data-act="tab"][data-v="face"]');
   for (const [k, v] of [['nose', 'nose_aquiline'], ['mouth', 'mouth_thin'], ['eyes', 'eyes_hooded']]) await click(`[data-act="face"][data-k="${k}"][data-v="${v}"]`);
   await shot('w09_male_face');

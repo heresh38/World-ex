@@ -285,7 +285,7 @@ export class Weapons {
     this.rounds.push({
       p: origin.clone(), v: dir.clone().multiplyScalar(speed), off: muzzle.clone().sub(origin), dist: 0,
       life: Math.max(1.2, S.range * 8 / speed + .5), max: Math.max(320, S.range * 8),
-      grav: A.grav ?? 1, w, S, A, shot, col, width: A.arch === 'sniper' || w.arch === 'bolt' ? .022 : kinetic ? .009 : .016,
+      grav: A.grav ?? 1, w, S, A, shot, col, width: w.arch === 'sniper' || w.arch === 'bolt' ? .022 : kinetic ? .009 : .016,
       len: kinetic ? 3.5 : 5,
     });
   }

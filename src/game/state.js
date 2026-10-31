@@ -59,7 +59,7 @@ export function newSave() {
   const s = {
     v: 1, created: Date.now(),
     character: defaultCharacter('female'),
-    car: { model: 'car_sport', paint: '#a3121f' },
+    car: { model: 'board_sport', paint: '#a3121f' },          // the summoned ride is a hover board (vehicles.js BOARDS)
     level: 1, xp: 0, credits: 500, alloy: 20,
     inventory: [], equipped: [null, null, null],
     stats: { kills: 0, precision: 0, deaths: 0, caches: 0, generators: 0, drones: 0, brutes: 0, shots: 0, hits: 0, distance: 0, carDistance: 0, time: 0, visited: [], creditsEarned: 0, bestStreak: 0 },
@@ -96,6 +96,10 @@ export function load() {
       s.character = defaultCharacter((s.character && s.character.body) || 'female');
     }
     s.stats = { ...newSave().stats, ...s.stats };
+    // the player's summoned vehicle became a hover board: old car saves keep their paint and map sport/utility
+    if (!s.car || typeof s.car !== 'object') s.car = { model: 'board_sport', paint: '#a3121f' };
+    if (!/^board_/.test(s.car.model)) s.car.model = s.car.model === 'car_utility' ? 'board_utility' : 'board_sport';
+    if (!/^#[0-9a-f]{6}$/i.test(s.car.paint || '')) s.car.paint = '#a3121f';
     return s;
   } catch (e) { return null; }
 }

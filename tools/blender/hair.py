@@ -141,6 +141,7 @@ class Groom:
     def roots(self, n, mask, off=.002, c0=(0, .012, .02), jitter=.35, band=None):
         """~n points on the scalp (head-local) where mask(L) < 0, at `off` above the skin. band=(lo, hi) keeps only
         lo < mask < hi (e.g. a strip just inside the hairline)."""
+        n = max(8, int(n * (.55 if self.kit.npc else 1.0)))
         m = n * 6 if band is None else n * 60
         i = np.arange(m) + .5
         phi = np.arccos(1 - 2 * i / m); th = math.pi * (1 + 5 ** .5) * i
@@ -210,7 +211,8 @@ class Groom:
     def cards(self, P, Nn, w0, w1, col, v0=0.0, v1=1.0, lift=.06, normals=None):
         """Ribbon per guide (V-shaped cross-section, 3 verts). col: atlas column (or array per card)."""
         n, k, _ = P.shape
-        w0 = np.broadcast_to(np.asarray(w0, F32), (n,)); w1 = np.broadcast_to(np.asarray(w1, F32), (n,))
+        wk = 1.3 if self.kit.npc else 1.0          # fewer, wider cards on the crowd LOD
+        w0 = np.broadcast_to(np.asarray(w0, F32) * wk, (n,)); w1 = np.broadcast_to(np.asarray(w1, F32) * wk, (n,))
         col = np.broadcast_to(np.asarray(col), (n,))
         T = np.zeros_like(P)
         T[:, 1:-1] = P[:, 2:] - P[:, :-2]; T[:, 0] = P[:, 1] - P[:, 0]; T[:, -1] = P[:, -1] - P[:, -2]
@@ -260,7 +262,7 @@ class Groom:
         cm = lambda L: mask(L) + shrink * s
         fn = kit.scalp(lambda L: t_fn(L) * (.25 + .75 * smoothstep(0, -.012 * s, cm(L))), None, 0, mask=cm)
         o = kit.build('hair_cap', fn, ho + self.S(-.11, -.12, -.1), ho + self.S(.11, .13, .15), [self.cap_mat],
-                      h=.0026 if not PL.FAST else .0034, target=target, weights=lambda V: {'head': np.ones(len(V), F32)})
+                      h=.0026 if not PL.FAST else .0034, target=int(target / max(kit.tscale, .6)), weights=lambda V: {'head': np.ones(len(V), F32)})
         if o is None:
             return None
         V = PL.verts(o) - ho

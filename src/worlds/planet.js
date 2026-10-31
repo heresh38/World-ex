@@ -244,10 +244,15 @@ export class PlanetWorld extends World {
     const tp = new THREE.Vector3(x + 6, this.height(x + 6, z - 5), z - 5);
     group.push(g.enemies.spawn('turret', tp, L, { group, onDeath }));
     const n = 3 + Math.floor(rnd() * 3) + (this.level > 10 ? 1 : 0);
-    for (let k = 0; k < n; k++) {
-      const a = rnd() * Math.PI * 2, r = 4 + rnd() * 7;
+    // some outposts have been overrun by the Writhe: a few raiders hold out against hosts, a mite swarm and a bladder
+    const overrun = rnd() < .25;
+    op.overrun = overrun;
+    const squad = overrun ? ['trooper', 'trooper', 'host', 'host', 'bladder', ...Array(5 + Math.floor(rnd() * 4)).fill('mite'),
+      ...(this.level > 8 && rnd() < .35 ? ['amalgam'] : rnd() < .5 ? ['host'] : [])] : null;
+    for (let k = 0; k < (squad ? squad.length : n); k++) {
+      const a = rnd() * Math.PI * 2, r = (squad && squad[k] !== 'trooper' ? 9 : 4) + rnd() * 7;
       const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
-      const type = k === 0 && rnd() < .5 + this.level * .02 ? 'brute' : 'trooper';
+      const type = squad ? squad[k] : k === 0 && rnd() < .5 + this.level * .02 ? 'brute' : 'trooper';
       group.push(g.enemies.spawn(type, new THREE.Vector3(px, this.height(px, pz), pz), L, { group, onDeath }));
     }
     if (rnd() < .6) group.push(g.enemies.spawn('drone', new THREE.Vector3(x, y, z + 8), L, { group, onDeath }));

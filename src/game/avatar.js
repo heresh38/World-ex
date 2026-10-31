@@ -56,10 +56,46 @@ export class Avatar {
         if (mat.map) { mat.map = mat.map.clone(); mat.map.needsUpdate = true; }
       }
     }
+    if (this.meta && this.meta.v === 3) this.setupPlayerMaterials();
     this.wear = {};
     this.current = null; this.aimPitch = 0; this.aimYawOffset = 0;
     this.gun = null; this.gunOffset = null;
     this.play('IdleRelaxed', 0);
+  }
+
+  // Player bodies: strand-card hair (alpha tested, two-sided, anisotropic sheen along the strands) and the skin
+  // cover mask (skin under worn garments is pulled a few mm inwards so animated skin never pierces cloth).
+  setupPlayerMaterials() {
+    this.coverU = { value: 0 };
+    const coverU = this.coverU;
+    this.model.traverse(o => {
+      if (!o.isMesh) return;
+      const m = o.material;
+      if (m.name === 'hair') {
+        // crowd LOD (player_*_npc): plain standard material, same alpha setup
+        const h = this.modelName.endsWith('_npc')
+          ? new THREE.MeshStandardMaterial({ name: 'hair', map: m.map, color: m.color.clone(), roughness: .55, metalness: 0,
+            alphaTest: .42, transparent: false, depthWrite: true, side: THREE.DoubleSide })
+          : new THREE.MeshPhysicalMaterial({
+            name: 'hair', map: m.map, color: m.color.clone(), roughness: .48, metalness: 0,
+            alphaTest: .42, transparent: false, depthWrite: true, side: THREE.DoubleSide,
+            anisotropy: .65, anisotropyRotation: Math.PI / 2, specularIntensity: .7,
+          });
+        h.userData.base = m.userData.base;
+        o.material = h; o.castShadow = true;
+        this.allMats[this.allMats.indexOf(m)] = h; this.mats.hair = h;
+      } else if (m.name === 'hair__cap') {
+        m.roughness = .62; m.transparent = false; m.alphaTest = 0;
+      } else if (m.name === 'skin' && o.geometry.attributes._covermask) {
+        m.onBeforeCompile = sh => {
+          sh.uniforms.coverMask = coverU;
+          sh.vertexShader = sh.vertexShader
+            .replace('#include <common>', '#include <common>\nattribute float _covermask;\nuniform float coverMask;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nif ((int(_covermask + .5) & int(coverMask + .5)) != 0) transformed -= normal * .006;');
+        };
+        m.customProgramCacheKey = () => 'skin-cover';
+      }
+    });
   }
 
   // civilians (civilians.py): outfits O_*, hair H_*; each outfit lists the body regions it covers
@@ -100,6 +136,13 @@ export class Avatar {
       for (const [id, o] of Object.entries(list)) o.visible = out[slot] === id && !(slot === 'hair' && hideHair) && !covered;
     }
     for (const [r, o] of Object.entries(this.regions)) o.visible = !hide.has(r);
+    // skin cover mask: one bit per visible garment (players.py cover_masks)
+    let mask = 0;
+    for (const [slot, list] of Object.entries(this.items)) {
+      const info = (this.wardrobe[slot] || {})[out[slot]];
+      if (info && info.cover !== undefined && list[out[slot]] && list[out[slot]].visible) mask |= 1 << info.cover;
+    }
+    if (this.coverU) this.coverU.value = mask;
     this.wear = out; this.wearKey = JSON.stringify(out);
     return out;
   }
@@ -127,10 +170,10 @@ export class Avatar {
     c.wear = this.setWear(c.wear);
     this.setFace(c.face, c.sliders);
     const set = (name, hex) => { if (!hex) return; for (const m of this.allMats) if (m.name === name) m.color.set(hex); };
-    set('skin', c.skin); set('eye_iris', c.eyes); set('hair', c.hairColor); set('brow', c.hairColor);
+    set('skin', c.skin); set('eye_iris', c.eyes); set('hair', c.hairColor); set('hair__cap', c.hairColor); set('brow', c.hairColor);
     for (const m of this.allMats) {
       if (m.name === 'brow' && m.map) m.map.offset.y = .25 * ((c.brow | 0) % 4);
-      const t = /^(?:cloth_|armor_primary__)([a-z]+)$/.exec(m.name);
+      const t = /^(?:cloth_|armor_primary__)([a-z]+)(?:__[a-z0-9_]+)?$/.exec(m.name);
       if (t) { m.color.copy(m.userData.base); const hex = c.tints && c.tints[t[1]]; if (hex) m.color.multiply(new THREE.Color(hex)); }
     }
     this.recolor({ glow: c.glow });

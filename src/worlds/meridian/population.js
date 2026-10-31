@@ -7,10 +7,46 @@ import { raySphere, rayCyl } from '../../game/combat.js';
 
 const SKIN = ['#f4d6c6', '#e8bfa5', '#d4a184', '#b9805f', '#8f5b3f', '#6b4130', '#4a2d22'];
 const HAIR = ['#1a1310', '#2b1d14', '#4a3020', '#7a5432', '#b88b4e', '#d8c08a', '#8a8a8a', '#5a1f17'];
+const EYES = ['#6f8fae', '#4f7a9e', '#6b8a5a', '#7a5a3a', '#4a3424', '#8a8f99'];
 const SHIRT = ['#e8e6e2', '#2a2d33', '#7a1f2a', '#1f4a7a', '#2f6a4a', '#c9a24a', '#6a4a8a', '#d86a3a', '#9aa0a8', '#4a3a2a', '#e0b0c0', '#3a6a8a'];
 const PANTS = ['#2a3a5a', '#1f2228', '#4a4030', '#6a6a70', '#2f3a2a', '#8a7a60', '#ffffff'];
+const DENIM = ['#ffffff', '#ffffff', '#c8d2e6', '#7a7f8c', '#3a3c44'];
 const SHOES = ['#1c1c1c', '#5a3a26', '#e6e6e6', '#3a3a3a', '#8a5a3a'];
 const pick = (a, r) => a[Math.floor(r() * a.length)];
+// Pedestrians use the player bodies (crowd LOD player_<sex>_npc.glb from players.py) with a random face and outfit.
+const MODEL = { female: 'player_female_npc', male: 'player_male_npc' };
+const MODEL_H = { female: 1.68, male: 1.84 };            // anatomy.Body heights
+const WEAR = {                                           // everyday pieces per slot (wardrobe.py item ids)
+  female: { top: ['tee', 'tank', 'blouse', 'sweater', 'ribbed'], legs: ['jeans', 'chinos', 'shorts', 'skirt', 'leggings'],
+    dress: ['sundress', 'knit'], outer: ['hoodie', 'jacket', 'circuit_coat'], feet: ['sneakers', 'sneakers', 'ankle_boots', 'tech'], head: ['beanie', 'cap'] },
+  male: { top: ['tee', 'tee', 'flannel', 'sweater', 'undersuit'], legs: ['jeans', 'jeans', 'chinos', 'shorts', 'cargo'],
+    outer: ['hoodie', 'jacket'], feet: ['sneakers', 'sneakers', 'ankle_boots', 'combat'], head: ['beanie', 'cap'] },
+};
+
+// A random but plausible look: always dressed (top + legs, or a dress), shoes, underwear stays on (locked slots).
+export function randomCharacter(av, sex, r = Math.random) {
+  const W = av.wardrobe, M = (av.meta && av.meta.morphs) || { groups: {}, sliders: [] };
+  const pool = slot => (WEAR[sex][slot] || []).filter(id => W[slot] && W[slot][id]);
+  const pickW = slot => { const l = pool(slot); return l.length ? pick(l, r) : 'none'; };
+  const wear = {};
+  for (const slot of Object.keys(av.items)) wear[slot] = 'none';
+  wear.hair = W.hair ? pick(Object.keys(W.hair), r) : 'none';
+  if (sex === 'male' && r() < .05) wear.hair = 'none';
+  if (sex === 'female' && pool('dress').length && r() < .28) wear.dress = pickW('dress');
+  else { wear.top = pickW('top'); wear.legs = pickW('legs'); }
+  if (r() < .3) wear.outer = pickW('outer');
+  wear.feet = pickW('feet');
+  if (r() < .14) wear.head = pickW('head');
+  const tints = {};
+  for (const slot of ['top', 'outer', 'dress', 'head']) tints[slot] = pick(SHIRT, r);
+  tints.legs = /jeans|shorts/.test(wear.legs) ? pick(DENIM, r) : pick(PANTS, r);
+  tints.feet = pick(SHOES, r);
+  const face = {}, sliders = {};
+  for (const [g, list] of Object.entries(M.groups)) face[g] = r() < .65 ? pick(list, r) : null;
+  for (const n of M.sliders) sliders[n] = +((r() * 2 - 1) * .7).toFixed(2);
+  return { v: 3, body: sex, skin: pick(SKIN, r), eyes: pick(EYES, r), hairColor: pick(HAIR, r), brow: Math.floor(r() * 4),
+    face, sliders, wear, tints, glow: null };
+}
 const _v = new THREE.Vector3(), _h = new THREE.Vector3();
 
 class Ped {
@@ -23,11 +59,26 @@ class Ped {
 
   dress(r) {
     const av = this.av;
-    av.setLook(pick(av.outfits, r), pick(av.hairStyles, r));
-    const tint = (prefix, hex) => av.allMats.forEach(m => { if (m.name.startsWith(prefix)) { m.color.copy(m.userData.base).multiply(new THREE.Color(hex)); } });
-    const skin = pick(SKIN, r);
-    tint('skin', skin); tint('hair', pick(HAIR, r)); tint('shirt', pick(SHIRT, r)); tint('pants', pick(PANTS, r)); tint('shoes', pick(SHOES, r));
+    if (av.isPlayerBody) {
+      this.look = randomCharacter(av, this.sex, r);
+      av.applyCharacter(this.look);
+      // peds never change clothes: drop the hidden wardrobe pieces from the scene graph (fewer objects to update)
+      const hidden = [];
+      av.model.traverse(o => { if (o.isMesh && !o.visible) hidden.push(o); });
+      for (const o of hidden) o.removeFromParent();
+    } else {
+      av.setLook(pick(av.outfits, r), pick(av.hairStyles, r));
+      const tint = (prefix, hex) => av.allMats.forEach(m => { if (m.name.startsWith(prefix)) { m.color.copy(m.userData.base).multiply(new THREE.Color(hex)); } });
+      tint('skin', pick(SKIN, r)); tint('hair', pick(HAIR, r)); tint('shirt', pick(SHIRT, r)); tint('pants', pick(PANTS, r)); tint('shoes', pick(SHOES, r));
+    }
     av.root.scale.setScalar((this.baseScale || 1) * (.98 + r() * .04));
+  }
+
+  // shadows only for nearby peds, nothing drawn far away (the crowd is spread over the whole map)
+  lod(d) {
+    const sh = d < 45, vis = d < 170 || !this.alive;
+    if (sh !== this.shadow) { this.shadow = sh; this.av.model.traverse(o => { if (o.isMesh) o.castShadow = sh; }); }
+    if (this.av.root.visible !== vis) this.av.root.visible = vis;
   }
 
   center(out) { return out.copy(this.pos).setY(this.pos.y + 1.0); }
@@ -84,8 +135,10 @@ export class Population {
     const total = paths.reduce((a, p) => a + p.total, 0);
     for (let i = 0; i < COUNT; i++) {
       const sex = i % 2 ? 'male' : 'female';
-      const model = sex === 'male' ? 'civ_male' : 'civ_female';
+      const npc = !!(game.assets.models && game.assets.models[MODEL[sex]]) && !window.__civPeds;   // __civPeds: old crowd (A/B tests)
+      const model = npc ? MODEL[sex] : (sex === 'male' ? 'civ_male' : 'civ_female');
       const av = new Avatar(game.assets, model);
+      if (npc) modelH[model] = MODEL_H[sex];
       if (!modelH[model]) { av.root.updateMatrixWorld(true); modelH[model] = new THREE.Box3().setFromObject(av.model).getSize(_v).y || TARGET_H[sex]; }
       av.root.traverse(o => { if (o.isMesh) o.frustumCulled = true; });
       game.world.scene.add(av.root);
@@ -153,12 +206,14 @@ export class Population {
       const step = far ? dt * 4 : dt;
       if (!q.alive) { q.deadT += step; av.update(d < 60 ? step : 0); continue; }
       q.hitT += step;
-      // any moving car runs people over (the player's, traffic, parked cars rolling)
-      let hitBy = null;
-      for (const c of g.vehicles.cars) if (c.alive && c.speed > 6 && Math.abs(c.pos.x - q.pos.x) < 2.4 && Math.abs(c.pos.z - q.pos.z) < 2.4 && Math.hypot(c.pos.x - q.pos.x, c.pos.z - q.pos.z) < 2.2) { hitBy = c; break; }
-      if (hitBy) {
-        g.fx.blood && g.fx.blood(_v.copy(q.pos).setY(q.pos.y + 1), new THREE.Vector3(Math.sin(hitBy.yaw), .4, Math.cos(hitBy.yaw)), 1.6);
-        q.die(hitBy === g.vehicles.current, new THREE.Vector3(Math.sin(hitBy.yaw), .5, Math.cos(hitBy.yaw)).multiplyScalar(Math.min(14, hitBy.speed * .6)));
+      // every car (the player's, traffic, parked ones rolling) is solid: slow contact pushes people aside,
+      // a hit above ~6 m/s runs them over (vehicles.pedContact tests the car's real footprint)
+      const hit = g.vehicles.pedContact(q);
+      if (hit) {
+        const hitBy = hit.car, hv = g.vehicles.carVel(hitBy), dir = new THREE.Vector3(hv.x, 0, hv.z).normalize();
+        g.fx.blood && g.fx.blood(_v.copy(q.pos).setY(q.pos.y + 1), dir.clone().setY(.4), 1.6);
+        q.die(hitBy === g.vehicles.current, dir.setY(.5).multiplyScalar(Math.min(14, hit.speed * .6)));
+        if (hitBy.traffic) hitBy.traffic.hitSomeone(hitBy);
         this.alarm(q.pos, 35, hitBy.pos); continue;
       }
       let speed = q.speed, anim = 'WalkRelaxed', animSpeed = 1;
@@ -199,7 +254,9 @@ export class Population {
         }
       }
       if (q.state !== 'flee' && q.state !== 'return') q.pos.y = this.map.height(q.pos.x, q.pos.z);
+      if (!far) g.vehicles.pedContact(q);          // walked into a car: slide around it (hard hits are handled above)
       av.root.position.copy(q.pos); av.root.rotation.y = q.yaw;
+      q.lod(d);
       if (!far) { av.play(anim, .25, animSpeed); av.update(d < 70 ? step : (Math.random() < .3 ? step * 3 : 0)); }
     }
   }

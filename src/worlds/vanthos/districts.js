@@ -34,8 +34,16 @@ function packs(ctx, D, n) {
     const p = ctx.street();
     const type = pickW(ctx.rnd, D.enemies);
     const [a, b] = D.pack;
-    ctx.pack([type], p.x, p.z, a + Math.floor(ctx.rnd() * (b - a + 1)), { ambush: D.ambush });
+    const n = a + Math.floor(ctx.rnd() * (b - a + 1));
+    ctx.pack([type], p.x, p.z, type === 'mite' ? n * 2 + 2 : n, { ambush: D.ambush });     // mites come in swarms
   }
+}
+
+// a Writhe nest: hosts shambling over a carpet of mites, a bladder or two, a sickly glow
+function nest(ctx, x, z, big = false) {
+  ctx.pack(big ? ['host', 'mite', 'mite', 'host', 'mite', 'bladder', 'mite', 'host', 'mite', 'bladder'] : ['host', 'mite', 'mite', 'mite', 'host', 'bladder', 'mite'],
+    x, z, big ? 12 : 7, {});
+  ctx.light(x, 2.5, z, 0xb8ff40, big ? 3 : 2, true);
 }
 
 export const DISTRICTS = [
@@ -55,10 +63,11 @@ export const DISTRICTS = [
   {
     id: 'old', name: 'Old Quarter', a0: 15, a1: 75, blurb: 'Dense apartments, markets and narrow streets',
     kit: { VX_res_a: 3, VX_res_b: 2, VX_res_c: 3, VX_res_ruin: 2, VX_res_market: 2 },
-    enemies: { stalker: 1 }, pack: [3, 5], loot: 1, danger: 1, packs: 12,
+    enemies: { stalker: 1, host: .3 }, pack: [3, 5], loot: 1, danger: 1, packs: 12,
     populate(ctx) {
       fillLots(ctx, this);
       packs(ctx, this, this.packs);
+      const n0 = ctx.street(); nest(ctx, n0.x, n0.z);
       // survivors' camp by a metro entrance (the underground mall they moved into)
       const c = ctx.street(); ctx.prop('VX_camp', c.x, c.z, 0); ctx.metro(c.x + 14, c.z);
       ctx.light(c.x, 3, c.z, 0xffae2f, 2.5, true);
@@ -90,10 +99,12 @@ export const DISTRICTS = [
   {
     id: 'flooded', name: 'Flooded District', a0: 135, a1: 195, blurb: 'Half-sunken streets, flooded metro entrances, things moving under the water',
     kit: { VX_res_ruin: 3, VX_com_ruin: 2, VX_res_c: 1, VX_ind_warehouse: 1 }, emptyLots: .2,
-    enemies: { swimmer: 1 }, pack: [2, 4], loot: 1, danger: 2, packs: 11,
+    enemies: { swimmer: 1, host: .5, mite: .4 }, pack: [2, 4], loot: 1, danger: 2, packs: 11,
     populate(ctx) {
       fillLots(ctx, this, lot => ctx.prop('VX_rubble', lot.x, lot.z, ctx.rnd() * 6));
       packs(ctx, this, this.packs);
+      // the Writhe breeds in the drowned streets
+      for (let i = 0; i < 3; i++) { const p = ctx.street(); nest(ctx, p.x, p.z, i === 0); }
       for (let i = 0; i < 12; i++) { const p = ctx.street(); ctx.shard(p.x, p.z); }
       for (let i = 0; i < 3; i++) { const p = ctx.street(); ctx.metro(p.x, p.z); }
       for (let i = 0; i < 6; i++) { const p = ctx.street(); ctx.prop('VX_car_wreck', p.x, p.z, ctx.rnd() * 6); }
@@ -102,15 +113,23 @@ export const DISTRICTS = [
   {
     id: 'research', name: 'Research Sector', a0: 195, a1: 255, blurb: 'Laboratories, containment sites and a hospital whose lights never went out',
     kit: { VX_lab_a: 3, VX_lab_containment: 2, VX_com_c: 1, VX_res_c: 1 },
-    enemies: { mutant: 1 }, pack: [2, 3], loot: 2, danger: 2, packs: 11,
+    enemies: { mutant: 1, host: .6 }, pack: [2, 3], loot: 2, danger: 2, packs: 11,
     populate(ctx) {
       // abandoned hospital: emergency lights, fog closes in, the dead walk out
       const h = ctx.takeLot(l => l.big) || ctx.takeLot();
       if (h) {
         ctx.building('VX_hospital', h.x, h.z, 0);
         for (let i = 0; i < 4; i++) ctx.light(h.x - 20 + i * 12, 4, h.z - 14, 0xff3326, 3, true);
-        ctx.trigger(h.x, h.z, 45, () => { ctx.horror(h.x, h.z); ctx.pack(['mutant'], h.x, h.z - 18, 6, { awake: true }); });
+        ctx.trigger(h.x, h.z, 45, () => {
+          ctx.horror(h.x, h.z); ctx.pack(['mutant'], h.x, h.z - 18, 3, { awake: true });
+          // the patients the parasite took first pour out of the wards
+          ctx.pack(['host', 'mite', 'mite', 'host', 'mite', 'mite'], h.x + 8, h.z - 22, 10, { awake: true });
+          ctx.pack(['bladder'], h.x - 10, h.z - 24, 2, { awake: true });
+        });
         ctx.cache(h.x, h.z - 16, 2, 'Pharmacy stores');
+        // what was left of the staff, fused into one thing, guards the morgue
+        ctx.boss('amalgam', h.x + 18, 0, h.z + 20, 'The Ward Matron', 3, 1);
+        nest(ctx, h.x - 20, h.z + 16, true);
       }
       // the lab boss among containment chambers
       const b = ctx.takeLot(l => l.big) || ctx.takeLot();
@@ -148,17 +167,20 @@ export const DISTRICTS = [
       const t = ctx.street(); ctx.prop('VX_train', t.x, t.z, ctx.rnd() * 6, { solid: true }); ctx.prop('VX_bridge_broken', t.x + 30, t.z, 0, { solid: true });
       ctx.cache(t.x, t.z + 6, 2, 'Freight car');
       for (let i = 0; i < 3; i++) { const p = ctx.street(); ctx.pack(['hulk'], p.x, p.z, 1, {}); }
+      for (let i = 0; i < 2; i++) { const p = ctx.street(); nest(ctx, p.x, p.z); }
       const m = ctx.street(); ctx.metro(m.x, m.z);
     },
   },
   {
     id: 'outskirts', name: 'The Outskirts', blurb: 'Abandoned settlements, scrapyards and the highways out', sparse: .4, emptyLots: .25,
     kit: { VX_res_c: 2, VX_res_ruin: 1, VX_ind_warehouse: 1 },
-    enemies: { trooper: 2, stalker: 2, brute: 1 }, pack: [2, 4], factionWar: true, loot: 1, danger: 1, packs: 12,
+    enemies: { trooper: 2, stalker: 2, brute: 1, host: .8 }, pack: [2, 4], factionWar: true, loot: 1, danger: 1, packs: 12,
     populate(ctx) {
       fillLots(ctx, this, lot => { for (let k = 0; k < 6; k++) ctx.prop('VX_car_wreck', lot.x + (ctx.rnd() - .5) * lot.w, lot.z + (ctx.rnd() - .5) * lot.d, ctx.rnd() * 6, { solid: true }); });
       packs(ctx, this, this.packs);
       for (let i = 0; i < 3; i++) { const p = ctx.street(); ctx.prop('VX_camp', p.x, p.z, ctx.rnd() * 6); ctx.cache(p.x + 5, p.z, 1, 'Settlers’ stash'); }
+      // a settlement the Writhe has already taken
+      const o = ctx.street(); ctx.prop('VX_camp', o.x, o.z, ctx.rnd() * 6); nest(ctx, o.x + 4, o.z + 4, true); ctx.cache(o.x - 5, o.z, 2, 'Overrun stash');
     },
   },
 ];

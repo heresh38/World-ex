@@ -279,9 +279,10 @@ export class Player {
     const cam = this.camera;
     let pivotH = 1.62, side = .62, dist = this.camDist;
     if (this.mode === 'car' && this.g.vehicles.current) {
+      if (this.g.vehicles.camera(cam, dt)) return;      // first-person seat / board camera (vehicles.js)
       const c = this.g.vehicles.current;
-      _p.copy(c.root.position).y += 1.6;
-      dist = 7.5; side = 0;
+      _p.copy(c.root.position).y += c.board ? 1.5 : 1.8;
+      dist = c.board ? 4.2 : 7.5; side = 0;
     } else if (this.mode === 'seat' || (this.mode === 'sit' && this.g.save.settings.view === 'third')) {
       _p.copy(this.pos).y += 1.3; dist = 2.6; side = .3;
     } else if (this.mode === 'sit') {

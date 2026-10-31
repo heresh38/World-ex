@@ -69,6 +69,13 @@ def veins(g, f, seed, w=.06):
     return g.math('SUBTRACT', 1.0, g.math('MINIMUM', g.math('DIVIDE', d, w), 1.0))
 
 
+def vridge(g, f, seed, sharp=10.0, detail=2.0):
+    """Wavy branching veins: the zero crossings of a noise field, sharpened (1 on the vein)."""
+    n = g.noise(f, detail, .55, seed)
+    r = g.math('SUBTRACT', 1.0, g.math('ABSOLUTE', g.math('MULTIPLY', g.math('SUBTRACT', n, .5), 2.0)))
+    return g.math('POWER', g.math('MAXIMUM', r, 0.0), sharp)
+
+
 def bake_set(p, name, c, n, m, strength=.5):
     bake(p, name, c, n, strength=strength, size=SIZE)
     out = bake(p, name + '_mtmp', m, size=SIZE)
@@ -85,15 +92,15 @@ def main():
         a = g.ramp(fib, [(.25, '#a8746c'), (.5, '#d8a89c'), (.75, '#f2d2c4')])
         blot = g.ramp(g.noise(4, 5, .6, 2), [(.35, (1, 1, 1)), (.7, (.72, .52, .58))])
         a = g.mix(a, blot, 1.0, 'MULTIPLY')
-        a = g.mix(a, (.32, .06, .12), g.math('MULTIPLY', veins(g, 5, 3, .07), .8))
-        a = g.mix(a, (.45, .12, .2), g.math('MULTIPLY', veins(g, 13, 4, .05), .5))
+        a = g.mix(a, (.32, .06, .12), g.math('MULTIPLY', vridge(g, 3, 3, 14), .8))
+        a = g.mix(a, (.45, .12, .2), g.math('MULTIPLY', vridge(g, 7, 4, 18), .5))
         pus = g.math('LESS_THAN', g.voronoi(22, 5, 'F1', 'Distance'), .09)
         return g.mix(a, (1.0, .92, .62), g.math('MULTIPLY', pus, .75))
 
     def flesh_n(g):
         fib = aniso(g, 4, 46, 3, .55, 1)
         pus = g.math('SUBTRACT', .12, g.math('MINIMUM', g.voronoi(22, 5, 'F1', 'Distance'), .12))
-        return g.math('ADD', g.math('ADD', g.math('MULTIPLY', veins(g, 5, 3, .07), .9), g.math('MULTIPLY', veins(g, 13, 4, .05), .45)),
+        return g.math('ADD', g.math('ADD', g.math('MULTIPLY', vridge(g, 3, 3, 14), .9), g.math('MULTIPLY', vridge(g, 7, 4, 18), .45)),
                       g.math('ADD', g.math('MULTIPLY', fib, .35), g.math('MULTIPLY', pus, 6.0)))
 
     def flesh_m(g):
@@ -105,27 +112,27 @@ def main():
         a = g.ramp(g.noise(6, 7, .62, 7), [(.3, '#b7b0a2'), (.7, '#e2dccd')])
         mott = g.ramp(g.noise(2.5, 4, .55, 8), [(.4, (1, 1, 1)), (.75, (.78, .7, .76))])
         a = g.mix(a, mott, 1.0, 'MULTIPLY')
-        a = g.mix(a, (.42, .3, .38), g.math('MULTIPLY', veins(g, 9, 9, .04), .45))
-        les = g.math('LESS_THAN', g.voronoi(7, 10, 'F1', 'Distance'), .13)
+        a = g.mix(a, (.42, .3, .38), g.math('MULTIPLY', vridge(g, 4, 9, 16), .45))
+        les = g.math('LESS_THAN', g.voronoi(7, 10, 'F1', 'Distance'), .24)
         a = g.mix(a, (.55, .2, .18), g.math('MULTIPLY', les, .8))
-        return g.mix(a, (.95, .82, .5), g.math('MULTIPLY', g.math('LESS_THAN', g.voronoi(7, 10, 'F1', 'Distance'), .05), .8))
+        return g.mix(a, (.95, .82, .5), g.math('MULTIPLY', g.math('LESS_THAN', g.voronoi(7, 10, 'F1', 'Distance'), .1), .8))
 
     def skin_n(g):
         wr = aniso(g, 30, 3, 4, .6, 11)
-        les = g.math('SUBTRACT', .14, g.math('MINIMUM', g.voronoi(7, 10, 'F1', 'Distance'), .14))
+        les = g.math('SUBTRACT', .24, g.math('MINIMUM', g.voronoi(7, 10, 'F1', 'Distance'), .24))
         return g.math('ADD', g.math('ADD', g.math('MULTIPLY', wr, .6), g.math('MULTIPLY', g.noise(60, 2, .5, 12), .25)),
                       g.math('MULTIPLY', les, -5.0))
 
     def skin_m(g):
-        les = g.math('LESS_THAN', g.voronoi(7, 10, 'F1', 'Distance'), .14)
+        les = g.math('LESS_THAN', g.voronoi(7, 10, 'F1', 'Distance'), .24)
         return mr(g, g.math('SUBTRACT', g.math('ADD', .5, g.math('MULTIPLY', g.noise(5, 3, .5, 13), .2)), g.math('MULTIPLY', les, .35)))
     bake_set(p, 'hx_skin', skin_c, skin_n, skin_m, .6)
 
     # ------------------------------------------------ chitin: fused plates, dark seams, growth ridges, glossy
     def chit_c(g):
         cell = g.voronoi(6, 14, 'F1', 'Distance')
-        a = g.ramp(cell, [(.0, '#e6e0d2'), (.45, '#b2a898'), (.62, '#6c6258')])
-        a = g.mix(a, (.18, .14, .14), g.math('MULTIPLY', veins(g, 6, 14, .05), .95))
+        a = g.ramp(cell, [(.0, '#ece6d8'), (.45, '#c2b8a6'), (.75, '#8a7e70')])
+        a = g.mix(a, (.3, .24, .22), g.math('MULTIPLY', veins(g, 6, 14, .05), .8))
         rid = g.ramp(aniso(g, 2, 40, 2, .5, 15), [(.3, (1, 1, 1)), (.7, (.8, .78, .74))])
         return g.mix(a, rid, 1.0, 'MULTIPLY')
 
@@ -157,12 +164,12 @@ def main():
     # ------------------------------------------------ membrane sac: glossy, a fine net of veins over mottled tissue
     def sac_c(g):
         a = g.ramp(g.noise(4, 4, .6, 21), [(.3, '#d8d0a8'), (.7, '#fbf6dc')])
-        a = g.mix(a, (.42, .2, .14), g.math('MULTIPLY', veins(g, 4, 22, .045), .85))
-        a = g.mix(a, (.6, .34, .22), g.math('MULTIPLY', veins(g, 11, 23, .04), .55))
+        a = g.mix(a, (.42, .2, .14), g.math('MULTIPLY', vridge(g, 2.5, 22, 12), .85))
+        a = g.mix(a, (.6, .34, .22), g.math('MULTIPLY', vridge(g, 6, 23, 16), .55))
         return g.mix(a, (.5, .55, .3), g.math('MULTIPLY', g.math('GREATER_THAN', g.noise(3, 3, .5, 24), .62), .4))
 
     def sac_n(g):
-        return g.math('ADD', g.math('ADD', g.math('MULTIPLY', veins(g, 4, 22, .045), 1.0), g.math('MULTIPLY', veins(g, 11, 23, .04), .5)),
+        return g.math('ADD', g.math('ADD', g.math('MULTIPLY', vridge(g, 2.5, 22, 12), 1.0), g.math('MULTIPLY', vridge(g, 6, 23, 16), .5)),
                       g.math('MULTIPLY', g.noise(30, 2, .5, 25), .15))
 
     def sac_m(g):

@@ -15,23 +15,35 @@ fs.mkdirSync(OUT, { recursive: true });
   const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
-  p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'medium'; });
+  p.on('crash', () => console.log('PAGE CRASHED'));
+  p.on('console', m => { if (process.env.VERBOSE && m.type() === 'log') console.log('LOG', m.text().slice(0, 200)); if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
+  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
   const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 82, timeout: 300000 }); console.log('shot', n); };
   const waitPlay = async () => { await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 900000, polling: 1000 });
     await ev(() => { const g = window.__game; g.paused = false; g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; }); };
+  // models other people are still building: stand in the base model so the run is not blocked by a missing file
+  await p.route(/assets\/models\/(player_(?:female|male))_npc\.glb$/, (route, req) => {
+    const m = /(player_(?:female|male))_npc\.glb$/.exec(req.url()), own = `assets/models/${m[1]}_npc.glb`;
+    if (fs.existsSync(own)) return route.continue();
+    return route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: fs.readFileSync(`assets/models/${m[1]}.glb`) });
+  });
   await p.goto(BASE + '/index.html');
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 300000, polling: 500 });
-  await ev(() => { const g = window.__game; g.save.settings.quality = 'medium'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
+  await ev(() => { window.__game.save.settings.dynamicRes = false; });
   await p.click('[data-act="title-play"]');
   await waitPlay();
   await ev(w => window.__game.travel(w), process.env.WORLD || 'ares');
   await waitPlay();
   await wait(2500);
   // keep the run deterministic: no wandering hostiles, the player cannot die
-  await ev(() => { const g = window.__game; g.enemies.clear(); if (g.save.settings.view !== 'first') g.toggleView(); });
+  await ev(() => {
+    const g = window.__game, pl = g.player; g.enemies.clear(); if (g.save.settings.view !== 'first') g.toggleView();
+    // turn away from the dropship and walk out into the open
+    pl.camYaw += Math.PI; const fx = -Math.sin(pl.camYaw), fz = -Math.cos(pl.camYaw);
+    pl.pos.x += fx * 25; pl.pos.z += fz * 25; pl.pos.y = g.world.collision.ground(pl.pos.x, pl.pos.z) + .1; pl.avatar.root.position.copy(pl.pos);
+  });
 
   const results = {};
   for (const arch of ARCHS) {
@@ -46,11 +58,11 @@ fs.mkdirSync(OUT, { recursive: true });
       return { uid: w.uid, name: w.name, label: data.archLabel(arch), sight: data.weaponSight(w), scoped: !!vm.scoped, model: A.model,
         meshes: (() => { let n = 0, mats = new Set(); vm.gun && vm.gun.traverse(o => { if (o.isMesh && o.visible) { n++; mats.add(o.material.name); } }); return { n, mats: [...mats] }; })() };
     }, arch);
-    await wait(1200);
+    await wait(3500);
     await shot(`w_${arch}_hip`);
     // aim down sights
     await ev(() => { window.__game.input.rmb = true; });
-    await wait(1600);
+    await wait(3000);
     await shot(`w_${arch}_ads`);
     await ev(() => { window.__game.input.rmb = false; });
     // spawn a target ahead and fire a few times at its chest
@@ -65,7 +77,9 @@ fs.mkdirSync(OUT, { recursive: true });
       const hp0 = e.hp;
       const w = g.weapons.equipped(), A = data.ARCHETYPES[w.arch], S = st.weaponStats(w), a = g.weapons.ammoOf(w);
       let maxRounds = 0, maxGoo = 0;
+      console.log('target spawned', hp0);
       for (let k = 0; k < 4; k++) {
+        console.log('fire', k);
         // aim at the target's centre from the camera
         const c = e.center(new V()), cam = g.camera.position;
         const d = c.clone().sub(cam); pl.camYaw = Math.atan2(-d.x, -d.z); pl.camPitch = Math.atan2(d.y, Math.hypot(d.x, d.z));

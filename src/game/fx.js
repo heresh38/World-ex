@@ -285,6 +285,29 @@ export class FX {
     if (dirty) this.slimeDecals.instanceMatrix.needsUpdate = true;
   }
 
+  // gore burst (the Writhe, aliens): an ichor spray, heavy meat chunks that arc and drop, splats around on the ground
+  gore(p, color = 0x9aa020, size = 1) {
+    if (!this.bPoints) return;
+    this.blood(p, null, 1.4 * size, color);
+    const c = new THREE.Color(color), meat = new THREE.Color(0x4a1410), n = Math.round(12 * size);
+    for (let k = 0; k < n; k++) {
+      const i = this.bCursor; this.bCursor = (this.bCursor + 1) % this.BM;
+      this.bPos[i * 3] = p.x + (Math.random() - .5) * .3 * size; this.bPos[i * 3 + 1] = p.y + (Math.random() - .3) * .3 * size; this.bPos[i * 3 + 2] = p.z + (Math.random() - .5) * .3 * size;
+      const a = Math.random() * 6.28, sp = (1.5 + Math.random() * 4) * Math.sqrt(size);
+      this.bVel[i * 3] = Math.cos(a) * sp; this.bVel[i * 3 + 1] = 2 + Math.random() * 4 * Math.sqrt(size); this.bVel[i * 3 + 2] = Math.sin(a) * sp;
+      this.bLife[i] = 1 + Math.random() * 1.2; this.bSize[i] = (.06 + Math.random() * .1) * Math.min(1.6, size);
+      const m = Math.random() < .5 ? meat : c, v = .5 + Math.random() * .5;
+      this.bCol[i * 3] = m.r * v; this.bCol[i * 3 + 1] = m.g * v; this.bCol[i * 3 + 2] = m.b * v;
+    }
+    if (this.groundFn) {
+      for (let k = 0, m = Math.round(2 + 3 * size); k < m; k++) {
+        const a = Math.random() * 6.28, r = Math.random() * 1.8 * size, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+        this.decal(x, this.groundFn(x, z), z, .35 + Math.random() * .7 * size, color);
+      }
+    }
+    this.emit(p, Math.round(8 * size), 1.5, color, .6, -.5, .12 * size, 1, null, 1.5);   // faint glowing spore mist
+  }
+
   // welding: bright bursts of sparks that fall and bounce, plus a flickering arc light
   weld(p, dir) {
     this.emit(p, 6 + (Math.random() * 6 | 0), 5.5, 0xfff0c0, .7, 9.8, .035, .9, dir, .2);

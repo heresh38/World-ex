@@ -899,6 +899,20 @@ def exterior(m):
     fill(m['hull'], [[P3(p, -12.9) for p in secs[0][1]], bridge_out], (0, -1, 0))
     bay = [P3(p, 39.5) for p in prof(13.0, 11.0, a=.8, a2=1.0, sill=4.6, bh=3.0, bv=3.0)]
     fill(m['hull_dark'], [[P3(p, 39.5) for p in secs[-1][1]], bay], (0, 1, 0))
+    # hull dressing seen from the canopy side panes: RCS blocks, radiator strips, comms mast + dish
+    for sx in (-1, 1):
+        part(bl.box('rcs_block', (.9, 1.4, .9), (sx * 7.55, -11.9, 4.3), m['hull_dark'], bevel=.08))
+        for k, (dy, dz) in enumerate(((-.71, 0), (0, .46), (0, -.46))):
+            part(bl.cyl('rcs_nozzle', .14, .3, (sx * 7.55, -11.9 + dy, 4.3 + dz) if dy else (sx * 8.0, -11.9, 4.3 + dz),
+                        m['frame'], 10, rot=(R90, 0, 0) if dy else (0, R90, 0)))
+        for y in frange(-6.0, 4.0, 1.25):
+            part(bl.box('radiator', (.12, .9, 1.5), (sx * 7.82, y, 3.2), m['hull_dark'], bevel=.02))
+        part(bl.box('sensor_pod', (1.2, 3.0, .7), (sx * 4.0, -9.5, 6.2), m['hull'], bevel=.15))
+        part(bl.sphere('sensor_dome', .45, (sx * 4.0, -10.6, 6.5), m['glass'], 16, 8))
+    part(bl.cyl('mast', .12, 2.4, (0, -8.0, 7.1), m['frame'], 10))
+    part(bl.cyl('dish', 1.1, .25, (0, -8.3, 8.2), m['hull'], 24, r2=.3, rot=(.9, 0, 0)))
+    part(bl.sphere('mast_blink', .12, (0, -8.0, 8.35), m['red'], 8, 6))
+    part(bl.box('spine', (2.2, 16.0, .5), (0, -2.0, 6.1), m['hull_dark'], bevel=.12))
     # running lights along the hull shoulders
     for sx in (-1, 1):
         beam((sx * 7.8, -12.5, 4.0), (sx * 7.8, 6.0, 4.0), .06, .06, m['cyan'])

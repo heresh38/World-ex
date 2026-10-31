@@ -28,9 +28,11 @@ const MODELS = [
   ['ship_interior', 'ship_interior.glb', 10], ['player_female', 'player_female.glb', 5], ['player_male', 'player_male.glb', 5],
   ['enemy_trooper', 'enemy_trooper.glb', 4], ['enemy_brute', 'enemy_brute.glb', 4], ['npc_vendor', 'npc_vendor.glb', 4],
   ['car_sport', 'car_sport.glb', 2], ['car_utility', 'car_utility.glb', 2], ['ship_jumper', 'ship_jumper.glb', 2],
+  ['cars', 'cars.glb', 8], ['board_sport', 'board_sport.glb', 1], ['board_utility', 'board_utility.glb', 1],
   ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
-  ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
+  ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['player_female_npc', 'player_female_npc.glb', 3], ['player_male_npc', 'player_male_npc.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
   ['vanthos', 'vanthos.glb', 8], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
+  ...['mite', 'host', 'bladder', 'amalgam'].map(k => ['writhe_' + k, 'writhe_' + k + '.glb', 1]),
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]), ['gun_attach', 'gun_attach.glb', 1],
 ];
 const TEXTURES = ['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss', 'facade_e', 'ribbon_e'];
@@ -527,7 +529,7 @@ class Game {
     let carNear = null;
     if (canAct && p.mode === 'foot' && w.allowCars) carNear = this.vehicles.nearest(p.pos);
     if (focus) this.hud.prompt(focus);
-    else if (carNear) this.hud.prompt({ key: 'E', verb: 'Drive', label: carNear.S.name });
+    else if (carNear) this.hud.prompt({ key: 'E', verb: carNear.board ? 'Ride' : 'Drive', label: carNear.S.name });
     else if (p.mode === 'sit' && !this.stationId) this.hud.prompt({ key: 'E', verb: 'Stand up', label: '' });
     else if (p.mode === 'car') this.hud.prompt(null);
     else this.hud.prompt(null);
@@ -567,7 +569,7 @@ class Game {
     this.objT = (this.objT || 0) - dt;
     if (this.objT <= 0) { this.objT = .5; this.hud.setObjectives(w.objectives()); }
     this.audio.combat += ((this.enemies.combatCount > 0 ? 1 : 0) - this.audio.combat) * Math.min(1, dt * .5);
-    this.hud.setHint(!input.locked && !this.stationId && !this.paused ? 'Click to take control' : (p.mode === 'car' ? 'E exit · Shift boost · Space brake' : ''));
+    this.hud.setHint(!input.locked && !this.stationId && !this.paused ? 'Click to take control' : (p.mode === 'car' ? (this.vehicles.current && this.vehicles.current.board ? 'E step off · Shift boost · Space jump' : 'E exit · Shift boost · Space handbrake') : ''));
     this.hud.update(dt);
     this.autosaveT = (this.autosaveT || 0) + dt;
     if (this.autosaveT > 20) { this.autosaveT = 0; this.persist(); }

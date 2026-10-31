@@ -157,6 +157,60 @@ export class Audio {
     this.tone(o, t, .12, big ? 160 : 260, 60, 'sine', big ? .4 : .2);
   }
 
+  // ---- the Writhe: wet tearing squelches, warbling shrieks, chittering, gurgling sacs, a fused-throat roar
+  squelch(pos, size = 1) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.out(pos, 45 + size * 20), s = Math.min(2.5, size);
+    this.nz(o, t, .14 + .12 * s, 900 + Math.random() * 500, 160, 4, 'bandpass', .3 + .2 * s, .004);
+    this.nz(o, t + .03, .2 + .1 * s, 2400, 500, 2, 'bandpass', .12 * s, .01);
+    this.tone(o, t, .1 + .05 * s, 220 / Math.sqrt(s), 55, 'sine', .25 * s);
+    for (let k = 0; k < 2 + s * 2; k++) this.tone(o, t + .02 + Math.random() * .18 * s, .04, 300 + Math.random() * 500, 90, 'sine', .07 * s);
+  }
+
+  shriek(pos, pitch = 1) {
+    if (!this.ready) return;
+    const c = this.ctx, t = c.currentTime, o = this.out(pos, 90), dur = .7 + Math.random() * .3;
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 3; f.frequency.setValueAtTime(1600 * pitch, t); f.frequency.exponentialRampToValueAtTime(700 * pitch, t + dur);
+    const g = c.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.22, t + .05); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+    f.connect(g); g.connect(o);
+    const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = 9 + Math.random() * 7; lg.gain.value = 60 * pitch; lfo.connect(lg);
+    for (const det of [0, 13, -21]) {
+      const os = c.createOscillator(); os.type = 'sawtooth';
+      os.frequency.setValueAtTime(520 * pitch + det, t); os.frequency.exponentialRampToValueAtTime(980 * pitch + det, t + dur * .3);
+      os.frequency.exponentialRampToValueAtTime(380 * pitch + det, t + dur);
+      lg.connect(os.frequency); os.connect(f); os.start(t); os.stop(t + dur + .05);
+    }
+    lfo.start(t); lfo.stop(t + dur + .05);
+    this.nz(o, t, dur * .8, 3000 * pitch, 900, 1.5, 'bandpass', .12, .04);
+  }
+
+  chitter(pos, k = 1) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (t - (this.chitT || 0) < .08) return;
+    this.chitT = t;
+    const o = this.out(pos, 35);
+    for (let i = 0, n = 4 + Math.floor(Math.random() * 5 * k); i < n; i++) {
+      const at = t + i * (.028 + Math.random() * .02);
+      this.nz(o, at, .025, 5200 + Math.random() * 2000, 2400, 6, 'bandpass', .14);
+      this.tone(o, at, .018, 2600 + Math.random() * 1400, 1800, 'square', .025);
+    }
+  }
+
+  gurgle(pos) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.out(pos, 45);
+    this.nz(o, t, 1.1, 260, 140, 6, 'bandpass', .35, .1);
+    for (let k = 0; k < 9; k++) this.tone(o, t + k * (.06 + Math.random() * .07), .07 + Math.random() * .05, 110 + Math.random() * 220, 70, 'sine', .14);
+  }
+
+  roar(pos) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.out(pos, 140), dur = 1.3;
+    this.tone(o, t, dur, 72, 48, 'sawtooth', .22, .12); this.tone(o, t, dur, 77, 51, 'sawtooth', .18, .15); this.tone(o, t, dur * .8, 140, 90, 'square', .05, .1);
+    this.nz(o, t, dur, 700, 180, 2, 'bandpass', .5, .12); this.nz(o, t + .05, dur * .9, 2200, 600, 3, 'bandpass', .16, .2);
+  }
+
   hit(crit, kill) {
     if (!this.ready) return;
     const t = this.ctx.currentTime;

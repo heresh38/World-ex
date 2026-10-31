@@ -8,7 +8,10 @@ Output assets/models/player_female.glb, player_male.glb on the shared rig with t
   * C_<slot>_<item>  clothing pieces, H_<style> hair styles (wardrobe.py)
 Metadata for the game is stored on the armature as the `worldex` extra.
 
-Run: blender --background --python tools/blender/players.py [-- female|male] [--fast]
+Also writes player_<sex>_npc.glb: the crowd LOD (coarser meshes, single body mesh, thinner hair, same rig, clips,
+material names and wardrobe meta) used by the pedestrians.
+
+Run: blender --background --python tools/blender/players.py [-- female|male] [--fast] [--no-npc | --npc-only]
 """
 import bpy, bmesh, sys, os, json, math, time
 import numpy as np
@@ -236,12 +239,17 @@ def skin_mat(sex):
 
 # ------------------------------------------------------------------ build
 class PlayerBuilder:
-    def __init__(self, sex):
-        self.sex = sex
+    def __init__(self, sex, npc=False):
+        self.sex = sex; self.npc = npc
         self.B = anatomy.Body(sex)
         self.F = anatomy.Field(self.B)
         self.skinner = Skinner(self.B, self.F)
         q = 2.0 if FAST else 1.0
+        if npc:      # crowd LOD: coarser meshes, one body mesh, no lashes (see export)
+            q = max(q, 2.2)
+            self.res = dict(body=.0034 * q, head=.0009 * q, hand=.0012 * q, foot=.0016 * q)
+            self.tgt = dict(body=7000, head=3200, hand=900, foot=700)
+            return
         self.res = dict(body=.0034 * q, head=.0009 * q, hand=.0012 * q, foot=.0016 * q)
         self.tgt = dict(body=22000, head=16000, hand=3800, foot=2800)
 
@@ -581,6 +589,11 @@ class PlayerBuilder:
         self.wardrobe = wardrobe.Kit(self).run() if '--naked' not in ARGS else {'items': {}, 'defaults': {}}
         for o in regions:
             set_normals(o, self.F)
+        if self.npc:
+            # one skin mesh for the whole body below the head (garments cover by the skin cover mask, not region hiding)
+            body = bl.join([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name.startswith('B_')
+                            and o.name not in ('B_head', 'B_eyes', 'B_brows', 'B_lashes')], 'B_body')
+            bpy.data.objects.remove(lashes)
         self.cover_masks()
         # rig
         b = type('B', (), {})(); b.J = self.B.joints(); b.s = self.B.H / 1.82
@@ -591,7 +604,7 @@ class PlayerBuilder:
             if o.type == 'MESH':
                 o.parent = arm
                 md = o.modifiers.new('Armature', 'ARMATURE'); md.object = arm
-        characters.animate(arm, b.s)
+        characters.animate(arm, b.s, style=self.sex, clips=characters.PLAYER_CLIPS)
         meta = {'v': 3, 'sex': self.sex, 'regions': sorted(o.name[2:] for o in bpy.context.scene.objects if o.name.startswith('B_')),
                 'morphs': {'groups': face.GROUPS, 'sliders': face.SLIDERS}, 'brows': self.BROW_STYLES,
                 'wardrobe': self.wardrobe['items'], 'defaults': self.wardrobe['defaults']}
@@ -672,9 +685,13 @@ class PlayerBuilder:
 
 
 def export(sex):
-    pb = PlayerBuilder(sex)
-    pb.run()
-    bl.export('player_%s.glb' % sex, animations=True, export_vertex_color='ACTIVE', export_morph_normal=False, export_attributes=True)
+    kw = dict(animations=True, export_vertex_color='ACTIVE', export_morph_normal=False, export_attributes=True)
+    if '--npc-only' not in ARGS:
+        PlayerBuilder(sex).run()
+        bl.export('player_%s.glb' % sex, **kw)
+    if '--no-npc' not in ARGS:
+        PlayerBuilder(sex, npc=True).run()
+        bl.export('player_%s_npc.glb' % sex, **kw)
 
 
 if __name__ == '__main__':

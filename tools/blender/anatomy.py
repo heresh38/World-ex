@@ -541,6 +541,14 @@ class Field:
                                np.array([.25, .2, B.head_o[2] + .02]))
 
     def parts(self, P):
+        # garment fields ask for the parts and the whole field of the same points: reuse the last result
+        if getattr(self, '_last', None) is not None and self._last[0] is P and self._last[1] == P.shape:
+            return self._last[2]
+        out = self._parts(P)
+        self._last = (P, P.shape, out)
+        return out
+
+    def _parts(self, P):
         B = self.B
         z = P[:, 2]; ax = np.abs(P[:, 0])
         tor = smin(self.torso_b(P), self.head_w(P), .018)

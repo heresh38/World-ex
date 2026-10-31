@@ -7,8 +7,10 @@ import { mulberry } from '../../game/state.js';
 const CELL = 20;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
-const FAUNA = { old: ['stalker'], commercial: ['stalker'], flooded: ['swimmer'], research: ['mutant'], military: ['trooper', 'brute'],
-  industrial: ['hulk', 'stalker'], crown: ['elite', 'stalker'], outskirts: ['stalker', 'trooper'] };
+// the Writhe (host, mite, bladder) has spread through the flooded and research tunnels and into the old lines
+const FAUNA = { old: ['stalker', 'host', 'mite'], commercial: ['stalker'], flooded: ['swimmer', 'host', 'mite', 'mite', 'bladder'],
+  research: ['mutant', 'host', 'mite', 'mite', 'bladder'], military: ['trooper', 'brute'],
+  industrial: ['hulk', 'stalker'], crown: ['elite', 'stalker'], outskirts: ['stalker', 'trooper', 'host'] };
 
 function instanceKit(scene, root, mats) {
   if (!mats.length) return;
@@ -163,11 +165,15 @@ export class MetroWorld extends World {
       if (pk.live || pk.pos.distanceTo(p.pos) > 46) continue;
       pk.live = true;
       const group = [];
+      const off = Math.floor(this.rnd() * this.fauna.length);
       for (let k = 0; k < pk.n; k++) {
-        const type = pk.boss ? (this.fauna[0] === 'trooper' ? 'brute' : this.fauna.includes('hulk') ? 'hulk' : 'elite') : this.fauna[k % this.fauna.length];
-        const e = g.enemies.spawn(type, pk.pos.clone().add(new THREE.Vector3((Math.random() - .5) * 6, 0, (Math.random() - .5) * 6)), this.entry.level + (pk.boss ? 3 : 1), { group });
-        if (pk.boss) { e.maxHp = e.hp = e.maxHp * 3; e.T = { ...e.T, name: 'Nest ' + e.T.name, loot: 1 }; }
-        group.push(e);
+        const type = pk.boss ? (this.fauna[0] === 'trooper' ? 'brute' : this.fauna.includes('hulk') ? 'hulk' : this.fauna.includes('host') ? 'amalgam' : 'elite') : this.fauna[(k + off) % this.fauna.length];
+        // mites crawl out of the dark in clutches
+        for (let m = 0, cnt = type === 'mite' ? 3 : 1; m < cnt; m++) {
+          const e = g.enemies.spawn(type, pk.pos.clone().add(new THREE.Vector3((Math.random() - .5) * 6, 0, (Math.random() - .5) * 6)), this.entry.level + (pk.boss ? 3 : 1), { group });
+          if (pk.boss) { e.maxHp = e.hp = e.maxHp * (type === 'amalgam' ? 1.5 : 3); e.T = { ...e.T, name: 'Nest ' + e.T.name, loot: 1 }; }
+          group.push(e);
+        }
       }
     }
     for (const cc of this.caches) if (cc.open && cc.lid && cc.t < 1) { cc.t = Math.min(1, cc.t + dt * 2); cc.lid.rotation.x = -cc.t * 1.9; }
