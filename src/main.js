@@ -31,7 +31,7 @@ const MODELS = [
   ['cars', 'cars.glb', 8], ['board_sport', 'board_sport.glb', 1], ['board_utility', 'board_utility.glb', 1],
   ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
   ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['player_female_npc', 'player_female_npc.glb', 3], ['player_male_npc', 'player_male_npc.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
-  ['vanthos', 'vanthos.glb', 8], ['airport', 'airport.glb', 5], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
+  ['vanthos', 'vanthos.glb', 8], ['spaceport', 'spaceport.glb', 5], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
   ...['mite', 'host', 'bladder', 'amalgam'].map(k => ['writhe_' + k, 'writhe_' + k + '.glb', 1]),
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]), ['gun_attach', 'gun_attach.glb', 1],
 ];

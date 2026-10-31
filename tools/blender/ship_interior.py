@@ -717,7 +717,6 @@ def main():
     for j in range(len(fpts) - 1):
         beam(fpts[j] + Vector((0, -.45, 0)), fpts[j + 1] + Vector((0, -.45, 0)), .1, .06, m['cyan'], up=(0, -1, 0))
     col_box(-14, 38.6, 0, 14, 40.5, 12)
-    LIGHTS.append(dict(kind='point', name='bay_field', pos=to3((0, 36.0, 7.0)), color='#58b4ff', intensity=12, dist=18))
     # catwalks at the sill line with railings, brackets on the ribs
     for sx in (-1, 1):
         x_in = sx * 10.9; x_w = sx * 12.55

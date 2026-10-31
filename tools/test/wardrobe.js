@@ -27,9 +27,11 @@ fs.mkdirSync(OUT, { recursive: true });
       const vis = await ev(id => { const o = window.__game.player.avatar.items.hair[id]; let v = 0; o.traverse(m => { if (m.isMesh && m.visible) v++; }); return v; }, id);
       if (!vis) errs.push('hair ' + id + ' not visible');
       await shot(`h_${tag}_${id}`);
-      await ev(() => { const g = window.__game; g.wardrobeSpin = (g.wardrobeSpin || 0) + 2.6; });
+      await ev(() => { const g = window.__game; g.wardrobeSpin = (g.wardrobeSpin || 0) + 1.57; });
+      await wait(900); await shot(`h_${tag}_${id}_side`);
+      await ev(() => { const g = window.__game; g.wardrobeSpin += 1.57; });
       await wait(900); await shot(`h_${tag}_${id}_back`);
-      await ev(() => { const g = window.__game; g.wardrobeSpin -= 2.6; });
+      await ev(() => { const g = window.__game; g.wardrobeSpin -= 3.14; });
       await wait(500);
     }
   };

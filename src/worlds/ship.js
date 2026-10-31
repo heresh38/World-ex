@@ -274,6 +274,8 @@ export class ShipWorld extends World {
         s.shadow.bias = -.0005; s.shadow.normalBias = .04;
         sc.add(s, s.target);
         this.sun = s;
+        // the hull is static: refresh the big sun shadow map every other frame (moving casters are small)
+        s.shadow.autoUpdate = false; s.shadow.needsUpdate = true;
         this.sunDir = V(L.pos).sub(V(L.target)).normalize();
       } else if (L.kind === 'spot') {
         const s = new THREE.SpotLight(L.color, L.intensity * 3, 34, L.angle, .55, 2);
@@ -339,6 +341,8 @@ export class ShipWorld extends World {
     pm.dispose();
     this.disposables.push(this.envRT, this.screens, this.field);
     sc.fog = new THREE.Fog(0x05070c, 60, 400);
+    // compile every material variant now (behind the loading screen) instead of stalling when a deck first comes into view
+    try { g.renderer.r.compile(sc, g.camera); } catch (e) { /* optional warm-up */ }
     progress(1, 'Ready');
   }
 
@@ -418,6 +422,7 @@ export class ShipWorld extends World {
 
   update(dt) {
     const g = this.g, t = g.time;
+    if (this.sun) { this.shadowTick = (this.shadowTick || 0) + 1; if (this.shadowTick % 2 === 0) this.sun.shadow.needsUpdate = true; }
     if (this.sky) this.sky.position.copy(g.camera.position);
     if (this.planet) { this.planet.rotation.y += dt * .004; this.planet.material.uniforms.time.value = t; }
     if (this.moon) { this.moon.rotation.y += dt * .002; this.moon.material.uniforms.time.value = t; }

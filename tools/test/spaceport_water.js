@@ -1,6 +1,6 @@
-// Spaceport + water check: travel to Earth (landing cinematic), look at the airport from several angles, shoot into the
+// Spaceport + water check: travel to Earth (landing cinematic), look at the spaceport from several angles, shoot into the
 // river, fire a rocket at the water, drop a car in, wade / swim, then return to orbit (take-off cinematic).
-// Usage: python3 -m http.server 8765 &  then  NODE_PATH=$(npm root -g) node tools/test/airport_water.js   (shots in test-out/)
+// Usage: python3 -m http.server 8765 &  then  NODE_PATH=$(npm root -g) node tools/test/spaceport_water.js   (shots in test-out/)
 const { chromium } = require('playwright');
 const fs = require('fs');
 const BASE = process.env.BASE || 'http://localhost:8765';
@@ -39,18 +39,18 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { window.__travel = window.__game.travel('earth'); });
   await waitState('cinematic');
   console.log('load seconds', Math.round((Date.now() - t0) / 1000));
-  await wait(1200); await shot('aw01_landing_descent');
-  await wait(1800); await shot('aw02_landing_touchdown');
-  await wait(1500); await shot('aw03_landing_ramp');
+  await wait(1200); await shot('sp01_landing_descent');
+  await wait(1800); await shot('sp02_landing_touchdown');
+  await wait(1500); await shot('sp03_landing_ramp');
   await waitPlay();
   await wait(800);
   const arrived = await ev(() => { const g = window.__game, w = g.world, P = g.player.pos;
     return { pos: [P.x, P.y, P.z].map(v => +v.toFixed(1)), district: w.map.district(P.x, P.z), ship: w.jumpship.position.toArray().map(v => +v.toFixed(1)),
-      colliders: w.airport.colliders.length, water: !!g.water, cine: !!g.cine, hud: !g.hud.el.classList.contains('hidden') }; });
+      colliders: w.spaceport.colliders.length, water: !!g.water, cine: !!g.cine, hud: !g.hud.el.classList.contains('hidden') }; });
   console.log('arrived', JSON.stringify(arrived));
-  await shot('aw04_first_person_at_pad');
+  await shot('sp04_first_person_at_pad');
 
-  // ---------------- airport views (free camera)
+  // ---------------- spaceport views (free camera)
   const cam = async (n, pos, look, ms = 3000) => {
     await ev(([pos, look]) => { const g = window.__game, V = g.camera.position.constructor; g.stationId = 'test'; const c = g.camera; c.position.set(...pos); c.lookAt(...look);
       g.camFocus = { pos: new V(...pos), look: new V(...look), orbit: false, q: c.quaternion.clone(), p0: c.position.clone(), q0: c.quaternion.clone(), fov0: 60, t0: 0 }; }, [pos, look]);
@@ -58,15 +58,18 @@ fs.mkdirSync(OUT, { recursive: true });
   };
   const A = await ev(() => { const { x, z } = window.__game.world.padPos; return [x, z]; });
   const W = (x, y, z) => [A[0] + x, y, A[1] + z];
-  await cam('aw05_overview_from_city', W(-80, 140, -330), W(-40, 0, 40));
-  await cam('aw06_terminal_landside', W(35, 6, -150), W(0, 8, -80));
-  await cam('aw07_apron_ship_terminal', W(40, 8, 40), W(-10, 4, -40));
-  await cam('aw08_runway_threshold', W(-420, 12, 100), W(-200, 0, 100));
-  await cam('aw09_tower_fuel', W(90, 18, 30), W(150, 20, -66));
-  await cam('aw10_hangars', W(-180, 10, 70), W(-260, 6, -10));
-  await cam('aw11_terminal_hall', W(-30, 3, -72), W(20, 2.5, -45));
-  await cam('aw12_vendor_kiosk', W(14, 2.2, -38), W(14, 1.4, -51));
-  await cam('aw13_dusk_runway_lights', W(260, 25, 160), W(-100, 0, 100));
+  await cam('sp05_overview_from_city', W(-80, 140, -330), W(-40, 0, 60));
+  await cam('sp06_terminal_landside', W(35, 6, -150), W(0, 8, -80));
+  await cam('sp07_pad1_ship_terminal', W(40, 8, 40), W(-10, 4, -40));
+  await cam('sp08_heavy_pads_deflectors', W(-110, 16, 178), W(-185, 5, 95));
+  await cam('sp09_gantry_hauler', W(-120, 6, 60), W(-170, 8, 100));
+  await cam('sp10_container_yard_crane', W(196, 14, 150), W(266, 6, 60));
+  await cam('sp11_control_tower', W(92, 20, -24), W(130, 32, -66));
+  await cam('sp12_hangars_courier', W(-215, 9, 52), W(-300, 7, -10));
+  await cam('sp13_terminal_hall', W(-30, 3, -72), W(20, 2.5, -45));
+  await cam('sp14_vendor_kiosk', W(14, 2.2, -38), W(14, 1.4, -51));
+  await ev(() => { window.__game.world.ambient.t = 7.5; });
+  await cam('sp15_ambient_shuttle_landing', W(95, 12, 40), W(150, 14, 98), 1500);
   await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; });
 
   // ---------------- water: shoot into the river from the south quay
@@ -79,9 +82,9 @@ fs.mkdirSync(OUT, { recursive: true });
   await wait(1500);
   await ev(() => { const g = window.__game; window.__fire = setInterval(() => { g.input.lmb = true; g.input.lmbHit = true; g.input.locked = true; g.paused = false; }, 30); });
   await wait(1600);
-  await shot('aw14_bullets_into_river');
+  await shot('sp16_bullets_into_river');
   await ev(() => { clearInterval(window.__fire); window.__game.input.lmb = false; });
-  await wait(600); await shot('aw15_bullet_ripples');
+  await wait(600); await shot('sp17_bullet_ripples');
   const wstats = await ev(() => { const w = window.__game.water; return { ripples: w.rip.filter(r => r.w > 0).length, drops: w.drops.live, level: w.level, heightRiver: w.heightAt(0, -330), heightLand: w.heightAt(0, 0) }; });
   console.log('water after shots', JSON.stringify(wstats));
   // a rocket at the water (the real rocket path: launchRocket -> updateRockets -> hitTest -> explosion at the surface)
@@ -91,24 +94,24 @@ fs.mkdirSync(OUT, { recursive: true });
     const w = st.makeWeapon('rocket', 2, g.power() || 10);
     g.weapons.launchRocket(new V(4, 3, -292), new V(10, -3, -322), st.weaponStats(w), w);
   });
-  await wait(900); await shot('aw16_rocket_column');
-  await wait(1400); await shot('aw17_rocket_aftermath');
+  await wait(900); await shot('sp18_rocket_column');
+  await wait(1400); await shot('sp19_rocket_aftermath');
   // a car dropped into the river
   await ev(() => { const g = window.__game, V = g.camera.position.constructor; window.__car = g.vehicles.spawn('car_sport', '#a3121f', new V(-14, 7, -318), .6); });
-  await wait(1500); await shot('aw18_car_splash');
+  await wait(1500); await shot('sp20_car_splash');
   await wait(2500);
   const carState = await ev(() => { const c = window.__car; return { y: +c.pos.y.toFixed(2), wet: !!c.wet }; });
   console.log('car', JSON.stringify(carState));
-  await shot('aw19_car_floating');
+  await shot('sp21_car_floating');
   // wade in, then swim (third person)
   await setP(20, -1, RZ + 34, Math.PI, -.25, true);
   await ev(() => { const g = window.__game; window.__walk = setInterval(() => { g.input.keys && g.input.keys.add && g.input.keys.add('KeyW'); }, 50); });
   await ev(() => { const g = window.__game; g.input.key = (c => (orig => k => k === 'KeyW' || orig(k))(g.input.key.bind(g.input)))(); });
-  await wait(2500); await shot('aw20_wading');
+  await wait(2500); await shot('sp22_wading');
   await wait(3500);
   const swim = await ev(() => { const P = window.__game.player; return { y: +P.pos.y.toFixed(2), swimming: !!P.swimming, depth: +(window.__game.water.level - P.pos.y).toFixed(2) }; });
   console.log('swim', JSON.stringify(swim));
-  await shot('aw21_swimming');
+  await shot('sp23_swimming');
   await ev(() => { const g = window.__game; clearInterval(window.__walk); delete g.input.key; });
 
   // ---------------- take-off cinematic
@@ -116,12 +119,12 @@ fs.mkdirSync(OUT, { recursive: true });
   await wait(500);
   await ev(() => { const it = window.__game.world.interactables.find(i => i.id === 'ship'); it.action(); });
   await waitState('cinematic');
-  await wait(1500); await shot('aw22_takeoff_spool');
-  await wait(1800); await shot('aw23_takeoff_climb');
+  await wait(1500); await shot('sp24_takeoff_spool');
+  await wait(1800); await shot('sp25_takeoff_climb');
   await waitPlay();
   const back = await ev(() => ({ world: window.__game.world.constructor.name, state: window.__game.state }));
   console.log('back', JSON.stringify(back));
-  await wait(1500); await shot('aw24_back_on_ship');
+  await wait(1500); await shot('sp26_back_on_ship');
   console.log('errors', errs.length);
   await b.close();
   process.exit(errs.length ? 1 : 0);

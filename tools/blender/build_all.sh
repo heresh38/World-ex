@@ -11,8 +11,11 @@ for s in horror_textures writhe aliens; do
   echo "== $s"
   blender --background --python tools/blender/$s.py 2>&1 | grep -E "^\[export|^\[texture|Error|Traceback" || true
 done
-# water (ocean-sim normal maps, foam, spray sprite) and the New Meridian spaceport (bakes its ap_* textures first)
-for s in water_textures airport; do
+# trees: space-colonised broadleaf + whorled conifers, leaf/bark textures, impostor atlas, snow_c/_n ground textures
+echo "== trees"
+blender --background --python tools/blender/trees.py 2>&1 | grep -E "^\[export|^\[texture|^\[tris|Error|Traceback" || true
+# water (ocean-sim normal maps, foam, spray sprite) and the New Meridian Spaceport (bakes its sp_* textures first)
+for s in water_textures spaceport; do
   echo "== $s"
-  blender --background --python tools/blender/$s.py 2>&1 | grep -E "^\[export|^\[texture|^\[airport|Error|Traceback" || true
+  blender --background --python tools/blender/$s.py 2>&1 | grep -E "^\[export|^\[texture|^\[spaceport|Error|Traceback" || true
 done

@@ -45,6 +45,15 @@ fs.mkdirSync(OUT, { recursive: true });
   // keep the run deterministic: no wandering hostiles, the player cannot die
   await ev(() => {
     const g = window.__game, pl = g.player; g.enemies.clear(); if (g.save.settings.view !== 'first') g.toggleView();
+    // one fixed setup for every weapon: face the most open direction from the spawn point
+    let yaw = pl.camYaw, free = 0; const V = pl.pos.constructor;
+    for (let k = 0; k < 16; k++) {
+      const y = pl.camYaw + k * Math.PI / 8, d = new V(-Math.sin(y), 0, -Math.cos(y)), o = pl.pos.clone(); o.y += 1.2;
+      const h = g.world.collision.raycast(o, d, 60), f = h ? h.dist : 60;
+      if (f > free + .5) { free = f; yaw = y; }
+    }
+    window.__setup = { yaw, free, pos: pl.pos.clone() };
+    pl.camYaw = yaw; pl.camPitch = 0;
     if (g.world.constructor.name !== 'ShipWorld') {
       // turn away from the dropship and walk out into the open
       pl.camYaw += Math.PI; const fx = -Math.sin(pl.camYaw), fz = -Math.cos(pl.camYaw);
@@ -61,15 +70,20 @@ fs.mkdirSync(OUT, { recursive: true });
       g.save.equipped[A.slot] = w.uid; g.weapons.slot = A.slot; g.weapons.ammo[w.uid] = null; delete g.weapons.ammo[w.uid];
       g.player.armed = true; g.weapons.refreshModel(); g.weapons.swap = 0; g.weapons.reloading = 0;
       g.enemies.clear(); g.paused = false; g.input.locked = true; g.input.enabled = true;
+      const U = window.__setup; g.player.pos.copy(U.pos); g.player.avatar.root.position.copy(U.pos); g.player.vel.set(0, 0, 0);
+      g.player.camYaw = U.yaw; g.player.camPitch = 0;
       const vm = g.viewmodel;
       return { uid: w.uid, name: w.name, label: data.archLabel(arch), sight: data.weaponSight(w), scoped: !!vm.scoped, model: A.model,
         meshes: (() => { let n = 0, mats = new Set(); vm.gun && vm.gun.traverse(o => { if (o.isMesh && o.visible) { n++; mats.add(o.material.name); } }); return { n, mats: [...mats] }; })() };
     }, arch);
-    await wait(3500);
+    // software rendering compiles each new gun's shaders slowly: wait until the raise animation has really finished
+    await p.waitForFunction(() => { const v = window.__game.viewmodel; return v.gun && v.lower <= .001; }, null, { timeout: 120000, polling: 250 }).catch(() => {});
+    await wait(1500);
     await shot(`w_${arch}_hip`);
     // aim down sights
     await ev(() => { window.__game.input.rmb = true; window.__game.player.armed = true; });
-    await wait(3000);
+    await p.waitForFunction(() => window.__game.viewmodel.ads > .985, null, { timeout: 120000, polling: 250 }).catch(() => {});
+    await wait(1500);
     await shot(`w_${arch}_ads`);
     await ev(() => { window.__game.input.rmb = false; });
     // spawn a target ahead and fire a few times at its chest
@@ -79,14 +93,9 @@ fs.mkdirSync(OUT, { recursive: true });
       const ship = g.world.constructor.name === 'ShipWorld';
       let dist = ship ? (arch === 'bile' || arch === 'pump' ? 5 : 9) : arch === 'bolt' ? 40 : arch === 'bile' || arch === 'pump' ? 8 : 16;
       pl.armed = true;
-      // face the most open direction so the target is not behind a console
-      let yaw = pl.camYaw, free = 0;
-      for (let k = 0; k < 16; k++) {
-        const y = pl.camYaw + k * Math.PI / 8, d = new V(-Math.sin(y), 0, -Math.cos(y)), o = pl.pos.clone(); o.y += 1.2;
-        const h = g.world.collision.raycast(o, d, 60), f = h ? h.dist : 60;
-        if (f > free + .5) { free = f; yaw = y; }
-      }
-      const want = dist; dist = Math.max(3, Math.min(want, free - 2.5));
+      const U = window.__setup, yaw = U.yaw, free = U.free;
+      pl.pos.copy(U.pos); pl.avatar.root.position.copy(U.pos);
+      dist = Math.max(3, Math.min(dist, free - 2.5));
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       const at = new V(pl.pos.x + fx * dist, 0, pl.pos.z + fz * dist); at.y = g.world.collision.ground(at.x, at.z);
       const e = g.enemies.spawn('brute', at, 30); e.state = 'idle'; e.fireT = 999;
@@ -119,15 +128,20 @@ fs.mkdirSync(OUT, { recursive: true });
     await ev(() => window.__game.enemies.clear());
   }
 
+  if (process.env.EXTRA === '0') { console.log('page errors', errs.length); await b.close(); return; }
   // bullet drop: a level round fired high above the world, kinetic (gravity) vs energy (straight)
   const drop = await ev(async () => {
     const g = window.__game, V = g.player.pos.constructor, data = await import('/src/game/data.js'), st = await import('/src/game/state.js');
     const out = {};
     for (const arch of ['bolt', 'auto']) {
       const w = st.makeWeapon(arch, 1, 10), A = data.ARCHETYPES[arch], S = st.weaponStats(w);
-      const o = g.player.pos.clone().add(new V(0, 400, 0)), d = new V(1, 0, 0);
-      g.weapons.spawnRound(o, o, d, S, w, A, { hit: false });
-      const r = g.weapons.rounds[g.weapons.rounds.length - 1];
+      let r = null, o = null;
+      for (const h of [300, 700, 1500]) {
+        o = g.player.pos.clone().add(new V(0, h, 0)); const d = new V(-Math.sin(window.__setup.yaw), 0, -Math.cos(window.__setup.yaw));
+        if (g.world.collision.raycast(o, d, 600)) continue;      // keep the flight path clear
+        g.weapons.spawnRound(o, o, d, S, w, A, { hit: false }); r = g.weapons.rounds[g.weapons.rounds.length - 1]; break;
+      }
+      if (!r) { out[arch] = 'no clear path'; continue; }
       for (let k = 0; k < 80 && r.dist < 300 && g.weapons.rounds.includes(r); k++) await new Promise(res => setTimeout(res, 100));
       out[arch] = { vel: A.vel, dist: Math.round(r.dist), dropM: +(o.y - r.p.y).toFixed(3), expectedAtDist: +(.5 * 9.81 * (r.dist / A.vel) ** 2 * (A.grav ?? 1)).toFixed(3) };
     }
@@ -147,7 +161,9 @@ fs.mkdirSync(OUT, { recursive: true });
     }, sight);
     optics.push(o); console.log('optic', JSON.stringify(o));
     if (sight === 'holo' || sight === 'x4') {
-      await ev(() => { window.__game.input.rmb = true; }); await wait(1600); await shot(`w_optic_${sight}_ads`);
+      await ev(() => { window.__game.input.rmb = true; });
+      await p.waitForFunction(() => window.__game.viewmodel.ads > .985, null, { timeout: 120000, polling: 250 }).catch(() => {});
+      await wait(1500); await shot(`w_optic_${sight}_ads`);
       await ev(() => { window.__game.input.rmb = false; }); await wait(600);
     }
   }

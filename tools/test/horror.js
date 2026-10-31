@@ -2,7 +2,7 @@
 // the behaviours: mite swarm leaps, bladder rupture releasing brood, mites raising a corpse as a host, Writhe vs other
 // factions, and 0 page errors.
 // Usage: python3 -m http.server 8765 &  then  NODE_PATH=$(npm root -g) node tools/test/horror.js   (screenshots in test-out/)
-// WORLD=ares (or another frontier planet id) runs the same checks on a lighter world: VANTHOS needs a renderer with ~5 GB.
+// WORLD=ares (a frontier planet) or WORLD=ship (the hub, no travel) runs the same checks on a lighter world when memory is short.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const BASE = process.env.BASE || 'http://localhost:8765';
@@ -18,10 +18,12 @@ fs.mkdirSync(OUT, { recursive: true });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
   await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
   // other work in progress may list models that are not built yet (player *_npc): fall back to the base model for this test
-  await p.route('**/assets/models/*_npc.glb', async route => {
+  await p.route('**/assets/models/*.glb', async route => {
     const r = await route.fetch();
-    if (r.status() === 404) { console.log('fallback for', route.request().url().split('/').pop()); return route.continue({ url: route.request().url().replace('_npc.glb', '.glb') }); }
-    return route.fulfill({ response: r });
+    if (r.status() !== 404) return route.fulfill({ response: r });
+    const u = route.request().url(), f = u.split('/').pop();
+    console.log('fallback for', f);
+    return route.continue({ url: /_npc\.glb$/.test(f) ? u.replace('_npc.glb', '.glb') : u.replace(f, 'writhe_mite.glb') });
   });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
@@ -33,8 +35,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { const g = window.__game; g.save.settings.quality = 'low'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
   await p.click('[data-act="title-play"]');
   await waitPlay();
-  await ev(w => window.__game.travel(w), WORLD);
-  await waitPlay();
+  if (WORLD !== 'ship') { await ev(w => window.__game.travel(w), WORLD); await waitPlay(); }
   await wait(2000);
   // a quiet street: stop the district streaming and clear what is around, the player is invulnerable for the shots
   const base = await ev(() => {

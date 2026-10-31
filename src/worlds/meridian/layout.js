@@ -12,11 +12,11 @@ export const SNOW_LINE = 68;
 const PEAKS = [[-300, -1060, 48, 150], [-60, -1100, 66, 175], [190, -1050, 44, 140], [-560, -990, 26, 130]];   // x, z, height, spread
 // The river (owner's city art): straight through the city's north side in block row -3, winding to the sea outside.
 export const RIVER_Z = -3 * PITCH, RIVER_W = 33, RIVER_BANK = 4;
-// The spaceport (owner request: "where we land in the city"): just south of the city across the ring road, joined to it
-// by the street at x = -275. AIRPORT.x/z is the origin of tools/blender/airport.py (landing pad 1); `area` is the
-// flattened footprint [x0, z0, x1, z1] (runway, taxiways, apron, terminal, landside lots and approach lights).
-export const AIRPORT = { x: -275, z: 640, area: [-705, 492, 52, 800] };
-export const inAirport = (x, z, pad = 0) => x > AIRPORT.area[0] - pad && x < AIRPORT.area[2] + pad && z > AIRPORT.area[1] - pad && z < AIRPORT.area[3] + pad;
+// New Meridian Spaceport (owner request: "where we land in the city"): the starship landing zone just south of the city
+// across the ring road, joined to it by the street at x = -275. SPACEPORT.x/z is the origin of tools/blender/spaceport.py
+// (landing pad 1); `area` is the flattened footprint [x0, z0, x1, z1] (landing field, terminal, yard, landside lots).
+export const SPACEPORT = { x: -275, z: 640, area: [-705, 492, 52, 800] };
+export const inSpaceport = (x, z, pad = 0) => x > SPACEPORT.area[0] - pad && x < SPACEPORT.area[2] + pad && z > SPACEPORT.area[1] - pad && z < SPACEPORT.area[3] + pad;
 export function riverZ(x) {
   const o = Math.abs(x) - (CITY_EDGE + 30);
   if (o <= 0) return RIVER_Z;
@@ -123,7 +123,7 @@ export class MeridianMap {
     // the city is flat at 0
     this.stampRect(0, 0, CITY_EDGE * 2 + 40, CITY_EDGE * 2 + 40, 0, 60);
     // the spaceport is a level field at street height
-    const [ax0, az0, ax1, az1] = AIRPORT.area;
+    const [ax0, az0, ax1, az1] = SPACEPORT.area;
     this.stampRect((ax0 + ax1) / 2, (az0 + az1) / 2, ax1 - ax0, az1 - az0, 0, 70);
     // villages and farms sit on gentle terraces at their natural height
     for (const v of VILLAGES) { v.y = Math.max(1, this.sampleNatural(v.pos[0], v.pos[1])); this.stampDisk(v.pos[0], v.pos[1], v.r, v.y, 50); }
@@ -245,7 +245,7 @@ export class MeridianMap {
       if (Math.max(Math.abs(x), Math.abs(z)) > CITY_EDGE - PITCH) return 'Meridian Heights';
       return Math.hypot(x, z) < 200 ? 'Downtown' : 'New Meridian';
     }
-    if (inAirport(x, z)) return 'Meridian Spaceport';
+    if (inSpaceport(x, z)) return 'Meridian Spaceport';
     if (Math.abs(z - riverZ(x)) < RIVER_W) return 'Meridian River';
     for (const v of VILLAGES) if (Math.hypot(x - v.pos[0], z - v.pos[1]) < v.r + 80) return v.name;
     for (const f of FARMS) if (Math.abs(x - f.pos[0]) < f.w / 2 + 60 && Math.abs(z - f.pos[1]) < f.d / 2 + 60) return f.name;
@@ -257,7 +257,7 @@ export class MeridianMap {
   // keep-out test for scatter (roads, city, villages, farms)
   developed(x, z, pad = 0) {
     if (Math.abs(x) < CITY_EDGE + 30 + pad && Math.abs(z) < CITY_EDGE + 30 + pad) return true;
-    if (inAirport(x, z, 25 + pad)) return true;
+    if (inSpaceport(x, z, 25 + pad)) return true;
     for (const v of VILLAGES) if (Math.hypot(x - v.pos[0], z - v.pos[1]) < v.r + 20 + pad) return true;
     for (const f of FARMS) if (Math.abs(x - f.pos[0]) < f.w / 2 + 10 + pad && Math.abs(z - f.pos[1]) < f.d / 2 + 10 + pad) return true;
     return false;

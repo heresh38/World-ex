@@ -557,11 +557,15 @@ def leaf_textures(names):
             pal = [(.11, .25, .16), (.14, .29, .18), (.10, .22, .15)]
             main = twig_path(rng, ox + C * .5, oy + C * .985, rng.normal(0, .08), C * .9, 7, .06)
             twigs = [(main, 1.0)]
-            for k in range(7):
-                t = .12 + .78 * k / 7
+            for k in range(10):
+                t = .08 + .8 * k / 10
                 x, y, a = along(main, t)
                 s = 1 if k % 2 else -1
-                twigs.append((twig_path(rng, x, y, a + s * rng.uniform(.7, 1.0), C * .42 * (1 - t * .7), 4, .08), .6))
+                tw = twig_path(rng, x, y, a + s * rng.uniform(.85, 1.2), C * .5 * (1 - t * .65), 4, .08)
+                twigs.append((tw, .6))
+                if t < .6:   # second-order shoots
+                    x2, y2, a2 = along(tw, .45)
+                    twigs.append((twig_path(rng, x2, y2, a2 - s * rng.uniform(.5, .8), C * .2 * (1 - t), 3, .08), .4))
             for p, w in twigs:
                 draw_twig(cv, p, C * .012 * w, C * .006 * w, (.33, .24, .17))
             for p, w in twigs:
@@ -572,10 +576,10 @@ def leaf_textures(names):
                     col = jit(rng, pick(rng, pal), .08)
                     for s in (-1, 1):
                         na = a + s * rng.uniform(.75, 1.15)
-                        nl = C * rng.uniform(.035, .05)
+                        nl = C * rng.uniform(.045, .065)
                         cv.seg(x, y, x + math.sin(na) * nl, y - math.cos(na) * nl, 2.2, 1.1, col, shade=False)
             if snow:
-                snow_blobs(cv, ox, oy, C, rng, .5, int(ox + oy))
+                snow_blobs(cv, ox, oy, C, rng, .62, int(ox + oy))
         return f
     make('spruce', sq(spruce_cell(False)))
     make('spruce_snow', sq(spruce_cell(True)))
@@ -589,14 +593,14 @@ def leaf_textures(names):
                 (x0, y0), (x1, y1) = pts[i], pts[i + 1]
                 flat = abs(math.cos(math.atan2(x1 - x0, -(y1 - y0)))) < .85
                 if flat or depth < 2:
-                    cv.seg(x0, y0 - w * .45, x1, y1 - w * .45, w * .75, w * .5, (.93, .95, 1.0), shade=False)
+                    cv.seg(x0, y0 - w * .55, x1, y1 - w * .55, w * 1.0, w * .7, (.93, .95, 1.0), shade=False)
             if depth >= 3:
                 return
             for k in range(2 + (depth < 1)):
                 t = rng.uniform(.3, .9)
                 bx, by, ba = along(pts, t)
                 grow(bx, by, ba + (1 if k % 2 else -1) * rng.uniform(.35, .8), L * rng.uniform(.45, .65), w * .62, depth + 1)
-        grow(ox + C * .5, oy + C * .985, rng.normal(0, .1), C * .55, C * .022, 0)
+        grow(ox + C * .5, oy + C * .985, rng.normal(0, .1), C * .6, C * .03, 0)
     make('twig_snow', sq(twig_snow_cell))
 
     # --- snow clumps lying on conifer branches
@@ -706,7 +710,7 @@ class MB:
         lv = np.zeros(len(me.loops), np.int64); me.loops.foreach_get('vertex_index', lv)
         uvl = me.uv_layers.new(name='UVMap')
         uvl.data.foreach_set('uv', np.array(self.UV, np.float32)[lv].ravel())
-        ca = me.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT')
+        ca = me.color_attributes.new('Col', 'BYTE_COLOR', 'POINT')   # exported as normalized ushort
         c = np.array(self.C, np.float32)
         ca.data.foreach_set('color', np.stack([c, c, c, np.ones_like(c)], 1).ravel())
         try:
@@ -736,12 +740,12 @@ def sides_for(r, trunk=False, lod=0):
     return s
 
 
-def tube(mb, pts, rad, bark, snow=None, trunk=False, lod=0, flare=0.0, buttress=0.0, gnarl=0.0, seed=0, tile=1.4, ao_ground=True):
+def tube(mb, pts, rad, bark, snow=None, trunk=False, lod=0, flare=0.0, buttress=0.0, gnarl=0.0, seed=0, tile=1.4, ao_ground=True, maxs=99):
     pts = np.asarray(pts, np.float64); rad = np.asarray(rad, np.float64)
     n = len(pts)
     if n < 2:
         return
-    S = sides_for(rad[0], trunk, lod)
+    S = min(maxs, sides_for(rad[0], trunk, lod))
     mi = mb.mat(bark); si = mb.mat(snow) if snow is not None else None
     # tangents + parallel-transport frames
     T = np.zeros_like(pts)
@@ -784,7 +788,7 @@ def tube(mb, pts, rad, bark, snow=None, trunk=False, lod=0, flare=0.0, buttress=
             m = mi
             if si is not None:
                 nz = (mb.N[a][2] + mb.N[b][2] + mb.N[c][2] + mb.N[d][2]) / 4
-                if nz > .38:
+                if nz > .22:
                     m = si
                     for v in (a, b, c, d):      # a little thickness of snow on top
                         mb.V[v] = mb.V[v] + np.array(mb.N[v]) * .012 + UP * .01
@@ -1108,7 +1112,7 @@ def conifer(sp, seed):
                 pitch = sp['pitch_lo'] + (sp['pitch_hi'] - sp['pitch_lo']) * t + rng.normal(0, .08)
                 hd = np.array([math.cos(az), math.sin(az), 0])
                 base = axis(z)
-                nseg = max(2, int(L / .5))
+                nseg = max(2, min(4, int(L / .8)))
                 pts = []; 
                 for k in range(nseg + 1):
                     f = k / nseg
@@ -1117,7 +1121,7 @@ def conifer(sp, seed):
                 pts = np.array(pts)
                 rb = max(.014, rtr(z) * .42 * (L / (sp['Lmax'] * s)) ** .6)
                 rad = np.array([rb * (1 - .75 * k / nseg) for k in range(nseg + 1)])
-                T.tubes.append(dict(pts=pts, rad=rad, trunk=False))
+                T.tubes.append(dict(pts=pts, rad=rad, trunk=False, maxs=4))
                 # sprays along the branch: alternating side shoots + the tip
                 m = max(1, int(L / sp.get('spray_gap', .62)))
                 for k in range(m + 1):
@@ -1126,6 +1130,13 @@ def conifer(sp, seed):
                     p = pts[i] * (1 - fk) + pts[i + 1] * fk
                     bd = nrm(pts[i + 1] - pts[i])
                     side = np.cross(UP, bd); side = nrm(side)
+                    # a drooping spray hanging off the branch fills the cone seen from the side
+                    hd2 = nrm(bd * .55 - UP * .75 + side * rng.normal(0, .3))
+                    oo = nrm(np.cross(hd2, side) * -1)
+                    if oo[2] < 0:
+                        oo = -oo
+                    sz = sp['card'] * rng.uniform(.85, 1.15) * s * (.75 + .25 * (1 - t))
+                    T.cards.append(dict(base=p - hd2 * sz * .08, d=hd2, n=nrm(oo + rng.normal(0, .25, 3)), size=sz, tex=tex_snow if (snow and rng.random() < .6) else tex, fold=0, ao=(.45 + .5 * f) * (.75 + .25 * t), nb=.6))
                     for sgn in ((1, -1) if k < m else (0,)):
                         d = nrm(bd * (1 if sgn == 0 else .55) + side * sgn * .85 + UP * rng.normal(-.05, .12))
                         tilt = rng.normal(0, .55)
@@ -1134,9 +1145,9 @@ def conifer(sp, seed):
                         n = nrm(nup * math.cos(tilt) + bx * math.sin(tilt))
                         size = sp['card'] * rng.uniform(.8, 1.15) * s * (.75 + .25 * (1 - t))
                         ao = (.5 + .5 * f ** .8) * (.75 + .25 * t)
-                        tx = tex_snow if (snow and n[2] > .55) else tex
-                        T.cards.append(dict(base=p - d * size * .1, d=d, n=n, size=size, tex=tx, fold=.2, ao=ao, nb=.6))
-                    if snow and sgn != 0 and k % 2 == 0 and f > .25:
+                        tx = tex_snow if (snow and (n[2] > .2 or rng.random() < .5)) else tex
+                        T.cards.append(dict(base=p - d * size * .1, d=d, n=n, size=size, tex=tx, fold=0, ao=ao, nb=.6))
+                    if snow and sgn != 0 and f > .2:
                         cs = (.45 + .5 * L / (sp['Lmax'] * s)) * rng.uniform(.85, 1.2)
                         T.cards.append(dict(base=p + UP * .1 - bd * cs * .5, d=bd, n=UP.copy(), size=cs, tex='snowclump', fold=0, ao=1.0, nb=.2))
             z += sp['spacing'] * rng.uniform(.8, 1.2) * s
@@ -1186,11 +1197,11 @@ def conifer(sp, seed):
                 nup = nrm(UP - d * np.dot(UP, d)); bx = np.cross(d, nup); tilt = rng.normal(0, .5)
                 n = nrm(nup * math.cos(tilt) + bx * math.sin(tilt))
                 ao = .55 + .45 * min(1, (p[2] - c[2] + pr * .3) / (pr * .7))
-                tx = tex_snow if (snow and n[2] > .5) else tex
+                tx = tex_snow if (snow and (n[2] > .3 or rng.random() < .4)) else tex
                 T.cards.append(dict(base=p - d * .3, d=d, n=n, size=sp['card'] * rng.uniform(.8, 1.2) * s, tex=tx, fold=.25, ao=ao, nb=.55,
                                     out=nrm((p - c) / np.array([pr, pr, pr * .5]) + UP * .4)))
             if snow:
-                for k in range(max(2, nc // 7)):
+                for k in range(max(3, nc // 4)):
                     u = rng.normal(0, .45, 2)
                     p = c + np.array([u[0] * pr, u[1] * pr, pr * .3])
                     cs = pr * rng.uniform(.5, .8)
@@ -1282,42 +1293,42 @@ SPECIES = {
     ],
     'bare_snow': [
         ('TR_bare_snow_a', 91, dict(kind='bare', h=13, trunk_top=4.5, trunk_r=.4, env_c=8.6, env_r=(6.0, 6.0, 5.0), lump=.35, shell=.35, nattr=900,
-                                    jitter=.24, trop=.06, flare=.5, gnarl=.06, bark='winter', leaves='twig_snow', card=1.4, n_cards=330, budget=4300,
+                                    jitter=.24, trop=.06, flare=.5, gnarl=.06, bark='winter', leaves='twig_snow', card=1.8, n_cards=460, budget=4000,
                                     tip_r=.008, snow=True)),
         ('TR_bare_snow_b', 92, dict(kind='bare', h=11, trunk_top=6.0, trunk_r=.24, env_c=7.6, env_r=(3.6, 3.6, 4.4), lump=.3, shell=.25, nattr=700,
-                                    step=.4, di=2.4, dk=.7, jitter=.22, trop=.1, flare=.4, bark='winter', leaves='twig_snow', card=1.2, n_cards=280,
+                                    step=.4, di=2.4, dk=.7, jitter=.22, trop=.1, flare=.4, bark='winter', leaves='twig_snow', card=1.6, n_cards=400,
                                     budget=3800, tip_r=.007, snow=True, sway=.3)),
     ],
     'spruce': [
-        ('TR_spruce_a', 101, dict(kind='spruce', h=17, trunk_r=.34, z0=1.0, spacing=.75, Lmax=3.7, shape=1.0, pitch_lo=-.32, pitch_hi=.3,
-                                  bark='spruce', leaves='spruce', card=1.2)),
-        ('TR_spruce_b', 102, dict(kind='spruce', h=13, trunk_r=.28, z0=.7, spacing=.7, Lmax=3.1, shape=.95, pitch_lo=-.38, pitch_hi=.25,
-                                  bark='spruce', leaves='spruce', card=1.1)),
-        ('TR_spruce_c', 103, dict(kind='spruce', h=21, trunk_r=.38, z0=1.6, spacing=.85, Lmax=3.3, shape=1.2, pitch_lo=-.28, pitch_hi=.32,
+        ('TR_spruce_a', 101, dict(kind='spruce', h=17, trunk_r=.34, z0=1.0, spacing=.95, Lmax=3.7, shape=1.0, pitch_lo=-.32, pitch_hi=.3,
+                                  bark='spruce', leaves='spruce', card=1.8, spray_gap=.55)),
+        ('TR_spruce_b', 102, dict(kind='spruce', h=13, trunk_r=.28, z0=.7, spacing=.9, Lmax=3.1, shape=.95, pitch_lo=-.38, pitch_hi=.25,
+                                  bark='spruce', leaves='spruce', card=1.65, spray_gap=.55)),
+        ('TR_spruce_c', 103, dict(kind='spruce', h=21, trunk_r=.38, z0=1.6, spacing=1.0, Lmax=3.3, shape=1.2, pitch_lo=-.28, pitch_hi=.32,
                                   bark='spruce', leaves='spruce', card=1.2, lean=.03)),
     ],
     'spruce_snow': [
-        ('TR_spruce_snow_a', 111, dict(kind='spruce', h=16, trunk_r=.33, z0=.9, spacing=.75, Lmax=3.6, shape=1.0, pitch_lo=-.4, pitch_hi=.25,
-                                       bark='spruce', leaves='spruce', leaves_snow='spruce_snow', card=1.2, snow=True, sag=.2)),
-        ('TR_spruce_snow_b', 112, dict(kind='spruce', h=12, trunk_r=.27, z0=.6, spacing=.7, Lmax=3.0, shape=.95, pitch_lo=-.45, pitch_hi=.2,
-                                       bark='spruce', leaves='spruce', leaves_snow='spruce_snow', card=1.1, snow=True, sag=.22)),
-        ('TR_pine_snow', 113, dict(kind='pine', h=15, trunk_r=.32, lean=.03, crown_lo=.58, limbs=11, Lmax=3.2, pitch=.3, pad=1.5, pad_cards=34,
-                                   bark='pine', leaves='pine', leaves_snow='spruce_snow', card=1.15, snow=True, taper=.8)),
+        ('TR_spruce_snow_a', 111, dict(kind='spruce', h=16, trunk_r=.33, z0=.9, spacing=.95, Lmax=3.6, shape=1.0, pitch_lo=-.4, pitch_hi=.25,
+                                       bark='spruce', leaves='spruce', leaves_snow='spruce_snow', card=1.8, spray_gap=.55, snow=True, sag=.2)),
+        ('TR_spruce_snow_b', 112, dict(kind='spruce', h=12, trunk_r=.27, z0=.6, spacing=.9, Lmax=3.0, shape=.95, pitch_lo=-.45, pitch_hi=.2,
+                                       bark='spruce', leaves='spruce', leaves_snow='spruce_snow', card=1.65, spray_gap=.55, snow=True, sag=.22)),
+        ('TR_pine_snow', 113, dict(kind='pine', h=15, trunk_r=.32, lean=.03, crown_lo=.58, limbs=11, Lmax=3.2, pitch=.3, pad=1.7, pad_cards=62,
+                                   bark='pine', leaves='pine', leaves_snow='spruce_snow', card=1.5, snow=True, taper=.8)),
     ],
     'pine': [
         ('TR_pine_a', 121, dict(kind='pine', h=9.5, trunk_r=.36, lean=.18, bend=1.4, crown_lo=.3, limbs=10, Lmax=5.0, pitch=.12, droop=.25,
-                                rise=.06, pad=1.9, pad_cards=40, bark='pine', leaves='pine', card=1.2, taper=.8)),
-        ('TR_pine_b', 122, dict(kind='pine', h=17, trunk_r=.32, lean=.03, crown_lo=.6, limbs=12, Lmax=3.4, pitch=.35, pad=1.5, pad_cards=34,
-                                bark='pine', leaves='pine', card=1.15, taper=.8)),
+                                rise=.06, pad=2.0, pad_cards=70, bark='pine', leaves='pine', card=1.55, taper=.8)),
+        ('TR_pine_b', 122, dict(kind='pine', h=17, trunk_r=.32, lean=.03, crown_lo=.6, limbs=12, Lmax=3.4, pitch=.35, pad=1.7, pad_cards=62,
+                                bark='pine', leaves='pine', card=1.5, taper=.8)),
     ],
     'bush': [
-        ('TR_bush_a', 131, dict(kind='bush', h=1.9, trunk_top=-.1, trunk_r=.06, env_c=1.0, env_r=(1.4, 1.4, 1.0), lump=.25, shell=.3, nattr=320,
+        ('TR_bush_a', 131, dict(kind='bush', h=1.9, trunk_top=-.1, trunk_r=.06, env_c=.85, env_r=(1.4, 1.4, 1.0), lump=.25, shell=.3, nattr=320,
                                 step=.22, di=1.2, dk=.32, jitter=.2, trop=.05, tip_r=.006, bark='oak', leaves='bush', card=.72, n_cards=240,
                                 budget=420, leaf_zmin=.2, stems=6, ao=.35)),
-        ('TR_bush_b', 132, dict(kind='bush', h=2.6, trunk_top=-.1, trunk_r=.08, env_c=1.35, env_r=(1.9, 1.7, 1.3), lump=.35, shell=.3, nattr=380,
+        ('TR_bush_b', 132, dict(kind='bush', h=2.6, trunk_top=-.1, trunk_r=.08, env_c=1.15, env_r=(1.9, 1.7, 1.3), lump=.35, shell=.3, nattr=380,
                                 step=.25, di=1.4, dk=.36, jitter=.22, trop=.05, tip_r=.007, bark='oak', leaves='bush', card=.85, n_cards=280,
                                 budget=480, leaf_zmin=.2, stems=7, ao=.35)),
-        ('TR_bush_flower', 133, dict(kind='bush', h=1.8, trunk_top=-.1, trunk_r=.06, env_c=.95, env_r=(1.3, 1.3, .95), lump=.3, shell=.3, nattr=320,
+        ('TR_bush_flower', 133, dict(kind='bush', h=1.8, trunk_top=-.1, trunk_r=.06, env_c=.8, env_r=(1.3, 1.3, .95), lump=.3, shell=.3, nattr=320,
                                      step=.22, di=1.2, dk=.32, jitter=.2, trop=.05, tip_r=.006, bark='oak', leaves='bush_flower', card=.72, n_cards=250,
                                      budget=420, leaf_zmin=.2, stems=6, ao=.38)),
     ],
@@ -1383,9 +1394,10 @@ def build_mesh(T, sp, mats, lod, name):
             if lod and len(p) > 3:
                 idx = sorted(set(list(range(0, len(p), 2)) + [len(p) - 1]))
                 p, r = p[idx], r[idx]
-            ts.append((p, r, t['trunk']))
-    for i, (p, r, tr) in enumerate(ts):
-        tube(mb, p, r, bark, snow, trunk=tr, lod=lod, flare=sp.get('flare', .3) if tr else 0, buttress=sp.get('buttress', 0) if tr else 0,
+            ts.append((p, r, t['trunk'], t.get('maxs', 99)))
+    ts = [t if len(t) == 4 else (*t, 99) for t in ts]
+    for i, (p, r, tr, mx) in enumerate(ts):
+        tube(mb, p, r, bark, snow, trunk=tr, lod=lod, maxs=mx, flare=sp.get('flare', .3) if tr else 0, buttress=sp.get('buttress', 0) if tr else 0,
              gnarl=sp.get('gnarl', 0) * (1 if tr else .5), seed=i, tile=1.6 if tr else 1.0)
     btris = mb.tris()
     rng = random.Random(len(name))
@@ -1613,7 +1625,7 @@ def main():
             o = rock(nm, sd, sn, mats, scl); o.parent = r
             print('[tree] %-20s %d tris' % (nm, sum(len(p.vertices) - 2 for p in o.data.polygons)))
     out = 'trees.glb' if full else os.environ.get('TREE_OUT', '/tmp/trees_partial.glb')
-    kw = dict(export_image_format='WEBP', export_image_quality=88, export_vertex_color='ACTIVE')
+    kw = dict(export_image_format='WEBP', export_image_quality=82, export_vertex_color='ACTIVE')
     if full:
         bl.export(out, **kw)
     else:

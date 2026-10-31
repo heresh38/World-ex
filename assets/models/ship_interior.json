@@ -1245,18 +1245,6 @@
    "dist": 13
   },
   {
-   "kind": "point",
-   "name": "bay_field",
-   "pos": [
-    0,
-    7.0,
-    -36.0
-   ],
-   "color": "#58b4ff",
-   "intensity": 12,
-   "dist": 18
-  },
-  {
    "kind": "spot",
    "name": "hangar_flood",
    "pos": [

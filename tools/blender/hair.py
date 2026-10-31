@@ -50,7 +50,7 @@ def strand_texture(size=1024):
                 x += rng.normal(0, 6) * tl ** 2      # wisps stray
             w = rng.uniform(k['wmin'], k['wmax']) * (1 - .75 * smoothstep(.55, 1.0, tl))
             a = (1 - smoothstep(.8, 1.0, tl)) * rng.uniform(.75, 1.0)
-            b = rng.uniform(.72, 1.0) * (.8 + .2 * tl) * (1 + .06 * np.sin(tl * rng.uniform(40, 90)))
+            b = rng.uniform(.6, 1.0) * (.78 + .22 * tl) * (1 + .06 * np.sin(tl * rng.uniform(40, 90)))
             xi = np.floor(x).astype(int)
             for o in range(-3, 4):
                 col = np.clip(xi + o, 0, W - 1)
@@ -187,7 +187,13 @@ class Groom:
                 g = np.maximum(np.broadcast_to(np.asarray(hang(p, t, ctx), F32), (n,)), smoothstep(o + .005, o + .016, h) * fall)
             else:
                 g = np.zeros(n, F32)
-            dirv = nrm(tan * (1 - g)[:, None] + down * g[:, None])
+            dn = down[None, :]
+            if ctx is not None and ('flare' in ctx or 'fwd' in ctx):
+                # hanging hair stands off the head and shoulders (volume), front locks fall forward over the chest
+                fl = np.broadcast_to(np.asarray(ctx.get('flare', 0.0), F32), (n,))[:, None]
+                fw = np.broadcast_to(np.asarray(ctx.get('fwd', 0.0), F32), (n,))[:, None]
+                dn = nrm(dn + _radial(self, p) * fl * (1 - t) + np.array([0, -1, 0], F32) * fw)
+            dirv = nrm(tan * (1 - g)[:, None] + dn * g[:, None])
             p = p + dirv * step
             # hug the scalp while combed, never inside the offset shell
             h = self.H(p); nh = sdf.normals(self.H, p)
@@ -353,31 +359,32 @@ def female_styles(g):
     xp = .002 * s
     R = np.concatenate([g.roots(130, full), g.roots(40, full, band=(-.014, -.002))])
     fr = smoothstep(-.0 * s, -.07 * s, R[:, 1])
-    length = (.42 - .13 * fr) * rng.uniform(.93, 1.05, len(R))
+    length = (.5 - .12 * fr) * rng.uniform(.92, 1.05, len(R))
     hang = lambda p, t, c: smoothstep(.05 * s, .0, p[:, 2])
-    ctx = {'side': sides(R, xp)}
-    layered(R, length, 10, part_flow(xp), hang, [(.5, .0026, .03, .022, 0, 1.0), (.4, .0058, .024, .016, 1, .93),
-                                                 (None, .0075, .014, .008, 2, .8)], ctx)
+    front_lock = (R[:, 1] < -.0 * s) & (np.abs(R[:, 0]) > .02 * s) & (rng.random(len(R)) < .7)
+    ctx = {'side': sides(R, xp), 'flare': np.full(len(R), .35, F32), 'fwd': np.where(front_lock, .35, 0).astype(F32)}
+    layered(R, length, 10, part_flow(xp), hang, [(.5, .004, .03, .022, 0, 1.0), (.4, .0095, .026, .016, 1, .93),
+                                                 (None, .013, .014, .008, 2, .85)], ctx)
     cap = g.cap(lambda L: np.full(len(L), .0024 * s, F32), full)
     g.finish('long', 'Long layered', [cap], W)
 
     # ---------------------------------------------------------------- high ponytail
-    tie = S(0, .09, .07)
+    tie = S(0, .082, .092)
     R = np.concatenate([g.roots(130, full), g.roots(40, full, band=(-.014, -.002))])[::-1]
     length = np.linalg.norm(tie - R, axis=1) * 1.08
     flow = lambda p, t, c: tie - p
     for (lo, hi), off, col in (((0, int(len(R) * .6)), .0022, 0), ((int(len(R) * .6), len(R)), .0038, 1)):
         P, N = g.grow(R[lo:hi], length[lo:hi], 6, flow, None, off=off)
         g.cards(P, N, .022, .01, col, lift=.0)
-    path = np.array([tie / s, (0, .128, .056), (0, .155, -.02), (0, .163, -.13), (0, .158, -.26), (0, .148, -.4)], F32) * s
-    radii = np.array([.012, .034, .042, .038, .028, .01]) * s
+    path = np.array([tie / s, (0, .13, .085), (0, .165, .0), (0, .175, -.12), (0, .17, -.27), (0, .16, -.44)], F32) * s
+    radii = np.array([.014, .042, .052, .048, .036, .012]) * s
     seg = np.r_[0, np.cumsum(np.linalg.norm(np.diff(path, axis=0), axis=1))]; seg /= seg[-1]
     k = 11; tt = np.linspace(0, 1, k)
     C = np.stack([np.interp(tt, seg, path[:, i]) for i in range(3)], 1).astype(F32)
     rad = np.interp(tt, seg, radii)
     Tn = nrm(np.gradient(C, axis=0))
     e1 = nrm(np.cross(Tn, [1, 0, 0])); e2 = nrm(np.cross(Tn, e1))
-    n = 46; Ps = np.zeros((n, k, 3), F32); Ns = np.zeros((n, k, 3), F32)
+    n = 52; Ps = np.zeros((n, k, 3), F32); Ns = np.zeros((n, k, 3), F32)
     for i in range(n):
         a = 2 * math.pi * i / n + rng.uniform(-.15, .15); r = rng.uniform(.45, 1.0); tw = rng.uniform(.4, .9)
         ang = a + tw * tt * 2
@@ -405,13 +412,13 @@ def female_styles(g):
     endz = -.078 * s
     length = np.clip((R[:, 2] - endz) * 1.12 + .02 + .05 * smoothstep(xp, .06 * s, -R[:, 0] + xp) * smoothstep(0, -.05 * s, R[:, 1]), .05, None) * rng.uniform(.96, 1.03, len(R))
     hang = lambda p, t, c: smoothstep(.045 * s, .005 * s, p[:, 2]) * (1 - .7 * smoothstep(.75, 1.0, t))
-    ctx = {'side': sides(R, xp), 'curl': np.full(len(R), 1.4, F32)}
-    layered(R, length, 9, part_flow(xp, .6), hang, [(.55, .003, .032, .026, 0, 1.0), (None, .0075, .027, .02, 1, .97)], ctx)
+    ctx = {'side': sides(R, xp), 'curl': np.full(len(R), 1.4, F32), 'flare': np.full(len(R), .45, F32)}
+    layered(R, length, 9, part_flow(xp, .6), hang, [(.55, .0045, .032, .026, 0, 1.0), (None, .0105, .028, .02, 1, .97)], ctx)
     cap = g.cap(lambda L: np.full(len(L), .0026 * s, F32), full)
     g.finish('bob', 'Bob', [cap], W)
 
     # ---------------------------------------------------------------- top bun
-    bc = S(0, .03, .118)
+    bc = S(0, .022, .122)
     R = np.concatenate([g.roots(120, full), g.roots(40, full, band=(-.014, -.002))])[::-1]
     length = np.linalg.norm(bc - R, axis=1) * 1.08
     flow = lambda p, t, c: bc - p
@@ -419,11 +426,11 @@ def female_styles(g):
         P, N = g.grow(R[lo:hi], length[lo:hi], 6, flow, None, off=off)
         g.cards(P, N, .024, .012, col, lift=.0)
     ax = nrm(np.array([0, .35, 1.0], F32)); e1 = nrm(np.cross(ax, [1, 0, 0])); e2 = np.cross(ax, e1)
-    cen = g.shell(bc[None], .0, 3)[0] + ax * .022 * s
-    n = 28; k = 16; Ps = np.zeros((n, k, 3), F32); Ns = np.zeros((n, k, 3), F32)
-    RR = .022 * s
+    cen = g.shell(bc[None], .0, 3)[0] + ax * .03 * s
+    n = 32; k = 16; Ps = np.zeros((n, k, 3), F32); Ns = np.zeros((n, k, 3), F32)
+    RR = .027 * s
     for i in range(n):
-        a0 = 2 * math.pi * i / n; r = .017 * s * rng.uniform(.75, 1.05)
+        a0 = 2 * math.pi * i / n; r = .021 * s * rng.uniform(.75, 1.05)
         th = np.linspace(0, 2 * math.pi * 1.05, k) + rng.uniform(0, 6.28)
         a = a0 + th * .5
         ring = np.cos(th)[:, None] * e1 + np.sin(th)[:, None] * e2
@@ -437,11 +444,12 @@ def female_styles(g):
     xp = .012 * s
     R = np.concatenate([g.roots(130, full), g.roots(40, full, band=(-.014, -.002))])
     fr = smoothstep(0, -.07 * s, R[:, 1])
-    length = (.3 - .06 * fr) * rng.uniform(.92, 1.06, len(R))
+    length = (.25 - .045 * fr) * rng.uniform(.92, 1.06, len(R))
     hang = lambda p, t, c: smoothstep(.05 * s, .0, p[:, 2]) * .85
-    ctx = {'side': sides(R, xp), 'wave': rng.uniform(.5, .8, len(R)).astype(F32), 'ph': rng.uniform(0, .8, len(R)).astype(F32)}
-    layered(R, length, 11, part_flow(xp), hang, [(.5, .0032, .032, .022, 0, 1.0), (.4, .0075, .026, .016, 1, .94),
-                                                 (None, .01, .014, .008, 2, .85)], ctx)
+    ctx = {'side': sides(R, xp), 'wave': rng.uniform(1.2, 1.6, len(R)).astype(F32), 'ph': rng.uniform(0, .8, len(R)).astype(F32),
+           'flare': np.full(len(R), .55, F32)}
+    layered(R, length, 11, part_flow(xp), hang, [(.5, .005, .032, .022, 0, 1.0), (.4, .011, .026, .016, 1, .94),
+                                                 (None, .014, .014, .008, 2, .85)], ctx)
     cap = g.cap(lambda L: np.full(len(L), .0026 * s, F32), full)
     g.finish('wavy', 'Wavy shoulder-length', [cap], W)
     return 'long'

@@ -1,6 +1,6 @@
 """Countryside kit for New Meridian's outskirts: rural.glb (root nodes RU_*).
 
-Trees and bushes, village houses, a farm (barn, silo, fences, hay, crops, tractor), wind turbine, water tower,
+Village houses, a farm (barn, silo, fences, hay, crops, tractor), wind turbine, water tower,
 gas station, road signs. Textures (roof tiles, planks, siding, bark, leaves, field rows) are generated here.
 """
 import bpy, bmesh, math, os, sys
@@ -307,8 +307,7 @@ def main():
         nonlocal x
         x += w
         return x
-    tree_round('RU_tree_oak', nx(), 1, P['leaves']); tree_round('RU_tree_maple', nx(), 7, P['leaves2'], 6.0)
-    tree_round('RU_tree_birch', nx(), 13, P['leaves'], 8.5); tree_pine('RU_tree_pine', nx(), 3); bush('RU_bush', nx(), 5)
+    # trees and bushes now come from trees.py (trees.glb, TR_*); the old RU_tree_* / RU_bush blobs are retired
     gable_house('RU_house_a', nx(), 8, 10, 3.2, 1, 'plaster'); gable_house('RU_house_b', nx(), 9, 11, 3.0, 2, 'siding')
     gable_house('RU_house_c', nx(), 7, 9, 3.0, 1, 'siding'); gable_house('RU_farmhouse', nx(), 10, 12, 3.2, 2, 'plaster')
     shop('RU_shop', nx()); barn('RU_barn', nx(40)); silo('RU_silo', nx()); fence('RU_fence', nx()); hay('RU_hay', nx())

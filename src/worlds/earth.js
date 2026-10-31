@@ -5,7 +5,7 @@ import { World } from './world.js';
 import { atmosphereSky } from './sky.js';
 import { mulberry } from '../game/state.js';
 import { Avatar } from '../game/avatar.js';
-import { MeridianMap, VILLAGES, FARMS, HALF, SIZE, SEA, BLOCK, ROAD, CITY_N as N, PITCH, CITY_EDGE, fbm, RIVER_Z, RIVER_W, RIVER_BANK, AIRPORT, inAirport } from './meridian/layout.js';
+import { MeridianMap, VILLAGES, FARMS, HALF, SIZE, SEA, BLOCK, ROAD, CITY_N as N, PITCH, CITY_EDGE, fbm, RIVER_Z, RIVER_W, RIVER_BANK, SPACEPORT, inSpaceport } from './meridian/layout.js';
 import { Water } from '../game/water.js';
 import { Puffs } from '../game/puffs.js';
 import { runCinematic, ease, easeOut, easeIn, bezier } from '../game/cinematic.js';
@@ -76,20 +76,27 @@ function terrainMaterial(T) {
   const mat = new THREE.MeshStandardMaterial({ map: grass, normalMap: grassN, roughness: .95, color: 0x8fae6a, envMapIntensity: .25 });
   mat.onBeforeCompile = sh => {
     sh.uniforms.rockMap = { value: rock }; sh.uniforms.rockN = { value: rockN }; sh.uniforms.sandMap = { value: sand };
+    sh.uniforms.snowMap = { value: T.snow || T.ice }; sh.uniforms.snowN = { value: T.snow_n || T.ice_n || rockN };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;varying vec3 vWN;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xyz;vWN=normalize(mat3(modelMatrix)*objectNormal);');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;varying vec3 vWN;uniform sampler2D rockMap,rockN,sandMap;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;varying vec3 vWN;uniform sampler2D rockMap,rockN,sandMap,snowMap,snowN;')
       .replace('#include <map_fragment>', `
         vec2 uvG=vWP.xz*.11;vec3 gc=texture2D(map,uvG).rgb*texture2D(map,uvG*.13+.27).rgb*2.4;
         float meadow=.5+.5*sin(vWP.x*.004)*cos(vWP.z*.005);gc*=mix(vec3(1.),vec3(1.12,1.05,.75),meadow*.6);
         float slope=1.-vWN.y;float rk=smoothstep(.22,.42,slope);
         vec3 an=abs(vWN);vec2 uvR=(an.x>an.z?vWP.zy:vWP.xy)*.08;vec3 rc=texture2D(rockMap,uvR).rgb*vec3(.95,.92,.88);
         float beach=1.-smoothstep(${(SEA + 1.2).toFixed(1)},${(SEA + 3.5).toFixed(1)},vWP.y);vec3 sc2=texture2D(sandMap,vWP.xz*.12).rgb*vec3(1.,.95,.85);
+        gc*=mix(vec3(1.),vec3(.92,.86,.74),smoothstep(${(SNOW_LINE - 30).toFixed(1)},${SNOW_LINE.toFixed(1)},vWP.y));
         vec3 col=mix(gc,rc*1.15,rk);col=mix(col,sc2,beach);
+        // snow above the snow line (wavy edge), thinning on steep ground; snow lies on the ledges of rock faces
+        float snl=${SNOW_LINE.toFixed(1)}+(texture2D(rockMap,vWP.xz*.0035).r-.5)*16.;
+        float snH=smoothstep(snl-3.,snl+4.,vWP.y),ledge=smoothstep(.5,.72,rc.r*.55+vWN.y*.6);
+        float sn=snH*max(1.-smoothstep(.4,.62,slope),rk*ledge*.9);vec2 uvS=vWP.xz*.08;
+        col=mix(col,texture2D(snowMap,uvS).rgb*vec3(.97,.98,1.02),sn);
         diffuseColor.rgb*=col/max(diffuse,vec3(.05));`)
       .replace('#include <normal_fragment_maps>', `
-        vec3 nG=texture2D(normalMap,uvG).xyz*2.-1.;vec3 nR=texture2D(rockN,uvR).xyz*2.-1.;
-        vec3 mapN=normalize(mix(nG,nR,rk));mapN.xy*=normalScale;normal=normalize(tbn*mapN);`);
+        vec3 nG=texture2D(normalMap,uvG).xyz*2.-1.;vec3 nR=texture2D(rockN,uvR).xyz*2.-1.;vec3 nS=texture2D(snowN,uvS).xyz*2.-1.;
+        vec3 mapN=normalize(mix(mix(nG,nR,rk),nS,sn));mapN.xy*=normalScale;normal=normalize(tbn*mapN);`);
   };
   return mat;
 }
@@ -107,6 +114,10 @@ export class EarthWorld extends World {
     const T = A.textures;
     const tick = async (p, l) => { progress(p, l); await new Promise(r => setTimeout(r, 0)); };
     await tick(.03, 'Surveying the island');
+    // Blender-grown trees (tools/blender/trees.py) and the snow-line ground textures, only needed on Earth
+    await A.loadAll([{ type: 'model', name: 'trees', file: 'trees.glb' }, { type: 'texture', name: 'snow', file: 'snow_c.jpg' }, { type: 'texture', name: 'snow_n', file: 'snow_n.jpg', color: false }],
+      k => progress(.03 + k * .05, 'Growing trees'));
+    this.flora = new Flora(g, sc, A.models.trees);
     const map = this.map = new MeridianMap();
     this.collision.terrain = (x, z) => map.height(x, z);
     // ---------------- light: late golden hour
@@ -131,7 +142,7 @@ export class EarthWorld extends World {
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i) + ox, z = pos.getZ(i) + oz;
         // in the city the concrete slab is the ground; sink the terrain a hair under it
-        pos.setY(i, map.height(x, z) - (Math.abs(x) < CITY_EDGE + 20 && Math.abs(z) < CITY_EDGE + 20 ? .15 : inAirport(x, z, -6) ? .3 : 0));
+        pos.setY(i, map.height(x, z) - (Math.abs(x) < CITY_EDGE + 20 && Math.abs(z) < CITY_EDGE + 20 ? .15 : inSpaceport(x, z, -6) ? .3 : 0));
       }
       geo.computeVertexNormals();
       const t = new THREE.Mesh(geo, tmat); t.position.set(ox, 0, oz); t.receiveShadow = true;
@@ -158,7 +169,7 @@ export class EarthWorld extends World {
     this.buildForests(rnd);
     this.buildTurbines(rnd);
     await tick(.78, 'Opening the spaceport');
-    this.buildAirport(rnd);
+    this.buildSpaceport(rnd);
     await tick(.84, 'Waking the city');
     // skyway traffic overhead (decoration) + parked cars at the kerbs
     this.skyway = [];
@@ -180,7 +191,7 @@ export class EarthWorld extends World {
       if (Math.abs(_p.x) < 30 && Math.abs(_p.z) < 40) continue;
       g.vehicles.spawn(rnd() < .7 ? 'car_sport' : 'car_utility', paints[Math.floor(rnd() * paints.length)], _p.clone(), Math.atan2(_v.x, _v.z));
     }
-    this.parkAirportCars(rnd, paints);
+    this.parkSpaceportCars(rnd, paints);
     // ---------------- life
     this.population = new Population(g, map, this.paths);
     this.traffic = new Traffic(g, map);
@@ -317,20 +328,25 @@ export class EarthWorld extends World {
     // parks: lawns, trees, benches and a fountain each; riverside promenades lined with trees
     const rk = A.models.rural.scene;
     const lawnMat = new THREE.MeshStandardMaterial({ map: (() => { const t = A.textures.moss.clone(); t.repeat.set(10, 10); t.needsUpdate = true; return t; })(), color: 0x8fb070, roughness: .95 });
-    const treeM = [], mapleM = [], pineM = [], benchM = [], fountM = [], bushM = [];
+    const benchM = [], fountM = [], fl = this.flora;
     for (const [cx, cz] of parks) {
       plane(BLOCK - 6, BLOCK - 6, cx, cz, lawnMat, .03);
-      for (let k = 0; k < 16; k++) {
-        const a = rnd() * Math.PI * 2, r = 14 + rnd() * 26;
-        (k % 3 === 0 ? pineM : k % 3 === 1 ? mapleM : treeM).push(new THREE.Matrix4().compose(_p.set(cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.8 + rnd() * .5)));
+      // a ring of cherry blossom round the fountain, oaks and maples (some turning) further out
+      const a0 = rnd() * 6.28;
+      for (let k = 0; k < 8; k++) { const a = a0 + k / 8 * Math.PI * 2; fl.add('cherry', cx + Math.cos(a) * 19, 0, cz + Math.sin(a) * 19, rnd, .85 + rnd() * .25); }
+      for (let k = 0; k < 10; k++) {
+        const a = rnd() * Math.PI * 2, r = 28 + rnd() * 13;
+        if (cx === 0 && cz === 0 && Math.abs(r - 33) < 3) continue;          // Founders' Park bench ring
+        fl.add('park', cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r, rnd, .8 + rnd() * .35);
       }
+      for (let k = 0; k < 6; k++) { const a = rnd() * 6.28, r = 24 + rnd() * 18; fl.add('bush', cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r, rnd, .8 + rnd() * .4); }
       for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; benchM.push(new THREE.Matrix4().compose(_p.set(cx + Math.cos(a) * 9, 0, cz + Math.sin(a) * 9), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
       fountM.push(new THREE.Matrix4().compose(_p.set(cx, 0, cz), _q.identity(), _s.set(1, 1, 1)));
       this.collision.add([cx - 4.5, 0, cz - 4.5, cx + 4.5, .7, cz + 4.5], 'fountain');
     }
     for (const z of [qN - 4, qS + 4]) for (let x = -CITY_EDGE + 20; x < CITY_EDGE - 10; x += 14) {
       if (Math.abs(((x / PITCH) % 1 + 1) % 1 - .5) < .12) continue;      // keep the bridge heads clear
-      treeM.push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.75 + rnd() * .3)));
+      fl.add('riverside', x, 0, z, rnd, .8 + rnd() * .3);            // weeping willows and ash along the quays
     }
     // suburbs: three rows of houses per block with yards, trees and hedges
     const hm = { RU_house_a: [], RU_house_b: [], RU_house_c: [] };
@@ -339,19 +355,12 @@ export class EarthWorld extends World {
         const x = cx + ox * 28, z = cz + oz * 22, k = pick(Object.keys(hm)), rot = oz < 0 ? Math.PI : 0;
         hm[k].push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.setFromAxisAngle(Y, rot), _s.setScalar(1)));
         this.collision.add([x - 6, 0, z - 6, x + 6, 7, z + 6], 'building');
-        mapleM.push(new THREE.Matrix4().compose(_p.set(x + 9, 0, z - oz * 6), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.7 + rnd() * .3)));
-        bushM.push(new THREE.Matrix4().compose(_p.set(x - 8, 0, z + oz * 9), _q.identity(), _s.setScalar(1)));
+        fl.add('suburb', x + 9, 0, z - oz * 6, rnd, .7 + rnd() * .3);  // maples and birches in the yards, hedges by the gate
+        fl.add('bush', x - 8, 0, z + oz * 9, rnd, 1); fl.add('bush', x - 5.6, 0, z + oz * 9.4, rnd, .9);
       }
       plane(BLOCK - 6, BLOCK - 6, cx, cz, lawnMat, .02);
     }
     for (const [k, list] of Object.entries(hm)) instanceKit(this.scene, rk.getObjectByName(k), list);
-    instanceKit(this.scene, rk.getObjectByName('RU_tree_oak'), treeM);
-    instanceKit(this.scene, rk.getObjectByName('RU_tree_maple'), mapleM);
-    instanceKit(this.scene, rk.getObjectByName('RU_tree_pine'), pineM);
-    instanceKit(this.scene, rk.getObjectByName('RU_bush'), bushM);
-    kitColliders(this.collision, rk.getObjectByName('RU_tree_oak'), treeM, { post: .35, h: 4 }, 'tree');
-    kitColliders(this.collision, rk.getObjectByName('RU_tree_maple'), mapleM, { post: .32, h: 4 }, 'tree');
-    kitColliders(this.collision, rk.getObjectByName('RU_tree_pine'), pineM, { post: .4, h: 4 }, 'tree');
     for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + .3; benchM.push(new THREE.Matrix4().compose(_p.set(Math.cos(a) * 33, 0, Math.sin(a) * 33), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
     instanceKit(this.scene, pk.getObjectByName('PR_bench'), benchM);
     kitColliders(this.collision, pk.getObjectByName('PR_bench'), benchM, { box: true }, 'bench');
@@ -421,7 +430,7 @@ export class EarthWorld extends World {
   buildVillages(rnd) {
     const A = this.g.assets, rk = A.models.rural.scene, map = this.map;
     const kinds = ['RU_house_a', 'RU_house_b', 'RU_house_c'];
-    const mats = { RU_house_a: [], RU_house_b: [], RU_house_c: [], RU_shop: [], RU_gas: [], RU_watertower: [], RU_tree_oak: [], RU_tree_maple: [], RU_bush: [] };
+    const mats = { RU_house_a: [], RU_house_b: [], RU_house_c: [], RU_shop: [], RU_gas: [], RU_watertower: [] };
     const placed = [];
     const sizeOf = n => { const b = new THREE.Box3().setFromObject(rk.getObjectByName(n)); return b.getSize(new THREE.Vector3()); };
     const sizes = {}; for (const n of Object.keys(mats)) sizes[n] = sizeOf(n);
@@ -465,7 +474,7 @@ export class EarthWorld extends World {
       for (let t = 0; t < 40; t++) {
         const a = rnd() * 6.28, d = v.r * (.5 + rnd() * .9), x = vx + Math.cos(a) * d, z = vz + Math.sin(a) * d;
         if (placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 9) || map.nearRoad(x, z, 8)) continue;
-        put(rnd() < .6 ? 'RU_tree_oak' : rnd() < .5 ? 'RU_tree_maple' : 'RU_bush', x, z, rnd() * 6.28, false, .8 + rnd() * .5);
+        this.flora.add(rnd() < .75 ? 'village' : 'bush', x, map.height(x, z) - .1, z, rnd, .8 + rnd() * .4); placed.push([x, z]);
       }
       if (sidewalkA.length > 3) this.paths.push(this.loop([...sidewalkA, ...sidewalkB.reverse()]));
       this.paths.push(this.loop(Array.from({ length: 12 }, (_, i) => [vx + Math.cos(i / 12 * 6.28) * 40, vz + Math.sin(i / 12 * 6.28) * 40])));
@@ -475,8 +484,7 @@ export class EarthWorld extends World {
 
   // small things people bump into: trunks, poles, fences, hay bales
   propColliders(rk, n, list) {
-    if (/RU_tree/.test(n)) kitColliders(this.collision, rk.getObjectByName(n), list, { post: .35, h: 4 }, 'tree');
-    else if (/RU_fence|RU_hay|RU_sign/.test(n)) kitColliders(this.collision, rk.getObjectByName(n), list, /sign/.test(n) ? { post: .15, h: 3 } : { box: true });
+    if (/RU_fence|RU_hay|RU_sign/.test(n)) kitColliders(this.collision, rk.getObjectByName(n), list, /sign/.test(n) ? { post: .15, h: 3 } : { box: true });
   }
 
   // ---------------------------------------------------------------- farms
@@ -527,20 +535,33 @@ export class EarthWorld extends World {
 
   // ---------------------------------------------------------------- nature
   buildForests(rnd) {
-    const A = this.g.assets, rk = A.models.rural.scene, map = this.map;
-    const kinds = ['RU_tree_oak', 'RU_tree_maple', 'RU_tree_birch', 'RU_tree_pine', 'RU_bush'];
-    const mats = Object.fromEntries(kinds.map(k => [k, []]));
-    for (let x = -HALF + 40; x < HALF - 40; x += 26) for (let z = -HALF + 40; z < HALF - 40; z += 26) {
-      const n = fbm(x * .0045 + 3, z * .0045 - 8, 41, 3);
-      if (n < .55) continue;
-      const X = x + (rnd() - .5) * 16, Z = z + (rnd() - .5) * 16, h = map.height(X, Z);
-      if (h < SEA + 2 || map.developed(X, Z) || map.nearRoad(X, Z, 13)) continue;
-      const k = h > 40 ? (rnd() < .75 ? 3 : 2) : Math.floor(rnd() * 5);
-      mats[kinds[k]].push(new THREE.Matrix4().compose(_p.set(X, h - .2, Z), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.75 + rnd() * .6)));
-      if (k !== 4) { const r = .3 * (.75 + .3); this.collision.add([X - r, h, Z - r, X + r, h + 5, Z + r], 'tree'); }
+    // Woods by altitude: broadleaf lowlands (rainforest in the wet hollows) -> birch/spruce mix -> conifers ->
+    // snow-covered spruce, pine and bare trees above the snow line. Lone oaks, ash and umbrella trees dot the open fields.
+    const map = this.map, fl = this.flora;
+    const slopeAt = (x, z) => Math.hypot(map.height(x + 2, z) - map.height(x - 2, z), map.height(x, z + 2) - map.height(x, z - 2)) / 4;
+    for (let x = -HALF + 40; x < HALF - 40; x += 22) for (let z = -HALF + 40; z < HALF - 40; z += 22) {
+      const n = fbm(x * .0045 + 3, z * .0045 - 8, 41, 3), hc = map.height(x, z);
+      const forest = n >= (hc > SNOW_LINE - 15 ? .44 : .55);
+      for (let k = 0; k < (forest ? (n > .62 ? 2 : 1) : 1); k++) {
+        const X = x + (rnd() - .5) * 18, Z = z + (rnd() - .5) * 18, h = map.height(X, Z);
+        if (h < SEA + 2 || map.developed(X, Z) || map.nearRoad(X, Z, 13)) continue;
+        const sl = slopeAt(X, Z), hj = h + (rnd() - .5) * 10;
+        if (h > 38 && rnd() < (sl > .6 ? .5 : .06)) { fl.add(hj > SNOW_LINE ? 'rock_snow' : 'rock', X, h - .35, Z, rnd, .7 + rnd() * .8); continue; }
+        if (sl > .75) continue;                                              // cliffs stay bare
+        if (!forest) {                                                       // open country: the odd lone tree
+          if (h < 45 && rnd() < .05) fl.add('field', X, h - .25, Z, rnd, .9 + rnd() * .35);
+          continue;
+        }
+        const wet = fbm(X * .003 + 20, Z * .003 - 4, 77, 3);
+        const pool = hj > SNOW_LINE - 2 ? 'snow' : hj > 50 ? 'conifer' : hj > 30 ? 'mixed' : wet > .6 && h < 24 ? 'rainforest' : 'lowland';
+        fl.add(pool, X, h - .25, Z, rnd, .8 + rnd() * .45);
+        if (pool !== 'snow' && pool !== 'conifer' && rnd() < .35) { const b = rnd() * 6.28; fl.add('bush', X + Math.cos(b) * 4, map.height(X + Math.cos(b) * 4, Z + Math.sin(b) * 4) - .1, Z + Math.sin(b) * 4, rnd, .8 + rnd() * .5); }
+      }
     }
-    this.treeCount = Object.values(mats).reduce((a, b) => a + b.length, 0);
-    for (const [n, list] of Object.entries(mats)) instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700 });
+    // every tree is planted (city, villages, woods): build the instanced LOD sets and the trunk colliders
+    fl.build();
+    for (const c of fl.colliders()) kitColliders(this.collision, c.root, c.mats, c.rock ? { box: true } : { post: Math.max(.15, c.trunk * .9), h: 4 }, c.rock ? 'rock' : 'tree');
+    this.treeCount = fl.count;
   }
 
   buildTurbines(rnd) {
@@ -557,35 +578,35 @@ export class EarthWorld extends World {
     }
   }
 
-  // ---------------------------------------------------------------- spaceport: airport, ship, Quartermaster
-  // The airport model (tools/blender/airport.py) carries its colliders, pads, spawn and vendor spot in extras.worldex,
-  // in three space relative to landing pad 1 (AIRPORT.x/z).
-  buildAirport(rnd) {
-    const g = this.g, A = g.assets, sc = this.scene, O = new THREE.Vector3(AIRPORT.x, 0, AIRPORT.z);
-    const site = A.clone('airport', 'AP_site'); site.position.copy(O); sc.add(site);
-    const meta = this.airport = JSON.parse(site.userData.worldex);
+  // ---------------------------------------------------------------- spaceport: landing zone, ship, Quartermaster
+  // The spaceport model (tools/blender/spaceport.py) carries its colliders, pads, spawn and vendor spot in extras.worldex,
+  // in three space relative to landing pad 1 (SPACEPORT.x/z).
+  buildSpaceport(rnd) {
+    const g = this.g, A = g.assets, sc = this.scene, O = new THREE.Vector3(SPACEPORT.x, 0, SPACEPORT.z);
+    const site = A.clone('spaceport', 'SP_site'); site.position.copy(O); sc.add(site);
+    const meta = this.spaceport = JSON.parse(site.userData.worldex);
     const W = a => new THREE.Vector3(a[0], a[1], a[2]).add(O);
     site.traverse(o => {
       if (!o.isMesh) return;
       const m = o.material, n = m.name || '', grp = o.parent && o.parent.name;
       o.receiveShadow = true;
-      if (/AP_ground|AP_lights/.test(grp) || /AP_ground|AP_lights/.test(o.name)) o.castShadow = false;
-      // painted lines, tyre rubber and pads sit a hair above the slabs: keep them from z-fighting at a distance
-      if (/^ap_paint|^ap_tyre/.test(n)) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -4; }
-      if (n === 'ap_pad') { m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -2; }
-      if (n === 'ap_fence') { m.transparent = false; m.alphaTest = .45; m.depthWrite = true; m.side = THREE.DoubleSide; }
-      if (n === 'ap_glass') { m.envMapIntensity = 1.8; m.roughness = .04; m.metalness = .35; }
-      if (n === 'ap_floor') { m.envMapIntensity = .8; }
+      if (/SP_ground|SP_lights/.test(grp) || /SP_ground|SP_lights/.test(o.name)) o.castShadow = false;
+      // painted markings, scorch and pads sit a hair above the field slab: keep them from z-fighting at a distance
+      if (/^sp_paint|^sp_scorch/.test(n)) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -4; }
+      if (n === 'sp_pad' || n === 'sp_pad_heavy') { m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -2; }
+      if (n === 'sp_fence') { m.transparent = false; m.alphaTest = .45; m.depthWrite = true; m.side = THREE.DoubleSide; }
+      if (n === 'sp_glass') { m.envMapIntensity = 1.8; m.roughness = .04; m.metalness = .35; }
+      if (n === 'sp_floor') { m.envMapIntensity = .8; }
     });
-    for (const c of meta.colliders) this.collision.add([c[0] + O.x, c[1], c[2] + O.z, c[3] + O.x, c[4], c[5] + O.z], c[6] || 'airport');
-    this.radar = site.getObjectByName('AP_radar');
-    this.socks = []; site.traverse(o => { if (/^windsock_sock/.test(o.name) && !o.isMesh) this.socks.push(o); });
+    for (const c of meta.colliders) this.collision.add([c[0] + O.x, c[1], c[2] + O.z, c[3] + O.x, c[4], c[5] + O.z], c[6] || 'spaceport');
+    this.radar = site.getObjectByName('SP_radar');
     // the Wayfarer's jumpship on pad 1, ramp toward the terminal
     const pad = this.padPos = W(meta.ship);
     const js = A.clone('ship_jumper'); js.position.copy(pad); js.rotation.y = 0; sc.add(js); this.jumpship = js;
     this.shipColliders();
     this.interactables.push({ id: 'ship', pos: pad.clone().add(new THREE.Vector3(0, 0, -10.6)), r: 3.2, label: 'The Wayfarer', verb: 'Return to orbit', key: 'E', action: () => g.travel('ship') });
-    // visiting ships: a dropship on pad 2, a jumpship in a different livery on pad 3, one in hangar 1
+    // visiting ships: a dropship and a jumpship in another livery on the VTOL pads, our own freighter / courier props
+    // (tools/blender/spaceport.py) on the heavy pads and in hangar 1
     const visitor = (model, p, yaw, tint) => {
       const v = A.clone(model); v.position.copy(p); v.rotation.y = yaw; sc.add(v);
       if (tint) v.traverse(o => { if (o.isMesh && o.material.name === 'ship_hull') { o.material = o.material.clone(); o.material.color.set(tint); } });
@@ -595,7 +616,20 @@ export class EarthWorld extends World {
     };
     visitor('ship_dropship', W(meta.pads[1]), Math.PI * .1);
     visitor('ship_jumper', W(meta.pads[2]), -Math.PI * .15, '#5a6470');
-    visitor('ship_dropship', W([meta.hangars[0][0], .1, meta.hangars[0][1] + 2]), Math.PI, '#b9b3a6');
+    // prop ships: half sizes [x, top, z] of their hull for colliders (yaw 0 or PI only)
+    const prop = (node, p, yaw, half) => {
+      const v = A.clone('spaceport', node); v.position.copy(p); v.rotation.y = yaw; sc.add(v);
+      this.collision.add([p.x - half[0], p.y + .4, p.z - half[2], p.x + half[0], p.y + half[1], p.z + half[2]], 'ship');
+      return v;
+    };
+    prop('SP_ship_hauler', W(meta.heavy[1]), Math.PI, [7.6, 11.5, 22]);
+    prop('SP_ship_courier', W(meta.heavy[3]), .0, [8, 6.5, 12.5]);
+    prop('SP_ship_lander', W(meta.heavy[0]), Math.PI, [4.8, 6, 7]);
+    prop('SP_ship_courier', W([meta.hangars[0][0], .1, meta.hangars[0][1] + 1]), Math.PI, [8, 6.5, 12.5]);
+    // ambient traffic: a shuttle that comes in to heavy pad 8, waits, and lifts off again (engine glow + dust)
+    const amb = A.clone('spaceport', 'SP_ship_lander'); sc.add(amb);
+    amb.traverse(o => { if (o.isMesh && o.material.name === 'sp_engine') { o.material = o.material.clone(); this.ambGlow = o.material; } });
+    this.ambient = { obj: amb, pad: W(meta.heavy[4]), t: 30, box: null };
     // the Quartermaster runs a kiosk just inside the terminal's airside doors
     const vp = W(meta.vendor);
     const qm = new Avatar(A, 'npc_vendor'); qm.root.position.copy(vp); qm.root.rotation.y = meta.vendorYaw || 0; qm.play('IdleRelaxed', 0);
@@ -642,10 +676,10 @@ export class EarthWorld extends World {
       this.collision.add([p.x - 8.6, p.y + .8, p.z, p.x + 8.6, p.y + 1.4, p.z + 5.5], 'ship')];
   }
 
-  parkAirportCars(rnd, paints) {
-    const O = AIRPORT, g = this.g;
+  parkSpaceportCars(rnd, paints) {
+    const O = SPACEPORT, g = this.g;
     let n = 0;      // a handful: every car is a full drivable vehicle
-    for (const [x0, z0, x1, z1] of this.airport.lots) for (const [z, yaw] of [[z0 + 5.5, Math.PI], [z1 - 5.5, 0]]) {
+    for (const [x0, z0, x1, z1] of this.spaceport.lots) for (const [z, yaw] of [[z0 + 5.5, Math.PI], [z1 - 5.5, 0]]) {
       for (let x = x0 + 4.35; x < x1 - 4; x += 5.4) {
         if (rnd() < .8 || n >= 10) continue;
         n++;
@@ -654,11 +688,47 @@ export class EarthWorld extends World {
     }
   }
 
-  updateAirport(dt) {
-    const t = this.g.time;
+  updateSpaceport(dt) {
     if (this.radar) this.radar.rotation.y += dt * 1.3;
-    for (const [i, s] of (this.socks || []).entries()) { s.rotation.y = .35 + Math.sin(t * .5 + i) * .18 + Math.sin(t * 1.7 + i * 2) * .05; s.rotation.x = .12 + Math.sin(t * 2.3 + i) * .04; }
+    this.updateAmbientShip(dt);
     if (this.dust && !this.g.cine) this.dust.update(dt, this.scene.fog);
+  }
+
+  // A shuttle on a 75 s loop: descends onto heavy pad 8 (0-12 s), sits (12-42 s), lifts off and climbs away (42-52 s).
+  updateAmbientShip(dt) {
+    const A = this.ambient; if (!A) return;
+    const o = A.obj, pad = A.pad, g = this.g;
+    A.t = (A.t + dt) % 75;
+    const t = A.t;
+    let level = 0;
+    const from = _v.set(pad.x + 260, pad.y + 180, pad.z + 320);
+    if (t < 12) {
+      const k = t / 12, e = 1 - Math.pow(1 - k, 2.4);
+      const hover = Math.max(0, 1 - (k - .75) / .25);
+      o.position.set(from.x + (pad.x - from.x) * Math.min(1, e * 1.15), pad.y + (from.y - pad.y) * Math.pow(1 - k, 2.2), from.z + (pad.z - from.z) * Math.min(1, e * 1.15));
+      o.rotation.set(-.12 * (1 - k), Math.PI + 1.2 * (1 - e), .05 * Math.sin(t));
+      level = .6 + .4 * hover; o.visible = true;
+    } else if (t < 42) { o.position.copy(pad); o.rotation.set(0, Math.PI, 0); level = t < 14 ? 1 - (t - 12) / 2 : 0; o.visible = true; }
+    else if (t < 52) {
+      const k = (t - 42) / 10, up = k < .3 ? (k / .3) * 14 : 14 + Math.pow((k - .3) / .7, 1.8) * 260;
+      o.position.set(pad.x - Math.pow(Math.max(0, k - .3) / .7, 2) * 320, pad.y + up, pad.z + Math.pow(Math.max(0, k - .3) / .7, 2) * 260);
+      o.rotation.set(-.25 * Math.max(0, k - .3), Math.PI - .9 * Math.max(0, k - .3), 0);
+      level = 1; o.visible = true;
+    } else { o.visible = false; level = 0; }
+    // collider only while parked
+    const parked = t >= 12 && t < 42;
+    if (parked && !A.box) A.box = this.collision.add([pad.x - 4.8, pad.y + .4, pad.z - 7, pad.x + 4.8, pad.y + 6, pad.z + 7], 'ship');
+    if (!parked && A.box) { this.collision.remove(A.box); A.box = null; }
+    if (this.ambGlow) this.ambGlow.emissiveIntensity = .3 + level * 2.2;
+    if (level > .05 && o.visible && o.position.distanceTo(g.camera.position) < 700) {
+      o.updateMatrixWorld(true);
+      for (const [x, z] of [[-3.7, -3.4], [3.7, -3.4], [-3.7, 3.4], [3.7, 3.4]]) g.fx.glow(_p.set(x, 2.6, z).applyMatrix4(o.matrixWorld), 1.4 + level * 1.4, 0x7fd8ff, .05);
+      const alt = o.position.y - pad.y, k = level * Math.max(0, 1 - alt / 22);
+      if (this.dust && k > .05 && Math.random() < k * dt * 30) {
+        const a = Math.random() * Math.PI * 2;
+        this.dust.emit(_p.set(o.position.x + Math.cos(a) * 4, pad.y + .3, o.position.z + Math.sin(a) * 4), 1, { speed: 9, ring: .1, spread: .1, life: 2.4, size: [1.4, 6], alpha: .28 * k, color: 0xc9b9a0, gravity: -.3, drag: 1.1 });
+      }
+    }
   }
 
   // ---------------------------------------------------------------- landing / take-off cinematics
@@ -801,6 +871,7 @@ export class EarthWorld extends World {
       let r, g2, b;
       if (h < SEA) { r = 30; g2 = 70; b = 92; }
       else if (Math.abs(wx) < CITY_EDGE && Math.abs(wz) < CITY_EDGE) { r = 92; g2 = 92; b = 98; }
+      else if (h > SNOW_LINE) { r = 226; g2 = 232; b = 238; }
       else { const t = Math.min(1, Math.max(0, h / 70)); r = 70 + t * 70; g2 = 100 + t * 30; b = 58 + t * 50; }
       const k = (j * S + i) * 4; img.data[k] = r; img.data[k + 1] = g2; img.data[k + 2] = b; img.data[k + 3] = 255;
     }
@@ -812,15 +883,18 @@ export class EarthWorld extends World {
     for (let i = -N - 1; i <= N; i++) { const c0 = (i + .5) * PITCH; let [a, b] = toPx(c0, -CITY_EDGE), [a2, b2] = toPx(c0, CITY_EDGE); x.beginPath(); x.moveTo(a, b); x.lineTo(a2, b2); x.stroke(); [a, b] = toPx(-CITY_EDGE, c0); [a2, b2] = toPx(CITY_EDGE, c0); x.beginPath(); x.moveTo(a, b); x.lineTo(a2, b2); x.stroke(); }
     x.fillStyle = 'rgba(214,190,140,.7)';
     for (const f of FARMS) { const [a, b] = toPx(f.pos[0] - f.w / 2, f.pos[1] - f.d / 2); x.fillRect(a, b, f.w / SIZE * S, f.d / SIZE * S); }
-    // the spaceport: runway, taxiway, apron and terminal
-    const ap = this.airport;
+    // the spaceport: landing field, pads, terminal, container yard
+    const ap = this.spaceport;
     if (ap) {
-      const R = (x0, z0, x1, z1, col) => { const [a, b] = toPx(x0 + AIRPORT.x, z0 + AIRPORT.z), [c2, d] = toPx(x1 + AIRPORT.x, z1 + AIRPORT.z); x.fillStyle = col; x.fillRect(a, b, Math.max(1, c2 - a), Math.max(1, d - b)); };
-      const [rx0, rz, rx1, rw] = ap.runway, [tx0, tz, tx1, tw] = ap.taxiway, [ax0, az0, ax1, az1] = ap.apron, [px0, pz0, px1, pz1] = ap.terminal;
-      R(ax0, az0, ax1, az1, '#8e9096'); R(tx0, tz - tw / 2, tx1, tz + tw / 2, '#5a5c62'); R(rx0, rz - rw / 2, rx1, rz + rw / 2, '#3c3e44');
-      R(rx0 + 10, rz - .8, rx1 - 10, rz + .8, '#e8e2d4'); R(px0, pz0, px1, pz1, '#cfe6f0');
+      const P = (x, z) => toPx(x + SPACEPORT.x, z + SPACEPORT.z);
+      const R = (x0, z0, x1, z1, col) => { const [a, b] = P(x0, z0), [c2, d] = P(x1, z1); x.fillStyle = col; x.fillRect(a, b, Math.max(1, c2 - a), Math.max(1, d - b)); };
+      const [fx0, fz0, fx1, fz1] = ap.field, [px0, pz0, px1, pz1] = ap.terminal, [yx0, yz0, yx1, yz1] = ap.yard;
+      R(fx0, fz0, fx1, fz1, '#8e9096'); R(yx0, yz0, yx1, yz1, '#7a6a5a'); R(px0, pz0, px1, pz1, '#cfe6f0');
+      const ring = (p, r, col) => { const [a, b] = P(p[0], p[2]); x.strokeStyle = col; x.lineWidth = 1.5; x.beginPath(); x.arc(a, b, Math.max(1.5, r / SIZE * S), 0, 7); x.stroke(); };
+      for (const p of ap.pads) ring(p, ap.padR, '#1ad8ff');
+      for (const p of ap.heavy) ring(p, ap.heavyR, '#ffae2f');
       x.fillStyle = '#1ad8ff'; x.font = '700 11px Rajdhani, sans-serif'; x.textAlign = 'center';
-      const [lx, ly] = toPx(AIRPORT.x - 60, AIRPORT.z + 60); x.fillText('SPACEPORT', lx, ly + 22);
+      const [lx, ly] = P(-60, 60); x.fillText('SPACEPORT', lx, ly + 26);
     }
     x.fillStyle = '#e8e2d4'; x.font = '600 11px Rajdhani, sans-serif'; x.textAlign = 'center';
     for (const v of VILLAGES) { const [a, b] = toPx(v.pos[0], v.pos[1]); x.beginPath(); x.arc(a, b, 5, 0, 7); x.fill(); x.fillText(v.name.toUpperCase(), a, b - 9); }
@@ -829,12 +903,12 @@ export class EarthWorld extends World {
 
   // at the foot of the jumpship's ramp on pad 1, facing the terminal
   spawn() {
-    const s = (this.airport && this.airport.spawn) || [0, .07, -12.5];
-    return { pos: new THREE.Vector3(AIRPORT.x + s[0], s[1], AIRPORT.z + s[2]), yaw: this.airport ? this.airport.spawnYaw : Math.PI };
+    const s = (this.spaceport && this.spaceport.spawn) || [0, .07, -12.5];
+    return { pos: new THREE.Vector3(SPACEPORT.x + s[0], s[1], SPACEPORT.z + s[2]), yaw: this.spaceport ? this.spaceport.spawnYaw : Math.PI };
   }
 
   markers() {
-    const m = [{ pos: this.padPos || new THREE.Vector3(AIRPORT.x, 0, AIRPORT.z), icon: '▲', color: '#1ad8ff' }, { pos: this.vendorPos || new THREE.Vector3(AIRPORT.x, 0, AIRPORT.z - 50), icon: '◉', color: '#7dffb0' }];
+    const m = [{ pos: this.padPos || new THREE.Vector3(SPACEPORT.x, 0, SPACEPORT.z), icon: '▲', color: '#1ad8ff' }, { pos: this.vendorPos || new THREE.Vector3(SPACEPORT.x, 0, SPACEPORT.z - 50), icon: '◉', color: '#7dffb0' }];
     for (const e of this.wanted.police) m.push({ pos: e.pos, icon: '●', color: '#ff4a3d' });
     return m;
   }
@@ -849,7 +923,7 @@ export class EarthWorld extends World {
     this.sun.target.position.set(Math.round(c.x / 4) * 4, c.y, Math.round(c.z / 4) * 4);
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir, 300);
     this.water.update(dt);
-    this.updateAirport(dt);
+    this.updateSpaceport(dt);
     for (const t of this.skyway) {
       t.t += t.speed * t.dir * dt;
       if (t.t > CITY_EDGE) t.t = -CITY_EDGE; if (t.t < -CITY_EDGE) t.t = CITY_EDGE;
@@ -860,6 +934,7 @@ export class EarthWorld extends World {
     this.population.update(dt);
     this.traffic.update(dt);
     this.wanted.update(dt);
+    if (this.flora) this.flora.update(g.camera, dt);
     if (this.vendor) this.vendor.update(dt);
     // district name in the HUD
     this.distT = (this.distT || 0) - dt;
