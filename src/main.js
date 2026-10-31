@@ -31,7 +31,7 @@ const MODELS = [
   ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
   ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
   ['vanthos', 'vanthos.glb', 8], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
-  ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]),
+  ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]), ['gun_attach', 'gun_attach.glb', 1],
 ];
 const TEXTURES = ['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss', 'facade_e', 'ribbon_e'];
 

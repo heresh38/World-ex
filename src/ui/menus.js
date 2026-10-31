@@ -1,6 +1,6 @@
 // Title screen, loading screen, pause menu and every ship-station panel (the old main menu, moved aboard).
 import { DESTINATIONS, ARCHETYPES, RARITY, PERKS, SLOT_NAMES, SHADERS, ARMOR_COLORS, GLOW_COLORS, PAINTS, TIPS,
-  SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS, ARMOR_SLOT, armorPiece } from '../game/data.js';
+  SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS, ARMOR_SLOT, armorPiece, SIGHTS, sightOptions, weaponSight } from '../game/data.js';
 import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter } from '../game/state.js';
 
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -345,6 +345,8 @@ export class Menus {
         <button class="btn pri" data-act="upgrade" ${sv.credits < cost.cr || sv.alloy < cost.al || sel.power >= cap ? 'disabled' : ''}>Infuse +5 power · ${cost.cr} CR · ${cost.al} alloy</button>
         <button class="btn" data-act="dismantle" ${eq ? 'disabled' : ''}>Dismantle (+${2 + sel.rarity * 3} alloy)</button></div>
       ${sel.power >= cap ? `<p class="guide">Infusion cap reached (${cap}). Raise your level or power to push further.</p>` : ''}
+      ${sightOptions(sel.arch).length > 1 ? `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px">SIGHT</div>
+      <div class="row" style="margin:8px 0 14px">${sightOptions(sel.arch).map(id => `<button class="btn ${weaponSight(sel) === id ? 'pri' : ''}" data-act="sight" data-v="${id}">${SIGHTS[id].name}</button>`).join('')}</div>` : ''}
       <div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px">SHADER</div>
       <div class="swatches">${SHADERS.map(s => `<div class="sw ${sel.shader === s.id ? 'on' : ''}" title="${s.name}" style="background:${s.body}" data-act="shader" data-v="${s.id}"></div>`).join('')}</div>
       <div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px;margin:10px 0">INVENTORY (${sv.inventory.length})</div>
@@ -451,6 +453,7 @@ export class Menus {
         sv.alloy += 2 + sv.inventory[i].rarity * 3; sv.inventory.splice(i, 1); this.sel = null; g.audio.ui('back'); g.onLoadoutChanged(); break;
       }
       case 'shader': { const w = sv.inventory.find(x => x.uid === this.sel); if (w) { w.shader = v; g.weapons.refreshModel(); g.onLoadoutChanged(); } break; }
+      case 'sight': { const w = sv.inventory.find(x => x.uid === this.sel); if (w) { w.sight = v; g.weapons.refreshModel(); g.onLoadoutChanged(); } break; }
       case 'carmodel': sv.car.model = v; g.world.refreshCar && g.world.refreshCar(); break;
       case 'paint': sv.car.paint = v; g.world.refreshCar && g.world.refreshCar(); break;
       case 'buy': {

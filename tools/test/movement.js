@@ -41,7 +41,8 @@ fs.mkdirSync(OUT, { recursive: true });
   // a 1.6 m crate wall in front: jump into it and mantle
   const crate = await ev(() => { const g = window.__game, P = g.player, c = g.world.collision; const x = P.pos.x, z = P.pos.z + 3, y = P.pos.y;
     c.add([x - 2, y, z, x + 2, y + 1.6, z + 2], 'test'); P.vel.set(0, 0, 0); P.crouch = false; P.slideT = 0; return y + 1.6; });
-  const cl = await sim(['KeyW'], 1.6, ['Space']);
+  await sim(['KeyW'], .5);
+  const cl = await sim(['KeyW'], 1.4, ['Space']);
   console.log('climb', JSON.stringify(cl), 'top', crate, cl.climbed && Math.abs(cl.pos[1] - crate) < .1 ? 'OK' : 'FAIL');
   // sit on the nearest bench
   const seat = await ev(() => { const g = window.__game, P = g.player; const s = g.world.interactables.filter(i => i.id === 'seat').sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];

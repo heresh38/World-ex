@@ -43,7 +43,7 @@ export class Viewmodel {
   }
 
   setWeapon(w) {
-    const uid = w ? w.uid + ':' + w.shader : null;
+    const uid = w ? w.uid + ':' + w.shader + ':' + (w.sight || '') : null;   // a new optic remounts the gun
     if (uid === this.uid) return;
     this.uid = uid;
     if (this.gun) { this.gun.removeFromParent(); this.gun = null; }
