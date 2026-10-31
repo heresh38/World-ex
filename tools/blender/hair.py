@@ -242,6 +242,8 @@ class Groom:
         return n * (k - 1) * 4
 
     def card_object(self, name):
+        if not self.V:
+            return None
         V = np.concatenate(self.V); Q = np.concatenate(self.Q); UV = np.concatenate(self.UV); N = np.concatenate(self.N)
         o = PL.to_object(name, V + self.ho, Q)
         o.data.materials.append(self.cards_mat)
@@ -275,7 +277,8 @@ class Groom:
         kit = self.kit
         cards = self.card_object('hair_cards')
         w = weights or (lambda V: {'head': np.ones(len(V), F32)})
-        PL.apply_weights(cards, w(PL.verts(cards)))
+        if cards is not None:
+            PL.apply_weights(cards, w(PL.verts(cards)))
         objs = [o for o in parts if o is not None] + [cards]
         o = kit.add('hair', item, label, objs)
         self.morphs(o)

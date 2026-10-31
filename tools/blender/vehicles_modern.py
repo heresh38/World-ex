@@ -289,7 +289,7 @@ CARS = {
         w=[(0, .8), (.06, .9), (.3, .96), (.8, .975), (4.7, .975), (4.92, .95), (5.0, .9)],
         cowl=1.06, atop=1.92, ctop=4.84, rear=4.94, roof=2.04, belt=1.17, tumble=.1,
         side_glass=[(1.4, 2.42)], blackB=(2.42, 2.54), doors=[1.12, 2.48, 3.4, 4.86],
-        floor=.56, hipup=.26, reach=1.1, xs=.4, rear_seat=0, cargo=True, partition=True,
+        floor=.56, hipup=.26, reach=1.1, xs=.4, rear_seat=0, cargo=True, partition=True, rear_win=(1.5, 1.9, .04),
         hood=[.3, 1.0], plate_z=.52, head_z=(.84, .98), tail_z=(.9, 1.4), clad=.16,
         theme=dict(insert='#3e4146', leather='#26272a', dash='#2a2b2e', lower='#1b1c1e', accent='#2a2b2e', metal=False),
         badge=0, paint='#e9e9e6'),
@@ -503,8 +503,9 @@ class Car:
                     return 'trim_gloss'          # ceramic frit band along the A-pillars
                 return 'glass_front' if not self.lo else 'glass_lo'
             if s > c['ctop'] + .02:
-                if c.get('bed') and False:
-                    return 'car_paint'
+                rw_ = c.get('rear_win')            # vans: panel doors with two small windows
+                if rw_ and not (rw_[0] < cc.z < rw_[1] and abs(cc.x) > rw_[2] and abs(cc.x) < self.w(s) - .25):
+                    return 'car_paint' if abs(cc.x) > .012 else 'trim_gloss'
                 return 'glass_rear' if not self.lo else 'glass_lo'
             return 'car_paint'
         mb.quad_grid(rows, mat)
