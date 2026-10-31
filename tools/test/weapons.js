@@ -134,7 +134,7 @@ fs.mkdirSync(OUT, { recursive: true });
       for (const k of ['pos', 'col', 'size', 'bPos', 'bCol', 'bSize']) if (g.fx[k] && !Array.from(g.fx[k]).every(fin)) nan.push('fx.' + k);
       const fxo = g.fx, stains = fxo.slimeLife ? Array.from(fxo.slimeLife).filter(v => v > 0).length : 0;
       return { dist, hp0: Math.round(hp0), hp1: Math.round(e.hp), alive: e.alive, damage: Math.round(hp0 - e.hp), maxRounds, maxGoo,
-        stains, afflicted: g.weapons.afflicted.size, nan: nan.slice(0, 8), goo0: window.__goo0 || null, fade: document.getElementById('fade').classList.contains('on'), dead: !!pl.dead, hp: Math.round(pl.health), drop: A.grav ? 'gravity' : 'straight', vel: A.vel };
+        stains, afflicted: g.weapons.afflicted.size, gooLeft: g.weapons.goo.length, nan: nan.slice(0, 8), goo0: window.__goo0 || null, fade: document.getElementById('fade').classList.contains('on'), dead: !!pl.dead, hp: Math.round(pl.health), drop: A.grav ? 'gravity' : 'straight', vel: A.vel };
     }, arch);
     const ctxState = () => ev(() => ({ ...window.__ctx, lostNow: window.__game.renderer.r.getContext().isContextLost() }));
     let ctx = await ctxState();

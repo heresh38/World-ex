@@ -15,6 +15,12 @@ fs.mkdirSync(OUT, { recursive: true });
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 300), (e.stack || '').split('\n').slice(0, 4).join(' | ')); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 300)); } });
   await p.addInitScript(() => { localStorage.clear(); });
+  // a model another workstream is rebuilding may be missing from the working tree: serve the committed copy
+  await p.route('**/assets/models/*.glb', async r => {
+    const f = 'assets/models/' + r.request().url().split('/').pop();
+    if (fs.existsSync(f)) return r.continue();
+    try { const buf = require('child_process').execSync('git show HEAD:' + f, { maxBuffer: 1 << 28 }); return r.fulfill({ body: buf, contentType: 'model/gltf-binary' }); } catch (e) { return r.continue(); }
+  });
   // crowd LOD bodies may not be built yet in a fresh checkout: stand in the full player bodies for this test only
   for (const sex of ['female', 'male']) {
     if (!fs.existsSync(`assets/models/player_${sex}_npc.glb`)) await p.route(`**/player_${sex}_npc.glb`, r => r.fulfill({ path: `assets/models/player_${sex}.glb`, contentType: 'model/gltf-binary' }));
