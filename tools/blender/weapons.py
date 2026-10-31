@@ -260,6 +260,93 @@ def rocket():
     finish('gun_rocket', P, (0, -.64, .13), (0, -.28, -.02), (0, .1, sz))
 
 
+# -------------------------------------------------------------- Orion Arms line (owner's weapon sheet)
+def smg():
+    """Compact SMG: boxy upper with glow seams, vertical foregrip, folding skeleton stock, red dot."""
+    bl.reset(); M = mats(); P = []
+    P += grip(M, ang=.22, h=.11)
+    P += [B('upper', (.05, .26, .055), (0, -.06, .07), M['body'], .01),
+          B('lower', (.046, .16, .045), (0, -.03, .028), M['metal'], .008),
+          B('shroud', (.056, .12, .05), (0, -.24, .066), M['metal'], .01),
+          B('seam', (.002, .2, .01), (.026, -.08, .072), M['glow'], 0), B('seam2', (.002, .2, .01), (-.026, -.08, .072), M['glow'], 0),
+          B('mag', (.03, .05, .17), (0, -.1, -.06), M['dark'], .006, rot=(-.08, 0, 0)),
+          B('magglow', (.032, .01, .1), (0, -.074, -.05), M['glow'], 0, rot=(-.08, 0, 0)),
+          B('vgrip', (.026, .03, .085), (0, -.25, -.012), M['grip'], .008),
+          B('stockbar', (.012, .2, .012), (.016, .17, .07), M['dark'], .003), B('stockbar2', (.012, .2, .012), (-.016, .17, .03), M['dark'], .003),
+          B('stockpad', (.04, .025, .075), (0, .27, .05), M['grip'], .006),
+          barrel('barrel', .011, .06, -.3, .066, M['dark']), barrel('can', .019, .11, -.36, .066, M['metal'], 14),
+          B('cocking', (.03, .012, .012), (0, .02, .1), M['trim'], .003)]
+    P += vents(M, -.19, -.29, .07, .029, 4) + vents(M, -.19, -.29, .07, -.029, 4)
+    P += rail(M, .06, -.28, .1, .022)
+    sz = .135
+    P += red_dot(M, -.04, sz)
+    finish('gun_smg', P, (0, -.48, .066), (0, -.25, -.03), (0, .08, sz))
+
+
+def sidearm():
+    """Sidearm: slide with glow channel, accessory rail, tritium sights, ammo readout."""
+    bl.reset(); M = mats(); P = []
+    P += grip(M, ang=.3, h=.11)
+    P += [B('frame', (.032, .16, .03), (0, -.07, .03), M['metal'], .008),
+          B('slide', (.036, .2, .036), (0, -.07, .07), M['body'], .009),
+          B('slidecut', (.038, .05, .012), (0, .0, .083), M['dark'], .002),
+          B('glow', (.002, .12, .008), (.0185, -.1, .072), M['glow'], 0), B('glow2', (.002, .12, .008), (-.0185, -.1, .072), M['glow'], 0),
+          B('readout', (.02, .014, .012), (0, .035, .052), M['glow'], .002),
+          barrel('barrel', .009, .03, -.17, .07, M['dark']),
+          B('railbox', (.028, .05, .014), (0, -.13, .01), M['dark'], .004)]
+    for i in range(5):
+        P.append(B('serr', (.038, .004, .03), (0, .015 + i * .008, .07), M['dark'], 0))
+    sz = .1
+    P += [B('rearL', (.008, .01, .014), (.008, .025, sz - .004), M['dark'], .002), B('rearR', (.008, .01, .014), (-.008, .025, sz - .004), M['dark'], .002),
+          bl.sphere('rdotL', .002, (.008, .019, sz), M['green'], 6, 4), bl.sphere('rdotR', .002, (-.008, .019, sz), M['green'], 6, 4)]
+    P += iron_front(M, -.155, sz, ears=False)
+    finish('gun_sidearm', P, (0, -.2, .07), (0, -.02, -.02), (0, .09, sz))
+
+
+def heavy_mg():
+    """Rotary heavy machine gun: barrel cluster in a shroud, drum magazine, carry handle and rear grip."""
+    bl.reset(); M = mats(); P = []
+    P += grip(M, ang=.2, h=.12)
+    P += [B('housing', (.1, .32, .12), (0, -.08, .06), M['body'], .02),
+          B('housingglow', (.002, .2, .02), (.051, -.08, .07), M['glow'], 0), B('housingglow2', (.002, .2, .02), (-.051, -.08, .07), M['glow'], 0),
+          barrel('motor', .05, .08, -.24, .07, M['metal'], 20),
+          barrel('frontring', .056, .03, -.52, .07, M['metal'], 20), barrel('midring', .05, .02, -.38, .07, M['dark'], 20)]
+    for i in range(6):
+        a = i * math.pi / 3
+        P.append(barrel('rbarrel', .011, .36, -.28, .07 + math.sin(a) * .03, M['dark'], 10, x=math.cos(a) * .03))
+    P += [bl.cyl('drum', .09, .07, (.0, -.06, -.07), M['metal'], 28, rot=(0, R90, 0)),
+          bl.cyl('drumcap', .06, .074, (.0, -.06, -.07), M['trim'], 20, rot=(0, R90, 0)),
+          bl.cyl('drumglow', .092, .01, (.0, -.06, -.07), M['glow'], 28, rot=(0, R90, 0)),
+          B('carry', (.016, .2, .016), (0, -.12, .17), M['dark'], .004), B('carryL', (.016, .016, .05), (0, -.03, .145), M['dark'], .003),
+          B('carryF', (.016, .016, .05), (0, -.21, .145), M['dark'], .003),
+          B('stock', (.06, .14, .09), (0, .16, .05), M['metal'], .015), B('butt', (.064, .03, .11), (0, .245, .045), M['grip'], .008),
+          B('fgrip', (.03, .045, .1), (0, -.3, -.02), M['grip'], .008)]
+    sz = .21
+    P += red_dot(M, .0, sz)
+    finish('gun_hmg', P, (0, -.66, .07), (0, -.3, -.04), (0, .1, sz))
+
+
+def energy_rifle():
+    """Exotic energy rifle: tapered shell with stacked focusing rings around a glowing core."""
+    bl.reset(); M = mats(); P = []
+    P += grip(M, ang=.25, h=.12)
+    P += [bl.cyl('shellrear', .06, .2, (0, .02, .07), M['body'], 20, rot=(R90, 0, 0), r2=.045),
+          bl.cyl('shellfront', .045, .26, (0, -.21, .07), M['body'], 20, rot=(R90, 0, 0), r2=.028),
+          barrel('core', .02, .38, .0, .07, M['glow'], 16)]
+    for i, (y, r) in enumerate(((-.06, .07), (-.14, .062), (-.22, .054), (-.3, .046))):
+        P.append(bl.torus('ring', r, .007, (0, y, .07), M['trim'] if i % 2 else M['metal'], rot=(R90, 0, 0), maj=28, mn=8))
+    P += [bl.cyl('emitter', .03, .04, (0, -.38, .07), M['metal'], 18, rot=(R90, 0, 0), r2=.02),
+          barrel('emitglow', .014, .02, -.4, .07, M['glow'], 14),
+          B('fin', (.006, .26, .05), (0, -.18, .125), M['body'], .004),
+          B('stock', (.044, .17, .07), (0, .2, .045), M['metal'], .015), B('butt', (.048, .03, .09), (0, .29, .04), M['grip'], .008),
+          B('cell', (.05, .06, .05), (0, -.06, -.01), M['glow'], .01),
+          B('fgrip', (.03, .04, .07), (0, -.22, .0), M['grip'], .008)]
+    sz = .165
+    P += [B('sightrail', (.02, .1, .02), (0, .0, .13), M['dark'], .004)]
+    P += red_dot(M, -.01, sz)
+    finish('gun_energy', P, (0, -.42, .07), (0, -.22, -.03), (0, .09, sz))
+
+
 def make_paint():
     """Base paint texture for gun_body: subtle machined panels (the shader colour multiplies it)."""
     import numpy as np
@@ -276,5 +363,5 @@ def make_paint():
 
 bl.reset()
 make_paint()
-for f in (auto_rifle, hand_cannon, scout_rifle, shotgun, sniper, rocket, pulse_rifle):
+for f in (auto_rifle, hand_cannon, scout_rifle, shotgun, sniper, rocket, pulse_rifle, smg, sidearm, heavy_mg, energy_rifle):
     f()

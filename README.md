@@ -85,6 +85,7 @@ built in the **wardrobe pod**, where the camera moves close on the face for face
   nose size). These are glTF morph targets, built as smooth warps in `tools/blender/face.py`.
 * **Hair**: styles (female: high ponytail with lilac braid, bob, pixie; male: side part, buzz, swept back, or shaved) and colour.
 * **Clothing**, one piece per slot with a colour tint each: headwear, shirt, vest and harness, coat, gloves, pants and shoes.
+  A base layer of underwear is always worn (it can be recoloured, not removed) and hides itself under clothing that covers it.
   The defaults are the full sets from the owner's references in `art/reference/`. The female wears the ribbed
   high-neck top, ribbed leggings with knee guards, the navy-and-gold circuit coat, an olive harness, armoured gauntlets and
   tech boots. The male wears the black undersuit, the vanguard plate (chest, abdomen bands, layered pauldrons and a core light),
@@ -92,7 +93,7 @@ built in the **wardrobe pod**, where the camera moves close on the face for face
   New pieces are added in `tools/blender/wardrobe.py`.
 
 ## Loot
-Weapons: auto rifle, pulse rifle, scout rifle, hand cannon, shotgun, sniper and rocket launcher. Rarity runs Common, Uncommon, Rare,
+Weapons: auto rifle, pulse rifle, scout rifle, hand cannon, shotgun, sniper and rocket launcher, plus the Orion Arms line from the owner's weapon sheet: submachine gun, sidearm, rotary heavy machine gun and an exotic energy rifle. Rarity runs Common, Uncommon, Rare,
 Legendary, Exotic, with random perks and stat rolls. Enemies drop data cores (coloured by rarity, with a light beam for Rare and up),
 ammo and credits. Power = the average of your equipped weapons. Progress saves to `localStorage`.
 

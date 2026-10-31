@@ -14,6 +14,8 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - `bash tools/blender/build_all.sh` rebuilds everything into `assets/`. In this container Blender is the `bpy` pip
   module behind a `/usr/local/bin/blender` shim; a normal Blender install works the same way.
 - `bl.py` helpers (materials, primitives, loft, export). Blender is Z-up, -Y forward → glTF/three is Y-up, +Z forward.
+- Weapons (`weapons.py`): auto, pulse, scout, hand cannon, shotgun, sniper, rocket, plus the Orion Arms line from the
+  owner's weapon sheet: SMG, sidearm, heavy machine gun (rotary) and exotic energy rifle. Stats are in `ARCHETYPES` (`data.js`).
 - Material **names are an API**: the game recolours by name (`armor_primary`, `armor_secondary`, `glow`, `visor`,
   `gun_body`, `gun_glow`, `car_paint`, `hover_glow`, `facade`, `ribbon`, `rock`, `core_glow`, `ammo_glow`, glass names).
 - Bone names lose dots in three (`hand.R` → `handR`). Characters share one rig and 9 clips
@@ -26,7 +28,8 @@ Players are built by `players.py` (base body, regions `B_*`, eyes, brows, lashes
 `wardrobe.py` (hair and clothing as `C_<slot>__<item>`). The anatomy is signed-distance fields in `anatomy.py`,
 meshed by `sdf.py` (Surface Nets + narrow band). Meta (wardrobe items with the regions they hide, defaults, morph groups)
 lives in the armature's `worldex` extra. `Avatar.applyCharacter(save.character)` applies the look, using character v3:
-skin, eyes, hairColor, brow, face presets, sliders, wear per slot and tints per slot. Material names are an API for runtime
+skin, eyes, hairColor, brow, face presets, sliders, wear per slot and tints per slot. The underwear slots (`undertop`,
+`underbottom`) are `locked` (never removable) and use `coveredBy` to hide under clothing, so the body is never shown naked. Material names are an API for runtime
 tints: `skin`, `eye_iris`, `hair`, `brow`, `cloth_<slot>`, `armor_primary__<slot>`, `glow`. Run with `-- female|male --fast`
 for quick checks; `sdfview.py` previews a field without Blender. `refs.py` cuts fabric swatches from `art/reference`
 (owner's art, allowed). `civilians.py` builds the pedestrians with `npc_kit.py` (tinted by prefix skin/hair/shirt/pants/shoes).
@@ -34,7 +37,12 @@ for quick checks; `sdfview.py` previews a field without Blender. `refs.py` cuts 
 and the upper-arm twist small for skinned shoulders.
 
 ## Earth (free roam)
-`src/worlds/meridian/`: `layout.js` (heightmap, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
+The city follows the owner's river-city art (`art/reference/city_river.jpg`). A river (`RIVER_Z`, `riverZ()` in
+`layout.js`, carved below sea level) runs through block row -3 with a bridge (`BLD_bridge`) on every north-south street
+and causeway bridges where highways cross it. Downtown has towers; the middle ring has green-roof kit (`BLD_8`–`BLD_13`
+in `city.py`); the outer ring has suburbs (rural houses). There are parks with `BLD_fountain`, a central `BLD_rotunda`
+plaza, and glowing cyan kerb strips.
+`src/worlds/meridian/`: `layout.js` (heightmap, river, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
 `traffic.js` (lane cars, hijack), `wanted.js` (stars + security drones). Assets: `rural.py` (RU_* kit). No missions on Earth.
 
 ## Camera

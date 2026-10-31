@@ -6,6 +6,14 @@ export const SIZE = 2800, HALF = SIZE / 2, CELL = 4, N = SIZE / CELL + 1;
 export const BLOCK = 92, ROAD = 18, CITY_N = 4, PITCH = BLOCK + ROAD;
 export const CITY_EDGE = (CITY_N + .5) * PITCH;     // 495 m: the outer ring road
 export const SEA = -3;
+// The river (owner's city art): straight through the city's north side in block row -3, winding to the sea outside.
+export const RIVER_Z = -3 * PITCH, RIVER_W = 33, RIVER_BANK = 4;
+export function riverZ(x) {
+  const o = Math.abs(x) - (CITY_EDGE + 30);
+  if (o <= 0) return RIVER_Z;
+  const t = Math.min(1, o / 120);
+  return RIVER_Z + Math.sign(x) * 70 * Math.sin(o / 170) * t * t * (3 - 2 * t);
+}
 
 function hash2(x, z, s) { let h = (Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(s, 982451653)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
 function vnoise(x, z, s) {
@@ -117,7 +125,29 @@ export class MeridianMap {
     for (let k = 0; k < N * N; k++) if (this.flatW[k] > 0) this.h[k] += (this.flatH[k] - this.h[k]) * this.flatW[k];
     // re-sample road heights from the final terrain so ribbons hug the ground
     for (const r of this.roads) for (const p of r.pts) p.y = this.height(p.x, p.z);
+    this.carveRiver();
     this.buildLanes();
+  }
+
+  // Cut the river bed below sea level (the bay's water fills it); highways cross on causeways.
+  carveRiver() {
+    const reach = RIVER_W + RIVER_BANK;
+    this.riverCrossings = [];
+    for (const r of this.roads) {
+      for (let i = 1; i < r.pts.length; i++) {
+        const a = r.pts[i - 1], b = r.pts[i];
+        const da = a.z - riverZ(a.x), db = b.z - riverZ(b.x);
+        if (da * db <= 0) this.riverCrossings.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2, ang: Math.atan2(b.x - a.x, b.z - a.z) });
+      }
+    }
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const x = i * CELL - HALF, z = j * CELL - HALF, d = Math.abs(z - riverZ(x));
+      if (d > reach) continue;
+      if (this.riverCrossings.some(c => Math.hypot(c.x - x, c.z - z) < 14)) continue;
+      const k = this.idx(i, j), bed = SEA - 4.5 + 2 * (d / RIVER_W) ** 2;
+      const t = d < RIVER_W ? 0 : (d - RIVER_W) / RIVER_BANK;
+      this.h[k] = Math.min(this.h[k], bed + (this.h[k] - bed) * t * t);
+    }
   }
 
   sampleNatural(x, z) { return this.natural(x, z); }
@@ -194,7 +224,12 @@ export class MeridianMap {
   }
 
   district(x, z) {
-    if (Math.abs(x) < CITY_EDGE && Math.abs(z) < CITY_EDGE) return Math.hypot(x, z) < 200 ? 'Downtown' : 'New Meridian';
+    if (Math.abs(x) < CITY_EDGE && Math.abs(z) < CITY_EDGE) {
+      if (Math.abs(z - RIVER_Z) < 75) return 'Riverside';
+      if (Math.max(Math.abs(x), Math.abs(z)) > CITY_EDGE - PITCH) return 'Meridian Heights';
+      return Math.hypot(x, z) < 200 ? 'Downtown' : 'New Meridian';
+    }
+    if (Math.abs(z - riverZ(x)) < RIVER_W) return 'Meridian River';
     for (const v of VILLAGES) if (Math.hypot(x - v.pos[0], z - v.pos[1]) < v.r + 80) return v.name;
     for (const f of FARMS) if (Math.abs(x - f.pos[0]) < f.w / 2 + 60 && Math.abs(z - f.pos[1]) < f.d / 2 + 60) return f.name;
     if (this.height(x, z) < SEA + .5) return 'Meridian Bay';

@@ -15,6 +15,10 @@ export const ARCHETYPES = {
   handcannon: { name: 'Hand Cannon', model: 'gun_handcannon', sound: 'handcannon', dmg: 58, rpm: 140, mag: 11, reserve: 110, reload: 1.8, range: 30, spread: .5, crit: 2.0, auto: false, zoom: 1.3, slot: 1 },
   shotgun: { name: 'Shotgun', model: 'gun_shotgun', sound: 'shotgun', dmg: 22, pellets: 8, rpm: 70, mag: 6, reserve: 40, reload: 2.6, range: 10, spread: 5.5, crit: 1.2, auto: false, zoom: 1.15, slot: 1 },
   sniper: { name: 'Sniper Rifle', model: 'gun_sniper', sound: 'sniper', dmg: 180, rpm: 60, mag: 4, reserve: 24, reload: 2.8, range: 140, spread: .05, crit: 2.6, auto: false, zoom: 4.5, slot: 1 },
+  smg: { name: 'Submachine Gun', model: 'gun_smg', sound: 'smg', dmg: 11, rpm: 900, mag: 42, reserve: 420, reload: 1.7, range: 20, spread: 1.7, crit: 1.5, auto: true, zoom: 1.25, slot: 0 },
+  sidearm: { name: 'Sidearm', model: 'gun_sidearm', sound: 'sidearm', dmg: 24, rpm: 400, mag: 16, reserve: 160, reload: 1.3, range: 24, spread: .8, crit: 1.7, auto: false, zoom: 1.2, slot: 1 },
+  energy: { name: 'Energy Rifle', model: 'gun_energy', sound: 'energy', dmg: 34, pellets: 6, rpm: 80, mag: 5, reserve: 40, reload: 2.3, range: 40, spread: 1.4, crit: 1.3, auto: false, zoom: 1.6, slot: 1 },
+  hmg: { name: 'Heavy Machine Gun', model: 'gun_hmg', sound: 'hmg', dmg: 21, rpm: 1100, mag: 150, reserve: 450, reload: 3.6, range: 38, spread: 2.0, crit: 1.4, auto: true, zoom: 1.3, slot: 2 },
   rocket: { name: 'Rocket Launcher', model: 'gun_rocket', sound: 'rocket', dmg: 420, rpm: 40, mag: 1, reserve: 6, reload: 2.4, range: 200, spread: 0, crit: 1.0, auto: false, zoom: 1.5, slot: 2, projectile: true, splash: 6 },
 };
 export const SLOT_NAMES = ['Primary', 'Special', 'Heavy'];
@@ -33,7 +37,8 @@ export const PERKS = {
 
 const PREFIX = ['Ashen', 'Gilded', 'Silent', 'Iron', 'Hollow', 'Vesper', 'Last', 'Bright', 'Feral', 'Distant', 'Saint', 'Ninth', 'Grey', 'Ember', 'Cold', 'Long', 'Red', 'Sable', 'Quiet', 'True'];
 const NOUN = ['Oath', 'Lantern', 'Verdict', 'Heron', 'Requiem', 'Anvil', 'Meridian', 'Covenant', 'Thorn', 'Halcyon', 'Tide', 'Cinder', 'Harbinger', 'Psalm', 'Warden', 'Vigil', 'Gambit', 'Spire', 'Nocturne', 'Arbiter'];
-export const EXOTIC_NAMES = { auto: 'Sunforge Litany', pulse: 'Ninefold Choir', scout: 'Farsight Herald', handcannon: 'The Undertaker', shotgun: 'Gravedigger’s Hymn', sniper: 'Pale Horizon', rocket: 'Starfall Engine' };
+export const EXOTIC_NAMES = { auto: 'Sunforge Litany', pulse: 'Ninefold Choir', scout: 'Farsight Herald', handcannon: 'The Undertaker', shotgun: 'Gravedigger’s Hymn', sniper: 'Pale Horizon', rocket: 'Starfall Engine',
+  smg: 'Vandal-X9', sidearm: 'Helios', energy: 'Eclipse', hmg: 'Atlas' };
 
 export function weaponName(arch, rarity, rnd) {
   if (rarity === 4) return EXOTIC_NAMES[arch];
@@ -52,8 +57,8 @@ export const ARMOR_COLORS = ['#e8e2d4', '#3a3f47', '#1b2440', '#8c1d26', '#2f6b5
 export const SKIN_TONES = ['#f6d5c2', '#eec1a2', '#e2b394', '#d39b78', '#c08560', '#a86d4a', '#8d5638', '#6e4029', '#55301e', '#c9b6c9', '#9fb4c8', '#b7c9a8'];
 export const EYE_COLORS = ['#6f8fae', '#4f7a9e', '#7aa6c2', '#6b8a5a', '#8aa05a', '#7a5a3a', '#4a3424', '#9a8a6a', '#8a8f99', '#c27a2a', '#b46cff', '#ff4a3d', '#e8f4ff', '#ffe066'];
 export const HAIR_COLORS = ['#141110', '#2a211c', '#3b2a22', '#5a3c28', '#7a5434', '#a8794c', '#d6b07a', '#e8d6b0', '#9a9a9a', '#e8e8e8', '#8c1d26', '#c4553a', '#b9a3e8', '#3a6fd8', '#2f8a6a', '#e86aa8'];
-export const SLOT_ORDER = ['head', 'top', 'vest', 'outer', 'dress', 'hands', 'legs', 'feet'];
-export const SLOT_LABELS = { hair: 'Hair', head: 'Headwear', top: 'Shirt', vest: 'Vest & harness', outer: 'Coat', dress: 'Dress', hands: 'Gloves', legs: 'Pants', feet: 'Shoes' };
+export const SLOT_ORDER = ['head', 'top', 'vest', 'outer', 'dress', 'hands', 'legs', 'feet', 'undertop', 'underbottom'];
+export const SLOT_LABELS = { hair: 'Hair', head: 'Headwear', top: 'Shirt', vest: 'Vest & harness', outer: 'Coat', dress: 'Dress', hands: 'Gloves', legs: 'Pants', feet: 'Shoes', undertop: 'Underwear top', underbottom: 'Underwear' };
 export const FACE_LABELS = { nose: 'Nose', mouth: 'Mouth', eyes: 'Eye shape', ears: 'Ears' };
 export const SLIDER_LABELS = { jaw_width: 'Jaw width', chin_length: 'Chin length', chin_width: 'Chin width', cheekbones: 'Cheekbones',
   brow_height: 'Brow height', eye_spacing: 'Eye spacing', face_width: 'Face width', nose_size: 'Nose size' };

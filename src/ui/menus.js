@@ -188,8 +188,10 @@ export class Menus {
       for (const slot of SLOT_ORDER) {
         const items = Object.entries(av.wardrobe[slot] || {}).map(([id, d]) => [id, d.label]);
         const cur = (c.wear || {})[slot] || 'none';
+        if (!items.length && slot.startsWith('under')) continue;
         body += label((SLOT_LABELS[slot] || slot).toUpperCase());
-        if (!items.length) { body += `<p class="guide" style="margin:6px 0 12px">No ${(SLOT_LABELS[slot] || slot).toLowerCase()} yet — more pieces are coming.</p>`; continue; }
+        if (!items.length) { if (!slot.startsWith('under')) body += `<p class="guide" style="margin:6px 0 12px">No ${(SLOT_LABELS[slot] || slot).toLowerCase()} yet — more pieces are coming.</p>`; continue; }
+        if (av.isLocked(slot)) { body += `<p class="guide" style="margin:6px 0 4px">Always worn — pick a colour.</p>`; body += swatches('tint', ARMOR_COLORS, (c.tints || {})[slot], slot, true); continue; }
         body += btns('wear', [['none', 'None'], ...items], cur, slot);
         if (cur !== 'none') body += swatches('tint', ARMOR_COLORS, (c.tints || {})[slot], slot, true);
       }
@@ -351,7 +353,7 @@ export class Menus {
       case 'haircol': sv.character.hairColor = v; g.player.applyLook(); break;
       case 'brow': sv.character.brow = +v; g.player.applyLook(); break;
       case 'face': (sv.character.face = sv.character.face || {})[t.dataset.k] = v || null; g.player.applyLook(); break;
-      case 'wear': (sv.character.wear = sv.character.wear || {})[t.dataset.k] = v; g.player.applyLook(); g.weapons.refreshModel(); break;
+      case 'wear': if (v === 'none' && g.player.avatar.isLocked(t.dataset.k)) break; (sv.character.wear = sv.character.wear || {})[t.dataset.k] = v; g.player.applyLook(); g.weapons.refreshModel(); break;
       case 'tint': (sv.character.tints = sv.character.tints || {})[t.dataset.k] = v || null; g.player.applyLook(); break;
       case 'color': sv.character[t.dataset.k] = v || null; g.player.applyLook(); break;
       case 'toggle': sv.settings[v] = !sv.settings[v]; g.applySettings(v); break;

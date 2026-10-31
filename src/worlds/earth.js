@@ -5,7 +5,7 @@ import { World } from './world.js';
 import { atmosphereSky } from './sky.js';
 import { mulberry } from '../game/state.js';
 import { Avatar } from '../game/avatar.js';
-import { MeridianMap, VILLAGES, FARMS, HALF, SIZE, SEA, BLOCK, ROAD, CITY_N as N, PITCH, CITY_EDGE, fbm } from './meridian/layout.js';
+import { MeridianMap, VILLAGES, FARMS, HALF, SIZE, SEA, BLOCK, ROAD, CITY_N as N, PITCH, CITY_EDGE, fbm, RIVER_Z, RIVER_W, RIVER_BANK } from './meridian/layout.js';
 import { Population } from './meridian/population.js';
 import { Traffic } from './meridian/traffic.js';
 import { Wanted } from './meridian/wanted.js';
@@ -159,91 +159,161 @@ export class EarthWorld extends World {
   }
 
   // ---------------------------------------------------------------- city
+  // Layout follows the owner's river-city art: towers downtown, green-roof mid-rises, a river with bridges on the north
+  // side, parks with fountains, a central rotunda plaza, glowing cyan kerb lines and house-lined streets at the edge.
   buildCity(rnd) {
     const g = this.g, A = g.assets, sc = this.scene, T = A.textures;
     const ext = CITY_EDGE * 2 + 30;
+    const rN = RIVER_Z - BLOCK / 2, rS = RIVER_Z + BLOCK / 2;            // river block row (bridges span it)
+    const qN = RIVER_Z - RIVER_W - RIVER_BANK, qS = RIVER_Z + RIVER_W + RIVER_BANK;   // quay edges
+    const inRiver = z => z > rN - 1 && z < rS + 1;
+    const plane = (w, d, x, z, mat, y = .01) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; sc.add(m); return m; };
     const conc = T.concrete.clone(); conc.repeat.set(ext / 6, ext / 6); conc.needsUpdate = true;
     const concN = T.concrete_n.clone(); concN.repeat.copy(conc.repeat); concN.needsUpdate = true;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(ext, ext), new THREE.MeshStandardMaterial({ map: conc, normalMap: concN, roughness: .9, color: 0xbab2a6 }));
-    ground.rotation.x = -Math.PI / 2; ground.position.y = .01; ground.receiveShadow = true; sc.add(ground);
+    const groundMat = new THREE.MeshStandardMaterial({ map: conc, normalMap: concN, roughness: .9, color: 0xbab2a6 });
+    // ground: north and south of the river (the quays stop at the water)
+    plane(ext, qN + ext / 2, 0, (-ext / 2 + qN) / 2, groundMat);
+    plane(ext, ext / 2 - qS, 0, (qS + ext / 2) / 2, groundMat);
     const asph = T.asphalt.clone(); asph.repeat.set(ext / 10, ROAD / 10); asph.needsUpdate = true;
     const asphN = T.asphalt_n.clone(); asphN.repeat.copy(asph.repeat); asphN.needsUpdate = true;
     this.roadMat = new THREE.MeshStandardMaterial({ map: asph, normalMap: asphN, roughness: .8, color: 0x9a9aa0, envMapIntensity: .4 });
     const lineMat = this.lineMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d0, roughness: .6 });
+    const glowMat = new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x40e0ff, emissiveIntensity: 1.15, roughness: .4 });
     const dashGeo = new THREE.PlaneGeometry(.3, 4); dashGeo.rotateX(-Math.PI / 2);
-    const dashes = [];
+    const glowGeo = new THREE.PlaneGeometry(.2, 10); glowGeo.rotateX(-Math.PI / 2);
+    const dashes = [], glows = [];
     for (let i = -N - 1; i <= N; i++) {
       const c = (i + .5) * PITCH;
-      for (const ax of [0, 1]) {
-        const r = new THREE.Mesh(new THREE.PlaneGeometry(ext, ROAD), this.roadMat);
-        r.rotation.x = -Math.PI / 2; if (ax) r.rotation.z = Math.PI / 2;
-        r.position.set(ax ? c : 0, .025, ax ? 0 : c); r.receiveShadow = true; sc.add(r);
-        for (let t = -ext / 2; t < ext / 2; t += 10) dashes.push(ax ? [c, t] : [t, c, 1]);
+      // east-west roads run the full width; north-south roads stop at the river where a bridge carries them
+      plane(ext, ROAD, 0, c, this.roadMat, .025);
+      const nsA = [-ext / 2, rN], nsB = [rS, ext / 2];
+      for (const [z0, z1] of [nsA, nsB]) { const m = plane(ROAD, z1 - z0, c, (z0 + z1) / 2, this.roadMat, .025); }
+      for (let t = -ext / 2; t < ext / 2; t += 10) {
+        dashes.push([t, c, 1]);
+        if (!inRiver(t)) dashes.push([c, t]);
+        for (const side of [-1, 1]) {
+          glows.push([t + 5, c + side * (ROAD / 2 - .7), 1]);
+          if (!inRiver(t)) glows.push([c + side * (ROAD / 2 - .7), t + 5]);
+        }
       }
     }
     const dm = new THREE.InstancedMesh(dashGeo, lineMat, dashes.length);
     dashes.forEach((d, i) => { _m.makeRotationY(d[2] ? Math.PI / 2 : 0); _m.setPosition(d[0], .04, d[1]); dm.setMatrixAt(i, _m); });
     dm.receiveShadow = true; sc.add(dm);
-    // towers
+    const gm = new THREE.InstancedMesh(glowGeo, glowMat, glows.length);
+    glows.forEach((d, i) => { _m.makeRotationY(d[2] ? Math.PI / 2 : 0); _m.setPosition(d[0], .045, d[1]); gm.setMatrixAt(i, _m); });
+    sc.add(gm);
+    // kit materials: window emission for glass, facade and brick
     const kit = A.models.city_buildings.scene;
-    const variants = [];
-    for (let i = 0; i < 8; i++) {
+    const variants = {};
+    const IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+    for (const i of IDS) {
       const root = kit.getObjectByName('BLD_' + i); root.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(root);
-      variants.push({ root, size: box.getSize(new THREE.Vector3()), mats: [] });
-      root.traverse(o => {
-        if (!o.isMesh) return; const mt = o.material;
-        if (mt.name === 'facade') { mt.color.set(0x8f969f); mt.roughness = .35; mt.metalness = .5; mt.emissiveMap = T.facade_e; mt.emissive = new THREE.Color(1, .85, .6); mt.emissiveIntensity = .9; mt.needsUpdate = true; }
-        if (mt.name === 'ribbon') { mt.color.set(0x9aa1aa); mt.roughness = .3; mt.metalness = .45; mt.emissiveMap = T.ribbon_e; mt.emissive = new THREE.Color(1, .9, .75); mt.emissiveIntensity = .75; mt.needsUpdate = true; }
-      });
+      variants[i] = { root, size: box.getSize(new THREE.Vector3()), mats: [] };
     }
-    const parks = [];
+    kit.traverse(o => {
+      if (!o.isMesh || o.material.userData.done) return; const mt = o.material; mt.userData.done = true;
+      if (mt.name === 'facade') { mt.color.set(0x8f969f); mt.roughness = .35; mt.metalness = .5; mt.emissiveMap = T.facade_e; mt.emissive = new THREE.Color(1, .85, .6); mt.emissiveIntensity = .9; mt.needsUpdate = true; }
+      if (mt.name === 'ribbon') { mt.color.set(0xa6b4c4); mt.roughness = .22; mt.metalness = .55; mt.emissiveMap = T.ribbon_e; mt.emissive = new THREE.Color(1, .9, .75); mt.emissiveIntensity = .75; mt.needsUpdate = true; }
+      if (mt.name === 'brick') { mt.color.set(0x9a5a44); mt.roughness = .8; mt.metalness = 0; mt.emissiveMap = T.facade_e; mt.emissive = new THREE.Color(1, .82, .55); mt.emissiveIntensity = .8; mt.needsUpdate = true; }
+    });
+    const place = (V, x, z, rot, s2, hs = 1) => {
+      const sw = rot % Math.PI ? V.size.z : V.size.x, sd = rot % Math.PI ? V.size.x : V.size.z;
+      V.mats.push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.setFromAxisAngle(Y, rot), _s.set(s2, s2 * hs, s2)));
+      this.collision.add([x - sw * s2 / 2, 0, z - sd * s2 / 2, x + sw * s2 / 2, V.size.y * s2 * hs, z + sd * s2 / 2], 'building');
+    };
+    const pick = list => list[Math.floor(rnd() * list.length)];
+    const parks = [], houses = [];
+    const PARKS = new Set(['2,-2', '-3,2', '-1,-2', '3,1', '-2,3']);
+    const PLAZA = '1,1';
     for (let bx = -N; bx <= N; bx++) for (let bz = -N; bz <= N; bz++) {
-      const cx = bx * PITCH, cz = bz * PITCH;
+      const cx = bx * PITCH, cz = bz * PITCH, key = bx + ',' + bz;
       if (bx === 0 && bz === 0) continue;                                     // spaceport plaza
-      if ((bx === 2 && bz === -2) || (bx === -3 && bz === 2)) { parks.push([cx, cz]); continue; }  // city parks
+      if (inRiver(cz)) continue;                                              // the river
+      if (key === PLAZA) { this.plaza = [cx, cz]; continue; }
+      if (PARKS.has(key)) { parks.push([cx, cz]); continue; }
       const edge = Math.max(Math.abs(bx), Math.abs(bz));
+      if (edge === N && rnd() < .75) { houses.push([cx, cz]); continue; }    // suburbs at the city edge
       const lots = (bx === 1 && bz === 0) || (bx === 0 && bz === 1) ? [[0, 0, true]] : [[-1, -1], [1, -1], [-1, 1], [1, 1]];
       for (const [ox, oz, big] of lots) {
-        if (!big && rnd() < .1 && edge > 1) continue;
-        let v = big ? 6 : (edge <= 1 ? [0, 5, 1, 2, 7] : edge <= 2 ? [3, 4, 7, 1, 2, 0] : [6, 4, 3, 7])[Math.floor(rnd() * (edge <= 1 ? 5 : edge <= 2 ? 6 : 4))];
-        if (v === 5 && variants[5].used) v = 0;
+        if (!big && rnd() < .08 && edge > 1) continue;
+        let v = big ? 6 : edge <= 1 ? pick([0, 5, 1, 2, 12, 12, 7]) : edge <= 2 ? pick([12, 8, 9, 10, 11, 4, 7, 3]) : pick([8, 9, 10, 11, 11, 13, 13, 6]);
+        if (v === 5 && variants[5].used) v = 12;
         variants[v].used = true;
         const V = variants[v], rot = Math.floor(rnd() * 4) * Math.PI / 2;
         const sw = rot % Math.PI ? V.size.z : V.size.x, sd = rot % Math.PI ? V.size.x : V.size.z;
         const lot = big ? BLOCK - 10 : BLOCK / 2 - 4;
         const s2 = Math.min(1, lot / Math.max(sw, sd)) * (big ? 1 : .92 + rnd() * .08);
-        const hs = big ? 1 : (edge >= 3 ? .55 : .85) + rnd() * .4;
-        const x = cx + (big ? 0 : ox * BLOCK / 4), z = cz + (big ? 0 : oz * BLOCK / 4);
-        V.mats.push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.setFromAxisAngle(Y, rot), _s.set(s2, s2 * hs, s2)));
-        this.collision.add([x - sw * s2 / 2, 0, z - sd * s2 / 2, x + sw * s2 / 2, V.size.y * s2 * hs, z + sd * s2 / 2], 'building');
+        const hs = big || v >= 8 ? 1 : (edge >= 3 ? .55 : .85) + rnd() * .4;
+        place(V, cx + (big ? 0 : ox * BLOCK / 4), cz + (big ? 0 : oz * BLOCK / 4), rot, s2, hs);
       }
     }
-    for (const V of variants) instanceKit(this.scene, V.root, V.mats);
-    // street lamps along every road + benches
+    for (const V of Object.values(variants)) instanceKit(this.scene, V.root, V.mats);
+    // bridges over the river on every north-south street, and at the highway crossings outside the city
+    const br = kit.getObjectByName('BLD_bridge'), brM = [];
+    for (let i = -N - 1; i <= N; i++) {
+      const c = (i + .5) * PITCH;
+      brM.push(new THREE.Matrix4().compose(_p.set(c, 0, RIVER_Z), _q.identity(), _s.set(1, 1, 1)));
+      this.collision.add([c - 10, -1.4, rN - 2, c + 10, 0, rS + 2], 'bridge');
+    }
+    for (const x of this.map.riverCrossings || []) brM.push(new THREE.Matrix4().compose(_p.set(x.x, x.y, x.z), _q.setFromAxisAngle(Y, x.ang), _s.set(.7, 1, .7)));
+    instanceKit(this.scene, br, brM);
+    // central plaza: the rotunda and its reflecting pool
+    if (this.plaza) {
+      const rt = A.clone('city_buildings', 'BLD_rotunda'); rt.position.set(this.plaza[0], 0, this.plaza[1]); sc.add(rt);
+      this.collision.add([this.plaza[0] - 11, 0, this.plaza[1] - 11, this.plaza[0] + 11, 10, this.plaza[1] + 11], 'building');
+    }
+    // street lamps along every road (not over the water)
     const lampM = [];
     for (let i = -N - 1; i <= N; i++) {
       const c = (i + .5) * PITCH;
       for (let t = -N * PITCH; t <= N * PITCH; t += 34) for (const side of [-1, 1]) {
         const off = c + side * (ROAD / 2 + 1.2);
-        lampM.push(new THREE.Matrix4().compose(_p.set(off, 0, t + 11), _q.setFromAxisAngle(Y, side > 0 ? -Math.PI / 2 : Math.PI / 2), _s.set(1, 1, 1)));
+        if (!inRiver(t + 11)) lampM.push(new THREE.Matrix4().compose(_p.set(off, 0, t + 11), _q.setFromAxisAngle(Y, side > 0 ? -Math.PI / 2 : Math.PI / 2), _s.set(1, 1, 1)));
         lampM.push(new THREE.Matrix4().compose(_p.set(t + 11, 0, off), _q.setFromAxisAngle(Y, side > 0 ? Math.PI : 0), _s.set(1, 1, 1)));
       }
     }
     const pk = A.models.props_world.scene;
     instanceKit(this.scene, pk.getObjectByName('PR_lamp'), lampM);
-    // parks: grass, trees, benches
+    // parks: lawns, trees, benches and a fountain each; riverside promenades lined with trees
     const rk = A.models.rural.scene;
-    const treeM = [], benchM = [];
+    const lawnMat = new THREE.MeshStandardMaterial({ map: (() => { const t = A.textures.moss.clone(); t.repeat.set(10, 10); t.needsUpdate = true; return t; })(), color: 0x8fb070, roughness: .95 });
+    const treeM = [], mapleM = [], pineM = [], benchM = [], fountM = [], bushM = [];
     for (const [cx, cz] of parks) {
-      const lawn = new THREE.Mesh(new THREE.PlaneGeometry(BLOCK - 6, BLOCK - 6), new THREE.MeshStandardMaterial({ map: (() => { const t = A.textures.moss.clone(); t.repeat.set(10, 10); t.needsUpdate = true; return t; })(), color: 0x8fb070, roughness: .95 }));
-      lawn.rotation.x = -Math.PI / 2; lawn.position.set(cx, .03, cz); lawn.receiveShadow = true; this.scene.add(lawn);
-      for (let k = 0; k < 14; k++) treeM.push(new THREE.Matrix4().compose(_p.set(cx + (rnd() - .5) * 76, 0, cz + (rnd() - .5) * 76), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.8 + rnd() * .5)));
-      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; benchM.push(new THREE.Matrix4().compose(_p.set(cx + Math.cos(a) * 18, 0, cz + Math.sin(a) * 18), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
+      plane(BLOCK - 6, BLOCK - 6, cx, cz, lawnMat, .03);
+      for (let k = 0; k < 16; k++) {
+        const a = rnd() * Math.PI * 2, r = 14 + rnd() * 26;
+        (k % 3 === 0 ? pineM : k % 3 === 1 ? mapleM : treeM).push(new THREE.Matrix4().compose(_p.set(cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.8 + rnd() * .5)));
+      }
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; benchM.push(new THREE.Matrix4().compose(_p.set(cx + Math.cos(a) * 9, 0, cz + Math.sin(a) * 9), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
+      fountM.push(new THREE.Matrix4().compose(_p.set(cx, 0, cz), _q.identity(), _s.set(1, 1, 1)));
+      this.collision.add([cx - 4.5, 0, cz - 4.5, cx + 4.5, .7, cz + 4.5], 'fountain');
     }
-    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + .3; benchM.push(new THREE.Matrix4().compose(_p.set(Math.cos(a) * 33, 0, Math.sin(a) * 33), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
+    for (const z of [qN - 4, qS + 4]) for (let x = -CITY_EDGE + 20; x < CITY_EDGE - 10; x += 14) {
+      if (Math.abs(((x / PITCH) % 1 + 1) % 1 - .5) < .12) continue;      // keep the bridge heads clear
+      treeM.push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.75 + rnd() * .3)));
+    }
+    // suburbs: three rows of houses per block with yards, trees and hedges
+    const hm = { RU_house_a: [], RU_house_b: [], RU_house_c: [] };
+    for (const [cx, cz] of houses) {
+      for (const ox of [-1, 0, 1]) for (const oz of [-1, 1]) {
+        const x = cx + ox * 28, z = cz + oz * 22, k = pick(Object.keys(hm)), rot = oz < 0 ? Math.PI : 0;
+        hm[k].push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.setFromAxisAngle(Y, rot), _s.setScalar(1)));
+        this.collision.add([x - 6, 0, z - 6, x + 6, 7, z + 6], 'building');
+        mapleM.push(new THREE.Matrix4().compose(_p.set(x + 9, 0, z - oz * 6), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.7 + rnd() * .3)));
+        bushM.push(new THREE.Matrix4().compose(_p.set(x - 8, 0, z + oz * 9), _q.identity(), _s.setScalar(1)));
+      }
+      plane(BLOCK - 6, BLOCK - 6, cx, cz, lawnMat, .02);
+    }
+    for (const [k, list] of Object.entries(hm)) instanceKit(this.scene, rk.getObjectByName(k), list);
     instanceKit(this.scene, rk.getObjectByName('RU_tree_oak'), treeM);
+    instanceKit(this.scene, rk.getObjectByName('RU_tree_maple'), mapleM);
+    instanceKit(this.scene, rk.getObjectByName('RU_tree_pine'), pineM);
+    instanceKit(this.scene, rk.getObjectByName('RU_bush'), bushM);
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + .3; benchM.push(new THREE.Matrix4().compose(_p.set(Math.cos(a) * 33, 0, Math.sin(a) * 33), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
     instanceKit(this.scene, pk.getObjectByName('PR_bench'), benchM);
+    instanceKit(this.scene, kit.getObjectByName('BLD_fountain'), fountM);
     for (const [x, z, r, n] of [[PITCH - 20, -12, Math.PI / 2, 'PR_sign_magenta'], [12, PITCH - 20, 0, 'PR_sign_cyan'], [-PITCH + 28, 8, -Math.PI / 2, 'PR_sign_cyan']]) {
       const s = A.clone('props_world', n); s.position.set(x, 9, z); s.rotation.y = r; s.scale.setScalar(2.2); this.scene.add(s);
     }
@@ -253,6 +323,7 @@ export class EarthWorld extends World {
     const paths = [];
     for (let bx = -N; bx <= N; bx++) for (let bz = -N; bz <= N; bz++) {
       const cx = bx * PITCH, cz = bz * PITCH, h = BLOCK / 2 - 1.8;
+      if (Math.abs(cz - RIVER_Z) < BLOCK / 2) continue;                       // the river
       paths.push(this.loop([[cx - h, cz - h], [cx + h, cz - h], [cx + h, cz + h], [cx - h, cz + h]]));
     }
     return paths;

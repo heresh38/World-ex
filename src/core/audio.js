@@ -114,6 +114,10 @@ export class Audio {
       case 'sniper': this.nz(o, t, .6, 3600, 120, .6, 'lowpass', v * 1.2); this.tone(o, t, .45, 120, 30, 'sine', v * 1.3);
         this.nz(o, t + .05, .9, 900, 80, .5, 'lowpass', v * .3, .05); break;
       case 'rocket': this.nz(o, t, .6, 600, 2400, .8, 'bandpass', v * .8, .03); this.tone(o, t, .4, 90, 200, 'sawtooth', v * .1); break;
+      case 'smg': this.nz(o, t, .08, 5200, 900, .8, 'lowpass', v * .8); this.tone(o, t, .06, 220, 90, 'triangle', v * .6); break;
+      case 'sidearm': this.nz(o, t, .14, 3800, 400, .8, 'lowpass', v * .9); this.tone(o, t, .1, 180, 60, 'triangle', v * .8); break;
+      case 'hmg': this.nz(o, t, .1, 2600, 300, .7, 'lowpass', v); this.tone(o, t, .08, 110, 45, 'sine', v); break;
+      case 'energy': this.tone(o, t, .35, 1400, 300, 'sawtooth', v * .14); this.tone(o, t, .3, 220, 70, 'sine', v); this.nz(o, t, .25, 6000, 1200, 2, 'bandpass', v * .5); break;
       case 'bolt': this.tone(o, t, .18, 900, 220, 'sawtooth', v * .16); this.nz(o, t, .12, 3000, 800, 2, 'bandpass', v * .5); break;
       default: this.nz(o, t, .12, 3000, 400, .7, 'lowpass', v);
     }

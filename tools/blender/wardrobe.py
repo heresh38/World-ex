@@ -562,17 +562,47 @@ class Kit:
                         weights=lambda V: {'head': np.ones(len(V), F32)})
         self.add('head', 'pioneer', 'Pioneer helmet', [hm], hide=['head', 'eyes', 'brows', 'lashes'], extra={'hideHair': True})
 
+    # ====================================================================== underwear (always worn)
+    def underwear(self, M):
+        """Non-removable base layer: the game never shows the body naked. Hidden while clothing covers it."""
+        B, F = self.B, self.F
+        zc = B.z['crotch']
+        top_z = B.hip[2] + (.06 if not self.m else .045)
+
+        def briefs(P):
+            p = self.parts(P)
+            reg = np.maximum(self.dom(P, ['torso', 'legL', 'legR'], p), np.maximum(P[:, 2] - top_z, (zc - .045) - P[:, 2]))
+            return np.maximum(F(P) - .0018, reg)
+        col = '#2c2f36' if self.m else '#3a3440'
+        o = self.build('briefs', briefs, (-.22, -.17, zc - .07), (.22, .19, top_z + .02),
+                       [bl.mat('cloth_underbottom', col, 0, .7)], target=3500, uv=.1)
+        self.add('underbottom', 'base', 'Base layer', [o], extra={'locked': True, 'coveredBy': ['legs', 'dress']})
+        if self.m:
+            return
+        zsh = B.zsh
+
+        def bra(P):
+            p = self.parts(P)
+            zz = P[:, 2]; ax = np.abs(P[:, 0])
+            band = np.maximum(zz - 1.268, 1.128 - zz)
+            straps = np.maximum.reduce([np.abs(ax - .078) - .011, 1.24 - zz, zz - (zsh + .06)])
+            reg = np.maximum(self.dom(P, ['torso'], p), np.minimum(band, straps))
+            return np.maximum(F(P) - .0018, reg)
+        o = self.build('bra', bra, (-.2, -.16, 1.1), (.2, .16, zsh + .08), [bl.mat('cloth_undertop', col, 0, .65)], target=3500, uv=.1)
+        self.add('undertop', 'base', 'Base layer', [o], extra={'locked': True, 'coveredBy': ['top', 'dress']})
+
     # ====================================================================== run
     def run(self):
         self.circuit_texture()
         M = self.mats()
+        self.underwear(M)
         if self.m:
             self.hair_male(M); self.male_set(M)
-            defaults = {'hair': 'sidepart', 'head': 'none', 'top': 'undersuit', 'vest': 'vanguard', 'outer': 'none', 'hands': 'gloves',
+            defaults = {'underbottom': 'base', 'hair': 'sidepart', 'head': 'none', 'top': 'undersuit', 'vest': 'vanguard', 'outer': 'none', 'hands': 'gloves',
                         'legs': 'armoured', 'feet': 'combat'}
         else:
             self.hair_female(M); self.female_set(M)
-            defaults = {'hair': 'ponytail', 'head': 'none', 'top': 'ribbed', 'vest': 'harness', 'outer': 'circuit_coat',
+            defaults = {'undertop': 'base', 'underbottom': 'base', 'hair': 'ponytail', 'head': 'none', 'top': 'ribbed', 'vest': 'harness', 'outer': 'circuit_coat',
                         'hands': 'gauntlets', 'legs': 'leggings', 'feet': 'tech'}
         return {'items': self.items, 'defaults': defaults}
 

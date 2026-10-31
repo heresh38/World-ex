@@ -110,10 +110,10 @@ export class Weapons {
     g.save.stats.shots++;
     p.recoil = Math.min(1.5, p.recoil + (A.recoil || (A.dmg > 100 ? 1 : .35)) / S.spread * .3 + .15);
     p.camPitch += (w.arch === 'sniper' || w.arch === 'handcannon' ? .012 : .0035) * (p.aiming ? .6 : 1);
-    if (g.firstPerson()) { g.viewmodel.muzzleWorld(_m); g.viewmodel.kick(w.arch === 'sniper' || w.arch === 'rocket' || w.arch === 'shotgun' ? 3 : w.arch === 'handcannon' ? 2.2 : 1); }
+    if (g.firstPerson()) { g.viewmodel.muzzleWorld(_m); g.viewmodel.kick(w.arch === 'sniper' || w.arch === 'rocket' || w.arch === 'shotgun' ? 3 : w.arch === 'handcannon' || w.arch === 'energy' ? 2.2 : w.arch === 'smg' || w.arch === 'hmg' ? .7 : 1); }
     else p.avatar.muzzleWorld(_m);
     p.camForward(_d);
-    g.fx.muzzle(_m, _d, w.arch === 'rocket' ? 0xffa040 : 0xffc070);
+    g.fx.muzzle(_m, _d, w.arch === 'rocket' ? 0xffa040 : w.arch === 'energy' ? 0x5fe8ff : 0xffc070);
     g.audio.shot(A.sound);
     g.world.onGunshot && g.world.onGunshot(_m.clone());
     if (A.projectile) { this.launchRocket(_m.clone(), this.aimPoint(), S, w); return; }
@@ -130,7 +130,7 @@ export class Weapons {
       _o.copy(cam.position).addScaledVector(_d, p.camCur * .9);
       const res = g.combat.trace(_o, _d, Math.max(250, S.range * 4), 'player');
       const end = res.point;
-      g.fx.tracer(_m, end, RARITY[w.rarity].id === 'exotic' ? 0xffd070 : 0xffd9a0, w.arch === 'sniper' ? .03 : .015, w.arch === 'sniper' ? .2 : .06);
+      g.fx.tracer(_m, end, w.arch === 'energy' ? 0x5fe8ff : RARITY[w.rarity].id === 'exotic' ? 0xffd070 : 0xffd9a0, w.arch === 'sniper' ? .03 : .015, w.arch === 'sniper' ? .2 : .06);
       if (res.target) {
         const dist = res.dist;
         const fall = dist < S.range ? 1 : Math.max(.5, 1 - (dist - S.range) / (S.range * 2));

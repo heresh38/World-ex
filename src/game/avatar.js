@@ -87,17 +87,23 @@ export class Avatar {
     for (const slot of Object.keys(this.items)) {
       let it = wear && wear[slot] !== undefined ? wear[slot] : this.defaults[slot];
       if (it !== 'none' && !this.items[slot][it]) it = this.defaults[slot] || 'none';
+      if (it === 'none' && this.isLocked(slot)) it = this.defaults[slot] || Object.keys(this.items[slot])[0];
       out[slot] = it || 'none';
       const info = (this.wardrobe[slot] || {})[out[slot]];
       if (info) { info.hide.forEach(r => hide.add(r)); if (info.hideHair) hideHair = true; }
     }
     for (const [slot, list] of Object.entries(this.items)) {
-      for (const [id, o] of Object.entries(list)) o.visible = out[slot] === id && !(slot === 'hair' && hideHair);
+      const info = (this.wardrobe[slot] || {})[out[slot]] || {};
+      // the base layer is always worn; it only disappears under clothing that covers it
+      const covered = (info.coveredBy || []).some(s => out[s] && out[s] !== 'none');
+      for (const [id, o] of Object.entries(list)) o.visible = out[slot] === id && !(slot === 'hair' && hideHair) && !covered;
     }
     for (const [r, o] of Object.entries(this.regions)) o.visible = !hide.has(r);
     this.wear = out;
     return out;
   }
+
+  isLocked(slot) { return Object.values(this.wardrobe[slot] || {}).some(d => d.locked); }
 
   setMorph(name, v) {
     for (const o of this.morphMeshes) {
