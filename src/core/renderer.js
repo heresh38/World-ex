@@ -98,6 +98,19 @@ export class Renderer {
     if (s !== this.scale) { this.scale = s; this.resize(); }
   }
 
+  // Draws a second scene into a screen rectangle (CSS pixels) on top of the frame, keeping the frame's colour.
+  preview(scene, cam, rect) {
+    const r = this.r, w = rect.width, h = rect.height;
+    if (w < 24 || h < 24) return;
+    const x = rect.left, y = innerHeight - rect.bottom;
+    r.setRenderTarget(null);
+    r.setScissorTest(true); r.setScissor(x, y, w, h); r.setViewport(x, y, w, h);
+    const ac = r.autoClear; r.autoClear = false; r.clearDepth();
+    cam.aspect = w / h; cam.updateProjectionMatrix();
+    r.render(scene, cam);
+    r.autoClear = ac; r.setScissorTest(false); r.setViewport(0, 0, innerWidth, innerHeight);
+  }
+
   render(scene, camera, overlay = null) {
     this.scene = scene; this.camera = camera;
     this.renderPass.scene = scene; this.renderPass.camera = camera;

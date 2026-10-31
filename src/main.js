@@ -10,6 +10,7 @@ import { Combat } from './game/combat.js';
 import { EnemyManager } from './game/enemies.js';
 import { Vehicles } from './game/vehicles.js';
 import { FX } from './game/fx.js';
+import { Inspect } from './ui/inspect.js';
 import { Viewmodel } from './game/viewmodel.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { HUD } from './ui/hud.js';
@@ -19,8 +20,8 @@ import { EarthWorld } from './worlds/earth.js';
 import { PlanetWorld } from './worlds/planet.js';
 import { VanthosWorld } from './worlds/vanthos/world.js';
 import { MetroWorld } from './worlds/vanthos/metro.js';
-import { spaceSky, orbitPlanet } from './worlds/sky.js';
-import { DESTINATIONS, ARCHETYPES } from './game/data.js';
+import { spaceSky, orbitPlanet, planetMaps } from './worlds/sky.js';
+import { DESTINATIONS, ARCHETYPES, armorStats } from './game/data.js';
 import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS } from './game/state.js';
 
 const MODELS = [
@@ -142,7 +143,11 @@ class Game {
         ...TEXTURES.map(t => ({ type: 'texture', name: t, file: t.endsWith('_e') ? t + '.jpg' : t + '_c.jpg', weight: .3, label: 'Texture ' + t })),
         ...['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss'].map(t => ({ type: 'texture', name: t + '_n', file: t + '_n.jpg', color: false, weight: .3 })),
         { type: 'json', name: 'ship_interior', file: 'ship_interior.json', weight: .2 },
+        ...['earth_day', 'earth_clouds', 'earth_night', 'earth_ms'].map(t => ({ type: 'texture', name: t, file: t + '.jpg', color: t === 'earth_day', weight: .4, label: 'Charting Earth' })),
       ], (p, l) => this.menus.loading(p * .7, l));
+      const T = this.assets.textures;
+      planetMaps.earth = { day: T.earth_day, clouds: T.earth_clouds, night: T.earth_night, ms: T.earth_ms };
+      for (const t of Object.values(planetMaps.earth)) { t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = this.renderer.r.capabilities.getMaxAnisotropy(); t.needsUpdate = true; }
     } catch (e) { return this.fatal(e); }
     this.fx = null;
     this.player = new Player(this);
@@ -151,6 +156,7 @@ class Game {
     this.enemies = new EnemyManager(this);
     this.vehicles = new Vehicles(this);
     this.viewmodel = new Viewmodel(this);
+    this.inspect = new Inspect(this);
     this.viewmodel.recolor(this.save.character);
     this.player.setBody(this.save.character.body);
     await this.enterWorld('ship', p => this.menus.loading(.7 + p * .3, 'Preparing decks'));
@@ -165,6 +171,11 @@ class Game {
 
   async travel(id) {
     if (this.state !== 'play') return;
+    // grab the pointer now, while the click that started the trip still counts as a user gesture,
+    // so the player has full control the moment the new world appears
+    this.paused = false; this.menus.hidePause();
+    if (this.stationId) { this.menus.close(); this.stationId = null; this.camFocus = null; this.camera.clearViewOffset(); }
+    this.input.enabled = true; this.input.wantLock = true; this.input.lock();
     this.state = 'loading';
     this.persist();
     if (this.vehicles.current) this.vehicles.exit();
@@ -178,6 +189,9 @@ class Game {
     await new Promise(r => setTimeout(r, 250));
     this.menus.hideLoading();
     this.state = 'play';
+    this.paused = false; this.input.enabled = true;
+    if (this.player.mode === 'seat') this.player.mode = 'foot';
+    if (!this.input.locked) this.input.lock();
     await this.fade(false);
     const w = this.world;
     this.hud.banner(w.name, w.region, 3.5);
@@ -201,6 +215,8 @@ class Game {
     this.fx = new FX(w.scene);
     await w.build(progress);
     w.scene.add(this.player.avatar.root);
+    // seats exported with a layout (ship) become sit points
+    for (const st of (w.layout && w.layout.seats) || []) w.addSeat(new THREE.Vector3(st.pos[0], st.pos[1], st.pos[2]), st.yaw, st.label || 'Seat');
     // shadow cameras also see layer 1, where the player's body lives in first person
     w.scene.traverse(o => { if (o.isLight && o.shadow) o.shadow.camera.layers.enable(1); });
     const sp = w.spawn();
@@ -243,7 +259,7 @@ class Game {
   // In first person the body moves to layer 1: the camera skips it but it still casts a shadow.
   setAvatarLayer() {
     const p = this.player; if (!p || !p.avatar) return;
-    const fp = this.firstPerson() || this.carFirstPerson();
+    const fp = this.firstPerson() || this.carFirstPerson() || (p.mode === 'sit' && this.save.settings.view !== 'third' && !this.stationId);
     const key = (p.avatar.gunHolder ? p.avatar.gunHolder.uuid : '-') + (p.avatar.wearKey || '');
     if (fp === this._fpLayer && p.avatar === this._fpAvatar && key === this._fpKey) return;
     this._fpLayer = fp; this._fpAvatar = p.avatar; this._fpKey = key;
@@ -305,6 +321,15 @@ class Game {
     this.camera.setViewOffset(innerWidth, innerHeight, -innerWidth * .2, 0, innerWidth, innerHeight);
   }
 
+  get armor() { return armorStats(this.save.character, (this.player && this.player.avatar && this.player.avatar.wardrobe) || {}); }
+
+  openInventory() {
+    if (this.state !== 'play' || this.stationId || this.paused || !this.player || this.player.dead) return;
+    if (this.vehicles.current) return;
+    this.audio.ui('open'); this.hud.prompt(null);
+    this.openStationPanelOnly('inventory');
+  }
+
   openStationPanelOnly(id) {
     this.input.unlock(); this.input.enabled = false; this.stationId = id; this.camFocus = null; this.camera.clearViewOffset();
     this.menus.openStation(id);
@@ -320,7 +345,8 @@ class Game {
       p.mode = 'foot';
       if (st) { const v = st.pos; p.pos.set(v[0], v[1], v[2]); p.avatar.root.position.copy(p.pos); p.avatar.root.rotation.set(0, p.yaw, 0); }
     }
-    p.camYaw = p.yaw + Math.PI; p.snapCamera = true;
+    if (id !== 'inventory' && id !== 'engineering') { p.camYaw = p.yaw + Math.PI; p.snapCamera = true; }
+    if (id === 'inventory' && this.inspect) this.inspect.clear();
     this.input.enabled = true;
     if (this.world.refreshArmory) this.world.refreshArmory();
     this.audio.ui('back');
@@ -442,6 +468,10 @@ class Game {
   // ---------------------------------------------------------------- input routing
   onKey(e) {
     if (e.code === 'F3') { this.save.settings.showFps = !this.save.settings.showFps; this.hud.dirty = true; e.preventDefault(); }
+    if ((e.code === 'KeyI' || e.code === 'Tab') && this.state === 'play') {
+      if (this.stationId === 'inventory') { this.closeStation(); return; }
+      if (!this.stationId) { this.openInventory(); return; }
+    }
     if (e.code === 'Escape') {
       if (this.state === 'title' && this.menus.open) { this.menus.close(); this.menus.showTitle(load() !== null); return; }
       if (this.state !== 'play') return;
@@ -481,6 +511,7 @@ class Game {
     if (this.state === 'loading') { this.input.endFrame(); return; }
     if (!this.paused) this.update(dt);
     this.renderer.render(this.scene, this.camera, this.viewmodel && this.viewmodel.active ? this.viewmodel.scene : null);
+    if (this.stationId === 'inventory' && this.inspect) this.inspect.render(dt);
     this.renderer.govern(dt);
     this.input.endFrame();
   }
@@ -497,6 +528,7 @@ class Game {
     if (canAct && p.mode === 'foot' && w.allowCars) carNear = this.vehicles.nearest(p.pos);
     if (focus) this.hud.prompt(focus);
     else if (carNear) this.hud.prompt({ key: 'E', verb: 'Drive', label: carNear.S.name });
+    else if (p.mode === 'sit' && !this.stationId) this.hud.prompt({ key: 'E', verb: 'Stand up', label: '' });
     else if (p.mode === 'car') this.hud.prompt(null);
     else this.hud.prompt(null);
     if (canAct && input.pressed('KeyE')) {

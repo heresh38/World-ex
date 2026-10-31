@@ -1,6 +1,6 @@
 // Title screen, loading screen, pause menu and every ship-station panel (the old main menu, moved aboard).
 import { DESTINATIONS, ARCHETYPES, RARITY, PERKS, SLOT_NAMES, SHADERS, ARMOR_COLORS, GLOW_COLORS, PAINTS, TIPS,
-  SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS } from '../game/data.js';
+  SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS, ARMOR_SLOT, armorPiece } from '../game/data.js';
 import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter } from '../game/state.js';
 
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -67,6 +67,7 @@ export class Menus {
     const inShip = g.world && g.world.kind === 'ship';
     el.innerHTML = `<div class="ps"><h2>Paused</h2>
       <button class="btn pri" data-act="resume">Resume</button>
+      <button class="btn" data-act="pause-inventory">Inventory</button>
       <button class="btn" data-act="pause-settings">Settings</button>
       ${!inShip ? '<button class="btn gold" data-act="orbit">Return to orbit</button>' : ''}
       <button class="btn" data-act="quit">Save &amp; quit to title</button></div>`;
@@ -101,7 +102,7 @@ export class Menus {
     const A = ARCHETYPES[w.arch], R = RARITY[w.rarity];
     return `<div class="card ${on ? 'on' : ''}" style="--rc:${R.color}" data-act="pick" data-v="${w.uid}">
       <div class="pw">${w.power}</div><div class="nm" style="color:${R.color}">${esc(w.name)}</div>
-      <div class="ty">${R.name} · ${A.name}</div>
+      <div class="ty">${R.name} · ${A.cls ? cap(A.cls) + ' ' : ''}${A.name}</div>
       <div class="pk">${w.perks.map(p => PERKS[p].name).join(' · ') || 'No perks'}</div>${extra}</div>`;
   }
 
@@ -156,7 +157,7 @@ export class Menus {
   }
 
   controlsHtml() {
-    const K = [['W A S D', 'Move'], ['Shift', 'Run / boost in car'], ['T', 'Switch first / third person'], ['Mouse', 'Look / aim'], ['Space', 'Jump / handbrake'], ['E', 'Interact, enter / exit car'], ['Left mouse', 'Fire'], ['Right mouse', 'Aim down sights'], ['R', 'Reload'], ['1 2 3 / Wheel', 'Switch weapon'], ['V', 'Summon hover car'], ['Esc', 'Pause / leave station'], ['F3', 'FPS counter']];
+    const K = [['W A S D', 'Move'], ['Shift', 'Run / boost in car'], ['T', 'Switch first / third person'], ['Mouse', 'Look / aim'], ['Space', 'Jump / handbrake'], ['E', 'Interact, enter / exit car'], ['Left mouse', 'Fire'], ['Right mouse', 'Aim down sights'], ['R', 'Reload'], ['1 2 3 / Wheel', 'Switch weapon'], ['V', 'Summon hover car'], ['I / Tab', 'Inventory'], ['Esc', 'Pause / leave station'], ['F3', 'FPS counter']];
     return `<div class="keys">${K.map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('')}</div>`;
   }
 
@@ -258,6 +259,76 @@ export class Menus {
     return this.frame('Armory', 'Loadout', 'Primary: rifles. Special: hand cannons, shotguns, snipers. Heavy: rockets.', body, [['0', 'Primary'], ['1', 'Special'], ['2', 'Heavy']]);
   }
 
+  // Inventory (I / Tab, anywhere): everything you carry and wear. Changing the loadout happens aboard the ship.
+  st_inventory() {
+    const g = this.g, sv = g.save, aboard = g.world && g.world.kind === 'ship';
+    if (!['weapons', 'armor', 'missions', 'overview'].includes(this.tab)) this.tab = 'weapons';
+    const label = s => `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px;margin:14px 0 8px">${s}</div>`;
+    let body = '';
+    if (this.tab === 'weapons') {
+      const f = this.filter == null ? -1 : this.filter;
+      const cf = this.clsFilter || 'all';
+      const list = sv.inventory.filter(w => (f < 0 || ARCHETYPES[w.arch].slot === f) && (cf === 'all' || (ARCHETYPES[w.arch].cls || 'energy') === cf))
+        .sort((a, b) => (sv.equipped.includes(b.uid) - sv.equipped.includes(a.uid)) || b.power - a.power || b.rarity - a.rarity);
+      const sel = sv.inventory.find(w => w.uid === this.sel) || g.weapons.equipped(g.weapons.slot) || list[0];
+      if (sel) this.sel = sel.uid;
+      g.inspect && g.inspect.setWeapon(sel);
+      const chips = [[-1, 'All'], [0, 'Primary'], [1, 'Special'], [2, 'Heavy']].map(([k, n]) =>
+        `<button class="btn ${f === k ? 'pri' : ''}" data-act="invfilter" data-v="${k}">${n} · ${k < 0 ? sv.inventory.length : sv.inventory.filter(w => ARCHETYPES[w.arch].slot === k).length}</button>`).join('');
+      const classes = [...new Set(Object.values(ARCHETYPES).map(a => a.cls).filter(Boolean))];
+      const cchips = classes.length > 1 ? ['all', ...classes].map(k => `<button class="btn ${cf === k ? 'pri' : ''}" data-act="invcls" data-v="${k}">${k === 'all' ? 'Every class' : cap(k)}</button>`).join('') : '';
+      body = `<div class="row" style="flex-wrap:wrap;margin-bottom:8px">${chips}</div>${cchips ? `<div class="row" style="flex-wrap:wrap;margin-bottom:10px">${cchips}</div>` : ''}`;
+      if (sel) {
+        const A = ARCHETYPES[sel.arch], R = RARITY[sel.rarity], eq = sv.equipped.includes(sel.uid), am = g.weapons.ammoOf(sel);
+        const sh = SHADERS.find(x => x.id === sel.shader) || SHADERS[0];
+        body += `<div class="inv-sel"><div class="nm" style="font:700 26px var(--font);color:${R.color}">${esc(sel.name)}</div>
+          <div class="ty" style="letter-spacing:.24em;color:var(--dim);font-size:12px;margin-bottom:10px">${R.name} ${A.cls ? cap(A.cls) + ' ' : ''}${A.name} · ${SLOT_NAMES[A.slot]} slot · Power ${sel.power}${eq ? ' · <span style="color:var(--gold)">EQUIPPED</span>' : ''}</div>
+          ${this.statBars(sel)}
+          <div class="inv-facts"><span>Ammo<b>${am.mag} / ${am.reserve}</b></span><span>Precision<b>×${A.crit}</b></span><span>Fire mode<b>${A.burst ? A.burst + '-round burst' : A.auto ? 'Automatic' : 'Semi-auto'}</b></span><span>Finish<b>${esc(sh.name)}</b></span></div>
+          <div class="row" style="margin-top:12px">${eq ? '<button class="btn" disabled>Equipped</button>' : aboard
+            ? `<button class="btn pri" data-act="equip" data-v="${sel.uid}">Equip to ${SLOT_NAMES[A.slot]}</button>`
+            : '<button class="btn" disabled>Equip aboard the ship</button>'}</div></div>`;
+      }
+      body += label('CARRIED (' + list.length + ')') + `<div class="grid">${list.map(w => this.weaponCard(w, w.uid === this.sel, sv.equipped.includes(w.uid) ? '<div style="position:absolute;right:12px;bottom:10px;font-size:10px;letter-spacing:.3em;color:var(--gold)">EQUIPPED</div>' : '')).join('') || '<p class="guide">Nothing here yet.</p>'}</div>`;
+    } else if (this.tab === 'armor') {
+      g.inspect && g.inspect.setCharacter();
+      const A = g.armor, wr = g.player.avatar.wardrobe || {};
+      body = `<div class="big-stat">${[[A.armor, 'Armour rating'], [Math.round(A.resist * 100) + '%', 'Damage resisted'], [Math.round(A.mobility) + '%', 'Mobility'],
+        [g.player.maxShield, 'Shield capacity'], [g.player.maxHealth, 'Health']].map(([v, l]) => `<div><b>${v}</b><small>${l}</small></div>`).join('')}</div>`;
+      body += label('WORN');
+      for (const slot of Object.keys(ARMOR_SLOT)) {
+        if (!wr[slot] || !Object.keys(wr[slot]).length) continue;
+        const id = (sv.character.wear || {})[slot], d = id && id !== 'none' ? wr[slot][id] : null;
+        const a = d ? armorPiece(slot, id, d.label) : null;
+        body += `<div class="inv-row"><span>${esc(SLOT_LABELS[slot] || slot)}</span><b>${d ? esc(d.label) : '<i style="color:var(--dim)">Nothing</i>'}</b>
+          <em>${a ? (a.heavy ? 'Armoured · ' : 'Light · ') + '+' + a.armor : ''}</em></div>`;
+      }
+      body += `<p class="guide" style="margin-top:14px">${aboard ? 'Change armour and clothing at the <b>Wardrobe pod</b> in the commons.' : 'Armour is changed at the <b>Wardrobe pod</b> aboard the ship.'} Armoured pieces resist more damage but slow you slightly. Drag the picture to turn around.</p>`;
+    } else if (this.tab === 'missions') {
+      g.inspect && g.inspect.clear();
+      const obj = (g.world && g.world.objectives ? g.world.objectives() : []) || [];
+      body = label('CURRENT · ' + esc((g.world && g.world.name) || '')) + (obj.map(o => `<div class="contract"><b style="font-size:16px;letter-spacing:.06em">${esc(o.text)}</b>
+        ${o.sub ? `<div style="font-size:13px;color:var(--dim);margin-top:4px;font-family:var(--body)">${esc(o.sub)}</div>` : ''}</div>`).join('') || '<p class="guide">Nothing pressing here. Explore.</p>');
+      body += label('CONTRACTS') + sv.contracts.map(c => `<div class="contract ${c.done ? 'done' : ''}"><div class="row" style="justify-content:space-between">
+        <b style="font-size:16px;letter-spacing:.06em">${esc(c.text)}</b><span style="color:var(--gold)">${c.reward} CR</span></div>
+        <div style="font-size:12px;letter-spacing:.2em;color:var(--dim);margin-top:4px">${Math.min(c.p, c.n)} / ${c.n}${c.done ? ' · READY — CLAIM AT THE BRIEFING TABLE' : ''}</div>
+        <div class="pb"><i style="width:${Math.min(100, c.p / c.n * 100)}%"></i></div></div>`).join('');
+      const vs = sv.vanthos;
+      if (vs) body += label('VANTHOS') + `<div class="inv-row"><span>Memory shards</span><b>${(vs.shards || []).length}</b><em></em></div><div class="inv-row"><span>Guardians defeated</span><b>${(vs.bosses || []).length}</b><em></em></div>`;
+      body += label('WORLDS') + DESTINATIONS.filter(d => !d.hidden).map(d => `<div class="inv-row"><span>${esc(d.region)}</span><b>${esc(d.name)}</b><em>${sv.stats.visited.includes(d.id) ? 'Charted · level ' + d.level : 'Uncharted'}</em></div>`).join('');
+    } else {
+      g.inspect && g.inspect.clear();
+      const S = sv.stats;
+      body = `<div class="big-stat">${[[sv.level, 'Level'], [g.power(), 'Power'], [sv.credits.toLocaleString(), 'Credits'], [sv.alloy, 'Alloy'],
+        [sv.inventory.length, 'Weapons'], [g.armor.armor, 'Armour'], [S.kills, 'Hostiles defeated'], [S.caches, 'Caches opened']].map(([v, l]) => `<div><b>${v}</b><small>${l}</small></div>`).join('')}</div>
+        ${label('LOADOUT')}${[0, 1, 2].map(i => { const w = g.weapons.equipped(i); return `<div class="inv-row"><span>${SLOT_NAMES[i]}</span><b style="color:${w ? RARITY[w.rarity].color : 'var(--dim)'}">${w ? esc(w.name) : 'Empty'}</b><em>${w ? ARCHETYPES[w.arch].name + ' · ' + w.power : ''}</em></div>`; }).join('')}
+        <p class="guide" style="margin-top:14px">Weapons are swapped at the <b>Armory</b> and upgraded at the <b>Gunsmith bench</b> in the ship's hangar.</p>`;
+    }
+    const stage = this.tab === 'overview' || this.tab === 'missions' ? '' : '<div class="inv-stage"><i></i></div>';
+    return this.frame('Inventory', aboard ? 'Aboard the Wayfarer' : 'Field inventory', 'Your weapons, armour and gear. <kbd>I</kbd> or <kbd>Tab</kbd> to close.', body,
+      [['weapons', 'Weapons'], ['armor', 'Armour'], ['missions', 'Missions'], ['overview', 'Overview']]) + stage;
+  }
+
   // Gunsmith bench (old Gunsmith)
   st_gunsmith() {
     const g = this.g, sv = g.save;
@@ -337,6 +408,7 @@ export class Menus {
       case 'title-credits': g.titleCredits(); return;
       case 'resume': g.resume(); return;
       case 'leave': g.closeStation(); return;
+      case 'pause-inventory': this.hidePause(); g.paused = false; g.openInventory(); return;
       case 'pause-settings': this.hidePause(); g.paused = false; g.openStationPanelOnly('engineering'); return;
       case 'orbit': this.hidePause(); g.paused = false; g.travel('ship'); return;
       case 'quit': g.quitToTitle(); return;
@@ -362,7 +434,10 @@ export class Menus {
         if (t.dataset.armed) { g.wipe(); return; }
         t.dataset.armed = '1'; t.textContent = 'Click again to erase everything'; return;
       case 'pick': this.sel = v; break;
+      case 'invfilter': this.filter = +v; this.sel = null; break;
+      case 'invcls': this.clsFilter = v; this.sel = null; break;
       case 'equip': {
+        if (!g.world || g.world.kind !== 'ship') break;
         const w = sv.inventory.find(x => x.uid === v); const slot = ARCHETYPES[w.arch].slot;
         sv.equipped[slot] = w.uid; g.weapons.refreshModel(); g.audio.ui('confirm'); g.onLoadoutChanged(); break;
       }

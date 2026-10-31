@@ -57,6 +57,25 @@ export const ARMOR_COLORS = ['#e8e2d4', '#3a3f47', '#1b2440', '#8c1d26', '#2f6b5
 export const SKIN_TONES = ['#f6d5c2', '#eec1a2', '#e2b394', '#d39b78', '#c08560', '#a86d4a', '#8d5638', '#6e4029', '#55301e', '#c9b6c9', '#9fb4c8', '#b7c9a8'];
 export const EYE_COLORS = ['#6f8fae', '#4f7a9e', '#7aa6c2', '#6b8a5a', '#8aa05a', '#7a5a3a', '#4a3424', '#9a8a6a', '#8a8f99', '#c27a2a', '#b46cff', '#ff4a3d', '#e8f4ff', '#ffe066'];
 export const HAIR_COLORS = ['#141110', '#2a211c', '#3b2a22', '#5a3c28', '#7a5434', '#a8794c', '#d6b07a', '#e8d6b0', '#9a9a9a', '#e8e8e8', '#8c1d26', '#c4553a', '#b9a3e8', '#3a6fd8', '#2f8a6a', '#e86aa8'];
+// Armour: every worn piece protects by slot; plated / tactical pieces protect more but slow you a little.
+export const ARMOR_SLOT = { head: 10, top: 4, vest: 20, outer: 14, dress: 4, hands: 6, legs: 10, feet: 6 };
+const HEAVY = /plate|armou?r|guard|helmet|vest|harness|pauldron|greave|gauntlet|tactical|carrier|kevlar|combat/i;
+export function armorPiece(slot, id, label = '') {
+  const base = ARMOR_SLOT[slot] || 0, heavy = HEAVY.test(id + ' ' + label);
+  return { armor: Math.round(base * (heavy ? 1.7 : 1)), weight: heavy ? 2 : base ? 1 : 0, heavy };
+}
+// totals for a character: armour rating, damage resisted (fraction) and a mobility rating
+export function armorStats(character, wardrobe = {}) {
+  let armor = 0, weight = 0; const pieces = [];
+  for (const [slot, id] of Object.entries((character && character.wear) || {})) {
+    if (!id || id === 'none' || !(slot in ARMOR_SLOT)) continue;
+    const d = (wardrobe[slot] || {})[id]; if (!d) continue;
+    const a = armorPiece(slot, id, d.label); armor += a.armor; weight += a.weight;
+    pieces.push({ slot, id, label: d.label, ...a });
+  }
+  return { armor, resist: armor / (armor + 160), mobility: Math.max(88, 100 - weight * 1.2), pieces };
+}
+
 export const SLOT_ORDER = ['head', 'top', 'vest', 'outer', 'dress', 'hands', 'legs', 'feet', 'undertop', 'underbottom'];
 export const SLOT_LABELS = { hair: 'Hair', head: 'Headwear', top: 'Shirt', vest: 'Vest & harness', outer: 'Coat', dress: 'Dress', hands: 'Gloves', legs: 'Pants', feet: 'Shoes', undertop: 'Underwear top', underbottom: 'Underwear' };
 export const FACE_LABELS = { nose: 'Nose', mouth: 'Mouth', eyes: 'Eye shape', ears: 'Ears' };

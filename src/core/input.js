@@ -11,6 +11,8 @@ export class Input {
     addEventListener('keydown', e => {
       if (e.code === 'Tab' || e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       if (!this.down.has(e.code)) this.hit.add(e.code);
+      // any key (not Esc) re-grabs the mouse when the game wants it, so play never stalls on a lost lock
+      if (!this.locked && this.enabled && this.wantLock && e.code !== 'Escape' && !this.touch && !document.querySelector('.pn:not(.hidden) input:focus')) this.lock();
       this.down.add(e.code);
     });
     addEventListener('keyup', e => this.down.delete(e.code));

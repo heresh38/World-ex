@@ -199,27 +199,49 @@ export class HUD {
     this.weapEl.style.display = this.combatMode && !car ? '' : 'none';
   }
 
-  // rotating minimap around the player (worlds that provide one)
+  // Rotating minimap around the player, on every destination. Worlds may supply a pre-drawn map
+  // ({canvas, scale, half} or {canvas, scale, ox, oz, view}); otherwise one is built from the world itself.
   updateMinimap() {
-    const g = this.g, mm = g.world && g.world.minimap;
-    const show = !!mm && this.combatMode && !document.body.classList.contains('touch');
+    const g = this.g, w = g.world;
+    if (w && w.minimap === undefined) w.minimap = autoMinimap(w);
+    const mm = w && w.minimap;
+    const show = !!mm && g.state === 'play' && !g.stationId && !document.body.classList.contains('touch');
     this.miniEl.classList.toggle('hidden', !show);
     if (!show) return;
-    const x = this.mini, S = 180, p = g.player, c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
-    const zoom = p.mode === 'car' ? 1.6 : 2.6;                     // map pixels per minimap pixel scale
+    const x = this.mini, S = 180, R = S / 2, p = g.player, c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
+    if (mm.refresh) mm.refresh(c.x, c.z);
+    const ox = mm.ox != null ? mm.ox : -mm.half, oz = mm.oz != null ? mm.oz : -mm.half;
+    const view = mm.view ? mm.view * (p.mode === 'car' ? 1.6 : 1) : null;
+    const zoom = view ? R / (view * mm.scale) : (p.mode === 'car' ? 1.6 : 2.6);
+    const ppm = zoom * mm.scale;                                   // screen pixels per metre
     x.save(); x.clearRect(0, 0, S, S);
-    x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); x.clip();
-    x.fillStyle = '#1e465c'; x.fillRect(0, 0, S, S);
-    x.translate(S / 2, S / 2); x.rotate(p.camYaw); x.scale(zoom, zoom);
-    x.translate(-(c.x + mm.half) * mm.scale, -(c.z + mm.half) * mm.scale);
+    x.beginPath(); x.arc(R, R, R - 2, 0, Math.PI * 2); x.clip();
+    x.fillStyle = mm.bg || '#1e465c'; x.fillRect(0, 0, S, S);
+    x.save();
+    x.translate(R, R); x.rotate(p.camYaw); x.scale(zoom, zoom);
+    x.translate(-(c.x - ox) * mm.scale, -(c.z - oz) * mm.scale);
     x.drawImage(mm.canvas, 0, 0);
-    // blips
-    const blip = (wx, wz, col, r = 2.2) => { x.fillStyle = col; x.beginPath(); x.arc((wx + mm.half) * mm.scale, (wz + mm.half) * mm.scale, r / zoom * 1.6, 0, 7); x.fill(); };
-    for (const m of this.markers) blip(m.pos.x, m.pos.z, m.color, 3);
+    x.restore();
+    // blips in screen space so they can sit on the rim when out of range
+    const cs = Math.cos(p.camYaw), sn = Math.sin(p.camYaw);
+    const toScr = (wx, wz) => { const dx = (wx - c.x) * ppm, dz = (wz - c.z) * ppm; return [R + dx * cs - dz * sn, R + dx * sn + dz * cs]; };
+    const blip = (wx, wz, col, r, icon = null, clamp = false) => {
+      let [sx, sy] = toScr(wx, wz); const dx = sx - R, dy = sy - R, d = Math.hypot(dx, dy), lim = R - 9;
+      if (d > lim) { if (!clamp) return; sx = R + dx / d * lim; sy = R + dy / d * lim; }
+      x.fillStyle = col;
+      if (icon) { x.font = '700 13px Rajdhani, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.shadowColor = '#000'; x.shadowBlur = 3; x.fillText(icon, sx, sy); x.shadowBlur = 0; }
+      else { x.beginPath(); x.arc(sx, sy, r, 0, 7); x.fill(); }
+    };
+    // interaction points (stations, caches, lifts, doors): small pale dots
+    for (const it of w.interactables) { if (it.enabled && !it.enabled()) continue; const q = typeof it.pos === 'function' ? it.pos() : it.pos; if (q) blip(q.x, q.z, 'rgba(236,230,216,.75)', 2.2); }
+    // hostiles in range
+    if (w.combat) for (const e of g.enemies.list) if (e.alive && e.state !== 'idle') blip(e.pos.x, e.pos.z, '#ff4a3d', 2.4);
+    // world markers (objectives, landing zone, loot): icons, pinned to the rim when far away
+    for (const m of this.markers) blip(m.pos.x, m.pos.z, m.color, 3, m.icon || null, true);
     x.restore();
     // player arrow (camera-up)
-    x.fillStyle = '#e3c26c'; x.beginPath(); x.moveTo(S / 2, S / 2 - 8); x.lineTo(S / 2 + 5, S / 2 + 6); x.lineTo(S / 2, S / 2 + 3); x.lineTo(S / 2 - 5, S / 2 + 6); x.closePath(); x.fill();
-    x.strokeStyle = 'rgba(236,230,216,.5)'; x.lineWidth = 2; x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); x.stroke();
+    x.fillStyle = '#e3c26c'; x.beginPath(); x.moveTo(R, R - 8); x.lineTo(R + 5, R + 6); x.lineTo(R, R + 3); x.lineTo(R - 5, R + 6); x.closePath(); x.fill();
+    x.strokeStyle = 'rgba(236,230,216,.5)'; x.lineWidth = 2; x.beginPath(); x.arc(R, R, R - 2, 0, Math.PI * 2); x.stroke();
   }
 
   updateBars() {
@@ -241,4 +263,44 @@ export class HUD {
       el.querySelector('i').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
     });
   }
+}
+
+// Minimap for worlds without a hand-drawn one.
+// Endless terrain (frontier planets): a hill-shaded patch re-rendered around the player as they travel.
+// Interiors (ship, metro): walls drawn from the collision boxes.
+function autoMinimap(w) {
+  if (w.height) {
+    const N = 160, span = 700, c = document.createElement('canvas'); c.width = c.height = N;
+    const x = c.getContext('2d'), mm = { canvas: c, scale: N / span, ox: 0, oz: 0, view: 140, bg: '#28302a', cx: 1e9, cz: 1e9 };
+    const tint = (w.dest && w.dest.orb && /#([0-9a-f]{6})/i.exec(w.dest.orb)) ? parseInt(/#([0-9a-f]{6})/i.exec(w.dest.orb)[1], 16) : 0x6a7a5a;
+    const tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
+    mm.refresh = (px, pz) => {
+      if (Math.hypot(px - mm.cx, pz - mm.cz) < span * .22) return;
+      mm.cx = px; mm.cz = pz; mm.ox = px - span / 2; mm.oz = pz - span / 2;
+      const img = x.createImageData(N, N), st = span / N, H = new Float32Array((N + 1) * (N + 1));
+      for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) H[j * (N + 1) + i] = w.height(mm.ox + i * st, mm.oz + j * st);
+      const h0 = w.height(px, pz);
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const h = H[j * (N + 1) + i], hx = H[j * (N + 1) + i + 1] - h, hz = H[(j + 1) * (N + 1) + i] - h;
+        const shade = Math.max(.35, Math.min(1.4, 1 + (-hx - hz) * .9 / st)), lift = Math.max(-.25, Math.min(.35, (h - h0) / 120));
+        const k = (j * N + i) * 4, f = shade * (.55 + lift);
+        img.data[k] = Math.min(255, tr * f + 18); img.data[k + 1] = Math.min(255, tg * f + 22); img.data[k + 2] = Math.min(255, tb * f + 18); img.data[k + 3] = 255;
+      }
+      x.putImageData(img, 0, 0);
+    };
+    return mm;
+  }
+  const boxes = w.collision.boxes.filter(b => b.max.y - b.min.y > .8 && b.min.y < 1.6 && b.max.y > .4).map(b => [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z]);
+  if (!boxes.length) return null;
+  let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
+  for (const b of boxes) { x0 = Math.min(x0, b[0]); z0 = Math.min(z0, b[2]); x1 = Math.max(x1, b[3]); z1 = Math.max(z1, b[5]); }
+  x0 = Math.max(x0, -800) - 10; z0 = Math.max(z0, -800) - 10; x1 = Math.min(x1, 800) + 10; z1 = Math.min(z1, 800) + 10;
+  const sc = Math.min(6, 1024 / Math.max(x1 - x0, z1 - z0));
+  const c = document.createElement('canvas'); c.width = Math.ceil((x1 - x0) * sc); c.height = Math.ceil((z1 - z0) * sc);
+  const x = c.getContext('2d');
+  // floor: everything inside the walls' footprint reads as deck
+  x.fillStyle = '#1b2a33'; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = '#9fb4c2';
+  for (const b of boxes) x.fillRect((b[0] - x0) * sc, (b[2] - z0) * sc, Math.max(1, (b[3] - b[0]) * sc), Math.max(1, (b[5] - b[2]) * sc));
+  return { canvas: c, scale: sc, ox: x0, oz: z0, view: w.kind === 'ship' ? 26 : 48, bg: '#0d1418' };
 }

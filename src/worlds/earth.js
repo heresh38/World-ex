@@ -14,6 +14,35 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vect
 const Y = new THREE.Vector3(0, 1, 0);
 
 // Instance every mesh under a kit root at the given matrices (one draw call per material).
+// Colliders for instanced street furniture so people can't walk through it.
+// spec: {post: radius, h} — a thin upright (lamp, tree trunk, sign pole) at the instance origin
+//       {box: true}       — the kit's bounding box, split along its long side into small blocks so rotated
+//                           benches and fences don't turn into big diagonal boxes
+function kitColliders(collision, root, mats, spec, tag = 'prop') {
+  if (!root || !mats.length) return;
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const bb = new THREE.Box3();
+  root.traverse(o => { if (o.isMesh) { o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld))); } });
+  const c = new THREE.Vector3(), sc = new THREE.Vector3(), q = new THREE.Quaternion();
+  for (const m of mats) {
+    m.decompose(c, q, sc);
+    if (spec.post) {
+      const r = spec.post * sc.x, h = (spec.h || (bb.max.y - bb.min.y)) * sc.y;
+      collision.add([c.x - r, c.y, c.z - r, c.x + r, c.y + h, c.z + r], tag);
+      continue;
+    }
+    const lx = bb.max.x - bb.min.x, lz = bb.max.z - bb.min.z, alongX = lx >= lz;
+    const L = alongX ? lx : lz, n = Math.max(1, Math.ceil(L / .7)), half = Math.max(.12, (alongX ? lz : lx) / 2);
+    for (let i = 0; i < n; i++) {
+      const t = (i + .5) / n;
+      const p = new THREE.Vector3(alongX ? bb.min.x + t * lx : (bb.min.x + bb.max.x) / 2, 0, alongX ? (bb.min.z + bb.max.z) / 2 : bb.min.z + t * lz).applyMatrix4(m);
+      const e = Math.max(half, L / n / 2) * sc.x;
+      collision.add([p.x - e, c.y + bb.min.y * sc.y, p.z - e, p.x + e, c.y + bb.max.y * sc.y, p.z + e], tag);
+    }
+  }
+}
+
 function instanceKit(scene, root, mats, { shadow = true, chunk = 0 } = {}) {
   if (!mats.length) return [];
   root.updateMatrixWorld(true);
@@ -276,6 +305,7 @@ export class EarthWorld extends World {
     }
     const pk = A.models.props_world.scene;
     instanceKit(this.scene, pk.getObjectByName('PR_lamp'), lampM);
+    kitColliders(this.collision, pk.getObjectByName('PR_lamp'), lampM, { post: .16, h: 5 });
     // parks: lawns, trees, benches and a fountain each; riverside promenades lined with trees
     const rk = A.models.rural.scene;
     const lawnMat = new THREE.MeshStandardMaterial({ map: (() => { const t = A.textures.moss.clone(); t.repeat.set(10, 10); t.needsUpdate = true; return t; })(), color: 0x8fb070, roughness: .95 });
@@ -311,8 +341,18 @@ export class EarthWorld extends World {
     instanceKit(this.scene, rk.getObjectByName('RU_tree_maple'), mapleM);
     instanceKit(this.scene, rk.getObjectByName('RU_tree_pine'), pineM);
     instanceKit(this.scene, rk.getObjectByName('RU_bush'), bushM);
+    kitColliders(this.collision, rk.getObjectByName('RU_tree_oak'), treeM, { post: .35, h: 4 }, 'tree');
+    kitColliders(this.collision, rk.getObjectByName('RU_tree_maple'), mapleM, { post: .32, h: 4 }, 'tree');
+    kitColliders(this.collision, rk.getObjectByName('RU_tree_pine'), pineM, { post: .4, h: 4 }, 'tree');
     for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + .3; benchM.push(new THREE.Matrix4().compose(_p.set(Math.cos(a) * 33, 0, Math.sin(a) * 33), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
     instanceKit(this.scene, pk.getObjectByName('PR_bench'), benchM);
+    kitColliders(this.collision, pk.getObjectByName('PR_bench'), benchM, { box: true }, 'bench');
+    // every bench seats two
+    for (const m of benchM) {
+      const c = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(); m.decompose(c, q, sc);
+      const e = new THREE.Euler().setFromQuaternion(q, 'YXZ'), yaw = e.y, side = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      for (const k of [-.45, .45]) this.addSeat(c.clone().addScaledVector(side, k), yaw, 'Bench');
+    }
     instanceKit(this.scene, kit.getObjectByName('BLD_fountain'), fountM);
     for (const [x, z, r, n] of [[PITCH - 20, -12, Math.PI / 2, 'PR_sign_magenta'], [12, PITCH - 20, 0, 'PR_sign_cyan'], [-PITCH + 28, 8, -Math.PI / 2, 'PR_sign_cyan']]) {
       const s = A.clone('props_world', n); s.position.set(x, 9, z); s.rotation.y = r; s.scale.setScalar(2.2); this.scene.add(s);
@@ -366,6 +406,7 @@ export class EarthWorld extends World {
     // road signs at junctions with the ring road
     const signs = this.map.roads.map(r => { const p = r.pts[6]; return new THREE.Matrix4().compose(_p.set(p.x + 8, p.y, p.z), _q.identity(), _s.set(1, 1, 1)); });
     instanceKit(sc, A.models.rural.scene.getObjectByName('RU_sign'), signs);
+    kitColliders(this.collision, A.models.rural.scene.getObjectByName('RU_sign'), signs, { post: .15, h: 3 });
   }
 
   // ---------------------------------------------------------------- villages
@@ -421,7 +462,13 @@ export class EarthWorld extends World {
       if (sidewalkA.length > 3) this.paths.push(this.loop([...sidewalkA, ...sidewalkB.reverse()]));
       this.paths.push(this.loop(Array.from({ length: 12 }, (_, i) => [vx + Math.cos(i / 12 * 6.28) * 40, vz + Math.sin(i / 12 * 6.28) * 40])));
     }
-    for (const [n, list] of Object.entries(mats)) instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700 });
+    for (const [n, list] of Object.entries(mats)) { instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700 }); this.propColliders(rk, n, list); }
+  }
+
+  // small things people bump into: trunks, poles, fences, hay bales
+  propColliders(rk, n, list) {
+    if (/RU_tree/.test(n)) kitColliders(this.collision, rk.getObjectByName(n), list, { post: .35, h: 4 }, 'tree');
+    else if (/RU_fence|RU_hay|RU_sign/.test(n)) kitColliders(this.collision, rk.getObjectByName(n), list, /sign/.test(n) ? { post: .15, h: 3 } : { box: true });
   }
 
   // ---------------------------------------------------------------- farms
@@ -467,7 +514,7 @@ export class EarthWorld extends World {
         }
       }
     }
-    for (const [n, list] of Object.entries(mats)) instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700, shadow: n !== 'RU_wheat' && n !== 'RU_corn' });
+    for (const [n, list] of Object.entries(mats)) { instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700, shadow: n !== 'RU_wheat' && n !== 'RU_corn' }); this.propColliders(rk, n, list); }
   }
 
   // ---------------------------------------------------------------- nature
@@ -482,7 +529,7 @@ export class EarthWorld extends World {
       if (h < SEA + 2 || map.developed(X, Z) || map.nearRoad(X, Z, 13)) continue;
       const k = h > 40 ? (rnd() < .75 ? 3 : 2) : Math.floor(rnd() * 5);
       mats[kinds[k]].push(new THREE.Matrix4().compose(_p.set(X, h - .2, Z), _q.setFromAxisAngle(Y, rnd() * 6), _s.setScalar(.75 + rnd() * .6)));
-      if (k !== 4 && rnd() < .5) this.collision.add([X - .5, h, Z - .5, X + .5, h + 6, Z + .5], 'tree');
+      if (k !== 4) { const r = .3 * (.75 + .3); this.collision.add([X - r, h, Z - r, X + r, h + 5, Z + r], 'tree'); }
     }
     this.treeCount = Object.values(mats).reduce((a, b) => a + b.length, 0);
     for (const [n, list] of Object.entries(mats)) instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700 });

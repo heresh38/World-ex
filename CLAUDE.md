@@ -45,6 +45,18 @@ plaza, and glowing cyan kerb strips.
 `src/worlds/meridian/`: `layout.js` (heightmap, river, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
 `traffic.js` (lane cars, hijack), `wanted.js` (stars + security drones). Assets: `rural.py` (RU_* kit). No missions on Earth.
 
+## Player, UI and sky
+- Movement (`player.js`): walk 4.4, sprint 8.6, coyote time + jump buffer, C = crouch (slide when sprinting), automatic
+  mantling onto ledges 0.5–2.45 m (`findLedge`), sitting (`Player.sit`, `World.addSeat`; layouts may export `seats`).
+- Inventory (I / Tab): `Menus.st_inventory` (weapons, armour, missions, overview) + `src/ui/inspect.js` (turning gun or an
+  orbit shot of the player drawn by `Renderer.preview` into `.inv-stage`). Equipping only works aboard the ship.
+- Armour: `armorStats` in `data.js` (worn pieces → armour rating, damage resisted, mobility), used by `Game.armor`.
+- Minimap on every world (`hud.js updateMinimap`): worlds may provide `minimap`; otherwise frontier planets get a
+  hill-shaded patch and interiors a wall plan from the colliders. Interactables, hostiles and `markers()` are drawn.
+- Small street furniture gets colliders through `kitColliders` in `earth.js`.
+- Orbit: `sky.js` `spaceSky` (sparse stars, faint galaxy band) and `orbitPlanet`; Earth uses maps baked by
+  `tools/blender/planets.py` (`earth_day/clouds/night/ms.jpg`, registered in `planetMaps` at boot).
+
 ## Camera
 First person is the primary view (`settings.view = 'first'`), third person is a toggle (T) that may be removed later.
 In first person the body moves to layer 1 (shadows only) and `src/game/viewmodel.js` draws the Blender arms + gun in a
