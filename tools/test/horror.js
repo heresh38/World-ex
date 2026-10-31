@@ -15,6 +15,12 @@ fs.mkdirSync(OUT, { recursive: true });
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
   await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'medium'; });
+  // other work in progress may list models that are not built yet (player *_npc): fall back to the base model for this test
+  await p.route('**/assets/models/*_npc.glb', async route => {
+    const r = await route.fetch();
+    if (r.status() === 404) { console.log('fallback for', route.request().url().split('/').pop()); return route.continue({ url: route.request().url().replace('_npc.glb', '.glb') }); }
+    return route.fulfill({ response: r });
+  });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
   const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 85, timeout: 300000 }); console.log('shot', n); };

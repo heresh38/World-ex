@@ -9,6 +9,7 @@ import { atmosphereSky } from '../sky.js';
 import { mulberry } from '../../game/state.js';
 import { VanthosMap, CROWN_R, OUTER_R, SPIRE_R, CRATER_R, HIGHWAYS, MAJOR, STREET, BW, BD, WATER_Y, fbm } from './map.js';
 import { DISTRICTS } from './districts.js';
+import { Water } from '../../game/water.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
@@ -65,6 +66,7 @@ export class VanthosWorld extends World {
     sun.shadow.bias = -.0005; sun.shadow.normalBias = .08;
     sc.add(sun, sun.target); this.sun = sun;
     await tick(.08, 'Mapping the ruins');
+    await Water.load(A);
     this.buildTerrain();
     await tick(.2, 'Tracing the highways');
     this.buildRoads();
@@ -202,8 +204,12 @@ export class VanthosWorld extends World {
     const D = DISTRICTS.find(d => d.id === 'flooded');
     const wgeo = new THREE.RingGeometry(CROWN_R - 10, OUTER_R + 10, 64, 1, -D.a1 * Math.PI / 180, (D.a1 - D.a0) * Math.PI / 180);
     wgeo.rotateX(-Math.PI / 2);
-    const water = new THREE.Mesh(wgeo, new THREE.MeshStandardMaterial({ color: 0x1d3a44, roughness: .06, metalness: .3, transparent: true, opacity: .86, envMapIntensity: 1.3 }));
-    water.position.y = WATER_Y; sc.add(water); this.water = water;
+    // shared water surface (src/game/water.js): murky flood water with ripples and splashes; depth sampled over the sector
+    const arc = []; for (let k = 0; k <= 12; k++) { const a = (D.a0 + (D.a1 - D.a0) * k / 12) * Math.PI / 180; for (const R of [CROWN_R - 12, OUTER_R + 12]) arc.push([Math.cos(a) * R, Math.sin(a) * R]); }
+    const bounds = [Math.min(...arc.map(a => a[0])), Math.min(...arc.map(a => a[1])), Math.max(...arc.map(a => a[0])), Math.max(...arc.map(a => a[1]))];
+    this.water = new Water(this.g, sc, { level: WATER_Y, ground: (x, z) => map.height(x, z), inside: (x, z) => map.flooded(x, z) > .02, bounds, res: 320,
+      deep: 0x0b1916, shallow: 0x34402f, foamColor: 0xd9d6c6, caps: 0, swell: .32, clarity: 1.4, sunDir: this.sunDir, sunColor: 0xffc29a, vfxLight: 0xd8cfc8 });
+    this.water.addSurface(wgeo);
     // world edge walls in the badlands
     for (let k = 0; k < 24; k++) {
       const a = k / 24 * Math.PI * 2, R = 2380;
@@ -437,6 +443,7 @@ export class VanthosWorld extends World {
   // ---------------------------------------------------------------- per frame
   update(dt) {
     const g = this.g, p = g.player;
+    if (this.water) this.water.update(dt);
     this.sky.position.copy(g.camera.position);
     this.sky.material.uniforms.time.value = g.time;
     const c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
@@ -533,5 +540,5 @@ export class VanthosWorld extends World {
     return { canvas: c, scale: S / W, half };
   }
 
-  dispose() { super.dispose(); }
+  dispose() { this.water && this.water.dispose(); super.dispose(); }
 }

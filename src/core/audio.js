@@ -157,6 +157,65 @@ export class Audio {
     this.tone(o, t, .12, big ? 160 : 260, 60, 'sine', big ? .4 : .2);
   }
 
+  // water (src/game/water.js): 'small' bullet plip, 'wade'/'swim' slosh, 'big' body/fall, 'huge' car/explosion column
+  splash(pos, size = 'small') {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const now = performance.now(); if (size === 'small' && now - (this._splT || 0) < 35) return; this._splT = now;
+    const o = this.out(pos, size === 'huge' ? 220 : size === 'big' ? 120 : 45);
+    const bubbles = (n, f0, f1, dur, vol) => { for (let k = 0; k < n; k++) { const d = Math.random() * dur; const f = f0 + Math.random() * (f1 - f0); this.tone(o, t + d, .05 + Math.random() * .06, f, f * (1.6 + Math.random()), 'sine', vol * (.5 + Math.random() * .5)); } };
+    if (size === 'small') {
+      this.nz(o, t, .12, 4200, 1400, 1.5, 'bandpass', .3, .002);
+      bubbles(2, 700, 1400, .06, .08);
+    } else if (size === 'wade' || size === 'swim') {
+      this.nz(o, t, size === 'swim' ? .5 : .32, 900, 2600, .8, 'bandpass', size === 'swim' ? .14 : .1, .06);
+      this.nz(o, t + .05, .25, 3000, 800, 1, 'lowpass', .05, .03);
+      bubbles(size === 'swim' ? 3 : 1, 400, 900, .25, .04);
+    } else if (size === 'big') {
+      this.nz(o, t, .45, 1800, 300, .7, 'lowpass', .7, .004);
+      this.tone(o, t, .3, 140, 50, 'sine', .5);
+      this.nz(o, t + .08, 1.1, 2400, 500, .6, 'lowpass', .28, .1);
+      bubbles(8, 300, 900, .6, .07);
+    } else {
+      this.nz(o, t, .7, 1200, 120, .6, 'lowpass', 1.0, .004);
+      this.tone(o, t, .5, 90, 30, 'sine', .8);
+      this.nz(o, t + .15, 2.4, 3200, 400, .5, 'lowpass', .45, .25);        // the column falling back: a long hiss and patter
+      for (let k = 0; k < 14; k++) this.nz(o, t + .5 + Math.random() * 1.6, .06, 5000, 1500, 2, 'bandpass', .12 + Math.random() * .1);
+      bubbles(10, 200, 700, 1.2, .06);
+    }
+  }
+
+  // jumpship engines for the landing / take-off cinematics: level 0..1 (call updateJet every frame, stopLoop('jet') after)
+  jetLoop() {
+    return this.loop('jet', () => {
+      const c = this.ctx, g = c.createGain(); g.gain.value = 0; g.connect(this.sfx);
+      const n = this.noiseLoop(g, 500, 'lowpass', .8);
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 48;
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
+      const og = c.createGain(); og.gain.value = .25; o.connect(f); f.connect(og); og.connect(g); o.start();
+      const w = c.createOscillator(); w.type = 'sine'; w.frequency.value = 880;
+      const wg = c.createGain(); wg.gain.value = .02; w.connect(wg); wg.connect(g); w.start();
+      return { gain: g, nf: n.fl, osc: o, whine: w, nodes: [o, w, n.src] };
+    });
+  }
+
+  updateJet(level) {
+    const l = this.loops.jet; if (!l) return;
+    const t = this.ctx.currentTime, k = Math.max(0, Math.min(1.5, level));
+    l.gain.gain.setTargetAtTime(k * .6, t, .12);
+    l.nf.frequency.setTargetAtTime(300 + k * 1600, t, .15);
+    l.osc.frequency.setTargetAtTime(40 + k * 30, t, .2);
+    l.whine.frequency.setTargetAtTime(700 + k * 900, t, .3);
+  }
+
+  // heavy touchdown thump
+  touchdown(pos) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.out(pos, 120);
+    this.tone(o, t, .6, 70, 28, 'sine', .9); this.nz(o, t, .5, 900, 80, .6, 'lowpass', .5, .003);
+    this.nz(o, t + .25, .35, 2600, 1800, 3, 'bandpass', .12, .05);       // hydraulics settling
+  }
+
   // ---- the Writhe: wet tearing squelches, warbling shrieks, chittering, gurgling sacs, a fused-throat roar
   squelch(pos, size = 1) {
     if (!this.ready) return;

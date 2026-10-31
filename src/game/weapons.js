@@ -83,6 +83,7 @@ export class Weapons {
   constructor(game) {
     this.g = game;
     Weapons.assets = game.assets;
+    Weapons.shareTextures(game.assets);
     this.slot = 0; this.cool = 0; this.reloading = 0; this.swap = 0; this.burstLeft = 0; this.burstCool = 0;
     this.ammo = {};       // uid -> {mag, reserve}
     this.lastFire = 9; this.rampage = 0; this.rampageT = 0;
@@ -99,6 +100,32 @@ export class Weapons {
       emissive: 0x1c3a0c, emissiveIntensity: 1 }), MAX_GOO);
     this.globs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_GOO * 3), 3);
     this.globs.frustumCulled = false; this.globs.count = 0; this.globs.castShadow = false;
+  }
+
+  // Every gun GLB embeds its own copy of the shared texture sets (wpn_steel_*, wpn_wood_*, bio_flesh_*...): keep one
+  // texture per image name across all gun models and release the duplicates' decoded images (saves ~250 MB).
+  static shareTextures(assets) {
+    if (!assets || !assets.models || Weapons.texShared) return;
+    Weapons.texShared = true;
+    const byName = new Map(), dropped = new Set();
+    const KEYS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'clearcoatMap', 'clearcoatNormalMap'];
+    for (const [name, gltf] of Object.entries(assets.models)) {
+      if (!/^gun_/.test(name) || !gltf || !gltf.scene) continue;
+      gltf.scene.traverse(o => {
+        if (!o.isMesh) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          for (const k of KEYS) {
+            const t = m[k]; if (!t || !t.name) continue;
+            const keep = byName.get(t.name);
+            if (!keep) { byName.set(t.name, t); continue; }
+            if (keep === t) continue;
+            m[k] = keep;
+            if (!dropped.has(t)) { dropped.add(t); const d = t.source && t.source.data; if (d && d.close) d.close(); t.dispose(); }
+          }
+        }
+      });
+    }
+    Weapons.texStats = { kept: byName.size, dropped: dropped.size };
   }
 
   equipped(i = this.slot) {
@@ -535,7 +562,9 @@ export class Weapons {
         continue;
       }
       _a.copy(r.m.position); r.m.position.addScaledVector(r.dir, step);
-      g.water && g.water.hitTest(_a, r.m.position);
+      // water: a rocket that crosses the surface detonates there (fx.explosion near water raises the column)
+      const wet = g.water && g.water.hitTest(_a, r.m.position, null);
+      if (wet) { r.m.position.copy(wet.point); r.life = 0; }
     }
   }
 

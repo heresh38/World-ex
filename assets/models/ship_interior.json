@@ -1209,12 +1209,12 @@
    "name": "bay_field",
    "pos": [
     0,
-    3.5,
-    -36.5
+    7.0,
+    -36.0
    ],
    "color": "#58b4ff",
-   "intensity": 22,
-   "dist": 20
+   "intensity": 12,
+   "dist": 18
   },
   {
    "kind": "spot",

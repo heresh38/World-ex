@@ -470,9 +470,9 @@ class Kit:
             for b in list(W):
                 W[b] = W[b] * (1 - t)
             side = smoothstep(-.06, .06, V[:, 0])
-            W['hips'] = W.get('hips', 0) + t * .6
-            W['thigh.L'] = W.get('thigh.L', 0) + t * .4 * side
-            W['thigh.R'] = W.get('thigh.R', 0) + t * .4 * (1 - side)
+            W['hips'] = W.get('hips', 0) + t * .5
+            W['thigh.L'] = W.get('thigh.L', 0) + t * .5 * side
+            W['thigh.R'] = W.get('thigh.R', 0) + t * .5 * (1 - side)
         return W
 
     def skirt_loft(self, hem, top, rv, front, back):
@@ -502,7 +502,7 @@ class Kit:
                 if vneck is not None:           # V opening at the front: (depth below the collar, slope)
                     zv = zcol - vneck[0]
                     cut = np.minimum.reduce([zz - (zv + np.abs(P[:, 0]) * vneck[1]), -P[:, 1] - .02, .08 - np.abs(P[:, 0])])
-                    reg = np.maximum(reg, -cut)
+                    reg = np.maximum(reg, cut)
                 if scoop is not None:           # rounded scoop at the front (centre depth, half width)
                     e = ((P[:, 0] / scoop[1]) ** 2 + ((zz - zcol) / scoop[0]) ** 2) - 1
                     reg = np.maximum(reg, np.where(P[:, 1] < 0, -e * .03, -1))

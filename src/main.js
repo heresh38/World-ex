@@ -31,7 +31,7 @@ const MODELS = [
   ['cars', 'cars.glb', 8], ['board_sport', 'board_sport.glb', 1], ['board_utility', 'board_utility.glb', 1],
   ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
   ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['player_female_npc', 'player_female_npc.glb', 3], ['player_male_npc', 'player_male_npc.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
-  ['vanthos', 'vanthos.glb', 8], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
+  ['vanthos', 'vanthos.glb', 8], ['airport', 'airport.glb', 5], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
   ...['mite', 'host', 'bladder', 'amalgam'].map(k => ['writhe_' + k, 'writhe_' + k + '.glb', 1]),
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]), ['gun_attach', 'gun_attach.glb', 1],
 ];
@@ -181,6 +181,7 @@ class Game {
     this.state = 'loading';
     this.persist();
     if (this.vehicles.current) this.vehicles.exit();
+    if (this.world && this.world.depart) { try { await this.world.depart(id); } catch (e) { console.error(e); } }   // take-off cinematic
     const toShip = id === 'ship';
     const dest = toShip ? { name: 'The Wayfarer', desc: 'Breaking atmosphere. The ship will hold orbit above ' + (DESTINATIONS.find(d => d.id === this.save.lastDest) || DESTINATIONS[0]).name + '.' } : DESTINATIONS.find(d => d.id === id);
     if (!toShip) this.audio.warp();
@@ -194,7 +195,9 @@ class Game {
     this.paused = false; this.input.enabled = true;
     if (this.player.mode === 'seat') this.player.mode = 'foot';
     if (!this.input.locked) this.input.lock();
+    const arrive = this.world.arrive ? this.world.arrive() : null;   // landing cinematic (runs under the fade-in)
     await this.fade(false);
+    if (arrive) await arrive;
     const w = this.world;
     this.hud.banner(w.name, w.region, 3.5);
   }
@@ -322,6 +325,8 @@ class Game {
     // shift the projection so the framed station sits right of the panel
     this.camera.setViewOffset(innerWidth, innerHeight, -innerWidth * .2, 0, innerWidth, innerHeight);
   }
+
+  get water() { return (this.world && this.world.water) || null; }   // shared water API (src/game/water.js)
 
   get armor() { return armorStats(this.save.character, (this.player && this.player.avatar && this.player.avatar.wardrobe) || {}); }
 
@@ -511,8 +516,8 @@ class Game {
       return;
     }
     if (this.state === 'loading') { this.input.endFrame(); return; }
-    if (!this.paused) this.update(dt);
-    this.renderer.render(this.scene, this.camera, this.viewmodel && this.viewmodel.active ? this.viewmodel.scene : null);
+    if (this.cine) this.cine(dt); else if (!this.paused) this.update(dt);   // cutscenes (src/game/cinematic.js) own the frame
+    this.renderer.render(this.scene, this.camera, this.viewmodel && this.viewmodel.active && !this.cine ? this.viewmodel.scene : null);
     if (this.stationId === 'inventory' && this.inspect) this.inspect.render(dt);
     this.renderer.govern(dt);
     this.input.endFrame();

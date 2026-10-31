@@ -5,7 +5,10 @@ import { World } from './world.js';
 import { atmosphereSky } from './sky.js';
 import { mulberry } from '../game/state.js';
 import { Avatar } from '../game/avatar.js';
-import { MeridianMap, VILLAGES, FARMS, HALF, SIZE, SEA, BLOCK, ROAD, CITY_N as N, PITCH, CITY_EDGE, fbm, RIVER_Z, RIVER_W, RIVER_BANK } from './meridian/layout.js';
+import { MeridianMap, VILLAGES, FARMS, HALF, SIZE, SEA, BLOCK, ROAD, CITY_N as N, PITCH, CITY_EDGE, fbm, RIVER_Z, RIVER_W, RIVER_BANK, AIRPORT, inAirport } from './meridian/layout.js';
+import { Water } from '../game/water.js';
+import { Puffs } from '../game/puffs.js';
+import { runCinematic, ease, easeOut, easeIn, bezier } from '../game/cinematic.js';
 import { Population } from './meridian/population.js';
 import { Traffic } from './meridian/traffic.js';
 import { Wanted } from './meridian/wanted.js';
@@ -126,15 +129,17 @@ export class EarthWorld extends World {
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i) + ox, z = pos.getZ(i) + oz;
         // in the city the concrete slab is the ground; sink the terrain a hair under it
-        pos.setY(i, map.height(x, z) - (Math.abs(x) < CITY_EDGE + 20 && Math.abs(z) < CITY_EDGE + 20 ? .15 : 0));
+        pos.setY(i, map.height(x, z) - (Math.abs(x) < CITY_EDGE + 20 && Math.abs(z) < CITY_EDGE + 20 ? .15 : inAirport(x, z, -6) ? .3 : 0));
       }
       geo.computeVertexNormals();
       const t = new THREE.Mesh(geo, tmat); t.position.set(ox, 0, oz); t.receiveShadow = true;
       sc.add(t);
     }
-    // the bay all around the island
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE * 3, SIZE * 3), new THREE.MeshStandardMaterial({ color: 0x1d4a5e, roughness: .08, metalness: .2, envMapIntensity: 1.2 }));
-    water.rotation.x = -Math.PI / 2; water.position.y = SEA; sc.add(water); this.water = water;
+    // the bay all around the island and the river through the city: one shared water surface (src/game/water.js)
+    await Water.load(A);
+    this.water = new Water(g, sc, { level: SEA, ground: (x, z) => map.height(x, z), bounds: [-HALF, -HALF, HALF, HALF], res: 512,
+      deep: 0x041f2c, shallow: 0x22645f, caps: .3, swell: .6, clarity: 3.2, sunDir: this.sunDir, sunColor: 0xffd2a0, vfxLight: 0xf2e6da });
+    this.water.addSurface(new THREE.PlaneGeometry(SIZE * 3, SIZE * 3).rotateX(-Math.PI / 2), { follow: true });
     // island edge walls (beyond the beach)
     const E = HALF - 30;
     for (const [x0, z0, x1, z1] of [[-E - 5, -E - 5, E + 5, -E], [-E - 5, E, E + 5, E + 5], [-E - 5, -E, -E, E], [E, -E, E + 5, E]]) this.collision.add([x0, -50, z0, x1, 200, z1], 'edge');
@@ -151,7 +156,7 @@ export class EarthWorld extends World {
     this.buildForests(rnd);
     this.buildTurbines(rnd);
     await tick(.78, 'Opening the spaceport');
-    this.buildSpaceport();
+    this.buildAirport(rnd);
     await tick(.84, 'Waking the city');
     // skyway traffic overhead (decoration) + parked cars at the kerbs
     this.skyway = [];
@@ -173,6 +178,7 @@ export class EarthWorld extends World {
       if (Math.abs(_p.x) < 30 && Math.abs(_p.z) < 40) continue;
       g.vehicles.spawn(rnd() < .7 ? 'car_sport' : 'car_utility', paints[Math.floor(rnd() * paints.length)], _p.clone(), Math.atan2(_v.x, _v.z));
     }
+    this.parkAirportCars(rnd, paints);
     // ---------------- life
     this.population = new Population(g, map, this.paths);
     this.traffic = new Traffic(g, map);
@@ -258,7 +264,7 @@ export class EarthWorld extends World {
     const PLAZA = '1,1';
     for (let bx = -N; bx <= N; bx++) for (let bz = -N; bz <= N; bz++) {
       const cx = bx * PITCH, cz = bz * PITCH, key = bx + ',' + bz;
-      if (bx === 0 && bz === 0) continue;                                     // spaceport plaza
+      if (bx === 0 && bz === 0) { parks.push([cx, cz]); continue; }          // Founders' Park (the old landing plaza)
       if (inRiver(cz)) continue;                                              // the river
       if (key === PLAZA) { this.plaza = [cx, cz]; continue; }
       if (PARKS.has(key)) { parks.push([cx, cz]); continue; }
@@ -549,22 +555,217 @@ export class EarthWorld extends World {
     }
   }
 
-  // ---------------------------------------------------------------- spaceport, ship, Quartermaster
-  buildSpaceport() {
-    const g = this.g, A = g.assets, sc = this.scene;
-    const port = A.clone('city_buildings', 'BLD_port'); sc.add(port);
-    port.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
-    this.collision.add([-20, 0, -20, 20, 1.2, 20], 'port');
-    for (let i = 0; i < 6; i++) this.collision.add([-5, 0, 20 + i * 2.6, 5, 1.2 - (i + 1) * .2, 22.6 + i * 2.6], 'ramp');
-    const js = A.clone('ship_jumper'); js.position.set(0, 1.2, 4); js.rotation.y = Math.PI; sc.add(js); this.jumpship = js;
-    this.collision.add([-2.4, 1.2, -4, 2.4, 5, 12], 'ship');
-    this.collision.add([-8.6, 2.0, -1.5, 8.6, 2.6, 4], 'ship');
-    this.interactables.push({ id: 'ship', pos: new THREE.Vector3(0, 1.2, 12.5), r: 3.2, label: 'The Wayfarer', verb: 'Return to orbit', key: 'E', action: () => g.travel('ship') });
-    const qm = new Avatar(A, 'npc_vendor'); qm.root.position.set(9, 1.2, -9); qm.root.rotation.y = -Math.PI * .75; qm.play('IdleRelaxed', 0);
+  // ---------------------------------------------------------------- spaceport: airport, ship, Quartermaster
+  // The airport model (tools/blender/airport.py) carries its colliders, pads, spawn and vendor spot in extras.worldex,
+  // in three space relative to landing pad 1 (AIRPORT.x/z).
+  buildAirport(rnd) {
+    const g = this.g, A = g.assets, sc = this.scene, O = new THREE.Vector3(AIRPORT.x, 0, AIRPORT.z);
+    const site = A.clone('airport', 'AP_site'); site.position.copy(O); sc.add(site);
+    const meta = this.airport = JSON.parse(site.userData.worldex);
+    const W = a => new THREE.Vector3(a[0], a[1], a[2]).add(O);
+    site.traverse(o => {
+      if (!o.isMesh) return;
+      const m = o.material, n = m.name || '', grp = o.parent && o.parent.name;
+      o.receiveShadow = true;
+      if (/AP_ground|AP_lights/.test(grp) || /AP_ground|AP_lights/.test(o.name)) o.castShadow = false;
+      // painted lines, tyre rubber and pads sit a hair above the slabs: keep them from z-fighting at a distance
+      if (/^ap_paint|^ap_tyre/.test(n)) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -4; }
+      if (n === 'ap_pad') { m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -2; }
+      if (n === 'ap_fence') { m.transparent = false; m.alphaTest = .45; m.depthWrite = true; m.side = THREE.DoubleSide; }
+      if (n === 'ap_glass') { m.envMapIntensity = 1.8; m.roughness = .04; m.metalness = .35; }
+      if (n === 'ap_floor') { m.envMapIntensity = .8; }
+    });
+    for (const c of meta.colliders) this.collision.add([c[0] + O.x, c[1], c[2] + O.z, c[3] + O.x, c[4], c[5] + O.z], c[6] || 'airport');
+    this.radar = site.getObjectByName('AP_radar');
+    this.socks = []; site.traverse(o => { if (/^windsock_sock/.test(o.name) && !o.isMesh) this.socks.push(o); });
+    // the Wayfarer's jumpship on pad 1, ramp toward the terminal
+    const pad = this.padPos = W(meta.ship);
+    const js = A.clone('ship_jumper'); js.position.copy(pad); js.rotation.y = 0; sc.add(js); this.jumpship = js;
+    this.shipColliders();
+    this.interactables.push({ id: 'ship', pos: pad.clone().add(new THREE.Vector3(0, 0, -10.6)), r: 3.2, label: 'The Wayfarer', verb: 'Return to orbit', key: 'E', action: () => g.travel('ship') });
+    // visiting ships: a dropship on pad 2, a jumpship in a different livery on pad 3, one in hangar 1
+    const visitor = (model, p, yaw, tint) => {
+      const v = A.clone(model); v.position.copy(p); v.rotation.y = yaw; sc.add(v);
+      if (tint) v.traverse(o => { if (o.isMesh && o.material.name === 'ship_hull') { o.material = o.material.clone(); o.material.color.set(tint); } });
+      this.collision.add([p.x - 2.6, p.y, p.z - 7.5, p.x + 2.6, p.y + 3.8, p.z + 7.5], 'ship');
+      this.collision.add([p.x - 8.4, p.y + .8, p.z - 2, p.x + 8.4, p.y + 1.6, p.z + 4], 'ship');
+      return v;
+    };
+    visitor('ship_dropship', W(meta.pads[1]), Math.PI * .1);
+    visitor('ship_jumper', W(meta.pads[2]), -Math.PI * .15, '#5a6470');
+    visitor('ship_dropship', W([meta.hangars[0][0], .1, meta.hangars[0][1] + 2]), Math.PI, '#b9b3a6');
+    // the Quartermaster runs a kiosk just inside the terminal's airside doors
+    const vp = W(meta.vendor);
+    const qm = new Avatar(A, 'npc_vendor'); qm.root.position.copy(vp); qm.root.rotation.y = meta.vendorYaw || 0; qm.play('IdleRelaxed', 0);
     sc.add(qm.root); this.vendor = qm;
-    this.collision.add([8.5, 1.2, -9.5, 9.5, 3, -8.5], 'npc');
-    const term = A.clone('props_world', 'PR_terminal'); term.position.set(10.2, 1.2, -10.2); term.rotation.y = -Math.PI * .75; sc.add(term);
-    this.interactables.push({ id: 'vendor', pos: new THREE.Vector3(8, 1.2, -8), r: 2.4, label: 'Quartermaster Okafor', verb: 'Trade', key: 'E', action: () => g.station('vendor') });
+    this.collision.add([vp.x - .5, vp.y, vp.z - .5, vp.x + .5, vp.y + 1.9, vp.z + .5], 'npc');
+    const term = A.clone('props_world', 'PR_terminal'); term.position.copy(vp).add(new THREE.Vector3(4.4, 0, 1.2)); term.rotation.y = -.5; sc.add(term);
+    this.collision.add([term.position.x - .6, vp.y, term.position.z - .6, term.position.x + .6, vp.y + 1.6, term.position.z + .6], 'prop');
+    this.vendorPos = vp.clone().add(new THREE.Vector3(0, 0, 3.2));
+    this.interactables.push({ id: 'vendor', pos: this.vendorPos, r: 2.6, label: 'Quartermaster Okafor', verb: 'Trade', key: 'E', action: () => g.station('vendor') });
+    // street lamps on the forecourt and in the car parks
+    const lampM = [];
+    for (let x = -120; x <= 120; x += 30) lampM.push(new THREE.Matrix4().compose(_p.set(O.x + x, 0, O.z - 97.4), _q.setFromAxisAngle(Y, Math.PI), _s.set(1, 1, 1)));
+    for (const [x0, z0, x1, z1] of meta.lots) for (let x = x0 + 12; x < x1 - 6; x += 26) lampM.push(new THREE.Matrix4().compose(_p.set(O.x + x, 0, O.z + (z0 + z1) / 2 + .6), _q.setFromAxisAngle(Y, Math.PI / 2), _s.set(1, 1, 1)));
+    const pk = A.models.props_world.scene;
+    instanceKit(sc, pk.getObjectByName('PR_lamp'), lampM);
+    kitColliders(this.collision, pk.getObjectByName('PR_lamp'), lampM, { post: .16, h: 5 });
+    // people on the terminal forecourt and in the hall
+    for (const loop of meta.paths) this.paths.push(this.loop(loop.map(([x, z]) => [x + O.x, z + O.z])));
+    this.dust = new Puffs(sc, 700, { soft: .9 });
+  }
+
+  // jumpship hull + wings (ship at the pad, nose south)
+  shipColliders() {
+    const p = this.padPos;
+    this.shipBoxes = [this.collision.add([p.x - 2.4, p.y, p.z - 8, p.x + 2.4, p.y + 3.8, p.z + 8], 'ship'),
+      this.collision.add([p.x - 8.6, p.y + .8, p.z, p.x + 8.6, p.y + 1.4, p.z + 5.5], 'ship')];
+  }
+
+  parkAirportCars(rnd, paints) {
+    const O = AIRPORT, g = this.g;
+    for (const [x0, z0, x1, z1] of this.airport.lots) for (const [z, yaw] of [[z0 + 5.5, Math.PI], [z1 - 5.5, 0]]) {
+      for (let x = x0 + 4.35; x < x1 - 4; x += 5.4) {
+        if (rnd() < .45) continue;
+        g.vehicles.spawn(rnd() < .6 ? 'car_sport' : 'car_utility', paints[Math.floor(rnd() * paints.length)], new THREE.Vector3(O.x + x, 0, O.z + z), yaw);
+      }
+    }
+  }
+
+  updateAirport(dt) {
+    const t = this.g.time;
+    if (this.radar) this.radar.rotation.y += dt * 1.3;
+    for (const [i, s] of (this.socks || []).entries()) { s.rotation.y = .35 + Math.sin(t * .5 + i) * .18 + Math.sin(t * 1.7 + i * 2) * .05; s.rotation.x = .12 + Math.sin(t * 2.3 + i) * .04; }
+    if (this.dust && !this.g.cine) this.dust.update(dt, this.scene.fog);
+  }
+
+  // ---------------------------------------------------------------- landing / take-off cinematics
+  // engine wash: glow under the hull and at the rear thrusters, a light on the pad, dust thrown out along the ground
+  engineFx(level, dt) {
+    const g = this.g, js = this.jumpship, fx = g.fx;
+    js.updateMatrixWorld(true);
+    const alt = js.position.y - this.padPos.y;
+    if (level > .02) {
+      for (const [x, z] of [[-2.2, -3.5], [2.2, -3.5], [-2.2, 3.5], [2.2, 3.5]]) fx.glow(_p.set(x, .35, z).applyMatrix4(js.matrixWorld), 1.6 + level * 1.6, 0x6fd8ff, .05);
+      for (const n of ['thruster', 'thruster001']) { const th = js.getObjectByName(n); if (th) { th.getWorldPosition(_p); fx.glow(_p, 1.2 + level * 2.2, 0x9fe8ff, .05); } }
+      fx.flash(_p.set(js.position.x, Math.max(this.padPos.y + 1, js.position.y - 1.5), js.position.z), 0x7fd8ff, 260 * level, .08, 40);
+      fx.emit(_v.set(0, -.2, 0).applyMatrix4(js.matrixWorld), Math.round(4 * level), 6, 0x7fd8ff, .25, -2, .12, .6, _p.set(0, -1, 0), .2);
+    }
+    // dust and heat shimmer on the ground once the ship is low
+    const k = level * Math.max(0, 1 - alt / 26);
+    this.dustAcc = (this.dustAcc || 0) + dt * 60 * k;
+    while (this.dustAcc >= 1) {
+      this.dustAcc -= 1;
+      const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 5;
+      this.dust.emit(_p.set(js.position.x + Math.cos(a) * r, this.padPos.y + .3, js.position.z + Math.sin(a) * r), 1, { speed: 10 + 10 * k, ring: .12, spread: .1, life: 2.6,
+        size: [1.4, 7], alpha: .3 * Math.min(1, k * 2), color: 0xc9b9a0, gravity: -.35, drag: 1.1, vary: .12 });
+    }
+    this.dust.update(dt, this.scene.fog);
+    g.audio.updateJet(level);
+  }
+
+  // common per-frame work while a cutscene owns the camera
+  cineTick(dt) {
+    const g = this.g;
+    this.update(dt);
+    g.fx.update(dt, (x, z) => this.collision.ground(x, z));
+    g.audio.listener(g.camera.position, Math.atan2(-g.camera.getWorldDirection(_v).x, -_v.z));
+  }
+
+  shake(cam, amt) { if (amt > 0) { cam.position.x += (Math.random() - .5) * amt; cam.position.y += (Math.random() - .5) * amt; cam.position.z += (Math.random() - .5) * amt; } }
+
+  // Arrival: the jumpship drops out of the sky onto pad 1, settles in its own dust, and the player walks down the ramp.
+  arrive() {
+    const g = this.g, js = this.jumpship, cam = g.camera, p = g.player, av = p.avatar;
+    const pad = this.padPos.clone(), sp = this.spawn();
+    const S = pad.clone().add(new THREE.Vector3(-120, 170, 260)), C1 = pad.clone().add(new THREE.Vector3(-60, 70, 120)), C2 = pad.clone().add(new THREE.Vector3(-6, 16, 18)), H = pad.clone().add(new THREE.Vector3(0, 9, 0));
+    const ramp = pad.clone().add(new THREE.Vector3(0, 0, -9.6));
+    const camA = pad.clone().add(new THREE.Vector3(24, 2.4, -31)), camB = pad.clone().add(new THREE.Vector3(9, 3.1, -25));
+    const eye = sp.pos.clone().setY(sp.pos.y + 1.62), look = sp.pos.clone().add(new THREE.Vector3(0, 1.5, -20));
+    const tmpQ = new THREE.Quaternion(), fpQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye, look, Y));
+    let touched = false, shake = 0;
+    av.root.visible = false;
+    av.root.traverse(o => { if (o.isMesh) o.layers.set(0); });
+    g.audio.jetLoop();
+    const D = 6.2, TD = 3.9;
+    return runCinematic(g, {
+      duration: D, title: 'New Meridian Spaceport', sub: 'Earth · Pad 1',
+      update: (t, dt) => {
+        // flight path: a curving descent to a hover over the pad, then straight down
+        if (t < 3.0) {
+          const k = easeOut(t / 3.0);
+          bezier(js.position, S, C1, C2, H, k);
+          js.rotation.set(-.18 * (1 - k) + .1 * Math.sin(k * Math.PI), Math.PI * .7 * (1 - ease(t / 2.6)), .22 * Math.sin(k * Math.PI) * (1 - k));
+        } else if (t < TD) {
+          const k = ease((t - 3.0) / (TD - 3.0));
+          js.position.lerpVectors(H, pad, k); js.rotation.set(.03 * (1 - k), 0, Math.sin(t * 3) * .01 * (1 - k));
+        } else { js.position.copy(pad); js.rotation.set(0, 0, 0); }
+        if (!touched && t >= TD) { touched = true; shake = .35; g.audio.touchdown(pad); for (let k = 0; k < 60; k++) this.dustAcc = (this.dustAcc || 0) + 1; }
+        const level = t < TD ? 1 : Math.max(0, 1 - (t - TD) / .9);
+        this.engineFx(level, dt);
+        // the player comes down the ramp
+        if (t > TD + .5) {
+          av.root.visible = true;
+          const k = Math.min(1, (t - TD - .5) / (D - TD - .9));
+          av.root.position.lerpVectors(ramp, sp.pos, k); av.root.rotation.y = Math.PI;
+          av.play(k < 1 ? 'WalkRelaxed' : 'IdleRelaxed', .25); av.update(dt);
+        }
+        this.cineTick(dt);
+        // camera: low on the apron in front of the terminal, tracking the ship; then into the player's eyes
+        const lookAt = js.position.clone().add(_v.set(0, 2, 0));
+        if (t < 4.6) {
+          const k = ease((t - 2.6) / 2.0);
+          cam.position.lerpVectors(camA, camB, k);
+          cam.lookAt(lookAt.lerp(av.root.visible ? av.root.position.clone().setY(1.4) : pad.clone().setY(2.5), ease((t - 3.6) / 1.2)));
+          cam.fov = 46 - 8 * ease(t / 3); cam.updateProjectionMatrix();
+        } else {
+          const k = ease((t - 4.6) / (D - 4.6));
+          const from = camB.clone(); cam.position.lerpVectors(from, eye, k);
+          tmpQ.setFromRotationMatrix(new THREE.Matrix4().lookAt(from, av.root.position.clone().setY(1.4), Y));
+          cam.quaternion.slerpQuaternions(tmpQ, fpQ, k);
+          cam.fov = 38 + (g.save.settings.fov - 38) * k; cam.updateProjectionMatrix();
+        }
+        shake = Math.max(0, shake - dt * .6); this.shake(cam, shake);
+      },
+      finish: () => {
+        js.position.copy(pad); js.rotation.set(0, 0, 0);
+        av.root.visible = true; g._fpLayer = null;
+        g.audio.updateJet(0); g.audio.stopLoop('jet');
+        p.spawn(sp.pos, sp.yaw); p.camPitch = -.05;
+        g.hud.show(true); g.hud.dirty = true;
+        g.setAvatarLayer && g.setAvatarLayer();
+      },
+    });
+  }
+
+  // Take-off: the player is aboard; the jumpship spools up, lifts off the pad, noses up and climbs away south.
+  depart() {
+    const g = this.g, js = this.jumpship, cam = g.camera, av = g.player.avatar;
+    const pad = this.padPos.clone();
+    const camP = pad.clone().add(new THREE.Vector3(-30, 2.2, -33)), camP2 = pad.clone().add(new THREE.Vector3(-22, 4, -40));
+    av.root.visible = false;
+    g.audio.jetLoop();
+    const vel = new THREE.Vector3(); let pitch = 0;
+    return runCinematic(g, {
+      duration: 5.6, title: 'Departing New Meridian', sub: 'Pad 1 · cleared to orbit',
+      update: (t, dt) => {
+        const spool = ease(t / 1.2);
+        if (t < 1.2) js.position.copy(pad).add(_v.set(0, Math.sin(t * 40) * .02 * spool, 0));
+        else if (t < 2.7) { const k = ease((t - 1.2) / 1.5); js.position.copy(pad).add(_v.set(Math.sin(t * 2) * .2, k * 12, 0)); js.rotation.set(0, 0, Math.sin(t * 1.7) * .03); }
+        else {
+          pitch = Math.min(.42, pitch + dt * .3); js.rotation.x = -pitch;
+          vel.z += dt * (14 + (t - 2.7) * 26); vel.y += dt * (6 + (t - 2.7) * 14);
+          js.position.addScaledVector(vel, dt);
+        }
+        this.engineFx(.35 + .65 * spool + (t > 2.7 ? .4 : 0), dt);
+        this.cineTick(dt);
+        cam.position.lerpVectors(camP, camP2, ease(t / 5.6));
+        cam.lookAt(js.position.clone().add(_v.set(0, 2, 0)));
+        cam.fov = 44 - 10 * ease((t - 2.7) / 2.9); cam.updateProjectionMatrix();
+        this.shake(cam, t > 1 && t < 3 ? .05 * (1 - Math.abs(t - 2) ) : 0);
+      },
+      finish: () => { g.audio.updateJet(0); g.audio.stopLoop('jet'); av.root.visible = true; },
+    });
   }
 
   // ---------------------------------------------------------------- minimap (pre-rendered island)
@@ -587,15 +788,29 @@ export class EarthWorld extends World {
     for (let i = -N - 1; i <= N; i++) { const c0 = (i + .5) * PITCH; let [a, b] = toPx(c0, -CITY_EDGE), [a2, b2] = toPx(c0, CITY_EDGE); x.beginPath(); x.moveTo(a, b); x.lineTo(a2, b2); x.stroke(); [a, b] = toPx(-CITY_EDGE, c0); [a2, b2] = toPx(CITY_EDGE, c0); x.beginPath(); x.moveTo(a, b); x.lineTo(a2, b2); x.stroke(); }
     x.fillStyle = 'rgba(214,190,140,.7)';
     for (const f of FARMS) { const [a, b] = toPx(f.pos[0] - f.w / 2, f.pos[1] - f.d / 2); x.fillRect(a, b, f.w / SIZE * S, f.d / SIZE * S); }
+    // the spaceport: runway, taxiway, apron and terminal
+    const ap = this.airport;
+    if (ap) {
+      const R = (x0, z0, x1, z1, col) => { const [a, b] = toPx(x0 + AIRPORT.x, z0 + AIRPORT.z), [c2, d] = toPx(x1 + AIRPORT.x, z1 + AIRPORT.z); x.fillStyle = col; x.fillRect(a, b, Math.max(1, c2 - a), Math.max(1, d - b)); };
+      const [rx0, rz, rx1, rw] = ap.runway, [tx0, tz, tx1, tw] = ap.taxiway, [ax0, az0, ax1, az1] = ap.apron, [px0, pz0, px1, pz1] = ap.terminal;
+      R(ax0, az0, ax1, az1, '#8e9096'); R(tx0, tz - tw / 2, tx1, tz + tw / 2, '#5a5c62'); R(rx0, rz - rw / 2, rx1, rz + rw / 2, '#3c3e44');
+      R(rx0 + 10, rz - .8, rx1 - 10, rz + .8, '#e8e2d4'); R(px0, pz0, px1, pz1, '#cfe6f0');
+      x.fillStyle = '#1ad8ff'; x.font = '700 11px Rajdhani, sans-serif'; x.textAlign = 'center';
+      const [lx, ly] = toPx(AIRPORT.x - 60, AIRPORT.z + 60); x.fillText('SPACEPORT', lx, ly + 22);
+    }
     x.fillStyle = '#e8e2d4'; x.font = '600 11px Rajdhani, sans-serif'; x.textAlign = 'center';
     for (const v of VILLAGES) { const [a, b] = toPx(v.pos[0], v.pos[1]); x.beginPath(); x.arc(a, b, 5, 0, 7); x.fill(); x.fillText(v.name.toUpperCase(), a, b - 9); }
     return { canvas: c, scale: S / SIZE, half: HALF };
   }
 
-  spawn() { return { pos: new THREE.Vector3(0, 1.2, 16.5), yaw: 0 }; }
+  // at the foot of the jumpship's ramp on pad 1, facing the terminal
+  spawn() {
+    const s = (this.airport && this.airport.spawn) || [0, .07, -12.5];
+    return { pos: new THREE.Vector3(AIRPORT.x + s[0], s[1], AIRPORT.z + s[2]), yaw: this.airport ? this.airport.spawnYaw : Math.PI };
+  }
 
   markers() {
-    const m = [{ pos: new THREE.Vector3(0, 0, 12), icon: '▲', color: '#1ad8ff' }, { pos: new THREE.Vector3(8, 0, -8), icon: '◉', color: '#7dffb0' }];
+    const m = [{ pos: this.padPos || new THREE.Vector3(AIRPORT.x, 0, AIRPORT.z), icon: '▲', color: '#1ad8ff' }, { pos: this.vendorPos || new THREE.Vector3(AIRPORT.x, 0, AIRPORT.z - 50), icon: '◉', color: '#7dffb0' }];
     for (const e of this.wanted.police) m.push({ pos: e.pos, icon: '●', color: '#ff4a3d' });
     return m;
   }
@@ -609,7 +824,8 @@ export class EarthWorld extends World {
     const c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
     this.sun.target.position.set(Math.round(c.x / 4) * 4, c.y, Math.round(c.z / 4) * 4);
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir, 300);
-    this.water.position.x = Math.round(c.x / 50) * 50; this.water.position.z = Math.round(c.z / 50) * 50;
+    this.water.update(dt);
+    this.updateAirport(dt);
     for (const t of this.skyway) {
       t.t += t.speed * t.dir * dt;
       if (t.t > CITY_EDGE) t.t = -CITY_EDGE; if (t.t < -CITY_EDGE) t.t = CITY_EDGE;
@@ -637,6 +853,7 @@ export class EarthWorld extends World {
   onGunshot(pos) { this.population.alarm(pos, 40, pos); }
 
   dispose() {
+    this.water && this.water.dispose(); this.dust && this.dust.dispose();
     this.population && this.population.clear();
     this.traffic && this.traffic.clear();
     super.dispose();

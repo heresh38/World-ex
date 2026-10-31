@@ -98,7 +98,7 @@ def materials():
         frame=tmat('wall_frame', '#4b525b', .65, .4, 'paintmetal', 1.0),
         frame_light=tmat('wall_frame_light', '#c9ced4', .4, .42, 'paintmetal', 1.0),
         deck=tmat('floor_deck', '#ffffff', .6, .5, 'deckplate', 2.0),
-        grate=tmat('floor_grate', '#ffffff', .8, .4, 'grate', 1.0, 'grate_e.jpg', 1.4),
+        grate=tmat('floor_grate', '#ffffff', .8, .4, 'grate', 1.0, 'grate_e.jpg', 1.0),
         mat=tmat('floor_mat', '#ffffff', 0, .85, 'rubbermat', .5),
         hull=tmat('hull_ext', '#ffffff', .25, .45, 'hullplate', 4.0, cull=True),
         hull_dark=tmat('hull_ext_dark', '#5d636b', .5, .4, 'hullplate', 4.0, cull=True),
@@ -707,7 +707,7 @@ def main():
     for j in range(len(fpts) - 1):
         beam(fpts[j] + Vector((0, -.45, 0)), fpts[j + 1] + Vector((0, -.45, 0)), .1, .06, m['cyan'], up=(0, -1, 0))
     col_box(-14, 38.6, 0, 14, 40.5, 12)
-    LIGHTS.append(dict(kind='point', name='bay_field', pos=to3((0, 36.5, 3.5)), color='#58b4ff', intensity=22, dist=20))
+    LIGHTS.append(dict(kind='point', name='bay_field', pos=to3((0, 36.0, 7.0)), color='#58b4ff', intensity=12, dist=18))
     # catwalks at the sill line with railings, brackets on the ribs
     for sx in (-1, 1):
         x_in = sx * 10.9; x_w = sx * 12.55
@@ -749,9 +749,9 @@ def main():
     part(bl.box('hook_block', (.4, .3, .5), (-2.0, 27.7, 4.75), m['dark'], bevel=.03))
     # markings
     for y in (14.0, 34.0):
-        decal(ST['ARROW'], (-.0, y, .0), (0, 0, 1), (0, 1, 0), 1.6, 1.6, m['stencil_y'])
-    decal(ST['BAY 1'], (0, 16.5, 0), (0, 0, 1), (0, -1, 0), 2.2, 2.2)
-    decal(ST['CHEVRON'], (0, 37.2, 0), (0, 0, 1), (0, 1, 0), 2.4, 2.4, m['stencil_y'])
+        decal(ST['ARROW'], (-.0, y, .0), (0, 0, 1), (-1, 0, 0), 1.6, 1.6, m['stencil_y'])
+    decal(ST['BAY 1'], (0, 16.5, 0), (0, 0, 1), (0, 1, 0), 2.2, 2.2)
+    decal(ST['CHEVRON'], (0, 37.2, 0), (0, 0, 1), (-1, 0, 0), 2.4, 2.4, m['stencil_y'])
     decal(ST['01'], (-12.97, 21.0, 6.6), (1, 0, 0), (0, 0, 1), 2.4, 2.4)
     decal(ST['02'], (12.97, 21.0, 6.6), (-1, 0, 0), (0, 0, 1), 2.4, 2.4)
     decal(ST['MAX 4T'], (-12.97, 33.0, 6.6), (1, 0, 0), (0, 0, 1), 1.8, 1.8, m['stencil_y'])
@@ -841,10 +841,10 @@ def corridor(secs, pr, way):
     yc = (y0 + y1) / 2
     screen_panel('data' if way == 'fwd' else 'status', .8, .5, (-W + .03, yc - .9, 1.7), tilt=0, yaw=R90)
     decal(ST['FWD' if way == 'fwd' else 'AFT'], (W - .01, yc - .9, 1.9), (-1, 0, 0), (0, 0, 1), .7, .7)
-    decal(ST['ARROW'], (W - .01, yc - .9, 1.35), (-1, 0, 0), (0, -1, 0) if way == 'fwd' else (0, 1, 0), .6, .6, M_['stencil_y'])
+    decal(ST['ARROW'], (W - .01, yc - .9, 1.35), (-1, 0, 0), (0, 0, 1) if way == 'fwd' else (0, 0, -1), .6, .6, M_['stencil_y'])
     decal(ST['PWR' if way == 'fwd' else 'CORE'], (-W + .01, yc + .9, 2.1), (1, 0, 0), (0, 0, 1), .6, .6)
     if way == 'aft':
-        decal(ST['BAY 1'], (0, y1 - 1.2, 0), (0, 0, 1), (0, -1, 0), 1.6, 1.6)
+        decal(ST['BAY 1'], (0, y1 - 1.2, 0), (0, 0, 1), (0, 1, 0), 1.6, 1.6)
     if way == 'fwd':
         LIGHTS.append(dict(kind='point', name='corridor', pos=to3((0, yc, H - .6)), color='#dfefff', intensity=6, dist=7))
 
@@ -961,19 +961,7 @@ def export(m):
                 key = (mn[7:], round(c.x, 1), round(c.y, 1), round(c.z, 1))
                 screens[key] = 1
     SCREENS = [dict(kind=k[0], pos=to3((k[1], k[2], k[3]))) for k in screens]
-    for o in STATIC:
-        bl.apply_all(o)
-    # join static architecture by material to minimise draw calls
-    by_mat = {}
-    for o in STATIC:
-        if o.hide_render or not o.data.materials:
-            continue
-        if len(o.data.materials) > 1:
-            continue
-        by_mat.setdefault(o.data.materials[0].name, []).append(o)
-    for k, objs in by_mat.items():
-        bl.join(objs, 'arch_' + k)
-    # colliders: explicit boxes + prop roots
+    # colliders: explicit boxes + prop roots (before the props are merged into the architecture)
     cols = list(COLS)
 
     def aabb(o):
@@ -992,6 +980,33 @@ def export(m):
         if lo.x > hi.x:
             continue
         cols.append([round(lo.x, 3), round(lo.z, 3), round(-hi.y, 3), round(hi.x, 3), round(hi.z, 3), round(-lo.y, 3)])
+    # static props (everything the game does not address by name) are merged into the per-material architecture
+    KEEP = ('ST_armory', 'ST_gunsmith', 'MC_welder')
+    for root in [o for o in bpy.context.scene.objects if o.type == 'EMPTY' and o.parent is None and 'solid' in o.keys()]:
+        if root.name.split('.')[0] in KEEP:
+            continue
+        for ch in list(root.children):
+            if ch.type != 'MESH' or ch.name.startswith(('holo_globe', 'nav_holo')):
+                continue
+            mw = ch.matrix_world.copy(); ch.parent = None; ch.matrix_world = mw
+            bpy.ops.object.select_all(action='DESELECT'); ch.select_set(True); bpy.context.view_layer.objects.active = ch
+            bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.mesh.separate(type='MATERIAL'); bpy.ops.object.mode_set(mode='OBJECT')
+            STATIC.extend(bpy.context.selected_objects)
+    for o in STATIC:
+        bl.apply_all(o)
+    by_mat = {}
+    for o in STATIC:
+        if o.type != 'MESH' or not o.data.materials or not o.data.polygons:
+            continue
+        mats = {o.data.materials[p.material_index].name for p in o.data.polygons}
+        if len(mats) != 1:
+            continue
+        by_mat.setdefault(mats.pop(), []).append(o)
+    for k, objs in by_mat.items():
+        j = bl.join(objs, 'arch_' + k)
+        bpy.context.view_layer.objects.active = j; j.select_set(True)
+        bpy.ops.object.material_slot_remove_unused(); j.select_set(False)
     # sun: from ahead-right-above, pouring in through the canopy; target between bridge and commons
     sd = Vector((.45, -.7, .55)).normalized()
     tgt = Vector((0, -9.0, 0))

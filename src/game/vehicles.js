@@ -114,7 +114,7 @@ export class Car {
     this.hp = this.S.hp; this.alive = true; this.burnt = false; this.dynamic = true; this.sleep = true;
     this.side = 'civilian'; this.radius = 2.2; this.T = { name: this.S.name };
     this.holes = []; this.smokeT = 0; this.hornT = 0; this.airT = 0; this.lastY = pos.y; this.upsideT = 0;
-    this.lodNear = true;
+    this.lodNear = null;                 // forces the first LOD switch (both levels are visible in the file)
     this.settle();
     this.syncRoot();
     g.scene.add(this.root);

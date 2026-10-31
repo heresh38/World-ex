@@ -211,6 +211,8 @@ class Groom:
     def cards(self, P, Nn, w0, w1, col, v0=0.0, v1=1.0, lift=.06, normals=None):
         """Ribbon per guide (V-shaped cross-section, 3 verts). col: atlas column (or array per card)."""
         n, k, _ = P.shape
+        if n == 0:
+            return 0
         wk = 1.3 if self.kit.npc else 1.0          # fewer, wider cards on the crowd LOD
         w0 = np.broadcast_to(np.asarray(w0, F32) * wk, (n,)); w1 = np.broadcast_to(np.asarray(w1, F32) * wk, (n,))
         col = np.broadcast_to(np.asarray(col), (n,))
@@ -364,7 +366,7 @@ def female_styles(g):
     R = np.concatenate([g.roots(130, full), g.roots(40, full, band=(-.014, -.002))])[::-1]
     length = np.linalg.norm(tie - R, axis=1) * 1.08
     flow = lambda p, t, c: tie - p
-    for (lo, hi), off, col in (((0, 100), .0022, 0), ((100, 170), .0038, 1)):
+    for (lo, hi), off, col in (((0, int(len(R) * .6)), .0022, 0), ((int(len(R) * .6), len(R)), .0038, 1)):
         P, N = g.grow(R[lo:hi], length[lo:hi], 6, flow, None, off=off)
         g.cards(P, N, .022, .01, col, lift=.0)
     path = np.array([tie / s, (0, .128, .056), (0, .155, -.02), (0, .163, -.13), (0, .158, -.26), (0, .148, -.4)], F32) * s
@@ -413,7 +415,7 @@ def female_styles(g):
     R = np.concatenate([g.roots(120, full), g.roots(40, full, band=(-.014, -.002))])[::-1]
     length = np.linalg.norm(bc - R, axis=1) * 1.08
     flow = lambda p, t, c: bc - p
-    for (lo, hi), off, col in (((0, 100), .0022, 0), ((100, 160), .0038, 1)):
+    for (lo, hi), off, col in (((0, int(len(R) * .62)), .0022, 0), ((int(len(R) * .62), len(R)), .0038, 1)):
         P, N = g.grow(R[lo:hi], length[lo:hi], 6, flow, None, off=off)
         g.cards(P, N, .024, .012, col, lift=.0)
     ax = nrm(np.array([0, .35, 1.0], F32)); e1 = nrm(np.cross(ax, [1, 0, 0])); e2 = np.cross(ax, e1)
@@ -515,7 +517,8 @@ def male_styles(g):
     backn = smoothstep(.03 * s, .09 * s, R[:, 1]) * smoothstep(.08 * s, .0, R[:, 2])
     length = (.11 + .03 * front - .02 * sideness) * (1 - .45 * backn) * rng.uniform(.9, 1.08, len(R))
     idx = rng.permutation(len(R))
-    for ii, col, w0, w1, oo in ((idx[:105], 0, .028, .018, 0), (idx[105:], 1, .024, .014, .003)):
+    cut = int(len(R) * .55)
+    for ii, col, w0, w1, oo in ((idx[:cut], 0, .028, .018, 0), (idx[cut:], 1, .024, .014, .003)):
         c = {'off': ctx['off'][ii] + oo}
         P, N = g.grow(R[ii], length[ii], 7, flow, hang, off=lambda t, c: c['off'] * (1 - .4 * t) + .0015, ctx=c)
         g.cards(P, N, w0, w1, col)

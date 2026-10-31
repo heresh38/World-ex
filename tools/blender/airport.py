@@ -376,12 +376,10 @@ def ground(m):
     P.append(quad('apron', ax0, az0, ax1, az1, y0 + .01, m['apron'], 15))
     for k, (px, pz) in enumerate(PADS):
         P.append(disc('pad', px, pz, 0, 15, y0 + .03, m['pad'], 64, 8))
-    # hangar floors
-    for hx in HANGARS:
-        P.append(quad('hfloor', hx - HANGAR_W / 2, HANGAR_Z0, hx + HANGAR_W / 2, HANGAR_Z1, y0 + .02, m['apron'], 12))
+    # (hangar floors are the apron slab itself)
     # landside: forecourt road, spur to the ring road, kerb walk, parking lots
-    P.append(quad('forecourt', -130, FORECOURT_Z - ROAD_W / 2, 130, FORECOURT_Z + ROAD_W / 2, y0, m['asphalt'], 10))
-    P.append(quad('spur', -ROAD_W / 2, -146, ROAD_W / 2, FORECOURT_Z - ROAD_W / 2, y0, m['asphalt'], 10))
+    P.append(quad('forecourt', -128, FORECOURT_Z - ROAD_W / 2, 128, FORECOURT_Z + ROAD_W / 2, y0, m['asphalt'], 10))
+    P.append(quad('spur', -ROAD_W / 2, -137, ROAD_W / 2, FORECOURT_Z - ROAD_W / 2, y0, m['asphalt'], 10))
     P.append(quad('kerbwalk', -130, FORECOURT_Z + ROAD_W / 2, 130, TERM[1], y0 + .1, m['kerb'], 6))
     for x0, z0, x1, z1 in LOTS:
         P.append(quad('lot', x0, z0, x1, z1, y0, m['asphalt'], 10))
@@ -414,7 +412,7 @@ def markings(m):
         P.append(strip('thrbar', end + sgn * 2, RWY_Z - hw + 1, end + sgn * 2, RWY_Z + hw - 1, 1.8, y, W))
         # designation numbers (heading 09 at the west end reads from the approach, 27 at the east end)
         num = '09' if sgn > 0 else '27'
-        P.append(text('rwnum', num, 15, (end + sgn * 52, y + .002, RWY_Z), W, yaw=(-R90 if sgn > 0 else R90), flat=True))
+        P.append(text('rwnum', num, 15, (end + sgn * 52, y + .002, RWY_Z), W, yaw=(R90 if sgn > 0 else -R90), flat=True))
         # touchdown zone bars and aiming point blocks
         for dist, n in ((95, 3), (150, 2), (205, 1)):
             for s in (-1, 1):
@@ -469,7 +467,7 @@ def markings(m):
     for k in range(6):
         xc = -4.5 + k * 1.8
         P.append(strip('zebra2', xc, FORECOURT_Z - ROAD_W / 2 + .5, xc, FORECOURT_Z + ROAD_W / 2 - .5, .9, y, W))
-    z = -146
+    z = -136
     while z < FORECOURT_Z - 8:
         P.append(strip('sd', 0, z, 0, z + 3, .2, y, W)); z += 8
     for x0, z0, x1, z1 in LOTS:
@@ -603,7 +601,7 @@ def tower(m):
          B('tbaseglass', (16.1, 2, 16.1), (tx, 3.5, tz), m['glass']),
          B('tbaseroof', (16.6, .5, 16.6), (tx, 6.25, tz), m['concrete'])]
     col(tx - 8, 0, tz - 8, tx + 8, 6.5, tz + 8, 'tower')
-    P.append(C('shaft', 3.2, 31, (tx, 6, tz), m['concrete'], 24, r2=2.6))
+    P.append(C('shaft', 3.2, 31, (tx, 6, tz), m['kerb'], 24, r2=2.6))
     for k in range(4):
         P.append(C('fin', .5, 30, (tx + math.cos(k * R90 + .4) * 2.9, 6.3, tz + math.sin(k * R90 + .4) * 2.9), m['clad'], 8))
     P.append(C('cabfloor', 6.2, 1.0, (tx, 36, tz), m['clad_dark'], 8, r2=6.6, smooth=False))

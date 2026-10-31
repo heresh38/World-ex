@@ -12,7 +12,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await b.newPage({ viewport: { width: +(process.env.VW || 960), height: +(process.env.VH || 540) } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('crash', () => console.log('PAGE CRASHED'));
@@ -24,10 +24,12 @@ fs.mkdirSync(OUT, { recursive: true });
   const waitPlay = async () => { await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 900000, polling: 1000 });
     await ev(() => { const g = window.__game; g.paused = false; g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; }); };
   // models other people are still building: stand in the base model so the run is not blocked by a missing file
-  await p.route(/assets\/models\/(player_(?:female|male))_npc\.glb$/, (route, req) => {
-    const m = /(player_(?:female|male))_npc\.glb$/.exec(req.url()), own = `assets/models/${m[1]}_npc.glb`;
-    if (fs.existsSync(own)) return route.continue();
-    return route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: fs.readFileSync(`assets/models/${m[1]}.glb`) });
+  await p.route(/assets\/models\/[^/]+\.glb$/, (route, req) => {
+    const f = 'assets/models/' + req.url().split('/').pop();
+    if (fs.existsSync(f)) return route.continue();
+    const alt = 'assets/models/civ_female.glb';   // small skinned stand-in
+    console.log('stand-in for missing', f, '->', alt);
+    return route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: fs.readFileSync(alt) });
   });
   await p.goto(BASE + '/index.html');
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 300000, polling: 500 });

@@ -34,7 +34,7 @@ def mats():
     return dict(skin=fk.tmat('writhe_skin', 'hx_skin', nstr=1.2), flesh=fk.tmat('writhe_flesh', 'hx_flesh', nstr=1.2),
                 sac=fk.tmat('writhe_sac', 'hx_sac', nstr=1.0), bone=fk.tmat('writhe_bone', 'hx_bone'),
                 plate=fk.tmat('writhe_plate', 'hx_chitin', nstr=1.2), rag=fk.tmat('writhe_rag', 'hx_rag'),
-                glow=fk.glow_mat('writhe_glow', GLOW, 3.5))
+                glow=fk.glow_mat('writhe_glow', GLOW, 2.0))
 
 
 def human_joints(s=1.0):
@@ -58,7 +58,7 @@ def pustules(sc, rnd, centre, dirs, rr, bone, glow_frac=.3):
         p = sc.surface_point(centre, d, 1.2)
         r = rr[0] + (rr[1] - rr[0]) * rnd.random()
         g = rnd.random() < glow_frac
-        sc.sph(p + d * r * .55, r, bone, 'glow' if g else 'sac', GLOW if g else SAC, k=r * .35, amp=.15)
+        sc.sph(p + d * r * .8, r, bone, 'glow' if g else 'sac', GLOW if g else SAC, k=r * .3, amp=0)
 
 
 def rand_dirs(rnd, n, bias, spread=1.0):
@@ -128,14 +128,12 @@ def host_sculpt():
     for sx, deep in ((1, .02), (-1, .014)):
         sc.cut_ell((sx * .03, -.09, 1.715), (.019, .016, .014), 'head', 'flesh', CAV, k=.006)
     sc.sph((.03, -.082, 1.713), .011, 'head', 'glow', GLOW, k=.002, amp=0)                            # one milky glowing eye
-    for c, r in [((-.045, .015, 1.8), .052), ((-.075, -.025, 1.765), .032), ((-.02, .06, 1.78), .035), ((-.06, -.06, 1.73), .022)]:
-        sc.sph(c, r, 'head', 'sac', GROWTH, k=.025, amp=2.5)
+    # the skull split open along a crack, growth bulging out of it
+    sc.cut_ell((-.035, .01, 1.81), (.035, .09, .05), 'head', 'flesh', CAV, k=.01, R=sdf.rot((0, 1, 0), .5))
+    for c, r in [((-.045, .015, 1.795), .045), ((-.065, -.03, 1.77), .03), ((-.03, .06, 1.78), .032), ((-.06, -.065, 1.73), .02)]:
+        sc.sph(c, r, 'head', 'sac', '#e0b07a', k=.02, amp=2.5)
     sc.chain([(-.04, .07, 1.76), (-.06, .12, 1.66), (-.04, .1, 1.55), (-.07, .09, 1.45)], [.018, .012, .008, .003], 'head', 'flesh',
              GROWTH, k=.012, writhe=(.2, .9))
-    helmet = lambda P: sdf.ellipsoid(P, (0, .0, 1.735), (.097, .112, .114))
-    sc.shell(helmet, (-.12, -.13, 1.6), (.12, .13, 1.86), .006, 'head', 'rag', RAG_D,
-             keep=lambda P: np.maximum(-(P[:, 0] - .02 + (fbm(P, 18, 2, 3) - .5) * .07), 1.76 - P[:, 2] + (fbm(P, 15, 2, 4) - .5) * .05),
-             k=.003, amp=0)
     # ---- left arm: forearm swallowed by a spiked growth club with whip tendrils
     a0, a1 = J['upperarm.L']; f0, f1 = J['forearm.L']; h0, h1 = J['hand.L']
     sc.cone(a0, a1, .047, .04, 'upperarm.L', 'skin', SKIN, k=.03)
@@ -165,9 +163,6 @@ def host_sculpt():
         b0 = np.array([h1[0], y, h1[2] + .015])
         sc.chain([b0, b0 + (.004, -.012, -.04), b0 + (.012, -.03, -.065)], [.008, .007, .004], 'hand.R', 'skin', SKIN, k=.006)
     sc.chain([np.array([h0[0], -.03, h0[2] - .03]), np.array([h0[0] + .02, -.05, h0[2] - .07])], [.009, .005], 'hand.R', 'skin', SKIN, k=.006)
-    pad = lambda P: sdf.ellipsoid(P, a0 + np.array([-.01, 0, -.005]), (.072, .08, .058))
-    sc.shell(pad, a0 - .12, a0 + .12, .006, 'upperarm.R', 'rag', RAG_D,
-             keep=lambda P: (1.425 - P[:, 2]) + (fbm(P, 16, 2, 4) - .5) * .05, k=.003, amp=0)
     # ---- legs: wasted thighs, a boot on one foot, the other bare and clawed
     for side, sx in (('L', 1), ('R', -1)):
         t0, t1 = J['thigh.' + side]; s0, s1 = J['shin.' + side]; q0, q1 = J['foot.' + side]
@@ -324,6 +319,7 @@ def amalgam():
             a, t = J[k + '.' + side]
             J[k + '.' + side] = (a + np.array([sx * .07, 0, 0]), t + np.array([sx * .09, 0, 0]))
     sc = fk.Sculpt(23); rnd = sc.rnd
+    SKIN, SKIN_B = '#d2cab4', '#c8b4a4'
 
     def disp(P):
         return (fbm(P, 12, 3, 4) - .5) * .016 + ridge(P, 4, 5, 8) * .008
@@ -353,7 +349,7 @@ def amalgam():
     for c, r, inw in [((0, -.27, cz + .02), (.075, .05, .05), (0, 1, 0)), ((.17, -.24, sz + .2), (.045, .04, .04), (-.3, 1, 0)),
                       ((-.2, -.22, cz + .16), (.045, .04, .045), (.4, 1, 0)), ((-.08, -.2, sz + .04), (.04, .035, .035), (0, 1, .2)),
                       ((.23, -.2, cz + .2), (.035, .035, .04), (-.5, 1, 0))]:
-        c = np.array(c, float)
+        c = np.array(c, float); r = np.array(r) * np.array([1.45, 1.2, 1.45])
         sc.ell(c - np.asarray(inw) * .01, (r[0] * 1.35, .04, r[2] * 1.35), 'chest' if c[2] > cz - .02 else 'spine', 'flesh', FLESH, k=.03, amp=1.5)
         sc.cut_ell(c - np.array([0, .03, 0]), r, 'chest' if c[2] > cz - .02 else 'spine', 'flesh', CAV, k=.012)
         teeth_ring(sc, c - np.array([0, .012, 0]), r[0] * .95, r[2] * .95, 11, 'chest' if c[2] > cz - .02 else 'spine', inw, .03, .007)
@@ -424,7 +420,8 @@ def amalgam():
         st = sc.surface_point((0, .05, sz), c, 1.0)
         sc.chain([st, st + (0, .08, -.15), st + (.04, .14, -.35), st + (-.03, .2, -.5)], [.03, .02, .012, .003], 'spine', 'flesh', GROWTH,
                  k=.015, writhe=(.3, 1))
-    o = fk.build_mesh(sc, 'Body_amalgam', (-1.0, -.85, -.02), (1.0, .85, 2.95), .014, 12000, mats(), uv_scale=.6, ao_dist=.1, seed=9)
+    o = fk.build_mesh(sc, 'Body_amalgam', (-1.0, -.85, -.02), (1.0, .85, 2.95), .014, 12000, mats(), uv_scale=.6, ao_dist=.1, ao_k=.6, seed=9,
+                      bruise=('#a05a60', .45, 3.0))
     arm = fk.make_rig(J)
     fk.bake_clips(arm, humanoid_clips(dict(hunch=26, loll=0, both=True, drag=False, twitch=.7, lean=22, height=1.4)), 'hips', 1.0)
     fk.finish(o, arm, 'writhe_amalgam.glb')

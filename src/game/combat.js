@@ -108,6 +108,8 @@ export class Combat {
       if (!done) {
         const h = world.raycast(b.m.position, b.dir, step);
         if (h) { this.g.fx.impact(h.point, h.normal, 'metal'); done = true; }
+        // water: bolts fizzle out in a splash where they cross the surface
+        else if (this.g.water && this.g.water.hitTest(b.m.position, _v.copy(b.m.position).addScaledVector(b.dir, step), 'bolt')) done = true;
       }
       if (done) { b.m.removeFromParent(); b.m.material.dispose(); this.bolts.splice(i, 1); continue; }
       b.m.position.addScaledVector(b.dir, step);

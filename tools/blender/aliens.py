@@ -35,7 +35,7 @@ def mats(kind):
     _, hide, flesh, plate, glow, acid = KINDS[kind]
     return dict(skin=fk.tmat('alien_skin', 'hx_flesh', nstr=1.3), hide=fk.tmat('alien_hide', 'hx_skin', nstr=1.2),
                 plate=fk.tmat('alien_plate', 'hx_chitin', nstr=1.3), bone=fk.tmat('alien_bone', 'hx_bone'),
-                sac=fk.tmat('alien_sac', 'hx_sac'), glow=fk.glow_mat('alien_glow', glow, 6), acid=fk.glow_mat('alien_acid', acid, 4))
+                sac=fk.tmat('alien_sac', 'hx_sac'), glow=fk.glow_mat('alien_glow', glow, 3), acid=fk.glow_mat('alien_acid', acid, 2.5))
 
 
 def blobs(sc, rnd, centre, dirs, rr, bone, mat, col, k=.5, out=.25):
@@ -215,7 +215,7 @@ def build_kind(kind):
         p = sc.surface_point(V(0, .02, cz + .08 * s), c, 1.2)
         r = (.012 + .02 * rnd.random()) * s
         g = rnd.random() < .45
-        sc.sph(p + c * r * .3, r, 'chest', 'glow' if g else 'sac', GLOW if g else '#d8c8a0', k=r * .5, amp=.2)
+        sc.sph(p + c * r * .75, r, 'chest', 'glow' if g else 'sac', GLOW if g else '#d8c8a0', k=r * .3, amp=0)
     if kind in ('stalker', 'mutant', 'elite'):
         for c in rand_dirs(rnd, 3, (0, .6, -1), .4):
             st = sc.surface_point(V(0, .02, sz + .05 * s), c, 1.0)
