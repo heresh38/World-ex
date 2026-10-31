@@ -12,6 +12,8 @@ import { runCinematic, ease, easeOut, easeIn, bezier } from '../game/cinematic.j
 import { Population } from './meridian/population.js';
 import { Traffic } from './meridian/traffic.js';
 import { Wanted } from './meridian/wanted.js';
+import { Flora } from './meridian/flora.js';
+import { SNOW_LINE } from './meridian/layout.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);

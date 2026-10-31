@@ -434,7 +434,7 @@ def leaf_textures(names):
                     cv.leaf(tx, ty, ta + s * rng.uniform(.9, 1.25), C * rng.uniform(.10, .13), lance(.17), jit(rng, col, .04), li * rng.uniform(.92, 1.06), nveins=6)
             tx, ty, ta = along(pts, .999)
             cv.leaf(tx, ty, ta, C * .13, lance(.17), col, li, nveins=6)
-        broadleaf_cell(cv, ox, oy, C, rng, compound, n_side=2, gap=.2, start=.3)
+        broadleaf_cell(cv, ox, oy, C, rng, compound, n_side=3, gap=.15, start=.22)
     make('ash', sq(ash_cell))
 
     # --- maple: palmate leaves on long petioles, opposite pairs
@@ -462,7 +462,7 @@ def leaf_textures(names):
 
     # --- cherry: pompoms of double blossoms with a few young leaves
     def cherry_cell(cv, ox, oy, C, rng):
-        pinks = [(.96, .56, .76), (.99, .70, .86), (.90, .44, .66), (.98, .78, .90), (.93, .50, .72)]
+        pinks = [(.99, .62, .80), (1.0, .74, .88), (.95, .52, .72), (1.0, .82, .92), (.97, .58, .77)]
         def lf(cv, x, y, a, t):
             if rng.random() < .25:
                 cv.leaf(x, y, a, C * rng.uniform(.09, .12), ovate(.3), jit(rng, (.45, .35, .16)), rng.uniform(.8, 1.05))
@@ -1214,41 +1214,41 @@ SPECIES = {
     ],
     'ash': [
         ('TR_ash_a', 21, dict(h=16, trunk_top=5.5, trunk_r=.40, env_c=10.6, env_r=(6.2, 6.2, 6.0), lump=.5, nlobes=8, shell=.32, nattr=950,
-                              jitter=.22, trop=.07, flare=.45, gnarl=.04, bark='ash', leaves='ash', card=1.6, n_cards=740, lean=.05)),
+                              jitter=.22, trop=.07, flare=.45, gnarl=.04, bark='ash', leaves='ash', card=1.95, n_cards=800, lean=.05)),
         ('TR_ash_b', 22, dict(h=13, trunk_top=3.6, trunk_r=.40, env_c=8.3, env_r=(6.0, 6.0, 5.0), lump=.18, shell=.25, nattr=950,
-                              jitter=.18, trop=.05, flare=.45, bark='ash', leaves='ash', card=1.5, n_cards=860)),
+                              jitter=.18, trop=.05, flare=.45, bark='ash', leaves='ash', card=1.85, n_cards=860)),
         ('TR_ash_young', 23, dict(h=10, trunk_top=5.0, trunk_r=.14, env_c=7.0, env_r=(2.9, 2.9, 3.2), lump=.35, shell=.2, nattr=500,
                                   step=.35, di=2.2, dk=.6, jitter=.2, trop=.08, flare=.3, bark='ash', leaves='ash', card=1.15, n_cards=430,
                                   tip_r=.009, budget=1500, sway=.25)),
     ],
     'maple': [
         ('TR_maple_a', 31, dict(h=12, trunk_top=3.4, trunk_r=.36, env_c=7.6, env_r=(5.2, 5.2, 4.8), lump=.3, shell=.3, nattr=850,
-                                jitter=.2, trop=.05, flare=.5, bark='maple', leaves='maple', card=1.45, n_cards=760)),
+                                jitter=.2, trop=.05, flare=.5, bark='maple', leaves='maple', card=1.7, n_cards=760)),
         ('TR_maple_b', 32, dict(h=10, trunk_top=2.8, trunk_r=.32, env_c=6.4, env_r=(5.6, 5.6, 4.0), lump=.32, shell=.3, nattr=850,
-                                jitter=.22, trop=.03, flare=.5, bark='maple', leaves='maple', card=1.45, n_cards=740)),
+                                jitter=.22, trop=.03, flare=.5, bark='maple', leaves='maple', card=1.7, n_cards=740)),
         ('TR_maple_autumn_a', 33, dict(h=12.5, trunk_top=3.2, trunk_r=.38, env_c=7.8, env_r=(5.6, 5.6, 5.0), lump=.4, shell=.3, nattr=900,
-                                       jitter=.22, trop=.05, flare=.5, bark='maple', leaves='maple_autumn', card=1.45, n_cards=780)),
+                                       jitter=.22, trop=.05, flare=.5, bark='maple', leaves='maple_autumn', card=1.7, n_cards=780)),
         ('TR_maple_autumn_b', 34, dict(h=10, trunk_top=2.8, trunk_r=.32, env_c=6.4, env_r=(5.4, 5.4, 4.0), lump=.35, shell=.3, nattr=850,
-                                       jitter=.22, trop=.03, flare=.5, bark='maple', leaves='maple_autumn', card=1.45, n_cards=740)),
+                                       jitter=.22, trop=.03, flare=.5, bark='maple', leaves='maple_autumn', card=1.7, n_cards=740)),
     ],
     'birch': [
         ('TR_birch_a', 41, dict(h=14, trunk_top=11.5, trunk_r=.2, env_c=9.2, env_r=(2.8, 2.8, 5.0), lump=.3, shell=.2, nattr=650,
-                                step=.38, di=2.2, dk=.65, jitter=.2, trop=.0, tip_r=.009, bark='birch', leaves='birch', card=1.05, n_cards=560,
+                                step=.38, di=2.2, dk=.65, jitter=.2, trop=.0, tip_r=.009, bark='birch', leaves='birch', card=1.25, n_cards=600,
                                 budget=1800, sway=.25)),
         ('TR_birch_b', 42, dict(h=12, trunk_top=9.0, trunk_r=.18, env_c=8.0, env_r=(3.3, 3.3, 4.2), lump=.35, shell=.2, nattr=650,
-                                step=.38, di=2.2, dk=.65, jitter=.22, trop=-.02, tip_r=.009, bark='birch', leaves='birch', card=1.05, n_cards=560,
+                                step=.38, di=2.2, dk=.65, jitter=.22, trop=-.02, tip_r=.009, bark='birch', leaves='birch', card=1.25, n_cards=600,
                                 budget=1800, lean=.06, sway=.3)),
         ('TR_birch_c', 43, dict(h=15.5, trunk_top=13, trunk_r=.22, env_c=10.5, env_r=(2.5, 2.5, 5.4), lump=.3, shell=.2, nattr=650,
-                                step=.38, di=2.2, dk=.65, jitter=.2, trop=.02, tip_r=.009, bark='birch', leaves='birch', card=1.05, n_cards=560,
+                                step=.38, di=2.2, dk=.65, jitter=.2, trop=.02, tip_r=.009, bark='birch', leaves='birch', card=1.25, n_cards=600,
                                 budget=1800, sway=.35)),
     ],
     'cherry': [
         ('TR_cherry_a', 51, dict(h=7.5, trunk_top=1.8, trunk_r=.32, env_c=5.0, env_r=(6.4, 6.4, 2.9), lump=.3, shell=.35, flat=.45, nattr=850,
                                  jitter=.22, trop=-.02, flare=.5, gnarl=.06, bark='cherry', leaves='cherry', card=1.5, n_cards=800,
-                                 scaffold=[(4, 58, 3.0, 1.5, 1.8)], ao=.5)),
+                                 scaffold=[(4, 58, 3.0, 1.5, 1.8)], ao=.6)),
         ('TR_cherry_b', 52, dict(h=8.5, trunk_top=2.2, trunk_r=.36, env_c=5.8, env_r=(7.0, 7.0, 3.2), lump=.35, shell=.35, flat=.45, nattr=900,
                                  jitter=.22, trop=-.03, flare=.5, gnarl=.07, bark='cherry', leaves='cherry', card=1.5, n_cards=820,
-                                 scaffold=[(3, 52, 3.4, 1.9, 2.2)], ao=.5, lean=.06)),
+                                 scaffold=[(3, 52, 3.4, 1.9, 2.2)], ao=.6, lean=.06)),
     ],
     'umbrella': [
         ('TR_umbrella_a', 61, dict(h=11, trunk_top=5.2, trunk_r=.4, env_c=9.4, env_r=(8.8, 8.8, 2.1), lump=.25, shell=.3, flat=.55, nattr=900,
@@ -1259,12 +1259,12 @@ SPECIES = {
                                    scaffold=[(4, 58, 3.6, 3.7, 4.2)], scaffold_rise=.02, card_face_up=.9, card_up=.35, ao=.5, lean=.06)),
     ],
     'rainforest': [
-        ('TR_emergent_a', 71, dict(h=30, trunk_top=23, trunk_r=.6, env_c=27.2, env_r=(7.4, 7.4, 3.4), lump=.45, shell=.3, flat=.5, nattr=850,
+        ('TR_emergent_a', 71, dict(h=30, trunk_top=23, trunk_r=.72, env_c=27.2, env_r=(9.2, 9.2, 3.8), lump=.45, shell=.3, flat=.5, nattr=850,
                                    step=.6, di=3.6, dk=1.0, jitter=.18, trop=.05, flare=.4, buttress=.9, bark='rainforest', leaves='rainforest',
-                                   card=1.9, n_cards=640, scaffold=[(4, 52, 4.0, 22, 23.5)], leaf_zmin=20)),
-        ('TR_emergent_b', 72, dict(h=26, trunk_top=19, trunk_r=.5, env_c=23.2, env_r=(6.4, 6.4, 3.6), lump=.55, nlobes=5, shell=.3, flat=.55, nattr=800,
+                                   card=2.2, n_cards=760, scaffold=[(5, 58, 5.0, 21.5, 23.5)], leaf_zmin=20)),
+        ('TR_emergent_b', 72, dict(h=26, trunk_top=19, trunk_r=.62, env_c=23.2, env_r=(8.0, 8.0, 3.8), lump=.55, nlobes=5, shell=.3, flat=.55, nattr=800,
                                    step=.55, di=3.4, dk=.95, jitter=.2, trop=.05, flare=.4, buttress=.7, bark='rainforest', leaves='rainforest',
-                                   card=1.8, n_cards=600, scaffold=[(3, 48, 3.5, 18, 19.5)], leaf_zmin=16, lean=.04)),
+                                   card=2.1, n_cards=700, scaffold=[(4, 55, 4.3, 17.5, 19.5)], leaf_zmin=16, lean=.04)),
         ('TR_understory_a', 73, dict(h=9, trunk_top=3.0, trunk_r=.2, env_c=6.0, env_r=(3.7, 3.7, 3.2), lump=.3, shell=.25, nattr=600,
                                      step=.38, di=2.4, dk=.65, jitter=.2, trop=.04, flare=.3, bark='understory', leaves='rainforest', card=1.45, n_cards=520,
                                      budget=1600)),
@@ -1274,11 +1274,11 @@ SPECIES = {
     ],
     'willow': [
         ('TR_willow_a', 81, dict(h=11, trunk_top=3.0, trunk_r=.48, env_c=7.4, env_r=(5.6, 5.6, 4.2), lump=.3, shell=.35, nattr=800,
-                                 jitter=.22, trop=.08, flare=.6, gnarl=.08, bark='willow', leaves='willow', card=1.6, n_cards=330, card_out=.2,
-                                 card_up=-.6, fold=0, strands=300, strand_len=3.6, scaffold=[(4, 34, 2.8, 2.6, 3.0)], lean=.07)),
+                                 jitter=.22, trop=.08, flare=.6, gnarl=.08, bark='willow', leaves='willow', card=1.6, n_cards=200, card_out=.2,
+                                 card_up=-.6, fold=0, strands=420, strand_len=4.2, scaffold=[(4, 34, 2.8, 2.6, 3.0)], lean=.07)),
         ('TR_willow_b', 82, dict(h=9.5, trunk_top=2.4, trunk_r=.42, env_c=6.4, env_r=(5.0, 5.0, 3.8), lump=.35, shell=.35, nattr=750,
-                                 jitter=.24, trop=.08, flare=.6, gnarl=.08, bark='willow', leaves='willow', card=1.5, n_cards=300, card_out=.2,
-                                 card_up=-.6, fold=0, strands=280, strand_len=3.3, scaffold=[(3, 30, 2.4, 2.0, 2.4)], lean=.1)),
+                                 jitter=.24, trop=.08, flare=.6, gnarl=.08, bark='willow', leaves='willow', card=1.5, n_cards=190, card_out=.2,
+                                 card_up=-.6, fold=0, strands=380, strand_len=3.8, scaffold=[(3, 30, 2.4, 2.0, 2.4)], lean=.1)),
     ],
     'bare_snow': [
         ('TR_bare_snow_a', 91, dict(kind='bare', h=13, trunk_top=4.5, trunk_r=.4, env_c=8.6, env_r=(6.0, 6.0, 5.0), lump=.35, shell=.35, nattr=900,
@@ -1324,7 +1324,7 @@ SPECIES = {
 }
 BARK = {   # material -> (texture set, tint)
     'oak': ('oak', '#ffffff'), 'ash': ('oak', '#c2bcb2'), 'maple': ('oak', '#b3a89c'), 'birch': ('birch', '#ffffff'),
-    'cherry': ('cherry', '#ffffff'), 'umbrella': ('cherry', '#d6b49a'), 'rainforest': ('birch', '#c9c0b0'), 'understory': ('oak', '#a8a69a'),
+    'cherry': ('cherry', '#ffffff'), 'umbrella': ('oak', '#c9a68a'), 'rainforest': ('birch', '#c9c0b0'), 'understory': ('oak', '#a8a69a'),
     'willow': ('oak', '#aaa08f'), 'winter': ('oak', '#8f877e'), 'pine': ('pine', '#e6a273'), 'spruce': ('pine', '#a29890'),
 }
 

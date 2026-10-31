@@ -6,6 +6,10 @@ export const SIZE = 2800, HALF = SIZE / 2, CELL = 4, N = SIZE / CELL + 1;
 export const BLOCK = 92, ROAD = 18, CITY_N = 4, PITCH = BLOCK + ROAD;
 export const CITY_EDGE = (CITY_N + .5) * PITCH;     // 495 m: the outer ring road
 export const SEA = -3;
+// Snow line (m): the Meridian Peaks massif on the north coast rises well above it; earth.js whitens the terrain above it
+// (slope-dependent, snow on rock ledges) and flora.js plants snow-covered conifers and bare snowy trees there.
+export const SNOW_LINE = 68;
+const PEAKS = [[-300, -1060, 48, 150], [-60, -1100, 66, 175], [190, -1050, 44, 140], [-560, -990, 26, 130]];   // x, z, height, spread
 // The river (owner's city art): straight through the city's north side in block row -3, winding to the sea outside.
 export const RIVER_Z = -3 * PITCH, RIVER_W = 33, RIVER_BANK = 4;
 // The spaceport (owner request: "where we land in the city"): just south of the city across the ring road, joined to it
@@ -81,6 +85,10 @@ export class MeridianMap {
     h += Math.pow(1 - Math.abs(fbm(x * .0011, z * .0011, 23, 4) * 2 - 1), 2) * 55;      // ridges
     h *= ss(CITY_EDGE - 40, CITY_EDGE + 260, Math.hypot(x, z) * .85 + d * .15);       // calm near the city
     h += ss(1100, 1380, d) * (-28);                                                    // drop to the sea at the edges
+    // the Meridian Peaks: a craggy massif on the north coast, easing down before the shore
+    let pk = 0;
+    for (const [px, pz, ph, pr] of PEAKS) { const dx = x - px, dz = z - pz; pk += ph * Math.exp(-(dx * dx + dz * dz) / (2 * pr * pr)); }
+    if (pk > .5) h += pk * (.8 + .45 * Math.pow(1 - Math.abs(fbm(x * .006 + 11, z * .006 - 5, 31, 4) * 2 - 1), 2)) * (1 - ss(1180, 1370, d));
     // a lake to the north-west
     const lx = x + 420, lz = z - 820; h -= 22 * Math.exp(-(lx * lx + lz * lz) / (2 * 110 * 110));
     return h;
@@ -242,7 +250,8 @@ export class MeridianMap {
     for (const v of VILLAGES) if (Math.hypot(x - v.pos[0], z - v.pos[1]) < v.r + 80) return v.name;
     for (const f of FARMS) if (Math.abs(x - f.pos[0]) < f.w / 2 + 60 && Math.abs(z - f.pos[1]) < f.d / 2 + 60) return f.name;
     if (this.height(x, z) < SEA + .5) return 'Meridian Bay';
-    return this.height(x, z) > 45 ? 'Highlands' : 'Countryside';
+    const hh = this.height(x, z);
+    return hh > SNOW_LINE ? 'Meridian Peaks' : hh > 45 ? 'Highlands' : 'Countryside';
   }
 
   // keep-out test for scatter (roads, city, villages, farms)
