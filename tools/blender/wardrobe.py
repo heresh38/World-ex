@@ -84,7 +84,10 @@ class Kit:
         o = PL.to_object(name, V, Q)
         for m in mats:
             o.data.materials.append(m)
-        PL.decimate_to(o, int(target * self.tscale))
+        for _ in range(3):        # thin walls (skirts) can stall a single collapse pass
+            if len(o.data.vertices) <= target * self.tscale * 1.2:
+                break
+            PL.decimate_to(o, int(target * self.tscale))
         V = sdf.project(fn, PL.verts(o), 3, max_step=h * .5); PL.set_verts(o, V)
         if matfn is not None and len(mats) > 1:
             n, vi = PL.faces(o)
@@ -526,7 +529,8 @@ class Kit:
 
         def skirt_shell(loft, P, t=.004):
             """Skirt wall: the loft where it stands clear of the body, a fitted layer where the hips push past it; open hem."""
-            f = F(P); lo = loft(P)
+            p = self.parts(P); lo = loft(P)
+            f = np.minimum.reduce([p['torso'], p['legL'], p['legR']])     # never wraps the hands hanging beside it
             return np.maximum(np.minimum(lo, f - .0065), -np.minimum(lo + t, f - .002))
 
         def band_mat(z_top, w=.03):
@@ -621,7 +625,7 @@ class Kit:
                 return np.minimum(sk, bandd)
             sk = self.build('skirt', skirt, (-.26, -.19, hem - .02), (.26, .2, top_s + .02),
                             [tex('cloth_legs__skirt', 'fab_plaid.jpg'), bl.mat('trim_legs__skirt', '#2a2c30', .3, .55)],
-                            band_mat(top_s, .025), target=8000, uv=.2, weights=self.skirt_w)
+                            band_mat(top_s, .025), target=8000, uv=.2, weights=self.skirt_w, h=min(self.res, .0028))
             self.add('legs', 'skirt', 'Pleated skirt', [sk], hide=['pelvis'])
             # ---- dresses
             waist_d = z['navel'] - .015; hem_d = kn[2] + .03
@@ -637,7 +641,7 @@ class Kit:
                                                                       self.dom(P, ['torso'], p)]))
                 return np.minimum.reduce([sk, bod, straps])
             sd = self.build('sundress', sundress, (-.27, -.2, hem_d - .02), (.27, .2, B.zsh + .08),
-                            [tex('cloth_dress__sundress', 'fab_cotton.jpg', '#ffffff', .85)], target=11000, uv=.2, weights=self.skirt_w)
+                            [tex('cloth_dress__sundress', 'fab_cotton.jpg', '#ffffff', .85)], target=11000, uv=.2, weights=self.skirt_w, h=min(self.res, .0028))
             self.add('dress', 'sundress', 'Sundress', [sd], hide=['midriff', 'pelvis'], extra={'replaces': ['top', 'legs']})
             hem_k = kn[2] - .12
             kl = self.skirt_loft(hem_k, waist_d, [.15, .162, .178, .168, .15], [.1, .105, .108, .096, .088], [.11, .125, .135, .118, .098])
@@ -648,7 +652,7 @@ class Kit:
                 up = upper(lw - .012, waist_d - .04, .066, .005)(P)
                 return np.minimum(sk, up)
             kd = self.build('knit_dress', knit_dress, (-.36, -.2, hem_k - .02), TOPH,
-                            [tex('cloth_dress__knit', 'fab_knit.jpg', '#ffffff', .9)], target=12000, uv=.14, weights=self.skirt_w)
+                            [tex('cloth_dress__knit', 'fab_knit.jpg', '#ffffff', .9)], target=12000, uv=.14, weights=self.skirt_w, h=min(self.res, .0028))
             self.add('dress', 'knit', 'Knit midi dress', [kd], hide=['midriff', 'pelvis', 'chest', 'upperarm', 'forearm'],
                      extra={'replaces': ['top', 'legs']})
 

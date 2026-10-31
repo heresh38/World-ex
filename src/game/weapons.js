@@ -326,6 +326,7 @@ export class Weapons {
       r.life -= dt;
       r.v.y -= G * r.grav * dt;
       const speed = r.v.length(), step = speed * dt;
+      if (!(speed > 0) || !Number.isFinite(speed + r.p.x + r.p.y + r.p.z)) { this.rounds.splice(i, 1); continue; }
       _d.copy(r.v).divideScalar(speed);
       const res = g.combat.trace(r.p, _d, step, 'player');
       if (res.target || res.hit) { g.water && g.water.hitTest(r.p, res.point); this.roundHit(r, res, _d); this.rounds.splice(i, 1); continue; }
@@ -395,6 +396,7 @@ export class Weapons {
       if (q.kind === 'larva') this.steerLarva(q, dt);
       else q.v.y -= G * K.grav * dt;
       const speed = q.v.length(), step = speed * dt;
+      if (!Number.isFinite(speed) || !Number.isFinite(q.p.x + q.p.y + q.p.z)) { this.goo.splice(i, 1); continue; }   // never feed NaN to the renderer
       _d.copy(q.v).divideScalar(Math.max(1e-4, speed));
       const res = g.combat.trace(q.p, _d, step + q.size, 'player');
       if (res.target || res.hit || q.life <= 0) {

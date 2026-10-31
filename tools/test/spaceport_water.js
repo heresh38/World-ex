@@ -13,7 +13,8 @@ fs.mkdirSync(OUT, { recursive: true });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
+  // the full-detail crowd (150 player-quality NPCs) does not fit next to other test browsers: use the light crowd unless FULL_CROWD=1
+  await p.addInitScript(full => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__civPeds = !full; }, !!process.env.FULL_CROWD);
   // other work in progress may list a model that is not built yet: stand in with a sibling so the game still boots
   await p.route('**/assets/models/*.glb', async route => {
     const f = new URL(route.request().url()).pathname.split('/').pop(), path = require('path').join(__dirname, '../../assets/models/', f);

@@ -277,7 +277,7 @@ class PlayerBuilder:
         hands = []
         for sx in (1, -1):
             wr = B.wrist * [sx, 1, 1]; tp = B.tip * [sx, 1, 1]
-            lo = np.minimum(wr, tp) - .065; hi = np.maximum(wr, tp) + .065
+            lo = np.minimum(wr, tp) - .09; hi = np.maximum(wr, tp) + .09      # room for the thumb in front of the palm
             R = hand_region(sx)
             Q = np.array([sx, 1, 1], F32)
             armhand = lambda P, Q=Q: anatomy.smin(F.arm_l(P * Q), F.hand_l(P * Q), .012)

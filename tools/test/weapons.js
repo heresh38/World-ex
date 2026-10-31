@@ -17,7 +17,13 @@ fs.mkdirSync(OUT, { recursive: true });
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('crash', () => console.log('PAGE CRASHED'));
   p.on('console', m => { if (process.env.VERBOSE && m.type() === 'log') console.log('LOG', m.text().slice(0, 200)); if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
+  await p.addInitScript(() => {
+    localStorage.clear(); window.__TEST_QUALITY = 'low';
+    // a black frame with the HUD intact means the GPU process died (the container OOM-kills headless GPU processes)
+    window.__ctx = { lost: 0, restored: 0 };
+    addEventListener('webglcontextlost', () => window.__ctx.lost++, true);
+    addEventListener('webglcontextrestored', () => window.__ctx.restored++, true);
+  });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
   const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 82, timeout: 300000 }); console.log('shot', n); };
@@ -112,17 +118,33 @@ fs.mkdirSync(OUT, { recursive: true });
         pl.health = pl.maxHealth; pl.shield = pl.maxShield || pl.shield;
         a.mag = Math.max(a.mag, 2); g.weapons.fire(w, A, S, a);
         maxRounds = Math.max(maxRounds, g.weapons.rounds.length); maxGoo = Math.max(maxGoo, g.weapons.goo.length);
+        if (k === 0 && g.weapons.goo.length) { const q = g.weapons.goo[g.weapons.goo.length - 1]; window.__goo0 = { p: q.p.toArray(), v: q.v.toArray() }; }
         await new Promise(r => setTimeout(r, 450));
         maxRounds = Math.max(maxRounds, g.weapons.rounds.length); maxGoo = Math.max(maxGoo, g.weapons.goo.length);
       }
       // goo is slow and the software-rendered sim runs behind real time: wait until everything has landed
       for (let k = 0; k < 120 && (g.weapons.goo.length || g.weapons.rounds.length); k++) await new Promise(r => setTimeout(r, 250));
       await new Promise(r => setTimeout(r, 2500));
+      // NaN scan: anything non-finite in the scene graph, camera, player or particle buffers would black the frame through bloom
+      const fin = v => Number.isFinite(v), nan = [];
+      if (![...g.camera.position.toArray(), ...g.camera.quaternion.toArray()].every(fin)) nan.push('camera');
+      if (![pl.pos.x, pl.pos.y, pl.pos.z, pl.camYaw, pl.camPitch].every(fin)) nan.push('player');
+      g.scene.traverse(o => { if (!o.matrixWorld.elements.every(fin)) nan.push('obj:' + o.type + ':' + o.name); if (o.isLight && !fin(o.intensity)) nan.push('light'); });
+      g.viewmodel.scene.traverse(o => { if (!o.matrixWorld.elements.every(fin)) nan.push('vm:' + o.type + ':' + o.name); });
+      for (const k of ['pos', 'col', 'size', 'bPos', 'bCol', 'bSize']) if (g.fx[k] && !Array.from(g.fx[k]).every(fin)) nan.push('fx.' + k);
       const fxo = g.fx, stains = fxo.slimeLife ? Array.from(fxo.slimeLife).filter(v => v > 0).length : 0;
       return { dist, hp0: Math.round(hp0), hp1: Math.round(e.hp), alive: e.alive, damage: Math.round(hp0 - e.hp), maxRounds, maxGoo,
-        stains, afflicted: g.weapons.afflicted.size, fade: document.getElementById('fade').classList.contains('on'), dead: !!pl.dead, hp: Math.round(pl.health), drop: A.grav ? 'gravity' : 'straight', vel: A.vel };
+        stains, afflicted: g.weapons.afflicted.size, nan: nan.slice(0, 8), goo0: window.__goo0 || null, fade: document.getElementById('fade').classList.contains('on'), dead: !!pl.dead, hp: Math.round(pl.health), drop: A.grav ? 'gravity' : 'straight', vel: A.vel };
     }, arch);
+    const ctxState = () => ev(() => ({ ...window.__ctx, lostNow: window.__game.renderer.r.getContext().isContextLost() }));
+    let ctx = await ctxState();
+    if (ctx.lost || ctx.lostNow) {
+      console.log('WEBGL CONTEXT LOST (GPU process killed?)', JSON.stringify(ctx));
+      await p.waitForFunction(() => !window.__game.renderer.r.getContext().isContextLost(), null, { timeout: 120000, polling: 1000 }).catch(() => {});
+      await wait(3000); ctx = await ctxState();
+    }
     await shot(`w_${arch}_fire`);
+    results[arch + '_ctx'] = ctx;
     results[arch] = { ...info, ...fire };
     console.log(arch, JSON.stringify(results[arch]));
     await ev(() => window.__game.enemies.clear());
