@@ -18,12 +18,14 @@ const SPECS = {
   car_suv: { node: 'suv', mass: 1900, accel: 7.0, top: 50, grip: 9, steer: .56, hp: 700 },
   car_pickup: { node: 'pickup', mass: 2200, accel: 6.4, top: 48, grip: 8.5, steer: .52, hp: 760 },
   car_van: { node: 'van', mass: 2100, accel: 5.6, top: 42, grip: 8.5, steer: .54, hp: 720 },
+  // frontier all-terrain rover: soft long-travel suspension, lugged tyres (dropped by the ship on V while boarding)
+  car_rover: { node: 'rover', mass: 1500, accel: 8.4, top: 38, grip: 7.5, steer: .62, hp: 1100, droop: .26, bump: .2, static: .1 },
   board_sport: { board: true, name: 'Vanta Glide', mass: 90, accel: 13, top: 25, boost: 36, turn: 2.3, hp: 320 },
   board_utility: { board: true, name: 'Mule Deck', mass: 120, accel: 10, top: 21, boost: 30, turn: 1.9, hp: 480 },
 };
 // how high the Sit clip puts the hips above the avatar root
 const HIP = { player_male: .48, player_female: .44, civ_male: .45, civ_female: .39 };
-const G = 9.8, DROOP = .13, BUMP = .11, STATIC = .06;
+const G = 9.8, DROOP = .13, BUMP = .11, STATIC = .06;     // default suspension travel (m); specs may override
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4();
 const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _ray = new THREE.Raycaster(), _inv = new THREE.Matrix4();
@@ -153,7 +155,8 @@ export class Car {
   // ---------------------------------------------------------------- physics (dynamic cars)
   physics(dt, ctl) {
     const g = this.g, col = g.world.collision, S = this.S, M = this.mass;
-    const k = M * G / (4 * STATIC), c = .75 * Math.sqrt(k * M / 4);
+    const DR = S.droop || DROOP, BU = S.bump || BUMP, ST = S.static || STATIC;
+    const k = M * G / (4 * ST), c = .75 * Math.sqrt(k * M / 4);
     _e.set(this.pitch, this.yaw, this.roll, 'YXZ'); _q.setFromEuler(_e);
     let Fy = 0, tp = 0, tr = 0, contacts = 0, push = 0;
     for (const w of this.wheels) {
@@ -162,11 +165,11 @@ export class Car {
       const wy = waterY(g, _v.x, _v.z);
       w.water = wy !== null && wy > gy + .3 ? wy : null;
       let off = gy + this.meta.rw - _v.y;
-      if (off < -DROOP) { w.contact = false; w.off += (-DROOP - w.off) * Math.min(1, dt * 10); w.prev = w.off; continue; }
+      if (off < -DR) { w.contact = false; w.off += (-DR - w.off) * Math.min(1, dt * 10); w.prev = w.off; continue; }
       w.contact = true; contacts++;
-      if (off > BUMP) { push = Math.max(push, off - BUMP); off = BUMP; }
+      if (off > BU) { push = Math.max(push, off - BU); off = BU; }
       const rate = (off - w.prev) / dt; w.prev = off; w.off = off;
-      const F = Math.max(0, k * (off + STATIC) + c * rate);
+      const F = Math.max(0, k * (off + ST) + c * rate);
       Fy += F; tp += F * w.lz; tr += F * w.lx;
     }
     // buoyancy when the body sinks into water: floats low, drifts, heavy drag
@@ -261,7 +264,7 @@ export class Car {
       if (!w.piv) continue;
       w.rot += (this.vF / this.meta.rw) * dt;
       w.spin.rotation.x = w.rot;
-      w.piv.position.y = this.meta.rw + THREE.MathUtils.clamp(w.off, -DROOP, BUMP);
+      w.piv.position.y = this.meta.rw + THREE.MathUtils.clamp(w.off, -(this.S.droop || DROOP), this.S.bump || BUMP);
       if (w.front) w.piv.rotation.y = ang;
     }
     if (this.steerWheel) this.steerWheel.quaternion.copy(this.steerWheel.userData.q0).multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), -this.steer * 2.4));
@@ -601,7 +604,7 @@ function circleCar(car, x, z, r) {
 export class Vehicles {
   constructor(game) { this.g = game; this.cars = []; this.current = null; this.mine = null; this.grid = new Map(); this.frame = 0; }
 
-  clear() { this.cars.forEach(c => c.dispose()); this.cars = []; this.current = null; this.mine = null; this.grid.clear(); }
+  clear() { this.cars.forEach(c => c.dispose()); this.cars = []; this.current = null; this.mine = null; this.rover = null; this.grid.clear(); }
 
   // parked / scripted cars: legacy model names map onto the modern line-up
   spawn(model, paint, pos, yaw) {
@@ -611,10 +614,13 @@ export class Vehicles {
     this.cars.push(c); return c;
   }
 
-  // V: the hover board drops in under the player, who steps straight on
+  // V: the hover board drops in under the player, who steps straight on. On frontier worlds, V again while on the
+  // board calls down the all-terrain rover instead.
   summon() {
     const g = this.g, p = g.player;
+    if (g.world.allowCars && !p.dead && this.current && this.current.board && g.world.kind !== 'city') { this.dropRover(); return; }
     if (!g.world.allowCars || p.mode !== 'foot' || p.dead) { g.audio.ui('deny'); return; }
+    if (g.world.kind !== 'city' && !this.roverHint) { this.roverHint = true; setTimeout(() => g.hud.toast('Press V again to call down the rover'), 1200); }
     const model = boardModel(g.save.car.model);
     if (this.mine && (!this.mine.alive || this.mine.model !== model)) { this.mine.dispose(); this.cars.splice(this.cars.indexOf(this.mine), 1); this.mine = null; }
     if (!this.mine) { this.mine = new Board(g, model, g.save.car.paint, p.pos.clone(), p.yaw); this.cars.push(this.mine); }
@@ -623,6 +629,26 @@ export class Vehicles {
     g.fx.emit(_v.copy(b.pos).setY(b.pos.y + .2), 30, 4, 0x3ad6ff, .5, 2, .08);
     g.audio.ui('open');
     this.enter(b);
+  }
+
+  // the ship drops the rover beside the board; it lands on its suspension and the player climbs in
+  dropRover() {
+    const g = this.g, b = this.current;
+    const yaw = b.yaw, side = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    this.exit();
+    const pos = b.pos.clone().addScaledVector(side, -3.2).addScaledVector(new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), 2);
+    if (this.rover && this.rover.alive) { this.rover.pos.copy(pos); this.rover.vel.set(0, 0, 0); this.rover.yaw = yaw; }
+    else {
+      if (this.rover) { this.rover.dispose(); this.cars.splice(this.cars.indexOf(this.rover), 1); }
+      this.rover = new Car(g, 'car_rover', '#e9e6df', pos, yaw); this.cars.push(this.rover);
+    }
+    const r = this.rover;
+    r.pos.y = g.world.collision.support(pos.x, pos.z, pos.y + 2) + 3.5; r.pitch = r.roll = 0; r.vel.y = -2;
+    r.wake();
+    b.vel.set(0, 0, 0);
+    g.fx.emit(_v.copy(r.pos), 40, 6, 0xd9661f, .6, 4, .1);
+    g.audio.ui('open');
+    this.enter(r);
   }
 
   nearest(p, r = 2.2) {

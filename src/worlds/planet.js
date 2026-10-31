@@ -100,7 +100,7 @@ export class PlanetWorld extends World {
       const cn = Math.abs(fbm(wx * f * 1.3 + 3, wz * f * 1.3 + 8, s + 71, 4) - .5);
       h -= smooth(.06, 0, cn) * D.amp * 1.1;
     } else if (st === 'glacier') {
-      h = h * .7 + Math.pow(Math.max(0, h) / (D.amp * 3), 2) * D.amp * 3;
+      h = h * .75 + Math.pow(Math.max(0, h) / (D.amp * 3), 1.5) * D.amp * .9;
     } else if (st === 'volcanic') {
       // calderas: craters on top of the highest cones
       const cx = Math.floor(x / 420), cz = Math.floor(z / 420);
@@ -122,15 +122,15 @@ export class PlanetWorld extends World {
     return base + (h - base) * k * k * (3 - 2 * k);
   }
 
-  baseAtOrigin() { const D = this.dest; return (fbm(0, 0, this.seed) - .5) * D.amp * 2; }
+  baseAtOrigin() { const D = this.dest, b = (fbm(0, 0, this.seed) - .5) * D.amp * 2; return this.lava != null ? Math.max(b, this.lava + 3) : b; }
 
-  // Low-detail terrain from the edge of the streamed chunks out to the horizon (rebuilt as the player travels).
-  buildFar(cx, cz) {
-    const RINGS = 40, SEG = 112, r0 = CH * (RADIUS - .6), r1 = 1900;
+  // Low-detail terrain from the edge of the streamed chunks out to the horizon. Rebuilt around the player as they
+  // travel, a few rings per frame into a spare buffer so there is never a hitch, then swapped in.
+  buildFar(cx, cz, sync = false) {
+    const RINGS = 40, SEG = 112;
     if (!this.farMesh) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RINGS * SEG * 3), 3));
-      geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(RINGS * SEG * 3), 3));
       const idx = [];
       for (let r = 0; r < RINGS - 1; r++) for (let k = 0; k < SEG; k++) {
         const a = r * SEG + k, b = r * SEG + (k + 1) % SEG, c = a + SEG, d = b + SEG; idx.push(a, c, b, b, c, d);
@@ -139,20 +139,24 @@ export class PlanetWorld extends World {
       this.farMesh = new THREE.Mesh(geo, this.terrainMat); this.farMesh.frustumCulled = false; this.farMesh.receiveShadow = false;
       this.scene.add(this.farMesh);
     }
-    const geo = this.farMesh.geometry, P = geo.attributes.position, N = geo.attributes.normal;
-    for (let r = 0; r < RINGS; r++) {
-      const t = r / (RINGS - 1), rad = r0 * Math.pow(r1 / r0, t), e = Math.max(4, rad * .04);
-      for (let k = 0; k < SEG; k++) {
-        const a = k / SEG * Math.PI * 2, x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad;
+    this.farJob = { cx, cz, r: 0, buf: new Float32Array(RINGS * SEG * 3), RINGS, SEG };
+    if (sync) while (this.farJob) this.stepFar(RINGS);
+  }
+
+  stepFar(n) {
+    const J = this.farJob, r0 = CH * (RADIUS - .6), r1 = 1900;
+    for (let i = 0; i < n && J.r < J.RINGS; i++, J.r++) {
+      const r = J.r, rad = r0 * Math.pow(r1 / r0, r / (J.RINGS - 1));
+      for (let k = 0; k < J.SEG; k++) {
+        const a = k / J.SEG * Math.PI * 2, x = J.cx + Math.cos(a) * rad, z = J.cz + Math.sin(a) * rad, o = (r * J.SEG + k) * 3;
         // the inner rings sit a little low so the detailed chunks always win where they overlap
-        const y = this.height(x, z) - (r < 3 ? 1.2 : .3);
-        P.setXYZ(r * SEG + k, x, y, z);
-        _v.set(this.height(x - e, z) - this.height(x + e, z), 2 * e, this.height(x, z - e) - this.height(x, z + e)).normalize();
-        N.setXYZ(r * SEG + k, _v.x, _v.y, _v.z);
+        J.buf[o] = x; J.buf[o + 1] = this.height(x, z) - (r < 3 ? 1.2 : .3); J.buf[o + 2] = z;
       }
     }
-    P.needsUpdate = true; N.needsUpdate = true; geo.computeBoundingSphere();
-    this.farAt = [cx, cz];
+    if (J.r < J.RINGS) return;
+    const geo = this.farMesh.geometry; geo.attributes.position.array.set(J.buf); geo.attributes.position.needsUpdate = true;
+    geo.computeVertexNormals(); geo.computeBoundingSphere();
+    this.farAt = [J.cx, J.cz]; this.farJob = null;
   }
 
   async build(progress) {
@@ -240,7 +244,7 @@ export class PlanetWorld extends World {
     // reflections
     const pm = new THREE.PMREMGenerator(g.renderer.r);
     this.envRT = pm.fromScene(new THREE.Scene().add(atmosphereSky(D.sky[1], D.sky[0], D.sun, this.sunDir, { fog: D.fog })), .04);
-    this.buildFar(0, 0);
+    this.buildFar(0, 0, true);
     sc.environment = this.envRT.texture; sc.environmentIntensity = .6;
     pm.dispose(); this.disposables.push(this.envRT);
     g.vehicles.clear();
@@ -462,6 +466,7 @@ export class PlanetWorld extends World {
       }
     }
     if (this.queue.length) { const w = this.queue.shift(); this.makeChunk(w[0], w[1]); }
+    else if (this.farJob) this.stepFar(3);
     else if (this.farAt && Math.hypot(c.x - this.farAt[0], c.z - this.farAt[1]) > 140) this.buildFar(Math.round(c.x / 20) * 20, Math.round(c.z / 20) * 20);
     // caches: animate lids
     for (const cc of this.caches) if (cc.open && cc.lid && cc.t < 1) { cc.t = Math.min(1, cc.t + dt * 2); cc.lid.rotation.x = -cc.t * 1.9; }

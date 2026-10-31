@@ -158,6 +158,21 @@ fs.mkdirSync(OUT, { recursive: true });
   await run(2500); await shot('07_board_first');
   await ev(() => { const g = window.__game; g.input.down.delete('KeyW'); g.save.settings.view = 'third'; g.setAvatarLayer(); });
   await run(1500);
+  // frontier behaviour (faked on Earth): V again on the board drops the all-terrain rover, which lands on its springs
+  const rover = await ev(async () => {
+    const g = window.__game, kind = g.world.kind;
+    g.world.kind = 'planet'; g.vehicles.summon(); g.world.kind = kind;
+    const r = g.vehicles.current;
+    if (!r || r.model !== 'car_rover') return 'no rover';
+    const y0 = r.pos.y;
+    await new Promise(res => setTimeout(res, 3500));
+    const gy = g.world.collision.support(r.pos.x, r.pos.z, r.pos.y + 1);
+    g.input.down.add('KeyW'); await new Promise(res => setTimeout(res, 2500)); g.input.down.delete('KeyW');
+    return { dropFrom: +(y0 - gy).toFixed(1), landed: +(r.pos.y - gy).toFixed(2), contacts: r.contacts, speed: +r.speed.toFixed(1) };
+  });
+  check('rover drops, lands and drives', rover.contacts >= 3 && Math.abs(rover.landed) < .4 && rover.speed > 2, rover);
+  await ev(() => { const g = window.__game; g.player.camPitch = -.25; });
+  await run(2000); await shot('07b_rover');
   await ev(() => { const g = window.__game; if (g.vehicles.current) g.vehicles.exit(); });
 
   // ---- shoot a traffic driver through the windscreen: the car rolls to a stop
