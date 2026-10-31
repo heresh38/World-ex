@@ -26,9 +26,12 @@ fs.mkdirSync(OUT, { recursive: true });
   // models other people are still building: stand in the base model so the run is not blocked by a missing file
   await p.route(/assets\/models\/[^/]+\.glb$/, (route, req) => {
     const f = 'assets/models/' + req.url().split('/').pop();
-    if (fs.existsSync(f)) return route.continue();
-    const alt = 'assets/models/civ_female.glb';   // small skinned stand-in
-    console.log('stand-in for missing', f, '->', alt);
+    // this run only visits the ship and a frontier planet: big city / other-body models are swapped for a small one to
+    // keep the headless renderer's memory down (STUB=0 loads everything)
+    const heavy = process.env.STUB !== '0' && /\/(vanthos|city_buildings|rural|civ_male|player_male|player_female_npc|player_male_npc)\.glb$/.test(f);
+    if (fs.existsSync(f) && !heavy) return route.continue();
+    const alt = 'assets/models/npc_vendor.glb';   // small skinned stand-in
+    console.log('stand-in for', f, '->', alt);
     return route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: fs.readFileSync(alt) });
   });
   await p.goto(BASE + '/index.html');
@@ -36,15 +39,17 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { window.__game.save.settings.dynamicRes = false; });
   await p.click('[data-act="title-play"]');
   await waitPlay();
-  await ev(w => window.__game.travel(w), process.env.WORLD || 'ares');
-  await waitPlay();
+  const WORLD = process.env.WORLD || 'ship';   // the ship is the lightest world (headless renderers get OOM-killed under load)
+  if (WORLD !== 'ship') { await ev(w => window.__game.travel(w), WORLD); await waitPlay(); }
   await wait(2500);
   // keep the run deterministic: no wandering hostiles, the player cannot die
   await ev(() => {
     const g = window.__game, pl = g.player; g.enemies.clear(); if (g.save.settings.view !== 'first') g.toggleView();
-    // turn away from the dropship and walk out into the open
-    pl.camYaw += Math.PI; const fx = -Math.sin(pl.camYaw), fz = -Math.cos(pl.camYaw);
-    pl.pos.x += fx * 25; pl.pos.z += fz * 25; pl.pos.y = g.world.collision.ground(pl.pos.x, pl.pos.z) + .1; pl.avatar.root.position.copy(pl.pos);
+    if (g.world.constructor.name !== 'ShipWorld') {
+      // turn away from the dropship and walk out into the open
+      pl.camYaw += Math.PI; const fx = -Math.sin(pl.camYaw), fz = -Math.cos(pl.camYaw);
+      pl.pos.x += fx * 25; pl.pos.z += fz * 25; pl.pos.y = g.world.collision.ground(pl.pos.x, pl.pos.z) + .1; pl.avatar.root.position.copy(pl.pos);
+    }
   });
 
   const results = {};
@@ -63,7 +68,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await wait(3500);
     await shot(`w_${arch}_hip`);
     // aim down sights
-    await ev(() => { window.__game.input.rmb = true; });
+    await ev(() => { window.__game.input.rmb = true; window.__game.player.armed = true; });
     await wait(3000);
     await shot(`w_${arch}_ads`);
     await ev(() => { window.__game.input.rmb = false; });
@@ -71,8 +76,18 @@ fs.mkdirSync(OUT, { recursive: true });
     const fire = await ev(async arch => {
       const g = window.__game, pl = g.player, V = pl.pos.constructor;
       const data = await import('/src/game/data.js'), st = await import('/src/game/state.js');
-      const dist = arch === 'bolt' ? 40 : arch === 'bile' || arch === 'pump' ? 8 : 16;
-      const yaw = pl.camYaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const ship = g.world.constructor.name === 'ShipWorld';
+      let dist = ship ? (arch === 'bile' || arch === 'pump' ? 5 : 9) : arch === 'bolt' ? 40 : arch === 'bile' || arch === 'pump' ? 8 : 16;
+      pl.armed = true;
+      // face the most open direction so the target is not behind a console
+      let yaw = pl.camYaw, free = 0;
+      for (let k = 0; k < 16; k++) {
+        const y = pl.camYaw + k * Math.PI / 8, d = new V(-Math.sin(y), 0, -Math.cos(y)), o = pl.pos.clone(); o.y += 1.2;
+        const h = g.world.collision.raycast(o, d, 60), f = h ? h.dist : 60;
+        if (f > free + .5) { free = f; yaw = y; }
+      }
+      const want = dist; dist = Math.max(3, Math.min(want, free - 2.5));
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       const at = new V(pl.pos.x + fx * dist, 0, pl.pos.z + fz * dist); at.y = g.world.collision.ground(at.x, at.z);
       const e = g.enemies.spawn('brute', at, 30); e.state = 'idle'; e.fireT = 999;
       await new Promise(r => setTimeout(r, 300));
@@ -102,17 +117,20 @@ fs.mkdirSync(OUT, { recursive: true });
     await ev(() => window.__game.enemies.clear());
   }
 
-  // bullet drop: a kinetic round fired level falls under gravity
+  // bullet drop: a level round fired high above the world, kinetic (gravity) vs energy (straight)
   const drop = await ev(async () => {
-    const g = window.__game, pl = g.player;
-    const w = g.weapons.equipped(0), data = await import('/src/game/data.js'), st = await import('/src/game/state.js');
-    const A = data.ARCHETYPES[w.arch], S = st.weaponStats(w);
-    pl.camPitch = .02;
-    const n0 = g.weapons.rounds.length; g.weapons.fire(w, A, S, g.weapons.ammoOf(w));
-    const r = g.weapons.rounds[g.weapons.rounds.length - 1]; if (!r || g.weapons.rounds.length === n0) return null;
-    const y0 = r.p.y, v0 = r.v.y;
-    await new Promise(res => setTimeout(res, 250));
-    return { arch: w.arch, vy0: +v0.toFixed(2), vy1: +r.v.y.toFixed(2), dist: Math.round(r.dist), dy: +(r.p.y - y0).toFixed(3) };
+    const g = window.__game, V = g.player.pos.constructor, data = await import('/src/game/data.js'), st = await import('/src/game/state.js');
+    const out = {};
+    for (const arch of ['bolt', 'auto']) {
+      const w = st.makeWeapon(arch, 1, 10), A = data.ARCHETYPES[arch], S = st.weaponStats(w);
+      const o = g.player.pos.clone().add(new V(0, 400, 0)), d = new V(1, 0, 0);
+      g.weapons.spawnRound(o, o, d, S, w, A, { hit: false });
+      const r = g.weapons.rounds[g.weapons.rounds.length - 1], t0 = performance.now();
+      await new Promise(res => setTimeout(res, 400));
+      const t = (performance.now() - t0) / 1000;
+      out[arch] = { vel: A.vel, dist: Math.round(r.dist), dropM: +(o.y - r.p.y).toFixed(3), expectedAtDist: +(.5 * 9.81 * (r.dist / A.vel) ** 2 * (A.grav ?? 1)).toFixed(3) };
+    }
+    return out;
   });
   console.log('drop', JSON.stringify(drop));
 
@@ -132,7 +150,7 @@ fs.mkdirSync(OUT, { recursive: true });
       await ev(() => { window.__game.input.rmb = false; }); await wait(600);
     }
   }
-  await ev(() => { const g = window.__game; g.input.rmb = false; if (g.save.settings.view !== 'third') g.toggleView(); });
+  await ev(() => { const g = window.__game; g.input.rmb = false; g.player.armed = true; if (g.save.settings.view !== 'third') g.toggleView(); });
   await wait(1500); await shot('w_third_person');
   const fps = await ev(() => Math.round(window.__game.fps || 0));
   console.log('fps', fps);

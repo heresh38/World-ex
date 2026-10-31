@@ -126,13 +126,18 @@ export class Avatar {
       if (it !== 'none' && !this.items[slot][it]) it = this.defaults[slot] || 'none';
       if (it === 'none' && this.isLocked(slot)) it = this.defaults[slot] || Object.keys(this.items[slot])[0];
       out[slot] = it || 'none';
+    }
+    // a dress replaces the top and the legs pieces (they stay selected, just not shown)
+    const replaced = new Set();
+    for (const slot of Object.keys(this.items)) { const info = (this.wardrobe[slot] || {})[out[slot]]; if (info && info.replaces) info.replaces.forEach(s => replaced.add(s)); }
+    for (const slot of Object.keys(this.items)) {
       const info = (this.wardrobe[slot] || {})[out[slot]];
-      if (info) { info.hide.forEach(r => hide.add(r)); if (info.hideHair) hideHair = true; }
+      if (info && !replaced.has(slot)) { info.hide.forEach(r => hide.add(r)); if (info.hideHair) hideHair = true; }
     }
     for (const [slot, list] of Object.entries(this.items)) {
       const info = (this.wardrobe[slot] || {})[out[slot]] || {};
       // the base layer is always worn; it only disappears under clothing that covers it
-      const covered = (info.coveredBy || []).some(s => out[s] && out[s] !== 'none');
+      const covered = (info.coveredBy || []).some(s => out[s] && out[s] !== 'none' && !replaced.has(s)) || replaced.has(slot);
       for (const [id, o] of Object.entries(list)) o.visible = out[slot] === id && !(slot === 'hair' && hideHair) && !covered;
     }
     for (const [r, o] of Object.entries(this.regions)) o.visible = !hide.has(r);

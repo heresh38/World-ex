@@ -930,7 +930,7 @@ def main():
         'terminal': list(TERM), 'runway': [RWY_X0, RWY_Z, RWY_X1, RWY_W], 'taxiway': [TWY_X0, TWY_Z, TWY_X1, TWY_W],
         'apron': list(APRON), 'lots': [list(l) for l in LOTS], 'hangars': [[x, (HANGAR_Z0 + HANGAR_Z1) / 2] for x in HANGARS],
         'fence': list(FENCE), 'tower': list(TOWER), 'radar': [TOWER[0], 43.8, TOWER[1]],
-        'paths': [[[-120, -92], [120, -92], [120, -84], [-120, -84]], [[-72, -74], [72, -74], [72, -48], [-72, -48]]],
+        'paths': [[[-120, -95], [120, -95], [120, -86], [-120, -86]], [[-66, -74], [66, -74], [66, -54], [-66, -54]]],
     }
     root['worldex'] = json.dumps(meta)
     bl.export('airport.glb')

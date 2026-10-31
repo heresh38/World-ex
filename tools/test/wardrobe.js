@@ -8,7 +8,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
@@ -27,9 +27,10 @@ fs.mkdirSync(OUT, { recursive: true });
       const vis = await ev(id => { const o = window.__game.player.avatar.items.hair[id]; let v = 0; o.traverse(m => { if (m.isMesh && m.visible) v++; }); return v; }, id);
       if (!vis) errs.push('hair ' + id + ' not visible');
       await shot(`h_${tag}_${id}`);
-      await ev(() => { const a = window.__game.player.avatar; a.root.rotation.y += 2.4; });
-      await wait(400); await shot(`h_${tag}_${id}_back`);
-      await ev(() => { const a = window.__game.player.avatar; a.root.rotation.y -= 2.4; });
+      await ev(() => { const g = window.__game; g.wardrobeSpin = (g.wardrobeSpin || 0) + 2.6; });
+      await wait(900); await shot(`h_${tag}_${id}_back`);
+      await ev(() => { const g = window.__game; g.wardrobeSpin -= 2.6; });
+      await wait(500);
     }
   };
   // every clothing item per slot (wear tab), screenshot each
@@ -89,6 +90,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('w06_base_body');
   await wearTour('female');
   // male frame
+  await click('[data-act="tab"][data-v="body"]');
   await click('[data-act="body"][data-v="male"]');
   await wait(3000);
   await click('[data-act="tab"][data-v="wear"]');

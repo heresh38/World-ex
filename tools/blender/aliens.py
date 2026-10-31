@@ -142,7 +142,7 @@ def build_kind(kind):
         # elongated eyeless skull sweeping back, a split mandible jaw, teeth
         L = {'elite': 1.15}.get(kind, 1.0)
         sc.ell(V(0, -.01 * s, h2 + .1 * s), V(.075, .1, .085) * s, 'head', 'hide', HIDE, k=.03 * s)
-        sc.cone(V(0, .03 * s, h2 + .12 * s), V(0, .26 * s * L, h2 + .2 * s * L), .07 * s, .02 * s, 'head', 'plate', PLATE, k=.03 * s, amp=.4)
+        sc.cone(V(0, .03 * s, h2 + .12 * s), V(0, .3 * s * L, h2 + .15 * s * L), .065 * s, .014 * s, 'head', 'plate', PLATE, k=.03 * s, amp=.4)
         sc.cut_ell(V(0, -.1 * s, h2 + .04 * s), V(.04, .05, .035) * s, 'head', 'skin', '#3a0c14', k=.008 * s)
         teeth_ring(sc, V(0, -.1 * s, h2 + .045 * s), .036 * s, .03 * s, 12, 'head', (0, 1, 0), .025 * s, .005 * s)
         for sx in (1, -1):

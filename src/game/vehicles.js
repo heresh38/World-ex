@@ -738,7 +738,8 @@ export class Vehicles {
       for (let j = i + 1; j < cars.length; j++) {
         const b = cars[j]; if (b.board || (!b.alive && !b.burnt)) continue;
         const bMoving = b.dynamic && !b.sleep;
-        if (!aMoving && !bMoving && !(a.traffic && b.traffic === undefined) && !(a.speed > 1 || b.speed > 1)) continue;
+        if (!a.dynamic && !b.dynamic) continue;                       // two lane-following cars: traffic.js keeps them apart
+        if (!aMoving && !bMoving && !(a.speed > 1 || b.speed > 1)) continue;
         const dx = a.pos.x - b.pos.x, dz = a.pos.z - b.pos.z;
         if (dx * dx + dz * dz > 49 || Math.abs(a.pos.y - b.pos.y) > 2) continue;
         const h = obbObb(a, b); if (!h) continue;

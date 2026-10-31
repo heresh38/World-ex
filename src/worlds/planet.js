@@ -14,6 +14,18 @@ function vnoise(x, z, s) {
   const a = hash2(xi, zi, s), b = hash2(xi + 1, zi, s), c = hash2(xi, zi + 1, s), d = hash2(xi + 1, zi + 1, s);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
+function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+// landform style and sky dressing per frontier world
+const STYLE = { ares: 'mesa', vesper: 'glacier', thalassa: 'jungle', pyrrhos: 'volcanic', nyx: 'crystal' };
+const SKYBODY = {
+  ares: { dir: [-.45, .38, -.8], size: .2, color: '#e7d3b0', band: '#b08a62', ring: [1.45, 2.5], ringColor: '#d8c2a4', tilt: [.25, 1, .45] },
+  vesper: { dir: [.6, .22, -.75], size: .26, color: '#9fb6d8', band: '#5e7aa6', ring: null },
+  thalassa: { dir: [.3, .45, .85], size: .17, color: '#f0e2c8', band: '#c79a6a', ring: [1.5, 2.6], ringColor: '#e8dccb', tilt: [-.3, 1, .2] },
+  pyrrhos: { dir: [-.7, .25, .6], size: .07, color: '#b05030', band: '#702414', ring: null },
+  nyx: { dir: [-.5, .5, -.7], size: .06, color: '#e8e0ff', band: '#a898d8', ring: null, moon2: [.55, .32, -.75] },
+};
+const HAZE = { ares: .00062, vesper: .0011, thalassa: .0008, pyrrhos: .00095, nyx: .0007 };
+
 function fbm(x, z, s, o = 5) { let t = 0, a = .5, n = 0; for (let i = 0; i < o; i++) { t += a * vnoise(x, z, s + i * 17); n += a; x *= 2.02; z *= 2.02; a *= .5; } return t / n; }
 
 // Global instanced pools so scatter costs one draw call per prop type regardless of chunk count.
@@ -61,16 +73,86 @@ export class PlanetWorld extends World {
     this.lava = dest.hazard === 'lava' ? -6 : null;
   }
 
+  // Landforms per world (see STYLE): domain-warped fbm for the base, ridged multifractal mountains that rise
+  // with distance from the landing zone so the horizon is full of peaks, and a style pass on top:
+  // mesas (terraced plateaus and canyons), glaciers (smooth ice sheets under knife ridges), jungle hills,
+  // volcanic crags with calderas, crystal plains with dunes.
   height(x, z) {
-    const D = this.dest, s = this.seed, f = D.freq;
-    let h = (fbm(x * f, z * f, s) - .5) * D.amp * 2;
-    const r = 1 - Math.abs(fbm(x * f * .5 + 31, z * f * .5 - 17, s + 7, 4) * 2 - 1);
-    h += r * r * D.amp * 1.4;
+    const D = this.dest, s = this.seed, f = D.freq, st = STYLE[D.id] || 'hills';
+    // domain warp so nothing lines up with the noise grid
+    const wx = x + (fbm(x * f * .7 + 11, z * f * .7 - 5, s + 41, 3) - .5) * 120;
+    const wz = z + (fbm(x * f * .7 - 23, z * f * .7 + 9, s + 43, 3) - .5) * 120;
+    let h = (fbm(wx * f, wz * f, s) - .5) * D.amp * 2;
+    // ridged multifractal mountains, masked into ranges
+    let rid = 0, amp = 1, wgt = 1, fx = wx * f * .55, fz = wz * f * .55;
+    for (let i = 0; i < 5; i++) {
+      let n = 1 - Math.abs(vnoise(fx, fz, s + 90 + i * 13) * 2 - 1); n *= n; n *= wgt;
+      wgt = Math.min(1, n * 1.6); rid += n * amp; amp *= .5; fx *= 2.1; fz *= 2.1;
+    }
+    const range = smooth(.42, .72, fbm(wx * f * .18 + 7, wz * f * .18 - 3, s + 61, 3));
+    const far = smooth(120, 700, Math.hypot(x, z));
+    const mount = rid * range * D.amp * (st === 'crystal' ? 1.2 : st === 'jungle' ? 2.2 : 3.4) * (.35 + .65 * far);
+    h += mount;
+    if (st === 'mesa') {
+      // flat-topped plateaus with cliff steps, cut by dry canyons
+      const step = D.amp * .55, t = (h + D.amp * 2) / step, fr = t - Math.floor(t);
+      h = (Math.floor(t) + smooth(.55, .8, fr)) * step - D.amp * 2;
+      const cn = Math.abs(fbm(wx * f * 1.3 + 3, wz * f * 1.3 + 8, s + 71, 4) - .5);
+      h -= smooth(.06, 0, cn) * D.amp * 1.1;
+    } else if (st === 'glacier') {
+      h = h * .7 + Math.pow(Math.max(0, h) / (D.amp * 3), 2) * D.amp * 3;
+    } else if (st === 'volcanic') {
+      // calderas: craters on top of the highest cones
+      const cx = Math.floor(x / 420), cz = Math.floor(z / 420);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const kx = cx + i, kz = cz + j; if (hash2(kx, kz, s + 5) < .55) continue;
+        const px = (kx + .2 + hash2(kx, kz, s + 6) * .6) * 420, pz = (kz + .2 + hash2(kx, kz, s + 7) * .6) * 420;
+        const d = Math.hypot(x - px, z - pz), R = 70 + hash2(kx, kz, s + 8) * 60;
+        if (d < R * 2.2) h += D.amp * 2.2 * smooth(R * 2.2, R * .7, d) - D.amp * 1.6 * smooth(R * .75, R * .35, d);
+      }
+    } else if (st === 'crystal') {
+      // long wind-swept dunes on open plains
+      const a = .6, ux = x * Math.cos(a) - z * Math.sin(a), uz = x * Math.sin(a) + z * Math.cos(a);
+      h += Math.pow(Math.abs(Math.sin(ux * .045 + fbm(ux * .01, uz * .01, s + 9, 2) * 5)), 1.6) * 3.2 * (1 - range);
+    }
     h += (fbm(x * f * 4, z * f * 4, s + 3, 3) - .5) * 3;
     // flatten the landing zone
     const d = Math.hypot(x, z), k = Math.min(1, Math.max(0, (d - 30) / 50));
-    const base = (fbm(0, 0, s) - .5) * D.amp * 2;
+    const base = this.base0 !== undefined ? this.base0 : (this.base0 = this.baseAtOrigin());
     return base + (h - base) * k * k * (3 - 2 * k);
+  }
+
+  baseAtOrigin() { const D = this.dest; return (fbm(0, 0, this.seed) - .5) * D.amp * 2; }
+
+  // Low-detail terrain from the edge of the streamed chunks out to the horizon (rebuilt as the player travels).
+  buildFar(cx, cz) {
+    const RINGS = 40, SEG = 112, r0 = CH * (RADIUS - .6), r1 = 1900;
+    if (!this.farMesh) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RINGS * SEG * 3), 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(RINGS * SEG * 3), 3));
+      const idx = [];
+      for (let r = 0; r < RINGS - 1; r++) for (let k = 0; k < SEG; k++) {
+        const a = r * SEG + k, b = r * SEG + (k + 1) % SEG, c = a + SEG, d = b + SEG; idx.push(a, c, b, b, c, d);
+      }
+      geo.setIndex(idx);
+      this.farMesh = new THREE.Mesh(geo, this.terrainMat); this.farMesh.frustumCulled = false; this.farMesh.receiveShadow = false;
+      this.scene.add(this.farMesh);
+    }
+    const geo = this.farMesh.geometry, P = geo.attributes.position, N = geo.attributes.normal;
+    for (let r = 0; r < RINGS; r++) {
+      const t = r / (RINGS - 1), rad = r0 * Math.pow(r1 / r0, t), e = Math.max(4, rad * .04);
+      for (let k = 0; k < SEG; k++) {
+        const a = k / SEG * Math.PI * 2, x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad;
+        // the inner rings sit a little low so the detailed chunks always win where they overlap
+        const y = this.height(x, z) - (r < 3 ? 1.2 : .3);
+        P.setXYZ(r * SEG + k, x, y, z);
+        _v.set(this.height(x - e, z) - this.height(x + e, z), 2 * e, this.height(x, z - e) - this.height(x, z + e)).normalize();
+        N.setXYZ(r * SEG + k, _v.x, _v.y, _v.z);
+      }
+    }
+    P.needsUpdate = true; N.needsUpdate = true; geo.computeBoundingSphere();
+    this.farAt = [cx, cz];
   }
 
   async build(progress) {
@@ -83,8 +165,9 @@ export class PlanetWorld extends World {
     // ---------------- sky, fog, light
     const el = D.sunEl;
     this.sunDir = new THREE.Vector3(Math.cos(el) * .7, Math.sin(el), Math.cos(el) * -.7).normalize();
-    const sky = atmosphereSky(D.sky[1], D.sky[0], D.sun, this.sunDir); sc.add(sky); this.sky = sky;
-    sc.fog = new THREE.Fog(new THREE.Color(D.fog), 60, CH * RADIUS * .95);
+    const sky = atmosphereSky(D.sky[1], D.sky[0], D.sun, this.sunDir, { fog: D.fog, body: SKYBODY[D.id] }); sc.add(sky); this.sky = sky;
+    // exponential haze: clear nearby, mountains fade into the air on the horizon
+    sc.fog = new THREE.FogExp2(new THREE.Color(D.fog), HAZE[D.id] || .0008);
     sc.add(new THREE.HemisphereLight(new THREE.Color(D.sky[0]), new THREE.Color(D.groundTint).multiplyScalar(.4), 1.1));
     const sun = new THREE.DirectionalLight(new THREE.Color(D.sun), 2.6);
     sun.castShadow = true; const q = g.renderer.q; sun.shadow.mapSize.set(q.shadow, q.shadow);
@@ -95,17 +178,27 @@ export class PlanetWorld extends World {
     const gMap = T[D.ground], gN = T[D.ground + '_n'], rMap = T.rock, rN = T.rock_n;
     const mat = new THREE.MeshStandardMaterial({ map: gMap, normalMap: gN, roughness: .92, color: new THREE.Color(D.groundTint), envMapIntensity: .3 });
     const rockTint = new THREE.Color(D.rock);
+    const st = STYLE[D.id] || 'hills';
+    // snow on the peaks (everywhere but the volcanic and jungle worlds), strata bands in mesa cliffs
+    const snowLine = st === 'glacier' ? -999 : st === 'mesa' ? D.amp * 3.2 : st === 'crystal' ? D.amp * 2.6 : st === 'volcanic' || st === 'jungle' ? 9999 : D.amp * 2.4;
     mat.onBeforeCompile = sh => {
       sh.uniforms.rockMap = { value: rMap }; sh.uniforms.rockN = { value: rN }; sh.uniforms.rockTint = { value: rockTint };
+      sh.uniforms.snowLine = { value: snowLine }; sh.uniforms.strata = { value: st === 'mesa' ? 1 : st === 'volcanic' ? .5 : .2 };
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;varying vec3 vWN;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xyz;vWN=normalize(mat3(modelMatrix)*objectNormal);');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;varying vec3 vWN;uniform sampler2D rockMap,rockN;uniform vec3 rockTint;')
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;varying vec3 vWN;uniform sampler2D rockMap,rockN;uniform vec3 rockTint;uniform float snowLine,strata;')
         .replace('#include <map_fragment>', `
           vec2 uvG=vWP.xz*.125;vec4 gc=texture2D(map,uvG)*texture2D(map,uvG*.137+.31);gc.rgb*=1.75;
           float slope=1.-vWN.y;float rk=smoothstep(.18,.38,slope);
           vec3 an=abs(vWN);vec2 uvR=(an.x>an.z?vWP.zy:vWP.xy)*.09;
           vec4 rc=texture2D(rockMap,uvR);
-          diffuseColor.rgb*=mix(gc.rgb,rc.rgb*rockTint*2.2/max(diffuse,vec3(.05)),rk);`)
+          // sedimentary bands in cliffs
+          float band=sin(vWP.y*1.7+texture2D(rockMap,vWP.xz*.004).r*6.)*.5+.5;
+          rc.rgb*=mix(1.,.72+band*.5,strata);
+          diffuseColor.rgb*=mix(gc.rgb,rc.rgb*rockTint*2.2/max(diffuse,vec3(.05)),rk);
+          // snow settles on flatter ground above the snow line, thinning on steep rock
+          float sn=smoothstep(snowLine-6.,snowLine+10.,vWP.y+texture2D(rockMap,vWP.xz*.02).r*14.)*smoothstep(.62,.28,slope);
+          diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.86,.9,.96)/max(diffuse,vec3(.05)),sn);`)
         .replace('#include <normal_fragment_maps>', `
           vec3 nG=texture2D(normalMap,uvG).xyz*2.-1.;vec3 nR=texture2D(rockN,uvR).xyz*2.-1.;
           vec3 mapN=normalize(mix(nG,nR,rk));mapN.xy*=normalScale;normal=normalize(tbn*mapN);`);
@@ -146,7 +239,8 @@ export class PlanetWorld extends World {
     }
     // reflections
     const pm = new THREE.PMREMGenerator(g.renderer.r);
-    this.envRT = pm.fromScene(new THREE.Scene().add(atmosphereSky(D.sky[1], D.sky[0], D.sun, this.sunDir)), .04);
+    this.envRT = pm.fromScene(new THREE.Scene().add(atmosphereSky(D.sky[1], D.sky[0], D.sun, this.sunDir, { fog: D.fog })), .04);
+    this.buildFar(0, 0);
     sc.environment = this.envRT.texture; sc.environmentIntensity = .6;
     pm.dispose(); this.disposables.push(this.envRT);
     g.vehicles.clear();
@@ -368,6 +462,7 @@ export class PlanetWorld extends World {
       }
     }
     if (this.queue.length) { const w = this.queue.shift(); this.makeChunk(w[0], w[1]); }
+    else if (this.farAt && Math.hypot(c.x - this.farAt[0], c.z - this.farAt[1]) > 140) this.buildFar(Math.round(c.x / 20) * 20, Math.round(c.z / 20) * 20);
     // caches: animate lids
     for (const cc of this.caches) if (cc.open && cc.lid && cc.t < 1) { cc.t = Math.min(1, cc.t + dt * 2); cc.lid.rotation.x = -cc.t * 1.9; }
     // roaming drone pairs

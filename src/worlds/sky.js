@@ -133,20 +133,53 @@ function earthPlanet(M, sunDir, radius) {
   return g;
 }
 
-// Surface sky dome: gradient + sun + drifting cloud noise.
-export function atmosphereSky(top, horizon, sunColor, sunDir) {
+// Surface sky dome: gradient + sun + drifting cloud noise; the horizon melts into the fog colour, and a world may
+// hang a giant planet (banded, optionally ringed) or moons in its sky. Bodies are drawn analytically in direction
+// space, so they sit at infinity and never clip.
+export function atmosphereSky(top, horizon, sunColor, sunDir, opts = {}) {
+  const B = opts.body || null, V3 = a => new THREE.Vector3(...a).normalize();
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false,
     uniforms: { top: { value: new THREE.Color(top) }, hor: { value: new THREE.Color(horizon) }, sunC: { value: new THREE.Color(sunColor) },
-      sunDir: { value: sunDir.clone().normalize() }, time: { value: 0 } },
+      sunDir: { value: sunDir.clone().normalize() }, time: { value: 0 }, fogC: { value: new THREE.Color(opts.fog || horizon) },
+      hasBody: { value: B ? 1 : 0 }, bDir: { value: B ? V3(B.dir) : new THREE.Vector3(0, 1, 0) }, bSize: { value: B ? B.size : .1 },
+      bCol: { value: new THREE.Color(B ? B.color : '#fff') }, bBand: { value: new THREE.Color(B ? B.band : '#fff') },
+      ring: { value: new THREE.Vector2(...(B && B.ring ? B.ring : [0, 0])) }, ringCol: { value: new THREE.Color(B && B.ringColor ? B.ringColor : '#fff') },
+      ringN: { value: B && B.tilt ? V3(B.tilt) : new THREE.Vector3(0, 1, 0) }, moon2: { value: B && B.moon2 ? V3(B.moon2) : new THREE.Vector3(0, -1, 0) } },
     vertexShader: `varying vec3 vD;void main(){vD=normalize(position);vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}`,
-    fragmentShader: NOISE + `varying vec3 vD;uniform vec3 top,hor,sunC,sunDir;uniform float time;
+    fragmentShader: NOISE + `varying vec3 vD;uniform vec3 top,hor,sunC,sunDir,fogC,bDir,bCol,bBand,ringCol,ringN,moon2;uniform float time,hasBody,bSize;uniform vec2 ring;
+      // a sphere of angular radius r centred on direction C, lit by the sun; returns colour in rgb and coverage in a
+      vec4 body(vec3 d,vec3 C,float r,vec3 col,vec3 band,float banded){
+        vec3 T=normalize(cross(C,vec3(0.,1.,0.)+vec3(1e-4)));vec3 U=cross(T,C);
+        vec2 q=vec2(dot(d,T),dot(d,U))/r;float r2=dot(q,q);if(dot(d,C)<0.||r2>1.)return vec4(0.);
+        // the hemisphere facing us: normal points back toward the viewer
+        vec3 N=normalize(q.x*T+q.y*U-sqrt(1.-r2)*C);
+        float l=clamp(dot(N,sunDir),0.,1.);
+        float lat=q.y+fbm(vec3(q*3.,1.))*.12;
+        vec3 c=mix(col,band,banded*(.5+.5*sin(lat*22.+sin(lat*7.)*2.)));
+        c*=.85+fbm(vec3(q*9.,3.))*.3;
+        float edge=smoothstep(1.,.96,r2);
+        return vec4(c*(l*1.1+.04),edge);}
       void main(){vec3 d=normalize(vD);float y=max(d.y,0.);
         vec3 c=mix(hor,top,pow(y,.55));if(d.y<0.)c=hor*.8;
         float s=max(dot(d,sunDir),0.);
         c+=sunC*(pow(s,1200.)*30.+pow(s,60.)*.5+pow(s,6.)*.18);
         vec2 uv=d.xz/(d.y+.15);float cl=smoothstep(.5,.85,fbm(vec3(uv*1.4+vec2(time*.004,0.),0.)));
+        if(hasBody>.5){
+          vec4 b=body(d,bDir,bSize,bCol,bBand,1.);
+          // rings: intersect the view ray with the ring plane through the body (body at unit distance)
+          if(ring.y>0.){float dn=dot(d,ringN);if(abs(dn)>1e-4){float t=dot(bDir,ringN)/dn;vec3 p=d*t-bDir;float rr=length(p)/bSize;
+            if(t>0.&&rr>ring.x&&rr<ring.y){float k=(rr-ring.x)/(ring.y-ring.x);
+              float dens=(.55+.45*sin(k*60.)*sin(k*13.+1.))*smoothstep(0.,.05,k)*smoothstep(1.,.9,k)*(1.-smoothstep(.42,.46,k)*smoothstep(.5,.46,k));
+              vec3 rc=ringCol*(.35+.75*max(dot(ringN,sunDir)*sign(dot(ringN,-d)),0.)+.25);
+              bool behind=b.a>0.&&t>1.;
+              if(!behind)c=mix(c,rc,dens*.8);}}}
+          c=mix(c,b.rgb+c*.25,b.a*.92);
+          vec4 m2=body(d,moon2,bSize*.55,bCol*.9,bBand,.0);c=mix(c,m2.rgb+c*.2,m2.a*.9);
+        }
         c=mix(c,mix(hor*1.1,vec3(1.),.4)+sunC*pow(s,8.)*.4,cl*smoothstep(0.,.25,d.y)*.55);
+        // haze toward the horizon matches the scene fog so far terrain melts into the sky
+        c=mix(c,fogC,smoothstep(.22,0.,d.y)*.85);
         gl_FragColor=vec4(c,1.);}`,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), m);

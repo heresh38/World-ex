@@ -524,38 +524,39 @@ class Kit:
                 return np.maximum(F(P) - off, reg)
             return fn
 
+        def skirt_shell(loft, P, t=.004):
+            """Skirt wall: the loft where it stands clear of the body, a fitted layer where the hips push past it; open hem."""
+            f = F(P); lo = loft(P)
+            return np.maximum(np.minimum(lo, f - .0065), -np.minimum(lo + t, f - .002))
+
         def band_mat(z_top, w=.03):
             return lambda C: np.where(C[:, 2] > z_top - w, 1, 0)
 
         TOP = (-.36, -.2, hip - .05); TOPH = (.36, .2, zcol + .012)
         sleeve_hide = ['chest', 'midriff', 'upperarm', 'forearm']
-        hem_top = hip + (.05 if not m else .06)
+        hem_top = hip - .005                 # tops overlap the waistband by ~4 cm and sit outside it (larger offset)
         lw = le + float(np.linalg.norm(B.wrist - B.elbow))
-        tee = self.build('tee', upper(le * .42, hem_top, .07 if m else .066, .0045), TOP, TOPH,
-                         [tex('cloth_top__tee', 'fab_cotton.jpg'), tex('trim_top__tee', 'fab_knit.jpg', '#e8e8e8')],
-                         cuffs(le * .42, hem_top, .018), target=8000, uv=.18, cover=('torso', 'armL', 'armR'))
+        tee = self.build('tee', upper(le * .42, hem_top, .07 if m else .066, .0072), TOP, TOPH,
+                         [tex('cloth_top__tee', 'fab_cotton.jpg')], target=8000, uv=.18, cover=('torso', 'armL', 'armR'))
         self.add('top', 'tee', 'T-shirt', [tee], hide=['midriff'])
-        sw = self.build('sweater', upper(lw - .01, hem_top - .01, .068 if m else .064, .0065), TOP, TOPH,
-                        [tex('cloth_top__sweater', 'fab_knit.jpg'), tex('trim_top__sweater', 'fab_knit.jpg', '#d8d8d8')],
-                        cuffs(lw - .01, hem_top - .01, .03), target=9000, uv=.14, cover=('torso', 'armL', 'armR'))
+        sw = self.build('sweater', upper(lw - .01, hem_top - .01, .068 if m else .064, .0085), TOP, TOPH,
+                        [tex('cloth_top__sweater', 'fab_knit.jpg')], target=9000, uv=.14, cover=('torso', 'armL', 'armR'))
         self.add('top', 'sweater', 'Knit sweater', [sw], hide=sleeve_hide)
         if not m:
-            tk = self.build('tank', upper(-1, hem_top, .078, .0035, scoop=(.11, .085)), TOP, TOPH,
+            tk = self.build('tank', upper(-1, hem_top + .01, .078, .0068, scoop=(.11, .085)), TOP, TOPH,
                             [tex('cloth_top__tank', 'fab_cotton.jpg')], target=6000, uv=.16, cover=('torso',))
             self.add('top', 'tank', 'Tank top', [tk], hide=['midriff'])
-            bl_ = self.build('blouse', upper(le * .95, hem_top - .02, .062, .007, vneck=(.1, 1.7)), TOP, TOPH,
-                             [tex('cloth_top__blouse', 'fab_cotton.jpg'), tex('trim_top__blouse', 'fab_cotton.jpg', '#f0f0f0')],
-                             cuffs(le * .95, hem_top - .02, .02), target=9000, uv=.18, cover=('torso', 'armL', 'armR'))
+            bl_ = self.build('blouse', upper(le * .95, hem_top - .005, .062, .008, vneck=(.1, 1.7)), TOP, TOPH,
+                             [tex('cloth_top__blouse', 'fab_cotton.jpg')], target=9000, uv=.18, cover=('torso', 'armL', 'armR'))
             self.add('top', 'blouse', 'Blouse', [bl_], hide=['midriff', 'upperarm'])
         else:
-            pl = self.build('flannel', upper(lw - .012, hem_top - .02, .07, .006, vneck=(.07, 2.2)), TOP, TOPH,
-                            [tex('cloth_top__flannel', 'fab_plaid.jpg'), tex('trim_top__flannel', 'fab_plaid.jpg', '#c8c8c8')],
-                            cuffs(lw - .012, hem_top - .02, .03), target=9000, uv=.2, cover=('torso', 'armL', 'armR'))
+            pl = self.build('flannel', upper(lw - .012, hem_top - .01, .07, .0082, vneck=(.07, 2.2)), TOP, TOPH,
+                            [tex('cloth_top__flannel', 'fab_plaid.jpg')], target=9000, uv=.2, cover=('torso', 'armL', 'armR'))
             self.add('top', 'flannel', 'Plaid shirt', [pl], hide=sleeve_hide)
 
         # ---- outer layers: hoodie (with hood and pocket) and leather jacket (collar, zip)
         def hoodie(P):
-            d = upper(lw - .008, hip + .015, .078, .013)(P)
+            d = upper(lw - .008, hip - .02, .078, .013)(P)
             L = P - ho
             hood = sdf.torus(P, (0, .03, z['neck'] + .03), .078, .024, sdf.rot((1, 0, 0), -.5))
             hood = np.maximum(hood, -.035 - P[:, 1])
@@ -563,19 +564,18 @@ class Kit:
             pocket = np.maximum.reduce([F(P) - .021, np.abs(P[:, 0]) - .085, np.abs(P[:, 2] - (hip + .11)) - .055, P[:, 1] + .03])
             return np.minimum(d, pocket)
         hd = self.build('hoodie', hoodie, TOP, (.36, .22, zcol + .05),
-                        [tex('cloth_outer__hoodie', 'fab_knit.jpg'), tex('trim_outer__hoodie', 'fab_knit.jpg', '#d0d0d0')],
-                        cuffs(lw - .008, hip + .015, .035), target=11000, uv=.16, cover=('torso', 'armL', 'armR'))
+                        [tex('cloth_outer__hoodie', 'fab_knit.jpg')], target=11000, uv=.16, cover=('torso', 'armL', 'armR'))
         self.add('outer', 'hoodie', 'Hoodie', [hd], hide=sleeve_hide)
 
         def jacket(P):
-            d = upper(lw - .014, hip + .0, .074, .014)(P)
+            d = upper(lw - .014, hip - .02, .074, .014)(P)
             nr = np.sqrt(P[:, 0] ** 2 + (P[:, 1] - .004) ** 2)
             col = np.maximum(np.abs(nr - .074) - .005, np.maximum(z['neck'] - .02 - P[:, 2], P[:, 2] - (z['neck'] + .045)))
             return np.minimum(d, col)
 
         def jacket_mat(C):
             zip_ = (np.abs(C[:, 0]) < .006) & (C[:, 1] < -.04) & (C[:, 2] < z['neck'] + .05)
-            return np.where(zip_, 1, cuffs(lw - .014, hip + .0, .03)(C) * 2)
+            return np.where(zip_, 1, 0)
         jk = self.build('jacket', jacket, TOP, (.36, .22, zcol + .05),
                         [tex('cloth_outer__jacket', 'veh_leather_c.jpg', '#ffffff', .45), bl.mat('trim_outer__jacket', '#b8b8bc', .9, .3),
                          tex('armor_secondary__jacket', 'fab_knit.jpg', '#3a3a3a', .9)],
@@ -600,10 +600,11 @@ class Kit:
         self.add('legs', 'shorts', 'Shorts', [sh], hide=['pelvis'])
         if m:
             def cargo(P):
-                d = lower(an[2] + .04, waist, .0065)(P)
+                d = lower(an[2] + .04, waist, .006)(P)
                 Q = P.copy(); Q[:, 0] = np.abs(Q[:, 0])
                 mid = (hip + kn[2]) / 2 - .02
-                pk = np.maximum.reduce([F(P) - .016, np.abs(Q[:, 2] - mid) - .06, np.abs(Q[:, 1]) - .045, (B.hip[0] + .03) - Q[:, 0]])
+                pk = np.maximum.reduce([F(P) - .016, np.abs(Q[:, 2] - mid) - .06, np.abs(Q[:, 1]) - .045, (B.hip[0] + .03) - Q[:, 0],
+                                        self.dom(P, ['legL', 'legR'])])
                 return np.minimum(d, pk)
             cg = self.build('cargo', cargo, LEGS, LEGSH, [tex('cloth_legs__cargo', 'char_cargo_pants.jpg', '#ffffff'),
                                                           bl.mat('trim_legs__cargo', '#2a2c30', .3, .55)], band_mat(waist),
@@ -615,7 +616,7 @@ class Kit:
 
             def skirt(P):
                 zz = P[:, 2]
-                sk = np.maximum(np.abs(lo_(P)) - .0035, np.maximum(hem - zz, zz - top_s))
+                sk = np.maximum(skirt_shell(lo_, P), np.maximum(hem - zz, zz - top_s))
                 bandd = np.maximum(F(P) - .006, np.maximum(self.dom(P, ['torso']), np.abs(zz - (top_s - .015)) - .02))
                 return np.minimum(sk, bandd)
             sk = self.build('skirt', skirt, (-.26, -.19, hem - .02), (.26, .2, top_s + .02),
@@ -629,7 +630,7 @@ class Kit:
 
             def sundress(P):
                 zz = P[:, 2]; ax = np.abs(P[:, 0])
-                sk = np.maximum(np.abs(dl(P)) - .0035, np.maximum(hem_d - zz, zz - waist_d - .02))
+                sk = np.maximum(skirt_shell(dl, P), np.maximum(hem_d - zz, zz - waist_d - .02))
                 p = self.parts(P)
                 bod = np.maximum(F(P) - .0045, np.maximum(self.dom(P, ['torso'], p), np.maximum(waist_d - .04 - zz, zz - zb)))
                 straps = np.maximum(F(P) - .0045, np.maximum.reduce([np.abs(ax - .075) - .009, zb - .02 - zz, zz - (B.zsh + .06),
@@ -637,18 +638,19 @@ class Kit:
                 return np.minimum.reduce([sk, bod, straps])
             sd = self.build('sundress', sundress, (-.27, -.2, hem_d - .02), (.27, .2, B.zsh + .08),
                             [tex('cloth_dress__sundress', 'fab_cotton.jpg', '#ffffff', .85)], target=11000, uv=.2, weights=self.skirt_w)
-            self.add('dress', 'sundress', 'Sundress', [sd], hide=['midriff', 'pelvis'])
+            self.add('dress', 'sundress', 'Sundress', [sd], hide=['midriff', 'pelvis'], extra={'replaces': ['top', 'legs']})
             hem_k = kn[2] - .12
             kl = self.skirt_loft(hem_k, waist_d, [.15, .162, .178, .168, .15], [.1, .105, .108, .096, .088], [.11, .125, .135, .118, .098])
 
             def knit_dress(P):
                 zz = P[:, 2]
-                sk = np.maximum(np.abs(kl(P)) - .0035, np.maximum(hem_k - zz, zz - waist_d - .02))
+                sk = np.maximum(skirt_shell(kl, P), np.maximum(hem_k - zz, zz - waist_d - .02))
                 up = upper(lw - .012, waist_d - .04, .066, .005)(P)
                 return np.minimum(sk, up)
             kd = self.build('knit_dress', knit_dress, (-.36, -.2, hem_k - .02), TOPH,
                             [tex('cloth_dress__knit', 'fab_knit.jpg', '#ffffff', .9)], target=12000, uv=.14, weights=self.skirt_w)
-            self.add('dress', 'knit', 'Knit midi dress', [kd], hide=['midriff', 'pelvis', 'chest', 'upperarm', 'forearm'])
+            self.add('dress', 'knit', 'Knit midi dress', [kd], hide=['midriff', 'pelvis', 'chest', 'upperarm', 'forearm'],
+                     extra={'replaces': ['top', 'legs']})
 
         # ---- shoes
         def shoes(item, label, mat, top_z, off, sole, sole_mat, toe_cap=0.0):

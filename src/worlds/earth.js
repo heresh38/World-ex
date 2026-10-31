@@ -613,6 +613,24 @@ export class EarthWorld extends World {
     // people on the terminal forecourt and in the hall
     for (const loop of meta.paths) this.paths.push(this.loop(loop.map(([x, z]) => [x + O.x, z + O.z])));
     this.dust = new Puffs(sc, 700, { soft: .9 });
+    this.setRamp(1);
+  }
+
+  // The jumpship's boarding ramp, if the model has one: k = 0 raised (flight) .. 1 lowered. Uses an animation clip with
+  // "ramp" in its name when the GLB carries one, else swings the `ramp` node about its hinge (its origin) by
+  // ramp.userData.lower radians (default -1.2) from its modelled pose.
+  setRamp(k) {
+    const js = this.jumpship; if (!js) return;
+    if (this.rampState === undefined) {
+      const clip = (this.g.assets.clips('ship_jumper') || []).find(c => /ramp/i.test(c.name));
+      const node = js.getObjectByName('ramp');
+      this.rampState = clip ? { mixer: new THREE.AnimationMixer(js), clip } : node ? { node, x0: node.rotation.x, lower: node.userData.lower ?? -1.2 } : null;
+      if (this.rampState && this.rampState.mixer) { const a = this.rampState.action = this.rampState.mixer.clipAction(this.rampState.clip); a.play(); a.paused = true; a.clampWhenFinished = true; }
+    }
+    const R = this.rampState; if (!R) return;
+    k = Math.max(0, Math.min(1, k));
+    if (R.mixer) { R.action.time = k * R.clip.duration; R.mixer.update(0); }
+    else R.node.rotation.x = R.x0 + R.lower * k;
   }
 
   // jumpship hull + wings (ship at the pad, nose south)
@@ -684,7 +702,7 @@ export class EarthWorld extends World {
     const eye = sp.pos.clone().setY(sp.pos.y + 1.62), look = sp.pos.clone().add(new THREE.Vector3(0, 1.5, -20));
     const tmpQ = new THREE.Quaternion(), fpQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye, look, Y));
     let touched = false, shake = 0;
-    av.root.visible = false;
+    av.root.visible = false; this.setRamp(0);
     av.root.traverse(o => { if (o.isMesh) o.layers.set(0); });
     g.audio.jetLoop();
     const D = 6.2, TD = 3.9;
@@ -703,7 +721,8 @@ export class EarthWorld extends World {
         if (!touched && t >= TD) { touched = true; shake = .35; g.audio.touchdown(pad); for (let k = 0; k < 60; k++) this.dustAcc = (this.dustAcc || 0) + 1; }
         const level = t < TD ? 1 : Math.max(0, 1 - (t - TD) / .9);
         this.engineFx(level, dt);
-        // the player comes down the ramp
+        // the ramp drops, then the player comes down it
+        this.setRamp(ease((t - TD - .1) / .6));
         if (t > TD + .5) {
           av.root.visible = true;
           const k = Math.min(1, (t - TD - .5) / (D - TD - .9));
@@ -728,7 +747,7 @@ export class EarthWorld extends World {
         shake = Math.max(0, shake - dt * .6); this.shake(cam, shake);
       },
       finish: () => {
-        js.position.copy(pad); js.rotation.set(0, 0, 0);
+        js.position.copy(pad); js.rotation.set(0, 0, 0); this.setRamp(1);
         av.root.visible = true; g._fpLayer = null;
         g.audio.updateJet(0); g.audio.stopLoop('jet');
         p.spawn(sp.pos, sp.yaw); p.camPitch = -.05;
@@ -750,6 +769,7 @@ export class EarthWorld extends World {
       duration: 5.6, title: 'Departing New Meridian', sub: 'Pad 1 · cleared to orbit',
       update: (t, dt) => {
         const spool = ease(t / 1.2);
+        this.setRamp(1 - ease(t / .9));
         if (t < 1.2) js.position.copy(pad).add(_v.set(0, Math.sin(t * 40) * .02 * spool, 0));
         else if (t < 2.7) { const k = ease((t - 1.2) / 1.5); js.position.copy(pad).add(_v.set(Math.sin(t * 2) * .2, k * 12, 0)); js.rotation.set(0, 0, Math.sin(t * 1.7) * .03); }
         else {
@@ -764,7 +784,7 @@ export class EarthWorld extends World {
         cam.fov = 44 - 10 * ease((t - 2.7) / 2.9); cam.updateProjectionMatrix();
         this.shake(cam, t > 1 && t < 3 ? .05 * (1 - Math.abs(t - 2) ) : 0);
       },
-      finish: () => { g.audio.updateJet(0); g.audio.stopLoop('jet'); av.root.visible = true; },
+      finish: () => { g.audio.updateJet(0); g.audio.stopLoop('jet'); av.root.visible = true; this.setRamp(0); },
     });
   }
 

@@ -272,7 +272,7 @@ class PlayerBuilder:
             ex = np.array([1.0, 0, 0]) - n[0] * n; ex /= np.linalg.norm(ex)
             Rm = np.array([n, np.cross(n, ex), ex], F32)
             c = (wr + tp) / 2 + n * .01
-            return lambda P, o=0.0: np.maximum(-((P - wr) @ n) - o, sdf.ellipsoid(P, c, (.13 * k, .085 * k, .052 * k), Rm))
+            return lambda P, o=0.0: np.maximum(-((P - wr) @ n) - o, sdf.ellipsoid(P, c, (.14 * k, .1 * k, .068 * k), Rm))
         self.hand_region = hand_region
         hands = []
         for sx in (1, -1):

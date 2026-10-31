@@ -92,6 +92,7 @@ def common_mats():
     M['alu'] = tmat('alu', '#ffffff', .9, .3, img='veh_brushed_c.jpg')
     M['vent'] = tmat('vent', '#0d0d0e', .2, .5)
     M['mirror'] = tmat('mirror', '#d8e0e8', 1.0, .02)
+    M['rover_accent'] = tmat('rover_accent', '#d9661f', .1, .45, coat=.6)
     M['bedliner'] = tmat('bedliner', '#1a1b1d', 0, .9, img='veh_grip_c.jpg', nrm='veh_grip_n.jpg', nstr=.6)
     return M
 
@@ -294,6 +295,16 @@ CARS = {
         theme=dict(insert='#3e4146', leather='#26272a', dash='#2a2b2e', lower='#1b1c1e', accent='#2a2b2e', metal=False),
         badge=0, paint='#e9e9e6'),
 }
+
+
+CARS['rover'] = dict(
+    name='Talus Rover', L=3.95, W=2.3, wb=2.62, foh=.66, rw=.53, tw=.4, track=1.86, rim='rim_dark', knobby=True,
+    ztop=[(0, 1.0), (3.95, 1.0)], zbot=[(0, .56), (3.95, .56)], w=[(0, .8), (3.95, .8)],
+    cowl=1.0, atop=1.5, ctop=2.5, rear=2.85, roof=1.98, belt=1.06, tumble=.1,
+    side_glass=[], blackB=(2.5, 2.5), doors=[], floor=.62, hipup=.26, reach=1.08, xs=.42, rear_seat=0, cargo=False,
+    hood=[.1, .9], plate_z=.8, head_z=(.8, .95), tail_z=(.85, 1.0), clad=0.0,
+    theme=dict(insert='#3a3d42', leather='#c8622a', dash='#2a2b2e', lower='#1b1c1e', accent='#c8622a', metal=False),
+    badge=0, paint='#e9e6df')
 
 
 class Car:
@@ -1060,6 +1071,21 @@ class Car:
             return .7 + .3 * (j - 8) / 4
         self.lathe(spin, tp, segs, 'tyre', side, tv)
         rimm = c['rim']
+        if c.get('knobby') and not self.lo:
+            # chunky off-road lugs: staggered blocks standing proud of the tread
+            n = 26
+            for i in range(n):
+                for k, (x0, x1) in enumerate(((-hw * .95, -hw * .1), (hw * .1, hw * .95))):
+                    a0 = 2 * math.pi * (i + (.5 if k else 0)) / n
+                    da = 2 * math.pi / n * .55
+                    vs = []
+                    for rr in (rw - .005, rw + .035):
+                        for aa, xx in ((a0, x0), (a0 + da, x0), (a0 + da * 1.25, x1), (a0 + da * .25, x1)):
+                            vs.append((side * xx, rr * math.sin(aa), rr * math.cos(aa)))
+                    ids = [spin.vert(v) for v in vs]
+                    for f in ((4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+                        q = [ids[j] for j in f]
+                        spin.face(q if side > 0 else q[::-1], 'tyre', [(.1, .5), (.14, .5), (.14, .62), (.1, .62)])
         if self.lo:
             self.lathe(spin, [(rb + .006, hw * .78), (rb * .3, hw * .55), (0.0, hw * .5)], segs, rimm, side, None)
             return spin, None
@@ -1212,6 +1238,191 @@ class Car:
             paint=c['paint'])
 
 
+def lo_materials(lo, M, rim):
+    keep = ['car_paint', 'trim_black', 'glass_lo', 'lamp_head', 'lamp_tail', 'tyre', rim, 'rover_accent']
+    mats = [m.name for m in lo.data.materials]
+    remap = {'wheelwell': 'trim_black', 'trim_gloss': 'trim_black', 'grille': 'trim_black', 'chrome': rim, 'badge': rim, 'plate': 'trim_black',
+             'rim_dark': rim, 'rim': rim, 'glass_front': 'glass_lo'}
+    newm, idx = [], []
+    for nm in mats:
+        t = nm if nm in keep else remap.get(nm, 'trim_black')
+        if t not in newm:
+            newm.append(t)
+        idx.append(newm.index(t))
+    polys = [idx[p.material_index] for p in lo.data.polygons]
+    lo.data.materials.clear()
+    for nm in newm:
+        lo.data.materials.append(M[nm] if nm in M else bpy.data.materials[nm])
+    for p, i in zip(lo.data.polygons, polys):
+        p.material_index = i
+
+
+def tube(a, b, r, mat, n=10):
+    a, b = Vector(a), Vector(b)
+    d = b - a
+    o = bl.cyl('tube', r, d.length, (0, 0, 0), mat, n)
+    o.rotation_mode = 'QUATERNION'; o.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(d.normalized()); o.location = (a + b) / 2
+    bl.apply_all(o)
+    bl.uv_box(o, .3)
+    return o
+
+
+class Rover(Car):
+    """Open all-terrain rover: white tub, orange accents, roll cage, huge lugged tyres, long-travel arms."""
+
+    def parts(self, lo=False):
+        c, M, T = self.c, self.M, self.T
+        yd = self.Y
+        P = []
+        paint, acc, dark = M['car_paint'], M['rover_accent'], M['trim_black']
+        cage = M['rim_dark']
+        fl, belt, roof = c['floor'], c['belt'], c['roof']
+        # tub (open top): floor pan, sides, firewall/dash wall, back wall
+        s0, s1, wt = .95, 2.8, .78
+        P.append(boxo('tubfloor', (2 * wt, s1 - s0, .1), (0, yd((s0 + s1) / 2), fl - .05), dark, uvs=.6))
+        for sx in (1, -1):
+            P.append(boxo('tubside', (.08, s1 - s0, belt - fl + .08), (sx * (wt - .04), yd((s0 + s1) / 2), (belt + fl) / 2 - .04), paint, bevel=.03, segs=3))
+            P.append(boxo('tubstripe', (.085, s1 - s0 - .2, .06), (sx * (wt - .04), yd((s0 + s1) / 2), fl + .12), acc))
+            P.append(boxo('step', (.18, .9, .04), (sx * (wt + .1), yd(1.9), fl - .02), dark, bevel=.01))
+        P.append(boxo('tubback', (2 * wt, .08, belt - fl + .1), (0, yd(s1), (belt + fl) / 2), paint, bevel=.03, segs=3))
+        # nose: sloped bonnet over a chassis box, bull bar, skid plate, round lamps
+        P.append(boxo('nosebox', (1.5, .95, .36), (0, yd(.5), .78), paint, bevel=.08, segs=3))
+        P.append(boxo('bonnet', (1.42, .8, .1), (0, yd(.62), .98), paint, bevel=.04, segs=3, rot=(-.16, 0, 0)))
+        P.append(boxo('skid', (1.2, .5, .05), (0, yd(.28), .58), dark, bevel=.02, rot=(.5, 0, 0)))
+        if not lo:
+            for sx in (1, -1):
+                P.append(tube((sx * .62, yd(.02), .62), (sx * .62, yd(.02), .98), .035, cage))
+                P.append(cylo('lampf', .085, .06, (sx * .5, yd(.03), .86), M['lamp_head'], 20, rot=(math.pi / 2, 0, 0)))
+                P.append(cylo('lampr', .1, .05, (sx * .5, yd(.05), .86), M['chrome'], 20, rot=(math.pi / 2, 0, 0)))
+                P.append(boxo('vent', (.36, .04, .1), (sx * .32, yd(.6), 1.06), dark, rot=(-.16, 0, 0)))
+            P.append(tube((-.62, yd(.02), .98), (.62, yd(.02), .98), .035, cage))
+            P.append(tube((-.62, yd(.02), .7), (.62, yd(.02), .7), .035, cage))
+            P.append(boxo('grillebar', (.7, .03, .18), (0, yd(.02), .82), M['grille'], uvs=.25))
+        # rear deck with cargo box, tail lamps, spare wheel mount
+        P.append(boxo('deck', (1.5, 1.05, .32), (0, yd(3.35), .82), paint, bevel=.06, segs=3))
+        P.append(boxo('cargo', (1.3, .7, .3), (0, yd(3.3), 1.12), acc, bevel=.04, segs=3))
+        for sx in (1, -1):
+            P.append(boxo('tail', (.22, .04, .08), (sx * .58, yd(3.9), .9), M['lamp_tail'], uvs=.2))
+        # fenders over the wheels (white shells, orange inner lip)
+        for sa in (c['foh'], c['foh'] + c['wb']):
+            for sx in (1, -1):
+                mb = MB()
+                R = c['rw'] + .1
+                rows = []
+                for k in range(13):
+                    ang = math.radians(15 + 150 * k / 12)
+                    y = yd(sa) - math.cos(ang) * R
+                    z = c['rw'] + math.sin(ang) * R
+                    rows.append([(sx * (c['track'] / 2 + x), y, z) for x in (-c['tw'] / 2 - .1, c['tw'] / 2 + .08)])
+                mb.quad_grid(rows, lambda i, j, cc: 'car_paint')
+                P.append(mb.build('fender', M))
+                if not lo:
+                    # long-travel suspension: upper/lower arms + coil-over
+                    hub = Vector((sx * (c['track'] / 2 - c['tw'] / 2 - .02), yd(sa), c['rw']))
+                    for dz, zc in ((-.08, .62), (.1, .86)):
+                        for dy in (-.18, .18):
+                            P.append(tube((sx * .5, yd(sa) + dy, zc), hub + Vector((0, 0, dz)), .025, cage, 8))
+                    top = Vector((sx * .62, yd(sa), 1.12))
+                    P.append(tube(top, hub + Vector((-sx * .12, 0, -.04)), .025, M['chrome'], 10))          # damper shaft
+                    P.append(tube(top + (hub - top) * .1, top + (hub - top) * .6, .055, acc, 12))           # coil spring
+        # roll cage
+        r = .032 if not lo else .04
+        n = 10 if not lo else 6
+        hf, hr = 1.18, 2.55                      # front hoop base, main hoop
+        tf, tr = 1.55, 2.5
+        for sx in (1, -1):
+            P.append(tube((sx * .74, yd(hf), belt), (sx * .62, yd(tf), roof), r, cage, n))
+            P.append(tube((sx * .74, yd(hr), belt), (sx * .62, yd(tr), roof), r, cage, n))
+            P.append(tube((sx * .62, yd(tf), roof), (sx * .62, yd(tr), roof), r, cage, n))
+            P.append(tube((sx * .62, yd(tr), roof), (sx * .6, yd(3.75), .98), r, cage, n))
+            P.append(tube((sx * .74, yd(hf), belt), (sx * .62, yd(.9), 1.05), r, cage, n))
+        for s_, z_ in ((tf, roof), (tr, roof), (hf, belt + .02)):
+            P.append(tube((-.62 if z_ == roof else -.74, yd(s_), z_), (.62 if z_ == roof else .74, yd(s_), z_), r, cage, n))
+        P.append(tube((-.62, yd(tr), roof), (.62, yd(tf), roof), r * .8, cage, n))
+        # light bar on the front roof bar
+        P.append(boxo('lightbar', (1.0, .1, .08), (0, yd(tf - .02), roof + .07), dark, bevel=.02))
+        if not lo:
+            for k in range(4):
+                P.append(cylo('bar_lamp', .035, .02, (-.36 + k * .24, yd(tf - .075), roof + .07), M['lamp_head'], 14, rot=(math.pi / 2, 0, 0)))
+        # windscreen pane in the front hoop
+        mb = MB()
+        q = [mb.vert((x, yd(s_), z_)) for x, s_, z_ in ((-.7, hf + .02, belt + .03), (.7, hf + .02, belt + .03), (.6, tf - .02, roof - .04), (-.6, tf - .02, roof - .04))]
+        mb.face(q, 'glass_front' if not lo else 'glass_lo')
+        P.append(mb.build('screen_glass', M))
+        return P
+
+    def cockpit(self):
+        c, M, T = self.c, self.M, self.T
+        yd = self.Y
+        P = []
+        fl, hip, belt, xs = c['floor'], self.hip, c['belt'], c['xs']
+        s_hp = self.s_hp
+        s_dash = s_hp - .74
+        # dash: a padded beam across the tub with the cluster and a screen
+        P.append(boxo('dash', (1.48, .32, .3), (0, yd(s_dash - .14), belt - .05), T['dash_soft'], bevel=.05, segs=3, uvs=.3))
+        P.append(boxo('dashlow', (1.4, .3, .35), (0, yd(s_dash - .2), fl + .2), T['dash_lower'], bevel=.04, uvs=.3))
+        gz, tilt = belt + .14, .3
+        q = MB()
+        gw, gh = .3, .15
+        gp = lambda u, v: (xs + (u - .5) * gw, yd(s_dash) - .01 - (v - .5) * gh * math.sin(tilt), gz + (v - .5) * gh * math.cos(tilt))
+        ids = [q.vert(gp(0, 0)), q.vert(gp(1, 0)), q.vert(gp(1, 1)), q.vert(gp(0, 1))]
+        q.face(ids, 'gauges', [(1, 0), (0, 0), (0, 1), (1, 1)])
+        P.append(q.build('gauge', M))
+        P.append(boxo('podr', (.36, .14, .2), (xs, yd(s_dash - .06), gz), T['dash_soft'], bevel=.03, segs=3, rot=(tilt, 0, 0)))
+        self.needles = [(k, Vector((xs + (u - .5) * gw * -1, yd(s_dash) - .003, gz)), tilt) for k, u in (('S', .25), ('R', .75))]
+        sq = MB()
+        sp = lambda u, v: ((u - .5) * .24, yd(s_dash) - .02 - (v - .5) * .13 * math.sin(.25), belt + .05 + (v - .5) * .13 * math.cos(.25))
+        ids = [sq.vert(sp(0, 0)), sq.vert(sp(1, 0)), sq.vert(sp(1, 1)), sq.vert(sp(0, 1))]
+        sq.face(ids, 'screen', [(1, 0), (0, 0), (0, 1), (1, 1)])
+        P.append(sq.build('screen', M))
+        hub = Vector((xs, yd(s_hp - .58), hip + .38))
+        wt = .42
+        nrm = Vector((0, math.cos(wt), math.sin(wt)))
+        P.append(line_box('column', hub - nrm * .06, hub - nrm * .32, .07, .07, M['trim_black']))
+        self.hub, self.wheel_tilt = hub, wt
+        # centre tunnel with a gear lever, rubber floor, pedals
+        P.append(boxo('tunnel', (.24, .9, .22), (0, yd(s_hp - .2), fl + .11), T['dash_lower'], bevel=.03))
+        P.append(cylo('lever', .012, .16, (0, yd(s_hp - .3), fl + .3), M['chrome'], 10))
+        P.append(bl.sphere('knob', .03, (0, yd(s_hp - .3), fl + .39), T['seat_leather'], 16, 10)); bl.apply_all(P[-1]); bl.uv_box(P[-1], .2)
+        P.append(boxo('mat', (1.4, 1.6, .012), (0, yd(s_hp - .3), fl + .006), M['bedliner'], uvs=.5))
+        for dx, w in ((-.06, .1), (.1, .05)):
+            P.append(boxo('pedal', (w, .02, .07), (xs + dx, yd(s_hp - .9), fl + .14), M['rubber'], bevel=.006, rot=(.5, 0, 0)))
+        P += self.seat(xs, s_hp, True) + self.seat(-xs, s_hp, False)
+        # harness straps hanging from the main hoop
+        for x in (xs, -xs):
+            for dx in (-.12, .12):
+                P.append(line_box('harness', (x + dx, yd(2.55), c['roof'] - .25), (x + dx * .6, yd(s_hp + .25), hip + .55), .045, .004, M['rover_accent']))
+        return P
+
+    def build(self, root):
+        c, M = self.c, self.M
+        self.T = theme_mats(self.k, c['theme'])
+        hi = bl.empty('hi_' + self.k, (0, 0, 0), root)
+        P = self.parts() + self.cockpit()
+        for o in P:
+            bl.apply_all(o)
+        shell = bl.join(P, 'body_' + self.k)
+        shell.parent = hi
+        st = self.steering(); st.parent = hi
+        for n in self.needle_objs():
+            n.parent = hi
+        self.wheels(hi)
+        bl.empty('seat_' + self.k, (c['xs'], self.Y(self.s_hp), self.hip), root)
+        bl.empty('eye_' + self.k, (c['xs'], self.Y(self.s_hp - .06), self.hip + .74), root)
+        return hi
+
+    def build_lo(self, root):
+        self.T = theme_mats(self.k, self.c['theme'])
+        P = self.parts(lo=True)
+        wl = self.wheels(None)
+        for o in P + wl:
+            bl.apply_all(o)
+        lo = bl.join(P + wl, 'lo_' + self.k)
+        lo_materials(lo, self.M, self.c['rim'])
+        lo.parent = root
+        return lo
+
+
 def build_cars(only=None):
     bl.reset(); _M.clear()
     M = common_mats()
@@ -1219,9 +1430,10 @@ def build_cars(only=None):
         if only and k not in only:
             continue
         root = bl.empty('CAR_' + k, (0, 0, 0))
-        car = Car(k, M)
+        K = Rover if k == 'rover' else Car
+        car = K(k, M)
         car.build(root)
-        lo = Car(k, M, lo=True)
+        lo = K(k, M, lo=True)
         lo.build_lo(root)
         root['worldex'] = json.dumps(car.meta())
         root.location.x = i * 3.0

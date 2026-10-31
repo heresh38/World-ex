@@ -9,11 +9,19 @@ fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await b.newPage({ viewport: { width: +(process.env.W || 1024), height: +(process.env.H || 576) } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'medium'; });
+  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
+  // other work in progress may list a model that is not built yet: stand in with a sibling so the game still boots
+  await p.route('**/assets/models/*.glb', async route => {
+    const f = new URL(route.request().url()).pathname.split('/').pop(), path = require('path').join(__dirname, '../../assets/models/', f);
+    if (fs.existsSync(path)) return route.continue();
+    const alt = f.replace(/_npc\.glb$/, '.glb'), ap = require('path').join(__dirname, '../../assets/models/', alt);
+    console.log('missing model', f, '-> serving', fs.existsSync(ap) ? alt : 'player_female.glb');
+    return route.fulfill({ status: 200, contentType: 'model/gltf-binary', body: fs.readFileSync(fs.existsSync(ap) ? ap : require('path').join(__dirname, '../../assets/models/player_female.glb')) });
+  });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
   const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 82, timeout: 300000 }); console.log('shot', n); };
@@ -22,7 +30,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const waitPlay = async () => { await waitState('play'); await unpause(); };
   await p.goto(BASE + '/index.html');
   await waitState('title', 300000);
-  await ev(() => { const g = window.__game; g.save.settings.quality = 'medium'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
+  await ev(Q => { const g = window.__game; g.save.settings.quality = Q; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); }, process.env.Q || 'medium');
   await p.click('[data-act="title-play"]');
   await waitPlay();
 

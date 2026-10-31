@@ -2,19 +2,21 @@
 // the behaviours: mite swarm leaps, bladder rupture releasing brood, mites raising a corpse as a host, Writhe vs other
 // factions, and 0 page errors.
 // Usage: python3 -m http.server 8765 &  then  NODE_PATH=$(npm root -g) node tools/test/horror.js   (screenshots in test-out/)
+// WORLD=ares (or another frontier planet id) runs the same checks on a lighter world: VANTHOS needs a renderer with ~5 GB.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const BASE = process.env.BASE || 'http://localhost:8765';
 const OUT = process.env.OUT || 'test-out';
+const WORLD = process.env.WORLD || 'vanthos';
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'medium'; });
+  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
   // other work in progress may list models that are not built yet (player *_npc): fall back to the base model for this test
   await p.route('**/assets/models/*_npc.glb', async route => {
     const r = await route.fetch();
@@ -28,18 +30,18 @@ fs.mkdirSync(OUT, { recursive: true });
   const waitPlay = async () => { await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 900000, polling: 1000 }); await live(); };
   await p.goto(BASE + '/index.html');
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 300000, polling: 500 });
-  await ev(() => { const g = window.__game; g.save.settings.quality = 'medium'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
+  await ev(() => { const g = window.__game; g.save.settings.quality = 'low'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
   await p.click('[data-act="title-play"]');
   await waitPlay();
-  await ev(() => window.__game.travel('vanthos'));
+  await ev(w => window.__game.travel(w), WORLD);
   await waitPlay();
   await wait(2000);
   // a quiet street: stop the district streaming and clear what is around, the player is invulnerable for the shots
   const base = await ev(() => {
     const g = window.__game, w = g.world;
-    w.stream = () => {};
+    w.stream = () => {}; w.wanted = () => []; w.droneT = 1e9;           // no streaming packs, chunks or drone patrols
     g.enemies.clear(); g.godMode = true;
-    const st = w.sites.find(s => s.D.id === 'old') || w.sites[0];
+    const st = w.sites ? (w.sites.find(s => s.D.id === 'old') || w.sites[0]) : { pos: g.player.pos.clone() };
     const x = st.pos.x, z = st.pos.z;
     g.player.pos.set(x, w.collision.ground(x, z), z); g.player.avatar.root.position.copy(g.player.pos);
     window.__dmg = 0; const pd = g.player.damage.bind(g.player); g.player.damage = (n, f) => { window.__dmg += n; pd(n, f); };

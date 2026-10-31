@@ -1141,12 +1141,12 @@
    "pos": [
     27.068,
     33.083,
-    51.105
+    34.605
    ],
    "target": [
     0.0,
     0.0,
-    9.0
+    -7.5
    ],
    "color": "#fff1dc",
    "intensity": 3.0
@@ -1230,7 +1230,7 @@
     -17.5
    ],
    "color": "#ffe6c4",
-   "intensity": 150,
+   "intensity": 120,
    "angle": 0.72
   },
   {
@@ -1247,7 +1247,7 @@
     -33.5
    ],
    "color": "#ffe6c4",
-   "intensity": 150,
+   "intensity": 120,
    "angle": 0.72
   },
   {
@@ -1264,7 +1264,7 @@
     -17.5
    ],
    "color": "#ffe6c4",
-   "intensity": 150,
+   "intensity": 120,
    "angle": 0.72
   },
   {
@@ -1281,7 +1281,7 @@
     -33.5
    ],
    "color": "#ffe6c4",
-   "intensity": 150,
+   "intensity": 120,
    "angle": 0.72
   },
   {

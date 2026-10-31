@@ -113,6 +113,11 @@ def materials():
         pipe_b=bl.mat('pipe_blue', '#2a5d8f', .4, .45),
         green=bl.mat('neon_green', '#30ff70', 0, .4, emit='#30ff70', strength=6),
         engine=bl.mat('engine_glow', '#7fd8ff', 0, .3, emit='#7fd8ff', strength=12),
+        orange=tmat('accent_orange', '#d8661e', .35, .45, 'paintmetal', 1.0),
+        sofa=tmat('sofa_fabric', '#c8702c', 0, .8, 'padding', .6),
+        rug=tmat('floor_rug', '#5a4c42', 0, .95, 'rubbermat', .25),
+        leaf=bl.mat('plant_leaf', '#3c7a34', 0, .6),
+        soil=bl.mat('soil', '#2a2018', 0, .95),
     )
     m['hazard'].node_tree  # existing hazard stripes (hazard_c.jpg)
     TILE['hazard'] = 1.0
@@ -321,6 +326,14 @@ def rib(y, pr, depth, thick, m, segs=None, floor_flat=True):
         q = [P3(i0, y - thick / 2), P3(i1, y - thick / 2), P3(i1, y + thick / 2), P3(i0, y + thick / 2)]
         poly(m, q)
     return inner
+
+
+def rib_glow(y, pr, depth, m, w=.07, segs=range(1, 8)):
+    """Light strip running along the inner face of a frame (octagonal lit edge)."""
+    inner = offset(pr, depth + .006, True)
+    for j in segs:
+        a, b = inner[j], inner[j + 1]
+        poly(m, [P3(a, y - w / 2), P3(b, y - w / 2), P3(b, y + w / 2), P3(a, y + w / 2)])
 
 
 def floor_strip(secs, m, x0f=None, x1f=None, z=0.0):
@@ -630,8 +643,9 @@ def main():
             tube_x(sx * 7.0, sx * 7.75, yc, PZ, PR)
             PORTHOLES.append(dict(pos=to3((sx * 7.0, yc, PZ)), normal=dir3((sx, 0, 0)), r=PR))
     # ceiling: light ring above the holo table + strips along the chamfer edges
-    part(bl.torus('ceil_ring', 2.3, .06, (0, -1.0, 4.93), m['lightp'], maj=64, mn=6))
-    part(bl.cyl('ceil_disc', 2.6, .1, (0, -1.0, 4.97), m['frame'], 8))
+    for (hx, hy) in [(0, 0)] + [(math.cos(k * math.pi / 3) * 1.25, math.sin(k * math.pi / 3) * 1.25) for k in range(6)]:
+        part(bl.cyl('hex_frame', .7, .1, (hx, -1.0 + hy, 4.95), m['frame'], 6, rot=(0, 0, math.pi / 6)))
+        part(bl.cyl('hex_light', .56, .02, (hx, -1.0 + hy, 4.895), m['lightp'], 6, rot=(0, 0, math.pi / 6)))
     for sx in (-1, 1):
         lamp_strip((sx * 5.25, -6.6, 4.93), (sx * 5.25, 4.6, 4.93))
         for (y, pr) in CM[1:-1]:
@@ -655,11 +669,7 @@ def main():
     t = props.terminal('ST_record', (5.95, ry, 0), -R90, kind='amber'); solid(t)
     STATIONS['record'] = dict(pos=to3((4.5, ry, 0)), look=to3((6.0, ry, 1.3)), label='Service Record', verb='Stats',
                               at=to3((5.95, ry, .9)), rad=.62)
-    for by in (bays[4], bays[5]):
-        props.bench((-6.05, by, 0), R90)      # back to the wall, facing +X
-        col_box(-6.4, by - .95, 0, -5.75, by + .95, .95)
-        for o in (-.45, .45):
-            SEATS.append(dict(pos=to3((-5.95, by + o, 0)), yaw=yaw3(1, 0), id='bench'))
+    lounge(m)
     # lockers and a wall screen on the right
     for k in range(3):
         part(bl.box('locker', (.5, .56, 2.1), (6.25, bays[5] - .6 + k * .6, 1.05), m['frame_light'], bevel=.02))
@@ -736,7 +746,7 @@ def main():
         beam((sx * 12.2, 11.2, .05), (sx * 12.2, 38.5, .05), .05, .04, m['cyan'])
     for (x, y) in ((-12.3, 15.0), (12.3, 31.0), (12.3, 15.0), (-12.3, 31.0)):
         LIGHTS.append(dict(kind='spot', name='hangar_flood', pos=to3((x, y - .4, 8.1)), target=to3((x * .35, y + 2.5, 0)),
-                           color='#ffe6c4', intensity=150, angle=.72))
+                           color='#ffe6c4', intensity=120, angle=.72))
     # gantry crane on rails at the top of the walls
     for sx in (-1, 1):
         part(bl.box('crane_rail', (.35, 28, .3), (sx * 12.6, 25.0, 8.15), m['frame']))
@@ -801,6 +811,71 @@ def main():
     export(m)
 
 
+def plant(x, y, z, h=1.0, n=12, seed=0, mb=None):
+    """Leafy plant: n bent lance leaves fanned out from the pot (built as small strips)."""
+    r = random.Random(seed)
+    for k in range(n):
+        a = k / n * 2 * math.pi + r.uniform(-.2, .2)
+        L = h * r.uniform(.6, 1.0); lift = r.uniform(.9, 1.4); w = .07 * h + .03
+        d = Vector((math.cos(a), math.sin(a), 0)); side = Vector((-d.y, d.x, 0))
+        pts = []
+        for t in (0, .25, .5, .75, 1.0):
+            c = Vector((x, y, z)) + d * (L * t * .8) + Vector((0, 0, L * lift * (math.sin(t * 2.4) * .55)))
+            ww = w * math.sin(math.pi * min(t * 1.15, 1)) + .004
+            pts.append((c - side * ww, c + side * ww))
+        for i in range(len(pts) - 1):
+            poly(M_['leaf'], [pts[i][0], pts[i][1], pts[i + 1][1], pts[i + 1][0]])
+
+
+def planter(x, y, size=.55, h=.6, plant_h=1.1, seed=0):
+    part(bl.box('planter', (size, size, h), (x, y, h / 2), M_['frame_light'], bevel=.04))
+    part(bl.box('planter_band', (size + .02, size + .02, .06), (x, y, h - .1), M_['orange']))
+    part(bl.box('soil', (size - .08, size - .08, .02), (x, y, h - .02), M_['soil']))
+    plant(x, y, h, plant_h, 14, seed)
+    plant(x, y, h, plant_h * .7, 9, seed + 7)
+    col_box(x - size / 2, y - size / 2, 0, x + size / 2, y + size / 2, h)
+
+
+def sofa(x0, y0, x1, y1, face, seats):
+    """Straight sofa from (x0,y0) to (x1,y1) (its back edge), facing `face` (unit XY), cushions per seat."""
+    m = M_
+    a, b = Vector((x0, y0, 0)), Vector((x1, y1, 0)); f = Vector((face[0], face[1], 0))
+    L = (b - a).length; ax = (b - a) / L; mid = (a + b) / 2
+    rot = math.atan2(ax.y, ax.x)
+    def at(u, v, z):
+        return mid + ax * u + f * v + Vector((0, 0, z))
+    part(bl.box('sofa_base', (L, .8, .3), at(0, .42, .17), m['frame'], bevel=.03, rot=(0, 0, rot)))
+    part(bl.box('sofa_glow', (L - .2, .02, .03), at(0, .83, .1), m['amber'], rot=(0, 0, rot)))
+    part(bl.box('sofa_back', (L, .22, .62), at(0, .1, .62), m['sofa'], bevel=.06, segs=3, rot=(0, 0, rot)))
+    for k in range(seats):
+        u = -L / 2 + (k + .5) * L / seats
+        part(bl.box('cushion', (L / seats - .04, .62, .18), at(u, .5, .41), m['sofa'], bevel=.06, segs=3, rot=(0, 0, rot)))
+        part(bl.box('backcushion', (L / seats - .06, .16, .42), at(u, .27, .7), m['sofa'], bevel=.06, segs=3, rot=(-.12 if False else 0, 0, rot)))
+        p = at(u, .55, 0)
+        SEATS.append(dict(pos=to3((p.x, p.y, 0)), yaw=yaw3(f.x, f.y), id='sofa'))
+    lo = Vector((min(at(-L / 2, 0, 0).x, at(L / 2, .82, 0).x), min(at(-L / 2, 0, 0).y, at(L / 2, .82, 0).y), 0))
+    hi = Vector((max(at(-L / 2, 0, 0).x, at(L / 2, .82, 0).x), max(at(-L / 2, 0, 0).y, at(L / 2, .82, 0).y), 0))
+    col_box(lo.x, lo.y, 0, hi.x, hi.y, .5)
+
+
+def lounge(m):
+    """Crew lounge in the aft-port corner of the commons: L sofa, low table on a rug, planters."""
+    sofa(-6.45, -.1, -6.45, 3.9, (1, 0), 5)          # along the port wall, facing starboard
+    sofa(-5.6, 4.85, -2.9, 4.85, (0, -1), 3)          # across the aft end, facing forward
+    poly(m['rug'], [(-5.45, .3, .008), (-2.6, .3, .008), (-2.6, 4.0, .008), (-5.45, 4.0, .008)])
+    part(bl.box('table_top', (1.5, .85, .06), (-4.15, 2.1, .42), m['hull'], bevel=.02))
+    part(bl.box('table_base', (1.2, .5, .38), (-4.15, 2.1, .19), m['frame'], bevel=.02))
+    part(bl.box('table_glow', (1.3, .02, .02), (-4.15, 1.665, .39), m['cyan']))
+    o = props.screen('graph', .5, .3, (-4.15, 2.1, .452), tilt=R90, yaw=-R90, name='tablescr'); part(o)
+    for (x, y) in ((-4.6, 2.3), (-3.9, 1.95)):
+        part(bl.cyl('cup', .045, .1, (x, y, .5), m['brass'], 10))
+    col_box(-4.9, 1.67, 0, -3.4, 2.53, .45)
+    planter(-6.3, -.75, .55, .6, 1.2, 3)
+    planter(-6.0, 4.95, .5, .55, 1.0, 5)
+    planter(-2.35, 4.95, .5, .55, 1.0, 9)
+    planter(6.2, -1.0, .5, .55, 1.1, 11)
+
+
 def corridor(secs, pr, way):
     m = M_
     y0, y1 = secs[0][0], secs[-1][0]
@@ -814,13 +889,16 @@ def corridor(secs, pr, way):
             return m['frame']
         return m['ceil']
     shell(secs, mat)
-    for (y, _) in secs[1:-1]:
-        rib(y, pr, .18, .25, m['frame'])
-    for y in frange(y0 + 1.0, y1 - .9, 2.0):
-        rib(y, pr, .1, .12, m['frame_light'], segs=range(1, 8))
+    frames = frange(y0 + .75, y1 - .7, 1.25)
+    for y in frames:
+        rib(y, pr, .2, .28, m['frame'])
+        rib_glow(y, pr, .2, m['lightc'])
     hw = pr[-1][0]
     floor_strip(secs, m['deck'])
     poly(m['grate'], [(-.9, y0, .006), (.9, y0, .006), (.9, y1, .006), (-.9, y1, .006)])
+    for sx in (-1, 1):
+        beam((sx * 1.0, y0 + .1, .012), (sx * 1.0, y1 - .1, .012), .07, .012, m['orange'])
+        beam((sx * (hw - .35), y0 + .1, .012), (sx * (hw - .35), y1 - .1, .012), .05, .012, m['orange'])
     wall_cols(secs, .3)
     W = pr[6][0]; H = pr[4][1]; zc = (pr[3][1] + pr[4][1]) / 2
     xc = (abs(pr[3][0]) + abs(pr[4][0])) / 2
@@ -830,7 +908,7 @@ def corridor(secs, pr, way):
             t = (k + 1) / 4
             x = sx * (abs(pr[3][0]) * (1 - t) + abs(pr[4][0]) * t) - sx * .16
             z = pr[3][1] * (1 - t) + pr[4][1] * t - .16
-            pipe_run(x, z, y0 + .05, y1 - .05, r, mm, clamps=[y for (y, _) in secs[1:-1]])
+            pipe_run(x, z, y0 + .05, y1 - .05, r, mm, clamps=frames)
         # recessed light strip along the wall top + floor kerb glow
         lamp_strip((sx * (W - .02), y0 + .3, pr[3][1] - .1), (sx * (W - .02), y1 - .3, pr[3][1] - .1), m['lightc'], w=.06, d=.1, up=(-sx, 0, 0))
         beam((sx * (hw - .02), y0, .04), (sx * (hw - .02), y1, .04), .05, .03, m['cyan'])
@@ -893,7 +971,7 @@ def exterior(m):
                     loops.append([Vector((a0.x, yc + r * math.cos(k / 20 * 2 * math.pi), zc + r * math.sin(k / 20 * 2 * math.pi))) for k in range(20)])
                 fill(m['hull'], loops, (1 if a0.x > 0 else -1, 0, 0))
             else:
-                poly(m['hull'], [a0, a1, b1, b0])
+                poly(m['hull_dark'] if j in (0, 6, 7) else m['hull'], [a0, a1, b1, b0])
     # front face around the bridge, rear face around the open bay
     bridge_out = [P3(p, -12.9) for p in offset(prof(6.4, 4.6, bh=1.5, bv=1.0), -.32, False)]
     fill(m['hull'], [[P3(p, -12.9) for p in secs[0][1]], bridge_out], (0, -1, 0))
@@ -913,6 +991,12 @@ def exterior(m):
     part(bl.cyl('dish', 1.1, .25, (0, -8.3, 8.2), m['hull'], 24, r2=.3, rot=(.9, 0, 0)))
     part(bl.sphere('mast_blink', .12, (0, -8.0, 8.35), m['red'], 8, 6))
     part(bl.box('spine', (2.2, 16.0, .5), (0, -2.0, 6.1), m['hull_dark'], bevel=.12))
+    # two-tone livery: orange stripes along the flanks (matches the jumpship)
+    for sx in (-1, 1):
+        beam((sx * 7.8, -12.6, 3.55), (sx * 7.8, 6.1, 3.55), .03, .32, m['orange'], up=(sx, 0, 0))
+        beam((sx * 7.8, -12.6, 3.1), (sx * 7.8, 6.1, 3.1), .03, .08, m['orange'], up=(sx, 0, 0))
+        beam((sx * 14.05, 10.9, 9.3), (sx * 14.05, 39.3, 9.3), .03, .45, m['orange'], up=(sx, 0, 0))
+        beam((sx * 14.05, 10.9, 8.7), (sx * 14.05, 39.3, 8.7), .03, .1, m['orange'], up=(sx, 0, 0))
     # running lights along the hull shoulders
     for sx in (-1, 1):
         beam((sx * 7.8, -12.5, 4.0), (sx * 7.8, 6.0, 4.0), .06, .06, m['cyan'])
@@ -934,12 +1018,17 @@ def exterior(m):
             poly(m['hull'], q if sx < 0 else q[::-1])
         fill(m['hull_dark'], [B], (sx, 0, 0))
         part(bl.sphere('navlight', .22, (xt, 28.0, -.38), m['green'] if sx > 0 else m['red'], 10, 6))
+        beam((sx * 31.0, 23.3, -.3), (sx * 31.0, 34.6, -.38), 1.2, .05, m['orange'], up=(0, 0, 1))
         # engine nacelle on a pylon over the wing, exhaust visible through the open bay
         nx = sx * 21.0
         tube_y(m['hull'], nx, 1.6, [(26.0, 1.9), (26.4, 2.45), (27.5, 2.65), (44.0, 2.65), (49.5, 2.2), (51.0, 1.9)], seg=28)
         tube_y(m['frame'], nx, 1.6, [(26.0, 1.9), (26.6, 1.6), (27.4, 1.3)], seg=28, cap_end='last', cap_mat=m['dark'])
         tube_y(m['frame'], nx, 1.6, [(51.0, 1.9), (51.0, 1.6), (50.2, 1.5)], seg=28, cap_end='last', cap_mat=m['engine'])
         part(bl.torus('exhaust_ring', 1.75, .1, (nx, 51.0, 1.6), m['engine'], rot=(R90, 0, 0), maj=32, mn=6))
+        for (ya, yb) in ((28.2, 29.0), (46.5, 48.6)):
+            tube_y(m['orange'], nx, 1.6, [(ya, 2.68), (yb, 2.68 if yb < 45 else 2.45)], seg=28)
+        for yy in (33.0, 38.0, 43.0):
+            part(bl.torus('nacelle_band', 2.66, .05, (nx, yy, 1.6), m['frame'], rot=(R90, 0, 0), maj=32, mn=4))
         part(bl.torus('intake_ring', 2.2, .12, (nx, 26.1, 1.6), m['frame_light'], rot=(R90, 0, 0), maj=32, mn=6))
         part(bl.box('pylon', (1.0, 12.0, 2.2), (nx, 34.0, -.4), m['hull'], bevel=.1))
         beam((nx, 26.8, 4.28), (nx, 48.0, 4.28), .12, .08, m['cyan'])
@@ -1007,9 +1096,9 @@ def export(m):
         j = bl.join(objs, 'arch_' + k)
         bpy.context.view_layer.objects.active = j; j.select_set(True)
         bpy.ops.object.material_slot_remove_unused(); j.select_set(False)
-    # sun: from ahead-right-above, pouring in through the canopy; target between bridge and commons
+    # sun: from ahead-right-above, pouring in through the canopy and the starboard portholes
     sd = Vector((.45, -.7, .55)).normalized()
-    tgt = Vector((0, -9.0, 0))
+    tgt = Vector((0, 7.5, 0))   # centre of the ship: the shadow frustum covers bridge to bay
     LIGHTS.insert(0, dict(kind='sun', name='canopy_sun', pos=to3(tgt + sd * 60), target=to3(tgt), color='#fff1dc', intensity=3.0))
     out = dict(colliders=cols, stations=STATIONS, lights=LIGHTS, seats=SEATS, screens=SCREENS, portholes=PORTHOLES)
     json.dump(out, open(os.path.join(bl.MODELS, 'ship_interior.json'), 'w'), indent=1)

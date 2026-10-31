@@ -263,13 +263,14 @@ export class ShipWorld extends World {
     sc.add(new THREE.HemisphereLight(0xaec4e6, 0x2a251c, .75));
     for (const L of layout.lights) {
       if (L.kind === 'sun') {
-        // sunlight through the canopy and the starboard portholes (bridge + commons are inside the shadow frustum)
+        // sunlight through the canopy and the starboard portholes; the frustum spans the whole hull so the closed
+        // hangar stays in shadow (outside a shadow frustum three would light it fully)
         const s = new THREE.DirectionalLight(L.color, L.intensity * 2.2);
         s.position.copy(V(L.pos)); s.target.position.copy(V(L.target));
         s.castShadow = true;
         const q = g.renderer.q;
         s.shadow.mapSize.set(q.shadow, q.shadow);
-        Object.assign(s.shadow.camera, { left: -19, right: 19, top: 19, bottom: -19, near: 30, far: 100 });
+        Object.assign(s.shadow.camera, { left: -31, right: 31, top: 31, bottom: -31, near: 20, far: 105 });
         s.shadow.bias = -.0005; s.shadow.normalBias = .04;
         sc.add(s, s.target);
         this.sun = s;
