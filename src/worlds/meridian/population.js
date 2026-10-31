@@ -64,8 +64,9 @@ class Ped {
       av.applyCharacter(this.look);
       // peds never change clothes: drop the hidden wardrobe pieces from the scene graph (fewer objects to update)
       const hidden = [];
-      av.model.traverse(o => { if (o.isMesh && !o.visible) hidden.push(o); });
+      av.model.traverse(o => { if (!o.visible && !o.isBone && o !== av.model) hidden.push(o); });
       for (const o of hidden) o.removeFromParent();
+      av.allMats = []; av.model.traverse(o => { if (o.isMesh) av.allMats.push(o.material); });
     } else {
       av.setLook(pick(av.outfits, r), pick(av.hairStyles, r));
       const tint = (prefix, hex) => av.allMats.forEach(m => { if (m.name.startsWith(prefix)) { m.color.copy(m.userData.base).multiply(new THREE.Color(hex)); } });

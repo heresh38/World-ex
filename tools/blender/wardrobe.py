@@ -529,8 +529,8 @@ class Kit:
 
         def skirt_shell(loft, P, t=.004):
             """Skirt wall: the loft where it stands clear of the body, a fitted layer where the hips push past it; open hem."""
-            p = self.parts(P); lo = loft(P)
-            f = np.minimum.reduce([p['torso'], p['legL'], p['legR']])     # never wraps the hands hanging beside it
+            lo = loft(P)
+            f = self.F.trunk(P)          # torso + legs only: never wraps the hands hanging beside it
             return np.maximum(np.minimum(lo, f - .0065), -np.minimum(lo + t, f - .002))
 
         def band_mat(z_top, w=.03):

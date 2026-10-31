@@ -237,6 +237,11 @@ def skin_mat(sex):
     return m
 
 
+# everyday wardrobe kept on the crowd LOD (population.js picks from these)
+NPC_KEEP = {'ribbed', 'tee', 'sweater', 'tank', 'blouse', 'flannel', 'undersuit', 'leggings', 'jeans', 'chinos', 'shorts', 'skirt',
+            'cargo', 'sundress', 'knit', 'hoodie', 'jacket', 'circuit_coat', 'tech', 'sneakers', 'ankle_boots', 'combat', 'beanie', 'cap'}
+
+
 # ------------------------------------------------------------------ build
 class PlayerBuilder:
     def __init__(self, sex, npc=False):
@@ -590,6 +595,21 @@ class PlayerBuilder:
         for o in regions:
             set_normals(o, self.F)
         if self.npc:
+            # pedestrians only wear everyday pieces: drop the armour/tactical items from the crowd LOD (smaller GLB, fewer clones)
+            items = self.wardrobe['items']
+            for sl in list(items):
+                for it in list(items[sl]):
+                    if sl != 'hair' and it not in NPC_KEEP and not items[sl][it].get('locked'):
+                        o = bpy.data.objects.get('C_%s__%s' % (sl, it))
+                        if o is not None:
+                            bpy.data.objects.remove(o)
+                        del items[sl][it]
+                if not items[sl]:
+                    del items[sl]
+            d = self.wardrobe['defaults']
+            for sl in list(d):
+                if d[sl] != 'none' and (sl not in items or d[sl] not in items[sl]):
+                    d[sl] = {'legs': 'jeans', 'top': 'tee', 'feet': 'sneakers'}.get(sl, 'none')
             # one skin mesh for the whole body below the head (garments cover by the skin cover mask, not region hiding)
             body = bl.join([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name.startswith('B_')
                             and o.name not in ('B_head', 'B_eyes', 'B_brows', 'B_lashes')], 'B_body')

@@ -558,6 +558,14 @@ class Field:
             out['leg' + side] = smin(self.leg_l(Q), self.foot_l(Q), .02)
         return out
 
+    def trunk(self, P):
+        """Body without the arms (torso + legs, same blend as the full field): what skirts and dresses hang on."""
+        B = self.B
+        z = P[:, 2]; ax = np.abs(P[:, 0])
+        p = self.parts(P)
+        kl = (.06 * smoothstep(.015, .09, ax) + .006) * smoothstep(B.hip[2] - .32, B.hip[2] - .14, z) + .002
+        return smin(p['torso'], np.minimum(p['legL'], p['legR']), kl)
+
     def __call__(self, P):
         B = self.B
         z = P[:, 2]; ax = np.abs(P[:, 0])

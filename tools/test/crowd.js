@@ -27,7 +27,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await waitPlay();
   await ev(() => { const g = window.__game; g.input.locked = true; g.input.enabled = true; g.save.settings.view = 'first'; g.setAvatarLayer(); });
   await wait(4000);
-  const info = await ev(() => { const w = window.__game.world, P = w.population.peds; return { peds: P.length, models: [...new Set(P.map(q => q.av.modelName))], looks: P.slice(0, 6).map(q => q.look && Object.entries(q.look.wear).filter(([k, v]) => v !== 'none').map(([k, v]) => k + ':' + v).join(' ')) }; });
+  const info = await ev(() => { const w = window.__game.world, P = w.population.peds; return { heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null, peds: P.length, models: [...new Set(P.map(q => q.av.modelName))], looks: P.slice(0, 6).map(q => q.look && Object.entries(q.look.wear).filter(([k, v]) => v !== 'none').map(([k, v]) => k + ':' + v).join(' ')) }; });
   console.log('crowd', JSON.stringify(info));
   // stand next to the densest group of pedestrians and look at them
   const measure = async name => {

@@ -19,7 +19,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.route('**/assets/models/*.glb', async r => {
     const f = 'assets/models/' + r.request().url().split('/').pop();
     if (fs.existsSync(f)) return r.continue();
-    try { const buf = require('child_process').execSync('git show HEAD:' + f, { maxBuffer: 1 << 28 }); return r.fulfill({ body: buf, contentType: 'model/gltf-binary' }); } catch (e) { return r.continue(); }
+    try { const buf = require('child_process').execSync('git show ' + (process.env.GLB_REV || 'HEAD') + ':' + f, { maxBuffer: 1 << 28 }); return r.fulfill({ body: buf, contentType: 'model/gltf-binary' }); } catch (e) { return r.continue(); }
   });
   // crowd LOD bodies may not be built yet in a fresh checkout: stand in the full player bodies for this test only
   for (const sex of ['female', 'male']) {
