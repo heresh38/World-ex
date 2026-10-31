@@ -46,19 +46,46 @@ def M():
 
 
 # ------------------------------------------------------------------ ship furniture
-def captain_chair(loc=(0, 0, 0), rot=0.0):
-    m = M(); r = _root('ST_captain_chair', loc, rot)
-    P = [bl.cyl('base', .45, .25, (0, 0, .125), m['gunmetal'], 20),
-         bl.cyl('post', .12, .35, (0, 0, .4), m['steel'], 12),
-         bl.box('seat', (.7, .65, .14), (0, 0, .62), m['leather'], bevel=.05, segs=3),
-         bl.box('back', (.7, .14, .95), (0, .33, 1.12), m['leather'], bevel=.06, segs=3, rot=(-.12, 0, 0)),
-         bl.box('backshell', (.78, .08, 1.05), (0, .42, 1.12), m['hull'], bevel=.04, rot=(-.12, 0, 0)),
-         bl.box('headrest', (.45, .14, .25), (0, .4, 1.68), m['leather'], bevel=.05)]
+SCREEN_COLORS = dict(data='#2ad0ff', graph='#3fffb0', radar='#40ff90', nav='#4fb8ff', status='#2ad0ff',
+                     amber='#ffb340', keys='#6fd8ff')
+
+
+def screen_mat(kind):
+    """Runtime-animated screen: ship.js swaps materials named screen_<kind> for live canvas textures."""
+    c = SCREEN_COLORS.get(kind, '#2ad0ff')
+    return bl.mat('screen_' + kind, '#081820', 0, .25, emit=c, strength=1.6)
+
+
+def screen(kind, w, h, loc=(0, 0, 0), tilt=0.0, yaw=0.0, name='scr'):
+    """Flat screen quad (UV 0..1 across the face) facing -Y before tilt (positive tilts the top away) / yaw."""
+    bpy.ops.mesh.primitive_plane_add(size=1, location=loc, rotation=(R90 - tilt, 0, yaw))
+    o = bpy.context.object
+    o.scale = (w, h, 1)
+    return bl._finish(o, screen_mat(kind), name)
+
+
+def captain_chair(loc=(0, 0, 0), rot=0.0, name='ST_captain_chair', side_screen=True):
+    m = M(); r = _root(name, loc, rot)
+    P = [bl.cyl('base', .5, .08, (0, 0, .04), m['gunmetal'], 8, bevel=.02),
+         bl.torus('baseglow', .46, .015, (0, 0, .085), m['cyan'], maj=32, mn=4),
+         bl.cyl('post', .13, .4, (0, 0, .3), m['steel'], 12),
+         bl.box('pan', (.62, .6, .1), (0, -.02, .5), m['hull'], bevel=.03),
+         bl.box('seat', (.58, .58, .1), (0, -.02, .59), m['leather'], bevel=.045, segs=3),
+         bl.box('back', (.56, .12, .82), (0, .3, 1.07), m['leather'], bevel=.05, segs=3, rot=(-.14, 0, 0)),
+         bl.box('backshell', (.7, .1, 1.0), (0, .4, 1.08), m['hull'], bevel=.04, rot=(-.14, 0, 0)),
+         bl.box('spine', (.16, .08, .9), (0, .46, 1.08), m['gunmetal'], bevel=.02, rot=(-.14, 0, 0)),
+         bl.box('headrest', (.4, .16, .22), (0, .44, 1.66), m['leather'], bevel=.05),
+         bl.box('headwing', (.5, .08, .26), (0, .52, 1.66), m['hull'], bevel=.03)]
     for sx in (1, -1):
-        P += [bl.box('arm', (.12, .6, .1), (sx * .42, -.02, .85), m['hull'], bevel=.03),
-              bl.box('armpanel', (.14, .3, .06), (sx * .45, -.2, .93), m['dark'], bevel=.02),
-              bl.box('armglow', (.1, .2, .01), (sx * .45, -.2, .965), m['cyan'] if sx > 0 else m['amber']),
-              bl.box('trim', (.02, .02, .9), (sx * .4, .45, 1.12), m['brass'], rot=(-.12, 0, 0))]
+        P += [bl.box('arm', (.12, .62, .1), (sx * .38, -.04, .82), m['hull'], bevel=.035),
+              bl.box('armpost', (.08, .1, .3), (sx * .38, .15, .66), m['gunmetal']),
+              bl.box('armpad', (.13, .34, .04), (sx * .38, -.18, .885), m['dark'], bevel=.012),
+              bl.box('trim', (.02, .02, .86), (sx * .355, .47, 1.08), m['cyan'] if sx > 0 else m['amber'], rot=(-.14, 0, 0))]
+        P.append(screen('keys', .1, .28, (sx * .38, -.18, .909), tilt=R90, name='armkeys'))
+    if side_screen:   # swing-arm display on the right armrest
+        P += [bl.box('swing', (.04, .04, .4), (.5, -.2, 1.05), m['gunmetal']),
+              bl.box('swingbezel', (.36, .03, .25), (.42, -.4, 1.3), m['dark'], bevel=.01, rot=(0, 0, .69)),
+              screen('nav', .32, .21, (.408, -.386, 1.3), tilt=.1, yaw=math.pi + .69, name='swingscr')]
     _pack(r, P)
     bl.empty('IP_sit', (0, -.05, .0), r)
     return r
@@ -66,26 +93,42 @@ def captain_chair(loc=(0, 0, 0), rot=0.0):
 
 def holo_table(loc=(0, 0, 0), rot=0.0):
     m = M(); r = _root('ST_holotable', loc, rot)
-    P = [bl.cyl('pedestal', .6, .8, (0, 0, .4), m['gunmetal'], 24),
-         bl.cyl('top', 1.4, .12, (0, 0, .86), m['hull'], 32),
-         bl.torus('ring', 1.38, .04, (0, 0, .93), m['brass'], maj=40),
-         bl.cyl('emitter', 1.1, .02, (0, 0, .93), m['screen'], 32),
-         bl.torus('glowring', 1.15, .02, (0, 0, .94), m['cyan'], maj=40)]
+    P = [bl.cyl('foot', 1.0, .1, (0, 0, .05), m['gunmetal'], 8, bevel=.02),
+         bl.cyl('pedestal', .55, .7, (0, 0, .45), m['dark'], 8),
+         bl.cyl('collar', .75, .1, (0, 0, .78), m['gunmetal'], 8, bevel=.02),
+         bl.cyl('top', 1.4, .12, (0, 0, .86), m['hull'], 8, bevel=.03),
+         bl.cyl('rim', 1.46, .05, (0, 0, .935), m['gunmetal'], 8),
+         bl.torus('ring', 1.32, .03, (0, 0, .94), m['brass'], maj=48),
+         bl.cyl('emitter', 1.05, .02, (0, 0, .935), m['screen'], 32),
+         bl.torus('glowring', 1.12, .02, (0, 0, .95), m['cyan'], maj=48),
+         bl.torus('baseglow', .95, .015, (0, 0, .11), m['cyan'], maj=32, mn=4)]
+    for k in range(8):   # little control screens around the rim, tilted toward the user
+        a = k * math.pi / 4 + math.pi / 8
+        ca, sa = math.cos(a), math.sin(a)
+        kind = ('graph', 'keys', 'data', 'keys')[k % 4]
+        P.append(screen(kind, .42, .16, (ca * 1.22, sa * 1.22, .945), tilt=R90 - .25, yaw=a + R90, name='rimscr'))
     _pack(r, P)
     holo = bl.sphere('holo_globe', .55, (0, 0, 1.7), m['holo'], 24, 14)
     holo.parent = r
     return r
 
 
-def terminal(name, loc=(0, 0, 0), rot=0.0, amber=False):
+def terminal(name, loc=(0, 0, 0), rot=0.0, amber=False, kind=None):
+    """Standing console (faces -Y): chamfered body, angled desk with live keys, tilted main screen."""
     m = M(); r = _root(name, loc, rot)
-    sc = m['screen_amber'] if amber else m['screen']
-    P = [bl.box('body', (1.0, .5, 1.05), (0, .05, .525), m['gunmetal'], bevel=.04),
-         bl.box('desk', (1.1, .55, .08), (0, -.2, 1.0), m['hull'], bevel=.03, rot=(.25, 0, 0)),
-         bl.box('screen', (.9, .06, .6), (0, .2, 1.45), m['dark'], bevel=.03, rot=(-.15, 0, 0)),
-         bl.box('display', (.82, .01, .52), (0, .165, 1.45), sc, rot=(-.15, 0, 0)),
-         bl.box('keys', (.8, .3, .01), (0, -.22, 1.05), sc, rot=(.25, 0, 0)),
-         bl.box('cable', (.08, .08, 1.0), (.35, .3, .5), m['rubber'])]
+    kind = kind or ('amber' if amber else 'data')
+    body = bl.loft('body', [[(x, y, z) for (y, z) in ((.3, 0), (.3, 1.25), (.12, 1.95), (-.05, 1.95), (-.05, 1.1), (-.2, .98), (-.2, .9), (.05, .1), (.05, 0))]
+                            for x in (-.52, .52)], m['gunmetal'], smooth=False)
+    P = [body,
+         bl.box('kick', (1.0, .3, .1), (0, .05, .05), m['dark']),
+         bl.box('desk', (1.12, .42, .05), (0, -.22, .97), m['hull'], bevel=.02, rot=(.2, 0, 0)),
+         bl.box('bezel', (.98, .05, .66), (0, .115, 1.5), m['dark'], bevel=.025, rot=(-.32, 0, 0)),
+         bl.box('hood', (1.06, .3, .05), (0, .02, 1.93), m['hull'], bevel=.02),
+         bl.box('sidestrip', (.02, .02, .8), (.53, -.04, .5), m['amber'] if amber else m['cyan']),
+         bl.box('sidestrip2', (.02, .02, .8), (-.53, -.04, .5), m['amber'] if amber else m['cyan']),
+         bl.box('cable', (.08, .08, 1.0), (.35, .32, .5), m['rubber'])]
+    P.append(screen(kind, .88, .54, (0, .085, 1.5), tilt=.32, name='display'))
+    P.append(screen('keys', .9, .3, (0, -.225, 1.0), tilt=R90 - .2, name='keys'))
     _pack(r, P)
     return r
 
@@ -93,14 +136,16 @@ def terminal(name, loc=(0, 0, 0), rot=0.0, amber=False):
 def armory_rack(loc=(0, 0, 0), rot=0.0):
     m = M(); r = _root('ST_armory', loc, rot)
     P = [bl.box('back', (3.4, .2, 2.6), (0, .2, 1.3), m['panel'], bevel=.03),
-         bl.box('frame', (3.6, .35, .12), (0, .1, 2.65), m['gunmetal'], bevel=.02),
+         bl.box('frame', (3.6, .4, .14), (0, .1, 2.66), m['gunmetal'], bevel=.03),
          bl.box('base', (3.6, .6, .3), (0, 0, .15), m['gunmetal'], bevel=.03),
-         bl.box('sign', (1.2, .05, .18), (0, .08, 2.42), m['amber'])]
+         bl.box('header', (1.4, .06, .26), (0, .07, 2.4), m['dark'], bevel=.01),
+         bl.box('sign', (1.2, .05, .06), (0, .05, 2.3), m['amber'])]
+    P.append(screen('status', .5, .3, (1.15, .085, 2.3), name='rackscr'))
     for i in range(4):
         P.append(bl.box('hook', (3.2, .12, .04), (0, .05, .7 + i * .45), m['steel']))
     for sx in (-1.6, 1.6):
-        P.append(bl.box('side', (.12, .5, 2.6), (sx, .05, 1.3), m['hull'], bevel=.03))
-        P.append(bl.box('sideglow', (.02, .02, 2.2), (sx * .97, -.2, 1.3), m['cyan']))
+        P.append(bl.box('side', (.14, .55, 2.66), (sx, .05, 1.33), m['hull'], bevel=.035))
+        P.append(bl.box('sideglow', (.02, .02, 2.2), (sx * .97, -.22, 1.3), m['cyan']))
     _pack(r, P)
     for i in range(4):
         bl.empty('SLOT_%d' % i, (-.8 + (i % 2) * 1.6, -.05, .95 + (i // 2) * .9), r)
@@ -112,11 +157,13 @@ def gunsmith_bench(loc=(0, 0, 0), rot=0.0):
     P = [bl.box('top', (2.6, 1.0, .1), (0, 0, .95), m['steel'], bevel=.02),
          bl.box('drawers', (1.0, .9, .85), (.75, 0, .45), m['gunmetal'], bevel=.03),
          bl.box('legs', (.1, .9, .9), (-1.2, 0, .45), m['gunmetal']),
-         bl.box('vise', (.25, .2, .18), (-.8, -.3, 1.09), m['machine_yellow'] if 'machine_yellow' in m else m['yellow'], bevel=.02),
+         bl.box('vise', (.25, .2, .18), (-.8, -.3, 1.09), m['yellow'], bevel=.02),
          bl.box('backboard', (2.6, .08, 1.3), (0, .48, 1.65), m['panel']),
          bl.box('lamp', (1.6, .2, .06), (0, .2, 2.25), m['dark']),
          bl.box('lampglow', (1.5, .14, .01), (0, .2, 2.22), bl.mat('lamp_white', '#fff6e8', 0, .4, emit='#fff6e8', strength=8)),
-         bl.cyl('holopad', .35, .03, (0, -.05, 1.01), m['screen'], 24)]
+         bl.cyl('holopad', .35, .03, (0, -.05, 1.01), m['screen'], 24),
+         bl.box('scrbezel', (.62, .04, .4), (.85, .43, 1.75), m['dark'], bevel=.01)]
+    P.append(screen('graph', .56, .34, (.85, .405, 1.75), name='benchscr'))
     for i in range(6):
         P.append(bl.box('tool', (.03, .02, .25), (-1.0 + i * .18, .43, 1.75), m['steel']))
     for d in range(3):
@@ -130,11 +177,14 @@ def locker_pod(loc=(0, 0, 0), rot=0.0):
     m = M(); r = _root('ST_wardrobe', loc, rot)
     P = [bl.cyl('floor', 1.0, .15, (0, 0, .075), m['gunmetal'], 28),
          bl.cyl('ceiling', 1.0, .3, (0, 0, 2.75), m['hull'], 28),
+         bl.cyl('ceilglowdisc', .8, .02, (0, 0, 2.59), bl.mat('lamp_white', '#fff6e8', 0, .4, emit='#fff6e8', strength=8), 28),
          bl.torus('floorglow', .85, .03, (0, 0, .16), m['cyan'], maj=32),
          bl.torus('ceilglow', .85, .03, (0, 0, 2.58), m['cyan'], maj=32)]
     for i in range(5):
         a = math.pi * .35 + i * math.pi * .32
         P.append(bl.box('rib', (.12, .2, 2.6), (math.cos(a) * .95, math.sin(a) * .95, 1.4), m['hull'], rot=(0, 0, a), bevel=.03))
+    a = math.pi   # back rib carries a small status screen facing the open side (+X)
+    P.append(screen('status', .26, .4, (math.cos(a) * .83, math.sin(a) * .83, 1.55), yaw=R90, name='podscr'))
     _pack(r, P)
     return r
 
@@ -294,11 +344,16 @@ def lamp_post(loc=(0, 0, 0), rot=0.0):
 
 
 def bench(loc=(0, 0, 0), rot=0.0):
+    """Crew bench, seat top at .6 m (the Sit clip's hip height). Faces -Y."""
     m = M(); r = _root('bench', loc, rot)
-    _pack(r, [bl.box('seat', (1.8, .5, .08), (0, 0, .45), m['hull'], bevel=.02),
-              bl.box('back', (1.8, .08, .45), (0, .24, .75), m['hull'], bevel=.02),
-              bl.box('legL', (.08, .45, .45), (.75, 0, .22), m['gunmetal']),
-              bl.box('legR', (.08, .45, .45), (-.75, 0, .22), m['gunmetal'])])
+    pad = bl.mat('leather', '#2a2420', 0, .55)
+    _pack(r, [bl.box('frame', (1.9, .55, .1), (0, 0, .49), m['gunmetal'], bevel=.02),
+              bl.box('cushion', (1.84, .5, .07), (0, -.01, .57), pad, bevel=.03, segs=3),
+              bl.box('back', (1.84, .08, .5), (0, .25, .9), pad, bevel=.03, segs=3),
+              bl.box('backshell', (1.9, .06, .56), (0, .3, .9), m['hull'], bevel=.02),
+              bl.box('legL', (.1, .45, .45), (.8, .02, .22), m['gunmetal']),
+              bl.box('legR', (.1, .45, .45), (-.8, .02, .22), m['gunmetal']),
+              bl.box('glow', (1.6, .02, .02), (0, -.27, .44), m['cyan'])])
     return r
 
 

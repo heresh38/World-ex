@@ -25,7 +25,7 @@ export function makeWeapon(arch, rarity, power, rnd = Math.random) {
   const roll = () => 0.9 + rnd() * 0.2;
   return {
     uid: 'w' + (uid++) + Math.floor(rnd() * 1000), arch, rarity, power: Math.round(power), perks,
-    name: weaponName(arch, rarity, rnd), shader: 'bone',
+    name: weaponName(arch, rarity, rnd), shader: 'bone', sight: A.sight || 'default',
     stats: { dmg: roll(), rpm: 0.95 + rnd() * 0.1, stability: roll(), range: roll(), handling: roll() },
   };
 }
@@ -39,9 +39,13 @@ export function rollRarity(bonus = 0, rnd = Math.random) {
   return 0;
 }
 
+// loot pool: every archetype of the slot, weighted (horror guns are rarer finds)
 export function randomArch(rnd = Math.random, slot = null) {
   const keys = Object.keys(ARCHETYPES).filter(k => slot === null || ARCHETYPES[k].slot === slot);
-  return keys[Math.floor(rnd() * keys.length)];
+  const wt = k => ARCHETYPES[k].weight ?? 1;
+  let r = rnd() * keys.reduce((a, k) => a + wt(k), 0);
+  for (const k of keys) { r -= wt(k); if (r <= 0) return k; }
+  return keys[keys.length - 1];
 }
 
 // Player look: body frame, skin, face morphs, colours and one item per clothing slot (null wear = the model's defaults).

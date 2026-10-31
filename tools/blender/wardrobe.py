@@ -3,7 +3,7 @@
 Each item becomes C_<slot>__<item> (hair: C_hair__<style>) skinned with the same analytic weights as the body, so
 cloth and skin move together. Item metadata (label, body regions it hides) goes into the armature's `worldex` extra.
 Material names are an API for runtime tinting: cloth_<slot>, armor_primary__<slot>, armor_secondary__<slot>, trim_<slot>,
-glow, visor, hair, hair_accent.
+glow, visor, hair (strand cards), hair__cap (scalp cap); hair itself is grown by hair.py.
 The default female set follows the owner's circuit-coat reference, the male set the vanguard plate reference.
 """
 import bpy, math, os
@@ -27,6 +27,7 @@ class Kit:
         self.items = {}
         self.res = .0032 if PL.FAST else .0021
         self.head_res = .0026 if PL.FAST else .0013
+        self.hair_tris = {}
 
     # ------------------------------------------------------------ field helpers
     def parts(self, P):
@@ -48,6 +49,16 @@ class Kit:
         lw = float(np.linalg.norm(B.elbow - B.shoulder) + np.linalg.norm(B.wrist - B.elbow))
         return s, lw
 
+    def xfer(self, cover=('torso', 'armL', 'armR', 'legL', 'legR'), hands=False):
+        """Garment weights copied from the body: each vertex is projected onto the surface of the parts the garment covers
+        and takes the body's weights there, so cloth and skin deform identically and never pick up a bone of a part
+        they merely hang next to (a skirt beside the hand, a hem beside the wrist)."""
+        def w(V):
+            fn = lambda P: np.min(np.stack([self.F.parts(P)[k] for k in cover]), 0)
+            Vb = sdf.project(fn, V, 4, max_step=.03)
+            return self.pb.skinner(Vb, cover=cover, hands=hands)
+        return w
+
     def head_local(self, P):
         return P - self.B.head_o
 
@@ -59,7 +70,8 @@ class Kit:
         return zl - L[:, 2]
 
     # ------------------------------------------------------------ mesh one item
-    def build(self, name, fn, lo, hi, mats, matfn=None, target=9000, h=None, uv=.22, weights=None, nfn=None):
+    def build(self, name, fn, lo, hi, mats, matfn=None, target=9000, h=None, uv=.22, weights=None, nfn=None,
+              cover=('torso', 'armL', 'armR', 'legL', 'legR'), hands=False):
         h = h or self.res
         PL.log('item', name)
         V, Q = sdf.mesh(fn, lo, hi, h, log=PL.log)
@@ -78,7 +90,7 @@ class Kit:
         bl.uv_box(o, uv)
         PL.set_normals(o, nfn or fn)
         V = PL.verts(o)
-        W = weights(V) if weights else self.pb.skinner(V)
+        W = weights(V) if weights else self.xfer(cover, hands)(V)
         PL.apply_weights(o, W)
         PL.log('  ->', name, len(o.data.vertices), 'verts')
         return o
@@ -126,8 +138,6 @@ class Kit:
     def mats(self):
         M = {}
         M['glow'] = bl.mat('glow', '#1ad8ff' if not self.m else '#ffae2f', 0, .4, emit='#1ad8ff' if not self.m else '#ffae2f', strength=4)
-        M['hair'] = bl.mat('hair', '#ffffff', 0, .42)
-        vc_mat(M['hair'])
         return M
 
     # ====================================================================== hair
@@ -168,123 +178,6 @@ class Kit:
             return d
         return fn
 
-    def hair_female(self, M):
-        B = self.B; s = B.head.s; ho = B.head_o
-        S = lambda *v: np.array(v, F32) * s
-        tie = S(0, .086, .072)
-        C0 = S(0, .01, .02)
-        A = (tie - C0) / np.linalg.norm(tie - C0)
-        e1 = np.cross(A, [1, 0, 0]); e1 /= np.linalg.norm(e1); e2 = np.cross(A, e1)
-
-        def comb(L):                       # strands converge on the tie
-            v = L - C0
-            return np.arctan2(v @ e2, v @ e1) * 70
-
-        # ponytail: twisted clumps along a path from the tie down the back
-        path = np.array([tie / s, (0, .13, .05), (0, .155, -.03), (0, .16, -.14), (0, .155, -.28), (0, .145, -.42)], F32) * s
-        radii = np.array([.026, .044, .05, .044, .034, .016]) * s
-
-        def tail(P):
-            L = P - ho
-            d = np.full(len(P), 1.0, F32)
-            for k in range(6):
-                ang0 = k * math.pi / 3
-                pts = []
-                for i, (p, r) in enumerate(zip(path, radii)):
-                    a = ang0 + i * .7
-                    off = np.array([math.cos(a) * r * .55, math.sin(a) * r * .5, 0])
-                    pts.append((p + off, r * .6))
-                for (p0, r0), (p1, r1) in zip(pts[:-1], pts[1:]):
-                    d = smin(d, round_cone(L, p0, p1, r0, r1), .004 * s)
-            d = smin(d, sphere(L, tie, .013 * s), .006 * s)
-            return d
-
-        def braid(P):
-            L = P - ho
-            d = np.full(len(P), 1.0, F32)
-            pts = [(.052, -.046, .07), (.066, -.02, .05), (.074, .01, .02), (.07, .03, -.03), (.06, .04, -.09), (.052, .045, -.16)]
-            pts = np.array(pts, F32) * s
-            for i in range(len(pts) - 1):
-                for j in range(4):
-                    t = j / 4
-                    p = pts[i] * (1 - t) + pts[i + 1] * t
-                    side = 1 if (i * 4 + j) % 2 else -1
-                    q = p + np.array([.003 * side, -.003 * side, 0]) * s
-                    d = np.minimum(d, ellipsoid(L, q, S(.0055, .0045, .0075)))
-            return d
-
-        scalp = self.scalp(lambda L: np.full(len(L), .0052 * s, F32), comb, .0006)
-        fn = lambda P: np.minimum(scalp(P), tail(P))
-        lo = ho + S(-.11, -.11, -.48); hi = ho + S(.11, .25, .15)
-        hair = self.build('hair', fn, lo, hi, [M['hair']], h=self.head_res, target=10000, weights=self.hair_weights())
-        self.strand_colors(hair, lambda V: comb(V - ho))
-        acc = bl.mat('hair_accent', '#b9a3e8', 0, .45)
-        br = self.build('braid', braid, ho + S(.03, -.07, -.2), ho + S(.1, .07, .1), [acc], h=self.head_res, target=3500,
-                        weights=self.hair_weights())
-        band = bl.mat('trim_hair', '#c9a24a', .9, .3)
-        Fm = sdf.frame(A); Rt = np.array([Fm[1], Fm[2], Fm[0]])
-        tb = self.build('tie', lambda P: sdf.torus(P - ho, tie, .014 * s, .0045 * s, Rt), ho + tie - .03, ho + tie + .03,
-                        [band], h=.001, target=800, weights=self.hair_weights())
-        self.add('hair', 'ponytail', 'High ponytail', [hair, br, tb])
-        # bob: chin-length, side part
-        def bob_t(L):
-            return (.006 + .012 * smoothstep(.06 * s, -.06 * s, L[:, 2])) * 1.0
-
-        def bob_mask(L):
-            return np.maximum(-.07 * s - L[:, 2], np.minimum(-.035 * s - L[:, 1], .066 * s - L[:, 2]))
-
-        bob_phase = lambda L: np.arctan2(L[:, 0], L[:, 1]) * 80
-        bob = self.build('hair', self.scalp(bob_t, bob_phase, .0007, mask=bob_mask), ho + S(-.11, -.11, -.09), ho + S(.11, .12, .15),
-                         [M['hair']], h=self.head_res, target=9000, weights=lambda V: {'head': np.ones(len(V), F32)})
-        self.strand_colors(bob, lambda V: bob_phase(V - ho))
-        self.add('hair', 'bob', 'Bob', [bob])
-        pix = self.build('hair', self.scalp(lambda L: (.0045 + .006 * smoothstep(.04 * s, .1 * s, L[:, 2]) * smoothstep(.05 * s, -.06 * s, L[:, 1])),
-                                            lambda L: np.arctan2(L[:, 0], -L[:, 1] + .1 * s) * 60, .0006),
-                         ho + S(-.1, -.11, -.08), ho + S(.1, .12, .15), [M['hair']], h=self.head_res, target=9000,
-                         weights=lambda V: {'head': np.ones(len(V), F32)})
-        self.strand_colors(pix, lambda V: np.arctan2((V - ho)[:, 0], -(V - ho)[:, 1] + .1 * s) * 60)
-        self.add('hair', 'pixie', 'Pixie crop', [pix])
-
-    def hair_male(self, M):
-        B = self.B; s = B.head.s; ho = B.head_o
-        S = lambda *v: np.array(v, F32) * s
-
-        def t_side(L):
-            top = smoothstep(.035 * s, .085 * s, L[:, 2])
-            front = smoothstep(.06 * s, -.05 * s, L[:, 1])
-            return .0035 + top * (.007 + .008 * front)
-
-        part_x = .026 * s
-
-        def side_part(L):
-            return L[:, 1] * 1.0 / (.0045 * s) * 2 * math.pi + np.where(L[:, 0] > part_x, 1.3, 0)
-
-        def part_groove(P):
-            return P
-        fn0 = self.scalp(t_side, side_part, .0008)
-
-        def fn(P):
-            L = P - ho
-            d = fn0(P)
-            # parting line on the left
-            d = smax(d, -capsule(L, S(.026, -.07, .095), S(.03, .03, .118), .0016 * s), .002 * s)
-            return d
-        sp = self.build('hair', fn, ho + S(-.1, -.11, -.08), ho + S(.1, .12, .15), [M['hair']], h=self.head_res, target=9000,
-                        weights=lambda V: {'head': np.ones(len(V), F32)})
-        self.strand_colors(sp, lambda V: side_part(V - ho))
-        self.add('hair', 'sidepart', 'Side part', [sp])
-        bz = self.build('hair', self.scalp(lambda L: np.full(len(L), .0028 * s, F32), lambda L: L[:, 1] / (.0025 * s) * 6.28, .0003),
-                        ho + S(-.1, -.11, -.08), ho + S(.1, .12, .15), [M['hair']], h=self.head_res, target=8000,
-                        weights=lambda V: {'head': np.ones(len(V), F32)})
-        self.strand_colors(bz, lambda V: (V - ho)[:, 1] / (.0025 * s) * 6.28, base=.8, depth=.12)
-        self.add('hair', 'buzz', 'Buzz cut', [bz])
-        sw_phase = lambda L: np.arctan2(L[:, 0], -L[:, 1] + .06 * s) * 70
-        sw = self.build('hair', self.scalp(lambda L: .004 + .012 * smoothstep(.02 * s, .09 * s, L[:, 2]), sw_phase, .0008),
-                        ho + S(-.1, -.11, -.08), ho + S(.1, .13, .16), [M['hair']], h=self.head_res, target=8500,
-                        weights=lambda V: {'head': np.ones(len(V), F32)})
-        self.strand_colors(sw, lambda V: sw_phase(V - ho))
-        self.add('hair', 'swept', 'Swept back', [sw])
-
     # ====================================================================== female circuit set
     def female_set(self, M):
         B, F = self.B, self.F
@@ -297,7 +190,7 @@ class Kit:
             reg = np.maximum(self.dom(P, ['torso'], p), np.maximum(.975 - P[:, 2], P[:, 2] - zcol))
             return np.maximum(F(P) - .0025, reg)
         t = self.build('top', top, (-.22, -.17, .95), (.22, .17, zcol + .01), [tex('cloth_top', 'char_ribbed_white.jpg', '#f2f0ea', 0, .8)],
-                       target=7000, uv=.12)
+                       target=7000, uv=.12, cover=('torso', 'armL', 'armR'))
         self.add('top', 'ribbed', 'Ribbed high-neck top', [t], hide=['midriff'])
         # ---- legs: ribbed leggings + knee pads + greaves
         def legs(P):
@@ -305,7 +198,7 @@ class Kit:
             reg = np.maximum(self.dom(P, ['torso', 'legL', 'legR'], p), np.maximum(P[:, 2] - 1.0, .1 - P[:, 2]))
             return np.maximum(F(P) - .0045, reg)
         lg = self.build('legs', legs, (-.22, -.17, .09), (.22, .19, 1.01), [tex('cloth_legs', 'char_ribbed_white.jpg', '#eceae4', 0, .8)],
-                        target=8000, uv=.12)
+                        target=8000, uv=.12, cover=('torso', 'legL', 'legR'))
         kn = B.knee
 
         def armour(P):
@@ -320,7 +213,7 @@ class Kit:
             g = (np.abs(z_ - (kn[2] + .012)) < .005) | ((np.abs(Q - kn[0]) < .006) & (z_ < kn[2] - .1) & (z_ > B.ankle[2] + .1))
             return np.where(g, 1, 0)
         ar = self.build('legs_armour', armour, (-.2, -.15, .1), (.2, .1, kn[2] + .1),
-                        [tex('trim_legs', 'char_kneepad.jpg', '#ffffff', .5, .45), M['glow']], armour_mat, target=5000, uv=.1)
+                        [tex('trim_legs', 'char_kneepad.jpg', '#ffffff', .5, .45), M['glow']], armour_mat, target=5000, uv=.1, cover=('legL', 'legR'))
         self.add('legs', 'leggings', 'Ribbed leggings & knee guards', [lg, ar], hide=['thigh', 'shin', 'pelvis'])
         # ---- outer: sleeveless circuit coat with stand collar
         hem = kn[2] + .02
@@ -359,7 +252,7 @@ class Kit:
             return np.where(edge, 1, 0)
 
         def coat_w(V):
-            W = self.pb.skinner(V)
+            W = self.xfer(('torso', 'legL', 'legR'))(V)
             zz = V[:, 2]
             t = np.clip((B.hip[2] - .02 - zz) / .35, 0, 1)
             if t.any():
@@ -393,7 +286,7 @@ class Kit:
             return np.where(panel, 2, np.where(buck, 1, 0))
         hv = self.build('harness', harness, (-.2, -.15, 1.0), (.2, .15, B.zsh + .08),
                         [tex('cloth_vest', 'char_harness_olive.jpg', '#9a9a62', 0, .75), bl.mat('trim_vest', '#7d838c', .9, .3),
-                         tex('armor_secondary__vest', 'char_chest_sparkle.jpg', '#ffffff', .3, .35)], harness_mat, target=7000, uv=.15)
+                         tex('armor_secondary__vest', 'char_chest_sparkle.jpg', '#ffffff', .3, .35)], harness_mat, target=7000, uv=.15, cover=('torso',))
         self.add('vest', 'harness', 'Tactical harness', [hv])
         # ---- hands: armoured gauntlets + fingerless gloves
         self.gauntlets(M, tex)
@@ -421,7 +314,7 @@ class Kit:
             return np.where(g, 1, 0)
         lo = (-B.tip[0] - .07, -.12, B.tip[2] - .03); hi = (B.tip[0] + .07, .12, B.wrist[2] + .17)
         o = self.build(item, fn, lo, hi, [tex('cloth_hands', img, '#ffffff', .35, .5), M['glow']], mat, target=9000, uv=.08,
-                       h=self.res * .7)
+                       h=self.res * .7, cover=('armL', 'armR'), hands=True)
         self.add('hands', item, label, [o], hide=['hand'] if full_glove else [])
 
     def boots(self, M, tex, item, label, img, top_z, off, sole, strap=None):
@@ -450,7 +343,7 @@ class Kit:
         mats = [tex('cloth_feet', img, '#ffffff', .2, .55), M['glow']]
         if strap:
             mats.append(tex('trim_feet', strap, '#9a9a62', 0, .75))
-        o = self.build('boots', fn, lo, hi, mats, mat, target=8000, uv=.1)
+        o = self.build('boots', fn, lo, hi, mats, mat, target=8000, uv=.1, cover=('legL', 'legR'))
         self.add('feet', item, label, [o], hide=['foot'])
 
     # ====================================================================== male vanguard set
@@ -467,7 +360,7 @@ class Kit:
             reg = np.maximum(reg, np.where(self.dom(P, ['armL', 'armR'], p) < 0, s - (lw - .004), -1))
             return np.maximum(F(P) - .002, reg)
         t = self.build('top', top, (-.34, -.18, .9), (.34, .18, zcol + .01), [tex('cloth_top', 'char_undersuit_black.jpg', '#ffffff', 0, .7)],
-                       target=10000, uv=.1)
+                       target=10000, uv=.1, cover=('torso', 'armL', 'armR'))
         self.add('top', 'undersuit', 'Tactical undersuit', [t], hide=['chest', 'midriff', 'upperarm', 'forearm', 'neck'])
         # ---- vest: vanguard plate (chest, back, abdomen bands, layered pauldrons, collar, core light)
         steel = tex('armor_primary__vest', 'char_plate_steel.jpg', '#6f7f98', .7, .34)
@@ -509,7 +402,7 @@ class Kit:
             trim |= (np.abs(zz - 1.15) < .012) & (C[:, 1] < 0)
             return np.where(core, 2, np.where(trim, 1, 0))
         pv = self.build('plate', plate, (-.33, -.2, .97), (.33, .2, z['neck'] + .05), [steel, bronze, M['glow']], plate_mat,
-                        target=12000, uv=.25)
+                        target=12000, uv=.25, cover=('torso', 'armL', 'armR'))
         self.add('vest', 'vanguard', 'Vanguard plate', [pv])
         # ---- hands: tactical gloves (full)
         self.gauntlets(M, tex, full_glove=True, label='Tactical gloves', item='gloves', img='char_glove_black.jpg')
@@ -534,7 +427,7 @@ class Kit:
             return np.where(belt & plate, 2, np.where(plate, 1, 0))
         lg = self.build('legs', legs, (-.24, -.18, .1), (.24, .2, 1.03),
                         [tex('cloth_legs', 'char_undersuit_black.jpg', '#5a5e66', 0, .75), steel, bl.mat('trim_legs', '#2a2c30', .4, .5)],
-                        legs_mat, target=11000, uv=.12)
+                        legs_mat, target=11000, uv=.12, cover=('torso', 'legL', 'legR'))
         self.add('legs', 'armoured', 'Armoured trousers', [lg], hide=['pelvis', 'thigh', 'shin'])
         # ---- feet: combat boots
         self.boots(M, tex, 'combat', 'Combat boots', 'char_boot_black.jpg', .27, .007, .011)
@@ -575,7 +468,7 @@ class Kit:
             return np.maximum(F(P) - .0018, reg)
         col = '#2c2f36' if self.m else '#3a3440'
         o = self.build('briefs', briefs, (-.22, -.17, zc - .07), (.22, .19, top_z + .02),
-                       [bl.mat('cloth_underbottom', col, 0, .7)], target=3500, uv=.1)
+                       [bl.mat('cloth_underbottom', col, 0, .7)], target=3500, uv=.1, cover=('torso', 'legL', 'legR'))
         self.add('underbottom', 'base', 'Base layer', [o], extra={'locked': True, 'coveredBy': ['legs', 'dress']})
         if self.m:
             return
@@ -588,20 +481,23 @@ class Kit:
             straps = np.maximum.reduce([np.abs(ax - .078) - .011, 1.24 - zz, zz - (zsh + .06)])
             reg = np.maximum(self.dom(P, ['torso'], p), np.minimum(band, straps))
             return np.maximum(F(P) - .0018, reg)
-        o = self.build('bra', bra, (-.2, -.16, 1.1), (.2, .16, zsh + .08), [bl.mat('cloth_undertop', col, 0, .65)], target=3500, uv=.1)
+        o = self.build('bra', bra, (-.2, -.16, 1.1), (.2, .16, zsh + .08), [bl.mat('cloth_undertop', col, 0, .65)], target=3500, uv=.1, cover=('torso',))
         self.add('undertop', 'base', 'Base layer', [o], extra={'locked': True, 'coveredBy': ['top', 'dress']})
 
     # ====================================================================== run
     def run(self):
+        import hair
         self.circuit_texture()
+        hair.strand_texture()
         M = self.mats()
         self.underwear(M)
+        g = hair.Groom(self)
         if self.m:
-            self.hair_male(M); self.male_set(M)
+            hair.male_styles(g); self.male_set(M)
             defaults = {'underbottom': 'base', 'hair': 'sidepart', 'head': 'none', 'top': 'undersuit', 'vest': 'vanguard', 'outer': 'none', 'hands': 'gloves',
                         'legs': 'armoured', 'feet': 'combat'}
         else:
-            self.hair_female(M); self.female_set(M)
+            hair.female_styles(g); self.female_set(M)
             defaults = {'undertop': 'base', 'underbottom': 'base', 'hair': 'ponytail', 'head': 'none', 'top': 'ribbed', 'vest': 'harness', 'outer': 'circuit_coat',
                         'hands': 'gauntlets', 'legs': 'leggings', 'feet': 'tech'}
         return {'items': self.items, 'defaults': defaults}

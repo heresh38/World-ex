@@ -1,13 +1,23 @@
-"""Vehicles: two hover cars (drivable), the player's jumpship, an enemy dropship.
+"""Vehicles: modern road cars (cars.glb), the player's hover boards, the old skyway hover cars, the jumpship and the
+enemy dropship.
 
-Cars face Blender -Y (+Z in three.js). Paint material 'car_paint' uses a clear-coat layer
-(KHR_materials_clearcoat) so environment reflections read as lacquered paint.
-Empties: seat (driver hip), exit (where the player is placed on exit), thruster_* (glow anchors).
+cars.glb holds five everyday cars as top-level nodes CAR_hatch, CAR_sedan, CAR_suv, CAR_pickup, CAR_van. Each has
+  hi_<k>   full detail: lofted body with boolean wheel arches and door shut-lines, glass/pillars/roof from one greenhouse
+           loft, conformed lamps/grille/plates/badges (ray-projected onto the body), and a complete interior: dashboard
+           with gauge cluster and screen, steering wheel, seats with quilted inserts, door cards, console, gear lever,
+           pedals, headliner, visors, mirrors. Animated parts: steer_<k> (rotates about its local Z = column axis),
+           needleS_<k>/needleR_<k> (local Z = dial normal), wheel_<FL|FR|RL|RR>_<k> (steer about Y) with spin_* (spin about X).
+  lo_<k>   one mesh, 7 materials, for distance.
+  seat_<k>, eye_<k> empties (driver hip / eye) and a 'worldex' extra (JSON) with the dimensions the game's physics uses.
+Every texture comes from vehicle_textures.py; UVs are world-scale (box projection per face) so nothing stretches.
+Cars face Blender -Y (+Z in three.js). Paint material 'car_paint' has a clear-coat layer.
+Run: blender --background --python tools/blender/vehicles.py [-- cars|boards|legacy]
 """
-import bpy, math, os, sys
+import bpy, bmesh, math, os, sys, json
 sys.path.insert(0, os.path.dirname(__file__))
 import bl
-from mathutils import Vector
+from mathutils import Vector, Matrix
+from mathutils.bvhtree import BVHTree
 
 R90 = math.pi / 2
 
@@ -162,7 +172,17 @@ def jumpship(name='ship_jumper', hull='#e8e2d4', accent='#c79a45', glowc='#1ad8f
     bl.export(name + '.glb')
 
 
-car('car_sport', paint='#a3121f', style='sport')
-car('car_utility', L=5.0, W=1.05, H=.75, paint='#2a4f7a', style='utility')
-jumpship()
-jumpship('ship_dropship', hull='#3a3a40', accent='#5d1c1c', glowc='#ff3326', enemy=True)
+from vehicles_modern import build_cars, build_boards   # noqa: E402  (modern cars + boards live in their own module)
+
+if __name__ == '__main__':
+    what = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    what = [w for w in what if w] or ['cars', 'boards', 'legacy']
+    if 'cars' in what:
+        build_cars()
+    if 'boards' in what:
+        build_boards()
+    if 'legacy' in what:
+        car('car_sport', paint='#a3121f', style='sport')        # skyway hover cars (Earth decoration)
+        car('car_utility', L=5.0, W=1.05, H=.75, paint='#2a4f7a', style='utility')
+        jumpship()
+        jumpship('ship_dropship', hull='#3a3a40', accent='#5d1c1c', glowc='#ff3326', enemy=True)

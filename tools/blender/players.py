@@ -148,12 +148,14 @@ class Skinner:
         z = B.z
         self.neck_top = float(B.head_o[2] - .035 * B.head.s)
 
-    def __call__(self, V):
+    def __call__(self, V, cover=None, hands=True):
+        """Analytic weights at V. cover: the body parts a garment lies on (others never influence it, e.g. a skirt never
+        follows the hand hanging next to it); hands=False folds the hand bones into the forearms."""
         B = self.B
         V = np.asarray(V, F32)
         parts = self.F.parts(V)
         names = ['torso', 'armL', 'armR', 'legL', 'legR']
-        D = np.stack([parts[n] for n in names], 1)
+        D = np.stack([parts[n] if (cover is None or n in cover) else np.full(len(V), 1e3, F32) for n in names], 1)
         z = V[:, 2]; ax = np.abs(V[:, 0])
         # blend softness: wide at the shoulder / outer hip, nearly hard elsewhere
         tau_arm = 1e-4 + .01 * sdf.smoothstep(B.zsh - .16, B.zsh - .04, z)
@@ -180,7 +182,7 @@ class Skinner:
             s = chain_param(Q, [B.shoulder, B.elbow, B.wrist, B.tip])
             le = float(np.linalg.norm(B.elbow - B.shoulder)); lw = le + float(np.linalg.norm(B.wrist - B.elbow))
             aw = chain_weights(s, [0.0, le, lw], [(.07, .045), (.035, .035), (.015, .02)])
-            for bone, w in zip(['chest', 'upperarm.' + side, 'forearm.' + side, 'hand.' + side], aw):
+            for bone, w in zip(['chest', 'upperarm.' + side, 'forearm.' + side, 'hand.' + side if hands else 'forearm.' + side], aw):
                 add(bone, M[:, k] * w)
         for k, side, sx in ((3, 'L', 1), (4, 'R', -1)):
             Q = V * np.array([sx, 1, 1], F32)
@@ -579,6 +581,7 @@ class PlayerBuilder:
         self.wardrobe = wardrobe.Kit(self).run() if '--naked' not in ARGS else {'items': {}, 'defaults': {}}
         for o in regions:
             set_normals(o, self.F)
+        self.cover_masks()
         # rig
         b = type('B', (), {})(); b.J = self.B.joints(); b.s = self.B.H / 1.82
         arm = characters.make_armature(b, pole_angle=90)   # elbows down, little upper-arm twist (skinned shoulders)
@@ -595,6 +598,48 @@ class PlayerBuilder:
         arm['worldex'] = json.dumps(meta)
         self.arm = arm
         return arm
+
+    def cover_masks(self):
+        """Per body vertex bitmask of the garments lying over it (ray along the skin normal hits the garment within 3 cm).
+        Bit = wardrobe item's `cover` index. The game pushes masked skin a few mm inwards while those garments are worn,
+        so animated skin never pierces cloth. Eroded by two vertex rings so the step stays hidden under the garment."""
+        from mathutils.bvhtree import BVHTree
+        items = [(sl, it) for sl, d in self.wardrobe['items'].items() for it in d if sl != 'hair']
+        trees = []
+        for bit, (sl, it) in enumerate(items):
+            o = bpy.data.objects.get('C_%s__%s' % (sl, it))
+            if o is None or bit > 22:
+                continue
+            V = verts(o); n, vi = faces(o)
+            starts = np.concatenate([[0], np.cumsum(n)[:-1]])
+            polys = [vi[a:a + k].tolist() for a, k in zip(starts, n)]
+            trees.append((bit, BVHTree.FromPolygons(V.tolist(), polys), V.min(0) - .03, V.max(0) + .03))
+            self.wardrobe['items'][sl][it]['cover'] = bit
+        tot = 0
+        for o in bpy.context.scene.objects:
+            if o.type != 'MESH' or not o.name.startswith('B_') or o.name in ('B_eyes', 'B_brows', 'B_lashes'):
+                continue
+            V = verts(o); N = sdf.normals(self.F, V)
+            mask = np.zeros(len(V), np.int64)
+            ei = np.empty(len(o.data.edges) * 2, np.int32); o.data.edges.foreach_get('vertices', ei); E = ei.reshape(-1, 2)
+            for bit, tree, lo, hi in trees:
+                sel = np.nonzero(np.all((V > lo) & (V < hi), 1))[0]
+                if not len(sel):
+                    continue
+                hit = np.zeros(len(V), bool)
+                for i in sel:
+                    p = V[i] - N[i] * .0005
+                    if tree.ray_cast(p.tolist(), N[i].tolist(), .03)[0] is not None:
+                        hit[i] = True
+                for _ in range(2):          # erode: a vertex stays covered only if all its neighbours are
+                    bad = np.zeros(len(V), bool)
+                    bad[E[:, 0][~hit[E[:, 1]]]] = True; bad[E[:, 1][~hit[E[:, 0]]]] = True
+                    hit &= ~bad
+                mask[hit] |= 1 << bit
+            at = o.data.attributes.new('_covermask', 'FLOAT', 'POINT')
+            at.data.foreach_set('value', mask.astype(F32))
+            tot += int((mask > 0).sum())
+        log('cover masks:', len(trees), 'garments,', tot, 'covered skin verts')
 
     def split_body(self, body):
         """Body -> B_<region> objects by dominant bone."""
@@ -629,7 +674,7 @@ class PlayerBuilder:
 def export(sex):
     pb = PlayerBuilder(sex)
     pb.run()
-    bl.export('player_%s.glb' % sex, animations=True, export_vertex_color='ACTIVE', export_morph_normal=False)
+    bl.export('player_%s.glb' % sex, animations=True, export_vertex_color='ACTIVE', export_morph_normal=False, export_attributes=True)
 
 
 if __name__ == '__main__':

@@ -288,4 +288,5 @@ def main():
     bake(p, 'carbon', carbon_c, lambda g: g.brick(.0625, .0625, offset=.5, mortar=.004).outputs['Fac'], strength=.3)
 
 
-main()
+if __name__ == '__main__':   # ship_textures.py imports bake()/G from here
+    main()

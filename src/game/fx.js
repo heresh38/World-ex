@@ -214,6 +214,77 @@ export class FX {
     rg.m.position.copy(p); rg.r = r; rg.t = rg.max = .35; rg.m.visible = true;
   }
 
+  // ---------------------------------------------------------------- slime (horror weapons): gooey droplets, wet stains, acid fizz
+  // Droplets reuse the blood point pool; stains are their own instanced decals, oriented to the surface and faintly glowing.
+  initSlime() {
+    const SM = this.SM = 160;
+    const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
+    const tex = this.decals ? this.decals.material.map : null;
+    this.slimeDecals = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: .3, roughness: .12, metalness: 0,
+      emissive: 0x2a6a10, emissiveMap: tex, emissiveIntensity: .6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5 }), SM);
+    this.slimeDecals.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SM * 3), 3);
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < SM; i++) this.slimeDecals.setMatrixAt(i, zero);
+    this.slimeDecals.frustumCulled = false; this.slimeDecals.receiveShadow = true; this.scene.add(this.slimeDecals);
+    this.sCursor = 0; this.slimeLife = new Float32Array(SM); this.slimeInfo = [];
+  }
+
+  slimeDrops(p, dir = null, n = 8, speed = 2.5, color = 0x7cff3a, size = 1) {
+    if (!this.bPoints) return;
+    const c = new THREE.Color(color);
+    for (let k = 0; k < n; k++) {
+      const i = this.bCursor; this.bCursor = (this.bCursor + 1) % this.BM;
+      this.bPos[i * 3] = p.x; this.bPos[i * 3 + 1] = p.y; this.bPos[i * 3 + 2] = p.z;
+      let vx = (Math.random() - .5) * 2, vy = Math.random() * 1.2, vz = (Math.random() - .5) * 2;
+      if (dir) { vx = vx * .7 + dir.x * 1.4; vy = vy * .7 + dir.y * 1.4 + .3; vz = vz * .7 + dir.z * 1.4; }
+      const sp = speed * (.4 + Math.random() * .9);
+      this.bVel[i * 3] = vx * sp; this.bVel[i * 3 + 1] = vy * sp; this.bVel[i * 3 + 2] = vz * sp;
+      this.bLife[i] = .5 + Math.random() * .8; this.bSize[i] = (.02 + Math.random() * .045) * size;
+      const v = .7 + Math.random() * .5; this.bCol[i * 3] = c.r * v; this.bCol[i * 3 + 1] = c.g * v; this.bCol[i * 3 + 2] = c.b * v;
+    }
+  }
+
+  // a wet stain on any surface (normal = surface normal); fades away after ~25 s
+  slimeDecal(p, normal, s, color = 0x7cff3a) {
+    if (!this.slimeDecals) this.initSlime();
+    const i = this.sCursor; this.sCursor = (this.sCursor + 1) % this.SM;
+    const n = normal ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28));
+    const pos = p.clone().addScaledVector(n, .02 + Math.random() * .01);
+    this.slimeInfo[i] = { pos, q, s };
+    this.slimeDecals.setMatrixAt(i, new THREE.Matrix4().compose(pos, q, new THREE.Vector3(s, 1, s)));
+    this.slimeDecals.setColorAt(i, new THREE.Color(color).multiplyScalar(.8 + Math.random() * .3));
+    this.slimeDecals.instanceMatrix.needsUpdate = true; this.slimeDecals.instanceColor.needsUpdate = true;
+    this.slimeLife[i] = 25;
+  }
+
+  // a glob bursting: droplets, an acid glow and a stain on the surface it hit
+  slime(p, normal = null, size = 1, color = 0x7cff3a) {
+    this.slimeDrops(p, normal, Math.round(10 * size), 3 * Math.sqrt(size), color, size);
+    this.emit(p, Math.round(6 * size), 2.2, color, .45, 3, .07 * size, 1, normal, .8);
+    this.glow(p, .6 * size, color, .12);
+    if (normal) this.slimeDecal(p, normal, (.45 + Math.random() * .4) * size, color);
+  }
+
+  // acid eating at something: rising fizz
+  fizz(p, color = 0x9cff4a) { this.emit(p, 3, .8, color, .5, -1.5, .05, .8, null, 1); }
+
+  updateSlime(dt) {
+    if (!this.slimeDecals) return;
+    let dirty = false;
+    for (let i = 0; i < this.SM; i++) {
+      if (this.slimeLife[i] <= 0) continue;
+      this.slimeLife[i] -= dt;
+      const L = this.slimeLife[i];
+      if (L < 4) {
+        const I = this.slimeInfo[i], k = Math.max(0, L / 4) * I.s;
+        this.slimeDecals.setMatrixAt(i, new THREE.Matrix4().compose(I.pos, I.q, new THREE.Vector3(k, 1, k))); dirty = true;
+      }
+    }
+    if (dirty) this.slimeDecals.instanceMatrix.needsUpdate = true;
+  }
+
   // welding: bright bursts of sparks that fall and bounce, plus a flickering arc light
   weld(p, dir) {
     this.emit(p, 6 + (Math.random() * 6 | 0), 5.5, 0xfff0c0, .7, 9.8, .035, .9, dir, .2);

@@ -119,6 +119,24 @@ export class Audio {
       case 'hmg': this.nz(o, t, .1, 2600, 300, .7, 'lowpass', v); this.tone(o, t, .08, 110, 45, 'sine', v); break;
       case 'energy': this.tone(o, t, .35, 1400, 300, 'sawtooth', v * .14); this.tone(o, t, .3, 220, 70, 'sine', v); this.nz(o, t, .25, 6000, 1200, 2, 'bandpass', v * .5); break;
       case 'bolt': this.tone(o, t, .18, 900, 220, 'sawtooth', v * .16); this.nz(o, t, .12, 3000, 800, 2, 'bandpass', v * .5); break;
+      // kinetic firearms: sharp crack + body thump, mechanical tails (bolt throw, pump rack)
+      case 'rifle': this.nz(o, t, .16, 3400, 380, .7, 'lowpass', v * 1.05); this.tone(o, t, .12, 150, 48, 'triangle', v * .9); this.nz(o, t, .03, 7000, 3000, 1, 'highpass', v * .4); break;
+      case 'carbine': this.nz(o, t, .12, 4600, 500, .7, 'lowpass', v); this.tone(o, t, .09, 170, 60, 'triangle', v * .75); this.nz(o, t, .025, 8000, 4000, 1, 'highpass', v * .45); break;
+      case 'dmr': this.nz(o, t, .28, 3000, 220, .7, 'lowpass', v * 1.15); this.tone(o, t, .2, 120, 40, 'sine', v * 1.1); this.nz(o, t + .04, .5, 900, 90, .5, 'lowpass', v * .25, .04); break;
+      case 'ksmg': this.nz(o, t, .07, 4200, 700, .8, 'lowpass', v * .75); this.tone(o, t, .05, 240, 100, 'triangle', v * .5); break;
+      case 'boltaction': this.nz(o, t, .7, 3200, 100, .6, 'lowpass', v * 1.3); this.tone(o, t, .5, 110, 28, 'sine', v * 1.4);
+        this.nz(o, t + .06, 1.1, 800, 70, .5, 'lowpass', v * .35, .06);
+        this.nz(o, t + .55, .06, 2600, 1200, 3, 'bandpass', v * .3); this.nz(o, t + .75, .07, 3200, 1500, 3, 'bandpass', v * .35); break;
+      case 'pistol': this.nz(o, t, .13, 4000, 420, .8, 'lowpass', v * .9); this.tone(o, t, .09, 200, 70, 'triangle', v * .7); break;
+      case 'revolver': this.nz(o, t, .34, 2400, 180, .7, 'lowpass', v * 1.15); this.tone(o, t, .26, 105, 36, 'sine', v * 1.25); break;
+      case 'pump': this.nz(o, t, .4, 2000, 140, .6, 'lowpass', v * 1.2); this.tone(o, t, .3, 85, 33, 'sine', v * 1.3);
+        this.nz(o, t + .38, .09, 1800, 700, 2, 'bandpass', v * .35); this.nz(o, t + .52, .08, 2400, 900, 2, 'bandpass', v * .4); break;
+      // horror: wet hawks, retching gurgles, a heavy womb-pop
+      case 'spit': this.nz(o, t, .18, 900, 2400, 3, 'bandpass', v * .5, .01); this.tone(o, t, .12, 180, 420, 'sine', v * .35); this.nz(o, t + .04, .14, 600, 200, 4, 'bandpass', v * .3); break;
+      case 'bile': this.nz(o, t, .55, 300, 900, 5, 'bandpass', v * .7, .03); this.tone(o, t, .5, 70, 45, 'sawtooth', v * .12, .04);
+        for (let k = 0; k < 5; k++) this.tone(o, t + .05 + k * .07, .06, 260 + Math.random() * 300, 120, 'sine', v * .18); break;
+      case 'brood': this.tone(o, t, .25, 90, 220, 'sine', v * .9, .01); this.nz(o, t, .3, 400, 1600, 4, 'bandpass', v * .5, .01);
+        this.nz(o, t + .12, .5, 500, 150, 3, 'bandpass', v * .3, .05); break;
       default: this.nz(o, t, .12, 3000, 400, .7, 'lowpass', v);
     }
   }
@@ -129,6 +147,14 @@ export class Audio {
     this.nz(o, t, 1.4, 1800, 60, .5, 'lowpass', 1.3, .005);
     this.tone(o, t, .9, 70, 24, 'sine', 1.4);
     this.nz(o, t + .08, 1.8, 500, 40, .5, 'lowpass', .5, .1);
+  }
+
+  // a glob of slime bursting on something (horror weapons)
+  splat(pos, big = false) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.out(pos, 50);
+    this.nz(o, t, big ? .4 : .2, 1400, 250, 3, 'bandpass', big ? .6 : .35, .005);
+    this.tone(o, t, .12, big ? 160 : 260, 60, 'sine', big ? .4 : .2);
   }
 
   hit(crit, kill) {
