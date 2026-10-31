@@ -17,6 +17,13 @@ export class HUD {
       <div class="h-loc"></div>
       <div class="h-obj"></div>
       <div class="h-compass"><div class="strip"></div></div>
+      <div class="h-scope hidden"><svg viewBox="-100 -100 200 200"><circle r="99" fill="none" stroke="#000" stroke-width="2"/>
+        <line x1="-99" y1="0" x2="-6" y2="0" stroke="#000" stroke-width="1.1"/><line x1="6" y1="0" x2="99" y2="0" stroke="#000" stroke-width="1.1"/>
+        <line x1="0" y1="-99" x2="0" y2="-6" stroke="#000" stroke-width="1.1"/><line x1="0" y1="6" x2="0" y2="99" stroke="#000" stroke-width="1.1"/>
+        <line x1="-99" y1="0" x2="-55" y2="0" stroke="#000" stroke-width="3.5"/><line x1="55" y1="0" x2="99" y2="0" stroke="#000" stroke-width="3.5"/>
+        <line x1="0" y1="55" x2="0" y2="99" stroke="#000" stroke-width="3.5"/>
+        ${[-40, -30, -20, -10, 10, 20, 30, 40].map(v => `<circle cx="${v}" cy="0" r=".9" fill="#000"/><circle cx="0" cy="${v}" r=".9" fill="#000"/>`).join('')}
+        <circle r="1.4" fill="#ff3b2f"/></svg></div>
       <div class="h-cross"></div><div class="h-hit"></div>
       <div class="h-feed"></div>
       <div class="h-vitals"></div>
@@ -30,6 +37,7 @@ export class HUD {
       <canvas class="h-mini hidden" width="180" height="180"></canvas>`;
     const q = s => this.el.querySelector(s);
     this.dmgEl = q('.h-dmg'); this.locEl = q('.h-loc'); this.objEl = q('.h-obj'); this.compEl = q('.h-compass .strip');
+    this.scopeEl = q('.h-scope');
     this.crossEl = q('.h-cross'); this.hitEl = q('.h-hit'); this.feedEl = q('.h-feed'); this.vitEl = q('.h-vitals');
     this.weapEl = q('.h-weap'); this.carEl = q('.h-car'); this.banEl = q('.h-banner'); this.hintEl = q('.h-hint');
     this.numsEl = q('.h-nums'); this.fpsEl = q('.h-fps');
@@ -89,6 +97,11 @@ export class HUD {
 
   setObjectives(list) {
     this.objEl.innerHTML = (list || []).map(o => `<div class="o">${esc(o.text)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}${o.p !== undefined ? `<div class="pb"><i style="width:${Math.min(100, o.p * 100)}%"></i></div>` : ''}</div>`).join('');
+  }
+
+  scope(on) {
+    if (on === this.scopeOn) return;
+    this.scopeOn = on; this.scopeEl.classList.toggle('hidden', !on); this.crossEl.style.visibility = on ? 'hidden' : '';
   }
 
   crosshair(arch) {

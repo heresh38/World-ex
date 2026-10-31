@@ -45,6 +45,7 @@ export class Player {
   spawn(p, yaw = 0) {
     this.pos.copy(p); this.vel.set(0, 0, 0); this.yaw = yaw; this.camYaw = yaw + Math.PI; this.camPitch = -.12;
     this.mode = 'foot'; this.dead = false; this.health = this.maxHealth; this.shield = this.maxShield;
+    if (this.avatar.rag) { this.avatar.rag = null; this.avatar.play('IdleRelaxed', 0); this.g.weapons && this.g.weapons.refreshModel(); }
     this.avatar.root.position.copy(p); this.avatar.root.rotation.y = yaw;
     this.camCur = this.camDist;
     this.snapCamera = true;
@@ -131,8 +132,9 @@ export class Player {
 
   damage(n, from) {
     if (this.dead || this.g.godMode) return;
-    this.sinceHit = 0;
+    this.sinceHit = 0; if (from) this.lastHitFrom = from.clone ? from.clone() : null;
     const hadShield = this.shield > 0;
+    if (this.shield <= 0 && from) this.g.fx.blood(this.pos.clone().setY(this.pos.y + 1.2), this.pos.clone().sub(from).setY(.3).normalize(), .6);
     const s = Math.min(this.shield, n); this.shield -= s; n -= s;
     if (hadShield && this.shield <= 0) this.g.audio.shieldBreak();
     this.health -= n;
@@ -143,7 +145,9 @@ export class Player {
   }
 
   die() {
-    this.dead = true; this.avatar.play('Death', .15);
+    this.dead = true;
+    this.avatar.ragdoll(this.lastHitFrom ? this.pos.clone().sub(this.lastHitFrom).setY(1.5).normalize().multiplyScalar(4) : new THREE.Vector3(0, 1, 0), (x, z) => this.g.world.collision.ground(x, z));
+    this.g.fx.bloodPool(this.pos.clone(), 1);
     this.g.save.stats.deaths++;
     this.g.onPlayerDeath();
   }

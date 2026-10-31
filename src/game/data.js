@@ -70,6 +70,11 @@ export const PAINTS = ['#a3121f', '#2a4f7a', '#e8e2d4', '#1c1f24', '#c79a45', '#
 export const DESTINATIONS = [
   { id: 'earth', name: 'Earth', region: 'New Meridian City', kind: 'city', level: 1, power: 0, orb: 'radial-gradient(circle at 35% 35%,#7fc4ff,#1e5aa8 45%,#0a2142 70%)',
     desc: 'Humanity’s last great city. Restock, trade with the Quartermaster at the spaceport and clear the incursion in the outer districts.' },
+  { id: 'vanthos', name: 'Vanthos', region: 'The Fallen Metropolis', kind: 'metropolis', level: 6, power: 40, seed: 4401,
+    orb: 'radial-gradient(circle at 35% 35%,#d9b8ff,#6a3a8c 45%,#1a0c26 72%)',
+    desc: 'A gigantic city built around a central reactor, now consumed by an alien infestation. Eight districts, the Spire at its heart, and a metro full of secrets beneath. The closer you get to the Spire, the worse it gets.' },
+  { id: 'vanthos_metro', hidden: true, name: 'Vanthos Metro', region: 'Underground', kind: 'metro', level: 8,
+    desc: 'Flooded platforms, collapsed tunnels and whatever nests in the dark under the city.' },
   { id: 'ares', name: 'Ares Verge', region: 'Red Dust Expanse', kind: 'planet', level: 4, power: 20, seed: 1301,
     orb: 'radial-gradient(circle at 35% 35%,#ffb27a,#b2481e 45%,#3d1308 72%)',
     desc: 'Wind-carved mesas and buried colony ruins. Raider cells dig in around stolen generators.',

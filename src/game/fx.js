@@ -42,9 +42,104 @@ export class FX {
     this.sprites = [];
     this.beams = [];
     this.rings = [];
+    this.initBlood(scene);
+  }
+
+  // ---------------------------------------------------------------- blood: droplets, splatter and pools
+  initBlood(scene) {
+    const BM = this.BM = 900;
+    const g = new THREE.BufferGeometry();
+    this.bPos = new Float32Array(BM * 3); this.bVel = new Float32Array(BM * 3); this.bLife = new Float32Array(BM); this.bCol = new Float32Array(BM * 3); this.bSize = new Float32Array(BM);
+    g.setAttribute('position', new THREE.BufferAttribute(this.bPos, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('color', new THREE.BufferAttribute(this.bCol, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('size', new THREE.BufferAttribute(this.bSize, 1).setUsage(THREE.DynamicDrawUsage));
+    const m = new THREE.ShaderMaterial({
+      uniforms: { scale: { value: innerHeight / 2 } },
+      vertexShader: `attribute float size;attribute vec3 color;varying vec3 vC;uniform float scale;
+        void main(){vC=color;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=size*scale/max(.1,-mv.z);gl_Position=projectionMatrix*mv;}`,
+      fragmentShader: `varying vec3 vC;void main(){vec2 p=gl_PointCoord-.5;float d=dot(p,p)*4.;if(d>1.)discard;gl_FragColor=vec4(vC*(1.1-d*.4),1.);}`,
+      transparent: false, depthWrite: true,
+    });
+    this.bPoints = new THREE.Points(g, m); this.bPoints.frustumCulled = false; scene.add(this.bPoints);
+    this.bCursor = 0;
+    // splat texture: an irregular stain with drips
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    x.fillStyle = '#fff';
+    for (let k = 0; k < 14; k++) { const a = Math.random() * 6.28, r = Math.random() * 30; x.beginPath(); x.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 10 + Math.random() * 18, 0, 7); x.fill(); }
+    for (let k = 0; k < 18; k++) { const a = Math.random() * 6.28, r = 40 + Math.random() * 20; x.beginPath(); x.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 1.5 + Math.random() * 4, 0, 7); x.fill(); }
+    const tex = new THREE.CanvasTexture(c);
+    const DM = this.DM = 260;
+    const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
+    this.decals = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: .3, roughness: .25, metalness: .1,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }), DM);
+    this.decals.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(DM * 3), 3);
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < DM; i++) this.decals.setMatrixAt(i, zero);
+    this.decals.frustumCulled = false; this.decals.receiveShadow = true; scene.add(this.decals);
+    this.dCursor = 0; this.growing = [];
+  }
+
+  blood(p, dir = null, amount = 1, color = 0x6e0a0a) {
+    if (!this.bPoints) return;
+    const c = new THREE.Color(color), n = Math.round(14 * amount);
+    for (let k = 0; k < n; k++) {
+      const i = this.bCursor; this.bCursor = (this.bCursor + 1) % this.BM;
+      this.bPos[i * 3] = p.x; this.bPos[i * 3 + 1] = p.y; this.bPos[i * 3 + 2] = p.z;
+      const sp = 1.5 + Math.random() * 3.5 * amount;
+      let vx = (Math.random() - .5) * 2, vy = Math.random() * 1.2, vz = (Math.random() - .5) * 2;
+      if (dir) { vx = vx * .6 + dir.x * 1.6; vy = vy * .6 + dir.y + .4; vz = vz * .6 + dir.z * 1.6; }
+      this.bVel[i * 3] = vx * sp; this.bVel[i * 3 + 1] = vy * sp; this.bVel[i * 3 + 2] = vz * sp;
+      this.bLife[i] = .6 + Math.random() * .8; this.bSize[i] = .025 + Math.random() * .05;
+      const v = .55 + Math.random() * .5; this.bCol[i * 3] = c.r * v; this.bCol[i * 3 + 1] = c.g * v; this.bCol[i * 3 + 2] = c.b * v;
+    }
+    // splatter on the ground in the direction of the spray
+    if (this.groundFn && Math.random() < .55 * amount) {
+      const d = dir || new THREE.Vector3();
+      const x = p.x + d.x * (.6 + Math.random() * 1.4) + (Math.random() - .5), z = p.z + d.z * (.6 + Math.random() * 1.4) + (Math.random() - .5);
+      this.decal(x, this.groundFn(x, z), z, .5 + Math.random() * .7 * amount, color);
+    }
+  }
+
+  bloodPool(p, size = 1, color = 0x5a0808) {
+    const y = this.groundFn ? this.groundFn(p.x, p.z) : p.y;
+    const i = this.decal(p.x, y, p.z, .1, color);
+    this.growing.push({ i, x: p.x, y, z: p.z, t: 0, size: 1.4 * size + Math.random() * .6, rot: Math.random() * 6 });
+  }
+
+  decal(x, y, z, s, color) {
+    const i = this.dCursor; this.dCursor = (this.dCursor + 1) % this.DM;
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y + .03, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6), new THREE.Vector3(s, 1, s));
+    this.decals.setMatrixAt(i, m); this.decals.instanceMatrix.needsUpdate = true;
+    const c = new THREE.Color(color).multiplyScalar(.75 + Math.random() * .3);
+    this.decals.setColorAt(i, c); this.decals.instanceColor.needsUpdate = true;
+    return i;
+  }
+
+  updateBlood(dt) {
+    if (!this.bPoints) return;
+    let any = false;
+    for (let i = 0; i < this.BM; i++) {
+      if (this.bLife[i] <= 0) continue;
+      any = true; this.bLife[i] -= dt;
+      this.bVel[i * 3 + 1] -= 9.8 * dt;
+      this.bPos[i * 3] += this.bVel[i * 3] * dt; this.bPos[i * 3 + 1] += this.bVel[i * 3 + 1] * dt; this.bPos[i * 3 + 2] += this.bVel[i * 3 + 2] * dt;
+      if (this.groundFn) { const gy = this.groundFn(this.bPos[i * 3], this.bPos[i * 3 + 2]); if (this.bPos[i * 3 + 1] < gy + .02) { this.bLife[i] = 0; } }
+      if (this.bLife[i] <= 0) this.bSize[i] = 0;
+    }
+    const g = this.bPoints.geometry;
+    g.attributes.position.needsUpdate = true; g.attributes.size.needsUpdate = true; g.attributes.color.needsUpdate = true;
+    this.bPoints.visible = any; this.bPoints.material.uniforms.scale.value = innerHeight / 2;
+    for (let k = this.growing.length - 1; k >= 0; k--) {
+      const G = this.growing[k]; G.t += dt;
+      const s = G.size * Math.min(1, .15 + G.t / 4);
+      this.decals.setMatrixAt(G.i, new THREE.Matrix4().compose(new THREE.Vector3(G.x, G.y + .025, G.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), G.rot), new THREE.Vector3(s, 1, s)));
+      this.decals.instanceMatrix.needsUpdate = true;
+      if (G.t > 4) this.growing.splice(k, 1);
+    }
   }
 
   dispose() {
+    if (this.bPoints) { this.bPoints.removeFromParent(); this.decals.removeFromParent(); }
     this.points.removeFromParent(); this.lights.forEach(o => o.l.removeFromParent());
     this.tracers.forEach(t => t.m.removeFromParent()); this.sprites.forEach(s => s.s.removeFromParent());
     this.rings.forEach(r => r.m.removeFromParent());
@@ -126,6 +221,8 @@ export class FX {
   }
 
   update(dt, floorY = null) {
+    if (typeof floorY === 'function') this.groundFn = floorY;
+    this.updateBlood(dt);
     let any = 0;
     for (let i = 0; i < MAX; i++) {
       if (this.life[i] <= 0) { if (this.size[i]) { this.size[i] = 0; } continue; }

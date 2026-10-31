@@ -48,6 +48,8 @@ export class Weapons {
     const m = mesh.material, rc = RARITY[w.rarity].color;
     if (m.name === 'gun_glow') { m.color.set(rc); m.emissive.set(rc); m.emissiveIntensity = 1.8; }
     if (m.name === 'gun_body') { const sh = SHADERS.find(s => s.id === w.shader) || SHADERS[0]; m.color.set(sh.body); }
+    // optics are glass: see straight through red dots and scope lenses
+    if (m.name === 'gun_lens') { m.transparent = true; m.opacity = .14; m.depthWrite = false; m.emissiveIntensity = .2; m.color.set(0x9fd8ff); }
   }
 
   select(i) {

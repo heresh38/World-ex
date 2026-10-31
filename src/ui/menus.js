@@ -119,12 +119,12 @@ export class Menus {
   st_captain() {
     const g = this.g, pw = g.power();
     const cur = g.save.lastDest || 'earth';
-    const cards = DESTINATIONS.map(d => {
+    const cards = DESTINATIONS.filter(d => !d.hidden).map(d => {
       const visited = g.save.stats.visited.includes(d.id);
       const warn = pw < d.power ? `<span style="color:var(--red)"> · recommended power ${d.power}</span>` : '';
       return `<div class="card ${this.sel === d.id ? 'on' : ''}" data-act="dest" data-v="${d.id}">
         <div class="orb" style="background:${d.orb}"></div>
-        <div class="info"><div class="ty">${esc(d.kind === 'city' ? 'Home world · city' : 'Frontier · endless')}${d.id === cur ? ' · in orbit' : ''}</div>
+        <div class="info"><div class="ty">${esc(d.kind === 'city' ? 'Home world · city' : d.kind === 'metropolis' ? 'Open world · fallen city' : 'Frontier · endless')}${d.id === cur ? ' · in orbit' : ''}</div>
         <div class="nm" style="font-size:22px">${esc(d.name)}</div><div class="lvl">${esc(d.region)} · Level ${d.level}${warn}</div></div>
         <div style="font-size:11px;letter-spacing:.2em;color:var(--dim)">${visited ? 'CHARTED' : 'UNCHARTED'}</div></div>`;
     }).join('');
@@ -236,7 +236,7 @@ export class Menus {
       ${cell(s.kills, 'Hostiles defeated')}${cell(s.precision, 'Precision kills')}${cell(s.deaths, 'Times fallen')}
       ${cell(acc + '%', 'Accuracy')}${cell(s.generators, 'Generators destroyed')}${cell(s.caches, 'Caches opened')}
       ${cell(s.brutes, 'Brutes defeated')}${cell(s.drones, 'Drones downed')}${cell((s.distance / 1000).toFixed(1) + ' km', 'Walked')}
-      ${cell((s.carDistance / 1000).toFixed(1) + ' km', 'Driven')}${cell(Math.floor(t / 60) + 'h ' + (t % 60) + 'm', 'Time in service')}${cell(s.visited.length + ' / ' + DESTINATIONS.length, 'Worlds charted')}</div>
+      ${cell((s.carDistance / 1000).toFixed(1) + ' km', 'Driven')}${cell(Math.floor(t / 60) + 'h ' + (t % 60) + 'm', 'Time in service')}${cell(s.visited.filter(v => v !== 'vanthos_metro').length + ' / ' + DESTINATIONS.filter(d => !d.hidden).length, 'Worlds charted')}</div>
       <div class="bar xp" style="margin-top:18px;height:4px;transform:none"><i style="width:${g.save.xp / xpForLevel(g.save.level) * 100}%"></i></div>
       <div style="font-size:12px;letter-spacing:.2em;color:var(--dim);margin-top:6px">${g.save.xp} / ${xpForLevel(g.save.level)} XP TO LEVEL ${g.save.level + 1}</div>`;
     return this.frame('Service record', 'Statistics', 'Everything you have done since you took command.', body);

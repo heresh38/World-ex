@@ -72,11 +72,11 @@ export class Combat {
   }
 
   // ---------------------------------------------------------------- enemy bolts
-  bolt(from, dir, speed, dmg, color = 0xff3326) {
+  bolt(from, dir, speed, dmg, color = 0xff3326, victim = null) {
     const m = new THREE.Mesh(this.boltGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(5), toneMapped: false }));
     m.scale.set(1.4, 1.4, 1.6); m.position.copy(from); m.lookAt(_v.copy(from).add(dir));
     this.g.scene.add(m);
-    this.bolts.push({ m, dir: dir.clone(), speed, dmg, life: 3.5 });
+    this.bolts.push({ m, dir: dir.clone(), speed, dmg, life: 3.5, victim });
   }
 
   updateBolts(dt) {
@@ -85,6 +85,16 @@ export class Combat {
       const b = this.bolts[i]; b.life -= dt;
       const step = b.speed * dt;
       let done = b.life <= 0;
+      // faction infighting: a bolt aimed at a rival enemy only hits that enemy
+      if (!done && b.victim) {
+        const v = b.victim, sc = v.T.scale || 1;
+        const t = v.alive ? rayCyl(b.m.position, b.dir, v.pos.x, v.pos.z, v.pos.y, v.pos.y + 1.7 * sc, .5 * sc) : -1;
+        if (t >= 0 && t <= step) { v.takeDamage(b.dmg, false, b.m.position, b.dir, 'rival'); this.g.fx.impact(b.m.position, b.dir.clone().negate(), 'enemy'); done = true; }
+        if (!done && world.raycast(b.m.position, b.dir, step)) done = true;
+        if (!done) b.m.position.addScaledVector(b.dir, step);
+        if (done || b.life <= 0) { b.m.removeFromParent(); b.m.material.dispose(); this.bolts.splice(i, 1); }
+        continue;
+      }
       // player capsule hit test (closest approach of the segment to the body axis)
       if (!done && !p.dead && p.mode !== 'car') {
         const t = rayCyl(b.m.position, b.dir, p.pos.x, p.pos.z, p.pos.y, p.pos.y + 1.85, .45);

@@ -1,8 +1,9 @@
 // Skinned character wrapper shared by the player, enemies and NPCs:
 // clip cross-fading, gun attachment to the right hand, aim pitch on the spine, armour recolouring.
 import * as THREE from 'three';
+import { Ragdoll } from './ragdoll.js';
 
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q2b = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3();
 
 export class Avatar {
   constructor(assets, model) {
@@ -99,7 +100,7 @@ export class Avatar {
       for (const [id, o] of Object.entries(list)) o.visible = out[slot] === id && !(slot === 'hair' && hideHair) && !covered;
     }
     for (const [r, o] of Object.entries(this.regions)) o.visible = !hide.has(r);
-    this.wear = out;
+    this.wear = out; this.wearKey = JSON.stringify(out);
     return out;
   }
 
@@ -195,15 +196,33 @@ export class Avatar {
     if (prev) this.play(prev, 0);
   }
 
+  // physical death: the animation hands over to a verlet ragdoll pushed by the killing blow
+  ragdoll(impulse, ground) {
+    if (this.rag) return;
+    this.attachGun(null);
+    this.mixer.stopAllAction(); this.current = null;
+    const r = new Ragdoll(this, impulse, ground);
+    if (r.ok) this.rag = r; else this.play('Death', .1);
+  }
+
   update(dt) {
+    if (this.rag) { this.rag.step(Math.min(dt, .05)); return; }
     this.mixer.update(dt);
-    // additive aim: spread pitch across spine/chest, a little yaw
+    // additive aim: pitch the spine and chest about the character's own right axis (converted into each bone's
+    // parent space), so the torso bends forward/back instead of twisting around its centre
     if (this.spine && (this.aimPitch || this.aimYawOffset)) {
-      _e.set(-this.aimPitch * .45, this.aimYawOffset * .5, 0, 'XYZ');
-      // bone local X = character right axis after export -> pitch about X
-      _q.setFromEuler(_e); this.spine.quaternion.multiply(_q);
-      _e.set(-this.aimPitch * .55, this.aimYawOffset * .5, 0, 'XYZ');
-      _q.setFromEuler(_e); this.chest.quaternion.multiply(_q);
+      this.root.updateMatrixWorld(true);
+      this.root.getWorldQuaternion(_q2);
+      const right = _v.set(1, 0, 0).applyQuaternion(_q2), up = new THREE.Vector3(0, 1, 0);
+      for (const [bone, k] of [[this.spine, .45], [this.chest, .55]]) {
+        if (!bone || !bone.parent) continue;
+        bone.parent.getWorldQuaternion(_q);
+        const inv = _q.invert();
+        const ax = right.clone().applyQuaternion(inv).normalize(), ay = up.clone().applyQuaternion(inv).normalize();
+        bone.quaternion.premultiply(_q2b.setFromAxisAngle(ax, -this.aimPitch * k));
+        if (this.aimYawOffset) bone.quaternion.premultiply(_q2b.setFromAxisAngle(ay, this.aimYawOffset * .5));
+        bone.updateMatrixWorld(true);
+      }
     }
   }
 

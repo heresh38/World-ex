@@ -11,6 +11,12 @@ const TYPES = {
   drone: { hp: 70, speed: 7, range: 30, dmg: 5, burst: 2, gap: [1.0, 1.8], xp: 35, name: 'Seeker Drone', loot: .15 },
   turret: { hp: 260, range: 40, dmg: 6, burst: 4, gap: [1.4, 2.0], xp: 60, name: 'Sentry Turret', loot: .3 },
   generator: { hp: 900, xp: 200, name: 'Raider Generator', loot: 1 },
+  // VANTHOS alien species (alien_*.glb): spit glowing bolts at range, claw up close
+  stalker: { blood: 0x5a2a8a, model: 'alien_stalker', gun: null, hp: 140, speed: 5.4, range: 18, dmg: 7, burst: 2, gap: [1.4, 2.4], xp: 50, scale: 1.05, name: 'Stalker', loot: .18, faction: 'alien', pref: 3, melee: [18, 2.2, .9], bolt: 0xb46cff },
+  hulk: { blood: 0x8a4a1a, model: 'alien_hulk', gun: null, hp: 950, speed: 3.1, range: 22, dmg: 9, pellets: 4, burst: 1, gap: [2, 3], xp: 220, scale: 1.5, name: 'Carapace Hulk', loot: .6, faction: 'alien', pref: 2, melee: [45, 3.2, 1.6], bolt: 0xff7a2a },
+  mutant: { blood: 0x4a8a2a, model: 'alien_mutant', gun: null, hp: 260, speed: 4, range: 30, dmg: 8, burst: 3, gap: [1.2, 2], xp: 90, scale: 1, name: 'Lab Mutant', loot: .3, faction: 'alien', pref: 12, bolt: 0x7dffb0 },
+  swimmer: { blood: 0x1a6a7a, model: 'alien_swimmer', gun: null, hp: 160, speed: 5.6, range: 20, dmg: 7, burst: 2, gap: [1.3, 2.2], xp: 55, scale: .98, name: 'Drowned Swimmer', loot: .2, faction: 'alien', pref: 4, melee: [16, 2.2, .9], bolt: 0x3ae6ff },
+  elite: { blood: 0x6a1a5a, model: 'alien_elite', gun: null, hp: 1500, speed: 4.3, range: 34, dmg: 12, burst: 4, gap: [1.4, 2.2], xp: 420, scale: 1.32, name: 'Spire Elite', loot: 1, faction: 'alien', pref: 6, melee: [55, 3.2, 1.3], bolt: 0xff3fb4 },
 };
 
 export class Enemy {
@@ -23,10 +29,11 @@ export class Enemy {
     this.state = 'idle'; this.alertT = 0; this.fireT = 1 + Math.random() * 2; this.burstLeft = 0; this.burstT = 0;
     this.thinkT = Math.random() * .4; this.seen = false; this.strafe = Math.random() < .5 ? 1 : -1; this.strafeT = 0;
     this.deadT = 0; this.hitT = 9; this.onDeath = opts.onDeath || null; this.group = opts.group || null;
-    this.radius = type === 'brute' ? .7 : type === 'generator' ? 1.3 : type === 'turret' ? .9 : .5;
+    this.radius = type === 'brute' ? .7 : type === 'generator' ? 1.3 : type === 'turret' ? .9 : .5 * (this.T.scale || 1);
+    this.faction = this.T.faction || 'raider';
     if (this.T.model) {
       this.av = new Avatar(game.assets, this.T.model);
-      this.av.attachGun(this.T.gun, m => { if (m.material.name === 'gun_glow') { m.material.color.set('#ff3326'); m.material.emissive.set('#ff3326'); } if (m.material.name === 'gun_body') m.material.color.set('#2c2f36'); });
+      if (this.T.gun) this.av.attachGun(this.T.gun, m => { if (m.material.name === 'gun_glow') { m.material.color.set('#ff3326'); m.material.emissive.set('#ff3326'); } if (m.material.name === 'gun_body') m.material.color.set('#2c2f36'); });
       this.av.play('Idle', 0);
       this.obj = this.av.root;
     } else {
@@ -55,7 +62,7 @@ export class Enemy {
   center(out) {
     out.copy(this.pos);
     if (this.type === 'drone') return out;
-    out.y += this.type === 'generator' ? 1.4 : this.type === 'turret' ? 1.2 : (this.type === 'brute' ? 1.2 : 1.0);
+    out.y += this.type === 'generator' ? 1.4 : this.type === 'turret' ? 1.2 : (this.type === 'brute' ? 1.2 : 1.0 * (this.T.scale || 1));
     return out;
   }
 
@@ -88,6 +95,9 @@ export class Enemy {
   takeDamage(dmg, crit, point, dir, side) {
     if (!this.alive) return { killed: false };
     this.hp -= dmg; this.hitT = 0;
+    this.byRival = side === 'rival';
+    if (dir) this.lastHit = { dir: dir.clone(), dmg };
+    if (this.av && point) this.g.fx.blood(point, dir ? dir.clone().negate() : null, crit ? 1.4 : .8, this.T.blood);
     if (this.state === 'idle') this.alert();
     if (this.hp <= 0) { this.die(crit); return { killed: true }; }
     return { killed: false };
@@ -106,13 +116,19 @@ export class Enemy {
     const g = this.g;
     g.combat.targets.delete(this);
     if (this.box) { g.world.collision.remove(this.box); this.box = null; }
-    if (this.av) this.av.play('Death', .1);
+    if (this.av) {
+      const h = this.lastHit, imp = h ? h.dir.clone().setY(Math.max(.15, h.dir.y)).multiplyScalar(Math.min(9, 2.5 + h.dmg * .05)) : new THREE.Vector3(0, 1, 0);
+      if (crit) imp.multiplyScalar(1.3);
+      this.av.ragdoll(imp, (x, z) => this.g.world.collision.ground(x, z));
+      this.g.fx.blood(this.center(_v).clone(), null, 2.2, this.T.blood);
+      this.g.fx.bloodPool(this.pos.clone(), (this.T.scale || 1) * 1.1, this.T.blood);
+    }
     if (this.type === 'drone' || this.type === 'turret' || this.type === 'generator') {
       const p = this.center(_v).clone();
       g.fx.explosion(p, this.type === 'generator' ? 8 : 3); g.audio.explosion(p);
       if (this.type === 'generator') g.combat.splash(p, 7, 60, 'world');
     }
-    g.onEnemyKilled(this, crit);
+    if (!this.byRival) g.onEnemyKilled(this, crit);          // rival-faction kills give the player nothing
     if (this.police && g.world.wanted) g.world.wanted.onPoliceKilled();
     g.combat.drop(this.center(_v).clone(), this.type, this.level, this.T.loot);
     this.onDeath && this.onDeath(this);
@@ -122,6 +138,26 @@ export class Enemy {
     _a.copy(this.pos); _a.y += this.type === 'drone' ? 0 : 1.5;
     _h.copy(target); _h.y += 1.4;
     return this.g.world.collision.lineOfSight(_a, _h);
+  }
+
+  // Nearest hostile: the player, or (where factions fight) the closest enemy of another faction.
+  pickTarget() {
+    const g = this.g, p = g.player;
+    if (!g.world.factionWar) return p;
+    if (this.rivalT > 0 && this.rival && this.rival.alive) return this.rivalProxy;
+    let best = null, bd = 30 * 30;
+    for (const e of g.enemies.list) {
+      if (!e.alive || e.faction === this.faction || e.type === 'generator') continue;
+      const d = (e.pos.x - this.pos.x) ** 2 + (e.pos.z - this.pos.z) ** 2;
+      if (d < bd) { bd = d; best = e; }
+    }
+    const pd = (p.pos.x - this.pos.x) ** 2 + (p.pos.z - this.pos.z) ** 2;
+    if (!best || pd < bd * 1.4) { this.rival = null; return p; }
+    this.rival = best; this.rivalT = 2;
+    this.rivalProxy = { pos: best.pos, vel: best.vel, aiming: false, dead: false, rival: best,
+      damage: d => best.takeDamage(d, false, null, null, 'rival') };
+    if (this.state === 'idle') this.state = 'combat';
+    return this.rivalProxy;
   }
 
   shoot(p) {
@@ -138,14 +174,17 @@ export class Enemy {
     const n = T.pellets || 1;
     for (let k = 0; k < n; k++) {
       _d.copy(aim).add(_v.set((Math.random() - .5) * err, (Math.random() - .5) * err * .6, (Math.random() - .5) * err)).sub(from).normalize();
-      this.g.combat.bolt(from, _d, this.type === 'brute' ? 34 : 40, T.dmg * this.dmgMul * this.g.dmgScale(), this.type === 'brute' ? 0xff7a1a : 0xff3326);
+      this.g.combat.bolt(from, _d, this.type === 'brute' ? 34 : 40, T.dmg * this.dmgMul * (p.rival ? 1 : this.g.dmgScale()), T.bolt || (this.type === 'brute' ? 0xff7a1a : 0xff3326), p.rival);
     }
     this.g.audio.shot('bolt', from, true);
     this.g.fx.flash(from, 0xff4020, 15, .05, 6);
   }
 
   update(dt) {
-    const g = this.g, p = g.player;
+    const g = this.g;
+    this.rivalT = (this.rivalT || 0) - dt;
+    if (this.alive && (this.thinkT <= dt || !this.tgt)) this.tgt = this.pickTarget();
+    const p = this.tgt && (!this.tgt.rival || this.tgt.rival.alive) ? this.tgt : g.player;
     if (!this.alive) {
       this.deadT += dt;
       if (this.av) this.av.update(dt);
@@ -194,13 +233,17 @@ export class Enemy {
     if (this.state === 'combat') {
       facePlayer();
       const fx = dx / (dist || 1), fz = dz / (dist || 1);
-      const charge = this.type === 'brute' && this.hp < this.maxHp * .5;
-      const pref = this.type === 'brute' ? (charge ? 1.5 : 7) : 16;
+      const charge = (this.type === 'brute' && this.hp < this.maxHp * .5) || (!!T.melee && dist < 26);
+      const pref = T.pref !== undefined ? T.pref : this.type === 'brute' ? (charge ? 1.5 : 7) : 16;
       this.strafeT -= dt; if (this.strafeT <= 0) { this.strafeT = 1.5 + Math.random() * 2; this.strafe = -this.strafe; }
       if (dist > pref + 4 || !this.seen) { mx = fx; mz = fz; run = dist > pref + 12 || charge; }
       else if (dist < pref - 4) { mx = -fx * .7; mz = -fz * .7; }
       mx += -fz * this.strafe * .6; mz += fx * this.strafe * .6;
-      if (charge) { speed = 7.5; run = true; if (dist < 2.2) { this.meleeT = (this.meleeT || 0) - dt; if (this.meleeT <= 0) { this.meleeT = 1.2; p.damage(38 * this.dmgMul * g.dmgScale(), this.pos); g.fx.emit(_v.copy(p.pos).setY(p.pos.y + 1.2), 12, 5, 0xff7a1a, .3, 5); } } }
+      if (charge) {
+        const [mdmg, reach, cd] = T.melee || [38, 2.2, 1.2];
+        speed = T.melee ? T.speed * 1.5 : 7.5; run = true;
+        if (dist < reach) { this.meleeT = (this.meleeT || 0) - dt; if (this.meleeT <= 0) { this.meleeT = cd; p.damage(mdmg * this.dmgMul * (p.rival ? 1 : g.dmgScale()), this.pos); g.fx.emit(_v.copy(p.pos).setY(p.pos.y + 1.2), 12, 5, T.bolt || 0xff7a1a, .3, 5); } }
+      }
       else if (run) speed = T.speed * 1.8;
       if (this.seen) this.fireLogic(dt, p, dist);
     } else {

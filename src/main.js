@@ -17,6 +17,8 @@ import { Menus } from './ui/menus.js';
 import { ShipWorld } from './worlds/ship.js';
 import { EarthWorld } from './worlds/earth.js';
 import { PlanetWorld } from './worlds/planet.js';
+import { VanthosWorld } from './worlds/vanthos/world.js';
+import { MetroWorld } from './worlds/vanthos/metro.js';
 import { spaceSky, orbitPlanet } from './worlds/sky.js';
 import { DESTINATIONS, ARCHETYPES } from './game/data.js';
 import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS } from './game/state.js';
@@ -27,6 +29,7 @@ const MODELS = [
   ['car_sport', 'car_sport.glb', 2], ['car_utility', 'car_utility.glb', 2], ['ship_jumper', 'ship_jumper.glb', 2],
   ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
   ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
+  ['vanthos', 'vanthos.glb', 8], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]),
 ];
 const TEXTURES = ['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss', 'facade_e', 'ribbon_e'];
@@ -191,6 +194,8 @@ class Game {
     let w;
     if (id === 'ship') w = new ShipWorld(this);
     else if (id === 'earth') w = new EarthWorld(this);
+    else if (id === 'vanthos') w = new VanthosWorld(this, DESTINATIONS.find(d => d.id === id));
+    else if (id === 'vanthos_metro') w = new MetroWorld(this, this.metroEntry);
     else w = new PlanetWorld(this, DESTINATIONS.find(d => d.id === id));
     this.world = w; this.scene = w.scene;
     this.fx = new FX(w.scene);
@@ -205,7 +210,7 @@ class Game {
     this.hud.setMode(w.combat); this.hud.setLocation(w.region, w.name);
     this.hud.show(true); this.hud.dirty = true;
     if (id !== 'ship') {
-      this.save.lastDest = id;
+      if (id !== 'vanthos_metro') this.save.lastDest = id;
       if (!this.save.stats.visited.includes(id)) this.save.stats.visited.push(id);
     }
     this.audio.ambience(id === 'ship' ? 'ship' : id === 'earth' ? 'city' : 'wind');
@@ -220,6 +225,8 @@ class Game {
 
   // ---------------------------------------------------------------- first / third person
   // First person is the default. The third-person view stays available on T (and in the settings).
+  carFirstPerson() { const p = this.player; return !!p && this.save.settings.view !== 'third' && p.mode === 'car' && !this.stationId; }
+
   firstPerson() {
     const p = this.player;
     return !!p && this.save.settings.view !== 'third' && p.mode === 'foot' && !p.dead && !this.stationId;
@@ -236,9 +243,10 @@ class Game {
   // In first person the body moves to layer 1: the camera skips it but it still casts a shadow.
   setAvatarLayer() {
     const p = this.player; if (!p || !p.avatar) return;
-    const fp = this.firstPerson();
-    if (fp === this._fpLayer && p.avatar === this._fpAvatar) return;
-    this._fpLayer = fp; this._fpAvatar = p.avatar;
+    const fp = this.firstPerson() || this.carFirstPerson();
+    const key = (p.avatar.gunHolder ? p.avatar.gunHolder.uuid : '-') + (p.avatar.wearKey || '');
+    if (fp === this._fpLayer && p.avatar === this._fpAvatar && key === this._fpKey) return;
+    this._fpLayer = fp; this._fpAvatar = p.avatar; this._fpKey = key;
     p.avatar.root.traverse(o => { if (o.isMesh) { if (fp) o.layers.set(1); else o.layers.set(0); } });
   }
 

@@ -237,3 +237,8 @@ body.touch #prompt kbd{border-color:var(--gold);color:var(--gold)}
 .h-wanted span.on{color:#ffcf3f;text-shadow:0 0 10px rgba(255,180,40,.8),0 1px 3px #000;animation:pulse 1s ease-in-out infinite}
 .h-mini{position:absolute;right:30px;top:40px;width:180px;height:180px;border-radius:50%;box-shadow:0 4px 18px rgba(0,0,0,.5)}
 body.touch .h-wanted{top:calc(58px + env(safe-area-inset-top,0px));right:calc(18px + env(safe-area-inset-right,0px));font-size:18px}
+
+/* magnified scope picture (sniper / scout optics) */
+.h-scope{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 38vmin,rgba(0,0,0,.55) 38.6vmin,#000 40vmin);display:grid;place-items:center}
+.h-scope svg{width:80vmin;height:80vmin;filter:drop-shadow(0 0 1px rgba(255,255,255,.25))}
+.h-scope:after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 30vmin,rgba(0,0,0,.35) 39vmin);pointer-events:none}

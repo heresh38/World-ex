@@ -56,6 +56,7 @@ export class Viewmodel {
     const fg = g.getObjectByName('foregrip'), sg = g.getObjectByName('sight');
     if (fg) this.armL.position.copy(fg.position);
     if (sg) this.sight.copy(sg.position);
+    this.scoped = !!g.getObjectByName('scope');
     this.lower = 1;      // raise animation
   }
 
@@ -70,6 +71,10 @@ export class Viewmodel {
     const g = this.g, p = g.player, cam = g.camera;
     this.active = g.firstPerson() && p.armed && !!this.gun;
     this.rig.visible = this.active;
+    // magnified optics: once fully aimed the scope picture replaces the gun (like looking through the glass)
+    const inScope = this.active && this.scoped && this.ads > .82 && p.aiming;
+    g.hud.scope(inScope);
+    if (inScope) this.rig.visible = false;
     if (!this.active) return;
     this.rig.position.copy(cam.position); this.rig.quaternion.copy(cam.quaternion);
     this.scene.environment = g.scene.environment;
