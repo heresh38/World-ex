@@ -19,6 +19,7 @@ export class Input {
     addEventListener('blur', () => { this.down.clear(); this.lmb = this.rmb = false; });
     addEventListener('mousemove', e => {
       if (!this.locked) return;
+      // free mode (pointer lock refused, e.g. inside an embedding frame): plain mouse motion still steers the camera
       this.mx += e.movementX || 0; this.my += e.movementY || 0;
     });
     canvas.addEventListener('mousedown', e => {
@@ -29,7 +30,10 @@ export class Input {
     addEventListener('mouseup', e => { if (e.button === 0) this.lmb = false; if (e.button === 2) this.rmb = false; });
     addEventListener('contextmenu', e => e.preventDefault());
     addEventListener('wheel', e => { this.wheel += Math.sign(e.deltaY); }, { passive: true });
+    // pointer lock can be refused (a frame without the permission, some tablets): fall back to free mouse look
+    document.addEventListener('pointerlockerror', () => this.goFree());
     document.addEventListener('pointerlockchange', () => {
+      if (this.free) return;
       this.locked = document.pointerLockElement === canvas;
       if (!this.locked) { this.lmb = this.rmb = false; }
       this.onLockChange && this.onLockChange(this.locked);
@@ -37,15 +41,25 @@ export class Input {
     this.wantLock = false;
   }
 
+  goFree() {
+    if (this.touch || this.free) return;
+    this.free = true; this.locked = true;
+    this.onFree && this.onFree();
+  }
+
   lock() {
     if (this.touch) return;
+    if (this.free) { this.locked = true; return; }
+    // a request the browser silently ignores also counts as refused
+    clearTimeout(this.lockTimer);
+    this.lockTimer = setTimeout(() => { if (!this.locked && !document.pointerLockElement && this.enabled && this.wantLock) this.goFree(); }, 1200);
     try {
       const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
       if (p && p.catch) p.catch(() => { try { this.canvas.requestPointerLock(); } catch (e) { /* ignore */ } });
     } catch (e) { try { this.canvas.requestPointerLock(); } catch (e2) { /* ignore */ } }
   }
 
-  unlock() { if (document.pointerLockElement) document.exitPointerLock(); }
+  unlock() { if (this.free) { this.locked = false; return; } if (document.pointerLockElement) document.exitPointerLock(); }
 
   key(c) { return this.down.has(c); }
   pressed(c) { return this.hit.has(c); }

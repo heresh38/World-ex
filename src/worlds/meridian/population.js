@@ -18,7 +18,7 @@ import { raySphere, rayCyl } from '../../game/combat.js';
 import { mulberry } from '../../game/state.js';
 import { NavGraph } from './npcnav.js';
 import { Fauna } from './fauna.js';
-import { CITY_EDGE, TRANSIT } from './layout.js';
+import { CITY_EDGE, TRANSIT, HERITAGE } from './layout.js';
 
 const SKIN = ['#f4d6c6', '#e8bfa5', '#d4a184', '#b9805f', '#8f5b3f', '#6b4130', '#4a2d22'];
 const HAIR = ['#1a1310', '#2b1d14', '#4a3020', '#7a5432', '#b88b4e', '#d8c08a', '#8a8a8a', '#5a1f17'];
@@ -91,6 +91,7 @@ const _v = new THREE.Vector3(), _h = new THREE.Vector3(), _q = new THREE.Quatern
 const _sph = new THREE.Sphere(new THREE.Vector3(), 1.2), _frus = new THREE.Frustum(), _pm = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
 const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+const onHeritage = (x, z) => Math.abs(z - HERITAGE.z) < 11 && x > HERITAGE.x0 && x < HERITAGE.x1;
 
 // bend a bone about a world axis (converted into its parent's space); the avatar resets touched bones every update
 function bend(av, bone, axis, ang) {
@@ -237,6 +238,14 @@ export class Population {
     this.perf = { ms: 0, n: 0 };
   }
 
+  // where people like to be at this hour: the heritage avenue in the evening, downtown at lunch
+  areaBias(p) {
+    const h = this.hour;
+    if (h > 18.8 && h < 23.5) return onHeritage(p.x, p.z) ? 4 : p.dt ? 2 : 1;
+    if (h > 11.5 && h < 14.2) return p.dt ? 2 : 1;
+    return 1;
+  }
+
   get activeCount() { return this.peds.filter(q => q.state !== 'gone').length; }
   get hour() { return this.g.clock ? this.g.clock.hour : 12; }
   density(h = this.hour) { return lerpTable(DENSITY, h); }
@@ -312,9 +321,11 @@ export class Population {
         return true;
       }
     }
-    // in from out of view somewhere on the sidewalks
+    // in from out of view somewhere on the sidewalks (in the evening mostly onto the heritage avenue)
+    const eve = h > 18.8 && h < 23.5 && r() < .55;
+    const pool = eve ? (this.heritageNodes || (this.heritageNodes = nav.nodes.filter(n => n.avenue === 'heritage' || onHeritage(n.x, n.z)))) : nav.nodes;
     for (let k = 0; k < 60; k++) {
-      const n = nav.nodes[Math.floor(r() * nav.nodes.length)];
+      const n = pool[Math.floor(r() * pool.length)];
       if (!n.main || n.bridge || !near2(n.x, n.z, seed ? 6 : SPAWN_MIN, SPAWN_MAX)) continue;
       if (!seed && this.inView(n.x, n.y, n.z) && Math.hypot(n.x - F.x, n.z - F.z) < VIS_D + 5) continue;
       this.activate(q, n.x + (r() - .5) * .6, n.z + (r() - .5) * .6, n.y); q.mode = 'nav';
@@ -333,7 +344,12 @@ export class Population {
   seedPlace(q) {
     const r = this.rnd, F = this.focus, P = this.nav.pois, roll = r(), h = this.hour;
     const night = h < 6 || h > 22.5;
-    const free = (list, test) => { for (let k = 0; k < 40; k++) { const s = list[Math.floor(r() * list.length)]; if (s && test(s) && Math.hypot(s.x - F.x, s.z - F.z) < 150 && Math.hypot(s.x - F.x, s.z - F.z) > 4) return s; } return null; };
+    const free = (list, test) => {
+      let tot = 0; const c = [];
+      for (const s of list) { const d = Math.hypot(s.x - F.x, s.z - F.z); if (d < 150 && d > 4 && test(s)) { const w = this.areaBias(s); c.push([s, w]); tot += w; } }
+      let x = r() * tot; for (const [s, w] of c) { x -= w; if (x <= 0) return s; }
+      return null;
+    };
     if (roll < (night ? .12 : .26)) {
       const s = free(P.seat, s => !s.by && !this.playerOn(s)); if (!s) return false;
       this.activate(q, s.x, s.z, s.y); q.mode = 'nav'; q.goal = { kind: 'seat', poi: s }; s.by = q; q.spot = s;
@@ -371,9 +387,7 @@ export class Population {
       if (d < dmin || d > dmax * 1.4) return 0;
       let w = d > dmax ? .25 : 1;
       w *= 1 + 1.5 * Math.exp(-Math.hypot(p.x - px, p.z - pz) / 110);          // life where the player is
-      if (evening && (p.heritage || p.dt)) w *= p.heritage ? 4 : 2;
-      if (lunch && p.dt) w *= 2;
-      return w;
+      return w * this.areaBias(p);
     };
     const best = (list, ok, dmin, dmax, bias) => {
       let tot = 0; const c = [];

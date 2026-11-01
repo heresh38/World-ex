@@ -6,7 +6,8 @@
 // Two browser sessions (day, then evening + night): each hour change rebuilds lighting / ambience state and one long
 // software-rendered session can outgrow the shared memory limit.
 // Usage: python3 -m http.server 8765 &  then  NODE_PATH=$(npm root -g) node tools/test/life.js
-// NOSHOTS=1 skips the screenshots (numbers only); PHASE=day|night runs one session only.
+// NOSHOTS=1 skips the screenshots (numbers only); PHASE=day|night runs one session only, PHASE=shots only the
+// evening / night screenshots; SECS=<n> simulated seconds per hour sample (default 45).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const BASE = process.env.BASE || 'http://localhost:8765';
@@ -73,10 +74,11 @@ async function session(fn) {
 }
 
 const res = {};
+const SECS = +(process.env.SECS || 45);       // simulated seconds per hour sample
 const hours = async (T, list) => {
   for (const h of list) {
     await T.sim(1, { at: SPOT, hour: h, reseed: true });
-    res[h] = await T.sim(45, { at: SPOT });
+    res[h] = await T.sim(SECS, { at: SPOT });
     console.log('hour', h, JSON.stringify(res[h]));
   }
 };
@@ -165,8 +167,12 @@ async function day(T) {
 }
 
 async function night(T) {
-  const { shot, sim, cam, step, free } = T;
   await hours(T, [18, 23.5, 3]);
+  await nightShots(T);
+}
+
+async function nightShots(T) {
+  const { shot, sim, cam, step, free } = T;
   await free();
   await sim(1, { at: SPOT, hour: 20, reseed: true }); await sim(25, { at: SPOT });
   await cam([-62, 2.1, -108.5], [10, .8, -110]); await step(1, SPOT); await shot('08_heritage_evening');
@@ -176,8 +182,11 @@ async function night(T) {
 }
 
 (async () => {
-  if (PHASE !== 'night') await session(day);
-  if (PHASE !== 'day') await session(night);
+  if (PHASE === 'shots') await session(nightShots);          // evening / night screenshots only
+  else {
+    if (PHASE !== 'night') await session(day);
+    if (PHASE !== 'day') await session(night);
+  }
   if (PHASE === 'all') {
     const L = res[12.5], N3 = res[3], E = res[18];
     check(L.active >= 0.8 * L.target && L.active > 2 * N3.active, 'crowd follows the clock (lunch busy, 3 am thin)', { lunch: L.active, night: N3.active, evening: E.active, morning: res[8].active });

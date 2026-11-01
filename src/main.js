@@ -68,6 +68,7 @@ class Game {
     this.time = 0; this.fps = 60; this.state = 'boot'; this.paused = false;
     this.scene = null; this.world = null;
     this.input.onLockChange = locked => this.onLockChange(locked);
+    this.input.onFree = () => this.hud && this.hud.toast('Mouse capture unavailable here: move the mouse to look, arrow keys turn too');
     this.touch = isTouchDevice() ? new TouchControls(this) : null;
     if (this.touch && !sv) { this.save.settings.quality = 'medium'; this.save.settings.fov = 74; }
     // phones (and the low preset) cap textures at 1024 px: GPU memory is what kills a mobile tab on the big worlds
@@ -563,6 +564,12 @@ class Game {
     this.save.stats.time += dt;
     if (!this.clock || this.clock.save !== this.save) this.clock = new Clock(this.save);
     this.clock.update(dt);
+    // arrow keys turn the camera (a fallback when the mouse cannot be captured)
+    if (input.enabled && !this.stationId) {
+      const k = 1.9 * dt / (this.save.settings.sens * .0022);
+      if (input.key('ArrowLeft')) input.mx -= k; if (input.key('ArrowRight')) input.mx += k;
+      if (input.key('ArrowUp')) input.my -= k * .6; if (input.key('ArrowDown')) input.my += k * .6;
+    }
     if (input.enabled && input.locked) p.look(input, dt);
     // interactions
     const canAct = input.enabled && !this.stationId && !p.dead;
@@ -585,11 +592,17 @@ class Game {
     p.update(dt, input, w.collision);
     this.weapons.update(dt, input);
     this.vehicles.update(dt, input);
+    // seconds since the player last moved the camera (mouse, touch drag or arrow keys)
+    this.lookIdle = Math.abs(input.mx) + Math.abs(input.my) > .5 ? 0 : (this.lookIdle || 0) + dt;
     if (p.mode === 'car') {
-      // chase camera drifts behind the car when the mouse is idle
+      // chase camera drifts back behind the ride only after the camera has been left alone for a while, and gently,
+      // so free look while driving / boarding is never yanked back
       const c = this.vehicles.current;
       // (not while a touch stick is steering: the stick is camera-relative, a moving camera would keep turning the ride)
-      if (c && Math.abs(input.mx) < 1 && c.speed > 3 && !(input.axisX || input.axisY)) { let d = (c.yaw + Math.PI) - p.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); p.camYaw += d * Math.min(1, dt * 2.5); p.camPitch += (-.18 - p.camPitch) * Math.min(1, dt * 2); }
+      if (c && this.lookIdle > 1.6 && c.speed > 3 && !(input.axisX || input.axisY)) {
+        const k = Math.min(1, (this.lookIdle - 1.6) / 1.5) * Math.min(1, dt * 1.4);
+        let d = (c.yaw + Math.PI) - p.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); p.camYaw += d * k; p.camPitch += (-.18 - p.camPitch) * k;
+      }
     }
     this.enemies.update(dt);
     this.combat.update(dt);
