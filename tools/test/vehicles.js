@@ -21,6 +21,9 @@ fs.mkdirSync(OUT, { recursive: true });
     if (fs.existsSync(f)) return r.continue();
     try { const buf = require('child_process').execSync('git show ' + (process.env.GLB_REV || 'HEAD') + ':' + f, { maxBuffer: 1 << 28 }); return r.fulfill({ body: buf, contentType: 'model/gltf-binary' }); } catch (e) { return r.continue(); }
   });
+  // memory is shared with other test runs in CI containers: CROWD=n trims the pedestrian count for this test only
+  if (process.env.CROWD) await p.route('**/meridian/population.js', r => r.fulfill({ contentType: 'application/javascript',
+    body: fs.readFileSync('src/worlds/meridian/population.js', 'utf8').replace(/const COUNT = \d+;/, 'const COUNT = ' + (+process.env.CROWD) + ';') }));
   // crowd LOD bodies may not be built yet in a fresh checkout: stand in the full player bodies for this test only
   for (const sex of ['female', 'male']) {
     if (!fs.existsSync(`assets/models/player_${sex}_npc.glb`)) await p.route(`**/player_${sex}_npc.glb`, r => r.fulfill({ path: `assets/models/player_${sex}.glb`, contentType: 'model/gltf-binary' }));

@@ -28,9 +28,9 @@ class Kit:
         self.res = .0032 if PL.FAST else .0021
         self.head_res = .0026 if PL.FAST else .0013
         self.npc = getattr(pb, 'npc', False)
-        self.tscale = 1.0
+        self.tscale = .6                       # garment vertex budgets (GLB size: ~6k verts per piece on the player)
         if self.npc:
-            self.res = max(self.res, .0042); self.head_res = max(self.head_res, .0024); self.tscale = .4
+            self.res = max(self.res, .005); self.head_res = max(self.head_res, .0026); self.tscale = .2
         self.hair_tris = {}
 
     # ------------------------------------------------------------ field helpers
@@ -616,7 +616,7 @@ class Kit:
             self.add('legs', 'cargo', 'Cargo pants', [cg], hide=['pelvis', 'thigh', 'shin'])
         else:
             top_s = hip + .065; hem = kn[2] + .13
-            lo_ = self.skirt_loft(hem, top_s, [.205, .2, .188, .176, .164], [.128, .122, .108, .096, .09], [.15, .145, .132, .118, .106])
+            lo_ = self.skirt_loft(hem, top_s, [.235, .215, .192, .176, .164], [.15, .132, .11, .096, .09], [.17, .155, .134, .118, .106])
 
             def skirt(P):
                 zz = P[:, 2]
@@ -629,7 +629,7 @@ class Kit:
             self.add('legs', 'skirt', 'Pleated skirt', [sk], hide=['pelvis'])
             # ---- dresses
             waist_d = z['navel'] - .015; hem_d = kn[2] + .03
-            dl = self.skirt_loft(hem_d, waist_d, [.215, .205, .19, .17, .15], [.14, .13, .112, .098, .088], [.16, .15, .135, .115, .095])
+            dl = self.skirt_loft(hem_d, waist_d, [.25, .225, .196, .17, .15], [.17, .145, .116, .098, .088], [.19, .165, .138, .115, .095])
             zb = 1.27
 
             def sundress(P):

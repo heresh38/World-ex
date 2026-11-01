@@ -85,7 +85,8 @@ export class Avatar {
         o.material = h; o.castShadow = true;
         this.allMats[this.allMats.indexOf(m)] = h; this.mats.hair = h;
       } else if (m.name === 'hair__cap') {
-        m.roughness = .62; m.transparent = false; m.alphaTest = 0;
+        // strand atlas: solid inside, the hairline fades out in strand tips
+        m.roughness = .62; m.transparent = false; m.depthWrite = true; m.alphaTest = .42; m.side = THREE.FrontSide;
       } else if (m.name === 'skin' && o.geometry.attributes._covermask) {
         m.onBeforeCompile = sh => {
           sh.uniforms.coverMask = coverU;

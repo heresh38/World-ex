@@ -3,11 +3,11 @@
 * `strand_texture()` paints assets/textures/hair_strands.png with numpy: four card columns (dense, layered, wispy,
   short tufts) of thin strands drawn root (v=0) to tip (v=1) with per-strand brightness, darker roots, clumps that
   converge towards tapered tips and uneven lengths. RGB is grey (tinted at runtime by the hair colour), alpha is the
-  strand coverage. The cap samples the same image as an opaque streak texture.
+  strand coverage. The scalp cap samples it too: solid roots inside, sparse tips fading out at the hairline.
 * `Groom` grows guide strands over the head field: they hug the scalp at a small offset while combed along the
   style's flow, then hang under gravity and are pushed out of the head and body. Each guide becomes a ribbon with a
   shallow V cross-section whose normals point away from the scalp (the cards light like one hair volume).
-Material names are an API: `hair` (cards, alpha) and `hair__cap` (opaque), both tinted with the hair colour.
+Material names are an API: `hair` (cards) and `hair__cap` (scalp), both alpha tested and tinted with the hair colour.
 """
 import bpy, os, math
 import numpy as np
@@ -17,7 +17,6 @@ from sdf import smoothstep
 
 F32 = np.float32
 ATLAS = 'hair_strands.png'
-CAP_TEX = 'hair_cap.jpg'
 NCOL = 4                      # 0 dense, 1 layered, 2 wispy, 3 short tufts
 
 
@@ -84,20 +83,6 @@ def strand_texture(size=1024):
     im = bpy.data.images.new('hair_strands', size, Hh, alpha=True)
     im.pixels = img.ravel()                     # row 0 = image bottom = v 0 (the roots)
     im.filepath_raw = os.path.join(bl.TEXTURES, ATLAS); im.file_format = 'PNG'; im.save()
-    # scalp cap: low-contrast, tileable streaks running along v (it mostly shows through partings and hairlines)
-    N = 256; uu = (np.arange(N) + .5) / N
-    val = np.full(N, .66, F32)
-    for kk in (7, 13, 29, 53, 97):
-        val += (.05 / kk ** .3) * np.sin(2 * math.pi * kk * uu + rng.uniform(0, 6.3))
-    val += rng.normal(0, .025, N).astype(F32)
-    cap = np.ones((N, N, 4), F32)
-    vv = (np.arange(N) + .5) / N
-    shade = val[None, :] * (.94 + .06 * np.sin(2 * math.pi * 3 * vv + 1.0)[:, None])
-    cap[..., 0] = cap[..., 1] = cap[..., 2] = np.clip(shade, 0, 1)
-    ci = bpy.data.images.new('hair_cap', N, N)
-    ci.pixels = cap.ravel()
-    sc = bpy.context.scene; sc.render.image_settings.file_format = 'JPEG'; sc.render.image_settings.quality = 90
-    ci.save_render(os.path.join(bl.TEXTURES, CAP_TEX))
     return im
 
 
@@ -118,7 +103,20 @@ def card_material():
 
 
 def cap_material():
-    return bl.mat('hair__cap', '#ffffff', 0, .6, image=CAP_TEX)
+    """The cap samples the strand atlas too (alpha tested in the game): dense roots inside, sparse tips at the hairline."""
+    m = bpy.data.materials.get('hair__cap')
+    if m is not None:
+        return m
+    m = bpy.data.materials.new('hair__cap')
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    b.inputs['Roughness'].default_value = .6
+    tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(os.path.join(bl.TEXTURES, ATLAS), check_existing=True)
+    nt.links.new(tn.outputs['Color'], b.inputs['Base Color']); nt.links.new(tn.outputs['Alpha'], b.inputs['Alpha'])
+    try:
+        m.surface_render_method = 'DITHERED'
+    except Exception:
+        pass
+    return m
 
 
 # ====================================================================== groom
@@ -276,9 +274,12 @@ class Groom:
         V = PL.verts(o) - ho
         n_, vi = PL.faces(o)
         P = V[vi]
-        az = np.arctan2(P[:, 0], -P[:, 1] + .02 * s)
-        u = (az / (2 * math.pi) + .5) * 2.0
-        v = np.clip((.13 * s - P[:, 2]) / (.22 * s), 0, 1)
+        # u: around the head (mirrored, seamless) inside the middle of the dense column; v: 0 (solid roots) well inside
+        # the hairline -> sparse tapered tips at the edge, so the hairline fades into strands instead of a hard rim
+        az = np.arctan2(P[:, 0], -P[:, 1] + .02 * s) / math.pi * 6
+        u = .06 + .13 * np.abs((az % 2) - 1)
+        e = np.clip(-cm(P) / (.014 * s), 0, 1)
+        v = .02 + .8 * (1 - e) ** 1.6
         uv = o.data.uv_layers.get('UVMap') or o.data.uv_layers.new(name='UVMap')
         uv.data.foreach_set('uv', np.stack([u, v], 1).astype(F32).ravel())
         return o

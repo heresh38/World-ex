@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const BASE = process.env.BASE || 'http://localhost:8765';
 const OUT = process.env.OUT || 'test-out';
-const ARCHS = (process.env.ARCHS || 'rifle,carbine,dmr,ksmg,bolt,pistol,revolver,pump,spitter,bile,brood').split(',');
+const ARCHS = (process.env.ARCHS || 'rifle,carbine,dmr,ksmg,bolt,pistol,revolver,pump,spitter,bile,brood').split(',').filter(a => a && a !== 'none');
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
@@ -177,6 +177,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const o = await ev(async sight => {
       const g = window.__game, st = await import('/src/game/state.js');
       let w = g.save.inventory.find(x => x.arch === 'carbine');
+      if (!w) { w = st.makeWeapon('carbine', 2, 20); g.addWeapon(w); }
+      g.player.armed = true;
       w.sight = sight; g.save.equipped[0] = w.uid; g.weapons.slot = 0; g.weapons.refreshModel();
       const vm = g.viewmodel, att = vm.gun.getObjectByName('att_' + sight);
       return { sight, mounted: !!att, scoped: vm.scoped, zoom: g.weapons.zoom(), eye: vm.sight.toArray().map(v => +v.toFixed(3)) };

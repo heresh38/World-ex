@@ -238,8 +238,9 @@ def skin_mat(sex):
 
 
 # everyday wardrobe kept on the crowd LOD (population.js picks from these)
-NPC_KEEP = {'ribbed', 'tee', 'sweater', 'tank', 'blouse', 'flannel', 'undersuit', 'leggings', 'jeans', 'chinos', 'shorts', 'skirt',
-            'cargo', 'sundress', 'knit', 'hoodie', 'jacket', 'circuit_coat', 'tech', 'sneakers', 'ankle_boots', 'combat', 'beanie', 'cap'}
+NPC_KEEP = {'tee', 'sweater', 'tank', 'blouse', 'flannel', 'jeans', 'chinos', 'shorts', 'skirt', 'cargo', 'sundress', 'hoodie',
+            'jacket', 'sneakers', 'ankle_boots', 'beanie', 'cap'}
+NPC_HAIR = {'long', 'ponytail', 'bob', 'bun', 'sidepart', 'textured', 'buzz', 'swept'}
 
 
 # ------------------------------------------------------------------ build
@@ -599,7 +600,7 @@ class PlayerBuilder:
             items = self.wardrobe['items']
             for sl in list(items):
                 for it in list(items[sl]):
-                    if sl != 'hair' and it not in NPC_KEEP and not items[sl][it].get('locked'):
+                    if (it not in NPC_HAIR if sl == 'hair' else it not in NPC_KEEP) and not items[sl][it].get('locked'):
                         o = bpy.data.objects.get('C_%s__%s' % (sl, it))
                         if o is not None:
                             bpy.data.objects.remove(o)
@@ -609,7 +610,7 @@ class PlayerBuilder:
             d = self.wardrobe['defaults']
             for sl in list(d):
                 if d[sl] != 'none' and (sl not in items or d[sl] not in items[sl]):
-                    d[sl] = {'legs': 'jeans', 'top': 'tee', 'feet': 'sneakers'}.get(sl, 'none')
+                    d[sl] = {'legs': 'jeans', 'top': 'tee', 'feet': 'sneakers', 'hair': 'long' if self.sex == 'female' else 'sidepart'}.get(sl, 'none')
             # one skin mesh for the whole body below the head (garments cover by the skin cover mask, not region hiding)
             body = bl.join([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name.startswith('B_')
                             and o.name not in ('B_head', 'B_eyes', 'B_brows', 'B_lashes')], 'B_body')
@@ -708,10 +709,10 @@ def export(sex):
     kw = dict(animations=True, export_vertex_color='ACTIVE', export_morph_normal=False, export_attributes=True)
     if '--npc-only' not in ARGS:
         PlayerBuilder(sex).run()
-        bl.export('player_%s.glb' % sex, **kw)
+        bl.quantize_glb(bl.export('player_%s.glb' % sex, **kw))
     if '--no-npc' not in ARGS:
         PlayerBuilder(sex, npc=True).run()
-        bl.export('player_%s_npc.glb' % sex, **kw)
+        bl.quantize_glb(bl.export('player_%s_npc.glb' % sex, **kw))
 
 
 if __name__ == '__main__':

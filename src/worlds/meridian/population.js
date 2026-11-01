@@ -16,11 +16,11 @@ const pick = (a, r) => a[Math.floor(r() * a.length)];
 // Pedestrians use the player bodies (crowd LOD player_<sex>_npc.glb from players.py) with a random face and outfit.
 const MODEL = { female: 'player_female_npc', male: 'player_male_npc' };
 const MODEL_H = { female: 1.68, male: 1.84 };            // anatomy.Body heights
-const WEAR = {                                           // everyday pieces per slot (wardrobe.py item ids)
-  female: { top: ['tee', 'tank', 'blouse', 'sweater', 'ribbed'], legs: ['jeans', 'chinos', 'shorts', 'skirt', 'leggings'],
-    dress: ['sundress', 'knit'], outer: ['hoodie', 'jacket', 'circuit_coat'], feet: ['sneakers', 'sneakers', 'ankle_boots', 'tech'], head: ['beanie', 'cap'] },
-  male: { top: ['tee', 'tee', 'flannel', 'sweater', 'undersuit'], legs: ['jeans', 'jeans', 'chinos', 'shorts', 'cargo'],
-    outer: ['hoodie', 'jacket'], feet: ['sneakers', 'sneakers', 'ankle_boots', 'combat'], head: ['beanie', 'cap'] },
+const WEAR = {                                           // everyday pieces per slot (players.py NPC_KEEP item ids)
+  female: { top: ['tee', 'tank', 'blouse', 'sweater'], legs: ['jeans', 'chinos', 'shorts', 'skirt'],
+    dress: ['sundress'], outer: ['hoodie', 'jacket'], feet: ['sneakers', 'sneakers', 'ankle_boots'], head: ['beanie', 'cap'] },
+  male: { top: ['tee', 'tee', 'flannel', 'sweater'], legs: ['jeans', 'jeans', 'chinos', 'shorts', 'cargo'],
+    outer: ['hoodie', 'jacket'], feet: ['sneakers', 'sneakers', 'ankle_boots'], head: ['beanie', 'cap'] },
 };
 
 // A random but plausible look: always dressed (top + legs, or a dress), shoes, underwear stays on (locked slots).

@@ -307,3 +307,102 @@ def export(fname, animations=False, selected=None, **extra):
 def rng(seed):
     import random
     return random.Random(seed)
+
+
+def quantize_glb(path):
+    """Shrink an exported GLB in place: NORMAL -> int8 (KHR_mesh_quantization), WEIGHTS_0 -> uint8 and COLOR_0 -> uint8
+    normalized, TEXCOORD_0 in [0,1] -> uint16 normalized. Positions, indices, morph targets and images stay as they are.
+    three.js reads KHR_mesh_quantization natively (no decoder)."""
+    import json, struct
+    import numpy as np
+    raw = open(path, 'rb').read()
+    jl = struct.unpack('<I', raw[12:16])[0]
+    J = json.loads(raw[20:20 + jl])
+    bo = 20 + jl
+    bl_ = struct.unpack('<I', raw[bo:bo + 4])[0]
+    BIN = raw[bo + 8:bo + 8 + bl_]
+    acc, bvs = J['accessors'], J['bufferViews']
+    NC = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
+    users = {}
+    for i, a in enumerate(acc):
+        if 'bufferView' in a:
+            users.setdefault(a['bufferView'], []).append(i)
+    for a in acc:
+        if 'sparse' in a:
+            for k in ('indices', 'values'):
+                users.setdefault(a['sparse'][k]['bufferView'], []).append(-1)
+    for im in J.get('images', []):
+        if 'bufferView' in im:
+            users.setdefault(im['bufferView'], []).append(-1)
+    conv = {}
+    for m in J.get('meshes', []):
+        for pr in m['primitives']:
+            for k, i in pr['attributes'].items():
+                if k in ('NORMAL', 'WEIGHTS_0', 'COLOR_0', 'TEXCOORD_0'):
+                    conv[i] = k
+    new_views = {}
+    used_q = False
+    for i, kind in conv.items():
+        a = acc[i]
+        if a.get('componentType') != 5126 or 'bufferView' not in a or len(users.get(a['bufferView'], [])) != 1:
+            continue
+        v = bvs[a['bufferView']]
+        n, c = a['count'], NC[a['type']]
+        stride = v.get('byteStride', 4 * c)
+        X = np.frombuffer(BIN, np.float32, count=(stride // 4) * (n - 1) + c, offset=v.get('byteOffset', 0) + a.get('byteOffset', 0))
+        X = np.lib.stride_tricks.as_strided(X, (n, c), (stride, 4)).astype(np.float64)
+        if kind == 'NORMAL':
+            q = np.zeros((n, 4), np.int8)
+            q[:, :3] = np.clip(np.round(X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-9) * 127), -127, 127)
+            a.update(componentType=5120, normalized=True); a.pop('min', None); a.pop('max', None)
+            data, st = q.tobytes(), 4; used_q = True
+        elif kind == 'WEIGHTS_0':
+            W = np.clip(X, 0, None); W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
+            q = np.floor(W * 255).astype(np.int32)
+            rem = 255 - q.sum(1)                                     # keep the sum exactly 255
+            order = np.argsort(-(W * 255 - q), axis=1)
+            for r in range(4):
+                idx = rem > r
+                q[np.nonzero(idx)[0], order[idx, r]] += 1
+            a.update(componentType=5121, normalized=True); a.pop('min', None); a.pop('max', None)
+            data, st = q.astype(np.uint8).tobytes(), 4
+        elif kind == 'COLOR_0':
+            q = np.ones((n, 4), np.uint8) * 255
+            q[:, :c] = np.clip(np.round(X * 255), 0, 255)
+            a.update(componentType=5121, normalized=True, type='VEC4'); a.pop('min', None); a.pop('max', None)
+            data, st = q.tobytes(), 4
+        else:   # TEXCOORD_0
+            if X.min() < 0 or X.max() > 1:
+                continue
+            q = np.round(X * 65535).astype(np.uint16)
+            a.update(componentType=5123, normalized=True); a.pop('min', None); a.pop('max', None)
+            data, st = q.tobytes(), 4; used_q = True
+        a['byteOffset'] = 0
+        new_views[a['bufferView']] = (data, st)
+    # rebuild the binary chunk
+    out = bytearray()
+    for vi, v in enumerate(bvs):
+        if vi in new_views:
+            data, st = new_views[vi]
+            v['byteStride'] = st
+        else:
+            o = v.get('byteOffset', 0); data = BIN[o:o + v['byteLength']]
+        while len(out) % 4:
+            out += b'\0'
+        v['byteOffset'] = len(out); v['byteLength'] = len(data)
+        out += data
+    while len(out) % 4:
+        out += b'\0'
+    J['buffers'][0]['byteLength'] = len(out)
+    if used_q:
+        for key in ('extensionsUsed', 'extensionsRequired'):
+            J.setdefault(key, [])
+            if 'KHR_mesh_quantization' not in J[key]:
+                J[key].append('KHR_mesh_quantization')
+    js = json.dumps(J, separators=(',', ':')).encode()
+    js += b' ' * ((4 - len(js) % 4) % 4)
+    glb = struct.pack('<III', 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(out))
+    glb += struct.pack('<II', len(js), 0x4E4F534A) + js + struct.pack('<II', len(out), 0x004E4942) + bytes(out)
+    before = len(raw)
+    open(path, 'wb').write(glb)
+    print('[quantize] %s  %.1f MB -> %.1f MB' % (os.path.basename(path), before / 1e6, len(glb) / 1e6))

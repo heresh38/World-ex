@@ -50,7 +50,8 @@ export function runCinematic(g, shot) {
     const onPtr = () => { if (performance.now() - t0 > 250) finish(true); };
     addEventListener('keydown', onKey, true); addEventListener('pointerdown', onPtr, true);
     g.cine = dt => {
-      const t = (performance.now() - t0) / 1000;
+      // g.cineTime (seconds) pins the shot clock: tests use it to grab frames at exact moments on slow renderers
+      const t = g.cineTime != null ? g.cineTime : (performance.now() - t0) / 1000;
       try { shot.update(Math.min(t, shot.duration), dt); } catch (e) { console.error(e); finish(true); return; }
       if (t >= shot.duration) finish(false);
     };

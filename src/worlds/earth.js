@@ -838,7 +838,6 @@ export class EarthWorld extends World {
     const camP = pad.clone().add(new THREE.Vector3(-30, 2.2, -33)), camP2 = pad.clone().add(new THREE.Vector3(-22, 4, -40));
     av.root.visible = false;
     g.audio.jetLoop();
-    const vel = new THREE.Vector3(); let pitch = 0;
     return runCinematic(g, {
       duration: 5.6, title: 'Departing New Meridian', sub: 'Pad 1 · cleared to orbit',
       update: (t, dt) => {
@@ -847,9 +846,10 @@ export class EarthWorld extends World {
         if (t < 1.2) js.position.copy(pad).add(_v.set(0, Math.sin(t * 40) * .02 * spool, 0));
         else if (t < 2.7) { const k = ease((t - 1.2) / 1.5); js.position.copy(pad).add(_v.set(Math.sin(t * 2) * .2, k * 12, 0)); js.rotation.set(0, 0, Math.sin(t * 1.7) * .03); }
         else {
-          pitch = Math.min(.42, pitch + dt * .3); js.rotation.x = -pitch;
-          vel.z += dt * (14 + (t - 2.7) * 26); vel.y += dt * (6 + (t - 2.7) * 14);
-          js.position.addScaledVector(vel, dt);
+          // closed form (so a pinned shot clock gives a stable frame): accelerating climb away to the south
+          const u = t - 2.7;
+          js.rotation.set(-Math.min(.42, u * .3), 0, 0);
+          js.position.copy(pad).add(_v.set(0, 12 + 3 * u * u + 2.3 * u * u * u, 7 * u * u + 4.3 * u * u * u));
         }
         this.engineFx(.35 + .65 * spool + (t > 2.7 ? .4 : 0), dt);
         this.cineTick(dt);
