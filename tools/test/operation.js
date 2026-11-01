@@ -19,7 +19,15 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
-  const shot = async n => { await mem(n); await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 85, timeout: 300000 }); console.log('shot', n); };
+  // the last rendered frame stays on the canvas while the capture runs: swiftshader frames that pile up behind a slow
+  // capture otherwise balloon the browser's memory (the 14 GB box OOM-kills it)
+  const shot = async n => {
+    await mem(n);
+    await ev(() => { const r = window.__game.renderer; if (!r.__render) { r.__render = r.render; r.render = () => {}; } });
+    try { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 85, timeout: 300000 }); }
+    finally { await ev(() => { const r = window.__game.renderer; if (r.__render) { r.render = r.__render; r.__render = null; } }).catch(() => {}); }
+    console.log('shot', n);
+  };
   const { execSync } = require('child_process');
   const rss = () => { try { const out = execSync('ps -eo pid,ppid,rss').toString().trim().split('\n').slice(1).map(l => l.trim().split(/\s+/).map(Number));
     const kids = new Set([process.pid]); let ch = true; while (ch) { ch = false; for (const [a, pp] of out) if (kids.has(pp) && !kids.has(a)) { kids.add(a); ch = true; } }
@@ -90,7 +98,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => window.__sim(3));
   // ---------------------------------------------------------------- 3: the Brood Road (three Writhe waves, then light the gas main)
   st = await S(); check(st.i === 2 && st.stage === 'nest', 'stage 3 next', st);
-  await ev(() => { const s = window.__op().stages[2]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(1.2); window.__look(s.pos.x, s.pos.y + 1, s.pos.z, -.02); });
+  await ev(() => { const s = window.__op().stages[2]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(1.2); const q = s.cp.clone().lerp(s.pos, .7); window.__tp(q.x, s.ground(q.x, q.z), q.z); window.__look(s.pos.x, s.pos.y + .5, s.pos.z, -.12); window.__sim(.3); });
   st = await S(); check(st.phase === 'w1' && st.alive > 0, 'Writhe nest wakes', st);
   await wait(1500); await shot('op04_nest');
   const seen = new Set();

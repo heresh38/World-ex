@@ -133,7 +133,7 @@ export class Operation {
   after(t, fn) { this.timers.push({ t: this.clock + t, fn }); }
   say(lines, cb) {
     const h = this.g.hud;
-    lines.forEach(([who, text], k) => h.radio(who[0], text, { color: who[1], cb: k === lines.length - 1 ? cb : null }));
+    lines.forEach(([who, text], k) => h.radio(who[0], text, { color: who[1], tag: this.i, cb: k === lines.length - 1 ? cb : null }));
   }
   sayOnce(id, lines) { if (this.said.has(id)) return; this.said.add(id); this.say(lines); }
   level() { const S = this.S, D = this.w.map.district(S.pos.x, S.pos.z); return Math.min(this.w.levelAt(S.pos.x, S.pos.z, D), this.w.level + 2 + this.i * 2); }
@@ -189,12 +189,14 @@ export class Operation {
     // ---- stage anchors on a route from the landing zone to the Spire (~1.6 km)
     const relay = this.clearSpot(polar(103, 1478), 7);
     const shuttle = this.clearSpot(polar(105.8, 990), 5);
-    const nest = this.clearSpot(polar(110, 600), 7);
+    const nest = this.clearSpot(polar(110, 572), 7);
     const lift = new V(0, this.ground(0, 100), 100);
     const found = new V(-13, FOUND_Y, 52);
     this.stages = STAGES.map(s => ({ ...s }));
     const [S1, S2, S3, S4, S5] = this.stages;
+    for (const S of [S1, S2, S3]) S.place = null;
     S1.pos = relay; S1.r = 70; S2.pos = shuttle; S2.r = 70; S3.pos = nest; S3.r = 75; S4.pos = lift; S4.r = 60; S5.pos = found; S5.r = 95;
+    for (const S of [S1, S2, S3]) S.place = w.map.district(S.pos.x, S.pos.z).name;     // the district it really lies in
     // checkpoints: just short of each arena, on the side you come from
     const back = (p, from, d) => this.clearSpot(p.clone().add(from.clone().sub(p).setY(0).normalize().multiplyScalar(d)), 1.2);
     S1.cp = back(relay, L, 40); S2.cp = back(shuttle, relay, 42); S3.cp = back(nest, shuttle, 45); S4.cp = this.clearSpot(new V(0, 0, 124), 1.2);
@@ -321,7 +323,10 @@ export class Operation {
   reqAlive() { let n = 0; for (const wv of this.waves) if (wv.req) n += wv.alive(); return n; }
 
   // ---------------------------------------------------------------- stage flow
-  arrive(S) { this.phase = 'arrived'; this.cp = S.cp; this.g.hud.banner(S.title, S.place + ' · objective ' + (this.i + 1) + ' / ' + this.stages.length, 3); }
+  arrive(S) {
+    // lines still queued from earlier stages are stale once you are here (a fast board ride outruns the radio)
+    const h = this.g.hud; h.radioQ = h.radioQ.filter(q => q.tag === undefined || q.tag >= this.i);
+    this.phase = 'arrived'; this.cp = S.cp; this.g.hud.banner(S.title, S.place + ' · objective ' + (this.i + 1) + ' / ' + this.stages.length, 3); }
 
   finishStage(lines) {
     const g = this.g, S = this.S;

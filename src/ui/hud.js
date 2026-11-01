@@ -161,7 +161,7 @@ export class HUD {
   // ---------------------------------------------------------------- radio transmissions (speaker + line, queued)
   radio(who, text, o = {}) {
     const dur = o.dur || Math.max(3.2, Math.min(9, 1.6 + text.length * .055));
-    this.radioQ.push({ who, text, dur, color: o.color || null, cb: o.cb || null });
+    this.radioQ.push({ who, text, dur, color: o.color || null, cb: o.cb || null, tag: o.tag });
     if (this.radioQ.length > 12) this.radioQ.shift();
   }
   radioBusy() { return !!this.radioCur || this.radioQ.length > 0; }
