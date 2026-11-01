@@ -40,6 +40,27 @@ export class World {
     return best;
   }
 
+  // Upload every texture the scene's materials use (hidden LOD tiers and far kits included) behind the loading screen,
+  // and give the tiling ones anisotropic filtering, so nothing uploads or sharpens the first time it comes near.
+  warmTextures() {
+    const r = this.g.renderer.r, aniso = this.g.assets.aniso || 1, seen = new Set();
+    const tex = t => {
+      if (!t || !t.isTexture || seen.has(t) || t.isRenderTargetTexture) return; seen.add(t);
+      if (t.isCubeTexture || t.isDataTexture) return;
+      if (t.anisotropy < aniso && t.generateMipmaps !== false && t.minFilter !== THREE.NearestFilter && t.minFilter !== THREE.LinearFilter) {
+        t.anisotropy = aniso; if (t.version > 0) t.needsUpdate = true;
+      }
+      if (t.image) try { r.initTexture(t); } catch (e) { /* optional */ }
+    };
+    this.scene.traverse(o => {
+      for (const m of o.material ? [].concat(o.material) : []) {
+        for (const k in m) { const v = m[k]; if (v && v.isTexture) tex(v); }
+        if (m.uniforms) for (const k in m.uniforms) tex(m.uniforms[k] && m.uniforms[k].value);
+      }
+    });
+    return seen.size;
+  }
+
   dispose() {
     this.scene.traverse(o => {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();

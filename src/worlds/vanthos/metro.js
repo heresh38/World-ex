@@ -122,6 +122,7 @@ export class MetroWorld extends World {
       action: () => { g.metroReturn = { x: this.entry.x, y: this.entry.y, z: this.entry.z }; g.travel('vanthos'); } });
     this.fauna = fauna;
     g.vehicles.clear();
+    this.warmTextures();
     progress(1, 'Ready');
   }
 

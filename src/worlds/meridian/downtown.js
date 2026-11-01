@@ -12,10 +12,16 @@ import * as THREE from 'three';
 import { BLOCK, PITCH, ROAD, HERITAGE, TRANSIT, isDowntown, DT_N } from './layout.js';
 import { mulberry } from '../../game/state.js';
 import { SKY } from './daynight.js';
+import { fadeMaterial, fadeGeometry, fadeAttr } from '../../core/lodfade.js';
 
 const Y = new THREE.Vector3(0, 1, 0);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
 const FACE = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 };
+// hero -> low-detail hand-over distances in metres (times the quality draw factor, plus half the design's size); the
+// last LOD_BAND of each is a dithered cross-fade. Far enough that the box LODs only stand in where their missing trim is
+// a pixel or two, and never a hard swap.
+const LOD_NEAR = { building: 250, perMetre: .75, skywalk: 170, track: 130, platform: 210 };
+const LOD_BAND = .3;
 const IN = 41.5;                    // building faces stay inside +-IN of the block centre (sidewalk and walkers beyond)
 const FACADE = /^dt_(glass_(blue|teal|silver|dark|bronze|green)|ribbon|precast|punched|brick|stone|limestone|derelict|shop)/;
 // facade tile sets (downtown_textures.py): windows per tile [bays, floors], room size in metres [width, height, depth] and
@@ -365,7 +371,7 @@ export class Downtown {
       this.col.add([r[0], 4.7, r[1], r[2], 8.5, r[3]], 'skywalk');
       this.skywalks.push({ ...k, rect: r });
     }
-    for (const [n, list] of Object.entries(mats)) this.addLod(this.street.getObjectByName(n), this.street.getObjectByName(n + '_lod'), list, 90);
+    for (const [n, list] of Object.entries(mats)) this.addLod(this.street.getObjectByName(n), this.street.getObjectByName(n + '_lod'), list, LOD_NEAR.skywalk);
   }
 
   underSkywalk(x, z, pad = 3) { return this.skywalks.some(s => x > s.rect[0] - pad && x < s.rect[2] + pad && z > s.rect[1] - pad && z < s.rect[3] + pad); }
@@ -417,7 +423,7 @@ export class Downtown {
       const dStreet = Math.min(...[-3, -2, -1, 0, 1, 2].map(i => Math.abs(x - (i + .5) * PITCH)));
       if (dStreet > 12) cat.push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.identity(), _s.set(step / 20, 1, 1)));
     }
-    this.addLod(this.street.getObjectByName('DT_track'), this.street.getObjectByName('DT_track_lod'), trk, 70, false);
+    this.addLod(this.street.getObjectByName('DT_track'), this.street.getObjectByName('DT_track_lod'), trk, LOD_NEAR.track, false);
     this.h.instanceKit(this.scene, this.street.getObjectByName('DT_catenary'), cat, { shadow: false });
     for (const m of cat) { m.decompose(_p, _q, _s); this.col.add([_p.x - .15, 0, _p.z - .15, _p.x + .15, 7.2, _p.z + .15], 'prop'); }
     // stations mid-block at -1 and 1: a platform on each side of the tracks
@@ -428,7 +434,7 @@ export class Downtown {
       this.col.add([sx - 22, 0, z + sz * 7.3 - 2.1, sx + 22, .35, z + sz * 7.3 + 2.1], 'platform');
       this.paths.push(this.loop([[sx - 20, z + sz * 6.4], [sx + 20, z + sz * 6.4], [sx + 20, z + sz * 8.4], [sx - 20, z + sz * 8.4]], 1.5));
     }
-    this.addLod(this.street.getObjectByName('DT_platform'), this.street.getObjectByName('DT_platform_lod'), plat, 120);
+    this.addLod(this.street.getObjectByName('DT_platform'), this.street.getObjectByName('DT_platform_lod'), plat, LOD_NEAR.platform);
     for (let bx = -DT_N; bx <= 1; bx++) this.paths.push(this.loop([[bx * PITCH - 45, z - 8.6], [bx * PITCH + 45, z - 8.6], [bx * PITCH + 45, z + 8.6], [bx * PITCH - 45, z + 8.6]], 1.5));
     for (const x of [x0 + 1, x1 - 1]) this.f('DT_bollards', x, z, Math.PI / 2, true);
     for (let i = -DT_N - 1; i <= 1; i++) this.zebra((i + .5) * PITCH, z, true);
@@ -574,7 +580,8 @@ export class Downtown {
     }
   }
 
-  // hero / low-detail instanced pair for a root (shared instance buffer per tier, buckets by distance)
+  // hero / low-detail instanced pair for a root (shared instance buffer per tier, buckets by distance). The tiers
+  // cross-fade over the last LOD_BAND of `near` (screen-door dither per frame, core/lodfade.js), so nothing swaps at once.
   addLod(hi, lo, list, near = 160, shadow = true, loShadow = shadow) {
     if (!hi || !list.length) return;
     const parts = root => {
@@ -589,26 +596,28 @@ export class Downtown {
       });
       return out;
     };
-    const box = this.localBox(hi), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+    const box = this.localBox(hi), size = box.getSize(new THREE.Vector3());
     const n = list.length;
-    const set = { list, near, radius: size.length() / 2, pos: list.map(m => ctr.clone().applyMatrix4(m)), tiers: [] };
+    // (distances are horizontal, camera to instance origin: the same measure the fade shader uses)
+    const set = { list, near, radius: size.length() / 2, pos: list.map(m => new THREE.Vector3().setFromMatrixPosition(m)), tiers: [] };
     for (const [t, root] of [[0, hi], [1, lo]]) {
       const P = parts(root); if (!P) { set.tiers.push(null); continue; }
       const attr = new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16); attr.setUsage(THREE.DynamicDrawUsage);
+      const fade = fadeAttr(n);
       const ms = P.map(({ geo, mat }) => {
-        const im = new THREE.InstancedMesh(geo, mat, n);
+        const im = new THREE.InstancedMesh(fadeGeometry(geo, fade), fadeMaterial(mat), n);
         im.instanceMatrix = attr; im.count = 0; im.visible = false;
         im.castShadow = (t ? loShadow : shadow) && !/glass|glow|net/.test(mat.name); im.receiveShadow = true;
         this.scene.add(im); return im;
       });
-      set.tiers.push({ attr, ms });
+      set.tiers.push({ attr, fade, ms });
     }
     (this.lods = this.lods || []).push(set);
   }
 
   finish() {
     this.buildGrounds();
-    for (const D of this.designs.values()) if (D.list.length) this.addLod(D.root, D.lod, D.list, 150 + (D.meta.h || 40) * .4, true, (D.meta.h || 0) > 50);
+    for (const D of this.designs.values()) if (D.list.length) this.addLod(D.root, D.lod, D.list, LOD_NEAR.building + (D.meta.h || 40) * LOD_NEAR.perMetre, true, (D.meta.h || 0) > 50);
     // street furniture: instanced in chunks, solid pieces get colliders
     const props = this.g.assets.models.props_world.scene;
     for (const [name, items] of Object.entries(this.furn)) {
@@ -695,21 +704,23 @@ export class Downtown {
     for (const t of this.trams) this.updateTram(t, dt);
     this.timer = (this.timer || 0) - dt;
     const p = cam.position;
-    if (!force && this.timer > 0 && this.last && p.distanceToSquared(this.last) < 36) return;
+    if (!force && this.timer > 0 && this.last && p.distanceToSquared(this.last) < 16) return;
     this.timer = .4; this.last = (this.last || new THREE.Vector3()).copy(p);
-    const q = this.g.renderer.q || {}, k = .55 + .45 * (q.draw || .8);
+    const q = this.g.renderer.q || {}, k = (.55 + .45 * (q.draw || .8)) * (this.g.renderer.touch ? .85 : 1), MARGIN = 8;
     for (const S of this.lods || []) {
       const cnt = [0, 0], H = S.tiers;
-      const n2 = (S.near * k + S.radius * .5) ** 2;
+      const e = S.near * k + S.radius * .5, s = e * (1 - LOD_BAND);
+      const put = (t, i, a, b) => { const o = cnt[t]++; S.list[i].toArray(H[t].attr.array, o * 16); const F = H[t].fade.array; F[o * 3] = a; F[o * 3 + 1] = b; F[o * 3 + 2] = 0; };
       for (let i = 0; i < S.list.length; i++) {
-        const c = S.pos[i], d2 = (c.x - p.x) ** 2 + (c.z - p.z) ** 2 + (c.y - p.y) ** 2 * .25;
-        let t = d2 < n2 ? 0 : 1;
-        if (!H[t]) t = H[0] ? 0 : 1;
-        S.list[i].toArray(H[t].attr.array, cnt[t]++ * 16);
+        const c = S.pos[i], d = Math.hypot(c.x - p.x, c.z - p.z);
+        if (!H[1]) { put(0, i, 0, 0); continue; }
+        if (!H[0]) { put(1, i, 0, 0); continue; }
+        if (d < e + MARGIN) put(0, i, s, e);                 // hero, dithering out across [s, e]
+        if (d > s - MARGIN) put(1, i, -s, -e);               // low detail, filling exactly the pixels the hero drops
       }
       for (let t = 0; t < 2; t++) {
         if (!H[t]) continue;
-        H[t].attr.needsUpdate = true;
+        H[t].attr.needsUpdate = true; H[t].fade.needsUpdate = true;
         for (const im of H[t].ms) { im.count = cnt[t]; im.visible = cnt[t] > 0; im.boundingSphere = null; if (cnt[t]) im.computeBoundingSphere(); }
       }
     }

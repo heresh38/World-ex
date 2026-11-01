@@ -19,7 +19,7 @@ const Q = process.env.QUALITY || 'low';
 const TAG = (process.env.TAG || 'run') + '_' + Q + (process.env.TOUCH ? '_touch' : '');
 const SUBJ = new Set((process.env.SUBJECTS || 'park,forest,rock,tower,street,planet,perf').split(','));
 const STEP = +(process.env.STEP || 1.06);
-const W = 960, H = 540;
+const W = +(process.env.W || 800), H = +(process.env.H || 450);
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
@@ -121,13 +121,18 @@ fs.mkdirSync(OUT, { recursive: true });
     const r = await ev(([pos, look]) => {
       const g = window.__game, P = window.__pop, R = g.renderer, info = R.r.info, gl = R.r.getContext();
       P.cam(pos, look); P.lod(null);
-      R.__render.call(R, g.scene, g.camera);
+      const px = new Uint8Array(4);
+      R.__render.call(R, g.scene, g.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
       info.autoReset = false; info.reset();
-      R.__render.call(R, g.scene, g.camera);
-      const calls = info.render.calls, tris = info.render.triangles; info.autoReset = true;
-      const px = new Uint8Array(4), t = performance.now();
-      for (let i = 0; i < 3; i++) { R.__render.call(R, g.scene, g.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
-      return { calls, tris, ms: Math.round((performance.now() - t) / 3) };
+      const t = performance.now();
+      R.__render.call(R, g.scene, g.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const ms = Math.round(performance.now() - t), calls = info.render.calls, tris = info.render.triangles; info.autoReset = true;
+      // the share of it that is level-of-detail kit (trees, rocks, downtown buildings): what this test changes
+      let kitTris = 0; const w = g.world, kit = new Set();
+      if (w.flora) for (const k of w.flora.kinds.values()) if (k.meshes) for (const T of k.meshes) if (T) T.ms.forEach(m => kit.add(m));
+      if (w.downtown) for (const S of w.downtown.lods || []) for (const T of S.tiers) if (T) T.ms.forEach(m => kit.add(m));
+      for (const m of kit) if (m.visible) kitTris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3 * m.count;
+      return { calls, tris, kitTris: Math.round(kitTris), ms };
     }, [pos, look]);
     console.log('perf', name, JSON.stringify(r));
     const url = await ev(() => { const P = window.__pop; return P.png(P.grab()); }); save(`${TAG}_perf_${name}`, url);
@@ -180,6 +185,23 @@ fs.mkdirSync(OUT, { recursive: true });
     }
     if (SUBJ.has('street')) {
       results.walks.street = await walk('street', [140, 0, -110], [-260, 1.7, -104], [100, 1.7, -108], 20, 8);
+    }
+    // the same tree drawn by each tier at a few distances (needs flora.forceTier): how different the tiers look
+    if (SUBJ.has('tiers') && spots.lowland) {
+      const [x, y, z, h] = spots.lowland;
+      for (const d of [40, 80, 160, 300]) {
+        const r = await ev(([x, y, z, h, d]) => {
+          const g = window.__game, P = window.__pop, f = g.world.flora, w = g.world;
+          const cx = x + d, cy = Math.max(w.map.height(cx, z), y) + 3;
+          P.cam([cx, cy, z], [x, y + h * .45, z]);
+          const shots = [], ims = [];
+          for (const t of [0, 1, 2]) { f.forceTier = t; f.update(g.camera, 0, true); const im = P.grab(); ims.push(im); shots.push(P.png(im)); }
+          f.forceTier = null; f.update(g.camera, 0, true);
+          return { d, h01: P.diff(ims[0], ims[1]), h12: P.diff(ims[1], ims[2]), h02: P.diff(ims[0], ims[2]), px: Math.round(h * P.ppm(d)), shots };
+        }, [x, y, z, h, d]);
+        r.shots.forEach((u, t) => save(`${TAG}_tier${t}_${d}m`, u)); delete r.shots;
+        console.log('tiers', JSON.stringify(r));
+      }
     }
   }
   // ------------------------------------------------------------------ frontier planet: jungle streamed while walking

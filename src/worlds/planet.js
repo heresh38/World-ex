@@ -5,6 +5,7 @@ import { World } from './world.js';
 import { atmosphereSky } from './sky.js';
 import { mulberry } from '../game/state.js';
 import { Flora } from './meridian/flora.js';
+import { FADE_TIME, APPEAR, fadeMaterial, fadeGeometry, fadeAttr } from '../core/lodfade.js';
 
 const CH = 64, RES = 24, RADIUS = 4;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -31,32 +32,45 @@ const HAZE = { ares: .00062, vesper: .0011, thalassa: .0008, pyrrhos: .00095, ny
 
 function fbm(x, z, s, o = 5) { let t = 0, a = .5, n = 0; for (let i = 0; i < o; i++) { t += a * vnoise(x, z, s + i * 17); n += a; x *= 2.02; z *= 2.02; a *= .5; } return t / n; }
 
-// Global instanced pools so scatter costs one draw call per prop type regardless of chunk count.
+// Global instanced pools so scatter costs one draw call per prop type regardless of chunk count. Props of chunks
+// streamed in while playing dither in over APPEAR seconds (core/lodfade.js) and dither out before their slot is reused.
 class Pool {
   constructor(scene, root, cap) {
     root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
     this.parts = []; this.cap = cap; this.free = []; for (let i = cap - 1; i >= 0; i--) this.free.push(i);
+    this.fade = fadeAttr(cap); this.dying = [];
     root.traverse(o => {
       if (!o.isMesh) return;
-      const im = new THREE.InstancedMesh(o.geometry, o.material, cap);
+      const im = new THREE.InstancedMesh(fadeGeometry(o.geometry, this.fade), fadeMaterial(o.material), cap);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       im.castShadow = !/glow|crystal/.test(o.material.name); im.receiveShadow = true; im.frustumCulled = false;
-      im.geometry.userData.shared = true;
       for (let i = 0; i < cap; i++) im.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
       scene.add(im);
       this.parts.push({ im, local: new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld) });
     });
   }
-  add(mat) {
+  add(mat, appear = false) {
     const i = this.free.pop(); if (i === undefined) return -1;
     for (const p of this.parts) { p.im.setMatrixAt(i, _m.multiplyMatrices(mat, p.local)); p.im.instanceMatrix.needsUpdate = true; }
+    this.fade.array[i * 3 + 2] = appear ? Math.max(1e-3, FADE_TIME.value) : 0; this.fade.needsUpdate = true;
     return i;
   }
   remove(i) {
-    if (i < 0) return; _m.makeScale(0, 0, 0);
-    for (const p of this.parts) { p.im.setMatrixAt(i, _m); p.im.instanceMatrix.needsUpdate = true; }
-    this.free.push(i);
+    if (i < 0) return;
+    this.fade.array[i * 3 + 2] = -Math.max(1e-3, FADE_TIME.value); this.fade.needsUpdate = true;
+    this.dying.push(i);
+  }
+  // free the slots whose fade-out has finished
+  tick(now) {
+    if (!this.dying.length) return;
+    const F = this.fade.array;
+    this.dying = this.dying.filter(i => {
+      if (now + F[i * 3 + 2] < APPEAR) return true;
+      _m.makeScale(0, 0, 0);
+      for (const p of this.parts) { p.im.setMatrixAt(i, _m); p.im.instanceMatrix.needsUpdate = true; }
+      F[i * 3 + 2] = 0; this.fade.needsUpdate = true; this.free.push(i); return false;
+    });
   }
 }
 
@@ -147,7 +161,7 @@ export class PlanetWorld extends World {
   }
 
   stepFar(n) {
-    const J = this.farJob, r0 = CH * (RADIUS - .6), r1 = 1900;
+    const J = this.farJob, r0 = CH * (RADIUS - 1.5), r1 = 1900;
     for (let i = 0; i < n && J.r < J.RINGS; i++, J.r++) {
       const r = J.r, rad = r0 * Math.pow(r1 / r0, r / (J.RINGS - 1));
       for (let k = 0; k < J.SEG; k++) {
@@ -220,6 +234,7 @@ export class PlanetWorld extends World {
     this.pools = { rock: rockKit.map(r => new Pool(sc, r, 260)) };
     this.pools.crystal = D.crystal >= 0 ? new Pool(sc, kit.getObjectByName('PR_crystal_' + D.crystal), 240) : null;
     this.pools.plant = D.plants >= 0 ? new Pool(sc, kit.getObjectByName('PR_plant_' + D.plants), 400) : null;
+    this.poolList = [...this.pools.rock, this.pools.crystal, this.pools.plant].filter(Boolean);
     this.treeSpec = TREES[STYLE[D.id]] || null;
     if (this.treeSpec) {
       await A.loadAll([{ type: 'model', name: 'trees', file: 'trees.glb' }]);
@@ -258,6 +273,10 @@ export class PlanetWorld extends World {
     sc.environment = this.envRT.texture; sc.environmentIntensity = .6;
     pm.dispose(); this.disposables.push(this.envRT);
     g.vehicles.clear();
+    // a hidden chunk with the fading terrain material so its shader is compiled behind the loading screen
+    const probe = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.chunkFadeMat()); probe.visible = false; probe.receiveShadow = true; sc.add(probe);
+    this.built = true;
+    this.warmTextures();
     progress(1, 'Ready');
   }
 
@@ -287,16 +306,18 @@ export class PlanetWorld extends World {
       _v.set(this.height(x - e, z) - this.height(x + e, z), 2 * e, this.height(x, z - e) - this.height(x, z + e)).normalize();
       nrm.setXYZ(i, _v.x, _v.y, _v.z);
     }
-    const mesh = new THREE.Mesh(geo, this.terrainMat);
+    const appear = !!this.built;
+    const mesh = new THREE.Mesh(geo, appear ? this.chunkFadeMat() : this.terrainMat);
     mesh.position.set(ox, 0, oz); mesh.receiveShadow = true; mesh.castShadow = false;
     this.scene.add(mesh);
+    if (appear) (this.fading = this.fading || []).push(mesh);
     const ch = { key, cx, cz, mesh, inst: [], boxes: [], enemies: [], props: [] };
     // ---- seeded scatter
     const rnd = mulberry((this.seed * 7919) ^ (cx * 73856093) ^ (cz * 19349663));
     const place = (pool, x, z, s, ry, tilt = 0) => {
       const y = this.height(x, z);
       if (this.lava !== null && y < this.lava + .2) return null;
-      const id = pool.add(_m.compose(_p.set(x, y, z), _q.setFromEuler(new THREE.Euler(tilt * (rnd() - .5), ry, tilt * (rnd() - .5))), _s.set(s, s, s)));
+      const id = pool.add(_m.compose(_p.set(x, y, z), _q.setFromEuler(new THREE.Euler(tilt * (rnd() - .5), ry, tilt * (rnd() - .5))), _s.set(s, s, s)), appear);
       ch.inst.push([pool, id]);
       return y;
     };
@@ -322,7 +343,7 @@ export class PlanetWorld extends World {
       const x = cx * CH + rnd() * CH, z = cz * CH + rnd() * CH; if (Math.hypot(x, z) < 34) continue;
       const y = this.height(x, z), sl = Math.hypot(this.height(x + 2, z) - this.height(x - 2, z), this.height(x, z + 2) - this.height(x, z - 2)) / 4;
       if (sl > maxSlope || (this.lava !== null && y < this.lava + 1)) continue;
-      const h = this.flora.addLive(pool, x, y - .3, z, rnd, sc0 * (.8 + rnd() * .45)); if (!h) continue;
+      const h = this.flora.addLive(pool, x, y - .3, z, rnd, sc0 * (.8 + rnd() * .45), appear); if (!h) continue;
       ch.inst.push([{ remove: hh => this.flora.removeLive(hh) }, h]);
       const r = h.k.species === 'rock' ? h.k.w * .6 : h.k.species === 'bush' ? 0 : Math.max(.15, h.k.trunk * .9);
       if (r) ch.boxes.push(this.collision.add([x - r, y - .5, z - r, x + r, y + (h.k.species === 'rock' ? h.k.h * .8 : 4), z + r], h.k.species === 'rock' ? 'rock' : 'tree'));
@@ -436,7 +457,33 @@ export class PlanetWorld extends World {
     this.interactables = this.interactables.filter(it => !its.has(it));
     this.caches = this.caches.filter(c => c.key !== ch.key);
     this.scene.remove(ch.mesh); ch.mesh.geometry.dispose();
+    if (ch.mesh.material !== this.terrainMat) { ch.mesh.material.dispose(); this.fading = this.fading.filter(m => m !== ch.mesh); }
     this.chunks.delete(ch.key);
+  }
+
+  // A terrain chunk streamed in while playing dithers in over APPEAR seconds above the horizon mesh (which lies a
+  // little lower underneath it), then goes back to the shared material. The copies share the terrain's program; only
+  // their uBorn uniform differs.
+  chunkFadeMat() {
+    const src = this.terrainMat, m = src.clone(), born = { value: Math.max(1e-3, FADE_TIME.value) };
+    m.onBeforeCompile = (sh, r) => {
+      src.onBeforeCompile(sh, r);
+      sh.uniforms.uBorn = born; sh.uniforms.uFadeT = FADE_TIME;
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uBorn, uFadeT;')
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+          if ( fract( 52.9829189 * fract( dot( floor( gl_FragCoord.xy ), vec2( .06711056, .00583715 ) ) ) ) > ( uFadeT - uBorn ) / ${APPEAR.toFixed(2)} ) discard;`);
+    };
+    m.customProgramCacheKey = () => 'terrainfade';
+    m.userData.born = born;
+    return m;
+  }
+
+  fadeChunks() {
+    if (!this.fading || !this.fading.length) return;
+    this.fading = this.fading.filter(mesh => {
+      if (FADE_TIME.value - mesh.material.userData.born.value < APPEAR) return true;
+      mesh.material.dispose(); mesh.material = this.terrainMat; return false;
+    });
   }
 
   spawn() {
@@ -464,6 +511,7 @@ export class PlanetWorld extends World {
 
   update(dt) {
     const g = this.g, p = g.player;
+    FADE_TIME.value = g.time;
     this.sky.position.copy(g.camera.position);
     this.sky.material.uniforms.time.value = g.time;
     const c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
@@ -487,8 +535,12 @@ export class PlanetWorld extends World {
     }
     if (this.queue.length) { const w = this.queue.shift(); this.makeChunk(w[0], w[1]); }
     if (this.flora) this.flora.update(g.camera, dt);
-    else if (this.farJob) this.stepFar(3);
-    else if (this.farAt && Math.hypot(c.x - this.farAt[0], c.z - this.farAt[1]) > 140) this.buildFar(Math.round(c.x / 20) * 20, Math.round(c.z / 20) * 20);
+    for (const pl of this.poolList) pl.tick(FADE_TIME.value);
+    this.fadeChunks();
+    // (the low-detail horizon terrain follows the player: before, worlds with trees never rebuilt it and a hole
+    // opened where the landing zone's chunks had been)
+    if (this.farJob) this.stepFar(3);
+    else if (this.farAt && Math.hypot(c.x - this.farAt[0], c.z - this.farAt[1]) > 48) this.buildFar(Math.round(c.x / 16) * 16, Math.round(c.z / 16) * 16);
     // caches: animate lids
     for (const cc of this.caches) if (cc.open && cc.lid && cc.t < 1) { cc.t = Math.min(1, cc.t + dt * 2); cc.lid.rotation.x = -cc.t * 1.9; }
     // roaming drone pairs

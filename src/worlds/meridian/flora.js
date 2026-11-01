@@ -1,12 +1,21 @@
 // Flora: the Blender-grown trees of tools/blender/trees.py (trees.glb, roots TR_*) planted as instanced meshes with
 // three levels of detail. Every variant has TR_x (hero, 3-6k tris), TR_x_mid (~600 tris) and TR_x_lod (two crossed
 // impostor cards from a shared atlas). Instances are bucketed by distance from the camera whenever it has moved a few
-// metres, so thousands of trees cost a handful of draw calls. Leaves are alpha-tested double-sided cards whose normals
+// metres, so thousands of trees cost a handful of draw calls. Tiers never swap in one frame: across a distance band
+// both are drawn and cross-fade with a screen-door dither evaluated per frame in the shader (core/lodfade.js), and
+// small things (bushes, rocks) fade out far away instead of vanishing. Streamed instances (addLive) dither in over
+// ~1.6 s and out again on removeLive. Leaves are alpha-tested double-sided cards whose normals
 // point out of the crown (no back-face flip), with an alpha boost on distant mips so crowns don't thin out.
 // Wind: gusts roll across the island (a slow travelling wave in world space); the whole crown bends with the gust
 // (branches and leaves share one bend so they never separate), and leaf cards add their own flutter on top. near()
 // lists trees around a point (falling leaves in meridian/atmos.js).
 import * as THREE from 'three';
+import { FADE_TIME, APPEAR, fadeShader, fadeGeometry, fadeAttr } from '../../core/lodfade.js';
+
+// Level-of-detail distances in metres (scaled by the quality preset's draw factor and the tree's height):
+// [end of the hero band, end of the mid band, cull distance for small things]; each switch cross-fades over the
+// last BAND fraction before it. Rocks have one tier and only fade out.
+export const LOD = { hero: 78, mid: 290, small: 330, rock: 430, band: .3, step: 4 };
 
 // Planting pools (variant names in trees.glb). Earth picks a pool per area.
 export const POOLS = {
@@ -56,8 +65,9 @@ function prepMaterial(m, time) {
       sh.uniforms.uTime = time;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BEND);
+      fadeShader(sh);
     };
-    m.customProgramCacheKey = () => 'florab';
+    m.customProgramCacheKey = () => 'florab2';
     m.needsUpdate = true;
   } else if (/^leaves_/.test(n)) {
     const imp = n === 'leaves_impostor';
@@ -88,8 +98,14 @@ function prepMaterial(m, time) {
             float mipL = max(0., .5 * log2(max(dot(fdx, fdx), dot(fdy, fdy))));
             diffuseColor.a *= 1. + mipL * .28;
           #endif`);
+      fadeShader(sh);
     };
-    m.customProgramCacheKey = () => 'flora' + (imp ? 'i' : 'l');
+    m.customProgramCacheKey = () => 'flora2' + (imp ? 'i' : 'l');
+    m.needsUpdate = true;
+  } else {
+    // rocks: no wind, just the LOD fade
+    m.onBeforeCompile = sh => fadeShader(sh);
+    m.customProgramCacheKey = () => 'florar';
     m.needsUpdate = true;
   }
 }
@@ -137,17 +153,27 @@ export class Flora {
   // streamed worlds: reserve instance slots per pool before build(), then addLive/removeLive as chunks come and go
   reserve(what, cap) { for (const n of POOLS[what] || [what]) { const k = this.kinds.get(n); if (k) k.cap = Math.max(k.cap || 0, cap); } }
 
-  addLive(what, x, y, z, rnd = Math.random, scale = 1) {
+  // appear: dither in over APPEAR seconds (props streamed in while playing); removeLive dithers them out again before
+  // the slot is reused
+  addLive(what, x, y, z, rnd = Math.random, scale = 1, appear = false) {
     const k = this.pick(what, rnd); if (!k || !k.meshes) return null;
     let i = k.free.pop();
     if (i === undefined) { if (k.n >= k.capacity) return null; i = k.n++; }
     _m.compose(_p.set(x, y, z), _q.setFromAxisAngle(Y, rnd() * Math.PI * 2), _s.setScalar(scale)).toArray(k.mats, i * 16);
     k.pos[i * 3] = x; k.pos[i * 3 + 1] = y; k.pos[i * 3 + 2] = z; k.alive[i] = 1;
+    k.born[i] = appear ? Math.max(1e-3, this.now()) : 0;
     this.dirty = true;
     return { k, i };
   }
 
-  removeLive(h) { if (!h || !h.k.alive[h.i]) return; h.k.alive[h.i] = 0; h.k.free.push(h.i); this.dirty = true; }
+  removeLive(h, fade = true) {
+    if (!h || h.k.alive[h.i] !== 1) return;
+    if (fade) { h.k.alive[h.i] = 2; h.k.born[h.i] = -Math.max(1e-3, this.now()); (this.dying = this.dying || []).push(h); }
+    else { h.k.alive[h.i] = 0; h.k.free.push(h.i); }
+    this.dirty = true;
+  }
+
+  now() { return FADE_TIME.value = this.g.time || 0; }
 
   // pool name or variant name; returns the variant used (or null)
   add(what, x, y, z, rnd = Math.random, scale = 1, { collide = true, yaw } = {}) {
@@ -160,56 +186,90 @@ export class Flora {
     return name;
   }
 
-  get count() { let n = 0; for (const k of this.kinds.values()) n += k.alive ? k.alive.reduce((a, b) => a + b, 0) : k.list.length; return n; }
+  get count() { let n = 0; for (const k of this.kinds.values()) if (k.alive) { for (let i = 0; i < k.n; i++) if (k.alive[i] === 1) n++; } else n += k.list.length; return n; }
 
-  // instanced meshes: one per tier part, all parts of a tier share one instance-matrix buffer
+  // instanced meshes: one per tier part, all parts of a tier share one instance-matrix buffer and one fade buffer
   build() {
     for (const k of this.kinds.values()) {
       const n = Math.max(k.list.length, k.cap || 0); if (!n) continue;
       k.capacity = n; k.n = k.list.length; k.free = []; k.alive = new Uint8Array(n).fill(1, 0, k.list.length);
-      k.pos = new Float32Array(n * 3); k.mats = new Float32Array(n * 16);
+      k.pos = new Float32Array(n * 3); k.mats = new Float32Array(n * 16); k.born = new Float32Array(n);
       k.list.forEach((m, i) => { m.toArray(k.mats, i * 16); k.pos[i * 3] = m.elements[12]; k.pos[i * 3 + 1] = m.elements[13]; k.pos[i * 3 + 2] = m.elements[14]; });
       k.meshes = k.tiers.map((parts, t) => {
         if (!parts || !parts.length) return null;
         const attr = new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16); attr.setUsage(THREE.DynamicDrawUsage);
+        const fade = fadeAttr(n);
         const ms = parts.map(({ geo, mat }) => {
-          const im = new THREE.InstancedMesh(geo, mat, n);
+          const im = new THREE.InstancedMesh(fadeGeometry(geo, fade), mat, n);
           im.instanceMatrix = attr; im.count = 0; im.frustumCulled = false; im.visible = false;
           im.castShadow = t < 2; im.receiveShadow = true;
           this.scene.add(im); return im;
         });
-        return { attr, ms, count: 0 };
+        return { attr, fade, ms, count: 0 };
       });
     }
     this.update(this.g.camera, 0, true);
   }
 
+  // distance plan of a kind: present tiers and where each hands over, scaled by quality and tree size
+  plan(k) {
+    const q = this.g.renderer.q || {}, f = (.55 + .45 * (q.draw || .8)) * (this.g.renderer.touch ? .9 : 1);
+    if (k.planF === f) return k.plan;
+    const big = 1 + k.h / 40, small = k.h < 3.5, rock = k.species === 'rock';
+    const tiers = [0, 1, 2].filter(t => k.meshes[t]);
+    // switch distances between consecutive present tiers, then the far cull (Infinity for trees: impostors stay)
+    const at = [LOD.hero * f * big * (small ? .8 : 1), LOD.mid * f * big * (small ? .55 : 1)];
+    const ends = [];
+    for (let j = 0; j < tiers.length - 1; j++) ends.push(at[tiers[j + 1] - 1]);
+    const cull = rock ? LOD.rock * f : small ? LOD.small * f : Infinity;
+    ends.push(cull);
+    k.planF = f;
+    return (k.plan = { tiers, ends, cull });
+  }
+
   update(cam, dt, force = false) {
     this.time.value += dt;
+    const now = this.now();
     this.timer -= dt;
     const c = cam.position;
-    if (!force && !this.dirty && this.timer > 0 && c.distanceToSquared(this.last) < 16) return;
+    if (!force && !this.dirty && this.timer > 0 && c.distanceToSquared(this.last) < LOD.step * LOD.step) return;
     this.timer = .5; this.last.copy(c); this.dirty = false;
-    const q = this.g.renderer.q || {}, f = .55 + .45 * (q.draw || .8);
-    const HERO = 58 * f, MID = 230 * f;
+    // streamed instances that have finished fading out free their slot
+    if (this.dying && this.dying.length) this.dying = this.dying.filter(h => {
+      if (h.k.alive[h.i] !== 2) return false;
+      if (now + h.k.born[h.i] < APPEAR) return true;
+      h.k.alive[h.i] = 0; h.k.free.push(h.i); return false;
+    });
+    const MARGIN = LOD.step + 2, B = LOD.band;
     for (const k of this.kinds.values()) {
       if (!k.meshes) continue;
-      const big = 1 + k.h / 40, small = k.h < 3.5;
-      const h2 = (HERO * big) ** 2, m2 = (MID * big * (small ? .6 : 1)) ** 2, far2 = small ? (MID * .75) ** 2 : k.tiers[2] ? Infinity : (MID * 1.4) ** 2;
+      const { tiers, ends } = this.plan(k), nt = tiers.length;
       const T = k.meshes, cnt = [0, 0, 0];
-      const n = k.n, P = k.pos, M = k.mats, A = k.alive;
+      const n = k.n, P = k.pos, M = k.mats, A = k.alive, BO = k.born;
+      const put = (t, i, s, e) => {
+        const o = cnt[t]++, F = T[t].fade.array;
+        T[t].attr.array.set(M.subarray(i * 16, i * 16 + 16), o * 16);
+        F[o * 3] = s; F[o * 3 + 1] = e; F[o * 3 + 2] = BO[i];
+      };
       for (let i = 0; i < n; i++) {
         if (!A[i]) continue;
-        const dx = P[i * 3] - c.x, dz = P[i * 3 + 2] - c.z, d2 = dx * dx + dz * dz;
-        let t = d2 < h2 ? 0 : d2 < m2 ? 1 : d2 < far2 ? 2 : -1;
-        if (t < 0) continue;
-        while (t < 2 && !T[t]) t++;                  // missing tier: use the next cheaper one
-        if (!T[t]) { t = T[1] ? 1 : 0; if (!T[t]) continue; }
-        T[t].attr.array.set(M.subarray(i * 16, i * 16 + 16), cnt[t] * 16); cnt[t]++;
+        if (this.forceTier != null) { put(tiers.includes(this.forceTier) ? this.forceTier : tiers[0], i, 0, 0); continue; }     // tests: one tier everywhere
+        const dx = P[i * 3] - c.x, dz = P[i * 3 + 2] - c.z, d = Math.sqrt(dx * dx + dz * dz);
+        // tier j covers [ends[j-1] band start, ends[j]]: fades in over the band before its range (complement of the
+        // tier before it) and fades out over the band at its end
+        for (let j = 0; j < nt; j++) {
+          const e = ends[j], s = e * (1 - B), pe = j ? ends[j - 1] : 0, ps = pe * (1 - B);
+          if (d > e + MARGIN || (j && d < ps - MARGIN)) continue;
+          // which band is nearer decides the encoding (the bands are far apart compared to the re-bucket step)
+          if (j && (e === Infinity || d < (pe + s) / 2)) put(tiers[j], i, -ps, -pe);
+          else put(tiers[j], i, e === Infinity ? 0 : s, e === Infinity ? 0 : e);
+        }
       }
       for (let t = 0; t < 3; t++) {
         if (!T[t]) continue;
-        T[t].attr.needsUpdate = true; T[t].attr.clearUpdateRanges(); T[t].attr.addUpdateRange(0, cnt[t] * 16);
+        const a = T[t].attr, fa = T[t].fade;
+        a.needsUpdate = true; a.clearUpdateRanges(); a.addUpdateRange(0, cnt[t] * 16);
+        fa.needsUpdate = true; fa.clearUpdateRanges(); fa.addUpdateRange(0, cnt[t] * 3);
         for (const im of T[t].ms) { im.count = cnt[t]; im.visible = cnt[t] > 0; }
       }
     }

@@ -13,6 +13,10 @@ export class Assets {
     this.texLoader = new THREE.TextureLoader();
     this.models = {}; this.textures = {}; this.json = {};
     this.maxAniso = renderer.capabilities.getMaxAnisotropy();
+    // anisotropic filtering for every mipmapped texture: ground, facades and bark stay sharp at grazing angles instead
+    // of blurring until you are close (4x on phones, 8x elsewhere)
+    const touch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+    this.aniso = Math.max(1, Math.min(touch ? 4 : 8, this.maxAniso));
     this.maxTex = Infinity;        // longest texture side kept on the GPU (phones / low preset set this lower)
   }
 
@@ -85,7 +89,7 @@ export class Assets {
     return new Promise((res, rej) => this.texLoader.load(TEX_DIR + file, t => {
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-      t.anisotropy = Math.min(8, this.maxAniso);
+      t.anisotropy = this.aniso;
       res(t);
     }, undefined, () => rej(new Error('texture ' + file))));
   }
@@ -96,7 +100,7 @@ export class Assets {
         o.castShadow = true; o.receiveShadow = true;
         const ms = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of ms) {
-          if (m.map) m.map.anisotropy = Math.min(8, this.maxAniso);
+          for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'bumpMap']) if (m[k]) m[k].anisotropy = this.aniso;
           if (m.transparent || (m.opacity !== undefined && m.opacity < 1)) {
             m.transparent = true; m.depthWrite = false; o.castShadow = false;
           }

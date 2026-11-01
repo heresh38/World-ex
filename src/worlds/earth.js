@@ -219,6 +219,7 @@ export class EarthWorld extends World {
     dn.update(0, true);
     this.atmos = new Atmos(this);
     this.ambience = new EarthAmbience(this);
+    this.warmTextures();
     progress(1, 'Ready');
   }
 

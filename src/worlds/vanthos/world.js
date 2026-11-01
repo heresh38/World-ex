@@ -112,6 +112,7 @@ export class VanthosWorld extends World {
     sc.environment = this.envRT.texture; sc.environmentIntensity = .7;
     pm.dispose(); this.disposables.push(this.envRT);
     g.vehicles.clear();
+    this.warmTextures();
     progress(1, 'Ready');
   }
 
