@@ -100,6 +100,21 @@ into fresh human corpses which rise as hosts), `host` (lurching reanimated troop
 (`nest()` in `districts.js`, hospital boss), metro `FAUNA`, and overrun outposts on frontier planets.
 `FLESH_PREVIEW=<dir>` writes texture-embedded copies for `preview.py`. Test: `tools/test/horror.js` (WORLD=vanthos_metro default).
 
+## Vehicles
+`vehicle_textures.py` bakes `veh_*` maps (seat fabric/quilt, leather, dash, carpet, headliner, grille, speaker, disc, grip;
+layout renders with text for tyre sidewall/tread, gauges, screen, number-plate atlas, lamps, badges, bullet-hole and
+glass-crack decals). `vehicles.py` → `vehicles_modern.py` builds `cars.glb` with `CAR_hatch|sedan|suv|pickup|van|rover`
+(each `hi_<k>` full interior + `lo_<k>` 7-material LOD, animated `steer_`, `needleS_/needleR_`, `wheel_<FL..>`/`spin_`,
+`seat_`/`eye_` empties, `worldex` extra with dimensions) and `board_sport|board_utility.glb`; its legacy path still makes
+the skyway hover cars and calls `jumpship.py`. Runtime `src/game/vehicles.js`: `Car` = four-ray spring/damper suspension
+(gravity, landing, rolling over, buoyancy via `g.water`), OBB collisions with world boxes, other cars, the player
+(push/knock/stand on roof), enemies and pedestrians (`pedContact`, run-over above ~6 m/s); cars are combat targets
+(decals, smoke, fire, wreck). `Board` = hover board summoned with V (hovers over ground/water, carve, Space jump,
+Shift boost); on frontier worlds V again drops the rover. `save.car.model` is `board_sport|board_utility` (state.js
+migrates old `car_*`). `meridian/traffic.js` = fixed population (~120 lane cars with `civ_*` drivers in the Sit pose),
+throttled far away, turns at crossings; shot drivers slump and the car rolls to a stop. Test: `tools/test/vehicles.js`
+(`WORLD=ares` skips the Earth-only checks).
+
 ## Camera
 First person is the primary view (`settings.view = 'first'`), third person is a toggle (T) that may be removed later.
 In first person the body moves to layer 1 (shadows only) and `src/game/viewmodel.js` draws the Blender arms + gun in a
