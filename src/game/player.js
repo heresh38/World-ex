@@ -61,10 +61,34 @@ export class Player {
   // camera looks along (-sin camYaw, ., -cos camYaw)
   camForward(out) { return out.set(-Math.sin(this.camYaw) * Math.cos(this.camPitch), Math.sin(this.camPitch), -Math.cos(this.camYaw) * Math.cos(this.camPitch)); }
 
+  // Camera look. No aim assist: the feel comes from three things —
+  //  * zoom-matched sensitivity: while aiming, rotation scales with the visible field (tan of the half-FOV), so a
+  //    hand movement sweeps the same share of the screen at 1.3x and at 8x (times the "Aiming sensitivity" setting);
+  //  * smoothing: input goes into a pending turn that is paid out over a short time constant (Aim smoothing setting,
+  //    0-60 ms), so jittery mice and touch steps glide without losing any of the movement;
+  //  * touch response curve: slow drags are damped for fine corrections, fast swipes keep full speed.
   look(input, dt) {
-    const s = this.g.save.settings.sens * .0022 * (this.aiming ? .6 : 1);
-    this.camYaw -= input.mx * s;
-    this.camPitch -= input.my * s * (this.g.save.settings.invertY ? -1 : 1);
+    const S = this.g.save.settings, touch = !!input.touch;
+    let k = (touch ? (S.touchSens ?? 1) : S.sens) * .0022;
+    if (this.aiming) {
+      const z = this.g.weapons ? Math.max(1, this.g.weapons.zoom()) : 1, half = (S.fov || 70) * Math.PI / 360;
+      k *= (S.aimSens ?? 1) * Math.tan(half / z) / Math.tan(half);
+    }
+    let mx = input.mx, my = input.my;
+    if (touch && (mx || my)) {
+      const v = Math.hypot(mx, my) / Math.max(dt, 1 / 240);            // px per second
+      const gain = .5 + .5 * Math.min(1, v / 1400);
+      mx *= gain; my *= gain;
+    }
+    this.lookX = (this.lookX || 0) + mx * k;
+    this.lookY = (this.lookY || 0) + my * k * (S.invertY ? -1 : 1);
+    const tau = Math.max(0, Math.min(1, S.aimSmooth ?? (touch ? .5 : .3))) * .06;
+    const a = tau > 0 ? 1 - Math.exp(-dt / tau) : 1;
+    const dx = this.lookX * a, dy = this.lookY * a;
+    this.lookX -= dx; this.lookY -= dy;
+    if (Math.abs(this.lookX) < 1e-5) this.lookX = 0; if (Math.abs(this.lookY) < 1e-5) this.lookY = 0;
+    this.camYaw -= dx;
+    this.camPitch -= dy;
     this.camPitch = Math.max(-1.25, Math.min(1.2, this.camPitch));
   }
 

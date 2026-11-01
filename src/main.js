@@ -569,6 +569,11 @@ class Game {
       const k = 1.9 * dt / (this.save.settings.sens * .0022);
       if (input.key('ArrowLeft')) input.mx -= k; if (input.key('ArrowRight')) input.mx += k;
       if (input.key('ArrowUp')) input.my -= k * .6; if (input.key('ArrowDown')) input.my += k * .6;
+      // free mouse (no capture): a cursor held near the left/right edge keeps turning, faster the deeper it is
+      if (input.free && input.cx != null) {
+        const W = innerWidth, zone = Math.max(40, W * .07), d = input.cx < zone ? -(1 - input.cx / zone) : input.cx > W - zone ? (input.cx - (W - zone)) / zone : 0;
+        if (d) input.mx += d * 1.8 * k;
+      }
     }
     if (input.enabled && input.locked) p.look(input, dt);
     // interactions

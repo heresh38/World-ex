@@ -4,7 +4,7 @@ import { ARCHETYPES, RARITY, PERKS, weaponName, CONTRACT_POOL, sightOptions } fr
 const KEY = 'worldex_save_v1';
 
 export const DEFAULT_SETTINGS = {
-  quality: 'medium', resScale: 1, dynamicRes: true, sens: 1.0, invertY: false, fov: 70,
+  quality: 'medium', resScale: 1, dynamicRes: true, sens: 1.0, aimSens: 1.0, aimSmooth: .3, touchSens: 1.0, invertY: false, fov: 70,
   master: .8, music: .6, sfx: .9, muted: false, showFps: false, view: 'first', dayMinutes: 40,
 };
 

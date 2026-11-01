@@ -21,7 +21,9 @@ export class Input {
       if (!this.locked) return;
       // free mode (pointer lock refused, e.g. inside an embedding frame): plain mouse motion still steers the camera
       this.mx += e.movementX || 0; this.my += e.movementY || 0;
+      this.cx = e.clientX; this.cy = e.clientY;          // cursor position (free mode: edge turning)
     });
+    document.addEventListener('mouseleave', () => { this.cx = this.cy = null; });
     canvas.addEventListener('mousedown', e => {
       if (!this.locked && this.enabled && this.wantLock) { this.lock(); return; }
       if (e.button === 0) { this.lmb = true; this.lmbHit = true; }

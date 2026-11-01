@@ -533,11 +533,11 @@ def bolt_rifle():
         P.append(B('forendslot', (.0535, .03, .008), (0, y, .04), PK, .003))
     # action: round receiver with ejection port, bolt with shroud and handle, rail
     P += [tube('receiver', .021, .27, .13, zb, S, 48, cuts=[cbox((.02, .07, .02), (RIGHT * .02, -.0, zb + .008))]),
-          tube('bolt', .0125, .1, .05, zb, PK, 32), tube('shroud', .016, .035, .16, zb, S, 32),
-          ring('shroudring', .016, .0025, (0, .126, zb), S, maj=40),
-          rod('boltarm', (RIGHT * .012, .11, zb + .002), (RIGHT * .06, .118, zb - .028), .0045, S),
-          ball('boltknob', .0115, (RIGHT * .064, .12, zb - .032), PK, scale=(1, 1, 1.1)),
           B('recoillug', (.03, .012, .03), (0, -.13, .055), S, .002)]
+    BOLT = [tube('bolt', .0125, .1, .05, zb, PK, 32), tube('shroud', .016, .035, .16, zb, S, 32),
+            ring('shroudring', .016, .0025, (0, .126, zb), S, maj=40),
+            rod('boltarm', (RIGHT * .012, .11, zb + .002), (RIGHT * .06, .118, zb - .028), .0045, S),
+            ball('boltknob', .0115, (RIGHT * .064, .12, zb - .032), PK, scale=(1, 1, 1.1))]
     P += K.screw(0, -.06, .058, S, .003, 1) + K.screw(0, .1, .058, S, .003, 1)
     P += K.rail(M, .12, -.13, .097, .022, PK)
     # fluted heavy barrel and big brake
@@ -561,7 +561,10 @@ def bolt_rifle():
           ext('buttpad', [(.475, .096), (.49, .096), (.492, -.1), (.475, -.106)], .054, RB, .004),
           cylz('monopod', .006, .05, (0, .42, -.12), PK, 20), ball('monofoot', .009, (0, .42, -.146), RB)]
     P += K.sling_loop(.4, -.11, S) + K.sling_loop(-.5, .015, S)
-    finish('gun_bolt', P, (0, -.865, zb), (0, -.36, .02), (0, .2, .14), rail=(0, -.005, .1065))
+    ROUND = [tube('rd_case', .0062, .05, .03, .3, M['brass'], 14, bevel=.0008), tube('rd_neck', .0062, .012, -.02, .3, M['brass'], 14, r2=.0042, bevel=0),
+             tube('rd_nose', .0042, .018, -.032, .3, M['steel'], 14, r2=.0016, bevel=0)]
+    finish('gun_bolt', P, (0, -.865, zb), (0, -.36, .02), (0, .2, .14), rail=(0, -.005, .1065),
+           moving=[('bolt', BOLT, (0, .05, zb))], loose=[('x_round', ROUND, (0, 0, .3))])
 
 
 def service_pistol():
@@ -575,22 +578,34 @@ def service_pistol():
     slide_cuts = [cbox((.004, .0024, .026), (s * .0155, .032 - i * .0055, .066), rot=(.18, 0, 0)) for i in range(7) for s in (1, -1)]
     slide_cuts += [cbox((.004, .0024, .02), (s * .0155, -.12 - i * .0055, .068), rot=(.18, 0, 0)) for i in range(4) for s in (1, -1)]
     slide_cuts += [cbox((.016, .034, .02), (RIGHT * .008, -.03, .082))]
-    P.append(ext('slide', [(.04, .048), (.04, .074), (.034, .078), (-.148, .078), (-.158, .07), (-.158, .048)], .029, S, .0025, cuts=slide_cuts))
+    SLIDE = [ext('slide', [(.04, .048), (.04, .074), (.034, .078), (-.148, .078), (-.158, .07), (-.158, .048)], .029, S, .0025, cuts=slide_cuts)]
     P += [B('hood', (.018, .032, .014), (RIGHT * .002, -.03, .072), PK, .002),
           tube('crown', .0068, .006, -.153, .062, PK, 32, hollow=.0045), tube('guiderod', .004, .008, -.152, .044, PK, 20),
           ext('slidestop', [(-.005, .048), (-.058, .046), (-.064, .039), (-.01, .041)], .0026, S, .0006, 2, x=.0158),
           cylx('stoppin', .003, .033, (0, -.01, .042), S, 16), B('takedown', (.003, .012, .006), (.0155, -.085, .042), S, .001),
-          cylx('magrelease', .004, .006, (.015, -.006, .016), PO, 20), B('extractor', (.0015, .03, .004), (RIGHT * .0148, -.02, .068), PK, .0005)]
+          cylx('magrelease', .004, .006, (.015, -.006, .016), PO, 20)]
+    SLIDE.append(B('extractor', (.0015, .03, .004), (RIGHT * .0148, -.02, .068), PK, .0005))
     # sights: notch rear with two white dots, post front with one
     sz = .0835
-    P += [B('rear_base', (.026, .01, .006), (0, .028, .081), S, .001),
+    SLIDE += [B('rear_base', (.026, .01, .006), (0, .028, .081), S, .001),
           B('rearL', (.0085, .009, .008), (.0078, .028, sz - .002), S, .0008), B('rearR', (.0085, .009, .008), (-.0078, .028, sz - .002), S, .0008),
           cylx('rdotL', .0016, .001, (.0078, .0235, sz - .001), PA, 12) if False else ball('rdotL', .0017, (.0078, .0234, sz - .0015), PA, scale=(1, .4, 1), seg=12, rings=8),
           ball('rdotR', .0017, (-.0078, .0234, sz - .0015), PA, scale=(1, .4, 1), seg=12, rings=8),
           B('frontpost', (.0035, .006, .0075), (0, -.146, sz - .0035), S, .0008),
-          ball('fdot', .0016, (0, -.1425, sz - .0012), PA, scale=(1, .4, 1), seg=12, rings=8),
-          B('magbase', (.033, .046, .009), (0, .037, -.084), PO, .003, rot=(.3, 0, 0))]
-    finish('gun_pistol', P, (0, -.165, .062), (0, -.02, -.035), (0, .07, sz), rail=(0, -.05, .078))
+          ball('fdot', .0016, (0, -.1425, sz - .0012), PA, scale=(1, .4, 1), seg=12, rings=8)]
+    # magazine: steel body hidden in the grip, polymer base pad, top round (raked with the grip, ang .3)
+    ca, sa = math.cos(.3), math.sin(.3)
+
+    def gp(b, a=.004):          # point down the grip axis
+        return (a * ca + b * sa, .022 - b * ca + a * sa)
+    c = gp(.06)
+    MAG = [B('magbody', (.021, .029, .1), (0, c[0], c[1]), S, .0015, rot=(.3, 0, 0)),
+           B('magbase', (.033, .046, .009), (0, .037, -.084), PO, .003, rot=(.3, 0, 0))]
+    t = gp(.012, -.002)
+    MAG.append(rod('magtop', (0, t[0] + .012, t[1] + .002), (0, t[0] - .012, t[1] - .002), .0045, M['brass']))
+    top = gp(.01)
+    finish('gun_pistol', P, (0, -.165, .062), (0, -.02, -.035), (0, .07, sz), rail=(0, -.05, .078),
+           moving=[('mag', MAG, (0, top[0], top[1])), ('slide', SLIDE, (0, -.06, .062))])
 
 
 def pump_shotgun():
@@ -608,9 +623,9 @@ def pump_shotgun():
     for i in range(10):
         P.append(B('ribpost', (.004, .005, .006), (0, -.19 - i * .05, .092), S, .0006))
     grooves = [cbox((.07, .0045, .01), (0, -.29 - i * .018, .028)) for i in range(9)] + [cbox((.0045, .0045, .04), (s * .028, -.29 - i * .018, .052)) for i in range(9) for s in (1, -1)]
-    P += [ext('forend', [(-.27, .026), (-.27, .066), (-.455, .066), (-.455, .026)], .054, W, .016, 4, cuts=grooves)]
+    PUMP = [ext('forend', [(-.27, .026), (-.27, .066), (-.455, .066), (-.455, .026)], .054, W, .016, 4, cuts=grooves)]
     for s in (1, -1):
-        P.append(B('actionbar', (.003, .13, .006), (s * .0165, -.205, .05), S, .0008))
+        PUMP.append(B('actionbar', (.003, .13, .006), (s * .0165, -.205, .05), S, .0008))
     P += [ext('stock', [(.09, .098), (.2, .09), (.42, .076), (.432, .068), (.432, -.072), (.418, -.078), (.26, -.03), (.13, -.03),
                         (.07, -.09), (.04, -.1), (.012, -.088), (.004, -.03), (.03, .03), (.09, .03)], .038, W, .012, 4),
           ext('buttpad', [(.432, .07), (.447, .07), (.449, -.074), (.432, -.074)], .042, RB, .004),
@@ -626,7 +641,10 @@ def pump_shotgun():
         P += [cylz('shell', .0092, .045, (.034, y, .07), shell, 24), cylz('shellbase', .0098, .012, (.034, y, .043), BR, 24)]
     sz = .1
     P += [ball('bead', .0028, (0, -.71, .0985), BR, seg=14, rings=10), ball('midbead', .0018, (0, -.43, .0975), M['paint'], seg=10, rings=6)]
-    finish('gun_pump', P, (0, -.72, zb), (0, -.36, .012), (0, .1, sz), rail=None)
+    SHELL = [tube('sh_hull', .0092, .052, .02, .3, shell, 16, bevel=.001), tube('sh_base', .0098, .012, .032, .3, BR, 16, bevel=.0008),
+             tube('sh_crimp', .0086, .003, -.032, .3, shell, 16, bevel=0)]
+    finish('gun_pump', P, (0, -.72, zb), (0, -.36, .012), (0, .1, sz), rail=None,
+           moving=[('pump', PUMP, (0, -.36, .046))], loose=[('x_shell', SHELL, (0, 0, .3))])
 
 
 def compact_smg():
@@ -700,10 +718,26 @@ def revolver():
     cut = []
     for i in range(6):
         a = i * math.pi / 3 + math.pi / 6
-        cut.append(ccyl(.0055, .045, (math.cos(a) * .0215, -.004, zc + math.sin(a) * .0215), (R90, 0, 0), 16))
+        cut.append(ccyl(.0055, .08, (math.cos(a) * .0215, -.004, zc + math.sin(a) * .0215), (R90, 0, 0), 16))
         b = i * math.pi / 3 + math.pi / 2
         cut.append(ccyl(.0045, .01, (math.cos(b) * .013, -.034, zc + math.sin(b) * .013), (R90, 0, 0), 16))
-    P += [tube('cylinder', .0215, .058, .0265, zc, S, 64, cuts=cut, bevel=.002), tube('ratchet', .008, .006, .031, zc, S, 6)]
+    CYL = [tube('cylinder', .0215, .058, .0265, zc, S, 64, cuts=cut, bevel=.002), tube('ratchet', .008, .006, .031, zc, S, 6)]
+    ROUNDS = []
+    for i in range(6):
+        a = i * math.pi / 3 + math.pi / 6
+        x, z = math.cos(a) * .0215, zc + math.sin(a) * .0215
+        ROUNDS += [tube('rim', .0062, .0016, .0268, z, BR, 14, x=x, bevel=0), tube('case', .0054, .012, .0255, z, BR, 12, x=x, bevel=0),
+                   tube('primer', .0021, .0004, .02695, z, M['steel'], 8, x=x, bevel=0)]
+    hx, hz = .004, zc - .025
+    CRANE = [tube('ejrod', .0034, .03, -.031, zc, S, 20), tube('ejknob', .0042, .006, -.058, zc, S, 20),
+             B('yoke', (.008, .006, .028), (.002, -.034, zc - .012), S, .001), tube('yokepin', .0036, .05, .0, hz, S, 16, x=hx)]
+    LOADER = [tube('sl_body', .019, .012, .016, 0, S, 32), tube('sl_knob', .008, .014, .03, 0, S, 24),
+              ring('sl_grip', .019, .0016, (0, .01, 0), S, maj=32, mn=6)]
+    for i in range(6):
+        a = i * math.pi / 3 + math.pi / 6
+        x, z = math.cos(a) * .0215, math.sin(a) * .0215
+        LOADER += [tube('sl_case', .0054, .03, .004, z, BR, 12, x=x, bevel=0), tube('sl_nose', .0046, .008, -.026, z, M['steel'], 12, r2=.0024, x=x, bevel=0)]
+    CASING = [tube('cs_case', .0054, .03, .015, .2, BR, 12, bevel=0, hollow=.0045), tube('cs_rim', .0062, .0016, .0155, .2, BR, 12, bevel=0)]
     P += [tube('barrel', .0085, .12, -.06, zb, S, 40, hollow=.0048),
           ext('underlug', [(-.06, .052), (-.06, .088), (-.178, .088), (-.178, .056), (-.12, .046), (-.075, .048)], .02, S, .003),
           ext('ventrib', [(-.06, .088), (-.06, .094), (-.178, .094), (-.178, .088)], .008, S, .001,
@@ -720,7 +754,10 @@ def revolver():
           B('rearL', (.005, .006, .007), (.0055, .025, sz - .002), S, .0006), B('rearR', (.005, .006, .007), (-.0055, .025, sz - .002), S, .0006),
           ext('frontblade', [(-.16, .094), (-.163, sz), (-.172, sz), (-.176, .094)], .0035, S, .0006, 2),
           B('fiber', (.0037, .006, .003), (0, -.168, sz - .002), OR, .0004)]
-    finish('gun_revolver', P, (0, -.185, zb), (0, -.02, -.035), (0, .07, sz))
+    finish('gun_revolver', P, (0, -.185, zb), (0, -.02, -.035), (0, .07, sz),
+           moving=[('crane', CRANE, (hx, -.0025, hz)), ('cylinder', CYL, (0, -.0025, zc), 'crane'),
+                   ('rounds', ROUNDS, (0, -.0025, zc), 'cylinder')],
+           loose=[('x_speedloader', LOADER, (0, 0, 0)), ('x_casing', CASING, (0, 0, .2))])
 
 
 # ================================================================== horror line (living biomass)
@@ -751,6 +788,21 @@ def _bio_keys(mouth, rmouth=.05):
     return keys
 
 
+def load_mat(tex, emit):
+    """The loadable biomass (slime ball / bile bladder / larva egg): wet, glistening, lit from inside."""
+    return K.tmat('bio_load', tex, coat=1.0, rough=.12, emit=emit, strength=1.6, emit_tex=True)
+
+
+def hatch_sdf(c, r, cut_x, seed, th=.0032):
+    """Lid over a socket on the gun's left flank: a lumpy shell patch of ellipsoid (c, r) outside the plane x = cut_x."""
+    def f(P):
+        e = sdf.ellipsoid(P, c, r)
+        d = np.abs(e) - th
+        d = sdf.smax(d, cut_x - P[:, 0], .003)
+        return d + K.lumps(P, seed, 150, .0012)
+    return f
+
+
 def bio_spitter():
     """Spitter: a ribbed, breathing tube of muscle that hawks acid globs from a toothed maw."""
     bl.reset(); M = K.bio_mats()
@@ -774,6 +826,7 @@ def bio_spitter():
             d = sdf.smin(d, sdf.capsule(P, (s * .045, .12, .05), (s * .038, -.2, .035), .0035), .005)
         d = d + K.lumps(P, 3, 120, .0025) + K.lumps(P, 4, 40, .003)
         d = sdf.smax(d, -sdf.ellipsoid(P, (0, -.575, zb), (.032, .055, .026)), .012)               # the maw
+        d = sdf.smax(d, -sdf.sphere(P, (.038, -.25, .074), .024), .006)                               # feeding socket
         return d
     lo, hi = (-.1, -.62, -.14), (.1, .3, .16)
     P = [K.sdf_part('flesh', body, lo, hi, .0026, M['flesh'], 8000)]
@@ -806,8 +859,12 @@ def bio_spitter():
     P.append(K.sdf_part('bone', bone, (-.1, -.6, .03), (.1, .2, .17), .0015, M['bone'], 3500))
     P.append(K.sdf_part('maw', lambda P: sdf.ellipsoid(P, (0, -.548, zb), (.026, .03, .021)) + K.lumps(P, 6, 200, .001),
                         (-.04, -.6, .03), (.04, -.5, .11), .0018, M['maw'], 700))
-    finish('gun_bio_spitter', P, (0, -.6, zb), (0, -.295, -.02), (0, .13, .155), organic=('bio_flesh', 'bio_maw', 'bio_glow'),
-           cyl_axis=(0, .07), keys=_bio_keys(mouth, .045))
+    HATCH = [K.sdf_part('hatch', hatch_sdf((.03, -.25, .074), (.03, .034, .03), .044, 15), (.03, -.3, .03), (.075, -.2, .115), .0014, M['flesh'], 1400)]
+    LOAD = [K.sdf_part('biomass', lambda P: sdf.sphere(P, (.036, -.25, .074), .019) + K.lumps(P, 16, 260, .0012) + K.lumps(P, 17, 90, .0016),
+                       (.01, -.28, .05), (.06, -.22, .1), .0012, load_mat('bio_sac', '#ffffff'), 1200)]
+    finish('gun_bio_spitter', P, (0, -.6, zb), (0, -.295, -.02), (0, .13, .155), organic=('bio_flesh', 'bio_maw', 'bio_glow', 'bio_load'),
+           cyl_axis=(0, .07), keys=_bio_keys(mouth, .045),
+           moving=[('hatch', HATCH, (.046, -.25, .1)), ('biomass', LOAD, (.036, -.25, .074))])
 
 
 def bio_bile():
@@ -828,6 +885,7 @@ def bio_bile():
         d = d + K.lumps(P, 7, 110, .0028) + K.lumps(P, 8, 35, .004)
         d = sdf.smax(d, -sdf.ellipsoid(P, (0, -.46, zb), (.055, .06, .026)), .014)                 # wide horizontal maw
         d = sdf.smax(d, -sdf.ellipsoid(P, (0, -.17, -.015), (.038, .085, .04)), .01)               # window onto the stomach sac
+        d = sdf.smax(d, -sdf.ellipsoid(P, (.044, -.112, .078), (.022, .032, .02)), .006)            # feeding slit
         return d
     P = [K.sdf_part('flesh', body, (-.1, -.53, -.11), (.1, .26, .15), .0026, M['flesh'], 8000)]
 
@@ -854,8 +912,12 @@ def bio_bile():
     P.append(K.sdf_part('bone', bone, (-.12, -.5, .03), (.12, .2, .17), .0015, M['bone'], 3500))
     P.append(K.sdf_part('maw', lambda P: sdf.ellipsoid(P, (0, -.43, zb), (.048, .04, .02)) + K.lumps(P, 10, 200, .001),
                         (-.06, -.48, .04), (.06, -.38, .11), .0018, M['maw'], 700))
-    finish('gun_bio_bile', P, (0, -.49, zb), (0, -.2, -.06), (0, .12, .16), organic=('bio_flesh', 'bio_maw', 'bio_glow'),
-           cyl_axis=(0, .07), keys=_bio_keys((0, -.465, zb), .06))
+    HATCH = [K.sdf_part('hatch', hatch_sdf((.03, -.112, .078), (.032, .04, .03), .046, 18), (.03, -.16, .04), (.075, -.06, .115), .0014, M['flesh'], 1400)]
+    LOAD = [K.sdf_part('biomass', lambda P: sdf.ellipsoid(P, (.042, -.112, .078), (.016, .027, .015)) + K.lumps(P, 19, 240, .0012) + K.lumps(P, 20, 80, .0018),
+                       (.015, -.15, .05), (.07, -.075, .1), .0012, load_mat('bio_sac', '#ffffff'), 1200)]
+    finish('gun_bio_bile', P, (0, -.49, zb), (0, -.2, -.06), (0, .12, .16), organic=('bio_flesh', 'bio_maw', 'bio_glow', 'bio_load'),
+           cyl_axis=(0, .07), keys=_bio_keys((0, -.465, zb), .06),
+           moving=[('hatch', HATCH, (.048, -.112, .052)), ('biomass', LOAD, (.042, -.112, .078))])
 
 
 def bio_brood():
@@ -875,6 +937,7 @@ def bio_brood():
             d = sdf.smin(d, sdf.capsule(P, (s * .07, .1, .1), (s * .06, -.5, .1), .006), .008)
         d = d + K.lumps(P, 11, 90, .003) + K.lumps(P, 12, 30, .005)
         d = sdf.smax(d, -sdf.sphere(P, (0, -.67, zb), .045), .015)                                 # orifice
+        d = sdf.smax(d, -sdf.ellipsoid(P, (0, -.15, .18), (.03, .042, .028)), .006)                  # womb socket under the lid plate
         return d
     P = [K.sdf_part('flesh', body, (-.13, -.72, -.14), (.13, .37, .21), .003, M['flesh'], 9000)]
 
@@ -891,6 +954,8 @@ def bio_brood():
     def bone(P):
         d = np.full(len(P), 1e3, np.float32)
         for i, y in enumerate(np.linspace(.15, -.45, 5)):                                       # carapace plates
+            if i == 2:
+                continue                                                                        # the lid plate is the 'hatch'
             shell = sdf.ellipsoid(P, (0, y, zb + .02), (.09, .085, .09))
             inner = sdf.ellipsoid(P, (0, y + .01, zb + .005), (.085, .09, .085))
             plate = sdf.smax(shell, -inner, .004)
@@ -908,8 +973,23 @@ def bio_brood():
     P.append(K.sdf_part('bone', bone, (-.12, -.76, .03), (.12, .27, .25), .0022, M['bone'], 4500))
     P.append(K.sdf_part('maw', lambda P: sdf.sphere(P, (0, -.64, zb), .038) + K.lumps(P, 14, 200, .0015),
                         (-.05, -.69, .06), (.05, -.59, .16), .002, M['maw'], 700))
-    finish('gun_bio_brood', P, (0, -.7, zb), (0, -.31, -.04), (0, .07, .225), organic=('bio_flesh', 'bio_maw', 'bio_glow'),
-           cyl_axis=(0, .1), keys=_bio_keys((0, -.66, zb), .06))
+    def lid(P):
+        shell = sdf.ellipsoid(P, (0, -.15, zb + .02), (.09, .085, .09))
+        inner = sdf.ellipsoid(P, (0, -.14, zb + .005), (.085, .09, .085))
+        plate = sdf.smax(shell, -inner, .004)
+        return sdf.smax(plate, -(P[:, 2] - (zb + .045)), .006) + K.lumps(P, 21, 140, .0008)
+    HATCH = [K.sdf_part('hatch', lid, (-.1, -.25, .14), (.1, -.05, .23), .0018, M['bone'], 2000)]
+
+    def egg(P):
+        d = sdf.ellipsoid(P, (0, -.15, .176), (.02, .029, .02))
+        for k in range(5):                                                                      # raised veins
+            a = k * 1.25
+            d = sdf.smin(d, sdf.capsule(P, (math.cos(a) * .019, -.172, .176 + math.sin(a) * .019), (math.cos(a + .5) * .017, -.128, .176 + math.sin(a + .5) * .017), .0016), .003)
+        return d + K.lumps(P, 22, 220, .001)
+    LOAD = [K.sdf_part('biomass', egg, (-.03, -.19, .15), (.03, -.11, .2), .0011, load_mat('bio_flesh', '#ffffff'), 1500)]
+    finish('gun_bio_brood', P, (0, -.7, zb), (0, -.31, -.04), (0, .07, .225), organic=('bio_flesh', 'bio_maw', 'bio_glow', 'bio_load'),
+           cyl_axis=(0, .1), keys=_bio_keys((0, -.66, zb), .06),
+           moving=[('hatch', HATCH, (0, -.232, .16)), ('biomass', LOAD, (0, -.15, .176))])
 
 
 # ================================================================== sight attachments (gun_attach.glb)

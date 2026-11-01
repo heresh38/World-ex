@@ -97,16 +97,16 @@ def strokes(W, H, n, seed, col_fn, length=(8, 26), width=(1, 3), upward=False, w
 # ====================================================================== ground
 def asphalt():
     S = 1024
-    cv = Canvas(S, S, (.115, .113, .118), .9, 0)
+    cv = Canvas(S, S, (.07, .069, .072), .9, 0)
     big = noise(S, S, 2.0, 1); mid = noise(S, S, 1.4, 2); fine = noise(S, S, .1, 3)
     cv.c *= (.78 + .4 * big)[..., None] * (.9 + .2 * mid)[..., None]
     # aggregate: pale stones in the binder, polished by years of traffic then left to weather
     stones = np.clip((fine - .62) * 6, 0, 1)
-    cv.c = cv.c * (1 - stones[..., None] * .55) + np.array((.42, .41, .4), np.float32) * stones[..., None] * .55
+    cv.c = cv.c * (1 - stones[..., None] * .55) + np.array((.24, .235, .23), np.float32) * stones[..., None] * .55
     cv.hg = fine * .35 + stones * .25
     # sun-bleached, dusty areas
     dust = np.clip((noise(S, S, 1.9, 4) - .48) * 2.4, 0, 1)
-    cv.c = cv.c * (1 - dust[..., None] * .45) + np.array((.33, .3, .26), np.float32) * dust[..., None] * .45
+    cv.c = cv.c * (1 - dust[..., None] * .45) + np.array((.19, .17, .15), np.float32) * dust[..., None] * .45
     # repair patches (darker, smoother) with a hard edge
     rg = np.random.RandomState(5)
     yy, xx = np.mgrid[0:S, 0:S]
@@ -125,15 +125,15 @@ def asphalt():
     cv.c *= (1 - cr * .75)[..., None]; cv.hg -= cr * 1.2; cv.r = np.clip(cv.r + cr * .05, 0, 1)
     # weeds and moss growing out of the cracks
     near = wrapblur(cr, 3.0) * 4
-    weed = np.clip(near * (noise(S, S, 1.0, 9) > .5) * 1.4, 0, 1) * (noise(S, S, .4, 10) > .45)
-    gcol = np.where((noise(S, S, 1.2, 11) > .5)[..., None], np.array((.16, .2, .07), np.float32), np.array((.28, .27, .12), np.float32))
+    weed = np.clip(near * (noise(S, S, 1.0, 9) > .55) * 1.2, 0, 1) * (noise(S, S, .4, 10) > .5) * .8
+    gcol = np.where((noise(S, S, 1.2, 11) > .5)[..., None], np.array((.06, .075, .03), np.float32), np.array((.11, .1, .05), np.float32))
     cv.c = cv.c * (1 - weed[..., None] * .8) + gcol * weed[..., None] * .8
     cv.hg += weed * .6; cv.r = np.clip(cv.r + weed * .05, 0, 1)
     # potholes: broken edge, gravel and grit inside, the odd dark puddle stain
     for k in range(2):
         cx, cy, r = rg.uniform(0, S), rg.uniform(0, S), rg.uniform(40, 80)
         dx = (xx - cx + S / 2) % S - S / 2; dy = (yy - cy + S / 2) % S - S / 2
-        ang = np.arctan2(dy, dx); d = np.hypot(dx, dy) / (r * (1 + .25 * np.sin(ang * 5 + k) + .1 * np.sin(ang * 13)))
+        d = np.hypot(dx, dy) / r + (noise(S, S, 1.3, 50 + k) - .5) * .9
         hole = d < 1
         rim = (d > .85) & (d < 1.08)
         g2 = noise(S, S, .3, 12 + k)
@@ -146,7 +146,7 @@ def asphalt():
 
 def pavers():
     S = 1024
-    cv = Canvas(S, S, (.45, .43, .4), .88, 0)
+    cv = Canvas(S, S, (.26, .25, .23), .88, 0)
     yy, xx = np.mgrid[0:S, 0:S]
     n = 4; cs = S // n                                    # 1 m slabs on a 4 m tile
     row, col = yy // cs, xx // cs
@@ -186,28 +186,29 @@ def pavers():
 
 def dirt():
     S = 1024
-    cv = Canvas(S, S, (.26, .23, .2), .95, 0)
-    a, b = noise(S, S, 1.9, 31), noise(S, S, 1.0, 32)
-    cv.c *= (.7 + .5 * a)[..., None] * (.9 + .2 * b)[..., None]
+    cv = Canvas(S, S, (.13, .115, .1), .95, 0)
+    a, b, c = noise(S, S, 1.9, 31), noise(S, S, 1.0, 32), noise(S, S, .35, 39)
+    cv.c *= (.7 + .55 * a)[..., None] * (.85 + .3 * b)[..., None] * (.85 + .3 * c)[..., None]
     ash = np.clip((noise(S, S, 1.7, 33) - .5) * 2.5, 0, 1)
-    cv.c = cv.c * (1 - ash[..., None] * .5) + np.array((.36, .35, .34), np.float32) * ash[..., None] * .5
-    cv.hg = a * .5 + b * .3
-    # gravel: small voronoi stones
-    F1, F2, ID = voronoi(S, S, 70, 34)
+    cv.c = cv.c * (1 - ash[..., None] * .5) + np.array((.2, .195, .19), np.float32) * ash[..., None] * .5
+    damp = np.clip((noise(S, S, 1.8, 30) - .55) * 3, 0, 1)
+    cv.c *= (1 - damp * .35)[..., None]
+    cv.hg = a * .5 + b * .3 + c * .3
     rg = np.random.RandomState(35)
-    keep = (rg.rand(70 * 70) < .35)[ID]
-    dome = np.clip(1 - F1 * 2.2, 0, 1) * keep
-    stone = dome > 0
-    pal = np.array([(.42, .4, .37), (.3, .29, .28), (.5, .47, .42), (.38, .26, .2)], np.float32)
-    cv.c[stone] = pal[ID[stone] % 4] * (.7 + .5 * dome[stone])[:, None]
-    cv.hg += dome * 1.4
-    # bigger chips: concrete and brick
-    F1b, F2b, IDb = voronoi(S, S, 14, 36)
-    kb = (rg.rand(14 * 14) < .3)[IDb]
-    chip = (F1b < .28) & kb
-    pal2 = np.array([(.55, .53, .49), (.45, .24, .17), (.4, .39, .36)], np.float32)
-    cv.c[chip] = pal2[IDb[chip] % 3] * (.75 + .3 * noise(S, S, .3, 37)[chip])[:, None]
-    cv.hg[chip] += 1.2 - F1b[chip] * 2
+    # gravel at three sizes, irregular (two voronoi fields), mostly the soil's own greys and browns
+    for n, keep, k, hscale in ((90, .22, 34, .9), (40, .12, 36, 1.3), (16, .07, 37, 1.6)):
+        F1, F2, ID = voronoi(S, S, n, k)
+        kp = (rg.rand(n * n) < keep)[ID]
+        warp = noise(S, S, .8, k + 100) * .25
+        dome = np.clip(1 - (F1 + warp) * 2.4, 0, 1) * kp
+        stone = dome > .02
+        tone = rg.uniform(.6, 1.6, n * n).astype(np.float32)[ID]
+        brick = (rg.rand(n * n) < .12)[ID]
+        base = np.where(brick[..., None], np.array((.2, .1, .07), np.float32), np.array((.17, .16, .15), np.float32))
+        col = base * (tone * (.6 + .5 * dome))[..., None]
+        cv.c[stone] = cv.c[stone] * .25 + col[stone] * .75
+        cv.hg = np.where(stone, np.maximum(cv.hg, .4 + dome * hscale), cv.hg)
+        cv.r[stone] = .85
     # wind ripples in drifted ash
     rip = (np.sin((np.mgrid[0:S, 0:S][0] / S * 22 + noise(S, S, 1.4, 38) * 6) * TAU) * .5 + .5) * ash
     cv.hg += rip * .3
@@ -298,16 +299,15 @@ def window_hole(cv, rg, x0, y0, x1, y1, kind):
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         R = max(w, h) * rg.uniform(.65, .85)
         Y, X = np.mgrid[max(0, int(cy - R)):min(cv.h, int(cy + R)), max(0, int(cx - R)):min(cv.w, int(cx + R))]
-        a = np.arctan2(Y - cy, X - cx); d = np.hypot((Y - cy) * 1.2, X - cx) / (R * (1 + .2 * np.sin(a * 6 + rg.rand() * 6) + .1 * np.sin(a * 17)))
+        a = np.arctan2(Y - cy, X - cx); ph = rg.rand(3) * 6
+        d = np.hypot((Y - cy) * 1.2, X - cx) / (R * (1 + .12 * np.sin(a * 3 + ph[0]) + .07 * np.sin(a * 7 + ph[1]) + .04 * np.sin(a * 19 + ph[2])))
         hole = d < 1; rim = (d >= 1) & (d < 1.25)
         cv.c[Y[hole], X[hole]] = (.03, .028, .027); cv.hg[Y[hole], X[hole]] = -1.4
         cv.c[Y[rim], X[rim]] *= np.array((.62, .6, .58), np.float32); cv.hg[Y[rim], X[rim]] -= .5
         for k in range(5):                                  # exposed rebar across the hole
             ry = int(cy - R * .6 + k * R * .3)
-            if 0 <= ry < cv.h:
-                xs = X[0][(np.abs(Y[:, 0] - ry) < 1).any() and True or 0] if False else None
-                sl = hole[np.clip(ry - Y[0, 0], 0, hole.shape[0] - 1)]
-                xr = X[0][sl]
+            if Y[0, 0] <= ry < Y[-1, 0]:
+                xr = X[0][hole[ry - Y[0, 0]]]
                 if len(xr):
                     cv.c[ry:ry + 2, xr.min():xr.max()] = (.3, .16, .08); cv.hg[ry:ry + 2, xr.min():xr.max()] = .2; cv.m[ry:ry + 2, xr.min():xr.max()] = .3
 
@@ -326,9 +326,9 @@ def soot(cv, x0, y0, x1, y1, k=.85):
 
 def streaks(cv, seed, amount=.35, rust=.25):
     H, W = cv.h, cv.w
-    s = noise(H, W, 1.3, seed, ax=9, ay=.3)
+    s = noise(H, W, 1.3, seed, ax=.25, ay=9)               # long vertical runs (smooth along y)
     cv.c *= (1 - amount * np.clip((s - .5) * 2.6, 0, 1))[..., None]
-    r = np.clip((noise(H, W, 1.3, seed + 1, ax=10, ay=.35) - .66) * 3.5, 0, 1) * rust
+    r = np.clip((noise(H, W, 1.1, seed + 1, ax=.3, ay=12) - .7) * 4, 0, 1) * rust
     cv.c = cv.c * (1 - r[..., None]) + np.array((.3, .15, .06), np.float32) * r[..., None]
 
 
@@ -340,35 +340,39 @@ def crack_lines(cv, rg, n, seed):
 def conc():
     S, B, F = 1024, 4, 4
     cw, ch = S // B, S // F                           # 3.5 m bays, 3.5 m floors
-    cv = Canvas(S, S, (.5, .48, .44), .9, 0)
+    cv = Canvas(S, S, (.3, .29, .27), .9, 0)
     n = noise(S, S, 1.6, 61); f = noise(S, S, .3, 62)
     cv.c *= (.8 + .3 * n)[..., None] * (.92 + .16 * f)[..., None]
     cv.hg = f * .3
     rg = np.random.RandomState(63)
+    wins = []
     for fl in range(F):
         y0 = fl * ch
-        cv.rect(0, y0 + ch - 34, S, y0 + ch - 30, col=(.36, .34, .31), h=-.5)          # panel joint at the slab
+        cv.rect(0, y0 + ch - 34, S, y0 + ch - 30, col=(.2, .19, .18), h=-.5)          # panel joint at the slab
         cv.rect(0, y0 + ch - 30, S, y0 + ch, dh=.25)                                     # spandrel band, slightly proud
         burnt_floor = rg.rand() < .35
         for b in range(B):
             x0 = b * cw
-            cv.rect(x0, y0, x0 + 3, y0 + ch, col=(.38, .36, .33), h=-.4)              # vertical joint
+            cv.rect(x0, y0, x0 + 3, y0 + ch, col=(.2, .19, .18), h=-.4)              # vertical joint
             wx0, wx1 = x0 + int(cw * .16), x0 + int(cw * .84)
             wy0, wy1 = y0 + int(ch * .18), y0 + int(ch * .66)
             k = rg.rand()
             kind = 'spall' if k < .12 else 'board' if k < .2 else 'frame' if k < .55 else 'empty'
-            # sill: moss on it, a water stain beneath
-            cv.rect(wx0 - 6, wy1, wx1 + 6, wy1 + 7, col=(.42, .4, .37), h=.6)
-            cv.rect(wx0 - 4, wy1 - 1, wx1 + 4, wy1 + 2, col=(.17, .2, .08), h=.8)
-            window_hole(cv, rg, wx0, wy0, wx1, wy1, kind)
-            if (burnt_floor and rg.rand() < .7) or rg.rand() < .12:
-                soot(cv, wx0, wy0, wx1, wy1, .75 + rg.rand() * .2)
-    streaks(cv, 64, .4, .35)
+            # sill with moss on it
+            cv.rect(wx0 - 6, wy1, wx1 + 6, wy1 + 7, col=(.26, .25, .23), h=.6)
+            cv.rect(wx0 - 4, wy1 - 1, wx1 + 4, wy1 + 2, col=(.1, .12, .05), h=.8)
+            wins.append((wx0, wy0, wx1, wy1, kind, (burnt_floor and rg.rand() < .7) or rg.rand() < .12))
+    # weathering first (rain runs from the sills), then the openings stay dark and clean, then soot over everything
+    streaks(cv, 64, .4, .3)
     crack_lines(cv, rg, 6, 65)
-    # spalled patches with rebar showing
     sp = np.clip((noise(S, S, 1.5, 66) - .7) * 5, 0, 1)
-    cv.c = cv.c * (1 - sp[..., None] * .4) + np.array((.33, .31, .28), np.float32) * sp[..., None] * .4; cv.hg -= sp * .5
+    cv.c = cv.c * (1 - sp[..., None] * .4) + np.array((.18, .17, .16), np.float32) * sp[..., None] * .4; cv.hg -= sp * .5
     grime(cv, 67, .3, .2)
+    for wx0, wy0, wx1, wy1, kind, burn in wins:
+        window_hole(cv, rg, wx0, wy0, wx1, wy1, kind)
+    for wx0, wy0, wx1, wy1, kind, burn in wins:
+        if burn:
+            soot(cv, wx0, wy0, wx1, wy1, .75 + rg.rand() * .2)
     cv.save('vr_conc', strength=2.4, nsize=(512, 512))
 
 
@@ -376,26 +380,30 @@ def brick():
     S, B, F = 1024, 4, 3                              # 3.6 m bays, 4 m floors
     W, H = S, int(S * 12 / 14.4)
     cv = Canvas(W, H)
-    brickfield(cv, 0, 0, W, H, (.34, .2, .15), 71, bw=15, bh=5, mortar=(.36, .33, .3))
+    brickfield(cv, 0, 0, W, H, (.2, .11, .08), 71, bw=15, bh=5, mortar=(.2, .19, .17))
     cw, ch = W // B, H // F
     rg = np.random.RandomState(72)
+    wins = []
     for fl in range(F):
         y0 = fl * ch
-        cv.rect(0, y0 + ch - 10, W, y0 + ch - 4, col=(.36, .33, .29), h=.5)           # string course
+        cv.rect(0, y0 + ch - 10, W, y0 + ch - 4, col=(.22, .2, .18), h=.5)           # string course
         burnt = rg.rand() < .4
         for b in range(B):
             x0 = b * cw
             wx0, wx1 = x0 + int(cw * .3), x0 + int(cw * .7)
             wy0, wy1 = y0 + int(ch * .22), y0 + int(ch * .78)
-            cv.rect(wx0 - 8, wy0 - 12, wx1 + 8, wy0, col=(.38, .35, .31), h=.4)          # lintel
-            cv.rect(wx0 - 6, wy1, wx1 + 6, wy1 + 6, col=(.38, .35, .31), h=.5)
+            cv.rect(wx0 - 8, wy0 - 12, wx1 + 8, wy0, col=(.24, .22, .2), h=.4)          # lintel
+            cv.rect(wx0 - 6, wy1, wx1 + 6, wy1 + 6, col=(.24, .22, .2), h=.5)
             k = rg.rand()
-            window_hole(cv, rg, wx0, wy0, wx1, wy1, 'board' if k < .25 else 'frame' if k < .5 else 'empty')
-            if burnt or rg.rand() < .15:
-                soot(cv, wx0, wy0, wx1, wy1, .85)
-    streaks(cv, 73, .35, .2)
+            wins.append((wx0, wy0, wx1, wy1, 'board' if k < .25 else 'frame' if k < .5 else 'empty', burnt or rg.rand() < .15))
+    streaks(cv, 73, .35, .15)
     crack_lines(cv, rg, 4, 74)
     grime(cv, 75, .35, .25)
+    for wx0, wy0, wx1, wy1, kind, burn in wins:
+        window_hole(cv, rg, wx0, wy0, wx1, wy1, kind)
+    for wx0, wy0, wx1, wy1, kind, burn in wins:
+        if burn:
+            soot(cv, wx0, wy0, wx1, wy1, .85)
     cv.c *= .9
     cv.save('vr_brick', strength=2.2, nsize=(512, 512))
 
@@ -416,10 +424,10 @@ def frame():
                 cv.rect(x0 + cw // 2 - 8, y0, x0 + cw // 2 + 8, y0 + ch, col=(.06, .06, .06), h=-1)
             pane = rg.rand()
             if pane < .22:                            # a pane left: filthy, cracked, a little reflective
-                cv.rect(x0 + 4, y0 + 4, x0 + cw - 4, y0 + ch - 44, col=jitter(rg, (.12, .13, .13), .2), h=-.4, rough=.25, metal=.6)
+                cv.rect(x0 + 4, y0 + 4, x0 + cw - 4, y0 + ch - 44, col=jitter(rg, (.06, .065, .068), .2), h=-.4, rough=.25, metal=.6)
                 c = cracks(ch - 48, cw - 8, 3, int(rg.randint(9999)), .04, .2)
                 sub = cv.c[y0 + 4:y0 + ch - 44, x0 + 4:x0 + cw - 4]
-                sub *= (1 + c * 1.5)[..., None]
+                sub *= (1 + c * .6)[..., None]
                 cv.r[y0 + 4:y0 + ch - 44, x0 + 4:x0 + cw - 4] += c * .4
             else:
                 cv.hg[y0 + 4:y0 + ch - 44, x0 + 4:x0 + cw - 4] = -1.4
@@ -427,27 +435,27 @@ def frame():
             if rg.rand() > .12:
                 cv.rect(x0, y0, x0 + 5, y0 + ch - 40, col=(.2, .2, .21), h=.6, rough=.5, metal=.85)
         # slab edge band: concrete with soot
-        band = jitter(rg, (.4, .38, .35), .1)
+        band = jitter(rg, (.25, .24, .22), .1)
         cv.rect(0, y0 + ch - 40, W, y0 + ch, col=band, h=.8, rough=.9, metal=0)
         if rg.rand() < .5:
             sx = rg.randint(0, W - 200)
             soot(cv, sx, y0 + ch - 60, sx + 200, y0 + ch - 40, .7)
-    streaks(cv, 82, .3, .3)
+    streaks(cv, 82, .3, 0)
     grime(cv, 83, .25, .2)
     cv.save('vr_frame', strength=2.0, nsize=(384, 512))
 
 
 def slab():
     S = 512
-    cv = Canvas(S, S, (.46, .44, .41), .92, 0)
+    cv = Canvas(S, S, (.27, .26, .24), .92, 0)
     a, b = noise(S, S, 1.5, 91), noise(S, S, .15, 92)
     cv.c *= (.75 + .35 * a)[..., None] * (.85 + .3 * b)[..., None]
     agg = np.clip((b - .6) * 5, 0, 1)
-    cv.c = cv.c * (1 - agg[..., None] * .4) + np.array((.6, .58, .55), np.float32) * agg[..., None] * .4
+    cv.c = cv.c * (1 - agg[..., None] * .4) + np.array((.36, .35, .33), np.float32) * agg[..., None] * .4
     cv.hg = a * .5 + b * .5
     c = cracks(S, S, 4, 93, .03, .35)
     cv.c *= (1 - c * .7)[..., None]; cv.hg -= c
-    rust = np.clip((noise(S, S, 1.2, 94, ax=6, ay=.4) - .64) * 4, 0, 1)
+    rust = np.clip((noise(S, S, 1.2, 94, ax=.3, ay=8) - .66) * 4, 0, 1)
     cv.c = cv.c * (1 - rust[..., None] * .55) + np.array((.32, .17, .07), np.float32) * rust[..., None] * .55
     sootm = np.clip((noise(S, S, 1.9, 95) - .5) * 2.5, 0, 1)
     cv.c *= (1 - sootm * .5)[..., None]
@@ -456,41 +464,46 @@ def slab():
 
 def rubble():
     S = 1024
-    cv = Canvas(S, S, (.3, .28, .26), .95, 0)
-    F1, F2, ID = voronoi(S, S, 22, 101)
-    F1s, F2s, IDs = voronoi(S, S, 60, 102)
+    cv = Canvas(S, S, (.08, .075, .07), .95, 0)          # dust and grit between the pieces
     rg = np.random.RandomState(103)
-    pal = np.array([(.5, .48, .44), (.42, .4, .37), (.55, .52, .47), (.4, .23, .16), (.33, .32, .3), (.47, .45, .41)], np.float32)
-    big = (rg.rand(22 * 22) < .7)[ID]
-    dome = np.clip(1 - F1 * 1.4, 0, 1)
-    cv.c = pal[ID % 6] * (.65 + .5 * dome)[..., None]
-    sm = ~big
-    cv.c[sm] = pal[IDs[sm] % 6] * (.6 + .5 * np.clip(1 - F1s[sm] * 2, 0, 1))[:, None]
-    cv.hg = np.where(big, dome * 1.6, np.clip(1 - F1s * 2, 0, 1) * .9)
-    edge = np.clip(1 - (F2 - F1) / .05, 0, 1) * big
-    cv.c *= (1 - edge * .8)[..., None]; cv.hg -= edge * .8
-    f = noise(S, S, .2, 104); cv.c *= (.85 + .3 * f)[..., None]; cv.hg += f * .2
-    dust = np.clip((noise(S, S, 1.6, 105) - .5) * 2.5, 0, 1) * (cv.hg < .6)
-    cv.c = cv.c * (1 - dust[..., None] * .6) + np.array((.4, .38, .34), np.float32) * dust[..., None] * .6
+    cv.hg = noise(S, S, 1.2, 107) * .3
+    pal = np.array([(.27, .26, .24), (.22, .21, .2), (.3, .29, .26), (.19, .1, .07), (.16, .155, .15), (.25, .24, .22), (.12, .115, .11)], np.float32)
+    # chunks at three scales; each scale fills only part of the tile so larger pieces lie on a bed of smaller ones
+    for n, keep, seed, hs in ((60, .8, 102, .8), (24, .55, 101, 1.4), (9, .35, 108, 2.0)):
+        F1, F2, ID = voronoi(S, S, n, seed)
+        kp = (rg.rand(n * n) < keep)[ID]
+        warp = noise(S, S, 1.0, seed + 50) * .3
+        inner = np.clip(1 - (F2 - F1) / .12, 0, 1)                 # 1 at the chunk edge
+        dome = np.clip(1 - (F1 + warp) * 1.2, 0, 1)
+        m = kp & (inner < .85)
+        tone = rg.uniform(.7, 1.25, n * n).astype(np.float32)[ID]
+        pick = rg.choice(7, n * n, p=[.24, .2, .18, .07, .12, .12, .07])
+        col = pal[pick[ID]] * (tone * (.75 + .35 * dome))[..., None]
+        cv.c[m] = col[m]
+        cv.hg[m] = .3 + dome[m] * hs + (n == 9) * .5
+        cv.c[m] *= (1 - inner[m] * .5)[:, None]
+    f = noise(S, S, .2, 104); cv.c *= (.85 + .3 * f)[..., None]; cv.hg += f * .15
+    dust = np.clip((noise(S, S, 1.6, 105) - .5) * 2.5, 0, 1)
+    cv.c = cv.c * (1 - dust[..., None] * .5) + np.array((.21, .2, .18), np.float32) * dust[..., None] * .5
     sootm = np.clip((noise(S, S, 1.8, 106) - .58) * 3, 0, 1)
     cv.c *= (1 - sootm * .55)[..., None]
     # rebar and pipe bits
-    for k in range(18):
+    for k in range(14):
         x, y, a, L = rg.uniform(0, S), rg.uniform(0, S), rg.uniform(0, TAU), rg.uniform(30, 90)
         im = Image.new('L', (S, S)); ImageDraw.Draw(im).line([(x, y), (x + math.cos(a) * L, y + math.sin(a) * L)], fill=255, width=3)
         m = np.asarray(im) > 0
-        cv.c[m] = (.28, .14, .06); cv.hg[m] = 1.8; cv.m[m] = .4; cv.r[m] = .7
+        cv.c[m] = (.2, .1, .05); cv.hg[m] = 2.4; cv.m[m] = .4; cv.r[m] = .7
     cv.save('vr_rubble', strength=2.6, nsize=(512, 512))
 
 
 def rust():
     S = 512
-    cv = Canvas(S, S, (.3, .16, .08), .85, .3)
+    cv = Canvas(S, S, (.19, .09, .045), .85, .3)
     a, b = noise(S, S, 1.5, 111), noise(S, S, .3, 112)
     cv.c *= (.6 + .7 * a)[..., None] * (.8 + .4 * b)[..., None]
     cv.hg = a * .4 + b * .4
-    paint = noise(S, S, 1.7, 113) > .58
-    pc = np.array((.28, .31, .29), np.float32)
+    paint = (noise(S, S, 1.7, 113) * .7 + noise(S, S, .6, 115) * .3) > .56
+    pc = np.array((.16, .18, .17), np.float32)
     cv.c[paint] = pc * (.8 + .3 * b[paint])[:, None]; cv.hg[paint] += .4; cv.m[paint] = .1; cv.r[paint] = .7
     pit = np.clip((b - .7) * 6, 0, 1)
     cv.c *= (1 - pit * .5)[..., None]; cv.hg -= pit * .6

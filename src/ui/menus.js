@@ -224,7 +224,11 @@ export class Menus {
     } else if (this.tab === 'audio') {
       body = range(['master', 'Master'], 0, 1, .05, v => Math.round(v * 100)) + range(['music', 'Music'], 0, 1, .05, v => Math.round(v * 100)) + range(['sfx', 'Effects'], 0, 1, .05, v => Math.round(v * 100)) + tog('muted', 'Mute all');
     } else if (this.tab === 'controls') {
-      body = range(['sens', 'Mouse sensitivity'], .2, 3, .05, v => v.toFixed(2)) + tog('invertY', 'Invert look') + '<div style="height:12px"></div>' + this.controlsHtml();
+      body = range(['sens', 'Mouse sensitivity'], .2, 3, .05, v => v.toFixed(2))
+        + range(['aimSens', 'Aiming sensitivity (matched to zoom)'], .3, 2, .05, v => v.toFixed(2))
+        + range(['touchSens', 'Touch look sensitivity'], .3, 3, .05, v => v.toFixed(2))
+        + range(['aimSmooth', 'Aim smoothing'], 0, 1, .05, v => v ? Math.round(v * 60) + ' ms' : 'off')
+        + tog('invertY', 'Invert look') + '<div style="height:12px"></div>' + this.controlsHtml();
     } else {
       body = `<p class="guide">Erase your service record, inventory and progress and begin again.</p><button class="btn" data-act="wipe" style="border-color:var(--red);color:var(--red)">Reset save data</button>`;
     }
