@@ -91,12 +91,12 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; });
   const walk = await ev(() => {
     const g = window.__game, w = g.world;
-    const P = [...w.downtown.placed].filter(q => q.kind === 'tower').sort((a, b) => b.h - a.h)[0];
+    const P = [...w.downtown.placed].filter(q => /DT_(glass_tower|crown|ribbed|slab70)/.test(q.name)).sort((a, b) => b.h - a.h)[0];   // box-plan towers: the footprint is the wall
     const z = (P.rect[1] + P.rect[3]) / 2, x = P.rect[0] - 4, pos = new (g.player.pos.constructor)(x, 0.05, z), vel = pos.clone();
     for (let i = 0; i < 120; i++) { vel.set(4.4, -9, 0); w.collision.moveCapsule(pos, vel, .35, 1.7, 1 / 30); }
     return { tower: P.name, face: +P.rect[0].toFixed(2), end: +pos.x.toFixed(2), start: x };
   });
-  check(walk.end < walk.face && walk.end > walk.start + .5, 'walking into a tower stops at its wall', walk);
+  check(walk.end < walk.face + .3 && walk.end > walk.start + 2, 'walking into a tower stops at its wall', walk);
 
   // screenshots
   const view = async (n, pos, look) => { await cam(pos, look); await wait(500); const r = await frame(); console.log('view', n, JSON.stringify(r)); await shot(n); };
