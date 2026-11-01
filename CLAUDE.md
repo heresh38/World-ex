@@ -14,8 +14,12 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - `bash tools/blender/build_all.sh` rebuilds everything into `assets/`. In this container Blender is the `bpy` pip
   module behind a `/usr/local/bin/blender` shim; a normal Blender install works the same way.
 - `bl.py` helpers (materials, primitives, loft, export). Blender is Z-up, -Y forward → glTF/three is Y-up, +Z forward.
-- Weapons (`weapons.py`): auto, pulse, scout, hand cannon, shotgun, sniper, rocket, plus the Orion Arms line from the
-  owner's weapon sheet: SMG, sidearm, heavy machine gun (rotary) and exotic energy rifle. Stats are in `ARCHETYPES` (`data.js`).
+- Weapons (`weapons.py` + `gunkit.py`, textures `weapon_textures.py`): every archetype in `ARCHETYPES` (`data.js`) has a class
+  `cls`: `energy` (the original sci-fi line incl. the Orion Arms guns), `kinetic` (rifle, carbine, dmr, ksmg, bolt, pistol,
+  revolver, pump — real projectiles with muzzle velocity and bullet drop) and `horror` (living biomass: spitter, bile, brood).
+  Sights (`gun_attach.glb`: reflex, holo, 2x/4x/8x) mount per weapon (`w.sight`, changed at the Gunsmith); magnified optics
+  use the object name `scope` + `gun_lens`. Kinetic/horror guns use their own material names (`gun_steel`, `gun_wood`,
+  `bio_flesh`, ...) so rarity/shader tints only touch `gun_glow`/`gun_body`.
 - Material **names are an API**: the game recolours by name (`armor_primary`, `armor_secondary`, `glow`, `visor`,
   `gun_body`, `gun_glow`, `car_paint`, `hover_glow`, `facade`, `ribbon`, `rock`, `core_glow`, `ammo_glow`, glass names).
 - Bone names lose dots in three (`hand.R` → `handR`). Characters share one rig and 9 clips
