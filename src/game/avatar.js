@@ -23,6 +23,15 @@ export class Avatar {
       if (o.isBone) this.bones[o.name] = o;
       if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; }
     });
+    // SkeletonUtils.clone gives every skinned mesh its own Skeleton (and bone texture, updated each frame);
+    // the body, hair and garments all use the same bones, so bind them to one shared skeleton.
+    const skels = [];
+    this.model.traverse(o => {
+      if (!o.isSkinnedMesh) return;
+      const s = o.skeleton, sh = skels.find(k => k.bones.length === s.bones.length && k.bones.every((b, i) => b === s.bones[i])
+        && k.boneInverses.every((m, i) => m.equals(s.boneInverses[i])));
+      if (sh) { if (sh !== s) { o.skeleton = sh; s.dispose(); } } else skels.push(s);
+    });
     this.handR = this.bones.handR || this.bones['hand.R'];
     this.spine = this.bones.spine; this.chest = this.bones.chest; this.head = this.bones.head;
     // own copies of materials so recolouring one avatar never affects another
