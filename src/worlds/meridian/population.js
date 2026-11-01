@@ -563,7 +563,12 @@ export class Population {
       // every car is solid; a hit above ~6 m/s runs people over (only near the player, where it can be seen)
       if (d < 120 && q.state !== 'sit' && q.state !== 'settle') {
         const hit = g.vehicles.pedContact(q);
-        if (hit) {
+        // traffic on its lane brakes and bumps people aside (the player's car and crashed / knocked cars still kill)
+        if (hit && hit.car.traffic && hit.car.t && hit.car.t.mode !== 'dyn' && hit.car !== g.vehicles.current) {
+          hit.car.traffic.hitSomeone(hit.car);
+          const c = hit.car, ax = q.pos.x - c.pos.x, az = q.pos.z - c.pos.z, L = Math.hypot(ax, az) || 1;
+          q.pos.x += ax / L * .5; q.pos.z += az / L * .5;
+        } else if (hit) {
           const hitBy = hit.car, hv = g.vehicles.carVel(hitBy), dir = new THREE.Vector3(hv.x, 0, hv.z).normalize();
           g.fx.blood && g.fx.blood(_v.copy(q.pos).setY(q.pos.y + 1), dir.clone().setY(.4), 1.6);
           q.die(hitBy === g.vehicles.current, dir.setY(.5).multiplyScalar(Math.min(14, hit.speed * .6)));

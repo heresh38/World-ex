@@ -37,6 +37,9 @@ async function session(fn) {
   await waitPlay();
   console.log('earth load seconds', Math.round((Date.now() - t0) / 1000));
   await ev(() => { const g = window.__game, r = g.renderer; g.cineTime = null; g.paused = true; g.clock.paused = true; if (g.viewmodel) g.viewmodel.active = false; r.__render = r.render; r.render = () => {}; });
+  // the world is stepped ~30x faster than real time here: procedural sounds would pile up faster than the audio thread
+  // plays them (Chrome's memory balloons until the shared limit kills it), so audio stays suspended
+  await ev(() => { const g = window.__game, a = g.audio; if (a && a.ctx) { a.ctx.suspend(); a.ctx.resume = () => Promise.resolve(); } if (g.world.ambience) g.world.ambience.update = () => {}; });
   const T = {
     ev,
     shot: async n => {
