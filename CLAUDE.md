@@ -100,6 +100,22 @@ into fresh human corpses which rise as hosts), `host` (lurching reanimated troop
 (`nest()` in `districts.js`, hospital boss), metro `FAUNA`, and overrun outposts on frontier planets.
 `FLESH_PREVIEW=<dir>` writes texture-embedded copies for `preview.py`. Test: `tools/test/horror.js` (WORLD=vanthos_metro default).
 
+## Operation (VANTHOS)
+`src/worlds/vanthos/operation.js` (`Operation`, owned by `VanthosWorld.op`) plays VANTHOS as a linear, replayable mission,
+"Operation Heartline": landing zone → relay mast (Outskirts, hold the uplink vs raiders) → Flight Nine shuttle (Commercial,
+stalker ambush, pull the recorder) → Brood Road (Crown ring, three Writhe waves + amalgam, open the gas main) → Spire lift
+(crater, hold vs mixed factions, then ride; the lift is unpowered until then) → the Spire Warden on the foundation. Stages are
+scripted waves (`wave()`, enemies flagged `e.op`), not distance streaming; ambient `sites` near the route/arenas get
+`st.off`, and the raider convoy waits until the run is done. Radio lines are HUD subtitles (`hud.radio(who, text)`, queued),
+terminal logs use `hud.lore()`. Boss: `Enemy.hpFloor/onFloor` (50 % and 20 %), `immune` (hits return `{immune}` → HUD
+"IMMUNE"), `stunT`/`vuln` stagger; shield conduits are `Conduit` combat targets (not enemies; floating bars via
+`world.barTargets()`), boss bar `hud.bossBar()`. Reliquary loot = `rollWeapon()` (state.js: any archetype, weighted rarity,
+perks, stat rolls, random compatible sight); every copy has its own uid, `isNew` (NEW tag until picked), `keep` (Lock button).
+`VAULT_CAP` 200: only plain old spares are dismantled, with a feed message. Save: `save.vanthos.runs/best/logs`; each visit
+restarts the run, a metro trip resumes the stage (`g.opResume`), deaths revive at the stage checkpoint. Props `VX_conduit`,
+`VX_relay`, `VX_terminal`, `VX_reliquary` (`vanthos.py`; materials `conduit_glow`, `relay_glow`, `terminal_screen`,
+`reliquary_glow`). Test: `tools/test/operation.js` (screenshots in `test-out/operation/`).
+
 ## Vehicles
 `vehicle_textures.py` bakes `veh_*` maps (seat fabric/quilt, leather, dash, carpet, headliner, grille, speaker, disc, grip;
 layout renders with text for tyre sidewall/tread, gauges, screen, number-plate atlas, lamps, badges, bullet-hole and
