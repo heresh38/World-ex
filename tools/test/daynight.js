@@ -108,6 +108,22 @@ fs.mkdirSync(OUT, { recursive: true });
     check(a[0] > 0 && e[0] < 0, 'sun rises in the east and sets in the west', { dawn: a, evening: e });
     check(per[6.5].sunC !== per[13].sunC, 'dawn light is warmer than noon', { dawn: per[6.5].sunC, noon: per[13] && per[13].sunC });
   }
+  // ---------------------------------------------------------------- cost of the day/night additions
+  // downtown.js's fixed viewpoints (fov 55) at the original golden hour and at night, with the new VFX objects
+  // (lamp pools, halos, leaves, moths, steam/smoke, spray) shown and hidden, so the numbers compare with
+  // `PERF_ONLY=1 node tools/test/downtown.js` on an older build.
+  const PV = { street: [[-30, 1.7, -104], [60, 6, -110]], aerial: [[260, 210, 330], [-20, 30, -60]], towers: [[-110, 1.8, 30], [-110, 120, -40]] };
+  const cost = {};
+  for (const h of [18.6, 21.5]) for (const [k, [pos, look]] of Object.entries(PV)) {
+    await setHour(h); await cam(pos, look);
+    await ev(() => { const c = window.__game.camera; c.fov = 55; c.updateProjectionMatrix(); window.__game.camFocus.fov0 = 55; });
+    await frame(); const on = await frame();
+    const hid = await ev(() => { const w = window.__game.world, o = [w.daynight.pools, w.daynight.halos, w.atmos.leaves, w.atmos.moths, w.atmos.smoke.points, w.atmos.spray.points]; const v = o.map(x => x && x.visible); o.forEach(x => x && (x.visible = false)); window.__vis = v; return true; });
+    const off = await frame();
+    await ev(() => { const w = window.__game.world, o = [w.daynight.pools, w.daynight.halos, w.atmos.leaves, w.atmos.moths, w.atmos.smoke.points, w.atmos.spray.points]; o.forEach((x, i) => x && (x.visible = window.__vis[i])); });
+    cost[h + ' ' + k] = { calls: on.calls, callsWithoutVfx: off.calls, ms: on.ms, msWithoutVfx: off.ms, tris: on.tris };
+    console.log('cost', h, k, JSON.stringify(cost[h + ' ' + k]));
+  }
   // ---------------------------------------------------------------- env map rebuilds over simulated clock time
   const env = await ev(() => {
     const g = window.__game, w = g.world, dn = w.daynight, ren = g.renderer.render;
@@ -166,7 +182,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await shot('dn_vanthos');
     check(errs.length === e0, 'ship and VANTHOS load without page errors', errs.slice(e0));
   }
-  console.log('SUMMARY', JSON.stringify({ per, env, ambPeak: amb.peak }));
+  console.log('SUMMARY', JSON.stringify({ per, cost, env, ambPeak: amb.peak }));
   console.log('fails:', fails.length, fails.join('; '));
   console.log('page errors:', errs.length);
   await b.close();
