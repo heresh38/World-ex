@@ -40,14 +40,15 @@ const WINDOW_FRAG = `#ifdef USE_EMISSIVEMAP
   float wm = texture2D( emissiveMap, vEmissiveMapUv ).r;
   float glassK = smoothstep( .3, .5, wm );
   vec2 cuv = vEmissiveMapUv * uGrid, cell = floor( cuv ), fc = fract( cuv );
-  vec3 wq = floor( vDtN * 1.5 + .5 );
-  vec3 seed = vec3( cell.x + floor( vDtB.x ) * .173, cell.y + floor( vDtB.z ) * .291, dot( wq, vec3( 3.1, 5.7, 7.3 ) ) );
+  // (building position and wall facing are quantised off any boundary: interpolated varyings wobble by ~1e-5)
+  vec3 wq = floor( vDtN * 1.5 + .37 );
+  vec3 seed = vec3( cell.x + floor( vDtB.x * .5 + .2371 ) * .173, cell.y + floor( vDtB.z * .5 + .3119 ) * .291, dot( wq, vec3( 3.1, 5.7, 7.3 ) ) );
   float h1 = dtH( seed * .731 + 1.3 ), h2 = dtH( seed * 1.93 + 4.1 ), h3 = dtH( seed * 2.71 + 7.7 );
   float slot = floor( uHour * .7 + h1 * 7. );
   float lit = step( dtH( seed * 1.371 + slot * 11.13 + 2.7 ), uLit );
   vec3 lc = h2 < .7 ? vec3( 1., .72, .44 ) : h2 < .9 ? vec3( .86, .9, 1. ) : vec3( 1., .84, .62 );
   if ( h3 > .93 ) lc = mix( lc, vec3( .45, .6, 1. ) * ( .55 + .45 * sin( uTime * 9. + h1 * 40. ) * sin( uTime * 3.7 + h2 * 20. ) ), uNight );
-  float lampL = lit * uWin * ( .5 + .5 * wm ) * 1.35;
+  float lampL = lit * uWin * ( .5 + .5 * wm ) * uGain;
   float dayL = ( 1. - uNight ) * .09;
   vec3 inner = lc * lampL * .8 + vec3( .7, .74, .8 ) * dayL;
 #if defined( DT_ROOMS ) && defined( USE_NORMALMAP_TANGENTSPACE )
@@ -148,7 +149,7 @@ export class Downtown {
       m.emissiveMap = m.metalnessMap; m.emissive = new THREE.Color(1, 1, 1); m.emissiveIntensity = 1;
       m.envMapIntensity = glass ? 1.55 : .55;
       const U = { uGrid: { value: new THREE.Vector2(...set[1]) }, uRoom: { value: new THREE.Vector3(...set[2]) }, uLit: SKY[set[3]],
-        uNight: SKY.night, uHour: SKY.hour, uWin: SKY.win, uTime: SKY.time };
+        uNight: SKY.night, uHour: SKY.hour, uWin: SKY.win, uTime: SKY.time, uGain: { value: /shop/.test(n) ? .7 : 1.2 } };
       if (/derelict/.test(n)) U.uLit = { value: 0 };
       m.onBeforeCompile = sh => {
         Object.assign(sh.uniforms, U);
@@ -160,7 +161,7 @@ export class Downtown {
             #else
               vDtB = modelMatrix[3].xyz; vDtN = normalize( mat3( modelMatrix ) * objectNormal );
             #endif`);
-        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vDtB, vDtN;uniform vec2 uGrid;uniform vec3 uRoom;uniform float uLit, uNight, uHour, uWin, uTime;' + ROOM_GLSL)
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vDtB, vDtN;uniform vec2 uGrid;uniform vec3 uRoom;uniform float uLit, uNight, uHour, uWin, uTime, uGain;' + ROOM_GLSL)
           .replace('#include <emissivemap_fragment>', WINDOW_FRAG);
       };
       m.customProgramCacheKey = () => 'dtfacade' + (rooms ? 'r' : '');

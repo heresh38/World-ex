@@ -21,11 +21,12 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const check = (ok, what, info = '') => { console.log((ok ? 'PASS ' : 'FAIL ') + what + (info !== '' ? ' · ' + (typeof info === 'string' ? info : JSON.stringify(info)) : '')); if (!ok) fails.push(what); };
+  // the page never renders on its own during the test (software rendering piling up frames crashes Chrome):
+  // every screenshot renders exactly one frame first
   const shot = async n => {
     if (NOSHOTS) return;
-    await ev(() => { const g = window.__game; g.renderer.render(g.scene, g.camera); const r = g.renderer; if (!r.__render) { r.__render = r.render; r.render = () => {}; } });
-    try { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 84, timeout: 300000 }); }
-    finally { await ev(() => { const r = window.__game.renderer; if (r.__render) { r.render = r.__render; r.__render = null; } }).catch(() => {}); }
+    await ev(() => { const g = window.__game, r = g.renderer; r.__render.call(r, g.scene, g.camera); });
+    await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 84, timeout: 300000 });
     console.log('shot', n);
   };
   const waitPlay = async () => { await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 1200000, polling: 1000 });
@@ -40,7 +41,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { window.__game.cineTime = null; });
   console.log('earth load seconds', Math.round((Date.now() - t0) / 1000));
   // the game loop keeps running between our steps: stop it updating the world (we step it ourselves), keep rendering
-  await ev(() => { const g = window.__game; g.paused = true; g.clock.paused = true; if (g.viewmodel) g.viewmodel.active = false; });
+  await ev(() => { const g = window.__game, r = g.renderer; g.paused = true; g.clock.paused = true; if (g.viewmodel) g.viewmodel.active = false; r.__render = r.render; r.render = () => {}; });
 
   const nav = await ev(() => { const w = window.__game.world, P = w.population; return { ...P.nav.stats(), navMs: Math.round(P.navMs), fauna: !!P.fauna }; });
   console.log('nav', JSON.stringify(nav));

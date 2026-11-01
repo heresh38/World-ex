@@ -3,7 +3,7 @@
 // (warm orange dawn -> white noon -> golden hour -> red sunset -> blue/purple dusk -> deep blue night) into the sun /
 // moon light, hemisphere light, fog, sky dome (stars + moon at night), water, exposure and bloom.
 // The reflection probe (PMREM of a sky copy with a dark street below the horizon) is rebuilt only when the sun has moved
-// a few degrees or the light changed noticeably (~twice a real minute at the default day length), never every frame.
+// about five degrees or the light changed noticeably (~twice a real minute at the default day length), never every frame.
 // Night city: SKY holds the shared uniforms the window shaders read (meridian/downtown.js and nightWindows() below for
 // the older city kit): lit-room fractions per kind of building and hour, so windows switch on and off through the
 // evening. Emissive kit materials (street lamps, signs, crown lights, kerb strips) are scaled by night, and every street
@@ -36,11 +36,11 @@ const KEYS = [
   [7.3, { sun: 0xffc690, sunI: 2.6, hemiS: 0x9ab6de, hemiG: 0x5a4a3a, hemiI: .88, top: 0x3a6ab0, hor: 0xe8c4a4, sunC: 0xffd6a8,
     fog: 0xd0c0b2, fogN: 170, fogF: 1400, exp: 1.04, env: .85, bloom: .3, bloomT: 1, cloud: 0xfff0e2, glow: 0x000000, gnd: 0x36312e }],
   [10, { sun: 0xfff0dc, sunI: 3.1, hemiS: 0xa6c2ea, hemiG: 0x5e5446, hemiI: .95, top: 0x2c62b2, hor: 0xb6cee6, sunC: 0xfff2dc,
-    fog: 0xb8cbe0, fogN: 200, fogF: 1700, exp: 1.0, env: .9, bloom: .25, bloomT: 1, cloud: 0xffffff, glow: 0x000000, gnd: 0x383838 }],
+    fog: 0xb8cbe0, fogN: 220, fogF: 2000, exp: 1.0, env: .9, bloom: .25, bloomT: 1, cloud: 0xffffff, glow: 0x000000, gnd: 0x383838 }],
   [13.5, { sun: 0xfff8ee, sunI: 3.3, hemiS: 0xaccaf0, hemiG: 0x645a4c, hemiI: 1.0, top: 0x2a5eb0, hor: 0xbcd4ec, sunC: 0xffffff,
-    fog: 0xc0d4e6, fogN: 220, fogF: 1800, exp: 1.0, env: .9, bloom: .22, bloomT: 1, cloud: 0xffffff, glow: 0x000000, gnd: 0x3a3a3a }],
+    fog: 0xc0d4e6, fogN: 240, fogF: 2100, exp: 1.0, env: .9, bloom: .22, bloomT: 1, cloud: 0xffffff, glow: 0x000000, gnd: 0x3a3a3a }],
   [16.8, { sun: 0xffeccc, sunI: 3.15, hemiS: 0xa4c0e4, hemiG: 0x60543f, hemiI: .95, top: 0x2f62ac, hor: 0xc8d2dc, sunC: 0xfff0d8,
-    fog: 0xc6cfd8, fogN: 200, fogF: 1650, exp: 1.02, env: .9, bloom: .25, bloomT: 1, cloud: 0xfff8f0, glow: 0x000000, gnd: 0x3a3836 }],
+    fog: 0xc6cfd8, fogN: 210, fogF: 1900, exp: 1.02, env: .9, bloom: .25, bloomT: 1, cloud: 0xfff8f0, glow: 0x000000, gnd: 0x3a3836 }],
   // the original golden hour look
   [18.6, { sun: 0xffd2a0, sunI: 3.0, hemiS: 0x9cb8e0, hemiG: 0x5a4636, hemiI: .95, top: 0x3a6aa8, hor: 0xf2b27a, sunC: 0xffd9a8,
     fog: 0xd9a888, fogN: 160, fogF: 1300, exp: 1.05, env: .9, bloom: .3, bloomT: 1, cloud: 0xffe8d2, glow: 0x000000, gnd: 0x3c302a }],
@@ -84,9 +84,10 @@ export function nightWindows(m) {
   m.emissive = new THREE.Color(1, .8, .56); m.emissiveIntensity = 1;
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { uNight: SKY.night, uHour: SKY.hour, uLit: SKY.litHome, uWin: SKY.win });
+    // (the cell is taken 10 cm inside the wall, so a wall lying exactly on a cell boundary does not flicker)
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWinP;')
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
-        { vec4 wp4 = vec4(transformed, 1.);
+        { vec4 wp4 = vec4(transformed - objectNormal * .1, 1.);
         #ifdef USE_INSTANCING
           wp4 = instanceMatrix * wp4;
         #endif
@@ -150,8 +151,9 @@ export class DayNight {
       uniforms: { uI: { value: 0 }, uCol: { value: new THREE.Color(1, .74, .45) }, fogColor: { value: new THREE.Color() }, fogNear: { value: 1 }, fogFar: { value: 2 } },
       vertexShader: `varying vec2 vUv;varying float vD;void main(){vUv=uv;vec4 mv=modelViewMatrix*instanceMatrix*vec4(position,1.);vD=-mv.z;gl_Position=projectionMatrix*mv;}`,
       fragmentShader: `varying vec2 vUv;varying float vD;uniform float uI,fogNear,fogFar;uniform vec3 uCol,fogColor;
-        void main(){vec2 p=vUv*2.-1.;float r=dot(p,p);if(r>1.)discard;float a=(1.-r);a=a*a*(.35+.65*exp(-r*5.));
-          float f=1.-smoothstep(fogNear,fogFar,vD)*.85;gl_FragColor=vec4(uCol*a*uI*f,1.);}`,
+        void main(){vec2 p=vUv*2.-1.;float r=dot(p,p);if(r>1.)discard;float a=(1.-r);a=a*a*(.3+.7*exp(-r*4.));
+          // from far away (aerial) the pools merge into a faint glow instead of polka dots
+          float f=(1.-smoothstep(fogNear,fogFar,vD)*.85)*(1.-.75*smoothstep(60.,320.,vD));gl_FragColor=vec4(uCol*a*uI*f,1.);}`,
       blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8,
     });
     const pools = new THREE.InstancedMesh(geo, pmat, n);
@@ -167,8 +169,8 @@ export class DayNight {
     const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(heads, 3));
     const hmat = new THREE.ShaderMaterial({
       uniforms: { uI: { value: 0 }, scale: { value: innerHeight / 2 }, uCol: { value: new THREE.Color(1, .8, .55) } },
-      vertexShader: `uniform float scale;varying float vF;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vF=clamp(1.-(-mv.z-150.)/250.,0.,1.);gl_PointSize=min(256.,2.6*scale/max(.5,-mv.z));gl_Position=projectionMatrix*mv;}`,
-      fragmentShader: `uniform float uI;uniform vec3 uCol;varying float vF;void main(){vec2 p=gl_PointCoord-.5;float d=dot(p,p)*4.;if(d>1.)discard;float a=pow(1.-d,2.2);gl_FragColor=vec4(uCol*a*uI*vF,1.);}`,
+      vertexShader: `uniform float scale;varying float vF;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vF=clamp(1.-(-mv.z-150.)/250.,0.,1.);gl_PointSize=min(160.,1.7*scale/max(.5,-mv.z));gl_Position=projectionMatrix*mv;}`,
+      fragmentShader: `uniform float uI;uniform vec3 uCol;varying float vF;void main(){vec2 p=gl_PointCoord-.5;float d=dot(p,p)*4.;if(d>1.)discard;float a=pow(1.-d,3.);gl_FragColor=vec4(uCol*a*uI*vF,1.);}`,
       blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: true,
     });
     this.halos = new THREE.Points(hg, hmat); this.halos.frustumCulled = false; this.halos.renderOrder = 11; this.halos.visible = false;
@@ -192,7 +194,7 @@ export class DayNight {
     const night = smooth((-sinEl + .02) / .2);              // 0 while the sun is up, 1 once it is 11 degrees below
     SKY.night.value = night; SKY.hour.value = h; SKY.time.value = g.time || 0;
     SKY.litHome.value = curve(LIT.home, h); SKY.litOffice.value = curve(LIT.office, h); SKY.litShop.value = curve(LIT.shop, h);
-    SKY.win.value = .32 + .68 * smooth((night - .05) / .7);
+    SKY.win.value = .12 + .88 * smooth((night - .05) / .7);     // office lights barely show by day
     // the one shadow-casting light: the sun by day, the moon by night (both are dim around the switch)
     const useSun = sinEl > -.02;
     if (useSun) { this.lightD.copy(this.sunD); this.lightC.copy(P.sun); this.lightI = P.sunI * sunK; }
@@ -219,15 +221,16 @@ export class DayNight {
     const lampK = smooth((night - .08) / .5);
     if (this.pools) {
       this.pools.visible = this.halos.visible = lampK > .01;
-      this.pools.material.uniforms.uI.value = .55 * lampK;
-      this.halos.material.uniforms.uI.value = 1.6 * lampK;
+      this.pools.material.uniforms.uI.value = .42 * lampK;
+      this.halos.material.uniforms.uI.value = 1.1 * lampK;
       this.halos.material.uniforms.scale.value = innerHeight / 2;
       if (fog) { const U = this.pools.material.uniforms; U.fogColor.value.copy(fog.color); U.fogNear.value = fog.near; U.fogFar.value = fog.far; }
     }
-    // reflection probe: rebuilt when the sun moved ~3.5 degrees, the night level changed or after a while
+    // reflection probe: rebuilt when the sun moved ~5 degrees or the night level changed (at most every 12 s), or after a minute
     this.envT += dt;
     const L = this.lastEnv;
-    if (force || !this.envRT || this.sunD.dot(L.dir) < .9981 || Math.abs(night - L.night) > .06 || (this.envT > 45 && Math.abs(h - L.hour) > .05)) this.rebuildEnv(P, night);
+    const moved = this.sunD.dot(L.dir) < .9965, dn = Math.abs(night - L.night);
+    if (force || !this.envRT || (this.envT > 12 && (moved || dn > .1)) || dn > .3 || (this.envT > 60 && Math.abs(h - L.hour) > .05)) this.rebuildEnv(P, night);
     // the HUD clock (minutes)
     const lab = clk.label(); if (lab !== this.label) { this.label = lab; g.hud.setTime && g.hud.setTime(lab); }
   }

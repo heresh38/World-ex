@@ -38,7 +38,8 @@ export class NavGraph {
     const dt = world.downtown;
     if (dt) for (const it of (dt.furn.DT_cafe || [])) {
       const e = it.m.elements, x = e[12], z = e[14], yaw = Math.atan2(e[8], e[10]);
-      for (const b of this.col.near(x, z, 1)) if (b.tag === 'prop' && b.max.y > 2 && Math.abs((b.min.x + b.max.x) / 2 - x) < .4 && Math.abs((b.min.z + b.max.z) / 2 - z) < .4) this.soft.set(b, { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hx: 1, hz: .42 });
+      // (kitColliders splits that box into a row of overlapping blocks along its long side)
+      for (const b of this.col.near(x, z, 2)) if (b.tag === 'prop' && b.max.y > 2 && b.max.x - b.min.x > 2.4 && Math.abs((b.min.x + b.max.x) / 2 - x) < 1.5 && Math.abs((b.min.z + b.max.z) / 2 - z) < 1.5) this.soft.set(b, { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hx: 1, hz: .42 });
     }
     this.build();
   }

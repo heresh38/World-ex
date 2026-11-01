@@ -86,7 +86,7 @@ const lerpTable = (T, h) => { for (let i = 1; i < T.length; i++) if (h <= T[i][0
 const mixAt = h => { let m = MIX[0][1]; for (const [s, w] of MIX) if (h >= s) m = w; return m; };
 const rollKind = (m, r) => { let t = 0; for (const k in m) t += m[k]; let x = r() * t; for (const k in m) { x -= m[k]; if (x <= 0) return k; } return 'wander'; };
 
-const VIS_D = 170, RECYCLE_D = 300, SPAWN_MIN = 30, SPAWN_MAX = 235;
+const VIS_D = 170, RECYCLE_D = 280, SPAWN_MIN = 30, SPAWN_MAX = 185;
 const _v = new THREE.Vector3(), _h = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3();
 const _sph = new THREE.Sphere(new THREE.Vector3(), 1.2), _frus = new THREE.Frustum(), _pm = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -333,7 +333,7 @@ export class Population {
   seedPlace(q) {
     const r = this.rnd, F = this.focus, P = this.nav.pois, roll = r(), h = this.hour;
     const night = h < 6 || h > 22.5;
-    const free = (list, test) => { for (let k = 0; k < 40; k++) { const s = list[Math.floor(r() * list.length)]; if (s && test(s) && Math.hypot(s.x - F.x, s.z - F.z) < 200 && Math.hypot(s.x - F.x, s.z - F.z) > 4) return s; } return null; };
+    const free = (list, test) => { for (let k = 0; k < 40; k++) { const s = list[Math.floor(r() * list.length)]; if (s && test(s) && Math.hypot(s.x - F.x, s.z - F.z) < 150 && Math.hypot(s.x - F.x, s.z - F.z) > 4) return s; } return null; };
     if (roll < (night ? .12 : .26)) {
       const s = free(P.seat, s => !s.by && !this.playerOn(s)); if (!s) return false;
       this.activate(q, s.x, s.z, s.y); q.mode = 'nav'; q.goal = { kind: 'seat', poi: s }; s.by = q; q.spot = s;
@@ -344,7 +344,7 @@ export class Population {
       const m = free(P.meet, m => !m.users.length); if (!m) return false;
       const q2 = this.peds.find(p => p.state === 'gone' && p !== q); if (!q2) return false;
       for (const p of [q, q2]) { this.activate(p, m.x, m.z, 0); p.mode = 'nav'; p.goal = { kind: 'meet', poi: m }; m.users.push(p); p.spot = m; }
-      this.startTalk(m.users.slice(), m.x, m.z, 8 + r() * 16, m);
+      this.startTalk(m.users.slice(), m.x, m.z, 15 + r() * 35, m);
       for (const p of m.users) { p.pos.x = p.slot.x; p.pos.z = p.slot.z; }
       return true;
     }
@@ -386,7 +386,11 @@ export class Population {
     else if (kind === 'kiosk') poi = best(P.kiosk, k => k.users.some(u => !u), 10, 220);
     else if (kind === 'window') poi = best(P.window, w => !w.by, 10, 200);
     else if (kind === 'platform') poi = best(P.platform, p => !p.by, 20, 320);
-    else if (kind === 'meet') poi = best(P.meet, m => m.users.length < 3, 10, 200, m => m.users.length === 1 ? 8 : m.users.length === 2 ? 2 : 1);
+    else if (kind === 'meet') {
+      // someone already waiting nearby: most likely that is who we are meeting
+      const wait = P.meet.filter(m => m.users.length === 1 && m.users[0].state === 'meetwait' && Math.hypot(m.x - q.pos.x, m.z - q.pos.z) < 160);
+      poi = wait.length && r() < .75 ? wait[Math.floor(r() * wait.length)] : best(P.meet, m => m.users.length < 3, 10, 200, m => m.users.length === 1 ? 8 : m.users.length === 2 ? 2 : 1);
+    }
     else if (DOOR_OF[kind]) poi = best(P.door, d => DOOR_OF[kind].includes(d.kind), 25, 300);
     if (!poi) {
       kind = 'wander';
@@ -771,8 +775,8 @@ export class Population {
             grp.members.push(q); q.group = grp; q.state = 'talk';
             const n = grp.members.length; grp.members.forEach((m, i) => { const a = i / n * Math.PI * 2; m.slot = { x: grp.cx + Math.cos(a) * .72, z: grp.cz + Math.sin(a) * .72 }; });
             grp.until = Math.max(grp.until, this.time + 8 + r() * 8);
-          } else this.startTalk([...others.filter(u => !u.group), q], p.x, p.z, 12 + r() * 16, p);
-        } else { q.state = 'meetwait'; q.stateT = 18 + r() * 20; }
+          } else this.startTalk([...others.filter(u => !u.group), q], p.x, p.z, 25 + r() * 30, p);
+        } else { q.state = 'meetwait'; q.stateT = 35 + r() * 35; }
         return;
       }
       case 'wander': q.state = 'idle'; q.stateT = r() < .5 ? 2 + r() * 6 : 0; return;

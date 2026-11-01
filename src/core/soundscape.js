@@ -157,7 +157,9 @@ export class Soundscape {
       const scored = [];
       for (const em of this.emitters) { const l = this.level(em, lp, hour); if (l > .004) scored.push([l, em]); }
       scored.sort((a, b) => b[0] - a[0]);
-      const want = new Set(scored.slice(0, this.max).map(s => s[1]));
+      // nearest first, at most two voices of one kind (a row of cafes must not take the whole pool)
+      const want = new Set(), per = {};
+      for (const [, em] of scored) { if (want.size >= this.max) break; if ((per[em.kind] = (per[em.kind] || 0) + 1) <= 2) want.add(em); }
       for (const v of this.voices) if (!v.dying && !want.has(v.em)) this.release(v);
       for (const em of want) if (!this.voices.some(v => v.em === em && !v.dying) && this.voices.filter(v => !v.dying).length < this.max) this.voice(em);
     }
