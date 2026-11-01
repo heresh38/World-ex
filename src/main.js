@@ -280,7 +280,9 @@ class Game {
 
   firstPerson() {
     const p = this.player;
-    return !!p && this.save.settings.view !== 'third' && p.mode === 'foot' && !p.dead && !this.stationId;
+    // third person still looks through a magnified scope while aiming (the optic picture needs the first-person view)
+    const scoping = p && p.aiming && this.weapons && this.weapons.zoom() >= 2;
+    return !!p && (this.save.settings.view !== 'third' || scoping) && p.mode === 'foot' && !p.dead && !this.stationId;
   }
 
   toggleView() {

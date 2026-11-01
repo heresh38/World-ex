@@ -19,8 +19,11 @@ export class Avatar {
       this.actions[c.name] = a;
     }
     this.bones = {};
+    // rest pose of every bone: additive tweaks (aim lean, board crouch, slumps) are undone before each animation step,
+    // because clips exported with constant tracks stripped would otherwise never reset those bones and they would spin
+    this.restQ = new Map(); this.touched = new Set();
     this.model.traverse(o => {
-      if (o.isBone) this.bones[o.name] = o;
+      if (o.isBone) { this.bones[o.name] = o; this.restQ.set(o, o.quaternion.clone()); }
       if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; }
     });
     // SkeletonUtils.clone gives every skinned mesh its own Skeleton (and bone texture, updated each frame);
@@ -265,6 +268,8 @@ export class Avatar {
 
   update(dt) {
     if (this.rag) { this.rag.step(Math.min(dt, .05)); return; }
+    for (const b of this.touched) { const r = this.restQ.get(b); if (r) b.quaternion.copy(r); }
+    this.touched.clear();
     this.mixer.update(dt);
     // additive aim: pitch the spine and chest about the character's own right axis (converted into each bone's
     // parent space), so the torso bends forward/back instead of twisting around its centre
@@ -277,6 +282,7 @@ export class Avatar {
         bone.parent.getWorldQuaternion(_q);
         const inv = _q.invert();
         const ax = right.clone().applyQuaternion(inv).normalize(), ay = up.clone().applyQuaternion(inv).normalize();
+        this.touched.add(bone);
         bone.quaternion.premultiply(_q2b.setFromAxisAngle(ax, -this.aimPitch * k));
         if (this.aimYawOffset) bone.quaternion.premultiply(_q2b.setFromAxisAngle(ay, this.aimYawOffset * .5));
         bone.updateMatrixWorld(true);

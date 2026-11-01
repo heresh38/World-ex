@@ -916,8 +916,9 @@ export class Vehicles {
 
 // slight crouch on the board: knees bend, hips drop (applied after the mixer each frame)
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _ax = new THREE.Vector3();
-function bend(bone, axisWorld, ang) {
+function bend(bone, axisWorld, ang, av = null) {
   if (!bone || !bone.parent) return;
+  if (av && av.touched) av.touched.add(bone);             // reset to rest before the next animation step
   bone.parent.getWorldQuaternion(_qa);
   _ax.copy(axisWorld).applyQuaternion(_qa.invert()).normalize();
   bone.quaternion.premultiply(_qb.setFromAxisAngle(_ax, ang));
@@ -928,8 +929,8 @@ function crouch(av, a) {
   av.root.updateMatrixWorld(true);
   av.root.getWorldQuaternion(_q);
   const right = new THREE.Vector3(1, 0, 0).applyQuaternion(_q);
-  for (const s of ['L', 'R']) { bend(B['thigh' + s], right, -a); bend(B['shin' + s], right, a * 2); bend(B['foot' + s], right, -a); }
-  bend(B.spine, right, a * .4);
+  for (const s of ['L', 'R']) { bend(B['thigh' + s], right, -a, av); bend(B['shin' + s], right, a * 2, av); bend(B['foot' + s], right, -a, av); }
+  bend(B.spine, right, a * .4, av);
   av.model.position.y = -(1 - Math.cos(a)) * .85;
   av.crouched = true;
 }
