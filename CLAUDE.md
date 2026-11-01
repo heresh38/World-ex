@@ -57,6 +57,21 @@ plaza, and glowing cyan kerb strips.
 `src/worlds/meridian/`: `layout.js` (heightmap, river, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
 `traffic.js` (lane cars, hijack), `wanted.js` (stars + security drones). Assets: `rural.py` (RU_* kit). No missions on Earth.
 
+- Downtown (`src/worlds/meridian/downtown.js`, kit `tools/blender/downtown.py` + `downtown_textures.py`): blocks bx/bz -2..2
+  (`isDowntown`, `HERITAGE`, `TRANSIT` in `layout.js`; Founders' Park, the rotunda plaza and the (2,-2) park stay). Layout
+  adopted from a prairie river city's downtown (no real names anywhere): numbered-grid blocks split into many plots
+  (`PLAN` rows filled by `fillRow`, hand-planned landmark blocks), a car-free heritage avenue mid-block in row -1 lined
+  with sandstone/brick low-rises (towers behind and among them, cafe tables, string lights, banners, trees), a light-rail
+  transit mall one block nearer the river (row -2: track bed, catenary, two stations, two shuttling trams with a
+  `collision.dynamic` box), 1970s-80s concrete / bronze-glass towers beside new glass towers, a crescent tower over a plaza,
+  an observation tower, parkades, two construction sites with slewing tower cranes, plazas and pocket plazas, enclosed
+  skywalks at ~5 m between neighbouring buildings (auto-found, never over the transit mall), signals and zebra crossings.
+  Heights peak in the middle ring and fall off outward. `downtown.glb` = 21 designs `DT_<name>` + `DT_<name>_lod`
+  (extras `dt`: w/d/h, kind, era, `col` AABBs in three space, fronts face +z); `downtown_street.glb` = skywalks, platform,
+  track, catenary, tram, crane mast/jib, street furniture. Facade sets `dt_*_c/_n/_m` (m: R lit windows, G rough,
+  B metal; runtime reuses R as the emissive mask); untextured colours are merged per mesh into vertex-coloured
+  `dt_plain`, `dt_plain_metal`, `dt_plain_glow` (fewer draw calls; the glow takes the vertex colour). Buildings are instanced per design/material with hero/LOD buckets by
+  camera distance; furniture is chunk-instanced. Test: `tools/test/downtown.js` (`PERF_ONLY=1` for draw-call numbers).
 - Spaceport (`spaceport.py`, `SPACEPORT` in `layout.js`): a ship landing field south of the city (VTOL pads, terminal with the
   Quartermaster, control tower, hangars, fuel farm, container yard; no runways — ships land vertically). The player's ship lands
   on pad 1; `src/game/cinematic.js` plays the landing / take-off cutscenes (`g.cineTime` pins the clock for tests).

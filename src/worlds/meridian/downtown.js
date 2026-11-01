@@ -68,7 +68,7 @@ export class Downtown {
     if (FACADE.test(n) && m.metalnessMap) {
       // the _m map: R lit-window mask (night glow), G roughness, B metalness
       const glass = /glass/.test(n);
-      m.emissiveMap = m.metalnessMap; m.emissive = new THREE.Color(1, .8, .55); m.emissiveIntensity = glass ? .5 : .65;
+      m.emissiveMap = m.metalnessMap; m.emissive = new THREE.Color(1, .8, .55); m.emissiveIntensity = glass ? .09 : .16;     // golden hour: a few warm windows, not a lantern
       m.envMapIntensity = glass ? 1.55 : .55;
       m.onBeforeCompile = sh => {
         sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>',
@@ -76,8 +76,17 @@ export class Downtown {
       };
       m.customProgramCacheKey = () => 'dtfacade';
       m.needsUpdate = true;
+    } else if (n === 'dt_plain_glow') {
+      // merged emissive parts (crown lights, signs, lamps): the glow takes the vertex colour
+      m.onBeforeCompile = sh => {
+        sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR\n  totalEmissiveRadiance *= vColor.rgb;\n#endif');
+      };
+      m.customProgramCacheKey = () => 'dtglowv';
+      m.needsUpdate = true;
+    } else if (n === 'dt_plain_metal') {
+      m.envMapIntensity = 1.1;
     } else if (/^dt_lattice/.test(n)) {
-      m.transparent = false; m.alphaTest = .5; m.depthWrite = true; m.side = THREE.DoubleSide; m.opacity = 1;
+      m.transparent = false; m.alphaTest = .4; m.depthWrite = true; m.side = THREE.DoubleSide; m.opacity = 1;
     } else if (/^dt_net/.test(n)) {
       m.transparent = true; m.opacity = 1; m.depthWrite = false; m.side = THREE.DoubleSide;
     } else if (/^dt_glass_(clear|rail)/.test(n)) {
@@ -157,7 +166,11 @@ export class Downtown {
       const cx = bx * PITCH, cz = bz * PITCH, key = bx + ',' + bz, blk = [cx, cz], plan = PLAN[key];
       const transit = cz === TRANSIT.z && cx > TRANSIT.x0 && cx < TRANSIT.x1, heritage = cz === HERITAGE.z;
       if (plan) {
-        const shuffled = l => [l[0], ...l.slice(1).sort(() => r() - .5)];
+        const shuffled = l => {          // first stays first; Fisher-Yates on the rest (same result in every JS engine)
+          const t = l.slice(1);
+          for (let i = t.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [t[i], t[j]] = [t[j], t[i]]; }
+          return [l[0], ...t];
+        };
         if (transit || heritage) {      // split by the mid-block avenue: both halves face it
           const half = transit ? TRANSIT.half + .5 : HERITAGE.half + 1;
           this.fillRow(cx - IN, cx + IN, cz - half, IN - half, 's', shuffled(plan.N), blk);
@@ -293,7 +306,7 @@ export class Downtown {
       if (dStreet > 12) cat.push(new THREE.Matrix4().compose(_p.set(x, 0, z), _q.identity(), _s.set(step / 20, 1, 1)));
     }
     this.addLod(this.street.getObjectByName('DT_track'), this.street.getObjectByName('DT_track_lod'), trk, 70, false);
-    this.h.instanceKit(this.scene, this.street.getObjectByName('DT_catenary'), cat, { chunk: 160 });
+    this.h.instanceKit(this.scene, this.street.getObjectByName('DT_catenary'), cat, { shadow: false });
     for (const m of cat) { m.decompose(_p, _q, _s); this.col.add([_p.x - .15, 0, _p.z - .15, _p.x + .15, 7.2, _p.z + .15], 'prop'); }
     // stations mid-block at -1 and 1: a platform on each side of the tracks
     const plat = [];
@@ -422,19 +435,35 @@ export class Downtown {
     return { pts, total, w };
   }
 
+  // paved ground (avenues, plazas): planes collected per tint and merged into one mesh each in finish()
   ground(x0, z0, x1, z1, tint, y) {
-    const src = this.pavers || (this.pavers = (() => { let m = null; this.street.traverse(o => { if (o.isMesh && o.material.name === 'dt_pavers') m = o.material; }); return m; })());
-    const w = x1 - x0, d = z1 - z0;
-    const mat = new THREE.MeshStandardMaterial({ color: tint, roughness: .78, envMapIntensity: .5, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-    if (src && src.map) { mat.map = src.map.clone(); mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping; mat.map.repeat.set(w / 6, d / 6); mat.map.needsUpdate = true; }
-    if (src && src.normalMap) { mat.normalMap = src.normalMap.clone(); mat.normalMap.wrapS = mat.normalMap.wrapT = THREE.RepeatWrapping; mat.normalMap.repeat.set(w / 6, d / 6); mat.normalMap.needsUpdate = true; }
-    const g = new THREE.PlaneGeometry(w, d); g.rotateX(-Math.PI / 2);
-    const m = new THREE.Mesh(g, mat); m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); m.receiveShadow = true;
-    this.scene.add(m);
+    const w = x1 - x0, d = z1 - z0, g = new THREE.PlaneGeometry(w, d);
+    g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, y, (z0 + z1) / 2);
+    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 6, uv.getY(i) * d / 6);   // 6 m paver tile
+    ((this.grounds = this.grounds || {})[tint] = this.grounds[tint] || []).push(g);
+  }
+
+  buildGrounds() {
+    let src = null; this.street.traverse(o => { if (o.isMesh && o.material.name === 'dt_pavers') src = o.material; });
+    for (const [tint, list] of Object.entries(this.grounds || {})) {
+      const mat = new THREE.MeshStandardMaterial({ color: +tint, roughness: .78, envMapIntensity: .5, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      if (src && src.map) { mat.map = src.map; src.map.wrapS = src.map.wrapT = THREE.RepeatWrapping; }
+      if (src && src.normalMap) { mat.normalMap = src.normalMap; src.normalMap.wrapS = src.normalMap.wrapT = THREE.RepeatWrapping; }
+      const pos = [], uv = [], nrm = [], idx = []; let base = 0;
+      for (const g of list) {
+        pos.push(...g.attributes.position.array); uv.push(...g.attributes.uv.array); nrm.push(...g.attributes.normal.array);
+        for (const i of g.index.array) idx.push(i + base);
+        base += g.attributes.position.count; g.dispose();
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+      const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; this.scene.add(m);
+    }
   }
 
   // hero / low-detail instanced pair for a root (shared instance buffer per tier, buckets by distance)
-  addLod(hi, lo, list, near = 160, shadow = true) {
+  addLod(hi, lo, list, near = 160, shadow = true, loShadow = shadow) {
     if (!hi || !list.length) return;
     const parts = root => {
       if (!root) return null;
@@ -457,7 +486,7 @@ export class Downtown {
       const ms = P.map(({ geo, mat }) => {
         const im = new THREE.InstancedMesh(geo, mat, n);
         im.instanceMatrix = attr; im.count = 0; im.visible = false;
-        im.castShadow = shadow && !/glass|glow|net/.test(mat.name); im.receiveShadow = true;
+        im.castShadow = (t ? loShadow : shadow) && !/glass|glow|net/.test(mat.name); im.receiveShadow = true;
         this.scene.add(im); return im;
       });
       set.tiers.push({ attr, ms });
@@ -466,13 +495,14 @@ export class Downtown {
   }
 
   finish() {
-    for (const D of this.designs.values()) if (D.list.length) this.addLod(D.root, D.lod, D.list, 150 + (D.meta.h || 40) * .4);
+    this.buildGrounds();
+    for (const D of this.designs.values()) if (D.list.length) this.addLod(D.root, D.lod, D.list, 150 + (D.meta.h || 40) * .4, true, (D.meta.h || 0) > 50);
     // street furniture: instanced in chunks, solid pieces get colliders
     const props = this.g.assets.models.props_world.scene;
     for (const [name, items] of Object.entries(this.furn)) {
       const root = this.street.getObjectByName(name); if (!root) continue;
       const mats = items.map(i => i.m);
-      this.h.instanceKit(this.scene, root, mats, { chunk: 220, shadow: !/bin|hydrant|bollards|stringlights|bikerack/.test(name) });
+      this.h.instanceKit(this.scene, root, mats, { shadow: !/bin|hydrant|bollards|stringlights|bikerack|cafe|banner|signal/.test(name) });
       const meta = JSON.parse(root.userData.dt || '{}');
       for (const it of items) {
         if (it.solid === false) continue;
@@ -484,7 +514,7 @@ export class Downtown {
     }
     if (this.benches && this.benches.length) {
       const b = props.getObjectByName('PR_bench');
-      this.h.instanceKit(this.scene, b, this.benches, { chunk: 220 });
+      this.h.instanceKit(this.scene, b, this.benches, { shadow: false });
       this.h.kitColliders(this.col, b, this.benches, { box: true }, 'bench');
       for (const m of this.benches) {
         const c = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(); m.decompose(c, q, sc);

@@ -134,6 +134,38 @@ def mats():
     return M
 
 
+# Plain (untextured) materials are merged per mesh into three vertex-coloured ones so every design costs fewer draw calls:
+# dt_plain (dielectric), dt_plain_metal (metals) and dt_plain_glow (emissive; the runtime multiplies the glow by the colour).
+PLAIN_METAL = {'dt_metal_dark', 'dt_metal_light', 'dt_bronze', 'dt_copper', 'dt_mech', 'dt_steel'}
+PLAIN_GLOW = {'dt_glow_warm', 'dt_glow_cyan', 'dt_glow_red', 'dt_glow_green', 'dt_glow_white', 'dt_glow_magenta'}
+PLAIN = {'dt_white', 'dt_yellow', 'dt_red', 'dt_blue', 'dt_wood', 'dt_rust', 'dt_rubber', 'dt_plant', 'dt_plant_light', 'dt_flowers',
+         'dt_soil', 'dt_water', 'dt_tram_body', 'dt_tram_red', 'dt_carpaint_a', 'dt_carpaint_b', 'dt_carpaint_c', 'dt_carpaint_d'}
+
+
+def vcmat(name, metal, rough, emit=0.0):
+    if name in bl._MATS:
+        return bl._MATS[name]
+    m = bpy.data.materials.new(name); nt = m.node_tree; b = nt.nodes.get('Principled BSDF')
+    ca = nt.nodes.new('ShaderNodeVertexColor'); ca.layer_name = 'Col'
+    nt.links.new(ca.outputs['Color'], b.inputs['Base Color'])
+    b.inputs['Metallic'].default_value = metal; b.inputs['Roughness'].default_value = rough
+    if emit:
+        b.inputs['Emission Color'].default_value = (1, 1, 1, 1); b.inputs['Emission Strength'].default_value = emit
+    bl._MATS[name] = m
+    return m
+
+
+def merged(m):
+    """(material to use, vertex colour) for a plain material, else (m, None)"""
+    n = m.name
+    if n in PLAIN or n in PLAIN_METAL or n in PLAIN_GLOW:
+        b = m.node_tree.nodes.get('Principled BSDF')
+        col = tuple(b.inputs['Emission Color' if n in PLAIN_GLOW else 'Base Color'].default_value)[:3]
+        tgt = vcmat('dt_plain_glow', 0, .3, 5) if n in PLAIN_GLOW else vcmat('dt_plain_metal', .85, .35) if n in PLAIN_METAL else vcmat('dt_plain', 0, .62)
+        return tgt, col
+    return m, None
+
+
 # ---------------------------------------------------------------- mesh builder
 class MB:
     """Accumulates faces (per-corner UVs, material, smooth flag) and AABB colliders; build() makes one mesh object."""
@@ -165,11 +197,20 @@ class MB:
         me = bpy.data.meshes.new(name)
         me.from_pydata(self.V, [], self.F)
         lay = me.uv_layers.new(name='UVMap')
+        remap = [merged(m) for m in self.mats]
+        final = []
+        for m, _ in remap:
+            if m not in final:
+                final.append(m)
+        vc = me.color_attributes.new('Col', 'BYTE_COLOR', 'CORNER') if any(c for _, c in remap) else None
         for p, uvs, mi, sm in zip(me.polygons, self.UV, self.M, self.S):
-            p.material_index = mi; p.use_smooth = sm
+            m, c = remap[mi]
+            p.material_index = final.index(m); p.use_smooth = sm
             for li, uv in zip(p.loop_indices, uvs):
                 lay.data[li].uv = uv
-        for m in self.mats:
+                if vc is not None:
+                    vc.data[li].color = (*(c or (1, 1, 1)), 1)
+        for m in final:
             me.materials.append(m)
         me.validate(); me.update()
         o = bpy.data.objects.new(name, me)
@@ -302,12 +343,16 @@ def blob(mb, cx, cy, cz, rx, ry, rz, m, seg=8, rings=5):
             mb.face_i((R[j][i], R[j + 1][i], R[j + 1][(i + 1) % seg], R[j][(i + 1) % seg]), uv, m)
 
 
-def lattice_box(mb, p0, p1, w, m, bay=2.0):
-    """open truss of square section w from p0 to p1: four faces with the cut-out lattice texture (u along length)."""
+def lattice_box(mb, p0, p1, w, m, bay=2.0, chords=None):
+    """open truss of square section w from p0 to p1: four faces with the cut-out lattice texture (u along length), plus
+    solid corner chords (material `chords`) so the silhouette survives at a distance where the cut-out mips thin away."""
     p0, p1 = Vector(p0), Vector(p1); ax = p1 - p0; L = ax.length; ax.normalize()
     u = Vector((0, 0, 1)) if abs(ax.z) < .9 else Vector((1, 0, 0))
     s = ax.cross(u).normalized() * (w / 2); t = s.cross(ax).normalized() * (w / 2)
     c = [p0 - s - t, p0 + s - t, p0 + s + t, p0 - s + t]; d = [q + ax * L for q in c]
+    if chords is not None:
+        for q in c:
+            obox(mb, q, q + ax * L, w * .09, w * .09, chords)
     k = L / bay
     for i in range(4):
         a, b = c[i], c[(i + 1) % 4]
@@ -1027,10 +1072,10 @@ def hotel(mb, M, lo, rg):
     for x in (-8, 8):
         cyl(mb, x, -d / 2 - 9, 0, .3, 5.2, M['metal_l'], 10)
     # blade sign on the corner
-    box(mb, w / 2 + .6, -d / 2 + 1, ph + 4, w / 2 + 2.4, -d / 2 + 1.6, ph + 34, M['metal'])
+    box(mb, w / 2 + .6, -d / 2 + 1, ph + 4, w / 2 + 3.0, -d / 2 + 1.6, ph + 22, M['metal'])
     for k, ch in enumerate('HOTEL'):
         for side in (1, -1):
-            o = text_mesh(ch, 3.6, (w / 2 + 1.5, -d / 2 + 1.3 + side * .33, ph + 30 - k * 5.6), M['glow'], rot=(math.pi / 2, 0, 0 if side < 0 else math.pi), extrude=.06)
+            o = text_mesh(ch, 2.2, (w / 2 + 1.8, -d / 2 + 1.3 + side * .33, ph + 19.2 - k * 3.4), M['glow'], rot=(math.pi / 2, 0, 0 if side < 0 else math.pi), extrude=.06)
             mb.extra.append(o)
     rooftop(mb, -w / 2 + 2, -d / 2 + 2, w / 2 - 2, d / 2 - 2, top, M, rg, 'resi')
     prism(mb, P, top, top, None, top=M['roof'], walls=False)
@@ -1528,7 +1573,7 @@ def tram(mb, M, lo=False):
 def crane_mast(mb, M, H):
     """Tower crane mast: lattice section 2 m square on a concrete base, climbing frame near the top."""
     box(mb, -2.5, -2.5, 0, 2.5, 2.5, 1.2, M['rawconc'])
-    lattice_box(mb, (0, 0, 1.2), (0, 0, H), 2.0, M['lattice'], 2.0)
+    lattice_box(mb, (0, 0, 1.2), (0, 0, H), 2.0, M['lattice'], 2.0, M['yellow'])
     box(mb, -1.4, -1.4, H - 6, 1.4, 1.4, H - 5.4, M['yellow'], bottom=True)
     box(mb, -1.1, -1.1, H - .4, 1.1, 1.1, H, M['yellow'], bottom=True)
 
@@ -1540,13 +1585,13 @@ def crane_jib(mb, M):
     box(mb, -1.2, 1.1, .4, 1.2, 3.4, 3.0, M['yellow'])
     box(mb, -1.0, 3.38, 1.0, 1.0, 3.45, 2.7, M['tinted'], top=False)
     J = 52.0
-    lattice_box(mb, (1, 0, 2.0), (J, 0, 2.0), 1.6, M['lattice'], 1.6)
+    lattice_box(mb, (1, 0, 2.0), (J, 0, 2.0), 1.6, M['lattice'], 1.6, M['yellow'])
     box(mb, J - .3, -.8, 1.2, J + .3, .8, 2.8, M['yellow'])
-    lattice_box(mb, (-1, 0, 2.0), (-16, 0, 2.0), 1.8, M['lattice'], 1.8)
+    lattice_box(mb, (-1, 0, 2.0), (-16, 0, 2.0), 1.8, M['lattice'], 1.8, M['yellow'])
     for k in range(4):
         box(mb, -15.5 + k * 1.3, -1.1, -.6, -14.3 + k * 1.3, 1.1, 2.6, M['rawconc'])
     box(mb, -10, -.9, 2.8, -3, .9, 3.0, M['metal'])
-    lattice_box(mb, (0, 0, 1.2), (0, 0, 9.5), 1.6, M['lattice'], 1.6)
+    lattice_box(mb, (0, 0, 1.2), (0, 0, 9.5), 1.6, M['lattice'], 1.6, M['yellow'])
     for p in ((J * .62, 0, 2.8), (-12, 0, 2.8)):
         obox(mb, (0, 0, 9.4), p, .06, .06, M['metal'])
     box(mb, 30, -.7, .9, 32.4, .7, 1.25, M['metal'])

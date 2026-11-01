@@ -42,33 +42,31 @@ fs.mkdirSync(OUT, { recursive: true });
   console.log('earth load seconds', Math.round((Date.now() - t0) / 1000));
   await wait(3000);
 
-  // free camera at a fixed pose (both builds), frame stats summed over all passes of one frame
+  // free camera at a fixed pose (works on both builds). Software rendering takes seconds per frame, so each view renders
+  // one frame explicitly and reads renderer.info summed over every pass of it (shadow maps included).
   const cam = async (pos, look) => ev(([pos, look]) => {
     const g = window.__game, V = g.camera.position.constructor, c = g.camera; g.stationId = 'test';
-    c.position.set(...pos); c.lookAt(...look);
-    g.camFocus = { pos: new V(...pos), look: new V(...look), orbit: false, q: c.quaternion.clone(), p0: c.position.clone(), q0: c.quaternion.clone(), fov0: 60, t0: 0 };
+    c.position.set(...pos); c.lookAt(...look); c.fov = 55; c.updateProjectionMatrix();
+    g.camFocus = { pos: new V(...pos), look: new V(...look), orbit: false, q: c.quaternion.clone(), p0: c.position.clone(), q0: c.quaternion.clone(), fov0: 55, t0: 0 };
     const w = g.world; if (w.flora) w.flora.update(c, 0, true); if (w.downtown) w.downtown.update(c, 0, true);
   }, [pos, look]);
-  const measure = async name => {
-    const r = await ev(async () => {
-      const g = window.__game, R = g.renderer, info = R.r.info, orig = R.render.bind(R);
-      let calls = 0, tris = 0, n = 0;
-      R.render = (...a) => { info.autoReset = false; info.reset(); orig(...a); calls += info.render.calls; tris += info.render.triangles; n++; info.autoReset = true; };
-      const t = performance.now();
-      await new Promise(res => setTimeout(res, 6000));
-      R.render = orig;
-      return { frames: n, fps: +(n / ((performance.now() - t) / 1000)).toFixed(1), calls: Math.round(calls / Math.max(1, n)), tris: Math.round(tris / Math.max(1, n)), geometries: info.memory.geometries, textures: info.memory.textures };
-    });
-    console.log('perf', name, JSON.stringify(r));
-    return r;
-  };
+  const frame = () => ev(() => {
+    const g = window.__game, R = g.renderer, info = R.r.info;
+    info.autoReset = false; info.reset();
+    const t = performance.now();
+    R.render(g.scene, g.camera);
+    const ms = performance.now() - t, out = { calls: info.render.calls, tris: info.render.triangles, ms: Math.round(ms), geometries: info.memory.geometries, textures: info.memory.textures };
+    info.autoReset = true;
+    return out;
+  });
+  const measure = async name => { await frame(); const r = await frame(); console.log('perf', name, JSON.stringify(r)); return r; };
   const VIEWS = {
     street: [[-30, 1.7, -104], [60, 6, -110]],                // heritage avenue, eye height, looking east
     aerial: [[260, 210, 330], [-20, 30, -60]],                 // over the core from the south-east
     towers: [[-110, 1.8, 30], [-110, 120, -40]],               // plaza in front of the crescent, looking up
   };
   const perf = {};
-  for (const [k, [pos, look]] of Object.entries(VIEWS)) { await cam(pos, look); await wait(2500); perf[k] = await measure(k); }
+  for (const [k, [pos, look]] of Object.entries(VIEWS)) { await cam(pos, look); perf[k] = await measure(k); }
   if (PERF_ONLY) { console.log('PERF', JSON.stringify(perf)); console.log('page errors:', errs.length); await b.close(); process.exit(errs.length ? 1 : 0); }
 
   const st = await ev(() => window.__game.world.downtown.stats());
@@ -89,20 +87,19 @@ fs.mkdirSync(OUT, { recursive: true });
     return bad;
   });
   check(onLane.length === 0, 'no building stands on a traffic lane', onLane.slice(0, 5));
-  // walk into the tallest tower: the collider stops the player
+  // walk into the tallest tower (capsule moves of the player controller, stepped directly: the render loop is too slow)
   await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; });
-  const walk = await ev(async () => {
-    const g = window.__game, w = g.world, pl = g.player;
+  const walk = await ev(() => {
+    const g = window.__game, w = g.world;
     const P = [...w.downtown.placed].filter(q => q.kind === 'tower').sort((a, b) => b.h - a.h)[0];
-    const z = (P.rect[1] + P.rect[3]) / 2, x = P.rect[0] - 4;
-    pl.pos.set(x, 0.05, z); pl.vel.set(0, 0, 0); pl.avatar.root.position.copy(pl.pos); pl.camYaw = -Math.PI / 2; pl.camPitch = 0; pl.snapCamera = true;
-    g.input.down.add('KeyW'); await new Promise(r => setTimeout(r, 4000)); g.input.down.delete('KeyW');
-    return { tower: P.name, face: +P.rect[0].toFixed(2), end: +pl.pos.x.toFixed(2), start: x };
+    const z = (P.rect[1] + P.rect[3]) / 2, x = P.rect[0] - 4, pos = new (g.player.pos.constructor)(x, 0.05, z), vel = pos.clone();
+    for (let i = 0; i < 120; i++) { vel.set(4.4, -9, 0); w.collision.moveCapsule(pos, vel, .35, 1.7, 1 / 30); }
+    return { tower: P.name, face: +P.rect[0].toFixed(2), end: +pos.x.toFixed(2), start: x };
   });
   check(walk.end < walk.face && walk.end > walk.start + .5, 'walking into a tower stops at its wall', walk);
 
   // screenshots
-  const view = async (n, pos, look) => { await cam(pos, look); await wait(5000); await shot(n); };
+  const view = async (n, pos, look) => { await cam(pos, look); await wait(500); const r = await frame(); console.log('view', n, JSON.stringify(r)); await shot(n); };
   await view('d01_heritage_street', [-30, 1.7, -104], [60, 5, -112]);
   await view('d02_heritage_wide', [-58, 9, -118], [40, 10, -104]);
   await view('d03_towers_up', [-110, 1.8, 30], [-110, 120, -40]);
@@ -117,7 +114,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await view('d10_obs_tower', [170, 2, 60], [90, 80, -20]);
   // on foot, first person, on the heritage avenue among the crowd
   await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; const pl = g.player; pl.pos.set(-20, .05, -108); pl.vel.set(0, 0, 0); pl.avatar.root.position.copy(pl.pos); pl.camYaw = -Math.PI / 2; pl.camPitch = .05; pl.snapCamera = true; });
-  await wait(5000);
+  await wait(3000); await frame();
   const life = await ev(() => { const g = window.__game, w = g.world, P = g.player.pos; return { pedsNear60: w.population.peds.filter(q => q.alive && q.pos.distanceTo(P) < 60).length, district: w.districtName, fps: Math.round(g.fps) }; });
   console.log('street life', JSON.stringify(life));
   await shot('d11_on_foot');

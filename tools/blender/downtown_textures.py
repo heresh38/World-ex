@@ -126,8 +126,8 @@ def curtain():
         lit_floor = rg.rand() < .45
         for b in range(B):
             x0, y0 = b * cw, f * ch
-            g = jitter(rg, (.085, .115, .15), .14)
-            cv.rect(x0, y0, x0 + cw, y0 + ch, col=g, h=0, rough=.03 + rg.rand() * .05, metal=.85)
+            g = jitter(rg, (.2, .25, .31), .12)            # coated glass: metallic with a mid albedo reads as a tinted mirror
+            cv.rect(x0, y0, x0 + cw, y0 + ch, col=g, h=0, rough=.03 + rg.rand() * .05, metal=.8)
             # spandrel (opaque shadow-box glass at the slab), bottom 0.9 m of the 4 m floor
             sp = int(ch * .22)
             cv.rect(x0, y0 + ch - sp, x0 + cw, y0 + ch, col=jitter(rg, (.055, .07, .085), .08), rough=.09, metal=.8, h=.15)
@@ -168,7 +168,7 @@ def ribbon():
         lit_floor = rg.rand() < .4
         for b in range(B):
             x0 = b * cw
-            cv.rect(x0, band0, x0 + cw, band1, col=jitter(rg, (.16, .1, .055), .12), h=-1, rough=.07, metal=.75)
+            cv.rect(x0, band0, x0 + cw, band1, col=jitter(rg, (.3, .2, .11), .1), h=-1, rough=.06, metal=.75)
             if rg.rand() < .5:
                 dn = int((band1 - band0) * rg.uniform(.2, .8))
                 cv.rect(x0 + 3, band0, x0 + cw - 3, band0 + dn, col=jitter(rg, (.28, .22, .15), .1), h=-1, rough=.07)
@@ -586,8 +586,8 @@ def save_rgba(name, rgb, a):
 def lattice():
     S = 256                                      # one square truss bay: chords, a rung and a diagonal
     yy, xx = (np.mgrid[0:S, 0:S] + .5) / S
-    t = .07
-    a = (xx < t) | (xx > 1 - t) | (yy < t * .7) | (np.abs(xx - yy) < t * .55)
+    t = .1
+    a = (xx < t) | (xx > 1 - t) | (yy < t * .8) | (np.abs(xx - yy) < t * .6)
     rgb = np.ones((S, S, 3), np.float32) * .95
     edge = (xx < t * .3) | (xx > 1 - t * .3)
     rgb[edge] *= .7

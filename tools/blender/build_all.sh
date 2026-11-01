@@ -19,3 +19,6 @@ for s in water_textures spaceport; do
   echo "== $s"
   blender --background --python tools/blender/$s.py 2>&1 | grep -E "^\[export|^\[texture|^\[spaceport|Error|Traceback" || true
 done
+# downtown New Meridian: numpy-painted facade sets (dt_*), building designs + LODs and the street kit
+echo "== downtown"
+blender --background --python tools/blender/downtown.py 2>&1 | grep -E "^\[export|^\[texture|^\[design|Error|Traceback" || true
