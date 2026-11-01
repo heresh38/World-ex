@@ -8,7 +8,7 @@ const OUT = process.env.OUT || 'test-out/crowd';
 fs.mkdirSync(OUT, { recursive: true });
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
+  const p = await b.newPage({ viewport: { width: +(process.env.VW || 960), height: +(process.env.VH || 540) } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 300)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 300)); } });
@@ -51,11 +51,14 @@ fs.mkdirSync(OUT, { recursive: true });
       pl.avatar.root.position.copy(pl.pos); pl.camYaw = Math.atan2(pl.pos.x - q.pos.x, pl.pos.z - q.pos.z); pl.camPitch = -.05; pl.snapCamera = true;
       q.state = 'idle'; q.idleT = 30;
     }, [i, dist]);
-    await wait(2500); await shot(name);
+    await wait(2500);
+    if (name) await shot(name);
   };
-  for (let i = 0; i < 6; i++) await go(i * 7, 3.2, 'ped' + i);
-  await go(3, 14, 'street');
+  // numbers first (screenshots of the software-rendered page are the most memory hungry step)
+  await go(3, 14, null);
   await measure('street_view');
+  for (let i = 0; i < 4; i++) await go(i * 7, 3.2, 'ped' + i);
+  await go(3, 14, 'street');
   console.log('page errors:', errs.length);
   await b.close();
   process.exit(errs.length ? 1 : 0);

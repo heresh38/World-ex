@@ -22,6 +22,9 @@ export const POOLS = {
   bush: ['TR_bush_a', 'TR_bush_b', 'TR_bush_flower'],
   rock: ['TR_rock_a', 'TR_rock_b', 'TR_rock_c'],
   rock_snow: ['TR_rock_snow_a', 'TR_rock_snow_b', 'TR_rock_snow_c'],
+  // frontier worlds (planet.js): savanna mesas, the jungle basin, the glacier shelf
+  savanna: ['TR_umbrella_a', 'TR_umbrella_b', 'TR_umbrella_a', 'TR_oak_gold'],
+  jungle: ['TR_emergent_a', 'TR_emergent_b', 'TR_understory_a', 'TR_understory_b', 'TR_understory_a', 'TR_understory_b', 'TR_willow_b'],
 };
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
@@ -35,6 +38,7 @@ function prepMaterial(m, time) {
     m.alphaTest = imp ? .42 : .5; m.transparent = false; m.depthWrite = true;
     m.side = THREE.DoubleSide; m.shadowSide = THREE.DoubleSide;
     m.envMapIntensity = .35; m.roughness = Math.max(m.roughness, .7); m.metalness = 0;
+    if (imp) m.color.multiplyScalar(.82);          // impostor cards face the sky: keep them from out-shining the hero crowns
     m.onBeforeCompile = sh => {
       sh.uniforms.uTime = time;
       if (!imp) {
@@ -104,6 +108,27 @@ export class Flora {
 
   has(name) { return this.kinds.has(name); }
 
+  pick(what, rnd) {
+    if (!POOLS[what]) return this.kinds.get(what);
+    const p = POOLS[what].filter(n => this.kinds.has(n));
+    return p.length ? this.kinds.get(p[Math.floor(rnd() * p.length)]) : null;
+  }
+
+  // streamed worlds: reserve instance slots per pool before build(), then addLive/removeLive as chunks come and go
+  reserve(what, cap) { for (const n of POOLS[what] || [what]) { const k = this.kinds.get(n); if (k) k.cap = Math.max(k.cap || 0, cap); } }
+
+  addLive(what, x, y, z, rnd = Math.random, scale = 1) {
+    const k = this.pick(what, rnd); if (!k || !k.meshes) return null;
+    let i = k.free.pop();
+    if (i === undefined) { if (k.n >= k.capacity) return null; i = k.n++; }
+    _m.compose(_p.set(x, y, z), _q.setFromAxisAngle(Y, rnd() * Math.PI * 2), _s.setScalar(scale)).toArray(k.mats, i * 16);
+    k.pos[i * 3] = x; k.pos[i * 3 + 1] = y; k.pos[i * 3 + 2] = z; k.alive[i] = 1;
+    this.dirty = true;
+    return { k, i };
+  }
+
+  removeLive(h) { if (!h || !h.k.alive[h.i]) return; h.k.alive[h.i] = 0; h.k.free.push(h.i); this.dirty = true; }
+
   // pool name or variant name; returns the variant used (or null)
   add(what, x, y, z, rnd = Math.random, scale = 1, { collide = true, yaw } = {}) {
     let name = what;
@@ -115,12 +140,13 @@ export class Flora {
     return name;
   }
 
-  get count() { let n = 0; for (const k of this.kinds.values()) n += k.list.length; return n; }
+  get count() { let n = 0; for (const k of this.kinds.values()) n += k.alive ? k.alive.reduce((a, b) => a + b, 0) : k.list.length; return n; }
 
   // instanced meshes: one per tier part, all parts of a tier share one instance-matrix buffer
   build() {
     for (const k of this.kinds.values()) {
-      const n = k.list.length; if (!n) continue;
+      const n = Math.max(k.list.length, k.cap || 0); if (!n) continue;
+      k.capacity = n; k.n = k.list.length; k.free = []; k.alive = new Uint8Array(n).fill(1, 0, k.list.length);
       k.pos = new Float32Array(n * 3); k.mats = new Float32Array(n * 16);
       k.list.forEach((m, i) => { m.toArray(k.mats, i * 16); k.pos[i * 3] = m.elements[12]; k.pos[i * 3 + 1] = m.elements[13]; k.pos[i * 3 + 2] = m.elements[14]; });
       k.meshes = k.tiers.map((parts, t) => {
@@ -142,8 +168,8 @@ export class Flora {
     this.time.value += dt;
     this.timer -= dt;
     const c = cam.position;
-    if (!force && this.timer > 0 && c.distanceToSquared(this.last) < 16) return;
-    this.timer = .5; this.last.copy(c);
+    if (!force && !this.dirty && this.timer > 0 && c.distanceToSquared(this.last) < 16) return;
+    this.timer = .5; this.last.copy(c); this.dirty = false;
     const q = this.g.renderer.q || {}, f = .55 + .45 * (q.draw || .8);
     const HERO = 58 * f, MID = 230 * f;
     for (const k of this.kinds.values()) {
@@ -151,8 +177,9 @@ export class Flora {
       const big = 1 + k.h / 40, small = k.h < 3.5;
       const h2 = (HERO * big) ** 2, m2 = (MID * big * (small ? .6 : 1)) ** 2, far2 = small ? (MID * .75) ** 2 : k.tiers[2] ? Infinity : (MID * 1.4) ** 2;
       const T = k.meshes, cnt = [0, 0, 0];
-      const n = k.list.length, P = k.pos, M = k.mats;
+      const n = k.n, P = k.pos, M = k.mats, A = k.alive;
       for (let i = 0; i < n; i++) {
+        if (!A[i]) continue;
         const dx = P[i * 3] - c.x, dz = P[i * 3 + 2] - c.z, d2 = dx * dx + dz * dz;
         let t = d2 < h2 ? 0 : d2 < m2 ? 1 : d2 < far2 ? 2 : -1;
         if (t < 0) continue;

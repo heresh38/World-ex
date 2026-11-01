@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { World } from './world.js';
 import { atmosphereSky } from './sky.js';
 import { mulberry } from '../game/state.js';
+import { Flora } from './meridian/flora.js';
 
 const CH = 64, RES = 24, RADIUS = 4;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -24,6 +25,8 @@ const SKYBODY = {
   pyrrhos: { dir: [-.7, .25, .6], size: .07, color: '#b05030', band: '#702414', ring: null },
   nyx: { dir: [-.5, .5, -.7], size: .06, color: '#e8e0ff', band: '#a898d8', ring: null, moon2: [.55, .32, -.75] },
 };
+// Blender-grown trees per landform (tools/blender/trees.py via flora.js): [pool, per-chunk count, max slope, scale]
+const TREES = { glacier: [['snow', 2.2, .55, .9], ['rock_snow', .8, 9, 1]], jungle: [['jungle', 9, .7, .9], ['bush', 5, .8, 1.1]], mesa: [['savanna', 1.1, .35, 1]] };
 const HAZE = { ares: .00062, vesper: .0011, thalassa: .0008, pyrrhos: .00095, nyx: .0007 };
 
 function fbm(x, z, s, o = 5) { let t = 0, a = .5, n = 0; for (let i = 0; i < o; i++) { t += a * vnoise(x, z, s + i * 17); n += a; x *= 2.02; z *= 2.02; a *= .5; } return t / n; }
@@ -217,6 +220,13 @@ export class PlanetWorld extends World {
     this.pools = { rock: rockKit.map(r => new Pool(sc, r, 260)) };
     this.pools.crystal = D.crystal >= 0 ? new Pool(sc, kit.getObjectByName('PR_crystal_' + D.crystal), 240) : null;
     this.pools.plant = D.plants >= 0 ? new Pool(sc, kit.getObjectByName('PR_plant_' + D.plants), 400) : null;
+    this.treeSpec = TREES[STYLE[D.id]] || null;
+    if (this.treeSpec) {
+      await A.loadAll([{ type: 'model', name: 'trees', file: 'trees.glb' }]);
+      this.flora = new Flora(g, sc, A.models.trees);
+      for (const [pool, n] of this.treeSpec) this.flora.reserve(pool, Math.ceil(n * 90 / 3) + 40);
+      this.flora.build();
+    }
     progress(.2, 'Mapping terrain');
     // ---------------- landing site: jumpship + beacon
     const gy = this.height(0, 0);
@@ -306,6 +316,16 @@ export class PlanetWorld extends World {
     if (this.pools.plant) for (let k = 0, n = 2 + Math.floor(rnd() * 7); k < n; k++) {
       const x = cx * CH + rnd() * CH, z = cz * CH + rnd() * CH; if (nearSite(x, z)) continue;
       place(this.pools.plant, x, z, .8 + rnd() * .9, rnd() * 6.28, .3);
+    }
+    // trees: snowy conifers on the glacier shelf, jungle canopy, lone savanna trees on the mesas (streamed with the chunk)
+    if (this.flora) for (const [pool, dens, maxSlope, sc0] of this.treeSpec) for (let k = 0, n = Math.floor(dens * (.4 + rnd() * 1.2)); k < n; k++) {
+      const x = cx * CH + rnd() * CH, z = cz * CH + rnd() * CH; if (Math.hypot(x, z) < 34) continue;
+      const y = this.height(x, z), sl = Math.hypot(this.height(x + 2, z) - this.height(x - 2, z), this.height(x, z + 2) - this.height(x, z - 2)) / 4;
+      if (sl > maxSlope || (this.lava !== null && y < this.lava + 1)) continue;
+      const h = this.flora.addLive(pool, x, y - .3, z, rnd, sc0 * (.8 + rnd() * .45)); if (!h) continue;
+      ch.inst.push([{ remove: hh => this.flora.removeLive(hh) }, h]);
+      const r = h.k.species === 'rock' ? h.k.w * .6 : h.k.species === 'bush' ? 0 : Math.max(.15, h.k.trunk * .9);
+      if (r) ch.boxes.push(this.collision.add([x - r, y - .5, z - r, x + r, y + (h.k.species === 'rock' ? h.k.h * .8 : 4), z + r], h.k.species === 'rock' ? 'rock' : 'tree'));
     }
     // ---- outposts and caches
     const dist = Math.hypot(ox, oz);
@@ -466,6 +486,7 @@ export class PlanetWorld extends World {
       }
     }
     if (this.queue.length) { const w = this.queue.shift(); this.makeChunk(w[0], w[1]); }
+    if (this.flora) this.flora.update(g.camera, dt);
     else if (this.farJob) this.stepFar(3);
     else if (this.farAt && Math.hypot(c.x - this.farAt[0], c.z - this.farAt[1]) > 140) this.buildFar(Math.round(c.x / 20) * 20, Math.round(c.z / 20) * 20);
     // caches: animate lids

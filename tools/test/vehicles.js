@@ -61,6 +61,9 @@ fs.mkdirSync(OUT, { recursive: true });
   if (EARTH) check('fixed traffic population with drivers', pop.traffic >= 80 && pop.drivers === pop.traffic, pop);
   const n0 = pop.traffic;
 
+  const SKIP = process.env.FROM === 'board';            // resume a run that was cut short (shared-memory CI boxes)
+  if (SKIP) await ev(() => { const g = window.__game, B = window.__B, V = B.constructor; window.__dropCar = g.vehicles.spawn('car_sedan', '#2a4f7a', new V(B.x + 12, g.world.collision.ground(B.x + 12, B.z + 6), B.z + 6), 0); });
+  if (!SKIP) {
   // ---- gravity: a car dropped from 6 m lands and settles on the ground
   const drop = await ev(async () => {
     const g = window.__game, V = g.player.pos.constructor;
@@ -85,7 +88,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const h0 = m.height(x, z); if (w.map && h0 < 2) continue;
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const h1 = m.height(x + dx * 25, z + dz * 25), h2 = m.height(x + dx * 8, z + dz * 8);
-        const drop = h0 - h1; if (h2 > h0 + .5) continue;
+        const drop = h0 - h1; if (h2 > h0 + .5 || drop > 14) continue;
         if (!best || drop > best.drop) best = { x, z, dx, dz, drop };
       }
     }
@@ -104,9 +107,11 @@ fs.mkdirSync(OUT, { recursive: true });
       if (c.contacts === 0) air++;
       maxAirH = Math.max(maxAirH, h);
       if (i % 10 === 0) hist.push([+c.pos.y.toFixed(1), +gy.toFixed(1), c.contacts, +c.speed.toFixed(1)]);
-      if (i === 45) g.input.down.delete('KeyW');
+      if (i === 45) { g.input.down.delete('KeyW'); g.input.down.add('Space'); }
     }
     g.input.down.delete('KeyW');
+    for (let i = 0; i < 80 && (c.speed > .5 || c.contacts < 3); i++) await window.__waitGame(.1);
+    g.input.down.delete('Space');
     const gy = g.world.collision.support(c.pos.x, c.pos.z, c.pos.y + 1);
     return { drop: +best.drop.toFixed(1), airFrames: air, maxAirH: +maxAirH.toFixed(2), y: +c.pos.y.toFixed(2), ground: +gy.toFixed(2), contacts: c.contacts, hist };
   });
@@ -150,6 +155,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await run(1500);
   await ev(() => { const g = window.__game; g.input.down.delete('Space'); g.vehicles.exit(); });
 
+  }
   // ---- hover board: V summons it under the player, ride it
   const board = await ev(async () => {
     const g = window.__game;

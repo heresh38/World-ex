@@ -39,6 +39,14 @@ for quick checks; `sdfview.py` previews a field without Blender. `refs.py` cuts 
 (owner's art, allowed). `civilians.py` builds the pedestrians with `npc_kit.py` (tinted by prefix skin/hair/shirt/pants/shoes).
 `characters.py` still makes the enemies. The player rig uses the IK pole angle of 90 degrees, which keeps the elbows down
 and the upper-arm twist small for skinned shoulders.
+Hair is grown by `hair.py` (scalp cap + alpha-tested strand cards on the `hair_strands.png` atlas; materials `hair` and
+`hair__cap`, both tinted by hairColor). Player clips add Slide; Walk, Run, Jump and the Relaxed clips are gendered per GLB
+(`characters.animate(style=)`), enemies keep the neutral set. `players.py` also writes `player_<sex>_npc.glb` (crowd version:
+one body mesh, everyday wardrobe `NPC_KEEP`/`NPC_HAIR`, smaller atlas `hair_strands_s.png`) used by `population.js` with
+`randomCharacter`. Wardrobe meta per item: `hide` (regions), `coveredBy` (locked underwear), `replaces` (a dress hides
+top/legs), `cover` (bit in the per-vertex `_covermask`; `avatar.js` pulls masked skin 6 mm inwards while that garment is
+worn). Garment weights are copied from the body under them, restricted to the parts they cover. Player exports go through
+`bl.quantize_glb()` (8-bit normals/weights, 16-bit UVs; three reads it natively).
 
 ## Earth (free roam)
 The city follows the owner's river-city art (`art/reference/city_river.jpg`). A river (`RIVER_Z`, `riverZ()` in
@@ -48,6 +56,18 @@ in `city.py`); the outer ring has suburbs (rural houses). There are parks with `
 plaza, and glowing cyan kerb strips.
 `src/worlds/meridian/`: `layout.js` (heightmap, river, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
 `traffic.js` (lane cars, hijack), `wanted.js` (stars + security drones). Assets: `rural.py` (RU_* kit). No missions on Earth.
+
+## Trees
+`tools/blender/trees.py` grows every tree (`trees.glb`, roots `TR_*`; `-- oak birch --fast` builds only those into
+`$TREE_OUT`, `$TREE_PREVIEW=<dir>` writes per-species GLBs for preview.py). Broadleaf crowns by space colonisation, conifers
+by whorls/pads; leaf-cluster cards (`leaves_*`, alpha MASK, normals bent out of the crown, AO in COLOR_0), `bark_*`,
+`snow` (up-facing branch/rock faces), `rock`. Each variant has `TR_x` (hero 3-6k tris), `TR_x_mid`, `TR_x_lod` (crossed
+impostor cards from a Cycles-baked atlas); root extras `h`, `w`, `trunk`, `species`. Also bakes `snow_c/_n.jpg` (terrain).
+Runtime: `src/worlds/meridian/flora.js` (`Flora`: instanced LOD buckets by camera distance, wind, mip alpha boost;
+`POOLS` = planting sets per area; `addLive/removeLive` for streamed worlds). Earth plants by area (parks cherry ring +
+oak/maple, quays willow/ash, suburbs maple/birch + hedges, villages, lone field trees, woods by altitude up to the
+`SNOW_LINE` of the Meridian Peaks massif in `layout.js`); trunks collide via `kitColliders`. `planet.js` streams
+snowy conifers (glacier), jungle canopy and savanna trees (mesa) per chunk. Test: `tools/test/trees.js`.
 - Spaceport (`spaceport.py`, `SPACEPORT` in `layout.js`): a ship landing field south of the city (VTOL pads, terminal with the
   Quartermaster, control tower, hangars, fuel farm, container yard; no runways — ships land vertically). The player's ship lands
   on pad 1; `src/game/cinematic.js` plays the landing / take-off cutscenes (`g.cineTime` pins the clock for tests).

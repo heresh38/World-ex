@@ -24,6 +24,16 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 600000, polling: 500 });
   await ev(() => { const g = window.__game; g.save.settings.quality = 'low'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); g.startGame(true); });
   await waitPlay();
+  const cam = async (n, pos, look) => {
+    await ev(([pos, look]) => { const g = window.__game, V = g.camera.position.constructor; g.stationId = 'test'; const c = g.camera; c.position.set(...pos); c.lookAt(...look);
+      g.camFocus = { pos: new V(...pos), look: new V(...look), orbit: false, q: c.quaternion.clone(), p0: c.position.clone(), q0: c.quaternion.clone(), fov0: 60, t0: 0 };
+      g.world.flora.update(c, 0, true); }, [pos, look]);
+    await wait(4500); await shot(n);
+    console.log(n, JSON.stringify(await ev(() => { const g = window.__game, f = g.world.flora, t = [0, 0, 0];
+      for (const k of f.kinds.values()) if (k.meshes) k.meshes.forEach((m, i) => { if (m) t[i] += m.ms[0].count; });
+      return { fps: Math.round(g.fps), hero: t[0], mid: t[1], lod: t[2] }; })));
+  };
+  if (process.env.EARTH !== '0') {
   const t0 = Date.now();
   await ev(() => window.__game.travel('earth'));
   await waitPlay();
@@ -50,15 +60,7 @@ fs.mkdirSync(OUT, { recursive: true });
     };
   });
   console.log('spots', JSON.stringify(spots));
-  const cam = async (n, pos, look) => {
-    await ev(([pos, look]) => { const g = window.__game, V = g.camera.position.constructor; g.stationId = 'test'; const c = g.camera; c.position.set(...pos); c.lookAt(...look);
-      g.camFocus = { pos: new V(...pos), look: new V(...look), orbit: false, q: c.quaternion.clone(), p0: c.position.clone(), q0: c.quaternion.clone(), fov0: 60, t0: 0 };
-      g.world.flora.update(c, 0, true); }, [pos, look]);
-    await wait(4500); await shot(n);
-    console.log(n, JSON.stringify(await ev(() => { const g = window.__game, f = g.world.flora, t = [0, 0, 0];
-      for (const k of f.kinds.values()) if (k.meshes) k.meshes.forEach((m, i) => { if (m) t[i] += m.ms[0].count; });
-      return { fps: Math.round(g.fps), hero: t[0], mid: t[1], lod: t[2], district: g.world.map.district(g.camera.position.x, g.camera.position.z), calls: g.renderer.r.info.render.calls, tris: g.renderer.r.info.render.triangles }; })));
-  };
+
   const H = (x, z) => ev(([x, z]) => window.__game.world.map.height(x, z), [x, z]);
   // park (Founders' Park block at 2,-2: cherry ring round the fountain)
   await cam('t01_park', [262, 7, -262], [220, 3, -220]);
@@ -88,6 +90,27 @@ fs.mkdirSync(OUT, { recursive: true });
     console.log('walk into trunk', JSON.stringify(r));
     await wait(2500); await shot('t12_on_foot');
     console.log('fps on foot', await ev(() => Math.round(window.__game.fps)));
+  }
+  }
+  // frontier worlds: snowy conifers on the glacier shelf, jungle canopy, savanna trees on the mesas (streamed per chunk)
+  for (const id of (process.env.PLANETS ?? 'vesper,thalassa,ares').split(',').filter(Boolean)) {
+    await ev(i => window.__game.travel(i), id);
+    await waitPlay(); await wait(5000);
+    const t = await ev(() => {
+      const g = window.__game, f = g.world.flora; if (!f) return null;
+      let best = null, bd = 1e9;
+      for (const k of f.kinds.values()) if (k.alive && k.species !== 'rock' && k.species !== 'bush') for (let i = 0; i < k.n; i++) if (k.alive[i]) {
+        const d = Math.hypot(k.pos[i * 3], k.pos[i * 3 + 2]); if (d > 40 && d < bd) { bd = d; best = [k.pos[i * 3], k.pos[i * 3 + 1], k.pos[i * 3 + 2], k.h]; }
+      }
+      if (best) {   // a camera between the landing site and the tree, clear of the ground
+        const [x, y, z, h] = best, L = Math.hypot(x, z), r = h * 1.5 + 14, cx = x - x / L * r, cz = z - z / L * r;
+        best = [cx, Math.max(g.world.height(cx, cz) + 3, y + h * .5), cz, x, y + h * .45, z];
+      }
+      return { trees: f.count, best };
+    });
+    console.log(id, JSON.stringify(t));
+    if (t && t.best) await cam('t20_' + id, t.best.slice(0, 3), t.best.slice(3));
+    await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; });
   }
   console.log('page errors:', errs.length);
   await b.close();
