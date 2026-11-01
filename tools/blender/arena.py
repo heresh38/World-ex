@@ -572,30 +572,30 @@ def layout():
     # mezzanines: slab, edge girder (the mantle ledge), columns, railing with gaps (bridge + crate climbs)
     for s in (-1, 1):
         xa, xb = (hx0 + .5, -7.0) if s < 0 else (7.0, hx1 - .5)
-        P(xa, up - .2, -9.0, xb, up, 9.0, m['plate'], tag='mezz', mirror=False)
+        P(xa, up - .2, -8.0, xb, up, 8.0, m['plate'], tag='mezz', mirror=False)
         ex = -7.0 if s < 0 else 7.0
-        P(min(ex, ex + .3 * s), up - .8, -9.0, max(ex, ex + .3 * s), up, 9.0, m['steel_green'], tag='mezz', mirror=False)
-        for z in (-8.8, -3.0):
+        P(min(ex, ex + .3 * s), up - .8, -8.0, max(ex, ex + .3 * s), up, 8.0, m['steel_green'], tag='mezz', mirror=False)
+        for z in (-7.8, -3.0):
             P(ex + .15 * s - .15, 0, z - .15, ex + .15 * s + .15, up - .8, z + .15, m['steel_green'], tag='post')
         rail_x = ex + (-.04 if s < 0 else .04)
-        for (za, zb) in ((-9.0, -6.7), (-5.3, -1.5)):
+        for (za, zb) in ((-8.0, -5.7), (-4.3, -1.5)):
             P(rail_x - .04, up, za, rail_x + .04, up + 1.0, zb, m['steel_yellow'], tag='rail')
             P(rail_x - .03, up + .45, za, rail_x + .03, up + .5, zb, m['steel_yellow'], col=False)
-        # stairs at both ends, along the outer wall
+        # stairs at both ends, along the outer wall (a landing between the stair foot and the end wall)
         sxa, sxb = (hx0 + .5, hx0 + 2.5) if s < 0 else (hx1 - 2.5, hx1 - .5)
-        stairs(sxa, sxb, -15.4, -9.0, 0, up, 16, m['plate'], rise_along='+z')
+        stairs(sxa, sxb, -14.4, -8.0, 0, up, 16, m['plate'], rise_along='+z')
         rx = sxb + .04 if s < 0 else sxa - .04
         for k in range(4):
-            za, zb = -15.4 + k * 1.6, -15.4 + (k + 1) * 1.6
-            P(rx - .04, up * k / 4 + .2, za, rx + .04, up * (k + 1) / 4 + 1.0, zb, m['steel_yellow'], tag='rail')
-        # end railing at z = -9 across the mezzanine edge beside the stair
-        P(sxb if s < 0 else xa, up, -9.04, xb if s < 0 else sxa, up + 1.0, -8.96, m['steel_yellow'], tag='rail')
+            za, zb = -13.6 + k * 1.4, -13.6 + (k + 1) * 1.4
+            P(rx - .04, up * (k + 2) / 6 - .2, za, rx + .04, up * (k + 3) / 6 + 1.0, zb, m['steel_yellow'], tag='rail')
+        # end railing at z = -8 across the mezzanine edge beside the stair
+        P(sxb if s < 0 else xa, up, -8.04, xb if s < 0 else sxa, up + 1.0, -7.96, m['steel_yellow'], tag='rail')
         # crate stack to mantle onto the mezzanine (lower crate + upper crate = 2.2 m), a step crate beside it
         cx = ex + (.65 if s < 0 else -.65)
-        crate(cx, -6.0, 1.1, 1.2, 1.2); crate(cx, -6.0, 1.0, 1.1, 1.0, y=1.2, rot=.05)
-        crate(cx + (1.0 if s < 0 else -1.0), -6.1, .9, 1.0, 1.0, rot=.1)
+        crate(cx, -5.0, 1.1, 1.2, 1.2); crate(cx, -5.0, 1.0, 1.1, 1.0, y=1.2, rot=.05)
+        crate(cx + (1.0 if s < 0 else -1.0), -5.1, .9, 1.0, 1.0, rot=.1)
         # machine cabinets under the mezzanine
-        P(xa + .1, 0, -6.4, xa + .9, 2.0, -3.6, m['steel_grey'], tag='cover')
+        P(xa + .1, 0, -7.0, xa + .9, 2.0, -4.2, m['steel_grey'], tag='cover')
         P(xa + .1, 0, -1.2, xa + 1.4, 1.1, -.0001, m['steel_dark'], tag='cover')
     # bridge between the mezzanines (centre): slab, edge girders, railings
     P(-7.0, up - .2, -1.5, 7.0, up, 1.5, m['plate'], tag='mezz', mirror=False)
