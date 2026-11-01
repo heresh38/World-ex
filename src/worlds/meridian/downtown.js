@@ -622,6 +622,8 @@ export class Downtown {
         if (/stringlights|banner/.test(name)) { if (name === 'DT_banner') { it.m.decompose(_p, _q, _s); this.col.add([_p.x - .12, 0, _p.z - .12, _p.x + .12, 6, _p.z + .12], 'prop'); } continue; }
         if (/signal/.test(name)) { it.m.decompose(_p, _q, _s); this.col.add([_p.x - .15, 0, _p.z - .15, _p.x + .15, 6.2, _p.z + .15], 'prop'); continue; }
         if (/bollards/.test(name)) { this.h.kitColliders(this.col, root, [it.m], { box: true }, 'prop'); continue; }
+        // cafe set: only the table (and parasol pole) is solid, so the chairs around it stay reachable
+        if (name === 'DT_cafe') { this.h.kitColliders(this.col, root, [it.m], { post: .45, h: 1.0 }, 'prop'); continue; }
         if (meta.col && meta.col.length || /kiosk|shelter|planter|cafe|sculpture|bin|hydrant|bikerack/.test(name)) this.h.kitColliders(this.col, root, [it.m], { box: true }, 'prop');
       }
     }
