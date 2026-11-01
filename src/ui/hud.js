@@ -224,6 +224,9 @@ export class HUD {
     }
     this.updateBars();
     this.updateRadio(dt);
+    // subtitles and log cards stay out of the way of open panels (inventory, stations)
+    const veil = g.stationId ? 'hidden' : '';
+    if (veil !== this.veil) { this.veil = veil; this.radioEl.style.visibility = veil; this.loreEl.style.visibility = veil; }
     if (this.loreT > 0 && (this.loreT -= dt) <= 0) this.hideLore();
     this.frame = (this.frame || 0) + 1;
     if (this.combatMode) this.updateCompass();

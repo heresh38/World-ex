@@ -152,7 +152,8 @@ fs.mkdirSync(OUT, { recursive: true });
   check(half.phase === 'shield' && half.active === 3, 'three shield conduits online', half);
   // a real weapon round through the hit pipeline: the trace finds the Warden and the HUD shows IMMUNE
   const real = await ev(() => { const g = window.__game, B = window.__op().boss, V = g.player.pos.constructor;
-    const o = g.camera.position.clone(), c = B.center(new V()).clone(), d = c.clone().sub(o).normalize();
+    const P = g.player; P.pos.set(B.pos.x + 3, B.pos.y, B.pos.z + 7); P.vel.set(0, 0, 0); window.__sim(1 / 30);
+    const o = P.pos.clone().setY(P.pos.y + 1.6), c = B.center(new V()).clone(), d = c.clone().sub(o).normalize();
     const res = g.combat.trace(o, d, 300, 'player'); const hp = B.hp;
     const w = g.weapons.equipped(g.weapons.slot);
     if (res.target) g.weapons.roundHit({ w, S: { dmg: 80, range: 50, crit: 2 }, dist: 0, shot: {} }, res, d);

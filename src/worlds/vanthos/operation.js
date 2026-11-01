@@ -625,7 +625,7 @@ export class Operation {
     const v = sv.vanthos;
     g.hud.banner('Operation complete', OP_NAME + ' · ' + fmtTime(this.runTime) + (this.newBest ? ' · new best' : ' · best ' + fmtTime(v.best)), 3.6);
     const rows = ws.map(w => `<div class="r"><span style="color:${RARITY[w.rarity].color}">${esc(w.name)}</span><em>${RARITY[w.rarity].name} ${esc(ARCHETYPES[w.arch].name)} · ${esc(SIGHTS[weaponSight(w)].name)}${w.perks.length ? ' · ' + w.perks.map(p => PERKS[p].name).join(', ') : ''}</em></div>`).join('');
-    this.after(3.4, () => g.hud.lore(OP_NAME + ' · complete', 'The Spire is silent', `<p>Time <b>${fmtTime(this.runTime)}</b> · best <b>${fmtTime(v.best)}</b> · runs <b>${v.runs}</b></p>${rows}
+    this.after(4, () => g.hud.lore(OP_NAME + ' · complete', 'The Spire is silent', `<p>Time <b>${fmtTime(this.runTime)}</b> · best <b>${fmtTime(v.best)}</b> · runs <b>${v.runs}</b></p>${rows}
       <div class="r"><span>${credits} credits · ${alloy} alloy</span><em>Signal the Wayfarer to leave</em></div>`, 16));
     this.say([[WREN, 'Wayfarer is coming round. Signal when you want out, or stay a while. The city is yours.']]);
     g.persist();
