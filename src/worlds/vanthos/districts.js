@@ -110,7 +110,7 @@ function nest(ctx, x, z, big = false) {
   ctx.resident(['bladder'], x - 3, z + 3, big ? 2 : 1, 'wander', {});
   ctx.ruin('VR_remains', x + 1, z + 1, ctx.rnd() * 6); ctx.ruin('VR_remains', x - 2, z - 1, ctx.rnd() * 6);
   ctx.prop(big ? 'VX_growth_l' : 'VX_growth_s', x, z, ctx.rnd() * 6);
-  ctx.light(x, 2.5, z, 0xb8ff40, big ? 2.2 : 1.6, true);
+  ctx.light(x, 2.5, z, 0xb8ff40, big ? 1.1 : .8, true);
 }
 
 const BEH = { sleep: 3, feed: 2, perch: 0, patrol: 2, roam: 1.5, wander: 1.5 };
@@ -118,7 +118,7 @@ const BEH = { sleep: 3, feed: 2, perch: 0, patrol: 2, roam: 1.5, wander: 1.5 };
 export const DISTRICTS = [
   {
     id: 'crown', name: 'The Crown', blurb: 'The broken towers around the Spire. Nothing up here sleeps for long',
-    lots: { stand: .34, collapse: .38, stub: .12 }, stand: { VR_tower_a: 3, VR_tower_b: 3, VR_tower_c: 2, VR_mid_c: 2, VR_mid_a: 1 },
+    lots: { stand: .5, collapse: .36, stub: .1 }, stand: { VR_tower_a: 3, VR_tower_b: 3, VR_tower_c: 2, VR_mid_c: 2, VR_mid_a: 1 },
     enemies: { stalker: 4, elite: .4, host: 1.5, mite: 1 }, shelter: { stalker: 2, host: 2, mite: 1 }, percher: 'stalker',
     beh: { ...BEH, perch: 0, roam: 2.5 }, pack: [2, 3], inside: .55, perch: .45, feed: .4, factionWar: true, loot: 3, danger: 3,
     populate(ctx) {
@@ -131,7 +131,7 @@ export const DISTRICTS = [
   },
   {
     id: 'old', name: 'Old Quarter', a0: 15, a1: 75, blurb: 'Collapsed apartments and the market hall. The dead lie where they fell, mostly',
-    lots: { stand: .3, collapse: .36, stub: .16 }, stand: { VR_mid_a: 3, VR_mid_b: 3, VR_mid_c: 2, VR_low_a: 3, VR_low_b: 3, VR_hall: 2 },
+    lots: { stand: .48, collapse: .34, stub: .14 }, stand: { VR_mid_a: 3, VR_mid_b: 3, VR_mid_c: 2, VR_low_a: 3, VR_low_b: 3, VR_hall: 2 },
     enemies: { host: 3, mite: 1.2, stalker: 1.2, bladder: .4 }, shelter: { host: 3, stalker: 1, mite: 1 },
     beh: { ...BEH, sleep: 4 }, pack: [2, 4], inside: .6, perch: .3, feed: .6, loot: 1, danger: 1,
     populate(ctx) {
@@ -145,7 +145,7 @@ export const DISTRICTS = [
   },
   {
     id: 'commercial', name: 'Commercial District', a0: 75, a1: 135, blurb: 'Gutted towers and malls. Predators wait inside',
-    lots: { stand: .32, collapse: .36, stub: .12 }, stand: { VR_tower_a: 2, VR_tower_b: 3, VR_tower_c: 1, VR_mid_c: 2, VR_hall: 1 },
+    lots: { stand: .48, collapse: .36, stub: .1 }, stand: { VR_tower_a: 2, VR_tower_b: 3, VR_tower_c: 1, VR_mid_c: 2, VR_hall: 1 },
     enemies: { stalker: 3, host: 1, mite: .6 }, shelter: { stalker: 3, host: 1 }, percher: 'stalker',
     beh: { ...BEH, sleep: 2, perch: 0, patrol: 3 }, pack: [2, 3], inside: .65, perch: .5, feed: .5, loot: 2, danger: 2,
     populate(ctx) {
@@ -162,7 +162,7 @@ export const DISTRICTS = [
   },
   {
     id: 'flooded', name: 'Flooded District', a0: 135, a1: 195, blurb: 'Drowned streets, sunken ruins, things moving under the water',
-    lots: { stand: .16, collapse: .42, stub: .18 }, stand: { VR_low_b: 2, VR_mid_b: 2, VR_low_a: 1, VR_mid_a: 1 },
+    lots: { stand: .26, collapse: .44, stub: .18 }, stand: { VR_low_b: 2, VR_mid_b: 2, VR_low_a: 1, VR_mid_a: 1 },
     enemies: { swimmer: 2, host: 1.4, mite: .8 }, shelter: { host: 2, swimmer: 1 },
     beh: { ...BEH, sleep: 2, wander: 3 }, pack: [2, 4], inside: .5, perch: .2, feed: .5, loot: 1, danger: 2, water: true,
     populate(ctx) {
@@ -176,7 +176,7 @@ export const DISTRICTS = [
   },
   {
     id: 'research', name: 'Research Sector', a0: 195, a1: 255, blurb: 'Laboratories, containment sites and a hospital whose emergency lights never went out',
-    lots: { stand: .26, collapse: .36, stub: .16 }, stand: { VR_mid_c: 2, VR_mid_a: 1, VR_low_b: 2, VR_hall: 1, VR_tower_c: 1 },
+    lots: { stand: .42, collapse: .36, stub: .14 }, stand: { VR_mid_c: 2, VR_mid_a: 1, VR_low_b: 2, VR_hall: 1, VR_tower_c: 1 },
     enemies: { mutant: 2, host: 2, mite: 1 }, shelter: { mutant: 1, host: 2 },
     beh: { ...BEH, wander: 3 }, pack: [2, 3], inside: .6, perch: .2, feed: .6, loot: 2, danger: 2,
     populate(ctx) {
@@ -210,7 +210,7 @@ export const DISTRICTS = [
   },
   {
     id: 'military', name: 'Military Zone', a0: 255, a1: 315, blurb: 'Bunkers and checkpoints. The garrison never left; its sentries still fire',
-    lots: { stand: .2, collapse: .34, stub: .26 }, stand: { VR_low_b: 2, VR_hall: 1, VR_mid_b: 1 },
+    lots: { stand: .32, collapse: .36, stub: .24 }, stand: { VR_low_b: 2, VR_hall: 1, VR_mid_b: 1 },
     enemies: { host: 3, mite: 1, stalker: .6 }, shelter: { host: 3 },
     beh: { ...BEH, patrol: 3, sleep: 3 }, pack: [2, 4], inside: .6, perch: .2, feed: .4, loot: 3, danger: 2,
     populate(ctx) {
@@ -229,7 +229,7 @@ export const DISTRICTS = [
   },
   {
     id: 'industrial', name: 'Industrial Spine', a0: 315, a1: 375, blurb: 'Gutted factories and halls, and the heavy things that sleep in them',
-    lots: { stand: .3, collapse: .32, stub: .16 }, stand: { VR_hall: 4, VR_low_a: 1, VR_mid_b: 1, VR_low_b: 1 },
+    lots: { stand: .45, collapse: .34, stub: .14 }, stand: { VR_hall: 4, VR_low_a: 1, VR_mid_b: 1, VR_low_b: 1 },
     enemies: { stalker: 2, hulk: .6, host: 1.5, mite: 1 }, shelter: { hulk: 1.5, stalker: 1.5, host: 1 },
     beh: { ...BEH }, pack: [2, 3], inside: .65, perch: .3, feed: .5, factionWar: true, loot: 2, danger: 2,
     populate(ctx) {
@@ -247,7 +247,7 @@ export const DISTRICTS = [
   },
   {
     id: 'outskirts', name: 'The Outskirts', blurb: 'Fallen settlements, scrub and the dead highways out', sparse: .4,
-    lots: { stand: .18, collapse: .28, stub: .26 }, stand: { VR_low_a: 2, VR_low_b: 2, VR_mid_b: 1 },
+    lots: { stand: .26, collapse: .34, stub: .26 }, stand: { VR_low_a: 2, VR_low_b: 2, VR_mid_b: 1 },
     enemies: { host: 2.5, stalker: 1.5, mite: 1 }, shelter: { host: 2, stalker: 1 },
     beh: { ...BEH, roam: 3 }, pack: [2, 4], inside: .5, perch: .3, feed: .6, factionWar: true, loot: 1, danger: 1,
     populate(ctx) {

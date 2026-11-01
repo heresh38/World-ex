@@ -234,7 +234,8 @@ export class Enemy {
     }
     if (!this.byRival) g.onEnemyKilled(this, crit);          // rival-faction kills give the player nothing
     if (this.police && g.world.wanted) g.world.wanted.onPoliceKilled();
-    if (!this.consumed) g.combat.drop(this.center(_v).clone(), this.type, this.level, this.T.loot);
+    // loot (credits, ammo, cores) only from what the player killed, or what died within reach
+    if (!this.consumed && (!this.byRival || this.pos.distanceTo(g.player.pos) < 40)) g.combat.drop(this.center(_v).clone(), this.type, this.level, this.T.loot);
     this.onDeath && this.onDeath(this);
   }
 
@@ -429,8 +430,8 @@ export class Enemy {
     this.move(dt, mx, mz, speed);
     this.locomote(Math.hypot(this.vel.x, this.vel.z));
     this.av.aimPitch = this.state === 'combat' ? Math.atan2(p.pos.y - this.pos.y, Math.max(1, dist)) * .8 : 0;
-    // only animate skinned meshes that are near enough to matter
-    this.av.update(dist < 120 ? dt : 0);
+    // only animate skinned meshes that are near enough to matter (idle residents: nearer still)
+    this.av.update(dist < (this.state === 'idle' ? 80 : 120) ? dt : 0);
     return true;
   }
 
@@ -697,7 +698,7 @@ export class EnemyManager {
       // idle creatures far away cost almost nothing: beyond ~250 m they are frozen and hidden (the fog hides them
       // anyway), beyond ~95 m they think and move four times less often (their animation is not advanced)
       if (e.alive && e.state === 'idle' && !(e.riseT > 0)) {
-        if (md > 250) { if (e.obj.visible) e.obj.visible = false; e.skipDt = 0; this.asleep++; if (e.faction === 'writhe') wr++; continue; }
+        if (md > 175) { if (e.obj.visible) e.obj.visible = false; e.skipDt = 0; this.asleep++; if (e.faction === 'writhe') wr++; continue; }
         if (!e.obj.visible && !e.hidden) e.obj.visible = true;
         if (md > 95) {
           e.skipDt = (e.skipDt || 0) + dt;

@@ -77,8 +77,9 @@ const BLOCK_BODY = `
   float lot = 1. - walk;
   float gr = smoothstep(.45, .7, n2 * .7 + n1 * .5) * (lot + walk * .45);
   float du = smoothstep(.4, .7, n1) * (.5 + .5 * lot);
-  vec3 c = mix(pav, dirt, max(lot * (.65 + .35 * n2), du * .8));
-  c = mix(c, grass, clamp(gr, 0., 1.) * .92);
+  vec3 c = mix(pav, dirt, max(lot * (.75 + .25 * n2), du * .8));
+  c = mix(c, grass, clamp(gr * (.55 + .45 * walk), 0., 1.) * .85);
+  c *= 1. - lot * smoothstep(.55, .75, n3 * .5 + n1 * .6) * .35;               // ash and soot stains in the lots
   c *= mix(1., .55, 1. - smoothstep(.0, .35, edge));                          // kerb edge
   alb = c * (.85 + .3 * vnoise(w * .02 + 5.));
   wN = walk * (1. - gr * .7) + lot * .4;`;
@@ -90,7 +91,7 @@ function terrainBody(crater, spire) {
   float r = length(w);
   float n1 = vfbm(w * .012), n2 = vfbm(w * .09 + 5.), n3 = vfbm(w * .35 + 9.);
   vec3 dirt = texture2D(map, vMapUv).rgb, grass = texture2D(t1, w * .25).rgb, rock = texture2D(t2, w * .03).rgb * vec3(.55, .5, .47);
-  vec3 c = mix(dirt, grass, smoothstep(.45, .7, n1 * .6 + n2 * .5) * .9);
+  vec3 c = mix(dirt, grass, smoothstep(.52, .74, n1 * .6 + n2 * .5) * .85);
   c = mix(c, dirt * vec3(1.05, 1., .95), smoothstep(.6, .8, n3) * .5);
   c = mix(c, rock, smoothstep(4., 30., vWP.y) * .85);
   float crater = 1. - smoothstep(${(crater - 30).toFixed(1)}, ${(crater + 20).toFixed(1)}, r);

@@ -22,9 +22,9 @@ import { VanthosAmbience } from './ambience.js';
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
 const STREAM_IN = 230, STREAM_OUT = 340, SPAWN_PER_FRAME = 3;
-const FOG = '#4f4b45', FOG_NEAR = 16, FOG_FAR = 520;
+const FOG = '#5a564f', FOG_NEAR = 22, FOG_FAR = 500;
 // what grows back: young birch and ash, scrub, autumn-sick maples; willows where the water stands
-const GROW = { tree: ['TR_birch_a', 'TR_birch_b', 'TR_birch_c', 'TR_ash_young', 'TR_ash_young', 'TR_understory_a', 'TR_understory_b', 'TR_maple_autumn_b', 'TR_ash_b'],
+const GROW = { tree: ['TR_birch_a', 'TR_birch_b', 'TR_birch_c', 'TR_ash_young', 'TR_ash_young', 'TR_understory_a', 'TR_understory_b', 'TR_ash_b', 'TR_birch_b'],
   bush: ['TR_bush_a', 'TR_bush_b', 'TR_understory_b'], water: ['TR_willow_a', 'TR_willow_b'] };
 // operation arenas are kept clear of standing ruins (their anchors, see operation.js)
 const polar = (deg, r) => [Math.cos(deg * Math.PI / 180) * r, Math.sin(deg * Math.PI / 180) * r];
@@ -79,8 +79,8 @@ export class VanthosWorld extends World {
     const sky = atmosphereSky('#2f3236', '#5a564e', '#7d6d58', this.sunDir, { fog: FOG }); sc.add(sky); this.sky = sky;
     sky.material.uniforms.cloudC.value.set(.55, .55, .56);
     sc.fog = new THREE.Fog(new THREE.Color(FOG), FOG_NEAR, FOG_FAR); this.fogBase = [FOG_NEAR, FOG_FAR];
-    sc.add(new THREE.HemisphereLight(0x7c8088, 0x231f1a, .7));
-    const sun = new THREE.DirectionalLight(0xb5a68c, 1.25);
+    sc.add(new THREE.HemisphereLight(0x8a8e96, 0x3a342c, 1.45));
+    const sun = new THREE.DirectionalLight(0xc2b296, 1.75);
     sun.castShadow = true; const q = g.renderer.q; sun.shadow.mapSize.set(q.shadow, q.shadow);
     Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 500 });
     sun.shadow.bias = -.0005; sun.shadow.normalBias = .08;
@@ -139,7 +139,7 @@ export class VanthosWorld extends World {
     // reflections: the dim sky
     const pm = new THREE.PMREMGenerator(g.renderer.r);
     this.envRT = pm.fromScene(new THREE.Scene().add(atmosphereSky('#2f3236', '#5a564e', '#7d6d58', this.sunDir, { fog: FOG, ground: '#1c1a17', groundK: .8 })), .04);
-    sc.environment = this.envRT.texture; sc.environmentIntensity = .45;
+    sc.environment = this.envRT.texture; sc.environmentIntensity = .7;
     pm.dispose(); this.disposables.push(this.envRT);
     this.buildAsh();
     this.buildShafts();
@@ -420,7 +420,7 @@ export class VanthosWorld extends World {
         const m = m0.clone();
         if (m.name === 'core_glow') this.coreMat = m;
         m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
-          float fogFactor = smoothstep( fogNear, fogFar * 5.5, vFogDepth ) * .92;
+          float fogFactor = smoothstep( fogNear, fogFar * 3.2, vFogDepth ) * .9;
           gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
           #endif`); };
         m.customProgramCacheKey = () => 'spirefog';
@@ -454,9 +454,9 @@ export class VanthosWorld extends World {
           p.x += sin(uT * .3 + position.z) * 2. + uT * .8; p.z += cos(uT * .23 + position.x) * 2. + uT * .3;
           vec3 w = vec3(uC.x + mod(p.x - uC.x + uS * .5, uS) - uS * .5, uC.y - 8. + p.y, uC.z + mod(p.z - uC.z + uS * .5, uS) - uS * .5);
           vec4 mv = viewMatrix * vec4(w, 1.); gl_Position = projectionMatrix * mv;
-          float d = -mv.z; vA = smoothstep(1., 4., d) * (1. - smoothstep(18., 30., d));
-          gl_PointSize = clamp(220. / d, 1., 5.); }`,
-      fragmentShader: `varying float vA; void main(){ vec2 c = gl_PointCoord - .5; float a = smoothstep(.5, .1, length(c)) * vA * .55; gl_FragColor = vec4(vec3(.62, .6, .57), a); }`,
+          float d = -mv.z; vA = smoothstep(2., 6., d) * (1. - smoothstep(16., 28., d));
+          gl_PointSize = clamp(60. / d, 1., 2.6) * (.6 + fract(position.z * 3.7) * .6); }`,
+      fragmentShader: `varying float vA; void main(){ vec2 c = gl_PointCoord - .5; float a = smoothstep(.5, .15, length(c)) * vA * .32; gl_FragColor = vec4(vec3(.42, .4, .38), a); }`,
     });
     const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 4;
     this.scene.add(pts); this.ash = pts; this.disposables.push(geo, mat);
