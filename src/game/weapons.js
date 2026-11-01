@@ -346,7 +346,7 @@ export class Weapons {
     } else if (kind === 'husk' && rig.p.biomass) {
       const h = rig.prop('husk'); if (!h) return;
       h.position.copy(rig.p.biomass.position); h.quaternion.copy(rig.p.biomass.quaternion); h.scale.setScalar(.8);
-      const out = w.arch === 'brood' ? toWorld(.2, 1.2, -.3) : toWorld(1.1, .2, -.2);
+      const out = w.arch === 'brood' ? toWorld(.5, .5, -.2) : toWorld(.9, .1, -.1);
       D.spawn(h, 'husk', base.add(out), 4, 12);
       h.visible = false;
       g.fx.slimeDrops(rig.p.biomass.getWorldPosition(new THREE.Vector3()), null, 6, 1.4, GOO[ARCHETYPES[w.arch].goo].color, .28);

@@ -320,8 +320,8 @@ function boltReload(n) {
 // living guns: the hatch peels open wetly, the spent husk slops out, a fresh biomass is pushed in, the hatch squelches shut
 function bioReload(arch) {
   const brood = arch === 'brood', bile = arch === 'bile';
-  const open = brood ? -1.25 : bile ? -1.35 : 1.45;        // brood lid lifts at the back (about X); flank flaps swing out (about Z)
-  const g = brood ? [-.08, .08, .1, .38, .3, -.2] : [-.1, .06, .1, .22, .5, -.8];
+  const open = brood ? 1.25 : bile ? -1.35 : 1.45;        // brood lid lifts at the back (about X); flank flaps swing out (about Z)
+  const g = brood ? [-.07, -.1, -.03, -.42, .3, -.2] : [-.1, .06, .1, .22, .5, -.8];
   const bioOff = brood ? [0, .2, -.16] : [.16, -.1, -.12];
   return [seg(1, {
     gun: [[0, 0, 0, 0, 0, 0, 0], [.16, ...g], [.26, ...g.map((v, i) => i === 1 ? v + .01 : v), 'out'], [.34, ...g], [.84, ...g],
@@ -330,7 +330,7 @@ function bioReload(arch) {
       [.5, 'pouch', 0, 0, 0, .5, .3, -.6], [.62, 'biomass', 0, -.025, 0, -.3, 0, -.5], [.74, 'biomass', 0, -.022, 0, -.3, 0, -.5], [.8, 'biomass', 0, -.01, 0, -.3, 0, -.5],
       [.86, 'hatch', 0, .015, 0, -.2, 0, -.4], [.9, 'hatch', 0, .005, 0, -.2, 0, -.4, 'out'], [1, 'fore', 0, 0, 0, 0, 0, 0]],
     hatch: [[0, 0], [.18, 0], [.26, open * 1.15, 'back'], [.32, open * .92], [.4, open], [.8, open], [.86, open * .2, 'in'], [.9, -open * .06, 'out'], [.95, 0]],
-    bio: [[0, ...bioOff, .6, .4, 0], [.5, ...bioOff, .6, .4, 0], [.66, ...bioOff.map(v => v * .25), .2, .1, 0], [.76, ...bioOff.map(v => v * .05), 0, 0, 0], [.8, 0, 0, 0, 0, 0, 0, 'out']],
+    bio: [[0, 0, 0, 0, 0, 0, 0], [.3, 0, 0, 0, 0, 0, 0], [.301, ...bioOff, .6, .4, 0, 'lin'], [.5, ...bioOff, .6, .4, 0], [.66, ...bioOff.map(v => v * .25), .2, .1, 0], [.76, ...bioOff.map(v => v * .05), 0, 0, 0], [.8, 0, 0, 0, 0, 0, 0, 'out']],
   }, [[.2, 'sfx', 'hatchopen'], [.22, 'drip', 'hatch'], [.3, 'husk'], [.45, 'sfx', 'pouch'], [.5, 'bio', 1], [.76, 'sfx', 'bioin'], [.8, 'seat'], [.8, 'drip', 'biomass'],
     [.88, 'sfx', 'hatchclose'], [.9, 'glow'], [.92, 'drip', 'hatch']])];
 }
