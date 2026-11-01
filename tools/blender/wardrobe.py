@@ -28,7 +28,7 @@ class Kit:
         self.res = .0032 if PL.FAST else .0021
         self.head_res = .0026 if PL.FAST else .0013
         self.npc = getattr(pb, 'npc', False)
-        self.tscale = .6                       # garment vertex budgets (GLB size: ~6k verts per piece on the player)
+        self.tscale = .5                       # garment vertex budgets (GLB size: ~5k verts per piece on the player)
         if self.npc:
             self.res = max(self.res, .005); self.head_res = max(self.head_res, .0026); self.tscale = .2
         self.hair_tris = {}
@@ -527,11 +527,17 @@ class Kit:
                 return np.maximum(F(P) - off, reg)
             return fn
 
-        def skirt_shell(loft, P, t=.004):
-            """Skirt wall: the loft where it stands clear of the body, a fitted layer where the hips push past it; open hem."""
+        npc = self.npc
+
+        def skirt_shell(loft, P):
+            """Skirt wall: the loft where it stands clear of the body, a fitted layer where the hips push past it; open hem.
+            The crowd LOD gets a thicker wall so its coarse grid meshes (and decimates) it cleanly."""
+            t, out = (.01, .011) if npc else (.004, .0065)
             lo = loft(P)
             f = self.F.trunk(P)          # torso + legs only: never wraps the hands hanging beside it
-            return np.maximum(np.minimum(lo, f - .0065), -np.minimum(lo + t, f - .002))
+            return np.maximum(np.minimum(lo, f - out), -np.minimum(lo + t, f - .002))
+
+        skirt_h = None if npc else min(self.res, .0028)
 
         def band_mat(z_top, w=.03):
             return lambda C: np.where(C[:, 2] > z_top - w, 1, 0)
@@ -625,7 +631,7 @@ class Kit:
                 return np.minimum(sk, bandd)
             sk = self.build('skirt', skirt, (-.26, -.19, hem - .02), (.26, .2, top_s + .02),
                             [tex('cloth_legs__skirt', 'fab_plaid.jpg'), bl.mat('trim_legs__skirt', '#2a2c30', .3, .55)],
-                            band_mat(top_s, .025), target=8000, uv=.2, weights=self.skirt_w, h=min(self.res, .0028))
+                            band_mat(top_s, .025), target=8000, uv=.2, weights=self.skirt_w, h=skirt_h)
             self.add('legs', 'skirt', 'Pleated skirt', [sk], hide=['pelvis'])
             # ---- dresses
             waist_d = z['navel'] - .015; hem_d = kn[2] + .03
@@ -641,7 +647,7 @@ class Kit:
                                                                       self.dom(P, ['torso'], p)]))
                 return np.minimum.reduce([sk, bod, straps])
             sd = self.build('sundress', sundress, (-.27, -.2, hem_d - .02), (.27, .2, B.zsh + .08),
-                            [tex('cloth_dress__sundress', 'fab_cotton.jpg', '#ffffff', .85)], target=11000, uv=.2, weights=self.skirt_w, h=min(self.res, .0028))
+                            [tex('cloth_dress__sundress', 'fab_cotton.jpg', '#ffffff', .85)], target=11000, uv=.2, weights=self.skirt_w, h=skirt_h)
             self.add('dress', 'sundress', 'Sundress', [sd], hide=['midriff', 'pelvis'], extra={'replaces': ['top', 'legs']})
             hem_k = kn[2] - .12
             kl = self.skirt_loft(hem_k, waist_d, [.15, .162, .178, .168, .15], [.1, .105, .108, .096, .088], [.11, .125, .135, .118, .098])
@@ -652,7 +658,7 @@ class Kit:
                 up = upper(lw - .012, waist_d - .04, .066, .005)(P)
                 return np.minimum(sk, up)
             kd = self.build('knit_dress', knit_dress, (-.36, -.2, hem_k - .02), TOPH,
-                            [tex('cloth_dress__knit', 'fab_knit.jpg', '#ffffff', .9)], target=12000, uv=.14, weights=self.skirt_w, h=min(self.res, .0028))
+                            [tex('cloth_dress__knit', 'fab_knit.jpg', '#ffffff', .9)], target=12000, uv=.14, weights=self.skirt_w, h=skirt_h)
             self.add('dress', 'knit', 'Knit midi dress', [kd], hide=['midriff', 'pelvis', 'chest', 'upperarm', 'forearm'],
                      extra={'replaces': ['top', 'legs']})
 

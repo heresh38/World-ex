@@ -14,7 +14,11 @@ fs.mkdirSync(OUT, { recursive: true });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 300), (e.stack || '').split('\n').slice(0, 4).join(' | ')); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 300)); } });
-  await p.addInitScript(() => { localStorage.clear(); });
+  await p.addInitScript(() => {
+    localStorage.clear();
+    // wait for N seconds of *game* time (software rendering runs far below 60 fps and dt is clamped), keeping the game unpaused
+    window.__waitGame = async n => { const g = window.__game, t0 = g.time; while (g.time - t0 < n) { g.paused = false; g.input.locked = true; g.input.enabled = true; await new Promise(r => setTimeout(r, 50)); } };
+  });
   // a model another workstream is rebuilding may be missing from the working tree: serve the committed copy
   await p.route('**/assets/models/*.glb', async r => {
     const f = 'assets/models/' + r.request().url().split('/').pop();
@@ -46,23 +50,25 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(q => { const g = window.__game; g.save.settings.quality = q; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); g.startGame(true); }, process.env.QUALITY || 'low');
   await waitPlay();
   const t0 = Date.now();
-  await ev(() => window.__game.travel('earth'));
+  const WORLD = process.env.WORLD || 'earth', EARTH = WORLD === 'earth';
+  await ev(w => window.__game.travel(w), WORLD);
   await waitPlay();
-  console.log('earth load seconds', Math.round((Date.now() - t0) / 1000));
+  await ev(() => { const g = window.__game; window.__B = g.player.pos.clone(); });
+  console.log(WORLD + ' load seconds', Math.round((Date.now() - t0) / 1000));
   await run(3000);
-  const pop = await ev(() => { const g = window.__game, w = g.world; return { traffic: w.traffic.cars.length, drivers: w.traffic.cars.filter(t => t.car.driver && t.car.driver.alive).length, cars: g.vehicles.cars.length, parked: g.vehicles.cars.filter(c => c.parked).length, save: g.save.car }; });
+  const pop = !EARTH ? { traffic: 0 } : await ev(() => { const g = window.__game, w = g.world; return { traffic: w.traffic.cars.length, drivers: w.traffic.cars.filter(t => t.car.driver && t.car.driver.alive).length, cars: g.vehicles.cars.length, parked: g.vehicles.cars.filter(c => c.parked).length, save: g.save.car }; });
   console.log('population', JSON.stringify(pop));
-  check('fixed traffic population with drivers', pop.traffic >= 80 && pop.drivers === pop.traffic, pop);
+  if (EARTH) check('fixed traffic population with drivers', pop.traffic >= 80 && pop.drivers === pop.traffic, pop);
   const n0 = pop.traffic;
 
   // ---- gravity: a car dropped from 6 m lands and settles on the ground
   const drop = await ev(async () => {
     const g = window.__game, V = g.player.pos.constructor;
-    const x = -150, z = 92;
+    const B = window.__B, x = B.x + 12, z = B.z + 6;
     const c = g.vehicles.spawn('car_sedan', '#2a4f7a', new V(x, g.world.collision.ground(x, z) + 6, z), 0);
     c.pos.y = g.world.collision.ground(x, z) + 6; c.wake();
     let minAir = 99, maxH = 0;
-    for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 100)); const h = c.pos.y - g.world.collision.support(c.pos.x, c.pos.z, c.pos.y + 1); maxH = Math.max(maxH, h); }
+    for (let i = 0; i < 40; i++) { await window.__waitGame(0.1); const h = c.pos.y - g.world.collision.support(c.pos.x, c.pos.z, c.pos.y + 1); maxH = Math.max(maxH, h); }
     const gy = g.world.collision.support(c.pos.x, c.pos.z, c.pos.y + 1);
     window.__dropCar = c;
     return { y: +c.pos.y.toFixed(2), ground: +gy.toFixed(2), contacts: c.contacts, pitch: +c.pitch.toFixed(3), roll: +c.roll.toFixed(3) };
@@ -71,10 +77,12 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // ---- drive off a slope: find the steepest drop in the countryside and drive over it
   const slope = await ev(async () => {
-    const g = window.__game, w = g.world, m = w.map, V = g.player.pos.constructor;
+    const g = window.__game, w = g.world, V = g.player.pos.constructor, B = window.__B;
+    const m = w.map || { height: (x, z) => w.collision.ground(x, z) };
+    const R = w.map ? [560, 1100, -1000, 1000] : [B.x - 250, B.x + 250, B.z - 250, B.z + 250];
     let best = null;
-    for (let x = 560; x < 1100; x += 12) for (let z = -1000; z < 1000; z += 12) {
-      const h0 = m.height(x, z); if (h0 < 2) continue;
+    for (let x = R[0]; x < R[1]; x += 12) for (let z = R[2]; z < R[3]; z += 12) {
+      const h0 = m.height(x, z); if (w.map && h0 < 2) continue;
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const h1 = m.height(x + dx * 25, z + dz * 25), h2 = m.height(x + dx * 8, z + dz * 8);
         const drop = h0 - h1; if (h2 > h0 + .5) continue;
@@ -90,7 +98,7 @@ fs.mkdirSync(OUT, { recursive: true });
     let air = 0, maxAirH = 0;
     const hist = [];
     for (let i = 0; i < 70; i++) {
-      await new Promise(r => setTimeout(r, 100));
+      await window.__waitGame(0.1);
       g.paused = false; g.input.locked = true; g.input.enabled = true;
       const gy = g.world.collision.support(c.pos.x, c.pos.z, c.pos.y + 1), h = c.pos.y - gy;
       if (c.contacts === 0) air++;
@@ -116,7 +124,7 @@ fs.mkdirSync(OUT, { recursive: true });
     g.vehicles.enter(c);
     g.save.settings.view = 'first'; g.setAvatarLayer();
     g.player.camYaw = c.yaw + Math.PI; g.player.camPitch = -.15;
-    await new Promise(r => setTimeout(r, 1500));
+    await window.__waitGame(1.5);
     return { fp: g.carFirstPerson(), cam: g.camera.position.toArray().map(v => +v.toFixed(2)), car: c.pos.toArray().map(v => +v.toFixed(2)), layer: g._fpLayer };
   });
   check('first-person car camera inside the cabin', fp.fp && Math.abs(fp.cam[1] - fp.car[1] - 1.15) < .35, fp);
@@ -130,7 +138,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const g = window.__game, c = g.vehicles.current;
     g.player.camYaw = c.yaw + Math.PI; g.player.camPitch = -.1;
     g.input.down.add('KeyW'); g.input.down.add('KeyA');
-    await new Promise(r => setTimeout(r, 2500));
+    await window.__waitGame(2.5);
     const st = c.steerWheel ? c.steerWheel.quaternion.angleTo(c.steerWheel.userData.q0) : 0;
     const nd = c.needleS ? c.needleS.quaternion.angleTo(c.needleS.userData.q0) : 0;
     g.input.down.delete('KeyA');
@@ -145,7 +153,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // ---- hover board: V summons it under the player, ride it
   const board = await ev(async () => {
     const g = window.__game;
-    g.player.pos.set(-150, 0, 60); g.player.avatar.root.position.copy(g.player.pos); g.player.yaw = Math.PI / 2;
+    const B = window.__B; g.player.pos.set(B.x - 8, g.world.collision.ground(B.x - 8, B.z + 8), B.z + 8); g.player.avatar.root.position.copy(g.player.pos); g.player.yaw = Math.PI / 2;
     g.save.settings.view = 'third'; g.setAvatarLayer();
     g.vehicles.summon();
     const b = g.vehicles.current;
@@ -153,7 +161,7 @@ fs.mkdirSync(OUT, { recursive: true });
     g.input.down.add('KeyW');
     let jumpH = 0;
     for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 100)); g.paused = false; g.input.locked = true;
+      await window.__waitGame(0.1); g.paused = false; g.input.locked = true;
       if (i === 15) g.input.pressed = (k => c => c === 'Space' || k(c))(g.input.pressed.bind(g.input));
       if (i === 16) delete g.input.pressed;
       jumpH = Math.max(jumpH, b.pos.y - g.world.collision.ground(b.pos.x, b.pos.z));
@@ -170,13 +178,13 @@ fs.mkdirSync(OUT, { recursive: true });
   // frontier behaviour (faked on Earth): V again on the board drops the all-terrain rover, which lands on its springs
   const rover = await ev(async () => {
     const g = window.__game, kind = g.world.kind;
-    g.world.kind = 'planet'; g.vehicles.summon(); g.world.kind = kind;
+    g.world.kind = kind === 'city' ? 'planet' : kind; g.vehicles.summon(); g.world.kind = kind;
     const r = g.vehicles.current;
     if (!r || r.model !== 'car_rover') return 'no rover';
     const y0 = r.pos.y;
-    await new Promise(res => setTimeout(res, 3500));
+    await window.__waitGame(3.5);
     const gy = g.world.collision.support(r.pos.x, r.pos.z, r.pos.y + 1);
-    g.input.down.add('KeyW'); await new Promise(res => setTimeout(res, 2500)); g.input.down.delete('KeyW');
+    g.input.down.add('KeyW'); await window.__waitGame(2.5); g.input.down.delete('KeyW');
     return { dropFrom: +(y0 - gy).toFixed(1), landed: +(r.pos.y - gy).toFixed(2), contacts: r.contacts, speed: +r.speed.toFixed(1) };
   });
   check('rover drops, lands and drives', rover.contacts >= 3 && Math.abs(rover.landed) < .4 && rover.speed > 2, rover);
@@ -185,7 +193,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { const g = window.__game; if (g.vehicles.current) g.vehicles.exit(); });
 
   // ---- shoot a traffic driver through the windscreen: the car rolls to a stop
-  const kill = await ev(async () => {
+  const kill = !EARTH ? null : await ev(async () => {
     const g = window.__game, w = g.world, V = g.player.pos.constructor;
     // a moving city car on a straight
     const cand = w.traffic.cars.filter(t => t.mode === 'lane' && t.lane.city && t.s > 150 && t.s < t.lane.total - 250);
@@ -196,7 +204,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const pp = c.pos.clone().addScaledVector(f, 14).addScaledVector(side, 6);
     g.player.pos.set(pp.x, g.world.collision.support(pp.x, pp.z, 5), pp.z); g.player.avatar.root.position.copy(g.player.pos);
     t.ignoreT = 999;
-    await new Promise(r => setTimeout(r, 400));
+    await window.__waitGame(0.4);
     c.root.updateMatrixWorld(true);
     const d = c.driver; d.av.root.updateMatrixWorld(true);
     const head = new V(); d.av.head.getWorldPosition(head); head.y += .07;
@@ -206,14 +214,14 @@ fs.mkdirSync(OUT, { recursive: true });
     const hitDriver = res.target === d;
     const speed0 = c.speed;
     if (res.target) res.target.takeDamage(500, true, res.point, dir, 'player');
-    await new Promise(r => setTimeout(r, 300));
+    await window.__waitGame(0.3);
     const sp = [];
-    for (let i = 0; i < 16; i++) { await new Promise(r => setTimeout(r, 500)); g.paused = false; g.input.locked = true; sp.push(+c.speed.toFixed(1)); }
+    for (let i = 0; i < 24; i++) { await window.__waitGame(0.5); g.paused = false; g.input.locked = true; sp.push(+c.speed.toFixed(1)); }
     window.__deadCar = c;
     return { hitDriver, target: res.target ? res.target.T.name : null, alive: d.alive, speed0: +speed0.toFixed(1), speeds: sp, mode: t.mode, holes: c.holes.length, horn: c.hornT > 0 || sp.length > 0 };
   });
-  check('driver headshot through glass stops the car', kill.hitDriver && !kill.alive && kill.mode === 'dyn' && kill.speeds[kill.speeds.length - 1] < .6, kill);
-  await ev(() => { const g = window.__game, c = window.__deadCar; const V = c.pos.constructor;
+  if (EARTH) check('driver headshot through glass stops the car', kill.hitDriver && !kill.alive && kill.mode === 'dyn' && kill.speeds[kill.speeds.length - 1] < .6, kill);
+  await ev(() => { const g = window.__game, c = window.__deadCar = window.__deadCar || window.__dropCar; c.sleep = true; const V = c.pos.constructor;
     const side = new V(Math.cos(c.yaw), 0, -Math.sin(c.yaw));
     g.player.pos.copy(c.pos).addScaledVector(side, 4.5); g.player.pos.y = g.world.collision.support(g.player.pos.x, g.player.pos.z, c.pos.y + 2); g.player.avatar.root.position.copy(g.player.pos);
     g.player.camYaw = Math.atan2(side.x, side.z); g.player.camPitch = -.12; g.save.settings.view = 'first'; g.setAvatarLayer(); });
@@ -231,7 +239,7 @@ fs.mkdirSync(OUT, { recursive: true });
       if (res.target === c) { c.takeDamage(30, false, res.point, dir, 'player'); hits++; }
     }
     c.hp = c.S.hp * .3;
-    await new Promise(r => setTimeout(r, 2500));
+    await window.__waitGame(2.5);
     return { hits, holes: c.holes.length, hp: Math.round(c.hp), alive: c.alive };
   });
   check('bullets leave holes in the car', dmg.hits > 5 && dmg.holes > 3, dmg);
@@ -241,16 +249,16 @@ fs.mkdirSync(OUT, { recursive: true });
   const col = await ev(async () => {
     const g = window.__game, V = g.player.pos.constructor;
     g.save.settings.view = 'third'; g.setAvatarLayer();
-    const x = -260, z = 92;
+    const B = window.__B, x = B.x + 30, z = B.z - 20;
     const c = g.vehicles.spawn('car_van', '#e8e6e2', new V(x, g.world.collision.ground(x, z), z), 0);
-    await new Promise(r => setTimeout(r, 300));
+    await window.__waitGame(0.3);
     g.player.pos.set(x + .2, c.pos.y, z + .5); g.player.vel.set(0, 0, 0); g.player.avatar.root.position.copy(g.player.pos);
-    await new Promise(r => setTimeout(r, 400));
+    await window.__waitGame(0.4);
     const lx = g.player.pos.x - x, lz = g.player.pos.z - z;
     const outside = Math.abs(lx) > c.hw || Math.abs(lz - c.cz) > c.hl;
     // walk into it: stays outside
     g.player.pos.set(x + 2.5, c.pos.y, z); g.player.camYaw = Math.PI / 2; g.input.down.add('KeyW');
-    await new Promise(r => setTimeout(r, 1500)); g.input.down.delete('KeyW');
+    await window.__waitGame(1.5); g.input.down.delete('KeyW');
     const walkX = g.player.pos.x - x;
     // a car rolling into the player at 10 m/s
     g.player.godMode = false; g.player.health = 100; g.player.shield = 0; g.player.sinceHit = 0;
@@ -258,7 +266,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const m = g.vehicles.spawn('car_hatch', '#a3121f', new V(x + 14, g.world.collision.ground(x + 14, z - 12), z - 12), 0);
     g.player.pos.set(x + 14, g.world.collision.ground(x + 14, z - 4), z - 4);
     m.wake(); m.vel.set(0, 0, 11);
-    await new Promise(r => setTimeout(r, 1500));
+    await window.__waitGame(1.5);
     return { outside, walkX: +walkX.toFixed(2), halfW: +c.hw.toFixed(2), hp0, hp: Math.round(g.player.health), shield: Math.round(g.player.shield) };
   });
   check('car pushes the player out', col.outside && col.walkX > col.halfW, col);
@@ -267,7 +275,7 @@ fs.mkdirSync(OUT, { recursive: true });
   async function g_restoreHealth() { await ev(() => { const g = window.__game; g.player.health = g.player.maxHealth; }); }
 
   // ---- pedestrians: a fast car runs one over, a slow one pushes
-  const ped = await ev(async () => {
+  const ped = !EARTH ? null : await ev(async () => {
     const g = window.__game, V = g.player.pos.constructor, pop = g.world.population;
     const q = pop.peds.find(q => q.alive && q.pos.distanceTo(g.player.pos) < 200) || pop.peds.find(q => q.alive);
     g.player.pos.copy(q.pos).add(new V(8, 0, 8)); g.player.avatar.root.position.copy(g.player.pos);
@@ -275,15 +283,15 @@ fs.mkdirSync(OUT, { recursive: true });
     const c = g.vehicles.spawn('car_sedan', '#1a1b1e', new V(q.pos.x, q.pos.y, q.pos.z - 9), yaw);
     q.state = 'idle'; q.idleT = 99;
     c.wake(); c.vel.set(0, 0, 13); c.parked = false;
-    await new Promise(r => setTimeout(r, 2000));
+    await window.__waitGame(2);
     return { pedAlive: q.alive, carSpeed: +c.speed.toFixed(1) };
   });
-  check('fast car runs a pedestrian over', !ped.pedAlive, ped);
+  if (EARTH) check('fast car runs a pedestrian over', !ped.pedAlive, ped);
 
-  const fin = await ev(() => { const g = window.__game, w = g.world; return { traffic: w.traffic.cars.length, cars: g.vehicles.cars.length, fps: Math.round(g.fps) }; });
-  check('traffic never despawns', fin.traffic >= n0 - 2, { before: n0, after: fin.traffic });
+  const fin = await ev(() => { const g = window.__game, w = g.world; return { traffic: w.traffic ? w.traffic.cars.length : 0, cars: g.vehicles.cars.length, fps: Math.round(g.fps) }; });
+  if (EARTH) check('traffic never despawns', fin.traffic >= n0 - 2, { before: n0, after: fin.traffic });
   console.log('final', JSON.stringify(fin));
-  await ev(() => { const g = window.__game; g.player.pos.set(-150, 0, 60); g.player.avatar.root.position.copy(g.player.pos); g.player.camYaw = Math.PI * .75; g.player.camPitch = .02; g.save.settings.view = 'third'; g.setAvatarLayer(); });
+  if (EARTH) await ev(() => { const g = window.__game; g.player.pos.set(-150, 0, 60); g.player.avatar.root.position.copy(g.player.pos); g.player.camYaw = Math.PI * .75; g.player.camPitch = .02; g.save.settings.view = 'third'; g.setAvatarLayer(); });
   await run(4000); await shot('10_street_traffic');
   console.log('page errors:', errs.length);
   const failed = Object.entries(results).filter(([, v]) => !v).map(([k]) => k);

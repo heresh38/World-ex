@@ -344,13 +344,20 @@ def quantize_glb(path):
     used_q = False
     for i, kind in conv.items():
         a = acc[i]
-        if a.get('componentType') != 5126 or 'bufferView' not in a or len(users.get(a['bufferView'], [])) != 1:
+        if 'bufferView' not in a or len(users.get(a['bufferView'], [])) != 1:
             continue
         v = bvs[a['bufferView']]
         n, c = a['count'], NC[a['type']]
-        stride = v.get('byteStride', 4 * c)
-        X = np.frombuffer(BIN, np.float32, count=(stride // 4) * (n - 1) + c, offset=v.get('byteOffset', 0) + a.get('byteOffset', 0))
-        X = np.lib.stride_tricks.as_strided(X, (n, c), (stride, 4)).astype(np.float64)
+        if a.get('componentType') == 5123 and kind == 'COLOR_0':          # ushort colours -> ubyte
+            stride = v.get('byteStride', 2 * c)
+            X = np.frombuffer(BIN, np.uint16, count=(stride // 2) * (n - 1) + c, offset=v.get('byteOffset', 0) + a.get('byteOffset', 0))
+            X = np.lib.stride_tricks.as_strided(X, (n, c), (stride, 2)).astype(np.float64) / 65535
+        elif a.get('componentType') == 5126:
+            stride = v.get('byteStride', 4 * c)
+            X = np.frombuffer(BIN, np.float32, count=(stride // 4) * (n - 1) + c, offset=v.get('byteOffset', 0) + a.get('byteOffset', 0))
+            X = np.lib.stride_tricks.as_strided(X, (n, c), (stride, 4)).astype(np.float64)
+        else:
+            continue
         if kind == 'NORMAL':
             q = np.zeros((n, 4), np.int8)
             q[:, :3] = np.clip(np.round(X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-9) * 127), -127, 127)

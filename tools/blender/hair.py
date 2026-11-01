@@ -17,6 +17,7 @@ from sdf import smoothstep
 
 F32 = np.float32
 ATLAS = 'hair_strands.png'
+ATLAS_S = 'hair_strands_s.png'          # crowd LOD
 NCOL = 4                      # 0 dense, 1 layered, 2 wispy, 3 short tufts
 
 
@@ -83,17 +84,22 @@ def strand_texture(size=1024):
     im = bpy.data.images.new('hair_strands', size, Hh, alpha=True)
     im.pixels = img.ravel()                     # row 0 = image bottom = v 0 (the roots)
     im.filepath_raw = os.path.join(bl.TEXTURES, ATLAS); im.file_format = 'PNG'; im.save()
+    # half-size copy for the crowd LOD (2x2 box filter)
+    sm = img.reshape(Hh // 2, 2, size // 2, 2, 4).mean((1, 3))
+    ims = bpy.data.images.new('hair_strands_s', size // 2, Hh // 2, alpha=True)
+    ims.pixels = sm.ravel()
+    ims.filepath_raw = os.path.join(bl.TEXTURES, ATLAS_S); ims.file_format = 'PNG'; ims.save()
     return im
 
 
-def card_material():
+def card_material(atlas=ATLAS):
     m = bpy.data.materials.get('hair')
     if m is not None:
         return m
     m = bpy.data.materials.new('hair')
     nt = m.node_tree; b = nt.nodes['Principled BSDF']
     b.inputs['Roughness'].default_value = .45
-    tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(os.path.join(bl.TEXTURES, ATLAS), check_existing=True)
+    tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(os.path.join(bl.TEXTURES, atlas), check_existing=True)
     nt.links.new(tn.outputs['Color'], b.inputs['Base Color']); nt.links.new(tn.outputs['Alpha'], b.inputs['Alpha'])
     try:
         m.surface_render_method = 'DITHERED'
@@ -102,7 +108,7 @@ def card_material():
     return m
 
 
-def cap_material():
+def cap_material(atlas=ATLAS):
     """The cap samples the strand atlas too (alpha tested in the game): dense roots inside, sparse tips at the hairline."""
     m = bpy.data.materials.get('hair__cap')
     if m is not None:
@@ -110,7 +116,7 @@ def cap_material():
     m = bpy.data.materials.new('hair__cap')
     nt = m.node_tree; b = nt.nodes['Principled BSDF']
     b.inputs['Roughness'].default_value = .6
-    tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(os.path.join(bl.TEXTURES, ATLAS), check_existing=True)
+    tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(os.path.join(bl.TEXTURES, atlas), check_existing=True)
     nt.links.new(tn.outputs['Color'], b.inputs['Base Color']); nt.links.new(tn.outputs['Alpha'], b.inputs['Alpha'])
     try:
         m.surface_render_method = 'DITHERED'
@@ -128,7 +134,8 @@ class Groom:
     def __init__(self, kit):
         self.kit = kit; self.B = kit.B; self.H = kit.B.head; self.s = self.H.s
         self.ho = np.asarray(kit.B.head_o, F32); self.F = kit.F
-        self.cards_mat = card_material(); self.cap_mat = cap_material()
+        atlas = ATLAS_S if kit.npc else ATLAS
+        self.cards_mat = card_material(atlas); self.cap_mat = cap_material(atlas)
         self.rng = np.random.default_rng(5)
         self.V = []; self.Q = []; self.UV = []; self.N = []; self.nv = 0
 

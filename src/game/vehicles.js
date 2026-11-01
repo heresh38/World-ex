@@ -438,6 +438,8 @@ export class Board {
   }
 
   // ground or water surface the board rides on
+  wake() { /* boards never sleep */ }
+
   surface(x, z, yRef) {
     const g = this.g, col = g.world.collision;
     let h = col.support(x, z, yRef);
