@@ -358,8 +358,8 @@ export class Menus {
   st_garage() {
     const sv = this.g.save;
     const body = `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px">CHASSIS</div>
-      <div class="row" style="margin:8px 0 16px"><button class="btn ${sv.car.model === 'car_sport' ? 'pri' : ''}" data-act="carmodel" data-v="car_sport">Vanta GT · sport</button>
-      <button class="btn ${sv.car.model === 'car_utility' ? 'pri' : ''}" data-act="carmodel" data-v="car_utility">Mule Hauler · armoured</button></div>
+      <div class="row" style="margin:8px 0 16px"><button class="btn ${/sport/.test(sv.car.model) ? 'pri' : ''}" data-act="carmodel" data-v="board_sport">Vanta Glide · sport</button>
+      <button class="btn ${/utility/.test(sv.car.model) ? 'pri' : ''}" data-act="carmodel" data-v="board_utility">Mule Deck · armoured</button></div>
       <div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px">PAINT</div>
       <div class="swatches">${PAINTS.map(h => `<div class="sw ${sv.car.paint === h ? 'on' : ''}" style="background:${h}" data-act="paint" data-v="${h}"></div>`).join('')}</div>
       <p class="guide">Press <b>V</b> on Earth or any frontier world to have the ship drop your car beside you.</p>`;

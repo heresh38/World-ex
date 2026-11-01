@@ -159,7 +159,8 @@ fs.mkdirSync(OUT, { recursive: true });
   // ---- hover board: V summons it under the player, ride it
   const board = await ev(async () => {
     const g = window.__game;
-    const B = window.__B; g.player.pos.set(B.x - 8, g.world.collision.ground(B.x - 8, B.z + 8), B.z + 8); g.player.avatar.root.position.copy(g.player.pos); g.player.yaw = Math.PI / 2;
+    const B = window.__B, E = !!g.world.traffic, bx = E ? -150 : B.x - 8, bz = E ? 55.5 : B.z + 8;   // Earth: an east-west street
+    g.player.pos.set(bx, g.world.collision.support(bx, bz, 5), bz); g.player.avatar.root.position.copy(g.player.pos); g.player.yaw = Math.PI / 2; g.player.camYaw = -Math.PI / 2;
     g.save.settings.view = 'third'; g.setAvatarLayer();
     g.vehicles.summon();
     const b = g.vehicles.current;
@@ -189,9 +190,9 @@ fs.mkdirSync(OUT, { recursive: true });
     if (!r || r.model !== 'car_rover') return 'no rover';
     const y0 = r.pos.y;
     await window.__waitGame(3.5);
-    const gy = g.world.collision.support(r.pos.x, r.pos.z, r.pos.y + 1);
+    const gy = g.world.collision.support(r.pos.x, r.pos.z, r.pos.y + 1), landed = r.pos.y - gy, contacts = r.contacts;
     g.input.down.add('KeyW'); await window.__waitGame(2.5); g.input.down.delete('KeyW');
-    return { dropFrom: +(y0 - gy).toFixed(1), landed: +(r.pos.y - gy).toFixed(2), contacts: r.contacts, speed: +r.speed.toFixed(1) };
+    return { dropFrom: +(y0 - gy).toFixed(1), landed: +landed.toFixed(2), contacts, speed: +r.speed.toFixed(1) };
   });
   check('rover drops, lands and drives', rover.contacts >= 3 && Math.abs(rover.landed) < .4 && rover.speed > 2, rover);
   await ev(() => { const g = window.__game; g.player.camPitch = -.25; });
@@ -268,15 +269,16 @@ fs.mkdirSync(OUT, { recursive: true });
     const walkX = g.player.pos.x - x;
     // a car rolling into the player at 10 m/s
     g.player.godMode = false; g.player.health = 100; g.player.shield = 0; g.player.sinceHit = 0;
-    const hp0 = g.player.health;
+    const hp0 = g.player.health, hits = []; const od = g.player.damage.bind(g.player); g.player.damage = (n, f) => { hits.push(+n.toFixed(1)); od(n, f); };
     const m = g.vehicles.spawn('car_hatch', '#a3121f', new V(x + 14, g.world.collision.ground(x + 14, z - 12), z - 12), 0);
     g.player.pos.set(x + 14, g.world.collision.ground(x + 14, z - 4), z - 4);
     m.wake(); m.vel.set(0, 0, 11);
     await window.__waitGame(1.5);
-    return { outside, walkX: +walkX.toFixed(2), halfW: +c.hw.toFixed(2), hp0, hp: Math.round(g.player.health), shield: Math.round(g.player.shield) };
+    delete g.player.damage;
+    return { outside, walkX: +walkX.toFixed(2), halfW: +c.hw.toFixed(2), hp0, hp: Math.round(g.player.health), shield: Math.round(g.player.shield), hits };
   });
   check('car pushes the player out', col.outside && col.walkX > col.halfW, col);
-  check('moving car knocks the player', col.hp < col.hp0 || col.shield < 0, col);
+  check('moving car knocks the player', col.hits.some(n => n > 10), col);       // shields may soak the hit
   await g_restoreHealth();
   async function g_restoreHealth() { await ev(() => { const g = window.__game; g.player.health = g.player.maxHealth; }); }
 
