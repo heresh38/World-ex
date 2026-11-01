@@ -8,7 +8,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await b.newPage({ viewport: { width: +(process.env.W || 960), height: +(process.env.H || 540) } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; });
@@ -44,6 +44,8 @@ fs.mkdirSync(OUT, { recursive: true });
   await sim(['KeyW'], .5);
   const cl = await sim(['KeyW'], 1.4, ['Space']);
   console.log('climb', JSON.stringify(cl), 'top', crate, cl.climbed && Math.abs(cl.pos[1] - crate) < .1 ? 'OK' : 'FAIL');
+  if (!(cl.climbed && Math.abs(cl.pos[1] - crate) < .1)) console.log('  ledge check:', await ev(() => { const g = window.__game, P = g.player;
+    const f = new P.pos.constructor(0, 0, 1); P.findLedge(g.world.collision, f); return P.ledgeWhy; }));
   // sit on the nearest bench
   const seat = await ev(() => { const g = window.__game, P = g.player; const s = g.world.interactables.filter(i => i.id === 'seat').sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];
     if (!s) return 'no seats'; P.pos.copy(s.pos); s.action(); return { n: g.world.interactables.filter(i => i.id === 'seat').length, mode: P.mode }; });

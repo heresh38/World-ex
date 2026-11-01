@@ -91,25 +91,27 @@ export class Player {
 
   // ledge in front of the player that can be climbed: returns the stand point on top, or null
   findLedge(world, fwd) {
+    this.ledgeWhy = 'no hit';
     for (const hgt of [.35, .9, 1.5]) {
       const o = _t.set(this.pos.x, this.pos.y + hgt, this.pos.z);
       const hit = world.raycast(o, fwd, R + .55);
       if (!hit || !hit.box) continue;
       const top = hit.box.max.y, rise = top - this.pos.y;
-      if (rise < CLIMB_MIN || rise > CLIMB_MAX) continue;
+      if (rise < CLIMB_MIN || rise > CLIMB_MAX) { this.ledgeWhy = 'rise ' + rise.toFixed(2); continue; }
       // stand point a little past the edge, must be on a surface at that height with head room above
       const tx = hit.point.x + fwd.x * (R + .12), tz = hit.point.z + fwd.z * (R + .12);
       const sy = world.support(tx, tz, top + .05);
-      if (Math.abs(sy - top) > .3) continue;
+      if (Math.abs(sy - top) > .3) { this.ledgeWhy = 'support ' + sy.toFixed(2) + ' vs ' + top.toFixed(2); continue; }
       let clear = true;
       for (const b of world.near(tx, tz, R)) {
         if (b.max.y <= sy + .05 || b.min.y >= sy + HC) continue;
         if (tx + R * .8 > b.min.x && tx - R * .8 < b.max.x && tz + R * .8 > b.min.z && tz - R * .8 < b.max.z) { clear = false; break; }
       }
-      if (!clear) continue;
+      if (!clear) { this.ledgeWhy = 'no room on top'; continue; }
       // nothing overhead on the way up
       const up = world.raycast(_t.set(this.pos.x, this.pos.y + H - .1, this.pos.z), _d.set(0, 1, 0), rise + .2);
-      if (up && up.box && up.box !== hit.box) continue;
+      if (up && up.box && up.box !== hit.box) { this.ledgeWhy = 'overhead ' + (up.box.tag || '') + ' at ' + up.dist.toFixed(2); continue; }
+      this.ledgeWhy = 'ok';
       return new THREE.Vector3(tx, sy, tz);
     }
     return null;
