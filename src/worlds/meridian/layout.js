@@ -17,6 +17,15 @@ export const RIVER_Z = -3 * PITCH, RIVER_W = 33, RIVER_BANK = 4;
 // (landing pad 1); `area` is the flattened footprint [x0, z0, x1, z1] (landing field, terminal, yard, landside lots).
 export const SPACEPORT = { x: -275, z: 640, area: [-705, 492, 52, 800] };
 export const inSpaceport = (x, z, pad = 0) => x > SPACEPORT.area[0] - pad && x < SPACEPORT.area[2] + pad && z > SPACEPORT.area[1] - pad && z < SPACEPORT.area[3] + pad;
+// Downtown core (meridian/downtown.js, kit tools/blender/downtown.py), laid out after a prairie river city's downtown:
+// blocks bx/bz -2..2 south of the river, tallest towers in the middle ring, a car-free heritage avenue cut through the
+// middle of block row -1 and a light-rail transit mall one block nearer the river (row -2, blocks -2..1).
+// Founders' Park (0,0), the rotunda plaza (1,1) and the riverside park (2,-2) stay as they are.
+export const DT_N = 2;
+export const DT_KEEP = new Set(['0,0', '1,1', '2,-2']);
+export const isDowntown = (bx, bz) => Math.abs(bx) <= DT_N && Math.abs(bz) <= DT_N && !DT_KEEP.has(bx + ',' + bz);
+export const HERITAGE = { z: -PITCH, half: 7, x0: -2 * PITCH - BLOCK / 2, x1: 2 * PITCH + BLOCK / 2 };
+export const TRANSIT = { z: -2 * PITCH, half: 10, x0: -2 * PITCH - BLOCK / 2, x1: PITCH + BLOCK / 2 };
 export function riverZ(x) {
   const o = Math.abs(x) - (CITY_EDGE + 30);
   if (o <= 0) return RIVER_Z;
@@ -241,7 +250,10 @@ export class MeridianMap {
 
   district(x, z) {
     if (Math.abs(x) < CITY_EDGE && Math.abs(z) < CITY_EDGE) {
+      if (x > HERITAGE.x0 && x < HERITAGE.x1 && Math.abs(z - HERITAGE.z) < HERITAGE.half + 1) return 'Heritage Walk';
+      if (x > TRANSIT.x0 && x < TRANSIT.x1 && Math.abs(z - TRANSIT.z) < TRANSIT.half + 1) return 'Transit Mall';
       if (Math.abs(z - RIVER_Z) < 75) return 'Riverside';
+      if (Math.abs(x) < (DT_N + .5) * PITCH && Math.abs(z) < (DT_N + .5) * PITCH) return 'Downtown';
       if (Math.max(Math.abs(x), Math.abs(z)) > CITY_EDGE - PITCH) return 'Meridian Heights';
       return Math.hypot(x, z) < 200 ? 'Downtown' : 'New Meridian';
     }

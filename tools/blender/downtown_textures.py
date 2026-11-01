@@ -381,7 +381,7 @@ def derelict():
     # remains of an old painted coat, flaking
     paint = noise(H, W, 1.5, 72)
     pm = paint > .52
-    cv.c[pm] = cv.c[pm] * .3 + np.array((.52, .5, .44), np.float32) * .7
+    cv.c[pm] = cv.c[pm] * .35 + np.array((.36, .34, .3), np.float32) * .65
     cv.hg[pm] += .3
     rg = np.random.RandomState(73)
     for f in range(F):
@@ -432,7 +432,8 @@ def derelict():
             px, py = cx + math.sin(t * .7 + k) * 40 + t * 6, cy + math.cos(t * .9 + k * 2) * 20
             m = (xx - px) ** 2 + (yy - py) ** 2 < 36
             cv.c[m] = cv.c[m] * .2 + col * .8
-    grime(cv, 76, .3, .2)
+    grime(cv, 76, .4, .3)
+    cv.c *= .85
     cv.r = np.clip(cv.r + .05, 0, 1)
     cv.lit[:] = 0
     cv.save('dt_derelict', strength=2.2, nsize=(512, 512))

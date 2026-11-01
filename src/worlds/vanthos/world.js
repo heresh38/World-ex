@@ -304,16 +304,16 @@ export class VanthosWorld extends World {
     const g = this.g, A = g.assets, sc = this.scene;
     const sp = A.clone('vanthos', 'VX_spire'); sc.add(sp); this.spire = sp;
     sp.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    // foundation: a walkable disc 28 m up; towers as solid boxes
-    for (let x = -88; x <= 88; x += 22) for (let z = -88; z <= 88; z += 22) if (Math.hypot(x, z) < 86) this.collision.add([x - 11, -2, z - 11, x + 11, 28, z + 11], 'spire');
+    // foundation: a walkable disc, its cap 29 m up (VX_spire foundcap); towers as solid boxes
+    for (let x = -88; x <= 88; x += 22) for (let z = -88; z <= 88; z += 22) if (Math.hypot(x, z) < 86) this.collision.add([x - 11, -2, z - 11, x + 11, 29, z + 11], 'spire');
     // the rim: the square grid above leaves the edge of the round cap (r 88) unwalkable in places
-    for (let k = 0; k < 48; k++) { const a = k / 48 * Math.PI * 2, x = Math.cos(a) * 81, z = Math.sin(a) * 81; this.collision.add([x - 6, -2, z - 6, x + 6, 28, z + 6], 'spire'); }
+    for (let k = 0; k < 48; k++) { const a = k / 48 * Math.PI * 2, x = Math.cos(a) * 81, z = Math.sin(a) * 81; this.collision.add([x - 6, -2, z - 6, x + 6, 29, z + 6], 'spire'); }
     const towers = [[0, 240], [1.26, 290], [2.51, 300 * .62], [3.77, 260], [5.03, 230 * .62]];
     for (const [a, h] of towers) { const x = Math.cos(a) * 52, z = -Math.sin(a) * 52; this.collision.add([x - 19, 28, z - 19, x + 19, 28 + h, z + 19], 'spire'); }
     this.collision.add([-25, 28, -25, 25, 360, 25], 'spire');
     this.coreLight = new THREE.PointLight(0x7fe8ff, 8000, 900, 1.4); this.coreLight.position.set(0, 380, 0); sc.add(this.coreLight);
     // the lift up to the foundation (powered during the operation); the Spire Warden and its reliquary are operation.js
-    const lift = this.makeLift(0, 100, 28, 0, 76);
+    const lift = this.makeLift(0, 100, 29, 0, 76);
     this.spireLiftBase = lift.base;
     this.spireLift = new THREE.Vector3(0, 0, 100); this.spireLift.y = this.map.height(0, 100);
   }

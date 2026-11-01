@@ -21,7 +21,7 @@ export const fmtTime = t => t == null ? '—' : Math.floor(t / 60) + ':' + Strin
 export const OP_NAME = 'Operation Heartline';
 const WREN = ['Wren Asheby · Wayfarer', '#1ad8ff'], REC = ['Flight Nine · recorder', '#ffae2f'], WARDEN = ['The Spire Warden', '#ff5ac8'];
 const BOSS = 'The Spire Warden';
-const FOUND_Y = 28;
+const FOUND_Y = 29;            // top of the Spire foundation cap
 
 const STAGES = [
   { id: 'relay', title: 'The Relay', place: 'The Outskirts' },
@@ -116,7 +116,7 @@ function shieldMaterial() {
 export class Operation {
   constructor(w) {
     this.w = w; this.g = w.g;
-    this.i = 0; this.phase = 'travel'; this.clock = 0; this.intro = false; this.complete = false;
+    this.i = 0; this.phase = 'travel'; this.clock = 0; this.now = 0; this.intro = false; this.complete = false;   // clock: run time; now: timers
     this.waves = []; this.timers = []; this.cp = null; this.liftReady = false;
     this.conduits = []; this.boss = null; this.adds = [];
     this.hold = { p: 0, inside: true }; this.said = new Set();
@@ -130,7 +130,7 @@ export class Operation {
   get S() { return this.stages[this.i]; }
   get done() { return this.complete; }
   snapshot() { return { i: this.complete ? 0 : this.i, clock: this.clock }; }
-  after(t, fn) { this.timers.push({ t: this.clock + t, fn }); }
+  after(t, fn) { this.timers.push({ t: this.now + t, fn }); }
   say(lines, cb) {
     const h = this.g.hud;
     lines.forEach(([who, text], k) => h.radio(who[0], text, { color: who[1], tag: this.i, cb: k === lines.length - 1 ? cb : null }));
@@ -244,7 +244,7 @@ export class Operation {
       base.action = () => { if (!this.liftReady) { g.audio.ui('deny'); g.hud.toast('The lift has no power'); return; } ride(); this.onLiftRide(); };
     }
     // ---- stage 5: three shield conduits around the foundation and the Warden's reliquary
-    this.conduits = [36, 180, -108].map((d, k) => new Conduit(this, polar(d, 72).setY(FOUND_Y), k));
+    this.conduits = [180, -108, -36].map((d, k) => new Conduit(this, polar(d, 72).setY(FOUND_Y), k));
     const rq = new V(-13, FOUND_Y, 47);
     this.reliq = { obj: prop('VX_reliquary', rq, 0), pos: rq, open: false, t: 0, sealed: true };
     this.reliq.lid = this.reliq.obj.getObjectByName('reliquary_lid');
@@ -342,7 +342,8 @@ export class Operation {
     const g = this.g, w = this.w, p = g.player.pos;
     if (!this.stages) return;
     if (!this.complete) this.clock += dt;
-    for (let k = this.timers.length - 1; k >= 0; k--) if (this.timers[k].t <= this.clock) { const t = this.timers.splice(k, 1)[0]; t.fn(); }
+    this.now += dt;
+    for (let k = this.timers.length - 1; k >= 0; k--) if (this.timers[k].t <= this.now) { const t = this.timers.splice(k, 1)[0]; t.fn(); }
     this.tidyT = (this.tidyT || 0) - dt; if (this.tidyT <= 0) { this.tidyT = 1; this.tidyWaves(1); }
     for (const c of this.conduits) c.update(dt, g.time);
     this.updateVfx(dt);
@@ -539,7 +540,7 @@ export class Operation {
     e.onImmuneHit = (point) => {
       this.shieldHit = 1;
       if (point) g.fx.emit(point, 8, 5, 0xff3fb4, .35, 3, .06, .9);
-      if ((this.pingT || 0) < this.clock) { this.pingT = this.clock + .09; g.audio.shieldPing && g.audio.shieldPing(point || e.pos); }
+      if ((this.pingT || 0) < this.now) { this.pingT = this.now + .09; g.audio.shieldPing && g.audio.shieldPing(point || e.pos); }
     };
     this.boss = e; this.shieldK = 0;
   }
@@ -622,10 +623,10 @@ export class Operation {
     const c = this.reliq.pos.clone().setY(FOUND_Y + 1.4);
     g.fx.emit(c, 80, 6, 0xffcf3f, 1.2, -2, .1); g.fx.glow(c, 7, 0xffcf3f, .6); g.fx.flash(c, 0xffcf3f, 500, .5, 20);
     const v = sv.vanthos;
-    g.hud.banner('Operation complete', OP_NAME + ' · ' + fmtTime(this.runTime) + (this.newBest ? ' · new best' : ' · best ' + fmtTime(v.best)), 6);
+    g.hud.banner('Operation complete', OP_NAME + ' · ' + fmtTime(this.runTime) + (this.newBest ? ' · new best' : ' · best ' + fmtTime(v.best)), 3.6);
     const rows = ws.map(w => `<div class="r"><span style="color:${RARITY[w.rarity].color}">${esc(w.name)}</span><em>${RARITY[w.rarity].name} ${esc(ARCHETYPES[w.arch].name)} · ${esc(SIGHTS[weaponSight(w)].name)}${w.perks.length ? ' · ' + w.perks.map(p => PERKS[p].name).join(', ') : ''}</em></div>`).join('');
-    g.hud.lore(OP_NAME + ' · complete', 'The Spire is silent', `<p>Time <b>${fmtTime(this.runTime)}</b> · best <b>${fmtTime(v.best)}</b> · runs <b>${v.runs}</b></p>${rows}
-      <div class="r"><span>${credits} credits · ${alloy} alloy</span><em>Signal the Wayfarer to leave</em></div>`, 16);
+    this.after(3.4, () => g.hud.lore(OP_NAME + ' · complete', 'The Spire is silent', `<p>Time <b>${fmtTime(this.runTime)}</b> · best <b>${fmtTime(v.best)}</b> · runs <b>${v.runs}</b></p>${rows}
+      <div class="r"><span>${credits} credits · ${alloy} alloy</span><em>Signal the Wayfarer to leave</em></div>`, 16));
     this.say([[WREN, 'Wayfarer is coming round. Signal when you want out, or stay a while. The city is yours.']]);
     g.persist();
   }

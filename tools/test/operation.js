@@ -60,6 +60,15 @@ fs.mkdirSync(OUT, { recursive: true });
   });
   await setup();
   const S = () => ev(() => window.__state());
+  // a free camera at `off` from the target returned by `who` (page expression), looking at it; then back to the player view
+  const frame = async (n, who, off, lookUp = 2) => {
+    await ev(([who, off, lookUp]) => { const g = window.__game, V = g.camera.position.constructor, t = new Function('return ' + who)(), c = g.camera;
+      const pos = new V(t.x + off[0], t.y + off[1], t.z + off[2]), look = new V(t.x, t.y + lookUp, t.z);
+      g.stationId = 'test'; c.position.copy(pos); c.lookAt(look);
+      g.camFocus = { pos, look, orbit: false, q: c.quaternion.clone(), p0: pos.clone(), q0: c.quaternion.clone(), fov0: 60, t0: 0 }; }, [who, off, lookUp]);
+    await wait(2200); await shot(n);
+    await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; g.camera.clearViewOffset(); });
+  };
   const info = await ev(() => { const o = window.__op(); return { stages: o.stages.map(s => [s.id, Math.round(s.pos.x), Math.round(s.pos.y), Math.round(s.pos.z)]), off: o.offSites, sites: window.__game.world.sites.length, landing: window.__game.world.landing.toArray().map(Math.round) }; });
   console.log('operation', JSON.stringify(info));
   check(info.stages.length === 5, 'five stages');
@@ -125,15 +134,15 @@ fs.mkdirSync(OUT, { recursive: true });
   check(st.phase === 'ride', 'lift powered', st);
   pr = await ev(() => { const b = window.__game.world.spireLiftBase; window.__killOp(); window.__tp(b.pos.x, b.pos.y, b.pos.z + 1); return window.__press(); });
   const up = await ev(() => { window.__sim(1); return window.__game.player.pos.y; });
-  check(up > 27.5, 'lift rides to the foundation (and you stand on it)', { pr, y: up });
+  check(up > 28.5, 'lift rides to the foundation (and you stand on it)', { pr, y: up });
   await ev(() => window.__sim(3.2));
   // ---------------------------------------------------------------- 5: the Spire Warden
   st = await S(); check(st.i === 4 && st.phase === 'intro', 'the Warden wakes on the foundation', st);
   await ev(() => window.__sim(4));
   const boss0 = await ev(() => { const B = window.__op().boss; return { alive: B.alive, hp: B.hp, max: B.maxHp, name: B.T.name, state: B.state }; });
   check(boss0.alive && boss0.state === 'combat', 'boss fight starts', boss0);
-  await ev(() => { const B = window.__op().boss; window.__tp(B.pos.x + 4, 28, B.pos.z + 16); window.__look(B.pos.x, B.pos.y + 2.5, B.pos.z, .1); window.__sim(.2); });
-  await wait(1500); await shot('op07_warden');
+  await ev(() => { const B = window.__op().boss; window.__tp(B.pos.x + 4, 29, B.pos.z + 16); window.__look(B.pos.x, B.pos.y + 2.5, B.pos.z, .1); window.__sim(.2); });
+  await frame('op07_warden', 'window.__op().boss.pos', [7, 4, 12], 2.6);
   // to 50 %: the floor holds, the shield rises, damage is blocked
   const half = await ev(() => { const g = window.__game, B = window.__op().boss, V = g.player.pos.constructor;
     B.takeDamage(B.maxHp * .3, false, B.center(new V()).clone(), null, 'player'); B.takeDamage(B.maxHp * .3, false, B.center(new V()).clone(), null, 'player');
@@ -152,29 +161,30 @@ fs.mkdirSync(OUT, { recursive: true });
     return { hitBoss: res.target === B, hpSame: B.hp === hp, nums, bar: document.querySelector('.h-boss .bs').textContent, shield: document.querySelector('.h-boss').classList.contains('shield') }; });
   check(real.hitBoss && real.hpSame && real.nums.includes('IMMUNE'), 'weapon hit on the shield shows IMMUNE', real);
   check(real.shield && /immune/i.test(real.bar), 'boss bar shows the shield state', real.bar);
-  await ev(() => { window.__sim(2); const B = window.__op().boss; const P = window.__game.player; window.__look(B.pos.x, B.pos.y + 3, B.pos.z, .12); });
-  await wait(1800); await shot('op08_shield_phase');
+  await ev(() => window.__sim(2));
+  await frame('op08_shield_phase', 'window.__op().boss.pos', [8, 5, 14], 2.6);
   // the same moment on a landscape phone (iPhone-size viewport, touch layout)
   await p.setViewportSize({ width: 932, height: 430 });
-  await ev(() => { document.body.classList.add('touch'); window.__game.hud.radio('Wren Asheby · Wayfarer', 'It’s pulling power through those pylons. The shield is fed from the core. Break the conduits!', { color: '#1ad8ff' }); window.__sim(.5); });
+  await ev(() => { document.body.classList.add('touch'); const g0 = window.__game; if (g0.save.settings.view === 'third') g0.toggleView(); const B = window.__op().boss; window.__look(B.pos.x, B.pos.y + 2.5, B.pos.z, .1);
+    window.__game.hud.radio('Wren Asheby · Wayfarer', 'It’s pulling power through those pylons. The shield is fed from the core. Break the conduits!', { color: '#1ad8ff' }); window.__sim(.5); });
   await wait(1800); await shot('op08b_shield_phone');
   await ev(() => document.body.classList.remove('touch'));
   await p.setViewportSize({ width: 960, height: 540 });
   // a conduit: a ray finds it, its bar shows, shots wear it down
   const cd = await ev(() => { const g = window.__game, op = window.__op(), c = op.conduits[0], V = g.player.pos.constructor;
-    window.__tp(c.pos.x - 10, 28, c.pos.z + 10); window.__look(c.pos.x, c.pos.y + 3, c.pos.z, .15); window.__sim(.1);
+    window.__tp(c.pos.x - 10, 29, c.pos.z + 10); window.__look(c.pos.x, c.pos.y + 3, c.pos.z, .15); window.__sim(.1);
     const o = g.camera.position.clone(), d = c.center(new V()).clone().sub(o).normalize(), res = g.combat.trace(o, d, 200, 'player');
     const hp0 = c.hp; c.takeDamage(c.maxHp * .4, false, c.center(new V()).clone(), d, 'player');
     return { traced: res.target === c, hp0, hp: c.hp, bars: op.barTargets().length }; });
   check(cd.traced && cd.hp < cd.hp0 && cd.bars >= 1, 'conduits are shootable targets with health bars', cd);
-  await wait(1500); await shot('op09_conduit');
+  await frame('op09_conduit', 'window.__op().conduits[0].pos', [-9, 3.5, 9], 3);
   const drop = await ev(() => { const g = window.__game, op = window.__op(), V = g.player.pos.constructor;
     for (const c of op.conduits) if (c.alive) c.takeDamage(1e7, false, c.center(new V()).clone(), null, 'player');
     const B = op.boss, hp = B.hp; const r = B.takeDamage(1000, false, B.center(new V()).clone(), null, 'player');
     return { immune: B.immune, phase: op.phase, stun: B.stunT > 0, dealt: Math.round(r.dealt || 0), dropped: Math.round(hp - B.hp) }; });
   check(!drop.immune && drop.phase === 'stagger' && drop.stun && drop.dropped > 0, 'conduits down: shield drops, the Warden staggers, damage lands', drop);
-  await ev(() => { const B = window.__op().boss; window.__tp(B.pos.x + 3, 28, B.pos.z + 12); window.__look(B.pos.x, B.pos.y + 2.5, B.pos.z, .1); window.__sim(.3); });
-  await wait(1200); await shot('op10_stagger');
+  await ev(() => window.__sim(.3));
+  await frame('op10_stagger', 'window.__op().boss.pos', [7, 4, 12], 2.6);
   const p2 = await ev(() => { const g = window.__game, op = window.__op(), B = op.boss, V = g.player.pos.constructor;
     window.__sim(5);
     B.takeDamage(B.maxHp, false, B.center(new V()).clone(), null, 'player');
@@ -200,7 +210,7 @@ fs.mkdirSync(OUT, { recursive: true });
   check(loot.n >= 2 && loot.n <= 3 && loot.added === loot.n && loot.ok && loot.complete, 'reliquary grants 2-3 rolled weapons', { n: loot.n, added: loot.added });
   check(new Set(loot.ws.map(w => w.uid)).size === loot.n, 'every reward has its own uid');
   check(loot.signal, 'return-to-orbit signal offered');
-  await wait(1800); await shot('op11_reliquary_summary');
+  await ev(() => window.__sim(4)); await wait(1500); await shot('op11_reliquary_summary');
   // duplicates: the same archetype many times, every copy its own roll
   const dup = await ev(async () => { const g = window.__game, op = window.__op(), sv = g.save;
     const { sightOptions } = await import('/src/game/data.js');
@@ -214,7 +224,8 @@ fs.mkdirSync(OUT, { recursive: true });
   check(dup.distinct === 4 && dup.sightsOk && new Set(dup.perkSets).size >= 2, 'duplicates differ in perks / sight / stat rolls', dup.perkSets);
   // the inventory shows what sets the copies apart (NEW tags, sight, roll %), and Lock protects one
   const inv = await ev(() => { const g = window.__game, m = g.menus;
-    g.openInventory(); m.tab = 'weapons'; m.filter = 0; m.clsFilter = 'kinetic'; m.render();
+    g.openInventory(); m.tab = 'weapons'; m.filter = 0; m.clsFilter = 'kinetic';
+    const nr = g.save.inventory.find(w => w.arch === 'rifle' && w.isNew); if (nr) m.sel = nr.uid; m.render();
     const cards = [...document.querySelectorAll('#panel .card')];
     const rifle = cards.filter(c => /Assault Rifle/.test(c.textContent));
     return { cards: cards.length, rifleCards: rifle.length, news: document.querySelectorAll('#panel .card .tag:not(.lock)').length,
@@ -222,7 +233,10 @@ fs.mkdirSync(OUT, { recursive: true });
       facts: [...document.querySelectorAll('#panel .inv-facts span')].map(s => s.textContent).slice(4) }; });
   console.log('inventory', JSON.stringify(inv));
   check(inv.rifleCards >= 4 && inv.news >= 4 && inv.sg.every(Boolean), 'inventory lists every copy with NEW tag, sight and rolls', { rifleCards: inv.rifleCards, news: inv.news });
+  await ev(() => { const gr = document.querySelector('#panel .pn-body .grid'), body = document.querySelector('#panel .pn-body'); if (gr && body) body.scrollTop = gr.offsetTop - body.offsetTop - 40; });
   await wait(1200); await shot('op12_inventory_duplicates');
+  await ev(() => { const body = document.querySelector('#panel .pn-body'); if (body) body.scrollTop = 0; });
+  await wait(400); await shot('op12b_inventory_selected');
   const vault = await ev(() => { const g = window.__game, sv = g.save, m = g.menus;
     // pick a reward card: the NEW tag clears; lock it
     const w = g.world.op.rewards.weapons[0]; m.sel = null;
@@ -239,6 +253,11 @@ fs.mkdirSync(OUT, { recursive: true });
   console.log('vault', JSON.stringify(vault));
   check(vault.len <= 200 && vault.keptLocked && vault.keptNew && vault.keptEq && vault.lockedReward && vault.seenNew === false, 'vault cap 200: never scraps locked / new / equipped, and says so', vault);
   check(vault.feed > 0, 'vault overflow is reported in the feed');
+  // optional lore terminals: one per stage, read with E; the log card shows and the save remembers it
+  const logs = await ev(() => { const g = window.__game, op = window.__op(), ts = op.its.filter(x => /^Terminal/.test(x.label));
+    const t = ts.find(x => /manifest/i.test(x.label)); window.__tp(t.pos.x, t.pos.y, t.pos.z); const pr = window.__press();
+    return { terminals: ts.length, pr, saved: g.save.vanthos.logs, card: document.querySelector('.h-lore.on b') && document.querySelector('.h-lore.on b').textContent }; });
+  check(logs.terminals === 4 && logs.saved.includes('shuttle') && /manifest/i.test(logs.card || ''), 'lore terminals: E shows the log, the save keeps it', logs);
   // ---------------------------------------------------------------- HUD state at the end, then a replay
   const fin = await ev(() => { const g = window.__game; return { obj: g.world.objectives().slice(0, 2).map(o => o.text), runs: g.save.vanthos.runs }; });
   console.log('final', JSON.stringify(fin));

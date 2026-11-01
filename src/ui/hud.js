@@ -182,9 +182,9 @@ export class HUD {
     const el = this.loreEl;
     el.querySelector('small').textContent = kicker; el.querySelector('b').textContent = title;
     el.querySelector('.lt').innerHTML = html;
-    el.classList.add('on'); this.loreT = dur;
+    el.classList.add('on'); this.el.classList.add('lore-on'); this.loreT = dur;
   }
-  hideLore() { this.loreT = 0; this.loreEl.classList.remove('on'); }
+  hideLore() { this.loreT = 0; this.loreEl.classList.remove('on'); this.el.classList.remove('lore-on'); }
 
   feed(text, color = '#fff') {
     const d = document.createElement('div'); d.textContent = text; d.style.borderColor = color; d.style.color = color === '#ffffff' ? '' : color;
@@ -224,7 +224,7 @@ export class HUD {
     }
     this.updateBars();
     this.updateRadio(dt);
-    if (this.loreT > 0 && (this.loreT -= dt) <= 0) this.loreEl.classList.remove('on');
+    if (this.loreT > 0 && (this.loreT -= dt) <= 0) this.hideLore();
     this.frame = (this.frame || 0) + 1;
     if (this.combatMode) this.updateCompass();
     this.updateMinimap();

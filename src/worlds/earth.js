@@ -13,7 +13,8 @@ import { Population } from './meridian/population.js';
 import { Traffic } from './meridian/traffic.js';
 import { Wanted } from './meridian/wanted.js';
 import { Flora } from './meridian/flora.js';
-import { SNOW_LINE } from './meridian/layout.js';
+import { SNOW_LINE, isDowntown, TRANSIT } from './meridian/layout.js';
+import { Downtown } from './meridian/downtown.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
@@ -161,7 +162,7 @@ export class EarthWorld extends World {
     await tick(.42, 'Laying highways');
     this.buildHighways();
     await tick(.5, 'Building villages');
-    this.paths = this.cityPaths();
+    this.paths = [...this.cityPaths(), ...this.downtown.paths];
     this.buildVillages(rnd);
     await tick(.6, 'Planting fields');
     this.buildFarms(rnd);
@@ -273,7 +274,7 @@ export class EarthWorld extends World {
     };
     const pick = list => list[Math.floor(rnd() * list.length)];
     const parks = [], houses = [];
-    const PARKS = new Set(['2,-2', '-3,2', '-1,-2', '3,1', '-2,3']);
+    const PARKS = new Set(['2,-2', '-3,2', '-3,-1', '3,1', '-2,3']);      // (-1,-2) moved out of the downtown core
     const PLAZA = '1,1';
     for (let bx = -N; bx <= N; bx++) for (let bz = -N; bz <= N; bz++) {
       const cx = bx * PITCH, cz = bz * PITCH, key = bx + ',' + bz;
@@ -281,6 +282,7 @@ export class EarthWorld extends World {
       if (inRiver(cz)) continue;                                              // the river
       if (key === PLAZA) { this.plaza = [cx, cz]; continue; }
       if (PARKS.has(key)) { parks.push([cx, cz]); continue; }
+      if (isDowntown(bx, bz)) continue;                                       // downtown core: meridian/downtown.js
       const edge = Math.max(Math.abs(bx), Math.abs(bz));
       if (edge === N && rnd() < .75) { houses.push([cx, cz]); continue; }    // suburbs at the city edge
       const lots = (bx === 1 && bz === 0) || (bx === 0 && bz === 1) ? [[0, 0, true]] : [[-1, -1], [1, -1], [-1, 1], [1, 1]];
@@ -298,6 +300,10 @@ export class EarthWorld extends World {
       }
     }
     for (const V of Object.values(variants)) instanceKit(this.scene, V.root, V.mats);
+    // the downtown core (towers, heritage avenue, transit mall, plazas, skywalks, cranes): tools/blender/downtown.py kit
+    this.downtown = new Downtown(this, { instanceKit, kitColliders }); this.downtown.build();
+    const dt = this.downtown, lampOk = (x, z) => !dt.skywalks.some(s => x > s.rect[0] - 2 && x < s.rect[2] + 2 && z > s.rect[1] - 2 && z < s.rect[3] + 2)
+      && !(x > TRANSIT.x0 && x < TRANSIT.x1 && Math.abs(z - TRANSIT.z) < 7);
     // bridges over the river on every north-south street, and at the highway crossings outside the city
     const br = kit.getObjectByName('BLD_bridge'), brM = [];
     for (let i = -N - 1; i <= N; i++) {
@@ -318,8 +324,8 @@ export class EarthWorld extends World {
       const c = (i + .5) * PITCH;
       for (let t = -N * PITCH; t <= N * PITCH; t += 34) for (const side of [-1, 1]) {
         const off = c + side * (ROAD / 2 + 1.2);
-        if (!inRiver(t + 11)) lampM.push(new THREE.Matrix4().compose(_p.set(off, 0, t + 11), _q.setFromAxisAngle(Y, side > 0 ? -Math.PI / 2 : Math.PI / 2), _s.set(1, 1, 1)));
-        lampM.push(new THREE.Matrix4().compose(_p.set(t + 11, 0, off), _q.setFromAxisAngle(Y, side > 0 ? Math.PI : 0), _s.set(1, 1, 1)));
+        if (!inRiver(t + 11) && lampOk(off, t + 11)) lampM.push(new THREE.Matrix4().compose(_p.set(off, 0, t + 11), _q.setFromAxisAngle(Y, side > 0 ? -Math.PI / 2 : Math.PI / 2), _s.set(1, 1, 1)));
+        if (lampOk(t + 11, off)) lampM.push(new THREE.Matrix4().compose(_p.set(t + 11, 0, off), _q.setFromAxisAngle(Y, side > 0 ? Math.PI : 0), _s.set(1, 1, 1)));
       }
     }
     const pk = A.models.props_world.scene;
@@ -372,6 +378,7 @@ export class EarthWorld extends World {
     }
     instanceKit(this.scene, kit.getObjectByName('BLD_fountain'), fountM);
     for (const [x, z, r, n] of [[PITCH - 20, -12, Math.PI / 2, 'PR_sign_magenta'], [12, PITCH - 20, 0, 'PR_sign_cyan'], [-PITCH + 28, 8, -Math.PI / 2, 'PR_sign_cyan']]) {
+      if (isDowntown(Math.round(x / PITCH), Math.round(z / PITCH))) continue;     // the downtown kit has its own signs
       const s = A.clone('props_world', n); s.position.set(x, 9, z); s.rotation.y = r; s.scale.setScalar(2.2); this.scene.add(s);
     }
   }
@@ -381,7 +388,9 @@ export class EarthWorld extends World {
     for (let bx = -N; bx <= N; bx++) for (let bz = -N; bz <= N; bz++) {
       const cx = bx * PITCH, cz = bz * PITCH, h = BLOCK / 2 - 1.8;
       if (Math.abs(cz - RIVER_Z) < BLOCK / 2) continue;                       // the river
-      paths.push(this.loop([[cx - h, cz - h], [cx + h, cz - h], [cx + h, cz + h], [cx - h, cz + h]]));
+      const L = this.loop([[cx - h, cz - h], [cx + h, cz - h], [cx + h, cz + h], [cx - h, cz + h]]);
+      if (isDowntown(bx, bz)) L.w = 2;                                        // busier sidewalks downtown
+      paths.push(L);
     }
     return paths;
   }
@@ -881,6 +890,11 @@ export class EarthWorld extends World {
     for (const r of map.roads) { x.beginPath(); r.pts.forEach((p, i) => { const [a, b] = toPx(p.x, p.z); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke(); }
     x.lineWidth = 1.2;
     for (let i = -N - 1; i <= N; i++) { const c0 = (i + .5) * PITCH; let [a, b] = toPx(c0, -CITY_EDGE), [a2, b2] = toPx(c0, CITY_EDGE); x.beginPath(); x.moveTo(a, b); x.lineTo(a2, b2); x.stroke(); [a, b] = toPx(-CITY_EDGE, c0); [a2, b2] = toPx(CITY_EDGE, c0); x.beginPath(); x.moveTo(a, b); x.lineTo(a2, b2); x.stroke(); }
+    // downtown building footprints
+    if (this.downtown) {
+      x.fillStyle = '#48484e';
+      for (const [x0, z0, x1, z1] of this.downtown.footprints) { const [a, b] = toPx(x0, z0), [c2, d] = toPx(x1, z1); x.fillRect(a, b, Math.max(1, c2 - a), Math.max(1, d - b)); }
+    }
     x.fillStyle = 'rgba(214,190,140,.7)';
     for (const f of FARMS) { const [a, b] = toPx(f.pos[0] - f.w / 2, f.pos[1] - f.d / 2); x.fillRect(a, b, f.w / SIZE * S, f.d / SIZE * S); }
     // the spaceport: landing field, pads, terminal, container yard
@@ -935,6 +949,7 @@ export class EarthWorld extends World {
     this.traffic.update(dt);
     this.wanted.update(dt);
     if (this.flora) this.flora.update(g.camera, dt);
+    if (this.downtown) this.downtown.update(g.camera, dt);
     if (this.vendor) this.vendor.update(dt);
     // district name in the HUD
     this.distT = (this.distT || 0) - dt;

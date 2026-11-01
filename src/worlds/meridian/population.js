@@ -133,7 +133,7 @@ export class Population {
     this.peds = [];
     const COUNT = game.touch ? 60 : 150;          // phones: smaller crowd (each pedestrian is a full skinned body)
     // spread the crowd along every path, weighted by path length
-    const total = paths.reduce((a, p) => a + p.total, 0);
+    const total = paths.reduce((a, p) => a + p.total * (p.w || 1), 0);      // w: busier paths (downtown) get more walkers
     for (let i = 0; i < COUNT; i++) {
       const sex = i % 2 ? 'male' : 'female';
       const npc = !!(game.assets.models && game.assets.models[MODEL[sex]]) && !window.__civPeds;   // __civPeds: old crowd (A/B tests)
@@ -146,7 +146,7 @@ export class Population {
       const q = new Ped(game, av, sex);
       q.baseScale = TARGET_H[sex] / modelH[model];
       let r = Math.random() * total, path = paths[0];
-      for (const pth of paths) { r -= pth.total; if (r <= 0) { path = pth; break; } }
+      for (const pth of paths) { r -= pth.total * (pth.w || 1); if (r <= 0) { path = pth; break; } }
       this.place(q, path, Math.random() * path.total);
       this.peds.push(q);
     }

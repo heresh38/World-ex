@@ -36,7 +36,7 @@ const CREATURES = [...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k =>
   ...['mite', 'host', 'bladder', 'amalgam'].map(k => ['writhe_' + k, 'writhe_' + k + '.glb', 1])];
 const WORLD_MODELS = {
   ship: [],
-  earth: [['cars', 'cars.glb', 8], ['trees', 'trees.glb', 8], ['spaceport', 'spaceport.glb', 6], ['city_buildings', 'city_buildings.glb', 2],
+  earth: [['cars', 'cars.glb', 8], ['trees', 'trees.glb', 8], ['spaceport', 'spaceport.glb', 6], ['city_buildings', 'city_buildings.glb', 2], ['downtown', 'downtown.glb', 4], ['downtown_street', 'downtown_street.glb', 1],
     ['rural', 'rural.glb', 1], ['player_female_npc', 'player_female_npc.glb', 4], ['player_male_npc', 'player_male_npc.glb', 3],
     ['civ_female', 'civ_female.glb', 1], ['civ_male', 'civ_male.glb', 1], ['car_sport', 'car_sport.glb', 1], ['car_utility', 'car_utility.glb', 1],
     ['ship_dropship', 'ship_dropship.glb', 1]],
