@@ -611,7 +611,7 @@ class Game {
     // station framing shot overrides the follow camera
     if (this.camFocus) {
       const f = this.camFocus;
-      if (f.orbit) p.avatar.root.rotation.y = p.yaw + (this.wardrobeSpin || 0);
+      if (f.orbit) p.avatar.root.rotation.set(0, p.yaw + (this.wardrobeSpin || 0), 0);
       let k = Math.min(1, (performance.now() - f.t0) / 900); k = k * k * (3 - 2 * k);
       this.camera.position.lerpVectors(f.p0, f.pos, k);
       this.camera.quaternion.slerpQuaternions(f.q0, f.q, k);

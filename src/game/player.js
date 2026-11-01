@@ -51,7 +51,7 @@ export class Player {
     this.mode = 'foot'; this.dead = false; this.health = this.maxHealth; this.shield = this.maxShield;
     this.crouch = false; this.slideT = 0; this.climb = null; this.seat = null; this.dip = 0; this.eyeDrop = 0;
     if (this.avatar.rag) { this.avatar.rag = null; this.avatar.play('IdleRelaxed', 0); this.g.weapons && this.g.weapons.refreshModel(); }
-    this.avatar.root.position.copy(p); this.avatar.root.rotation.y = yaw;
+    this.avatar.root.position.copy(p); this.avatar.root.rotation.set(0, yaw, 0);
     this.camCur = this.camDist;
     this.snapCamera = true;
   }
@@ -124,7 +124,7 @@ export class Player {
     if (this.dead) { av.update(dt); return; }
     const k = c => input.key(c);
     if (this.mode === 'sit') {
-      av.root.position.copy(this.pos); av.root.rotation.y = this.yaw; av.aimPitch = 0; av.update(dt);
+      av.root.position.copy(this.pos); av.root.rotation.set(0, this.yaw, 0); av.aimPitch = 0; av.update(dt);
       if (input.enabled && (input.pressed('KeyW') || input.pressed('KeyS') || input.pressed('Space') || input.pressed('KeyE'))) { input.consume('KeyE'); this.stand(world); }
       return;
     }
@@ -134,7 +134,7 @@ export class Player {
       const t = Math.min(1, c.t), up = Math.min(1, t / .62), fw = Math.max(0, (t - .45) / .55);
       const eu = 1 - Math.pow(1 - up, 3), ef = fw * fw * (3 - 2 * fw);
       this.pos.set(c.from.x + (c.to.x - c.from.x) * ef, c.from.y + (c.to.y + .05 - c.from.y) * eu, c.from.z + (c.to.z - c.from.z) * ef);
-      av.root.position.copy(this.pos); av.root.rotation.y = this.yaw;
+      av.root.position.copy(this.pos); av.root.rotation.set(0, this.yaw, 0);   // full set: a quaternion copied in a vehicle can leave x/z at ±π (mirrored facing)
       av.play('Jump', .1); av.update(dt);
       this.eyeDrop = Math.sin(t * Math.PI) * .25;
       if (t >= 1) { this.climb = null; this.pos.copy(c.to); this.vel.set(c.dir.x * 2, 0, c.dir.z * 2); this.grounded = true; this.g.audio.land(); }
@@ -219,7 +219,7 @@ export class Player {
     if (faceCam) target = Math.atan2(_f.x, _f.z);
     let dy = target - this.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     if (fp) this.yaw = target; else this.yaw += dy * Math.min(1, (faceCam ? 20 : 12) * dt);
-    av.root.position.copy(this.pos); av.root.rotation.y = this.yaw;
+    av.root.position.copy(this.pos); av.root.rotation.set(0, this.yaw, 0);   // full set: a quaternion copied in a vehicle can leave x/z at ±π (mirrored facing)
     // camera height: slide / crouch drop the eye, landings dip it briefly
     const drop = this.slideT > 0 ? .75 : this.crouch ? .55 : 0;
     this.eyeDrop += (drop - this.eyeDrop) * Math.min(1, dt * 12);
