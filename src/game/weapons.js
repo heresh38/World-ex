@@ -24,8 +24,8 @@ const WEAR = {
 const GOO = {
   spit: { color: 0x7cff3a, size: .065, grav: 1, life: 3 },
   bile: { color: 0xc8e040, size: .032, grav: 1.3, life: 1.1 },
-  brood: { color: 0x9a2a3a, size: .1, grav: .85, life: 2.4 },
-  larva: { color: 0x6a1a26, size: .045, grav: 0, life: 4.5 },
+  brood: { color: 0xd8607a, size: .1, grav: .85, life: 2.4 },
+  larva: { color: 0xc0506a, size: .045, grav: 0, life: 4.5 },
 };
 
 function addWear(m, look) {
@@ -96,9 +96,18 @@ export class Weapons {
     this.streaks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_ROUNDS * 3), 3);
     this.streaks.frustumCulled = false; this.streaks.count = 0;
     // goo globs, droplets, spore pods and parasites: one instanced draw
-    this.globs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .32, metalness: 0,
-      emissive: 0x1c3a0c, emissiveIntensity: 1 }), MAX_GOO);
+    // textured with the shared Writhe sac set (veined, glistening membrane) and lit from within by the same map, so a
+    // pod or glob never reads as a black ball in shade; instanceColor tints each kind
+    const gtex = (f, srgb) => { const t = new THREE.TextureLoader().load('assets/textures/' + f); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 4; return t; };
+    const gmap = gtex('hx_sac_c.jpg', true);
+    this.globs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .32, metalness: 0,
+      map: gmap, normalMap: gtex('hx_sac_n.jpg', false), emissive: 0xffffff, emissiveMap: gmap, emissiveIntensity: .45 }), MAX_GOO);
     this.globs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_GOO * 3), 3);
+    // the inner glow takes each glob's own tint (spit green, bile yellow, brood pink) instead of the raw map colour
+    this.globs.material.onBeforeCompile = sh => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR\ntotalEmissiveRadiance *= vColor.rgb;\n#endif');
+    };
     this.globs.frustumCulled = false; this.globs.count = 0; this.globs.castShadow = false;
   }
 
