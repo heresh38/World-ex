@@ -100,8 +100,10 @@ fs.mkdirSync(OUT, { recursive: true });
     console.log('perf', k, JSON.stringify(perf[k]));
   }
   perf.memory = await ev(() => { const g = window.__game, r = g.renderer.r.info; let tex = 0, px = 0; const seen = new Set();
-    g.scene.traverse(o => { for (const m of o.material ? [].concat(o.material) : []) for (const k in m) { const t = m[k]; if (t && t.isTexture && !seen.has(t) && t.image) { seen.add(t); const im = t.image; const w = im.width || 0, h = im.height || 0; tex++; px = Math.max(px, w, h); } } });
-    return { textures: r.memory.textures, geometries: r.memory.geometries, maxSide: px, sceneTex: tex, heapMB: Math.round(performance.memory.usedJSHeapSize / 1e6) }; });
+    let bytes = 0; const srcs = new Set();
+    g.scene.traverse(o => { for (const m of o.material ? [].concat(o.material) : []) { const ts = []; for (const k in m) ts.push(m[k]); if (m.uniforms) for (const k in m.uniforms) ts.push(m.uniforms[k] && m.uniforms[k].value);
+      for (const t of ts) if (t && t.isTexture && !seen.has(t) && t.image) { seen.add(t); const im = t.image; const w = im.width || 0, h = im.height || 0; tex++; px = Math.max(px, w, h); if (!srcs.has(t.source)) { srcs.add(t.source); bytes += w * h * 4 * 1.33; } } } });
+    return { textures: r.memory.textures, geometries: r.memory.geometries, maxSide: px, sceneTex: tex, texMB: Math.round(bytes / 1e6), heapMB: Math.round(performance.memory.usedJSHeapSize / 1e6) }; });
   console.log('PERF', JSON.stringify(perf));
   if (PERF_ONLY) { console.log('page errors:', errs.length); await b.close(); process.exit(errs.length ? 1 : 0); }
   // ---------------------------------------------------------------- the dead city

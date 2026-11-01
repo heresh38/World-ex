@@ -133,11 +133,11 @@ export const DISTRICTS = [
     id: 'old', name: 'Old Quarter', a0: 15, a1: 75, blurb: 'Collapsed apartments and the market hall. The dead lie where they fell, mostly',
     lots: { stand: .48, collapse: .34, stub: .14 }, stand: { VR_mid_a: 3, VR_mid_b: 3, VR_mid_c: 2, VR_low_a: 3, VR_low_b: 3, VR_hall: 2 },
     enemies: { host: 3, mite: 1.2, stalker: 1.2, bladder: .4 }, shelter: { host: 3, stalker: 1, mite: 1 },
-    beh: { ...BEH, sleep: 4 }, pack: [2, 4], inside: .6, perch: .3, feed: .6, loot: 1, danger: 1,
+    beh: { ...BEH, sleep: 4 }, pack: [2, 4], inside: .42, perch: .3, feed: .5, loot: 1, danger: 1,
     populate(ctx) {
       fillLots(ctx, this);
       streets(ctx, this, 80);
-      residents(ctx, this, 16);
+      residents(ctx, this, 13);
       for (let i = 0; i < 2; i++) { const n0 = ctx.street(); nest(ctx, n0.x, n0.z, i === 0); }
       for (let i = 0; i < 5; i++) { const p = ctx.street(); ctx.cache(p.x, p.z, 1); }
       for (let i = 0; i < 2; i++) { const m = ctx.street(); ctx.metro(m.x, m.z); }

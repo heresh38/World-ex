@@ -86,7 +86,10 @@ plaza, and glowing cyan kerb strips.
   track, catenary, tram, crane mast/jib, street furniture. Facade sets `dt_*_c/_n/_m` (m: R = glass of every window
   .55..1, G rough, B metal; runtime reuses R as the night-window mask, see Day/night below); untextured colours are merged per mesh into vertex-coloured
   `dt_plain`, `dt_plain_metal`, `dt_plain_glow` (fewer draw calls; the glow takes the vertex colour). Buildings are instanced per design/material with hero/LOD buckets by
-  camera distance; furniture is chunk-instanced. Test: `tools/test/downtown.js` (`PERF_ONLY=1` for draw-call numbers).
+  camera distance (`LOD_NEAR`: ~250 m + 0.75 m per metre of height for buildings, skywalks 170, track 130, platform 210,
+  times the quality draw factor, x0.85 on touch); across the last 30 % the two tiers cross-fade with the shared
+  screen-door dither (`src/core/lodfade.js`, LOD tiers use faded copies of the dt materials); furniture is
+  chunk-instanced. Test: `tools/test/downtown.js` (`PERF_ONLY=1` for draw-call numbers).
 - Spaceport (`spaceport.py`, `SPACEPORT` in `layout.js`): a ship landing field south of the city (VTOL pads, terminal with the
   Quartermaster, control tower, hangars, fuel farm, container yard; no runways — ships land vertically). The player's ship lands
   on pad 1; `src/game/cinematic.js` plays the landing / take-off cutscenes (`g.cineTime` pins the clock for tests).
@@ -135,7 +138,17 @@ by whorls/pads; leaf-cluster cards (`leaves_*`, alpha MASK, normals bent out of 
 `snow` (up-facing branch/rock faces), `rock`. Each variant has `TR_x` (hero 3-6k tris), `TR_x_mid`, `TR_x_lod` (crossed
 impostor cards from a Cycles-baked atlas); root extras `h`, `w`, `trunk`, `species`. Also bakes `snow_c/_n.jpg` (terrain).
 Runtime: `src/worlds/meridian/flora.js` (`Flora`: instanced LOD buckets by camera distance, wind, mip alpha boost;
-`POOLS` = planting sets per area; `addLive/removeLive` for streamed worlds). Earth plants by area (parks cherry ring +
+`POOLS` = planting sets per area; `addLive/removeLive` for streamed worlds). LOD (`LOD` in flora.js, scaled by the
+quality draw factor, x0.9 on touch, and by tree height): hero -> mid at ~78 m, mid -> impostor at ~290 m, bushes fade
+out by ~330 m, rocks (one tier) by ~430 m. Tiers never swap in one frame: each hand-over cross-fades over the last 30 %
+with a screen-door dither computed per frame in the vertex shader from the per-instance `aFade` (s, e, born) attribute
+(`src/core/lodfade.js`: complementary dither so the pair never shows holes or double cover; the CPU re-buckets every
+4 m). Streamed instances (`addLive(..., appear)`, planet chunks, planet scatter `Pool`s and terrain chunks) dither in
+over 1.6 s and out on removal. Never give a material that uses `fadeShader` to a mesh without `aFade` (an unbound
+attribute reads a stale generic value): use `fadeMaterial()` copies. `flora.forceTier` draws one tier everywhere (tests).
+`World.warmTextures()` (end of each world build) uploads every scene texture behind the loading screen and sets
+anisotropic filtering (`assets.aniso`: 8, 4 on touch). Pop-in test: `tools/test/popin.js` (A/B frames across every
+LOD change while walking toward trees, a rock, towers and a streamed jungle; images in `test-out/popin/`). Earth plants by area (parks cherry ring +
 oak/maple, quays willow/ash, suburbs maple/birch + hedges, villages, lone field trees, woods by altitude up to the
 `SNOW_LINE` of the Meridian Peaks massif in `layout.js`); trunks collide via `kitColliders`. `planet.js` streams
 snowy conifers (glacier), jungle canopy and savanna trees (mesa) per chunk. Test: `tools/test/trees.js`.

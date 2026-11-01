@@ -21,7 +21,7 @@ import { VanthosAmbience } from './ambience.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
-const STREAM_IN = 230, STREAM_OUT = 340, SPAWN_PER_FRAME = 3;
+const STREAM_IN = 200, STREAM_OUT = 290, SPAWN_PER_FRAME = 3;
 const FOG = '#5a564f', FOG_NEAR = 22, FOG_FAR = 500;
 // what grows back: young birch and ash, scrub, autumn-sick maples; willows where the water stands
 const GROW = { tree: ['TR_birch_a', 'TR_birch_b', 'TR_birch_c', 'TR_ash_young', 'TR_ash_young', 'TR_understory_a', 'TR_understory_b', 'TR_ash_b', 'TR_birch_b'],
@@ -221,7 +221,7 @@ export class VanthosWorld extends World {
         obj.position.set(x, o.y !== undefined ? o.y : groundAt(x, z), z); obj.rotation.y = rot || 0;
         if (o.scale) obj.scale.setScalar(o.scale);
         obj.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-        sc.add(obj);
+        sc.add(obj); self.cullable(obj, 40);
         if (o.solid) self.collision.addObject(obj, 'prop', .15);
         return obj;
       },
@@ -259,6 +259,9 @@ export class VanthosWorld extends World {
     };
     return ctx;
   }
+
+  // loose objects (props, caches, metro entrances, shards) past the haze are not drawn at all
+  cullable(obj, r = 10) { (this.culls = this.culls || []).push([obj, r]); }
 
   // weeds through the kerbs and lots, trees on the ruins' rubble and roofs, the odd dead lamp
   overgrow() {
@@ -514,7 +517,7 @@ export class VanthosWorld extends World {
 
   makeMetro(x, y, z, D) {
     const g = this.g, A = g.assets;
-    const e = A.clone('vanthos', 'VX_metro_entrance'); e.position.set(x, y, z); this.scene.add(e);
+    const e = A.clone('vanthos', 'VX_metro_entrance'); e.position.set(x, y, z); this.scene.add(e); this.cullable(e, 10);
     const seed = Math.abs(Math.round(x * 13 + z * 7)) % 100000;
     const it = { id: 'metro', pos: e.position, r: 3, label: 'Metro entrance', verb: 'Descend into the metro', key: 'E',
       action: () => { g.metroEntry = { x: x + 6, y, z, district: D.id, seed, level: this.levelAt(x, z, D) }; g.travel('vanthos_metro'); } };
@@ -524,7 +527,7 @@ export class VanthosWorld extends World {
 
   makeCache(x, y, z, tier, label, unlocked = null) {
     const g = this.g, A = g.assets;
-    const c = A.clone('props_world', 'PR_cache'); c.position.set(x, y, z); c.rotation.y = Math.random() * 6; this.scene.add(c);
+    const c = A.clone('props_world', 'PR_cache'); c.position.set(x, y, z); c.rotation.y = Math.random() * 6; this.scene.add(c); this.cullable(c, 4);
     this.collision.addObject(c, 'cache');
     const cache = { obj: c, lid: c.getObjectByName('cache_lid'), open: false, pos: c.position.clone(), t: 0, tier, label };
     cache.it = { id: 'cache', pos: c.position, r: 2.2, label, key: 'E',
@@ -550,7 +553,7 @@ export class VanthosWorld extends World {
     if (this.g.save.vanthos.shards.includes(id)) return;
     const s = this.g.assets.clone('props_world', 'PR_core'); s.position.set(x, Math.max(y, -2.4) + .6, z); s.scale.setScalar(.8);
     s.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); if (o.material.emissive) o.material.emissive.set(0x3ae6ff); } });
-    this.scene.add(s); this.shards.push({ id, obj: s, pos: s.position });
+    this.scene.add(s); this.cullable(s, 4); this.shards.push({ id, obj: s, pos: s.position });
   }
 
   // ---------------------------------------------------------------- the living (and the dead) of the city
@@ -656,6 +659,8 @@ export class VanthosWorld extends World {
     if (this.op) { this.op.update(dt); g.hud.bossBar(this.op.bossBar()); }
     // ambushers stay still and hidden until the player is close
     for (const e of g.enemies.list) if (e.ambush && e.state === 'idle' && e.alive && e.pos.distanceTo(p.pos) < 16) { e.ambush = false; e.alert(); g.hud.toast('Ambush!'); }
+    this.cullT = (this.cullT || 0) - dt;
+    if (this.cullT <= 0 && this.culls) { this.cullT = .5; const cp = g.camera.position, F = this.scene.fog.far + 20; for (const [o, r] of this.culls) o.visible = Math.hypot(o.position.x - cp.x, o.position.z - cp.z) < F + r; }
     // the nearest district lights take the pooled point lights
     this.lightT = (this.lightT || 0) - dt;
     if (this.lightT <= 0) { this.lightT = .4; this.near = this.lights.map(L => [L, L.pos.distanceToSquared(p.pos)]).filter(x => x[1] < 140 * 140).sort((a, b) => a[1] - b[1]).slice(0, this.lightPool.length).map(x => x[0]); }

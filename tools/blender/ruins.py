@@ -564,8 +564,16 @@ def mound_mesh(mb, rg, M, H, rx, ry, cx=0.0, cy=0.0, n=22, chunks=26, slabs=5, l
         a = rg.uniform(0, TAU); dd = math.sqrt(rg.uniform(0, 1)) * .9
         u, v = math.cos(a) * dd, math.sin(a) * dd
         x, y = cx + u * rx, cy + v * ry
-        s = rg.uniform(.4, 1.3) * (1.3 - dd * .6)
-        chunk(mb, rg, x, y, h(u, v) + s * .2, s, M['slab'] if k % 3 == 0 else M['rubble'])
+        s = rg.uniform(.5, 1.9) * (1.4 - dd * .6)
+        chunk(mb, rg, x, y, h(u, v) + s * .15, s, M['slab'] if k % 3 == 0 else M['rubble'])
+    for k in range(max(1, slabs // 2)):                            # pieces of facade that came down whole, windows and all
+        a = rg.uniform(0, TAU); dd = rg.uniform(.2, .7)
+        u, v = math.cos(a) * dd, math.sin(a) * dd
+        x, y, z = cx + u * rx, cy + v * ry, h(u, v)
+        b = rg.uniform(0, TAU); W = rg.uniform(4, 7); L = rg.uniform(4, 8); tilt = rg.uniform(.35, 1.1)
+        p0 = (x, y, z - 1.0); p1 = (x + math.cos(b) * L * math.cos(tilt), y + math.sin(b) * L * math.cos(tilt), z - 1.0 + L * math.sin(tilt))
+        obox(mb, p0, p1, W, .3, M['conc'], up=(math.cos(b + 1.57), math.sin(b + 1.57), 0), tile=7)
+        rebar(mb, rg, p1, (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]), 4, M)
     for k in range(slabs):                                         # broken floor slabs sticking out at an angle
         a = rg.uniform(0, TAU); dd = rg.uniform(.1, .6)
         u, v = math.cos(a) * dd, math.sin(a) * dd
@@ -857,13 +865,13 @@ def stub(mb, M, lo, rg):
 
 # --- rubble
 def mound_l(mb, M, lo, rg):
-    mound_mesh(mb, rg, M, 6.0, 19, 16, chunks=60, slabs=10, lo=lo)
-    return dict(w=38, d=32, h=6, mound=[6.0, 19, 16, 0, 0], kind='rubble')
+    mound_mesh(mb, rg, M, 8.5, 19, 16, chunks=70, slabs=12, lo=lo)
+    return dict(w=38, d=32, h=8.5, mound=[8.5, 19, 16, 0, 0], kind='rubble')
 
 
 def mound_m(mb, M, lo, rg):
-    mound_mesh(mb, rg, M, 3.4, 11, 9, chunks=30, slabs=5, lo=lo)
-    return dict(w=22, d=18, h=3.4, mound=[3.4, 11, 9, 0, 0], kind='rubble')
+    mound_mesh(mb, rg, M, 4.6, 11, 9, chunks=36, slabs=6, lo=lo)
+    return dict(w=22, d=18, h=4.6, mound=[4.6, 11, 9, 0, 0], kind='rubble')
 
 
 def debris(mb, M, lo, rg):

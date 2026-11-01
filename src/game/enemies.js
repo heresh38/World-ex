@@ -695,10 +695,10 @@ export class EnemyManager {
       const md = Math.abs(e.pos.x - pp.x) + Math.abs(e.pos.z - pp.z);
       // stray spawns (brood, risen hosts) are dropped once the player has left them far behind
       if (e.extra && e.alive && e.state !== 'combat' && md > 260) { e.dispose(); this.list.splice(i, 1); continue; }
-      // idle creatures far away cost almost nothing: beyond ~250 m they are frozen and hidden (the fog hides them
+      // idle creatures far away cost almost nothing: beyond ~110-150 m they are frozen and hidden (the haze hides them
       // anyway), beyond ~95 m they think and move four times less often (their animation is not advanced)
       if (e.alive && e.state === 'idle' && !(e.riseT > 0)) {
-        if (md > 175) { if (e.obj.visible) e.obj.visible = false; e.skipDt = 0; this.asleep++; if (e.faction === 'writhe') wr++; continue; }
+        if (md > 125) { if (e.obj.visible) e.obj.visible = false; e.skipDt = 0; this.asleep++; if (e.faction === 'writhe') wr++; continue; }
         if (!e.obj.visible && !e.hidden) e.obj.visible = true;
         if (md > 95) {
           e.skipDt = (e.skipDt || 0) + dt;
@@ -710,6 +710,9 @@ export class EnemyManager {
         }
       } else if (e.alive && !e.obj.visible && !e.hidden && !e.T.pop) e.obj.visible = true;
       if (!e.update(dt)) { e.dispose(); this.list.splice(i, 1); continue; }
+      // only creatures near the player cast shadows (the shadow pass is the expensive half of a skinned draw)
+      const sh = md < 45;
+      if (e.av && e.castsShadow !== sh) { e.castsShadow = sh; e.obj.traverse(o => { if (o.isMesh) o.castShadow = sh; }); }
       if (e.alive && e.state === 'combat') combat++;
       if (e.alive && e.faction === 'writhe') wr++;
     }

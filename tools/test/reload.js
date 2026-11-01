@@ -103,14 +103,15 @@ fs.mkdirSync(OUT, { recursive: true });
       // ---- cancel paths: every part back at rest, the arm back on the foregrip
       const restCheck = () => {
         const vm = g.viewmodel, R = vm.gr, bad = [];
+        const lock = arch === 'pistol' && a.mag <= 0;      // an empty pistol keeps its slide locked back (correct, not a leftover)
         if (R) for (const [k, rr] of Object.entries(R.rest)) {
-          const o = R.p[k]; if (!o) continue;
+          const o = R.p[k]; if (!o || (lock && k === 'slide')) continue;
           if (o.position.distanceTo(rr.pos) > 1e-5 || o.quaternion.angleTo(rr.q) > 1e-4) bad.push(k);
           if (o.visible === k.startsWith('x_')) bad.push(k + ':vis');
         }
         if (R) for (const [k, o] of Object.entries(R.extra)) if (o && o.visible) bad.push('extra:' + k);
         if (vm.foreRest && vm.armL.position.distanceTo(vm.foreRest) > 1e-5) bad.push('armL');
-        const av = W.avRig; if (av) for (const [k, rr] of Object.entries(av.rest)) { const o = av.p[k]; if (o && (o.position.distanceTo(rr.pos) > 1e-5 || o.quaternion.angleTo(rr.q) > 1e-4)) bad.push('av:' + k); }
+        const av = W.avRig; if (av) for (const [k, rr] of Object.entries(av.rest)) { const o = av.p[k]; if (o && !(lock && k === 'slide') && (o.position.distanceTo(rr.pos) > 1e-5 || o.quaternion.angleTo(rr.q) > 1e-4)) bad.push('av:' + k); }
         return bad;
       };
       const mid = () => { a.mag = 0; a.reserve = S.mag * 3; W.startReload(S); window.__step(Math.round(W.reloadTotal * .45 * 60)); };
