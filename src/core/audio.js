@@ -413,12 +413,17 @@ export class Audio {
         return { gain: g, nodes };
       });
     } else if (kind === 'city') {
+      // distant city bed: low traffic rumble + a brighter hiss of tyres and voices, and a wind layer for the night;
+      // cityMix() shifts the balance with the time of day and how deep in the city the listener is
       this.loop('amb_city', () => {
         const g = c.createGain(); g.gain.value = 0; g.connect(this.amb); g.gain.setTargetAtTime(.45, c.currentTime, 1);
         const a = this.noiseLoop(g, 500, 'lowpass', .5), b = this.noiseLoop(g, 2400, 'bandpass', .4);
         const lfo = c.createOscillator(); lfo.frequency.value = .07; const lg = c.createGain(); lg.gain.value = 250; lfo.connect(lg); lg.connect(a.fl.frequency); lfo.start();
+        const ag = c.createGain(); ag.gain.value = 1; a.fl.disconnect(); a.fl.connect(ag); ag.connect(g);
         const bg = c.createGain(); bg.gain.value = .15; b.fl.disconnect(); b.fl.connect(bg); bg.connect(g);
-        return { gain: g, nodes: [a.src, b.src, lfo] };
+        const w = this.noiseLoop(g, 700, 'bandpass', 1.1), wg = c.createGain(); wg.gain.value = 0; w.fl.disconnect(); w.fl.connect(wg); wg.connect(g);
+        const wl = c.createOscillator(); wl.frequency.value = .09; const wlg = c.createGain(); wlg.gain.value = 320; wl.connect(wlg); wlg.connect(w.fl.frequency); wl.start();
+        return { gain: g, ag, bg, wg, af: a.fl, nodes: [a.src, b.src, lfo, w.src, wl] };
       });
     } else if (kind === 'wind') {
       this.loop('amb_wind', () => {
@@ -428,6 +433,16 @@ export class Audio {
         return { gain: g, nodes: [a.src, lfo] };
       });
     }
+  }
+
+  // Earth's city bed by time of day (meridian/daynight.js + ambience): day 0..1, wind 0..1, urban 0..1 (deep in the city)
+  cityMix(day, wind, urban = 1) {
+    const l = this.loops.amb_city; if (!l || !l.ag) return;
+    const t = this.ctx.currentTime, u = .35 + .65 * urban;
+    l.ag.gain.setTargetAtTime((.45 + .55 * day) * u, t, 2);
+    l.bg.gain.setTargetAtTime((.04 + .16 * day) * u, t, 2);
+    l.af.Q.setTargetAtTime(.5, t, 2);
+    l.wg.gain.setTargetAtTime(.05 + .32 * wind, t, 3);
   }
 
   // welding crackle: a looping source whose gain the caller modulates by distance

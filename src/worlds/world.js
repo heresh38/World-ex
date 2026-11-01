@@ -22,6 +22,7 @@ export class World {
   // a place to sit: pos is the floor point under the seat (where the Sit clip puts the body), yaw the facing
   addSeat(pos, yaw, label = 'Seat') {
     const p = pos.clone(), fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    (this.seatSpots = this.seatSpots || []).push({ pos: p, yaw, label });     // pedestrians sit here too (population.js)
     this.interactables.push({ id: 'seat', pos: p.clone().addScaledVector(fwd, .35), r: 1.25, label, verb: 'Sit', key: 'E',
       enabled: () => this.g.player.mode === 'foot', action: () => this.g.player.sit({ pos: p, yaw }) });
   }

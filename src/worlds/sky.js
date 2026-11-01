@@ -136,6 +136,9 @@ function earthPlanet(M, sunDir, radius) {
 // Surface sky dome: gradient + sun + drifting cloud noise; the horizon melts into the fog colour, and a world may
 // hang a giant planet (banded, optionally ringed) or moons in its sky. Bodies are drawn analytically in direction
 // space, so they sit at infinity and never clip.
+// Day/night (Earth, meridian/daynight.js): `night` 0..1 fades in stars and the moon (moonDir), `cloudC` tints the clouds,
+// `glowC` adds city light pollution low on the horizon, and gndC/gndK darken the lower half (used for the reflection
+// probe, so glass facades reflect a dark street below the horizon instead of a bright haze). All default to off.
 export function atmosphereSky(top, horizon, sunColor, sunDir, opts = {}) {
   const B = opts.body || null, V3 = a => new THREE.Vector3(...a).normalize();
   const m = new THREE.ShaderMaterial({
@@ -145,9 +148,14 @@ export function atmosphereSky(top, horizon, sunColor, sunDir, opts = {}) {
       hasBody: { value: B ? 1 : 0 }, bDir: { value: B ? V3(B.dir) : new THREE.Vector3(0, 1, 0) }, bSize: { value: B ? B.size : .1 },
       bCol: { value: new THREE.Color(B ? B.color : '#fff') }, bBand: { value: new THREE.Color(B ? B.band : '#fff') },
       ring: { value: new THREE.Vector2(...(B && B.ring ? B.ring : [0, 0])) }, ringCol: { value: new THREE.Color(B && B.ringColor ? B.ringColor : '#fff') },
-      ringN: { value: B && B.tilt ? V3(B.tilt) : new THREE.Vector3(0, 1, 0) }, moon2: { value: B && B.moon2 ? V3(B.moon2) : new THREE.Vector3(0, -1, 0) } },
+      ringN: { value: B && B.tilt ? V3(B.tilt) : new THREE.Vector3(0, 1, 0) }, moon2: { value: B && B.moon2 ? V3(B.moon2) : new THREE.Vector3(0, -1, 0) },
+      night: { value: 0 }, moonDir: { value: new THREE.Vector3(0, -1, 0) }, cloudC: { value: new THREE.Color(1, 1, 1) }, glowC: { value: new THREE.Color(0, 0, 0) },
+      gndC: { value: new THREE.Color(opts.ground || 0x000000) }, gndK: { value: opts.groundK || 0 }, sunK: { value: 1 } },
     vertexShader: `varying vec3 vD;void main(){vD=normalize(position);vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}`,
-    fragmentShader: NOISE + `varying vec3 vD;uniform vec3 top,hor,sunC,sunDir,fogC,bDir,bCol,bBand,ringCol,ringN,moon2;uniform float time,hasBody,bSize;uniform vec2 ring;
+    fragmentShader: NOISE + `varying vec3 vD;uniform vec3 top,hor,sunC,sunDir,fogC,bDir,bCol,bBand,ringCol,ringN,moon2,moonDir,cloudC,glowC,gndC;uniform float time,hasBody,bSize,night,gndK,sunK;uniform vec2 ring;
+      float star(vec3 d,float cells,float thr,float seed){vec3 c=floor(d*cells);float h=h3(c+seed);if(h<thr)return 0.;
+        vec3 j=vec3(h3(c+seed+1.7),h3(c+seed+3.1),h3(c+seed+5.3));vec3 sp=(c+.2+j*.6)/cells;
+        float r=length(normalize(sp)-d)*cells;return smoothstep(1.,.0,r*2.4)*(.35+.65*h3(c+seed+9.1));}
       // a sphere of angular radius r centred on direction C, lit by the sun; returns colour in rgb and coverage in a
       vec4 body(vec3 d,vec3 C,float r,vec3 col,vec3 band,float banded){
         vec3 T=normalize(cross(C,vec3(0.,1.,0.)+vec3(1e-4)));vec3 U=cross(T,C);
@@ -163,7 +171,27 @@ export function atmosphereSky(top, horizon, sunColor, sunDir, opts = {}) {
       void main(){vec3 d=normalize(vD);float y=max(d.y,0.);
         vec3 c=mix(hor,top,pow(y,.55));if(d.y<0.)c=hor*.8;
         float s=max(dot(d,sunDir),0.);
-        c+=sunC*(pow(s,1200.)*30.+pow(s,60.)*.5+pow(s,6.)*.18);
+        // the disc only above the horizon; the wide glow lingers after sunset (sunK fades the whole sun term)
+        float up=smoothstep(-.03,.01,sunDir.y);
+        c+=sunC*sunK*(pow(s,1200.)*30.*up+pow(s,60.)*.5*up+pow(s,6.)*.18);
+        if(night>0.){
+          // stars (two layers, twinkling) and a faint galactic band, fading into the horizon haze
+          float hz=smoothstep(.02,.3,d.y);vec3 gp=normalize(vec3(.35,1.,.25));float gl=dot(d,gp);
+          float band=exp(-gl*gl*30.);
+          float st=star(d,170.,.9975,1.)*1.6+star(d,330.,.996-band*.004,7.)*.55;
+          st*=.65+.35*sin(time*2.3+h3(floor(d*330.))*40.);
+          vec3 tint=mix(vec3(1.,.88,.76),vec3(.78,.86,1.),h3(floor(d*420.)));
+          c+=(tint*st+vec3(.018,.02,.03)*band*(.5+fbm(d*7.)*.7))*night*hz;
+          // the moon: lit disc with soft maria, a halo around it
+          float md=max(dot(d,moonDir),0.);
+          vec3 T=normalize(cross(moonDir,vec3(0.,1.,0.)+1e-4));vec3 U=cross(T,moonDir);
+          vec2 q=vec2(dot(d,T),dot(d,U))/.022;float r2=dot(q,q);
+          if(r2<1.&&dot(d,moonDir)>0.){float mar=fbm(vec3(q*2.2,5.));vec3 mc=vec3(.95,.96,1.)*(.75+.35*smoothstep(.35,.7,mar))*(1.-r2*.25);
+            c=mix(c,mc*2.4,smoothstep(1.,.9,r2)*night);}
+          c+=vec3(.55,.62,.8)*(pow(md,900.)*.6+pow(md,60.)*.06)*night;
+          // city light pollution low over the horizon
+          c+=glowC*smoothstep(.35,0.,d.y)*smoothstep(-.1,.0,d.y);
+        }
         vec2 uv=d.xz/(d.y+.15);float cl=smoothstep(.5,.85,fbm(vec3(uv*1.4+vec2(time*.004,0.),0.)));
         if(hasBody>.5){
           vec4 b=body(d,bDir,bSize,bCol,bBand,1.);
@@ -177,9 +205,11 @@ export function atmosphereSky(top, horizon, sunColor, sunDir, opts = {}) {
           c=mix(c,b.rgb+c*.25,b.a*.92);
           vec4 m2=body(d,moon2,bSize*.55,bCol*.9,bBand,.0);c=mix(c,m2.rgb+c*.2,m2.a*.9);
         }
-        c=mix(c,mix(hor*1.1,vec3(1.),.4)+sunC*pow(s,8.)*.4,cl*smoothstep(0.,.25,d.y)*.55);
+        c=mix(c,mix(hor*1.1,vec3(1.),.4)*cloudC+sunC*sunK*pow(s,8.)*.4,cl*smoothstep(0.,.25,d.y)*.55);
         // haze toward the horizon matches the scene fog so far terrain melts into the sky
         c=mix(c,fogC,smoothstep(.22,0.,d.y)*.85);
+        // reflection probe only: the street below the horizon is dark, so glass shows contrast instead of a bright haze
+        if(gndK>0.&&d.y<0.)c=mix(c,gndC,gndK*smoothstep(0.,-.12,d.y));
         gl_FragColor=vec4(c,1.);}`,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), m);

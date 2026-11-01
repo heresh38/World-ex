@@ -1,5 +1,7 @@
-// In-game time of day, shared by lighting, NPC routines and ambience. One full day lasts DAY_SECONDS of real time.
-// API: hour (0-24 float), day (count), daylight() 0..1, isNight(), between(a, b), set(hour), paused, speed (multiplier).
+// In-game time of day, shared by lighting, NPC routines and ambience. One full day lasts DAY_SECONDS of real time
+// (or settings.dayMinutes, Engineering terminal > Graphics > Day length).
+// API: hour (0-24 float), day (count), daylight() 0..1, isNight(), between(a, b), set(hour), paused, speed (multiplier),
+// label() 'HH:MM'. Earth's lighting (src/worlds/meridian/daynight.js) and ambience follow it.
 // Persisted in save.clock so a reload keeps the time. Tests: g.clock.set(21); g.clock.paused = true.
 export const DAY_SECONDS = 40 * 60;           // 40 real minutes per in-game day
 
@@ -14,7 +16,8 @@ export class Clock {
 
   update(dt) {
     if (this.paused) return;
-    this.hour += dt * this.speed * 24 / DAY_SECONDS;
+    const len = (this.save.settings && this.save.settings.dayMinutes) * 60 || DAY_SECONDS;
+    this.hour += dt * this.speed * 24 / len;
     if (this.hour >= 24) { this.hour -= 24; this.day++; }
     this.save.clock.hour = this.hour; this.save.clock.day = this.day;
   }

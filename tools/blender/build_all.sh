@@ -6,8 +6,9 @@ for s in textures ship_textures refs characters players civilians weapon_texture
   echo "== $s"
   blender --background --python tools/blender/$s.py 2>&1 | grep -E "^\[export|^\[ref|Error|Traceback|colliders" || true
 done
-# organic creatures: horror texture sets (hx_*), the Writhe infestation and the VANTHOS aliens (fleshkit.py SDF sculpting)
-for s in horror_textures writhe aliens; do
+# organic creatures: horror texture sets (hx_*), the Writhe infestation, the VANTHOS aliens and Earth's birds and stray
+# cats (fauna.glb) (fleshkit.py SDF sculpting)
+for s in horror_textures writhe aliens fauna; do
   echo "== $s"
   blender --background --python tools/blender/$s.py 2>&1 | grep -E "^\[export|^\[texture|Error|Traceback" || true
 done

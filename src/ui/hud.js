@@ -66,7 +66,14 @@ export class HUD {
     this.dirty = true;
   }
 
-  setLocation(region, name) { this.locEl.innerHTML = `${esc(region)}<b>${esc(name)}</b>`; }
+  setLocation(region, name) { this.locRegion = region; this.locName = name; this.renderLoc(); }
+  // in-game time under the place name, on worlds with a day/night cycle (Earth: meridian/daynight.js calls it each minute)
+  setTime(t) { this.timeText = t; if (this.timeEl && this.timeEl.isConnected) this.timeEl.textContent = t; else this.renderLoc(); }
+  renderLoc() {
+    const w = this.g.world, showT = this.timeText && w && w.daynight;
+    this.locEl.innerHTML = `${esc(this.locRegion || '')}<b>${esc(this.locName || '')}</b>${showT ? `<i class="h-time">${esc(this.timeText)}</i>` : ''}`;
+    this.timeEl = this.locEl.querySelector('.h-time');
+  }
   setHint(t) { t = t || ''; if (t !== this.hintText) { this.hintText = t; this.hintEl.textContent = t; } }
 
   buildCompass() {

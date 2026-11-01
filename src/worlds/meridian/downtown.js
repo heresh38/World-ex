@@ -11,12 +11,88 @@
 import * as THREE from 'three';
 import { BLOCK, PITCH, ROAD, HERITAGE, TRANSIT, isDowntown, DT_N } from './layout.js';
 import { mulberry } from '../../game/state.js';
+import { SKY } from './daynight.js';
 
 const Y = new THREE.Vector3(0, 1, 0);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
 const FACE = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 };
 const IN = 41.5;                    // building faces stay inside +-IN of the block centre (sidewalk and walkers beyond)
 const FACADE = /^dt_(glass_(blue|teal|silver|dark|bronze|green)|ribbon|precast|punched|brick|stone|limestone|derelict|shop)/;
+// facade tile sets (downtown_textures.py): windows per tile [bays, floors], room size in metres [width, height, depth] and
+// whose hours the lights keep (meridian/daynight.js SKY.lit*)
+const SETS = [
+  [/^dt_glass_/, [8, 4], [1.5, 4, 5], 'litOffice'], [/^dt_ribbon/, [8, 4], [1.5, 3.8, 5], 'litOffice'],
+  [/^dt_precast/, [4, 4], [3, 3.8, 4.5], 'litOffice'], [/^dt_punched/, [4, 4], [3.4, 3.2, 3.6], 'litHome'],
+  [/^dt_brick/, [4, 4], [3.6, 4.2, 4], 'litHome'], [/^dt_(stone|limestone)/, [4, 2], [4, 4.6, 4.5], 'litHome'],
+  [/^dt_derelict/, [4, 4], [3.6, 4, 4], 'litHome'], [/^dt_shop/, [8, 1], [5, 5, 6], 'litShop'],
+];
+// Window lights + interior mapping. The _m map's R channel marks the glass of every window (.55..1 per window). Each
+// window cell (bay x floor along a wall, hashed with the building's position and the wall's facing) gets its own lamp
+// colour and decides per time slot whether its room is lit (fraction from SKY.lit* for that kind of building), so the
+// city changes through the evening. Near the camera (desktop) a ray is traced into a box room behind the glass: back
+// wall with furniture and a picture, side walls, floor and a ceiling lamp, some rooms with blinds half down - glass with
+// depth behind it at the cost of a few dozen ALU ops, faded to a flat glow beyond 150 m and skipped on touch devices.
+const ROOM_GLSL = `
+float dtH(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+`;
+const WINDOW_FRAG = `#ifdef USE_EMISSIVEMAP
+{
+  float wm = texture2D( emissiveMap, vEmissiveMapUv ).r;
+  float glassK = smoothstep( .3, .5, wm );
+  vec2 cuv = vEmissiveMapUv * uGrid, cell = floor( cuv ), fc = fract( cuv );
+  vec3 wq = floor( vDtN * 1.5 + .5 );
+  vec3 seed = vec3( cell.x + floor( vDtB.x ) * .173, cell.y + floor( vDtB.z ) * .291, dot( wq, vec3( 3.1, 5.7, 7.3 ) ) );
+  float h1 = dtH( seed * .731 + 1.3 ), h2 = dtH( seed * 1.93 + 4.1 ), h3 = dtH( seed * 2.71 + 7.7 );
+  float slot = floor( uHour * .7 + h1 * 7. );
+  float lit = step( dtH( seed * 1.371 + slot * 11.13 + 2.7 ), uLit );
+  vec3 lc = h2 < .7 ? vec3( 1., .72, .44 ) : h2 < .9 ? vec3( .86, .9, 1. ) : vec3( 1., .84, .62 );
+  if ( h3 > .93 ) lc = mix( lc, vec3( .45, .6, 1. ) * ( .55 + .45 * sin( uTime * 9. + h1 * 40. ) * sin( uTime * 3.7 + h2 * 20. ) ), uNight );
+  float lampL = lit * uWin * ( .5 + .5 * wm ) * 1.35;
+  float dayL = ( 1. - uNight ) * .09;
+  vec3 inner = lc * lampL * .8 + vec3( .7, .74, .8 ) * dayL;
+#if defined( DT_ROOMS ) && defined( USE_NORMALMAP_TANGENTSPACE )
+  float vd = length( vViewPosition );
+  if ( glassK > 0. && vd < 150. ) {
+    vec3 Tv = normalize( tbn[ 0 ] ), Bv = normalize( tbn[ 1 ] ), Nv = normalize( nonPerturbedNormal );
+    vec3 rdv = normalize( - vViewPosition );
+    vec3 rd = vec3( dot( rdv, Tv ), dot( rdv, Bv ), max( .05, - dot( rdv, Nv ) ) );
+    rd.x += rd.x >= 0. ? 1e-4 : -1e-4; rd.y += rd.y >= 0. ? 1e-4 : -1e-4;
+    vec3 sz = uRoom, p = vec3( fc * sz.xy, 0. );
+    vec3 t3 = vec3( ( ( rd.x > 0. ? sz.x : 0. ) - p.x ) / rd.x, ( ( rd.y > 0. ? sz.y : 0. ) - p.y ) / rd.y, sz.z / rd.z );
+    float t = min( min( t3.x, t3.y ), t3.z );
+    vec3 q = p + rd * t;
+    bool vDown = dot( Bv, ( viewMatrix * vec4( 0., 1., 0., 0. ) ).xyz ) < 0.;
+    float up = vDown ? sz.y - q.y : q.y;                    // metres above the room floor
+    float side = q.x / sz.x;
+    vec3 wallC = mix( vec3( .86, .8, .7 ), mix( vec3( .62, .7, .78 ), vec3( .72, .62, .52 ), h3 ), step( .55, h2 ) );
+    vec3 alb; float ao;
+    if ( t == t3.z ) {                                      // back wall: furniture, a picture
+      alb = wallC;
+      float fx = fract( side + h1 );
+      if ( up < .85 && fx > .12 && fx < .78 ) alb = mix( vec3( .2, .16, .13 ), vec3( .3, .32, .36 ), h3 );
+      if ( up > 1.35 && up < 2.05 && abs( side - .35 - h2 * .3 ) < .14 ) alb = mix( vec3( .7, .3, .2 ), vec3( .2, .4, .6 ), h1 );
+      ao = smoothstep( 0., .5, min( min( q.x, sz.x - q.x ), min( up, sz.y - up ) ) );
+    } else if ( t == t3.x ) { alb = wallC * .92; ao = smoothstep( 0., .6, min( up, sz.y - up ) ) * smoothstep( 0., .8, sz.z - q.z ); }
+    else if ( ( rd.y > 0. ) == vDown ) {                    // floor: wood or carpet, a rug
+      alb = mix( vec3( .36, .25, .17 ), vec3( .42, .42, .44 ), step( .5, h3 ) );
+      if ( abs( side - .5 ) < .3 && abs( q.z - sz.z * .55 ) < sz.z * .25 ) alb = mix( vec3( .55, .2, .18 ), vec3( .25, .3, .45 ), h2 );
+      ao = smoothstep( 0., .5, min( min( q.x, sz.x - q.x ), sz.z - q.z ) );
+    } else { alb = vec3( .82 ); ao = 1.; }                  // ceiling
+    vec3 lp = vec3( sz.x * .5, vDown ? .05 : sz.y - .05, sz.z * .55 );
+    float ld = length( q - lp );
+    float lamp = 1.6 / ( 1. + ld * ld * .45 ) + .18;
+    if ( t != t3.x && t != t3.z && ( rd.y > 0. ) != vDown ) lamp += 2.5 * ( 1. - smoothstep( .2, .45, length( q.xz - lp.xz ) ) ) * lit;   // the fitting
+    float dayS = exp( - q.z * .22 ) * ( .6 + .4 * smoothstep( 0., 2., up ) );
+    vec3 room = alb * ( .35 + .65 * ao ) * ( lc * lampL * lamp + vec3( .75, .8, .9 ) * dayL * dayS * 1.6 );
+    // blinds part way down in some rooms, glowing when the room is lit
+    float fy = vDown ? fc.y : 1. - fc.y;
+    if ( h1 > .62 && fy < ( h2 * .6 + .15 ) ) room = mix( vec3( .9, .85, .75 ), vec3( .7, .74, .8 ), h3 ) * ( lc * lampL * .55 + dayL * .8 );
+    inner = mix( room, inner, smoothstep( 110., 150., vd ) );
+  }
+#endif
+  totalEmissiveRadiance = inner * glassK;
+}
+#endif`;
 
 // block plans: rows of designs per plot strip (first that fits wins, the rest of the list is tried in order)
 const PLAN = {
@@ -66,15 +142,46 @@ export class Downtown {
     if (m.userData.dt) return; m.userData.dt = true;
     const n = m.name || '';
     if (FACADE.test(n) && m.metalnessMap) {
-      // the _m map: R lit-window mask (night glow), G roughness, B metalness
-      const glass = /glass/.test(n);
-      m.emissiveMap = m.metalnessMap; m.emissive = new THREE.Color(1, .8, .55); m.emissiveIntensity = glass ? .09 : .16;     // golden hour: a few warm windows, not a lantern
+      // the _m map: R window mask (night windows + interior mapping, see WINDOW_FRAG), G roughness, B metalness
+      const glass = /glass/.test(n), set = SETS.find(S => S[0].test(n)) || SETS[3];
+      const rooms = !this.g.renderer.touch && !(typeof window !== 'undefined' && window.__ROOMS === false);
+      m.emissiveMap = m.metalnessMap; m.emissive = new THREE.Color(1, 1, 1); m.emissiveIntensity = 1;
       m.envMapIntensity = glass ? 1.55 : .55;
+      const U = { uGrid: { value: new THREE.Vector2(...set[1]) }, uRoom: { value: new THREE.Vector3(...set[2]) }, uLit: SKY[set[3]],
+        uNight: SKY.night, uHour: SKY.hour, uWin: SKY.win, uTime: SKY.time };
+      if (/derelict/.test(n)) U.uLit = { value: 0 };
       m.onBeforeCompile = sh => {
-        sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>',
-          '#ifdef USE_EMISSIVEMAP\n  totalEmissiveRadiance *= texture2D( emissiveMap, vEmissiveMapUv ).r;\n#endif');
+        Object.assign(sh.uniforms, U);
+        if (rooms) sh.defines = { ...(sh.defines || {}), DT_ROOMS: '' };
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vDtB, vDtN;')
+          .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+            #ifdef USE_INSTANCING
+              vDtB = instanceMatrix[3].xyz; vDtN = normalize( mat3( instanceMatrix ) * objectNormal );
+            #else
+              vDtB = modelMatrix[3].xyz; vDtN = normalize( mat3( modelMatrix ) * objectNormal );
+            #endif`);
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vDtB, vDtN;uniform vec2 uGrid;uniform vec3 uRoom;uniform float uLit, uNight, uHour, uWin, uTime;' + ROOM_GLSL)
+          .replace('#include <emissivemap_fragment>', WINDOW_FRAG);
       };
-      m.customProgramCacheKey = () => 'dtfacade';
+      m.customProgramCacheKey = () => 'dtfacade' + (rooms ? 'r' : '');
+      m.needsUpdate = true;
+    } else if (/^dt_awning/.test(n)) {
+      // awnings: the free (front) edge flutters a little in the wind (awning UVs: v = 1 at the free edge)
+      m.onBeforeCompile = sh => {
+        sh.uniforms.uTime = SKY.time;
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            {
+            #ifdef USE_INSTANCING
+              vec3 ip = instanceMatrix[3].xyz;
+            #else
+              vec3 ip = vec3( 0. );
+            #endif
+            float k = clamp( uv.y, 0., 1. ), ph = uTime * 3.1 + ( position.x + position.z ) * 1.7 + ip.x * .3 + ip.z * .2;
+            transformed.y += ( sin( ph ) * .035 + sin( ph * 2.3 + 1. ) * .015 ) * k * ( .6 + .4 * sin( uTime * .4 + ip.x * .05 ) );
+            }`);
+      };
+      m.customProgramCacheKey = () => 'dtawning';
       m.needsUpdate = true;
     } else if (n === 'dt_plain_glow') {
       // merged emissive parts (crown lights, signs, lamps): the glow takes the vertex colour
@@ -502,6 +609,7 @@ export class Downtown {
     for (const [name, items] of Object.entries(this.furn)) {
       const root = this.street.getObjectByName(name); if (!root) continue;
       const mats = items.map(i => i.m);
+      if (name === 'DT_banner' || name === 'DT_stringlights') this.sway(root, name === 'DT_banner');
       this.h.instanceKit(this.scene, root, mats, { shadow: !/bin|hydrant|bollards|stringlights|bikerack|cafe|banner|signal/.test(name) });
       const meta = JSON.parse(root.userData.dt || '{}');
       for (const it of items) {
@@ -529,6 +637,48 @@ export class Downtown {
       im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
     }
     this.update(this.g.camera, 0, true);
+  }
+
+  // Wind on the avenue: banner cloth flaps away from its pole (the cloth hangs in the local x = 0 plane, |z| .08-.88 m
+  // from the pole), string lights swing along their sag (wire along local z, +-7 m). Materials are cloned for these
+  // roots only; an existing onBeforeCompile (the vertex-coloured glow) runs first.
+  sway(root, banner) {
+    if (root.userData.sway) return; root.userData.sway = true;
+    const done = new Map();
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const src = o.material;
+      if (banner && !/^dt_awning/.test(src.name)) return;
+      if (!done.has(src)) {
+        const m = src.clone(), prev = src.onBeforeCompile, key = (src.customProgramCacheKey && src.customProgramCacheKey()) || '';
+        m.onBeforeCompile = (sh, r) => {
+          if (prev) prev.call(m, sh, r);
+          sh.uniforms.uSwT = SKY.time;
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uSwT;')
+            .replace('#include <begin_vertex>', `#include <begin_vertex>
+              {
+              #ifdef USE_INSTANCING
+                vec3 ip = instanceMatrix[3].xyz;
+              #else
+                vec3 ip = vec3( 0. );
+              #endif
+              float uTime = uSwT;
+              float gust = .65 + .35 * sin( uTime * .23 + ip.x * .02 ) * sin( uTime * .51 + ip.z * .03 );
+              ${banner ? `float k = clamp( ( abs( position.z ) - .08 ) / .8, 0., 1. );
+                float ph = uTime * 4.2 + position.y * 1.3 + abs( position.z ) * 3.5 + ip.x * .7;
+                transformed.x += ( sin( ph ) * .1 + sin( ph * 2.1 + 1.3 ) * .04 ) * k * gust;
+                transformed.z *= 1. - .04 * k * ( .5 + .5 * sin( ph * .7 ) );`
+              : `float t = clamp( position.z / 7., -1., 1. ), k = 1. - t * t;
+                float ph = uTime * 1.3 + ip.x * .11 + ip.z * .07;
+                transformed.x += k * ( sin( ph ) * .16 + sin( ph * 2.7 + t * 2. ) * .04 ) * gust;
+                transformed.y += k * sin( ph * 1.9 + 1. ) * .035 * gust;`}
+              }`);
+        };
+        m.customProgramCacheKey = () => key + (banner ? 'swayB' : 'swayS');
+        done.set(src, m);
+      }
+      o.material = done.get(src);
+    });
   }
 
   // ---------------------------------------------------------------- per frame

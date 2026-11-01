@@ -4,8 +4,9 @@ Every facade set is one tiling unit of whole floors x whole bays, so the UVs in 
 v = metres from the ground / tile height and the windows line up with the floors of the geometry. Outputs in assets/textures:
   <name>_c.jpg  colour            (embedded in the downtown GLBs)
   <name>_n.jpg  tangent normal    (OpenGL / glTF convention, +Y up)
-  <name>_m.jpg  R = lit window mask (night/emissive), G = roughness, B = metalness. The glTF exporter uses G/B as the
-                metallicRoughness texture; earth.js reuses the same image as the emissive mask (red channel).
+  <name>_m.jpg  R = window mask (the glass of every window, .55..1 per window; 0 on walls and on the derelict set),
+                G = roughness, B = metalness. The glTF exporter uses G/B as the metallicRoughness texture; meridian/downtown.js
+                reuses R as the night-window mask and picks per window and hour which rooms are lit (+ interior mapping).
 Sets: dt_curtain (unitised glass curtain wall), dt_ribbon (1970s bronze ribbon glazing + concrete spandrels),
 dt_precast (ribbed precast panels), dt_punched (residential / hotel punched windows), dt_brick (historic red brick, sash
 windows), dt_stone (rusticated sandstone, arched windows), dt_derelict (boarded and broken windows, grime), dt_shop
@@ -115,6 +116,14 @@ def jitter(rg, col, amt):
     return tuple(max(0, c * (1 + (rg.rand() - .5) * 2 * amt)) for c in col)
 
 
+def winlit(cv, x0, y0, x1, y1, k):
+    """mark a window's glass in the R (window) channel with a per-window brightness .55..1. Every window is marked; the
+    runtime (meridian/downtown.js) decides per window and hour which rooms are lit, so the city changes through the night."""
+    x0, x1, y0, y1 = int(round(x0)), int(round(x1)), int(round(y0)), int(round(y1))
+    v = .55 + .45 * ((k * .6180339887) % 1.0)
+    cv.lit[y0:y1, x0:x1] = np.maximum(cv.lit[y0:y1, x0:x1], v)
+
+
 # ---------------------------------------------------------------- glass curtain wall: 8 modules x 4 floors
 def curtain():
     W, H, B, F = 1024, 1024, 8, 4
@@ -144,6 +153,7 @@ def curtain():
                 cv.rect(x0 + 4, vis0 + 3, x0 + cw - 4, vis1, lit=.75 + rg.rand() * .25)
                 cv.rect(x0 + 4, vis0 + 2, x0 + cw - 4, vis0 + 6, col=(.8, .78, .7))
                 cv.c[vis0 + 6:vis1, x0 + 4:x0 + cw - 4] += np.array((.06, .055, .04), np.float32)
+            winlit(cv, x0 + 4, vis0 + 3, x0 + cw - 4, vis1, f * 31 + b * 7 + 1)
             # mullions (vertical) and transom at the slab line
             m = 4
             cv.rect(x0, y0, x0 + m, y0 + ch, col=(.55, .58, .61), h=1, rough=.35, metal=.9)
@@ -174,6 +184,7 @@ def ribbon():
                 cv.rect(x0 + 3, band0, x0 + cw - 3, band0 + dn, col=jitter(rg, (.28, .22, .15), .1), h=-1, rough=.07)
             if lit_floor and rg.rand() < .7:
                 cv.rect(x0 + 3, band0 + 3, x0 + cw - 3, band1 - 2, lit=.7 + rg.rand() * .3)
+            winlit(cv, x0 + 3, band0 + 3, x0 + cw - 3, band1 - 2, f * 31 + b * 7 + 2)
             cv.rect(x0, band0, x0 + 4, band1, col=(.12, .08, .05), h=-.6, rough=.4, metal=.8)
         # sill and drip edge
         cv.rect(0, band1, W, band1 + 6, col=(.66, .62, .55), h=.3)
@@ -213,6 +224,7 @@ def precast():
                 cv.rect(wx0, wy0, wx1, wy0 + int((wy1 - wy0) * rg.uniform(.15, .6)), col=jitter(rg, (.42, .41, .38), .1), h=-.6, rough=.06)
             if lit_floor and rg.rand() < .75:
                 cv.rect(wx0 + 2, wy0 + 2, wx1 - 2, wy1 - 2, lit=.7 + rg.rand() * .3)
+            winlit(cv, wx0 + 2, wy0 + 2, wx1 - 2, wy1 - 2, f * 31 + b * 7 + 3)
             # rib (pilaster) proud of the panel, with a shadow edge
             cv.rect(x0, y0, x0 + rib, y0 + ch, col=(.84, .82, .77), h=1.6, rough=.75)
             cv.rect(x0 + rib, y0, x0 + rib + 5, y0 + ch, col=(.55, .54, .5), h=.4)
@@ -254,6 +266,7 @@ def punched():
             if rg.rand() < .35:
                 cv.rect(g0 + 2, wy0 + 7, g1 - 2, wy1 - 7, lit=.65 + rg.rand() * .35)
                 cv.c[wy0 + 7:wy1 - 7, g0 + 2:g1 - 2] += np.array((.12, .09, .05), np.float32)
+            winlit(cv, g0 + 2, wy0 + 7, g1 - 2, wy1 - 7, f * 31 + b * 7 + 4)
             if not door:
                 cv.rect(wx0 - 9, wy1 + 4, wx1 + 9, wy1 + 12, col=(.7, .68, .64), h=.8)                 # sill
         cv.rect(0, y0 + ch - 6, W, y0 + ch, col=(.7, .68, .64), h=.25)
@@ -300,6 +313,7 @@ def sash(cv, rg, x0, y0, x1, y1, frame=(.9, .88, .82), lit_p=.3, arch=False):
     if rg.rand() < lit_p:
         cv.rect(gx0 + 1, gy0 + 1, gx1 - 1, gy1 - 1, lit=.65 + rg.rand() * .35)
         cv.c[gy0:gy1, gx0:gx1] += np.array((.1, .07, .03), np.float32)
+    winlit(cv, gx0 + 1, gy0 + 1, gx1 - 1, gy1 - 1, x0 // 7 + y0 // 3 + 5)
 
 
 # ---------------------------------------------------------------- historic red brick: 4 bays x 4 floors (3.6 x 4.2 m)
@@ -363,6 +377,7 @@ def stone():
                 m2 = ((xx - cx) ** 2 + (yy - cy) ** 2 < (r - 5) ** 2) & (yy < cy) & (yy > cy - r)
                 cv.mask(m, col=(.88, .86, .8), h=.0, rough=.5)
                 cv.mask(m2, col=(.06, .07, .085), h=-.9, rough=.05, metal=.6)
+                cv.lit[m2] = np.maximum(cv.lit[m2], .55 + .45 * (((b * 7 + 5) * .6180339887) % 1.0))
                 cv.rect(cx - 8, cy - r - 16, cx + 8, cy - r + 4, col=(.84, .73, .54), h=1.4)    # keystone
             sash(cv, rg, wx0, wy0, wx1, wy1, frame=(.88, .86, .8), lit_p=.35)
             cv.rect(wx0 - 16, wy1 + 4, wx1 + 16, wy1 + 14, col=(.8, .69, .5), h=1.3)

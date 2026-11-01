@@ -218,6 +218,7 @@ export class Menus {
         ${tog('dynamicRes', 'Hold 60 fps (dynamic res)')}
         <div class="set"><span>Camera</span><div class="row"><button class="btn ${s.view !== 'third' ? 'pri' : ''}" data-act="view" data-v="first">First person</button><button class="btn ${s.view === 'third' ? 'pri' : ''}" data-act="view" data-v="third">Third person</button></div><span></span></div>
         ${range(['fov', 'Field of view'], 55, 95, 1, v => v)}
+        ${range(['dayMinutes', 'Day length (real minutes)'], 10, 120, 5, v => v)}
         ${tog('showFps', 'Show FPS')}
         <p class="guide" style="margin-top:12px">Low: no bloom, 1K shadows. Medium: bloom, FXAA, 2K shadows. High: 4K shadows and 1.5× pixel density.</p>`;
     } else if (this.tab === 'audio') {

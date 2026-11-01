@@ -68,8 +68,8 @@ plaza, and glowing cyan kerb strips.
   skywalks at ~5 m between neighbouring buildings (auto-found, never over the transit mall), signals and zebra crossings.
   Heights peak in the middle ring and fall off outward. `downtown.glb` = 21 designs `DT_<name>` + `DT_<name>_lod`
   (extras `dt`: w/d/h, kind, era, `col` AABBs in three space, fronts face +z); `downtown_street.glb` = skywalks, platform,
-  track, catenary, tram, crane mast/jib, street furniture. Facade sets `dt_*_c/_n/_m` (m: R lit windows, G rough,
-  B metal; runtime reuses R as the emissive mask); untextured colours are merged per mesh into vertex-coloured
+  track, catenary, tram, crane mast/jib, street furniture. Facade sets `dt_*_c/_n/_m` (m: R = glass of every window
+  .55..1, G rough, B metal; runtime reuses R as the night-window mask, see Day/night below); untextured colours are merged per mesh into vertex-coloured
   `dt_plain`, `dt_plain_metal`, `dt_plain_glow` (fewer draw calls; the glow takes the vertex colour). Buildings are instanced per design/material with hero/LOD buckets by
   camera distance; furniture is chunk-instanced. Test: `tools/test/downtown.js` (`PERF_ONLY=1` for draw-call numbers).
 - Spaceport (`spaceport.py`, `SPACEPORT` in `layout.js`): a ship landing field south of the city (VTOL pads, terminal with the
@@ -78,6 +78,40 @@ plaza, and glowing cyan kerb strips.
 - Water (`src/game/water.js`, textures from `water_textures.py`): river, bay and Vanthos flood water. API `g.water`:
   `heightAt`, `depthAt`, `splash(pos, kind|size)`, `hitTest(from, to, kind)`; ripples, splashes, wading and swimming.
   `src/game/puffs.js` is the shared dust/spray sprite system.
+- Day/night (`src/worlds/meridian/daynight.js`, driven by `g.clock`): sun arc (east 06:00, south noon, west 20:00), moon
+  at night (the one shadow light switches sun <-> moon while both are dim), palette keyframes (dawn orange, white noon,
+  the original golden hour at 18:36, red sunset, purple dusk, blue night) for light, hemi, fog, sky (`atmosphereSky`
+  uniforms night/moonDir/cloudC/glowC; gndC/gndK darken the lower half of the reflection probe so glass reflects a dark
+  street), water, exposure, bloom. The PMREM probe is rebuilt only when the sun moved ~3.5 degrees or night changed.
+  `SKY` = shared uniforms (night, hour, litHome/litOffice/litShop fractions, win gain). Downtown facades: per window cell
+  (UV x tile bays/floors, hashed with the instance position and wall facing) a time-slot hash decides lit rooms; desktop
+  adds interior mapping (ray into a box room: furniture, rug, ceiling lamp, blinds; < 150 m, off on touch or with
+  `window.__ROOMS = false`). The city kit gets `nightWindows()` (3 m world cells). Emissive kit materials are scaled by
+  night (`registerGlows`: lamps off by day); every street lamp gets an additive ground pool + halo (2 draw calls).
+  Awnings flutter, banners and string lights sway (downtown.js `sway`). `atmos.js`: falling leaves/petals from nearby
+  trees (`Flora.near`), rooftop steam, chimney smoke (`world.houses`), fountain spray, moths at lamps. `ambience.js` +
+  `src/core/soundscape.js`: positional procedural ambience (fountains, cafes + evening music, construction 7-17, trams
+  with bell, highways, river, birds/crickets) on a pool of 6 voices (4 on touch), plus `audio.cityMix` for the city bed.
+  Test: `tools/test/daynight.js` (screenshots in `test-out/daynight/`).
+- Street life (`population.js`, `npcnav.js`, `fauna.js`): `NavGraph` = sidewalk rings (nodes every ~22 m), corner
+  crossings (edge `cross` = road axis/centre; people wait at the kerb for a traffic gap), heritage-avenue and transit-mall
+  walkways (platform nodes y 0.35), bridge footways, rings round plazas / park fountains / the rotunda, plus places
+  (`pois`): seats (benches via `World.seatSpots`, cafe chairs from `downtown.furn.DT_cafe`, planter rims), kiosk queues,
+  shop windows, doors (`work`/`home`/`shop`/`hotel`, downtown fronts + mid-ring and suburb street faces), platform spots,
+  meeting points; each hangs off the graph by a straight `clear()` walk (cafe sets count as oriented table boxes). A* per
+  goal. The crowd (`COUNT` 150, 60 on touch) lives around the player: size and goal mix follow `g.clock` (`DENSITY`,
+  `MIX`: commute to work doors / off trams, lunch queues + cafes, evening heritage avenue, near-empty 0-5 h); people
+  despawn through doors or by boarding trams and respawn out of view (doors, out-of-frustum nodes, tram arrivals);
+  far ones (> 300 m) are recycled; a teleport reseeds (some already seated / chatting). States: walk, wait, idle, browse,
+  queue, platform, meetwait, talk (groups of 2-3, also chance meetings head-on), settle/sit/rise, board, flee/return,
+  dead; seated neighbours talk; talk gestures are additive head/arm bends (avatar `touched`). Throttling: think+move
+  every frame < 50 m, every 3rd < 120 m, 8th < 220 m, 20th beyond; mixer only in view (rate 1/2/4 by distance); far
+  bodies leave the scene graph. Rural loops (villages, farms, spaceport) keep the simple loop walkers.
+  Fauna (`fauna.py` -> `fauna.glb`): `BIRD_pigeon`/`BIRD_sparrow` instanced, vertex shader folds/flaps wings (`_wing`)
+  and pecks (`_head`) from per-instance `aBird`; flocks peck on plazas/lawns/the avenue, burst up to a rooftop when the
+  player runs/drives close or a shot is fired (`Population.alarm` -> `Fauna.scare`), drift back; none at night. `CAT`
+  (14-bone rig, clips Idle/Look/Sit/Walk/Run, materials `cat_coat`/`cat_light`/`cat_eye` tinted per cat) sits by alley
+  mouths, slinks along the wall, bolts into the alley when approached. Test: `tools/test/life.js` (test-out/life/).
 
 ## Trees
 `tools/blender/trees.py` grows every tree (`trees.glb`, roots `TR_*`; `-- oak birch --fast` builds only those into
@@ -102,6 +136,8 @@ snowy conifers (glacier), jungle canopy and savanna trees (mesa) per chunk. Test
 - Small street furniture gets colliders through `kitColliders` in `earth.js`.
 - Orbit: `sky.js` `spaceSky` (sparse stars, faint galaxy band) and `orbitPlanet`; Earth uses maps baked by
   `tools/blender/planets.py` (`earth_day/clouds/night/ms.jpg`, registered in `planetMaps` at boot).
+- Clock: `src/game/clock.js` (`g.clock`: hour, daylight(), between(), set(), paused; day length = `settings.dayMinutes`,
+  default 40, Engineering > Graphics). The HUD shows the time under the place name on worlds with `daynight` (Earth).
 
 ## Creatures
 Organic enemies are sculpted with `fleshkit.py` (tagged SDF primitives → Surface Nets → skinned GLB: soft-min skin

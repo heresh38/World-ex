@@ -2,8 +2,10 @@
 // three levels of detail. Every variant has TR_x (hero, 3-6k tris), TR_x_mid (~600 tris) and TR_x_lod (two crossed
 // impostor cards from a shared atlas). Instances are bucketed by distance from the camera whenever it has moved a few
 // metres, so thousands of trees cost a handful of draw calls. Leaves are alpha-tested double-sided cards whose normals
-// point out of the crown (no back-face flip), with an alpha boost on distant mips so crowns don't thin out, and a
-// little wind sway.
+// point out of the crown (no back-face flip), with an alpha boost on distant mips so crowns don't thin out.
+// Wind: gusts roll across the island (a slow travelling wave in world space); the whole crown bends with the gust
+// (branches and leaves share one bend so they never separate), and leaf cards add their own flutter on top. near()
+// lists trees around a point (falling leaves in meridian/atmos.js).
 import * as THREE from 'three';
 
 // Planting pools (variant names in trees.glb). Earth picks a pool per area.
@@ -29,11 +31,35 @@ export const POOLS = {
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
 
+// crown bend shared by bark and leaves: grows with height squared, gusts travel across the island
+const BEND = `
+  #ifdef USE_INSTANCING
+    vec3 ip = instanceMatrix[3].xyz;
+  #else
+    vec3 ip = vec3(0.);
+  #endif
+  float gust = .55 + .45 * sin(uTime * .37 - ip.x * .011 - ip.z * .007) * sin(uTime * .19 + ip.z * .009 + 1.3);
+  float bk = clamp(position.y * .1, 0., 1.6); bk *= bk;
+  float bw = uTime * 1.1 + ip.x * .05 + ip.z * .04;
+  vec2 bend = vec2(.8, .45) * gust * (.16 + .05 * sin(bw)) + vec2(sin(bw * 1.7), cos(bw * 1.3)) * .035 * gust;
+  transformed.xz += bend * bk;
+  transformed.y -= dot(bend, bend) * bk * .5;`;
+
 function prepMaterial(m, time) {
   if (m.userData.flora) return;
   m.userData.flora = true;
   const n = m.name || '';
-  if (/^leaves_/.test(n)) {
+  if (/^bark_/.test(n) || n === 'snow') {
+    // (snow lies on branches: it bends with them; on rocks the bend is a few millimetres)
+    if (n === 'snow') { m.roughness = .55; m.envMapIntensity = .6; } else { m.envMapIntensity = .3; m.metalness = 0; }
+    m.onBeforeCompile = sh => {
+      sh.uniforms.uTime = time;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BEND);
+    };
+    m.customProgramCacheKey = () => 'florab';
+    m.needsUpdate = true;
+  } else if (/^leaves_/.test(n)) {
     const imp = n === 'leaves_impostor';
     m.alphaTest = imp ? .42 : .5; m.transparent = false; m.depthWrite = true;
     m.side = THREE.DoubleSide; m.shadowSide = THREE.DoubleSide;
@@ -44,15 +70,13 @@ function prepMaterial(m, time) {
       if (!imp) {
         sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
           .replace('#include <begin_vertex>', `#include <begin_vertex>
-            #ifdef USE_INSTANCING
-              vec3 ip = instanceMatrix[3].xyz;
-            #else
-              vec3 ip = vec3(0.);
-            #endif
-            float wk = clamp(position.y * .08, 0., 1.6);
-            float wt = uTime * 1.6 + ip.x * .07 + ip.z * .05;
-            transformed.x += (sin(wt + position.y * .35) * .05 + sin(wt * 2.7 + position.x * 1.7) * .025) * wk;
-            transformed.z += (cos(wt * .8 + position.y * .3) * .04 + sin(wt * 3.1 + position.z * 1.9) * .025) * wk;`);
+            ${BEND}
+            // leaf flutter: fast, small, stronger in a gust and toward the outside of the crown
+            float wk = clamp(position.y * .08, 0., 1.6) * (.5 + gust);
+            float wt = uTime * 2.2 + ip.x * .07 + ip.z * .05;
+            transformed.x += (sin(wt + position.y * .35) * .05 + sin(wt * 3.7 + position.x * 2.3 + position.z) * .03) * wk;
+            transformed.z += (cos(wt * .8 + position.y * .3) * .04 + sin(wt * 4.1 + position.z * 2.1 + position.x) * .03) * wk;
+            transformed.y += sin(wt * 2.9 + position.x * 3.1) * .02 * wk;`);
       }
       sh.fragmentShader = sh.fragmentShader
         // foliage normals already point out of the crown: don't flip them on back faces
@@ -67,10 +91,6 @@ function prepMaterial(m, time) {
     };
     m.customProgramCacheKey = () => 'flora' + (imp ? 'i' : 'l');
     m.needsUpdate = true;
-  } else if (/^bark_/.test(n)) {
-    m.envMapIntensity = .3; m.metalness = 0;
-  } else if (n === 'snow') {
-    m.roughness = .55; m.envMapIntensity = .6;
   }
 }
 
@@ -191,6 +211,20 @@ export class Flora {
         if (!T[t]) continue;
         T[t].attr.needsUpdate = true; T[t].attr.clearUpdateRanges(); T[t].attr.addUpdateRange(0, cnt[t] * 16);
         for (const im of T[t].ms) { im.count = cnt[t]; im.visible = cnt[t] > 0; }
+      }
+    }
+  }
+
+  // trees within r of (x, z): calls fn(x, y, z, kind) for each (kind: { name, h, w, species })
+  near(x, z, r, fn) {
+    const r2 = r * r;
+    for (const k of this.kinds.values()) {
+      if (!k.pos || k.species === 'rock' || k.species === 'bush' || k.h < 4) continue;
+      const P = k.pos, A = k.alive;
+      for (let i = 0; i < k.n; i++) {
+        if (!A[i]) continue;
+        const dx = P[i * 3] - x, dz = P[i * 3 + 2] - z;
+        if (dx * dx + dz * dz < r2) fn(P[i * 3], P[i * 3 + 1], P[i * 3 + 2], k);
       }
     }
   }

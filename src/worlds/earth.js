@@ -15,6 +15,9 @@ import { Wanted } from './meridian/wanted.js';
 import { Flora } from './meridian/flora.js';
 import { SNOW_LINE, isDowntown, TRANSIT } from './meridian/layout.js';
 import { Downtown } from './meridian/downtown.js';
+import { DayNight, nightWindows } from './meridian/daynight.js';
+import { Atmos } from './meridian/atmos.js';
+import { EarthAmbience } from './meridian/ambience.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
@@ -121,11 +124,12 @@ export class EarthWorld extends World {
     this.flora = new Flora(g, sc, A.models.trees);
     const map = this.map = new MeridianMap();
     this.collision.terrain = (x, z) => map.height(x, z);
-    // ---------------- light: late golden hour
+    // ---------------- light: set up for golden hour; meridian/daynight.js then follows g.clock (sun arc, palette, night)
     this.sunDir = new THREE.Vector3(-.55, .34, -.45).normalize();
     const sky = atmosphereSky('#3a6aa8', '#f2b27a', '#ffd9a8', this.sunDir); sc.add(sky); this.sky = sky;
     sc.fog = new THREE.Fog(0xd9a888, 160, 1300);
-    sc.add(new THREE.HemisphereLight(0x9cb8e0, 0x5a4636, .95));
+    this.hemi = new THREE.HemisphereLight(0x9cb8e0, 0x5a4636, .95); sc.add(this.hemi);
+    this.lampMats = []; this.houses = []; this.fountainSpots = []; this.parkSpots = []; this.suburbSpots = [];
     const sun = new THREE.DirectionalLight(0xffd2a0, 3.0);
     sun.castShadow = true;
     const q = g.renderer.q; sun.shadow.mapSize.set(q.shadow, q.shadow);
@@ -199,11 +203,22 @@ export class EarthWorld extends World {
     this.wanted = new Wanted(g, map);
     await tick(.92, 'Drawing the map');
     this.minimap = this.drawMinimap();
-    // reflections
-    const pm = new THREE.PMREMGenerator(g.renderer.r);
-    this.envRT = pm.fromScene(new THREE.Scene().add(atmosphereSky('#3a6aa8', '#f2b27a', '#ffd9a8', this.sunDir)), 0.04);
-    sc.environment = this.envRT.texture; sc.environmentIntensity = .9;
-    pm.dispose(); this.disposables.push(this.envRT);
+    // day/night (lighting, sky, reflections, night glow, lamp pools), ambient particles and positional ambience
+    const dn = this.daynight = new DayNight(this);
+    dn.registerGlows();
+    const lampRoot = A.models.props_world.scene.getObjectByName('PR_lamp'), lamps = [];
+    if (lampRoot) {
+      lampRoot.updateMatrixWorld(true);
+      const inv = new THREE.Matrix4().copy(lampRoot.matrixWorld).invert(), hb = new THREE.Box3();
+      lampRoot.traverse(o => { if (o.isMesh && o.material.name === 'street_light') { o.geometry.computeBoundingBox(); hb.union(o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld))); } });
+      const head = hb.isEmpty() ? new THREE.Vector3(0, 5, 0) : hb.getCenter(new THREE.Vector3());
+      for (const m of this.lampMats) lamps.push({ head: head.clone().applyMatrix4(m), ground: m.elements[13], r: 9 });
+    }
+    for (const it of (this.downtown && this.downtown.furn.DT_banner) || []) lamps.push({ head: new THREE.Vector3(.9, 5.6, 0).applyMatrix4(it.m), ground: 0, r: 6.5 });
+    dn.buildLampPools(lamps);
+    dn.update(0, true);
+    this.atmos = new Atmos(this);
+    this.ambience = new EarthAmbience(this);
     progress(1, 'Ready');
   }
 
@@ -227,7 +242,7 @@ export class EarthWorld extends World {
     const asphN = T.asphalt_n.clone(); asphN.repeat.copy(asph.repeat); asphN.needsUpdate = true;
     this.roadMat = new THREE.MeshStandardMaterial({ map: asph, normalMap: asphN, roughness: .8, color: 0x9a9aa0, envMapIntensity: .4 });
     const lineMat = this.lineMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d0, roughness: .6 });
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x40e0ff, emissiveIntensity: 1.15, roughness: .4 });
+    const glowMat = new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x40e0ff, emissiveIntensity: 1.15, roughness: .4 }); glowMat.name = 'kerb_glow';
     const dashGeo = new THREE.PlaneGeometry(.3, 4); dashGeo.rotateX(-Math.PI / 2);
     const glowGeo = new THREE.PlaneGeometry(.2, 10); glowGeo.rotateX(-Math.PI / 2);
     const dashes = [], glows = [];
@@ -266,6 +281,7 @@ export class EarthWorld extends World {
       if (mt.name === 'facade') { mt.color.set(0x8f969f); mt.roughness = .35; mt.metalness = .5; mt.emissiveMap = T.facade_e; mt.emissive = new THREE.Color(1, .85, .6); mt.emissiveIntensity = .9; mt.needsUpdate = true; }
       if (mt.name === 'ribbon') { mt.color.set(0xa6b4c4); mt.roughness = .22; mt.metalness = .55; mt.emissiveMap = T.ribbon_e; mt.emissive = new THREE.Color(1, .9, .75); mt.emissiveIntensity = .75; mt.needsUpdate = true; }
       if (mt.name === 'brick') { mt.color.set(0x9a5a44); mt.roughness = .8; mt.metalness = 0; mt.emissiveMap = T.facade_e; mt.emissive = new THREE.Color(1, .82, .55); mt.emissiveIntensity = .8; mt.needsUpdate = true; }
+      if (/^(facade|ribbon|brick)$/.test(mt.name)) nightWindows(mt);       // windows switch on and off through the night
     });
     const place = (V, x, z, rot, s2, hs = 1) => {
       const sw = rot % Math.PI ? V.size.z : V.size.x, sd = rot % Math.PI ? V.size.x : V.size.z;
@@ -331,6 +347,7 @@ export class EarthWorld extends World {
     const pk = A.models.props_world.scene;
     instanceKit(this.scene, pk.getObjectByName('PR_lamp'), lampM);
     kitColliders(this.collision, pk.getObjectByName('PR_lamp'), lampM, { post: .16, h: 5 });
+    this.lampMats.push(...lampM);
     // parks: lawns, trees, benches and a fountain each; riverside promenades lined with trees
     const rk = A.models.rural.scene;
     const lawnMat = new THREE.MeshStandardMaterial({ map: (() => { const t = A.textures.moss.clone(); t.repeat.set(10, 10); t.needsUpdate = true; return t; })(), color: 0x8fb070, roughness: .95 });
@@ -348,6 +365,7 @@ export class EarthWorld extends World {
       for (let k = 0; k < 6; k++) { const a = rnd() * 6.28, r = 24 + rnd() * 18; fl.add('bush', cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r, rnd, .8 + rnd() * .4); }
       for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; benchM.push(new THREE.Matrix4().compose(_p.set(cx + Math.cos(a) * 9, 0, cz + Math.sin(a) * 9), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
       fountM.push(new THREE.Matrix4().compose(_p.set(cx, 0, cz), _q.identity(), _s.set(1, 1, 1)));
+      this.fountainSpots.push({ x: cx, z: cz }); this.parkSpots.push({ x: cx, z: cz });
       this.collision.add([cx - 4.5, 0, cz - 4.5, cx + 4.5, .7, cz + 4.5], 'fountain');
     }
     for (const z of [qN - 4, qS + 4]) for (let x = -CITY_EDGE + 20; x < CITY_EDGE - 10; x += 14) {
@@ -365,8 +383,9 @@ export class EarthWorld extends World {
         fl.add('bush', x - 8, 0, z + oz * 9, rnd, 1); fl.add('bush', x - 5.6, 0, z + oz * 9.4, rnd, .9);
       }
       plane(BLOCK - 6, BLOCK - 6, cx, cz, lawnMat, .02);
+      this.suburbSpots.push({ x: cx, z: cz });
     }
-    for (const [k, list] of Object.entries(hm)) instanceKit(this.scene, rk.getObjectByName(k), list);
+    for (const [k, list] of Object.entries(hm)) { instanceKit(this.scene, rk.getObjectByName(k), list); for (const m of list) this.houses.push([k, m]); }
     for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + .3; benchM.push(new THREE.Matrix4().compose(_p.set(Math.cos(a) * 33, 0, Math.sin(a) * 33), _q.setFromAxisAngle(Y, -a + Math.PI / 2), _s.set(1, 1, 1))); }
     instanceKit(this.scene, pk.getObjectByName('PR_bench'), benchM);
     kitColliders(this.collision, pk.getObjectByName('PR_bench'), benchM, { box: true }, 'bench');
@@ -488,7 +507,7 @@ export class EarthWorld extends World {
       if (sidewalkA.length > 3) this.paths.push(this.loop([...sidewalkA, ...sidewalkB.reverse()]));
       this.paths.push(this.loop(Array.from({ length: 12 }, (_, i) => [vx + Math.cos(i / 12 * 6.28) * 40, vz + Math.sin(i / 12 * 6.28) * 40])));
     }
-    for (const [n, list] of Object.entries(mats)) { instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700 }); this.propColliders(rk, n, list); }
+    for (const [n, list] of Object.entries(mats)) { instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700 }); this.propColliders(rk, n, list); if (/RU_house/.test(n)) for (const m of list) this.houses.push([n, m]); }
   }
 
   // small things people bump into: trunks, poles, fences, hay bales
@@ -539,7 +558,7 @@ export class EarthWorld extends World {
         }
       }
     }
-    for (const [n, list] of Object.entries(mats)) { instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700, shadow: n !== 'RU_wheat' && n !== 'RU_corn' }); this.propColliders(rk, n, list); }
+    for (const [n, list] of Object.entries(mats)) { instanceKit(this.scene, rk.getObjectByName(n), list, { chunk: 700, shadow: n !== 'RU_wheat' && n !== 'RU_corn' }); this.propColliders(rk, n, list); if (n === 'RU_farmhouse') for (const m of list) this.houses.push([n, m]); }
   }
 
   // ---------------------------------------------------------------- nature
@@ -655,6 +674,7 @@ export class EarthWorld extends World {
     const pk = A.models.props_world.scene;
     instanceKit(sc, pk.getObjectByName('PR_lamp'), lampM);
     kitColliders(this.collision, pk.getObjectByName('PR_lamp'), lampM, { post: .16, h: 5 });
+    this.lampMats.push(...lampM);
     // people on the terminal forecourt and in the hall
     for (const loop of meta.paths) this.paths.push(this.loop(loop.map(([x, z]) => [x + O.x, z + O.z])));
     this.dust = new Puffs(sc, 700, { soft: .9 });
@@ -931,6 +951,7 @@ export class EarthWorld extends World {
 
   update(dt) {
     const g = this.g, p = g.player;
+    if (this.daynight) this.daynight.update(dt);
     this.sky.position.copy(g.camera.position);
     this.sky.material.uniforms.time.value = g.time;
     const c = p.mode === 'car' && g.vehicles.current ? g.vehicles.current.pos : p.pos;
@@ -951,6 +972,8 @@ export class EarthWorld extends World {
     if (this.flora) this.flora.update(g.camera, dt);
     if (this.downtown) this.downtown.update(g.camera, dt);
     if (this.vendor) this.vendor.update(dt);
+    if (this.atmos) this.atmos.update(dt);
+    if (this.ambience) this.ambience.update(dt);
     // district name in the HUD
     this.distT = (this.distT || 0) - dt;
     if (this.distT <= 0) {
@@ -968,6 +991,7 @@ export class EarthWorld extends World {
 
   dispose() {
     this.water && this.water.dispose(); this.dust && this.dust.dispose();
+    this.ambience && this.ambience.dispose(); this.atmos && this.atmos.dispose(); this.daynight && this.daynight.dispose();
     this.population && this.population.clear();
     this.traffic && this.traffic.clear();
     super.dispose();
