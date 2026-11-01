@@ -326,6 +326,21 @@ export class Audio {
     else this.tone(s, t, .05, 1200, 1000, 'triangle', .08);
   }
 
+  // radio transmission: a squelch of static and a two-tone chirp (HUD subtitles, operation.js)
+  radio() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, s = this.sfx;
+    this.nz(s, t, .16, 1800, 2600, 2, 'bandpass', .08, .004);
+    this.tone(s, t + .02, .06, 1480, 1480, 'square', .025); this.tone(s, t + .09, .07, 1960, 1960, 'square', .022);
+  }
+
+  // shield struck while immune: a glassy ping
+  shieldPing(pos) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = pos ? this.out(pos, 90) : this.sfx;
+    this.tone(o, t, .18, 2400, 1900, 'sine', .06); this.nz(o, t, .08, 5000, 7000, 3, 'bandpass', .04);
+  }
+
   pickup(rarity = 0) {
     if (!this.ready) return;
     const t = this.ctx.currentTime, notes = [0, 4, 7, 12, 16, 19].slice(0, 2 + rarity);

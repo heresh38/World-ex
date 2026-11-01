@@ -34,6 +34,9 @@ export class HUD {
       <div class="h-nums"></div>
       <div class="h-fps hidden"></div>
       <div class="h-wanted"></div>
+      <div class="h-boss hidden"><div class="bn"></div><div class="bb"><i></i><u></u></div><div class="bs"></div></div>
+      <div class="h-radio"><b></b><span></span></div>
+      <div class="h-lore"><small></small><b></b><div class="lt"></div></div>
       <canvas class="h-mini hidden" width="180" height="180"></canvas>`;
     const q = s => this.el.querySelector(s);
     this.dmgEl = q('.h-dmg'); this.locEl = q('.h-loc'); this.objEl = q('.h-obj'); this.compEl = q('.h-compass .strip');
@@ -42,6 +45,8 @@ export class HUD {
     this.weapEl = q('.h-weap'); this.carEl = q('.h-car'); this.banEl = q('.h-banner'); this.hintEl = q('.h-hint');
     this.numsEl = q('.h-nums'); this.fpsEl = q('.h-fps');
     this.wantedEl = q('.h-wanted'); this.miniEl = q('.h-mini'); this.mini = this.miniEl.getContext('2d');
+    this.bossEl = q('.h-boss'); this.radioEl = q('.h-radio'); this.loreEl = q('.h-lore');
+    this.radioQ = []; this.radioCur = null; this.loreT = 0;
     this.nums = []; this.bars = [];
     this.dirty = true; this.t = 0; this.markers = [];
     this.combatMode = false;
@@ -113,8 +118,8 @@ export class HUD {
     this.crossArch = arch;
   }
 
-  hitMarker(crit, kill) {
-    const e = this.hitEl; e.className = 'h-hit on' + (crit ? ' crit' : '') + (kill ? ' kill' : '');
+  hitMarker(crit, kill, immune = false) {
+    const e = this.hitEl; e.className = 'h-hit on' + (immune ? ' imm' : crit ? ' crit' : '') + (kill ? ' kill' : '');
     clearTimeout(this.hitTO); this.hitTO = setTimeout(() => e.className = 'h-hit', kill ? 220 : 90);
   }
 
@@ -123,12 +128,63 @@ export class HUD {
     clearTimeout(this.dfTO); this.dfTO = setTimeout(() => this.dmgEl.style.boxShadow = 'inset 0 0 160px rgba(255,40,30,0)', 120);
   }
 
+  // n: a number, or a word ('IMMUNE' when a shield takes the hit)
   damageNumber(pos, n, crit) {
     let d = this.nums.find(x => x.t <= 0);
     if (!d) { const el = document.createElement('div'); el.className = 'h-num'; this.numsEl.appendChild(el); d = { el, t: 0, p: new THREE.Vector3() }; this.nums.push(d); }
-    d.p.copy(pos); d.p.x += (Math.random() - .5) * .3; d.t = .8; d.el.textContent = Math.round(n); d.el.className = 'h-num' + (crit ? ' crit' : '');
+    const word = typeof n === 'string';
+    d.p.copy(pos); d.p.x += (Math.random() - .5) * .3; d.t = .8; d.el.textContent = word ? n : Math.round(n); d.el.className = 'h-num' + (word ? ' imm' : crit ? ' crit' : '');
     d.el.style.display = '';
   }
+
+  // the number for a hit result from takeDamage(): IMMUNE when blocked, otherwise what was actually dealt
+  hitNumber(pos, out, dmg, crit) {
+    if (out && out.immune) { if (this.immFrame !== this.frame) { this.immFrame = this.frame; this.damageNumber(pos, 'IMMUNE', false); } return; }
+    this.damageNumber(pos, out && out.dealt != null ? out.dealt : dmg, crit);
+  }
+
+  // ---------------------------------------------------------------- boss health bar (name, health, shield state)
+  // b = { name, hp, max, shield: bool, state: 'text', mark: fraction for a phase tick } or null to hide
+  bossBar(b) {
+    const el = this.bossEl;
+    if (!b) { if (this.bossOn) { this.bossOn = false; el.classList.add('hidden'); } return; }
+    if (!this.bossOn) { this.bossOn = true; el.classList.remove('hidden'); }
+    const key = b.name + '|' + Math.round(b.hp / b.max * 400) + '|' + b.shield + '|' + b.state + '|' + b.mark;
+    if (key === this.bossKey) return; this.bossKey = key;
+    el.querySelector('.bn').textContent = b.name;
+    el.querySelector('i').style.width = Math.max(0, b.hp / b.max * 100) + '%';
+    const u = el.querySelector('u'); u.style.display = b.mark ? '' : 'none'; if (b.mark) u.style.left = b.mark * 100 + '%';
+    el.classList.toggle('shield', !!b.shield); el.classList.toggle('stagger', b.state && /stagger|reel/i.test(b.state) && !b.shield);
+    el.querySelector('.bs').textContent = b.state || '';
+  }
+
+  // ---------------------------------------------------------------- radio transmissions (speaker + line, queued)
+  radio(who, text, o = {}) {
+    const dur = o.dur || Math.max(3.2, Math.min(9, 1.6 + text.length * .055));
+    this.radioQ.push({ who, text, dur, color: o.color || null, cb: o.cb || null });
+    if (this.radioQ.length > 12) this.radioQ.shift();
+  }
+  radioBusy() { return !!this.radioCur || this.radioQ.length > 0; }
+  clearRadio() { this.radioQ = []; this.radioCur = null; this.radioEl.classList.remove('on'); }
+  updateRadio(dt) {
+    const c = this.radioCur;
+    if (c) { c.t -= dt; if (c.t <= 0) { this.radioCur = null; this.radioEl.classList.remove('on'); this.radioGap = .35; if (c.cb) c.cb(); } return; }
+    if ((this.radioGap = (this.radioGap || 0) - dt) > 0 || !this.radioQ.length) return;
+    const n = this.radioCur = this.radioQ.shift(); n.t = n.dur;
+    const b = this.radioEl.querySelector('b'); b.textContent = n.who; b.style.color = n.color || '';
+    this.radioEl.querySelector('span').textContent = n.text;
+    this.radioEl.classList.add('on');
+    this.g.audio.radio && this.g.audio.radio();
+  }
+
+  // ---------------------------------------------------------------- lore / summary card (terminal logs, operation results)
+  lore(kicker, title, html, dur = 12) {
+    const el = this.loreEl;
+    el.querySelector('small').textContent = kicker; el.querySelector('b').textContent = title;
+    el.querySelector('.lt').innerHTML = html;
+    el.classList.add('on'); this.loreT = dur;
+  }
+  hideLore() { this.loreT = 0; this.loreEl.classList.remove('on'); }
 
   feed(text, color = '#fff') {
     const d = document.createElement('div'); d.textContent = text; d.style.borderColor = color; d.style.color = color === '#ffffff' ? '' : color;
@@ -167,6 +223,9 @@ export class HUD {
       d.el.style.opacity = Math.min(1, d.t * 3);
     }
     this.updateBars();
+    this.updateRadio(dt);
+    if (this.loreT > 0 && (this.loreT -= dt) <= 0) this.loreEl.classList.remove('on');
+    this.frame = (this.frame || 0) + 1;
     if (this.combatMode) this.updateCompass();
     this.updateMinimap();
     if (!(this.dirty || this.t > .12)) return;
@@ -246,7 +305,9 @@ export class HUD {
 
   updateBars() {
     const g = this.g, cam = g.camera, W = innerWidth, H = innerHeight;
-    const list = g.enemies.list.filter(e => e.alive && e.hitT < 6 && e.pos.distanceTo(g.player.pos) < 70).slice(0, 6);
+    // bosses have the big bar; worlds may add their own targets (shield conduits) through barTargets()
+    const extra = g.world && g.world.barTargets ? g.world.barTargets() : [];
+    const list = [...extra, ...g.enemies.list.filter(e => e.alive && !e.boss && e.hitT < 6 && e.pos.distanceTo(g.player.pos) < 70)].slice(0, 7);
     while (this.bars.length < list.length) {
       const el = document.createElement('div'); el.style.cssText = 'position:absolute;width:90px;transform:translate(-50%,-100%);text-align:center;font:600 11px Rajdhani,sans-serif;letter-spacing:.14em;text-transform:uppercase;text-shadow:0 1px 2px #000';
       el.innerHTML = '<div class="n"></div><div style="height:4px;background:rgba(0,0,0,.5);margin-top:2px"><i style="display:block;height:100%;background:#ff4a3d"></i></div>';
@@ -255,12 +316,12 @@ export class HUD {
     this.bars.forEach((el, i) => {
       const e = list[i];
       if (!e) { el.style.display = 'none'; return; }
-      e.center(_v); _v.y += e.type === 'brute' ? 1.3 : e.type === 'drone' ? .9 : e.type === 'generator' ? 2 : 1.1;
+      e.center(_v); _v.y += e.barY != null ? e.barY : e.type === 'brute' ? 1.3 : e.type === 'drone' ? .9 : e.type === 'generator' ? 2 : 1.1;
       _v.project(cam);
       if (_v.z > 1) { el.style.display = 'none'; return; }
       el.style.display = ''; el.style.left = ((_v.x + 1) / 2 * W) + 'px'; el.style.top = ((1 - _v.y) / 2 * H) + 'px';
       el.querySelector('.n').textContent = e.T.name;
-      el.querySelector('i').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
+      const bi = el.querySelector('i'); bi.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%'; bi.style.background = e.barColor || '#ff4a3d';
     });
   }
 }

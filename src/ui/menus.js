@@ -1,7 +1,7 @@
 // Title screen, loading screen, pause menu and every ship-station panel (the old main menu, moved aboard).
 import { DESTINATIONS, ARCHETYPES, RARITY, PERKS, SLOT_NAMES, SHADERS, ARMOR_COLORS, GLOW_COLORS, PAINTS, TIPS,
   SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS, ARMOR_SLOT, armorPiece, SIGHTS, sightOptions, weaponSight } from '../game/data.js';
-import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter } from '../game/state.js';
+import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter, rollQuality } from '../game/state.js';
 
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const presetName = id => cap(id.split('_').slice(1).join(' '));
@@ -98,12 +98,15 @@ export class Menus {
     const b = this.panel.querySelector('.pn-body'); if (b) b.scrollTop = top;
   }
 
+  // Every copy of a gun is its own weapon: the card shows what sets it apart (perks, sight, stat rolls, NEW / locked).
   weaponCard(w, on = false, extra = '') {
     const A = ARCHETYPES[w.arch], R = RARITY[w.rarity];
+    const tags = (w.isNew ? '<span class="tag">NEW</span>' : '') + (w.keep ? '<span class="tag lock">LOCKED</span>' : '');
     return `<div class="card ${on ? 'on' : ''}" style="--rc:${R.color}" data-act="pick" data-v="${w.uid}">
-      <div class="pw">${w.power}</div><div class="nm" style="color:${R.color}">${esc(w.name)}</div>
+      <div class="pw">${w.power}</div><div class="nm" style="color:${R.color}">${esc(w.name)}${tags}</div>
       <div class="ty">${R.name} · ${A.cls ? cap(A.cls) + ' ' : ''}${A.name}</div>
-      <div class="pk">${w.perks.map(p => PERKS[p].name).join(' · ') || 'No perks'}</div>${extra}</div>`;
+      <div class="pk">${w.perks.map(p => PERKS[p].name).join(' · ') || 'No perks'}</div>
+      <div class="sg">${esc(SIGHTS[weaponSight(w)].name)} · rolls ${rollQuality(w)}%</div>${extra}</div>`;
   }
 
   statBars(w) {
@@ -269,7 +272,7 @@ export class Menus {
       const f = this.filter == null ? -1 : this.filter;
       const cf = this.clsFilter || 'all';
       const list = sv.inventory.filter(w => (f < 0 || ARCHETYPES[w.arch].slot === f) && (cf === 'all' || (ARCHETYPES[w.arch].cls || 'energy') === cf))
-        .sort((a, b) => (sv.equipped.includes(b.uid) - sv.equipped.includes(a.uid)) || b.power - a.power || b.rarity - a.rarity);
+        .sort((a, b) => (sv.equipped.includes(b.uid) - sv.equipped.includes(a.uid)) || (!!b.isNew - !!a.isNew) || b.power - a.power || b.rarity - a.rarity || (b.got || 0) - (a.got || 0));
       const sel = sv.inventory.find(w => w.uid === this.sel) || g.weapons.equipped(g.weapons.slot) || list[0];
       if (sel) this.sel = sel.uid;
       g.inspect && g.inspect.setWeapon(sel);
@@ -284,10 +287,12 @@ export class Menus {
         body += `<div class="inv-sel"><div class="nm" style="font:700 26px var(--font);color:${R.color}">${esc(sel.name)}</div>
           <div class="ty" style="letter-spacing:.24em;color:var(--dim);font-size:12px;margin-bottom:10px">${R.name} ${A.cls ? cap(A.cls) + ' ' : ''}${A.name} · ${SLOT_NAMES[A.slot]} slot · Power ${sel.power}${eq ? ' · <span style="color:var(--gold)">EQUIPPED</span>' : ''}</div>
           ${this.statBars(sel)}
-          <div class="inv-facts"><span>Ammo<b>${am.mag} / ${am.reserve}</b></span><span>Precision<b>×${A.crit}</b></span><span>Fire mode<b>${A.burst ? A.burst + '-round burst' : A.auto ? 'Automatic' : 'Semi-auto'}</b></span><span>Finish<b>${esc(sh.name)}</b></span></div>
+          <div class="inv-facts"><span>Ammo<b>${am.mag} / ${am.reserve}</b></span><span>Precision<b>×${A.crit}</b></span><span>Fire mode<b>${A.burst ? A.burst + '-round burst' : A.auto ? 'Automatic' : 'Semi-auto'}</b></span><span>Finish<b>${esc(sh.name)}</b></span>
+            <span>Sight<b>${esc(SIGHTS[weaponSight(sel)].name)}</b></span><span>Stat rolls<b>${rollQuality(sel)}%</b></span><span>Copies owned<b>${sv.inventory.filter(x => x.arch === sel.arch).length}</b></span><span>Found<b>${esc(sel.source || 'Field')}</b></span></div>
           <div class="row" style="margin-top:12px">${eq ? '<button class="btn" disabled>Equipped</button>' : aboard
             ? `<button class="btn pri" data-act="equip" data-v="${sel.uid}">Equip to ${SLOT_NAMES[A.slot]}</button>`
-            : '<button class="btn" disabled>Equip aboard the ship</button>'}</div></div>`;
+            : '<button class="btn" disabled>Equip aboard the ship</button>'}
+            <button class="btn" data-act="keep" data-v="${sel.uid}">${sel.keep ? 'Unlock' : 'Lock (never dismantle)'}</button></div></div>`;
       }
       body += label('CARRIED (' + list.length + ')') + `<div class="grid">${list.map(w => this.weaponCard(w, w.uid === this.sel, sv.equipped.includes(w.uid) ? '<div style="position:absolute;right:12px;bottom:10px;font-size:10px;letter-spacing:.3em;color:var(--gold)">EQUIPPED</div>' : '')).join('') || '<p class="guide">Nothing here yet.</p>'}</div>`;
     } else if (this.tab === 'armor') {
@@ -314,7 +319,10 @@ export class Menus {
         <div style="font-size:12px;letter-spacing:.2em;color:var(--dim);margin-top:4px">${Math.min(c.p, c.n)} / ${c.n}${c.done ? ' · READY — CLAIM AT THE BRIEFING TABLE' : ''}</div>
         <div class="pb"><i style="width:${Math.min(100, c.p / c.n * 100)}%"></i></div></div>`).join('');
       const vs = sv.vanthos;
-      if (vs) body += label('VANTHOS') + `<div class="inv-row"><span>Memory shards</span><b>${(vs.shards || []).length}</b><em></em></div><div class="inv-row"><span>Guardians defeated</span><b>${(vs.bosses || []).length}</b><em></em></div>`;
+      const mmss = t => t == null ? '—' : Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+      if (vs) body += label('VANTHOS') + `<div class="inv-row"><span>Operation Heartline</span><b>${vs.runs || 0} completed</b><em>${vs.best != null ? 'Best ' + mmss(vs.best) : ''}</em></div>
+        <div class="inv-row"><span>Logs recovered</span><b>${(vs.logs || []).length}</b><em></em></div>
+        <div class="inv-row"><span>Memory shards</span><b>${(vs.shards || []).length}</b><em></em></div><div class="inv-row"><span>Guardians defeated</span><b>${(vs.bosses || []).length}</b><em></em></div>`;
       body += label('WORLDS') + DESTINATIONS.filter(d => !d.hidden).map(d => `<div class="inv-row"><span>${esc(d.region)}</span><b>${esc(d.name)}</b><em>${sv.stats.visited.includes(d.id) ? 'Charted · level ' + d.level : 'Uncharted'}</em></div>`).join('');
     } else {
       g.inspect && g.inspect.clear();
@@ -343,7 +351,7 @@ export class Menus {
       ${this.statBars(sel)}
       <div class="row" style="margin:16px 0">
         <button class="btn pri" data-act="upgrade" ${sv.credits < cost.cr || sv.alloy < cost.al || sel.power >= cap ? 'disabled' : ''}>Infuse +5 power · ${cost.cr} CR · ${cost.al} alloy</button>
-        <button class="btn" data-act="dismantle" ${eq ? 'disabled' : ''}>Dismantle (+${2 + sel.rarity * 3} alloy)</button></div>
+        <button class="btn" data-act="dismantle" ${eq || sel.keep ? 'disabled' : ''}>${sel.keep ? 'Locked' : `Dismantle (+${2 + sel.rarity * 3} alloy)`}</button></div>
       ${sel.power >= cap ? `<p class="guide">Infusion cap reached (${cap}). Raise your level or power to push further.</p>` : ''}
       ${sightOptions(sel.arch).length > 1 ? `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px">SIGHT</div>
       <div class="row" style="margin:8px 0 14px">${sightOptions(sel.arch).map(id => `<button class="btn ${weaponSight(sel) === id ? 'pri' : ''}" data-act="sight" data-v="${id}">${SIGHTS[id].name}</button>`).join('')}</div>` : ''}
@@ -439,7 +447,8 @@ export class Menus {
       case 'wipe':
         if (t.dataset.armed) { g.wipe(); return; }
         t.dataset.armed = '1'; t.textContent = 'Click again to erase everything'; return;
-      case 'pick': this.sel = v; break;
+      case 'pick': { this.sel = v; const w = sv.inventory.find(x => x.uid === v); if (w && w.isNew) w.isNew = false; break; }
+      case 'keep': { const w = sv.inventory.find(x => x.uid === v); if (w) { w.keep = !w.keep; g.audio.ui(w.keep ? 'confirm' : 'back'); } break; }
       case 'invfilter': this.filter = +v; this.sel = null; break;
       case 'invcls': this.clsFilter = v; this.sel = null; break;
       case 'equip': {
@@ -453,7 +462,7 @@ export class Menus {
         break;
       }
       case 'dismantle': {
-        const i = sv.inventory.findIndex(x => x.uid === this.sel); if (i < 0 || sv.equipped.includes(this.sel)) break;
+        const i = sv.inventory.findIndex(x => x.uid === this.sel); if (i < 0 || sv.equipped.includes(this.sel) || sv.inventory[i].keep) break;
         sv.alloy += 2 + sv.inventory[i].rarity * 3; sv.inventory.splice(i, 1); this.sel = null; g.audio.ui('back'); g.onLoadoutChanged(); break;
       }
       case 'shader': { const w = sv.inventory.find(x => x.uid === this.sel); if (w) { w.shader = v; g.weapons.refreshModel(); g.onLoadoutChanged(); } break; }

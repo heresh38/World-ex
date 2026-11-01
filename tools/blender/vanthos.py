@@ -540,6 +540,87 @@ def camp(x0):
     return finish('VX_camp', x0, P)
 
 
+# ====================================================================== the Operation (operation.js): mission props
+# Material names are an API: the game recolours / dims `conduit_glow`, `relay_glow`, `terminal_screen` and
+# `reliquary_glow` per instance (state lights), so each prop keeps its own glow material.
+def conduit(x0):
+    """Shield conduit: a hexagonal pylon that feeds the Spire Warden's barrier (shootable; the core glows magenta)."""
+    m = M(); P = []
+    cg = bl.mat('conduit_glow', '#ff3fb4', 0, .3, emit='#ff3fb4', strength=8)
+    P += [C('base', 1.6, .45, (0, 0, .22), m['dark'], 6), C('plinth', 1.2, .7, (0, 0, .8), m['panel'], 6, r2=1.05)]
+    for k in range(3):
+        a = k * 2.0944 + .5
+        P.append(B('fin', (1.3, .32, 3.8), (math.cos(a) * .95, math.sin(a) * .95, 3.0), m['panel'], bevel=.06, rot=(0, 0, a)))
+        P.append(B('finglow', (.9, .05, 2.6), (math.cos(a) * 1.13, math.sin(a) * 1.13, 3.0), cg, rot=(0, 0, a)))
+        P.append(C('cable', .1, 2.4, (math.cos(a + 1.05) * 1.9, math.sin(a + 1.05) * 1.9, .12), m['rubber'], 6, rot=(R90, 0, a + 1.05 + R90)))
+    P += [C('core', .38, 3.4, (0, 0, 2.9), cg, 12), C('collarlo', .62, .35, (0, 0, 1.3), m['dark'], 12), C('collarhi', .62, .35, (0, 0, 4.5), m['dark'], 12),
+          bl.torus('halo', 1.0, .08, (0, 0, 4.95), cg, maj=28, mn=6), C('cap', .75, .45, (0, 0, 5.0), m['dark'], 6, r2=.3),
+          bl.sphere('emitter', .3, (0, 0, 5.45), cg, 10, 8)]
+    return finish('VX_conduit', x0, P)
+
+
+def relay(x0):
+    """Signal relay mast: braced lattice tower, dish and a field console (relay_glow: amber dead, cyan linked)."""
+    m = M(); P = []
+    rg = bl.mat('relay_glow', '#ffae2f', 0, .3, emit='#ffae2f', strength=7)
+    P.append(B('slab', (5.5, 5.5, .35), (0, 0, .17), m['dirty']))
+    H = 15
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            P.append(C('leg', .13, H, (sx * 1.0, sy * 1.0, H / 2 + .3), m['steel'], 6))
+    for z in range(2, H, 3):
+        for s in (-1, 1):
+            P.append(B('brace', (2.1, .1, .1), (0, s * 1.0, z + .3), m['steel']))
+            P.append(B('brace', (.1, 2.1, .1), (s * 1.0, 0, z + .3), m['steel']))
+            P.append(B('diag', (2.6, .07, .07), (0, s * 1.0, z + 1.8), m['steel'], rot=(0, .95, 0)))
+    P += [B('deck', (2.8, 2.8, .15), (0, 0, H + .35), m['panel']),
+          C('dish', 2.3, .35, (0, -1.2, H + 2.2), m['steel'], 24, rot=(1.05, 0, 0), r2=.5),
+          C('feed', .06, 1.8, (0, -1.9, H + 2.8), m['steel'], 5, rot=(1.05, 0, 0)),
+          C('mast', .1, 3.4, (.9, .9, H + 2.0), m['steel'], 6), bl.sphere('beacon', .28, (.9, .9, H + 3.8), rg, 10, 8),
+          B('lamp', (.4, .15, .25), (0, -1.05, 8.3), rg),
+          B('console', (1.6, .8, 1.0), (0, -3.1, .85), m['panel'], bevel=.05), B('screen', (1.3, .05, .55), (0, -3.5, 1.35), rg, rot=(-.5, 0, 0)),
+          B('cabinet', (1.0, 1.0, 1.8), (1.6, 1.6, 1.2), m['dark'], bevel=.05), B('cabinetglow', (.06, .7, .1), (1.1, 1.6, 1.8), rg)]
+    for k in range(3):
+        P.append(C('cable', .07, 2.6, (-.2 + k * .2, -2.2, .4), m['rubber'], 5, rot=(R90 + .25, 0, 0)))
+    return finish('VX_relay', x0, P)
+
+
+def terminal(x0):
+    """Field terminal / console (lore logs, the lift controls, the nest purge). The screen faces -Y (the street)."""
+    m = M()
+    sc = bl.mat('terminal_screen', '#40e0ff', 0, .25, emit='#40e0ff', strength=5)
+    P = [B('foot', (1.3, .9, .2), (0, 0, .1), m['dark']), B('body', (.95, .55, 1.1), (0, .05, .75), m['panel'], bevel=.04),
+         B('head', (1.15, .65, .55), (0, -.1, 1.48), m['panel'], bevel=.04, rot=(-.45, 0, 0)),
+         B('screen', (.92, .04, .42), (0, -.4, 1.52), sc, rot=(-.45, 0, 0)), B('keys', (.85, .32, .05), (0, -.34, 1.12), m['dark'], rot=(-.2, 0, 0)),
+         B('stripe', (.96, .02, .06), (0, -.24, .5), m['amber']), C('antenna', .025, .9, (.45, .15, 2.1), m['steel'], 5),
+         bl.sphere('tip', .06, (.45, .15, 2.56), m['amber'], 6, 4)]
+    return finish('VX_terminal', x0, P)
+
+
+def reliquary(x0):
+    """The Warden's reliquary: an ornate sealed chest on a plinth. Child 'reliquary_lid' hinges open on its back edge."""
+    m = M(); r = bl.empty('VX_reliquary', (x0, 0, 0))
+    gl = bl.mat('reliquary_glow', '#ffcf3f', 0, .3, emit='#ffcf3f', strength=9)
+    body = [B('plinth', (3.0, 2.1, .32), (0, 0, .16), m['dark'], bevel=.06), B('step', (2.5, 1.7, .2), (0, 0, .42), m['panel'], bevel=.04),
+            B('chest', (2.1, 1.3, .85), (0, 0, .95), m['panel'], bevel=.07), B('band', (2.16, 1.36, .1), (0, 0, 1.2), m['brass']),
+            B('bandlo', (2.16, 1.36, .1), (0, 0, .66), m['brass']), B('seal', (.5, .05, .45), (0, -.67, .95), gl),
+            B('glowL', (.05, 1.0, .5), (-1.06, 0, .95), gl), B('glowR', (.05, 1.0, .5), (1.06, 0, .95), gl)]
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            body.append(C('post', .09, 1.15, (sx * 1.05, sy * .65, .97), m['brass'], 8))
+            body.append(bl.sphere('knob', .12, (sx * 1.05, sy * .65, 1.58), m['brass'], 8, 6))
+    for o in body:
+        bl.apply_all(o)
+    g = bl.join(body, 'VX_reliquary_mesh'); g.parent = r
+    lid = bl.empty('reliquary_lid', (0, .65, 1.38), r)
+    L = [B('lid', (2.12, 1.32, .3), (0, -.65, .15), m['panel'], bevel=.07), B('lidband', (.16, 1.36, .32), (0, -.65, .16), m['brass']),
+         B('lidglow', (1.5, .8, .02), (0, -.65, .31), gl), B('crest', (.4, .4, .12), (0, -.65, .36), m['brass'], rot=(0, 0, .785))]
+    for o in L:
+        bl.apply_all(o)
+    lm = bl.join(L, 'reliquary_lid_mesh'); lm.parent = lid
+    return r
+
+
 def car_wreck(x0):
     m = M(); P = [B('body', (2, 4.4, 1.1), (0, 0, .75), m['rust'], bevel=.3), B('cabin', (1.8, 2.2, .8), (0, .3, 1.6), m['dark'], bevel=.2)]
     for sx in (-1, 1):
@@ -610,6 +691,7 @@ def main():
     shuttle(nx(60)); apc(nx(40)); train(nx(40)); organism(nx(100)); camp(nx(60)); car_wreck(nx(30))
     growth_cluster('VX_growth_s', nx(30), 4, 101); growth_cluster('VX_growth_l', nx(40), 10, 102)
     tunnel(nx(50)); junction(nx(40)); station(nx(50))
+    conduit(nx(40)); relay(nx(20)); terminal(nx(20)); reliquary(nx(20))
     bl.export('vanthos.glb')
 
 

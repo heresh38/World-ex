@@ -164,16 +164,25 @@ export class Enemy {
     return best >= 0 ? { dist: best, crit } : null;
   }
 
+  // Boss hooks (operation.js): `immune` blocks all damage (the shield takes the hit), `hpFloor` stops the health at a
+  // threshold once and calls `onFloor` (phase change), `vuln` multiplies damage taken (a staggered boss).
   takeDamage(dmg, crit, point, dir, side) {
     if (!this.alive) return { killed: false };
+    if (this.immune) {
+      this.hitT = 0; if (this.state === 'idle') this.alert();
+      this.onImmuneHit && this.onImmuneHit(point, side);
+      return { killed: false, immune: true, dealt: 0 };
+    }
+    dmg *= this.vuln || 1;
     this.hp -= dmg; this.hitT = 0;
+    if (this.hpFloor && this.hp <= this.hpFloor) { this.hp = this.hpFloor; this.hpFloor = 0; this.onFloor && this.onFloor(this); }
     this.byRival = side === 'rival';
     if (dir) this.lastHit = { dir: dir.clone(), dmg };
     if (this.av && point) this.g.fx.blood(point, dir ? dir.clone().negate() : null, crit ? 1.4 : .8, this.T.blood);
     if (this.faction === 'writhe' && point && Math.random() < .3) this.g.audio.squelch && this.g.audio.squelch(point, .5);
     if (this.state === 'idle') this.alert();
-    if (this.hp <= 0) { this.die(crit); return { killed: true }; }
-    return { killed: false };
+    if (this.hp <= 0) { this.die(crit); return { killed: true, dealt: dmg }; }
+    return { killed: false, dealt: dmg };
   }
 
   alert() {
@@ -329,6 +338,14 @@ export class Enemy {
     }
     if (this.glowMats) { const k = .6 + .4 * Math.sin(g.time * 3 + this.seed); for (const o of this.glowMats) o.m.emissiveIntensity = o.base * k; }
     this.hitT += dt;
+    // staggered (a boss whose shield just broke): stands reeling, no attacks
+    if (this.stunT > 0 && this.av) {
+      this.stunT -= dt; this.lockT = 0;
+      this.move(dt, 0, 0, 0, 4);
+      this.av.play('Idle', .2, .45); this.av.aimPitch = -.35;
+      this.av.update(dt);
+      return true;
+    }
     const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z, dist = Math.hypot(dx, dz);
     this.thinkT -= dt;
     if (this.thinkT <= 0) {

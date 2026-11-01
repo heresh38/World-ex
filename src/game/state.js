@@ -1,5 +1,5 @@
 // Persistent player state (localStorage) + loot generation.
-import { ARCHETYPES, RARITY, PERKS, weaponName, CONTRACT_POOL } from './data.js';
+import { ARCHETYPES, RARITY, PERKS, weaponName, CONTRACT_POOL, sightOptions } from './data.js';
 
 const KEY = 'worldex_save_v1';
 
@@ -46,6 +46,43 @@ export function randomArch(rnd = Math.random, slot = null) {
   let r = rnd() * keys.reduce((a, k) => a + wt(k), 0);
   for (const k of keys) { r -= wt(k); if (r <= 0) return k; }
   return keys[keys.length - 1];
+}
+
+// A fully rolled drop: archetype (any class, or a given slot / archetype), rarity, perks, stat rolls and a random sight
+// from the gun's compatible optics, so the same gun can drop again and again and every copy is its own weapon.
+export function rollWeapon(power, o = {}) {
+  const rnd = o.rnd || Math.random;
+  const arch = o.arch || randomArch(rnd, o.slot ?? null);
+  const rarity = o.rarity ?? rollRarity(o.bonus || 0, rnd);
+  const w = makeWeapon(arch, rarity, Math.max(1, power), rnd);
+  const s = sightOptions(arch); w.sight = s[Math.floor(rnd() * s.length)];
+  if (o.source) w.source = o.source;
+  return w;
+}
+
+// weighted pick from {key: weight}
+export function pickWeighted(table, rnd = Math.random) {
+  const tot = Object.values(table).reduce((a, b) => a + b, 0); let r = rnd() * tot;
+  for (const [k, v] of Object.entries(table)) { r -= v; if (r <= 0) return k; }
+  return Object.keys(table)[0];
+}
+
+// how good a copy's stat rolls are (0..100): the average of its five rolls inside their ranges
+export function rollQuality(w) {
+  const s = w.stats || {}; const n = k => Math.max(0, Math.min(1, ((s[k] ?? 1) - (k === 'rpm' ? .95 : .9)) / (k === 'rpm' ? .1 : .2)));
+  return Math.round(['dmg', 'rpm', 'stability', 'range', 'handling'].reduce((a, k) => a + n(k), 0) / 5 * 100);
+}
+
+// Vault: big enough for a long run of operation loot. Past the cap the weakest plain spare is broken down for alloy
+// (never an equipped, locked (`keep`) or still-unseen (`isNew`) weapon); the caller is told so it can say so.
+export const VAULT_CAP = 200;
+export function vaultOverflow(s) {
+  if (s.inventory.length <= VAULT_CAP) return null;
+  const spare = s.inventory.filter(x => !s.equipped.includes(x.uid) && !x.keep && !x.isNew).sort((a, b) => a.rarity - b.rarity || a.power - b.power)[0];
+  if (!spare) return null;
+  s.inventory.splice(s.inventory.indexOf(spare), 1);
+  const alloy = 2 + spare.rarity * 3; s.alloy += alloy;
+  return { w: spare, alloy };
 }
 
 // Player look: body frame, skin, face morphs, colours and one item per clothing slot (null wear = the model's defaults).
@@ -119,6 +156,7 @@ export function load() {
     if (!/^board_/.test(s.car.model)) s.car.model = s.car.model === 'car_utility' ? 'board_utility' : 'board_sport';
     if (!/^#[0-9a-f]{6}$/i.test(s.car.paint || '')) s.car.paint = '#a3121f';
     s.armoryDelivered = grantArmory(s).length;           // new weapon classes reach existing saves
+    if (s.vanthos) s.vanthos = { shards: [], bosses: [], runs: 0, best: null, logs: [], ...s.vanthos };
     return s;
   } catch (e) { return null; }
 }

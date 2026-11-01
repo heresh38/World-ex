@@ -1,7 +1,7 @@
 // Combat hub: target registry, ray tracing against targets + world, splash damage, enemy bolts, loot pickups.
 import * as THREE from 'three';
 import { RARITY, ARCHETYPES } from './data.js';
-import { makeWeapon, rollRarity, randomArch } from './state.js';
+import { rollRarity, rollWeapon } from './state.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
@@ -60,7 +60,7 @@ export class Combat {
       if (d < r + (t.radius || .5)) {
         const f = 1 - Math.min(1, d / (r + .5)) * .6;
         const out = t.takeDamage(dmg * f, false, c, _v.subVectors(c, p).normalize(), side);
-        this.g.hud.damageNumber(c, dmg * f, false);
+        this.g.hud.hitNumber(c, out, dmg * f, false);
         if (out.killed) kills.push(t);
       }
     }
@@ -176,7 +176,7 @@ export class Combat {
       g.audio.ammo(); g.hud.feed('Ammo synthesised', '#ffffff'); g.hud.dirty = true;
     } else {
       const power = Math.max(1, g.power() + Math.round((Math.random() - .3) * 6) + (k.data.rarity >= 3 ? 4 : 0));
-      const w = makeWeapon(randomArch(), k.data.rarity, power);
+      const w = rollWeapon(power, { rarity: k.data.rarity });            // random archetype, perks, rolls and sight
       g.addWeapon(w);
       g.audio.pickup(k.data.rarity);
       g.hud.feed(w.name + ' · ' + ARCHETYPES[w.arch].name + ' · ' + w.power, RARITY[w.rarity].color);

@@ -22,7 +22,7 @@ import { VanthosWorld } from './worlds/vanthos/world.js';
 import { MetroWorld } from './worlds/vanthos/metro.js';
 import { spaceSky, orbitPlanet, planetMaps } from './worlds/sky.js';
 import { DESTINATIONS, ARCHETYPES, armorStats } from './game/data.js';
-import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS } from './game/state.js';
+import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS, vaultOverflow } from './game/state.js';
 
 // Models are loaded per world: BOOT_MODELS before the ship (everything the hub and the player always need), the
 // rest when a world is entered (WORLD_MODELS). Leaving a world frees its large models again, so memory stays bounded.
@@ -419,12 +419,14 @@ class Game {
 
   addWeapon(w) {
     const s = this.save;
+    // every new weapon is its own copy (unique uid) and wears a NEW tag until it is looked at in the inventory
+    if (s.inventory.some(x => x.uid === w.uid)) w.uid += 'd' + Math.floor(Math.random() * 1e6);
+    if (w.isNew === undefined) w.isNew = true;
+    w.got = w.got || Date.now();
     s.inventory.push(w);
-    // keep the vault bounded: auto-dismantle the weakest spare
-    if (s.inventory.length > 60) {
-      const spare = s.inventory.filter(x => !s.equipped.includes(x.uid) && !x.keep).sort((a, b) => a.rarity - b.rarity || a.power - b.power)[0];
-      if (spare) { s.inventory.splice(s.inventory.indexOf(spare), 1); s.alloy += 2 + spare.rarity * 3; }
-    }
+    // keep the vault bounded (VAULT_CAP): only a plain old spare is broken down, and the player is told
+    const o = vaultOverflow(s);
+    if (o) this.hud.feed('Vault full · ' + o.w.name + ' dismantled (+' + o.alloy + ' alloy)', '#9aa0a8');
     // empty slot? equip immediately
     const slot = ARCHETYPES[w.arch].slot;
     if (!s.equipped[slot]) { s.equipped[slot] = w.uid; this.weapons.refreshModel(); }

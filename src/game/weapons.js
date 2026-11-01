@@ -357,13 +357,13 @@ export class Weapons {
       if (res.crit) dmg *= S.crit;
       const out = res.target.takeDamage(dmg, res.crit, end, dir, 'player');
       g.fx.impact(end, dir.clone().negate(), res.crit ? 'crit' : 'enemy');
-      g.hud.damageNumber(end, dmg, res.crit);
-      if (res.crit && w.perks.includes('explosive')) { g.combat.splash(end, 2.5, dmg * .3, 'player', res.target); g.fx.emit(end, 14, 6, 0xff8a40, .3, 4, .08); }
+      g.hud.hitNumber(end, out, dmg, res.crit);
+      if (res.crit && w.perks.includes('explosive') && !out.immune) { g.combat.splash(end, 2.5, dmg * .3, 'player', res.target); g.fx.emit(end, 14, 6, 0xff8a40, .3, 4, .08); }
       if (out.killed) this.onKill(w, res.crit, res.target);
       const sh = r.shot;
       if (!sh.hit) g.save.stats.hits++;
       sh.hit = true;
-      g.hud.hitMarker(res.crit, out.killed); g.audio.hit(res.crit, out.killed);
+      g.hud.hitMarker(res.crit, out.killed, out.immune); if (!out.immune) g.audio.hit(res.crit, out.killed);
     } else {
       g.fx.impact(end, res.normal, res.terrain ? 'dirt' : 'metal');
       // shooting up a car in traffic
@@ -444,8 +444,8 @@ export class Weapons {
     const dmg = q.S.dmg * .16 * (1 + this.rampage * .15);
     const c = t.center(_b).clone();
     const out = t.takeDamage(dmg, false, c, q.v.clone().normalize(), 'player');
-    g.hud.damageNumber(c, dmg, false); g.hud.hitMarker(false, out.killed);
-    this.afflict(t, dmg * (q.A.dot || .4), q.w);
+    g.hud.hitNumber(c, out, dmg, false); g.hud.hitMarker(false, out.killed, out.immune);
+    if (!out.immune) this.afflict(t, dmg * (q.A.dot || .4), q.w);
     g.fx.slime(c, null, .6, 0x9aff4a);
     if (out.killed) this.onKill(q.w, false, t);
   }
@@ -479,8 +479,8 @@ export class Weapons {
     if (res.target) {
       let dmg = S.dmg * mult; if (res.crit) dmg *= S.crit;
       const out = res.target.takeDamage(dmg, res.crit, at, dir, 'player');
-      g.hud.damageNumber(at, dmg, res.crit); g.hud.hitMarker(res.crit, out.killed); g.audio.hit(res.crit, out.killed);
-      this.afflict(res.target, dmg * (A.dot || .5), w);
+      g.hud.hitNumber(at, out, dmg, res.crit); g.hud.hitMarker(res.crit, out.killed, out.immune); if (!out.immune) g.audio.hit(res.crit, out.killed);
+      if (!out.immune) this.afflict(res.target, dmg * (A.dot || .5), w);
       if (out.killed) this.onKill(w, res.crit, res.target);
       if (big) { const kills = g.combat.splash(at, A.splash || 1, dmg * .35, 'player', res.target); kills.forEach(t => this.onKill(w, false, t)); }
       g.fx.slime(at, normal, big ? 1 : .45, q.color);
@@ -511,7 +511,7 @@ export class Weapons {
       const c = t.center(_b).clone(), dmg = a.dps * .35;
       g.fx.fizz(c.clone().add(_a.set((Math.random() - .5) * .4, (Math.random() - .3) * .6, (Math.random() - .5) * .4)));
       const out = t.takeDamage(dmg, false, null, null, 'player');
-      g.hud.damageNumber(c, dmg, false);
+      g.hud.hitNumber(c, out, dmg, false);
       if (out.killed) { this.onKill(a.w, false, t); g.hud.hitMarker(false, true); this.afflicted.delete(t); }
     }
   }
