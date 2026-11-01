@@ -37,8 +37,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 600000, polling: 500 });
   await ev(() => { const g = window.__game; g.save.settings.quality = 'low'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); g.startGame(true); g.audio.start(); });
   await waitPlay();
-  const shipExp = await ev(() => window.__game.renderer.r.toneMappingExposure);
-  await ev(() => { window.__game.cineTime = 99; window.__game.travel('earth'); });
+    await ev(() => { window.__game.cineTime = 99; window.__game.travel('earth'); });
   await waitPlay();
   await ev(() => { window.__game.cineTime = null; });
   await wait(2000);
@@ -65,7 +64,7 @@ fs.mkdirSync(OUT, { recursive: true });
     street: [[-30, 1.7, -104], [60, 6, -112]],
     aerial: [[260, 210, 330], [-20, 30, -60]],
     river: [[90, 9, L.RIVER_Z + 70], [-60, 4, L.RIVER_Z - 10]],
-    park: [[park[0] + 26, 3, park[1] + 20], [park[0], 2.5, park[1]]],
+    park: [[park[0] + 11, 1.9, park[1] + 6], [park[0], 1.6, park[1]]],
   };
 
   // ---------------------------------------------------------------- hours
@@ -168,23 +167,51 @@ fs.mkdirSync(OUT, { recursive: true });
   const atm = await ev(() => window.__game.world.atmos.stats());
   console.log('atmos', JSON.stringify(atm));
   check(atm.vents > 0 && atm.chimneys > 0 && atm.fountains > 0, 'steam vents, chimneys and fountains found', atm);
-  // ---------------------------------------------------------------- other worlds still load
+  // ---------------------------------------------------------------- other worlds still load (fresh browser: swiftshader
+  // runs out of memory when one page has rendered all of the above and then loads two more worlds)
+  let worldsOk = null;
   if (!process.env.SKIP_WORLDS) {
-    const e0 = errs.length;
-    await ev(() => { const g = window.__game; g.stationId = null; g.camFocus = null; g.cineTime = 99; g.travel('ship'); });
-    await waitPlay(); await wait(1500); await frame();
-    const ship = await ev(() => { const g = window.__game; return { world: g.world.kind, exp: g.renderer.r.toneMappingExposure, time: !!document.querySelector('.h-loc .h-time') }; });
-    check(ship.world === 'ship' && Math.abs(ship.exp - shipExp) < 1e-6 && !ship.time, 'ship loads with its own lighting and no clock', ship);
-    await shot('dn_ship');
-    await ev(() => { const g = window.__game; g.travel('vanthos'); });
-    await waitPlay(); await wait(2000); await frame();
-    await ev(() => { window.__game.cineTime = null; });
-    await shot('dn_vanthos');
-    check(errs.length === e0, 'ship and VANTHOS load without page errors', errs.slice(e0));
+    await b.close();
+    const b2 = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
+    const p2 = await b2.newPage({ viewport: { width: 960, height: 540 } });
+    const e2 = [];
+    p2.on('pageerror', e => { e2.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
+    p2.on('console', m => { if (m.type() === 'error') { e2.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
+    await p2.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; });
+    const ev2 = (fn, arg) => p2.evaluate(fn, arg);
+    const play2 = async () => { await p2.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 1200000, polling: 1000 });
+      await ev2(() => { const g = window.__game; g.paused = false; g.menus.hidePause && g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; }); };
+    const shot2 = async n => {
+      await ev2(() => { const r = window.__game.renderer; if (!r.__render) { r.__render = r.render; r.render = () => {}; } });
+      try { await p2.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 86, timeout: 300000 }); }
+      finally { await ev2(() => { const r = window.__game.renderer; if (r.__render) { r.render = r.__render; r.__render = null; } }).catch(() => {}); }
+      console.log('shot', n);
+    };
+    await p2.goto(BASE + '/index.html');
+    await p2.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 600000, polling: 500 });
+    await ev2(() => { const g = window.__game; g.save.settings.quality = 'low'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); g.startGame(true); });
+    await play2();
+    const exp0 = await ev2(() => window.__game.renderer.r.toneMappingExposure);
+    // Earth at night, then back to the ship: the ship must look as before (exposure, no clock in the HUD)
+    await ev2(() => { const g = window.__game; g.save.clock = { hour: 22, day: 1 }; g.clock = null; g.cineTime = 99; g.travel('earth'); });
+    await play2(); await p2.waitForTimeout(2500);
+    await ev2(() => { const g = window.__game; g.travel('ship'); });
+    await play2(); await p2.waitForTimeout(2000);
+    const ship = await ev2(() => { const g = window.__game; return { world: g.world.kind, exp: g.renderer.r.toneMappingExposure, time: !!document.querySelector('.h-loc .h-time'), env: !!g.scene.environment }; });
+    check(ship.world === 'ship' && Math.abs(ship.exp - exp0) < 1e-6 && !ship.time, 'ship after Earth: own exposure, no clock', ship);
+    await shot2('dn_ship');
+    await ev2(() => { window.__game.travel('vanthos'); });
+    await play2(); await p2.waitForTimeout(3000);
+    await ev2(() => { window.__game.cineTime = null; });
+    await shot2('dn_vanthos');
+    worldsOk = e2.length === 0;
+    check(worldsOk, 'Earth -> ship -> VANTHOS without page errors', e2.slice(0, 5));
+    errs.push(...e2);
+    await b2.close();
   }
   console.log('SUMMARY', JSON.stringify({ per, cost, env, ambPeak: amb.peak }));
   console.log('fails:', fails.length, fails.join('; '));
   console.log('page errors:', errs.length);
-  await b.close();
+  await b.close().catch(() => {});
   process.exit(errs.length || fails.length ? 1 : 0);
 })().catch(e => { console.error('DAYNIGHT FAILED', e); process.exit(2); });

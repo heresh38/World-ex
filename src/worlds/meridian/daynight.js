@@ -32,20 +32,20 @@ const KEYS = [
   [5.3, { sun: 0x000000, sunI: 0, hemiS: 0x6274aa, hemiG: 0x2a2630, hemiI: .95, top: 0x0b1838, hor: 0x434466, sunC: 0x9a5060,
     fog: 0x30334e, fogN: 120, fogF: 1150, exp: 1.26, env: .62, bloom: .55, bloomT: .88, cloud: 0x585470, glow: 0x281a10, gnd: 0x0b0c11 }],
   [6.1, { sun: 0xff8a50, sunI: 1.35, hemiS: 0x8a8ebc, hemiG: 0x4c3a34, hemiI: .8, top: 0x2a4c8a, hor: 0xf29a6a, sunC: 0xffa262,
-    fog: 0xb88a7a, fogN: 140, fogF: 1200, exp: 1.12, env: .75, bloom: .42, bloomT: 1, cloud: 0xffc4a4, glow: 0x000000, gnd: 0x2a2224 }],
+    fog: 0xa88c88, fogN: 180, fogF: 1550, exp: 1.12, env: .75, bloom: .42, bloomT: 1, cloud: 0xffc4a4, glow: 0x000000, gnd: 0x2a2224 }],
   [7.3, { sun: 0xffc690, sunI: 2.6, hemiS: 0x9ab6de, hemiG: 0x5a4a3a, hemiI: .88, top: 0x3a6ab0, hor: 0xe8c4a4, sunC: 0xffd6a8,
-    fog: 0xd0c0b2, fogN: 170, fogF: 1400, exp: 1.04, env: .85, bloom: .3, bloomT: 1, cloud: 0xfff0e2, glow: 0x000000, gnd: 0x36312e }],
+    fog: 0xc6bcb4, fogN: 200, fogF: 1750, exp: 1.04, env: .85, bloom: .3, bloomT: 1, cloud: 0xfff0e2, glow: 0x000000, gnd: 0x36312e }],
   [10, { sun: 0xfff0dc, sunI: 3.1, hemiS: 0xa6c2ea, hemiG: 0x5e5446, hemiI: .95, top: 0x2c62b2, hor: 0xb6cee6, sunC: 0xfff2dc,
     fog: 0xb8cbe0, fogN: 220, fogF: 2000, exp: 1.0, env: .9, bloom: .25, bloomT: 1, cloud: 0xffffff, glow: 0x000000, gnd: 0x383838 }],
   [13.5, { sun: 0xfff8ee, sunI: 3.3, hemiS: 0xaccaf0, hemiG: 0x645a4c, hemiI: 1.0, top: 0x2a5eb0, hor: 0xbcd4ec, sunC: 0xffffff,
     fog: 0xc0d4e6, fogN: 240, fogF: 2100, exp: 1.0, env: .9, bloom: .22, bloomT: 1, cloud: 0xffffff, glow: 0x000000, gnd: 0x3a3a3a }],
   [16.8, { sun: 0xffeccc, sunI: 3.15, hemiS: 0xa4c0e4, hemiG: 0x60543f, hemiI: .95, top: 0x2f62ac, hor: 0xc8d2dc, sunC: 0xfff0d8,
     fog: 0xc6cfd8, fogN: 210, fogF: 1900, exp: 1.02, env: .9, bloom: .25, bloomT: 1, cloud: 0xfff8f0, glow: 0x000000, gnd: 0x3a3836 }],
-  // the original golden hour look
+  // the original golden hour look (with a lighter haze so distant towers keep their contrast)
   [18.6, { sun: 0xffd2a0, sunI: 3.0, hemiS: 0x9cb8e0, hemiG: 0x5a4636, hemiI: .95, top: 0x3a6aa8, hor: 0xf2b27a, sunC: 0xffd9a8,
-    fog: 0xd9a888, fogN: 160, fogF: 1300, exp: 1.05, env: .9, bloom: .3, bloomT: 1, cloud: 0xffe8d2, glow: 0x000000, gnd: 0x3c302a }],
+    fog: 0xcfa68c, fogN: 200, fogF: 1750, exp: 1.05, env: .9, bloom: .3, bloomT: 1, cloud: 0xffe8d2, glow: 0x000000, gnd: 0x3c302a }],
   [19.55, { sun: 0xff7038, sunI: 1.7, hemiS: 0x8a86b0, hemiG: 0x42302a, hemiI: .8, top: 0x30508c, hor: 0xff8a50, sunC: 0xff9450,
-    fog: 0xb07868, fogN: 150, fogF: 1250, exp: 1.1, env: .75, bloom: .4, bloomT: .95, cloud: 0xffa486, glow: 0x100804, gnd: 0x2a1e22 }],
+    fog: 0xa47a70, fogN: 180, fogF: 1550, exp: 1.1, env: .75, bloom: .4, bloomT: .95, cloud: 0xffa486, glow: 0x100804, gnd: 0x2a1e22 }],
   [20.35, { sun: 0xc06050, sunI: 0, hemiS: 0x6466a8, hemiG: 0x2e2636, hemiI: .9, top: 0x151e4c, hor: 0x6c4a7c, sunC: 0xd8705a,
     fog: 0x3c3658, fogN: 130, fogF: 1150, exp: 1.22, env: .64, bloom: .55, bloomT: .88, cloud: 0x7c5c84, glow: 0x2a1a10, gnd: 0x0c0a12 }],
   [21.4, NIGHT], [24, NIGHT],
@@ -57,8 +57,8 @@ const KEYS = [
 
 // lit-room fractions through the day: homes light up in the evening, offices in working hours, shops while open
 const LIT = {
-  home: [[0, .2], [1.5, .1], [4.5, .05], [6, .22], [7.5, .26], [9, .07], [16, .07], [18, .3], [20, .55], [22, .5], [23.5, .3], [24, .2]],
-  office: [[0, .06], [6, .06], [7.5, .55], [9, .8], [17, .8], [19, .35], [21, .14], [24, .06]],
+  home: [[0, .27], [1.5, .17], [4.5, .08], [6, .22], [7.5, .26], [9, .07], [16, .07], [18, .3], [20, .55], [22, .5], [23.5, .36], [24, .27]],
+  office: [[0, .1], [6, .1], [7.5, .55], [9, .8], [17, .8], [19, .35], [21, .16], [24, .1]],
   shop: [[0, .12], [7, .12], [8.5, 1], [21, 1], [22.5, .3], [24, .12]],
 };
 const curve = (K, h) => { for (let i = 1; i < K.length; i++) if (h <= K[i][0]) { const a = K[i - 1], b = K[i], t = smooth((h - a[0]) / (b[0] - a[0])); return a[1] + (b[1] - a[1]) * t; } return K[0][1]; };
@@ -169,7 +169,7 @@ export class DayNight {
     const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(heads, 3));
     const hmat = new THREE.ShaderMaterial({
       uniforms: { uI: { value: 0 }, scale: { value: innerHeight / 2 }, uCol: { value: new THREE.Color(1, .8, .55) } },
-      vertexShader: `uniform float scale;varying float vF;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vF=clamp(1.-(-mv.z-150.)/250.,0.,1.);gl_PointSize=min(160.,1.7*scale/max(.5,-mv.z));gl_Position=projectionMatrix*mv;}`,
+      vertexShader: `uniform float scale;varying float vF;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vF=clamp(1.-(-mv.z-150.)/250.,0.,1.);gl_PointSize=min(70.,1.1*scale/max(.5,-mv.z));gl_Position=projectionMatrix*mv;}`,
       fragmentShader: `uniform float uI;uniform vec3 uCol;varying float vF;void main(){vec2 p=gl_PointCoord-.5;float d=dot(p,p)*4.;if(d>1.)discard;float a=pow(1.-d,3.);gl_FragColor=vec4(uCol*a*uI*vF,1.);}`,
       blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: true,
     });
@@ -222,7 +222,7 @@ export class DayNight {
     if (this.pools) {
       this.pools.visible = this.halos.visible = lampK > .01;
       this.pools.material.uniforms.uI.value = .42 * lampK;
-      this.halos.material.uniforms.uI.value = 1.1 * lampK;
+      this.halos.material.uniforms.uI.value = .8 * lampK;
       this.halos.material.uniforms.scale.value = innerHeight / 2;
       if (fog) { const U = this.pools.material.uniforms; U.fogColor.value.copy(fog.color); U.fogNear.value = fog.near; U.fogFar.value = fog.far; }
     }

@@ -149,7 +149,7 @@ export class Downtown {
       m.emissiveMap = m.metalnessMap; m.emissive = new THREE.Color(1, 1, 1); m.emissiveIntensity = 1;
       m.envMapIntensity = glass ? 1.55 : .55;
       const U = { uGrid: { value: new THREE.Vector2(...set[1]) }, uRoom: { value: new THREE.Vector3(...set[2]) }, uLit: SKY[set[3]],
-        uNight: SKY.night, uHour: SKY.hour, uWin: SKY.win, uTime: SKY.time, uGain: { value: /shop/.test(n) ? .7 : 1.2 } };
+        uNight: SKY.night, uHour: SKY.hour, uWin: SKY.win, uTime: SKY.time, uGain: { value: /shop/.test(n) ? .42 : 1.2 } };
       if (/derelict/.test(n)) U.uLit = { value: 0 };
       m.onBeforeCompile = sh => {
         Object.assign(sh.uniforms, U);
@@ -163,8 +163,12 @@ export class Downtown {
             #endif`);
         sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vDtB, vDtN;uniform vec2 uGrid;uniform vec3 uRoom;uniform float uLit, uNight, uHour, uWin, uTime, uGain;' + ROOM_GLSL)
           .replace('#include <emissivemap_fragment>', WINDOW_FRAG);
+        // glass curtain walls far away: the mipmapped blinds average out to a pale grey; keep them dark so the towers
+        // read as glass (reflections carry them) instead of flat peach slabs
+        if (glass) sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+          diffuseColor.rgb *= 1. - .45 * smoothstep( 90., 380., length( vViewPosition ) );`);
       };
-      m.customProgramCacheKey = () => 'dtfacade' + (rooms ? 'r' : '');
+      m.customProgramCacheKey = () => 'dtfacade' + (rooms ? 'r' : '') + (glass ? 'g' : '');
       m.needsUpdate = true;
     } else if (/^dt_awning/.test(n)) {
       // awnings: the free (front) edge flutters a little in the wind (awning UVs: v = 1 at the free edge)
