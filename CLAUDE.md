@@ -82,7 +82,7 @@ plaza, and glowing cyan kerb strips.
   at night (the one shadow light switches sun <-> moon while both are dim), palette keyframes (dawn orange, white noon,
   the original golden hour at 18:36, red sunset, purple dusk, blue night) for light, hemi, fog, sky (`atmosphereSky`
   uniforms night/moonDir/cloudC/glowC; gndC/gndK darken the lower half of the reflection probe so glass reflects a dark
-  street), water, exposure, bloom. The PMREM probe is rebuilt only when the sun moved ~3.5 degrees or night changed.
+  street), water, exposure, bloom. The PMREM probe is rebuilt only when the sun moved ~5 degrees or night changed (at most every 12 s; ~2 per real minute).
   `SKY` = shared uniforms (night, hour, litHome/litOffice/litShop fractions, win gain). Downtown facades: per window cell
   (UV x tile bays/floors, hashed with the instance position and wall facing) a time-slot hash decides lit rooms; desktop
   adds interior mapping (ray into a box room: furniture, rug, ceiling lamp, blinds; < 150 m, off on touch or with
