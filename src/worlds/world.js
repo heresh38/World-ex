@@ -42,6 +42,7 @@ export class World {
   dispose() {
     this.scene.traverse(o => {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+      if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose();      // bone texture (re-made on the next render if reused)
     });
     this.disposables.forEach(d => d.dispose && d.dispose());
   }

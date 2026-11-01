@@ -289,5 +289,12 @@ export class Avatar {
     return this.root.getWorldPosition(out).add(_v.set(0, 1.4, 0));
   }
 
-  dispose() { this.root.removeFromParent(); this.mixer.stopAllAction(); }
+  dispose() {
+    this.root.removeFromParent(); this.mixer.stopAllAction();
+    // free the per-character GPU state: bone textures and the cloned materials (textures stay with the shared model)
+    const skels = new Set();
+    this.root.traverse(o => { if (o.isSkinnedMesh) skels.add(o.skeleton); });
+    skels.forEach(k => k.dispose());
+    for (const m of this.allMats || []) m.dispose();
+  }
 }
