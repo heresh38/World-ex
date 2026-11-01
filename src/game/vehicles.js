@@ -130,6 +130,9 @@ export class Car {
     const h = this.groundUnder();
     this.pos.y = h.y; this.pitch = h.pitch; this.roll = h.roll; this.vel.y = 0;
     for (const w of this.wheels) { w.off = 0; w.prev = 0; }
+    // placed over water: stay awake so buoyancy floats it instead of parking it on the bed
+    const wy = waterY(this.g, this.pos.x, this.pos.z);
+    if (wy !== null && wy > this.pos.y + .3) { this.pos.y = wy - .3; this.sleep = false; }
   }
 
   // average support under the four wheels -> height, pitch and roll (cheap; used for traffic and spawning)
