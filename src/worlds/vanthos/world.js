@@ -308,9 +308,11 @@ export class VanthosWorld extends World {
     this.coreLight = new THREE.PointLight(0x7fe8ff, 8000, 900, 1.4); this.coreLight.position.set(0, 380, 0); sc.add(this.coreLight);
     // the lift up to the foundation, and the Spire Warden waiting on top
     this.makeLift(0, 100, 28, 0, 78);
+    this.spireLift = new THREE.Vector3(0, 0, 100); this.spireLift.y = this.map.height(0, 100);
     if (!g.save.vanthos.bosses.includes('The Spire Warden')) {
-      this.sites.push({ D: DISTRICTS[0], types: ['elite'], pos: new THREE.Vector3(0, 28, 60), n: 1, o: { boss: { name: 'The Spire Warden', hpMul: 6, scale: 1.7 } }, live: [], cleared: false, spawned: false });
-      for (let k = 0; k < 4; k++) this.sites.push({ D: DISTRICTS[0], types: ['elite'], pos: new THREE.Vector3(Math.cos(k * 1.57) * 60, 28, Math.sin(k * 1.57) * 60), n: 1, o: {}, live: [], cleared: false, spawned: false });
+      // the Warden and its guard only wake when the player reaches the foundation (gate), not by distance from the street
+      this.sites.push({ D: DISTRICTS[0], types: ['elite'], pos: new THREE.Vector3(0, 28, 60), n: 1, o: { boss: { name: 'The Spire Warden', hpMul: 6, scale: 1.7 } }, live: [], cleared: false, spawned: false, gate: 'spire' });
+      for (let k = 0; k < 4; k++) this.sites.push({ D: DISTRICTS[0], types: ['elite'], pos: new THREE.Vector3(Math.cos(k * 1.57) * 60, 28, Math.sin(k * 1.57) * 60), n: 1, o: {}, live: [], cleared: false, spawned: false, gate: 'spire' });
     }
     this.makeCache(0, 28, 72, 4, 'Spire reliquary', () => g.save.vanthos.bosses.includes('The Spire Warden'));
   }
@@ -412,6 +414,7 @@ export class VanthosWorld extends World {
     for (const st of this.sites) {
       if (st.cleared) continue;
       const d = Math.hypot(st.pos.x - p.x, st.pos.z - p.z);
+      if (st.gate === 'spire' && !this.onFoundation()) { if (!st.spawned) continue; }
       if (!st.spawned && d < STREAM_IN) this.spawnSite(st);
       else if (st.spawned && d > STREAM_OUT) {
         const set = new Set(st.live);
@@ -420,6 +423,24 @@ export class VanthosWorld extends World {
         if (!st.live.length) st.spawned = false;
       }
     }
+  }
+
+  onFoundation() { const p = this.g.player.pos; return p.y > 20 && Math.hypot(p.x, p.z) < 95; }
+  spireBeaten() { return this.g.save.vanthos.bosses.includes('The Spire Warden'); }
+
+  // arriving at the Spire: the street gate (first time near the base) and the foundation (the Warden wakes)
+  spireBeats() {
+    const g = this.g, p = g.player.pos, r = Math.hypot(p.x, p.z);
+    if (!this.spireNear && r < 160 && p.y < 20) {
+      this.spireNear = true;
+      g.hud.banner('The Spire', this.spireBeaten() ? 'Silent now' : 'Take the lift on the south face', 3.5);
+    }
+    if (!this.spireTop && this.onFoundation()) {
+      this.spireTop = true;
+      if (!this.spireBeaten()) { g.hud.banner('The Spire Warden', 'It wakes', 3.5); g.audio.roar && g.audio.roar(new THREE.Vector3(0, 28, 60)); }
+      else g.hud.banner('The Foundation', 'The reliquary waits', 3);
+    }
+    if (this.spireTop && !this.onFoundation()) this.spireTop = false;
   }
 
   // ---------------------------------------------------------------- world event on the outer highway
@@ -458,7 +479,7 @@ export class VanthosWorld extends World {
     this.factionWar = !!D.factionWar;
     // stream enemy packs every few frames
     this.streamT = (this.streamT || 0) - dt;
-    if (this.streamT <= 0) { this.streamT = .5; this.stream(); }
+    if (this.streamT <= 0) { this.streamT = .5; this.stream(); this.spireBeats(); }
     // ambushers stay still and hidden until the player is close
     for (const e of g.enemies.list) if (e.ambush && e.state === 'idle' && e.alive && e.pos.distanceTo(p.pos) < 16) { e.ambush = false; e.alert(); g.hud.toast('Ambush!'); }
     // the nearest district lights take the pooled point lights
@@ -504,6 +525,7 @@ export class VanthosWorld extends World {
 
   markers() {
     const p = this.g.player.pos, m = [{ pos: new THREE.Vector3(0, 0, 0), icon: '◆', color: '#7fe8ff' }, { pos: this.landing, icon: '▲', color: '#1ad8ff' }];
+    if (this.spireLift && !this.onFoundation() && Math.hypot(p.x, p.z) < 420) m.push({ pos: this.spireLift, icon: '⇧', color: '#7fe8ff' });
     if (this.event) m.push({ pos: this.event.pos, icon: '✖', color: '#ff4a3d' });
     for (const q of this.metros || []) if (q.distanceTo(p) < 260) m.push({ pos: q, icon: 'M', color: '#e3c26c' });
     for (const c of this.caches) if (!c.open && c.pos.distanceTo(p) < 140) m.push({ pos: c.pos, icon: '◆', color: '#ffae2f' });
@@ -513,7 +535,12 @@ export class VanthosWorld extends World {
   objectives() {
     const g = this.g, p = g.player.pos, D = this.D || DISTRICTS[0];
     const d = Math.round(Math.hypot(p.x, p.z));
-    const o = [{ text: g.save.vanthos.bosses.includes('The Spire Warden') ? 'The Spire is silent' : 'Reach the Spire', sub: d > 120 ? d + ' m to the centre · danger rises' : 'The Warden waits on the foundation' },
+    const beaten = this.spireBeaten(), top = this.onFoundation();
+    const spire = beaten ? { text: 'The Spire is silent', sub: top ? 'Open the Spire reliquary' : 'The reliquary waits on the foundation' }
+      : top ? { text: 'Defeat the Spire Warden', sub: 'On the foundation' }
+      : d > 160 ? { text: 'Reach the Spire', sub: d + ' m to the centre · danger rises' }
+      : { text: 'Ride the lift up the Spire', sub: 'South face · ' + Math.round(Math.hypot(p.x, p.z - 100)) + ' m · the Warden waits on the foundation' };
+    const o = [spire,
       { text: D.name, sub: 'Threat level ' + this.levelAt(p.x, p.z, D) + (D.factionWar ? ' · rival factions at war' : '') },
       { text: 'Memory shards', sub: g.save.vanthos.shards.length + ' / 12 · hidden in the Flooded District' }];
     if (this.event) o.push({ text: 'World event: raider convoy', sub: 'Outer highway' });

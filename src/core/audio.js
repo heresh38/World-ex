@@ -8,6 +8,22 @@ const MUSIC = {
 };
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
+// Non-finite values reaching an AudioParam (a NaN distance, a zero divide) can poison filters and the compressor and
+// silence the whole mix; drop them at the source. exponential ramps also reject 0 and negatives, so clamp those.
+let guarded = false;
+function guardParams() {
+  if (guarded || typeof AudioParam === 'undefined') return; guarded = true;
+  const P = AudioParam.prototype, ok = Number.isFinite;
+  for (const name of ['setValueAtTime', 'linearRampToValueAtTime', 'setTargetAtTime']) {
+    const f = P[name]; if (!f) continue;
+    P[name] = function (v, a, b) { if (!ok(v) || !ok(a) || (b !== undefined && !ok(b))) return this; return f.call(this, v, a, b); };
+  }
+  const er = P.exponentialRampToValueAtTime;
+  if (er) P.exponentialRampToValueAtTime = function (v, t) { if (!ok(v) || !ok(t)) return this; return er.call(this, v > 0 ? v : 1e-4, t); };
+  const d = Object.getOwnPropertyDescriptor(P, 'value');
+  if (d && d.set) Object.defineProperty(P, 'value', { get: d.get, set(v) { if (ok(v)) d.set.call(this, v); }, configurable: true, enumerable: d.enumerable });
+}
+
 export class Audio {
   constructor(settings) {
     this.settings = settings;
@@ -19,26 +35,37 @@ export class Audio {
 
   // Must be called from a user gesture.
   start() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    // iOS can leave the context 'interrupted' (calls, Siri, other audio): any state but running gets resumed on a tap
+    if (this.ctx) { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
+    guardParams();
     const c = this.ctx = new AC();
+    c.addEventListener && c.addEventListener('statechange', () => { if (c.state === 'interrupted') c.resume().catch(() => {}); });
     this.master = c.createGain(); this.master.connect(c.destination);
-    const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
-    comp.connect(this.master);
-    this.bus = comp;
-    this.sfx = c.createGain(); this.sfx.connect(comp);
-    this.mus = c.createGain(); this.mus.connect(comp);
-    this.amb = c.createGain(); this.amb.connect(comp);
+    this.sfx = c.createGain(); this.mus = c.createGain(); this.amb = c.createGain();
     // shared reverb for music/ambience
     this.verb = c.createConvolver(); this.verb.buffer = this.impulse(2.8);
-    const vg = c.createGain(); vg.gain.value = .35; this.verb.connect(vg); vg.connect(comp);
+    this.verbOut = c.createGain(); this.verbOut.gain.value = .35; this.verb.connect(this.verbOut);
+    this.resetBus();
     const len = c.sampleRate * 2;
     this.noise = c.createBuffer(1, len, c.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.ready = true;
     this.applyVolumes();
+  }
+
+  // (Re)build the master compressor. A single NaN sample leaves a compressor silent for good, so the game calls this
+  // on every world change as a safety net (input params are also guarded, see guardParams).
+  resetBus() {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (this.bus) { try { this.bus.disconnect(); } catch (e) { /* already gone */ } }
+    for (const n of [this.sfx, this.mus, this.amb, this.verbOut]) { try { n.disconnect(); } catch (e) { /* not connected */ } }
+    const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    comp.connect(this.master); this.bus = comp;
+    for (const n of [this.sfx, this.mus, this.amb, this.verbOut]) n.connect(comp);
   }
 
   impulse(sec) {

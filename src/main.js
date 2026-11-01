@@ -258,6 +258,7 @@ class Game {
       if (id !== 'vanthos_metro') this.save.lastDest = id;
       if (!this.save.stats.visited.includes(id)) this.save.stats.visited.push(id);
     }
+    this.audio.resetBus && this.audio.resetBus();
     this.audio.ambience(id === 'ship' ? 'ship' : id === 'earth' ? 'city' : 'wind');
     this.audio.musicKind = null; this.audio.music(id === 'ship' ? 'ship' : id === 'earth' ? 'earth' : 'planet');
     if (id === 'ship') this.audio.weldLoop();
@@ -565,7 +566,7 @@ class Game {
     else this.hud.prompt(null);
     if (canAct && input.pressed('KeyE')) {
       if (p.mode === 'car') this.vehicles.exit();
-      else if (focus) focus.action();
+      else if (focus) { focus.action(); input.consume('KeyE'); }     // the same press must not also stand you up
       else if (carNear) this.vehicles.enter(carNear);
     }
     if (canAct && input.pressed('KeyV') && w.allowCars) this.vehicles.summon();
