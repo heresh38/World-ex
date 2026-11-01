@@ -7,6 +7,17 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
+// A NaN/Inf pixel (an over-bright specular in the half-float buffer, a bad normal) is spread over the whole screen by the
+// bloom blur and turns the frame black. Every full-screen pass that reads the scene drops such pixels first.
+// (GLSL ES 1.00-safe: no isnan; the comparison is false for both NaN and Inf.)
+const SAFE_FN = `vec4 wxSafe(vec4 c){ return (abs(c.r) < 6e4 && abs(c.g) < 6e4 && abs(c.b) < 6e4 && abs(c.a) < 6e4) ? max(c, vec4(0.)) : vec4(0.,0.,0.,1.); }\n`;
+function sanitize(mat) {
+  const fs = mat.fragmentShader, at = fs.indexOf('void main');
+  if (at < 0 || fs.includes('wxSafe')) return;
+  mat.fragmentShader = (fs.slice(0, at) + SAFE_FN + fs.slice(at)).replace(/texture2D\(\s*tDiffuse,\s*vUv\s*\)/g, 'wxSafe(texture2D( tDiffuse, vUv ))');
+  mat.needsUpdate = true;
+}
+
 export const QUALITY = {
   low: { pixel: 0.75, shadow: 1024, bloom: false, fxaa: false, shadowsOn: true, draw: 0.6 },
   medium: { pixel: 1.0, shadow: 2048, bloom: true, fxaa: true, shadowsOn: true, draw: 0.8 },
@@ -60,8 +71,10 @@ export class Renderer {
       const bp = this.bloomParams || [0.35, 1.0, 0.4];
       this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), bp[0], bp[2], bp[1]);
       this.composer.addPass(this.bloom);
+      sanitize(this.bloom.materialHighPassFilter);
     }
-    this.composer.addPass(new OutputPass());
+    const out = new OutputPass(); sanitize(out.material);
+    this.composer.addPass(out);
     this.fxaa = null;
     if (q.fxaa) {
       this.fxaa = new ShaderPass(FXAAShader);

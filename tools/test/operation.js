@@ -19,7 +19,13 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
-  const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 85, timeout: 300000 }); console.log('shot', n); };
+  const shot = async n => { await mem(n); await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 85, timeout: 300000 }); console.log('shot', n); };
+  const { execSync } = require('child_process');
+  const rss = () => { try { const out = execSync('ps -eo pid,ppid,rss').toString().trim().split('\n').slice(1).map(l => l.trim().split(/\s+/).map(Number));
+    const kids = new Set([process.pid]); let ch = true; while (ch) { ch = false; for (const [a, pp] of out) if (kids.has(pp) && !kids.has(a)) { kids.add(a); ch = true; } }
+    return Math.round(out.filter(r => kids.has(r[0])).reduce((s, r) => s + r[2], 0) / 1024); } catch (e) { return -1; } };
+  const mem = async tag => { const m = await p.evaluate(() => { const g = window.__game, r = g.renderer.r.info; return { geo: r.memory.geometries, tex: r.memory.textures, prog: r.programs.length, heap: Math.round(performance.memory.usedJSHeapSize / 1e6), enemies: g.enemies.list.length, scene: g.scene.children.length }; }).catch(() => null);
+    console.log('mem', tag, rss() + ' MB', JSON.stringify(m)); };
   const check = (ok, what, info = '') => { console.log((ok ? 'PASS ' : 'FAIL ') + what + (info !== '' ? ' · ' + (typeof info === 'string' ? info : JSON.stringify(info)) : '')); if (!ok) fails.push(what); };
   const live = () => ev(() => { const g = window.__game; g.paused = false; g.menus.hidePause && g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; });
   const waitPlay = async () => { await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 900000, polling: 1000 }); await live(); };

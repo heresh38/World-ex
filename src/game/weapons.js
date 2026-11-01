@@ -96,7 +96,7 @@ export class Weapons {
     this.streaks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_ROUNDS * 3), 3);
     this.streaks.frustumCulled = false; this.streaks.count = 0;
     // goo globs, droplets, spore pods and parasites: one instanced draw
-    this.globs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .12, metalness: 0,
+    this.globs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .32, metalness: 0,
       emissive: 0x1c3a0c, emissiveIntensity: 1 }), MAX_GOO);
     this.globs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_GOO * 3), 3);
     this.globs.frustumCulled = false; this.globs.count = 0; this.globs.castShadow = false;
