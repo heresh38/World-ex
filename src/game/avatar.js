@@ -288,6 +288,48 @@ export class Avatar {
         bone.updateMatrixWorld(true);
       }
     }
+    // relaxed seat pose (benches, sofas, cafe chairs): the shared Sit clip holds a steering wheel, so on a seat the arms
+    // are re-aimed in the body frame — upper arms hang, forearms rest along the thighs — and the chest leans back a touch.
+    // `sitRelax` is the target (0/1); the weight eases in with the sit-down blend.
+    this.sitW = (this.sitW || 0) + ((this.sitRelax ? 1 : 0) - (this.sitW || 0)) * Math.min(1, dt * 4);
+    if (this.sitW > .01 && this.bones.upperarmL) this.relaxArms(this.sitW);
+  }
+
+  // point `bone` so the direction to `child` matches `dir` (world space), blended by w; rig-axis independent
+  aimBone(bone, child, dir, w) {
+    bone.updateMatrixWorld(true);
+    const a = bone.getWorldPosition(new THREE.Vector3()), b = child.getWorldPosition(new THREE.Vector3());
+    const cur = b.sub(a).normalize();
+    const rot = new THREE.Quaternion().setFromUnitVectors(cur, dir);
+    rot.slerp(new THREE.Quaternion(), 1 - w);
+    const wq = bone.getWorldQuaternion(new THREE.Quaternion()), pq = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    this.touched.add(bone);
+    bone.quaternion.copy(pq.multiply(rot.multiply(wq)));
+    bone.updateMatrixWorld(true);
+  }
+
+  relaxArms(w) {
+    const B = this.bones;
+    this.root.updateMatrixWorld(true);
+    const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const f = new THREE.Vector3(0, 0, 1).applyQuaternion(rq), up = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(rq);
+    if (this.chest && this.chest.parent) {
+      // lean back slightly into the backrest
+      const inv = this.chest.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+      this.touched.add(this.chest);
+      this.chest.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(right.clone().applyQuaternion(inv).normalize(), -.12 * w));
+      this.chest.updateMatrixWorld(true);
+    }
+    const hips = (B.hips || this.root).getWorldPosition(new THREE.Vector3());
+    for (const s of ['L', 'R']) {
+      const ua = B['upperarm' + s], fa = B['forearm' + s], hd = B['hand' + s];
+      if (!ua || !fa || !hd) continue;
+      const lat = Math.sign(ua.getWorldPosition(new THREE.Vector3()).sub(hips).dot(right)) || (s === 'L' ? 1 : -1);
+      const out = right.clone().multiplyScalar(lat);
+      this.aimBone(ua, fa, up.clone().multiplyScalar(-.84).addScaledVector(f, .42).addScaledVector(out, .16).normalize(), w);
+      this.aimBone(fa, hd, up.clone().multiplyScalar(-.32).addScaledVector(f, .93).addScaledVector(out, -.14).normalize(), w);
+    }
   }
 
   muzzleWorld(out) {

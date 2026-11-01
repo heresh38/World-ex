@@ -74,7 +74,7 @@ export class Player {
     this.standFrom = this.pos.clone();
     this.pos.copy(seat.pos); this.yaw = seat.yaw;
     this.avatar.root.position.copy(this.pos); this.avatar.root.rotation.set(0, this.yaw, 0);
-    this.avatar.play('Sit', .35);
+    this.avatar.play('Sit', .35); this.avatar.sitRelax = true;   // relaxed arms on a seat (avatar.relaxArms)
     this.g.weapons && this.g.weapons.refreshModel();
   }
 
@@ -86,7 +86,7 @@ export class Player {
     const out = this.pos.clone().addScaledVector(f, .75); out.y = world.support(out.x, out.z, this.pos.y + .5);
     const blocked = world.raycast(_t.copy(this.pos).setY(this.pos.y + .9), f, .9);
     this.pos.copy(blocked && this.standFrom ? this.standFrom : out);
-    this.seat = null; this.avatar.play(this.armed ? 'Idle' : 'IdleRelaxed', .3);
+    this.seat = null; this.avatar.sitRelax = false; this.avatar.play(this.armed ? 'Idle' : 'IdleRelaxed', .3);
     this.g.weapons && this.g.weapons.refreshModel();
   }
 

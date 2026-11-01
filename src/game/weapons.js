@@ -7,7 +7,7 @@ import { ARCHETYPES, RARITY, SHADERS, SIGHTS, weaponSight, sightZoom } from './d
 import { weaponStats } from './state.js';
 
 const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Vector3(), _t = new THREE.Vector3(), _a = new THREE.Vector3(),
-  _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _M = new THREE.Matrix4();
+  _b = new THREE.Vector3(), _c = new THREE.Vector3(), _col = new THREE.Color(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _M = new THREE.Matrix4();
 const Z = new THREE.Vector3(0, 0, 1);
 const G = 9.81;
 const MAX_ROUNDS = 256, MAX_GOO = 160;
@@ -350,7 +350,7 @@ export class Weapons {
       if (n < MAX_ROUNDS) {
         _q.setFromUnitVectors(Z, _d);
         _M.compose(_b, _q, _s.set(r.width, r.width, len));
-        this.streaks.setMatrixAt(n, _M); this.streaks.setColorAt(n, _c.set(r.col.r * 4, r.col.g * 4, r.col.b * 4)); n++;
+        this.streaks.setMatrixAt(n, _M); this.streaks.setColorAt(n, _col.setRGB(r.col.r * 4, r.col.g * 4, r.col.b * 4)); n++;
       }
     }
     this.streaks.count = n;
@@ -422,7 +422,7 @@ export class Weapons {
         const wob = 1 + Math.sin(q.t * 30 + i) * .12;
         _q.setFromUnitVectors(Z, _d);
         _M.compose(q.p, _q, _s.set(q.size * wob, q.size / wob, q.size * (1.25 + Math.min(1, speed / 40) * .5)));
-        this.globs.setMatrixAt(n, _M); this.globs.setColorAt(n, _c.set(q.color)); n++;
+        this.globs.setMatrixAt(n, _M); this.globs.setColorAt(n, _col.set(q.color)); n++;   // a Color: Vector3.set(hex) gave (hex, NaN, NaN) -> black globs / NaN frames
       }
     }
     this.globs.count = n;

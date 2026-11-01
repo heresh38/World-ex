@@ -33,8 +33,31 @@ from gunkit import B, ext, tube, cbox, ccyl, cylx, cylz, ball, ring, rod, R90
 RIGHT = -1      # the gun's right side is -X
 
 
-def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, organic=(), cyl_axis=None, keys=None):
+def moving_part(name, parts, pivot, parent, parent_pivot=(0, 0, 0), organic=(), cyl_axis=None):
+    """Join parts into their own object whose origin sits at `pivot` (gun frame), parented to `parent`.
+    The game animates these by name for reloads (mag, bolt, charge, slide, pump, crane, cylinder, hatch, biomass)."""
+    from mathutils import Matrix, Vector
+    o = K.assemble(name, parts, organic, cyl_axis=cyl_axis)
+    o.name = name
+    o.data.transform(Matrix.Translation(-Vector(pivot)))
+    o.location = Vector(pivot) - Vector(parent_pivot)
+    o.parent = parent
+    return o
+
+
+def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, organic=(), cyl_axis=None, keys=None,
+           moving=(), loose=()):
+    """moving: [(name, parts, pivot) or (name, parts, pivot, parent_name)] animated parts; loose: [(name, parts, pivot)]
+    spare props the game hides and clones (x_shell, x_round, x_casing, x_speedloader...)."""
     g = K.assemble(name, parts, organic, cyl_axis=cyl_axis)
+    made = {}
+    for spec in moving:
+        nm, pp, pv = spec[:3]
+        par = made[spec[3]] if len(spec) > 3 else None
+        o = moving_part(nm, pp, pv, par[0] if par else g, par[1] if par else (0, 0, 0), organic, cyl_axis)
+        made[nm] = (o, pv)
+    for nm, pp, pv in loose:
+        moving_part(nm, pp, pv, g, (0, 0, 0), organic, cyl_axis)
     if optic:
         o = K.assemble('OPTIC', list(optic)); o.parent = g
     bl.empty('muzzle', muzzle, g); bl.empty('foregrip', fore, g); bl.empty('sight', sight, g)
@@ -393,8 +416,8 @@ def assault_rifle():
             P.append(K.rivet(s * .023, y, z, S, .0026, s))
     P += K.pins(.047, [(.1, .04), (.06, .04), (-.03, .04)], S, .0024)
     # bolt carrier seen through the ejection slot + charging handle
-    P += [B('carrier', (.02, .14, .018), (RIGHT * .012, -.06, .072), PK, .002),
-          rod('charging', (RIGHT * .02, -.125, .074), (RIGHT * .047, -.128, .074), .0045, S), ball('chknob', .0065, (RIGHT * .049, -.128, .074), S)]
+    BOLT = [B('carrier', (.02, .14, .018), (RIGHT * .012, -.06, .072), PK, .002),
+            rod('charging', (RIGHT * .02, -.125, .074), (RIGHT * .047, -.128, .074), .0045, S), ball('chknob', .0065, (RIGHT * .049, -.128, .074), S)]
     # dust cover with stamped ribs and its release button
     P.append(ext('dustcover', [(.17, .084), (.172, .094), (.156, .112), (-.172, .112), (-.19, .102), (-.196, .084)], .044, S, .006, 4))
     for y in (.11, .075, .04):
@@ -429,7 +452,7 @@ def assault_rifle():
     P.append(K.grip_profile('grip', PO, ang=.32, h=.115, w=.031, z=.024, swell=.005))
     P += K.trigger_group(M, S, S, y=-.04, z=.024, L=.056, drop=.048)
     P += [B('magcatch', (.012, .012, .018), (0, -.083, .006), S, .002)]
-    P += curved_mag('mag', -.085, .02, .36, .064, .6, .03, PO, 2)
+    MAG = curved_mag('magbody', -.085, .02, .36, .064, .6, .03, PO, 2)
     # walnut stock with steel butt plate, tang, sling swivel
     P += [ext('stock', [(.165, .084), (.21, .08), (.43, .068), (.445, .06), (.445, -.075), (.43, -.078), (.3, -.03), (.22, .002), (.165, .03)], .042, W, .011, 4),
           ext('buttplate', [(.444, .062), (.456, .058), (.456, -.076), (.444, -.08)], .044, S, .003),
@@ -439,7 +462,8 @@ def assault_rifle():
     # forward optic rail on the gas-tube cover (keeps the irons clear)
     P += K.rail(M, -.278, -.392, .1075, .02, PK)
     sz = .1195
-    finish('gun_rifle', P, (0, -.69, zb), (0, -.345, .012), (0, .06, sz), rail=(0, -.335, .117))
+    finish('gun_rifle', P, (0, -.69, zb), (0, -.345, .012), (0, .06, sz), rail=(0, -.335, .117),
+           moving=[('mag', MAG, (0, -.149, .02)), ('bolt', BOLT, (RIGHT * .049, -.128, .074))])
 
 
 def carbine():
@@ -452,11 +476,12 @@ def carbine():
     P.append(ext('magwell', [(-.046, -.006), (-.046, -.03), (-.124, -.032), (-.124, -.006)], .038, PK, .002, cuts=[cbox((.026, .07, .05), (0, -.085, -.02))]))
     P.append(ext('upper', [(.1, .046), (.1, .09), (-.134, .09), (-.134, .046)], .033, PK, .002,
                  cuts=[cbox((.01, .05, .016), (RIGHT * .017, -.03, .068))]))
-    P += [B('boltface', (.02, .05, .014), (RIGHT * .01, -.03, .068), S, .002),
-          B('portdoor', (.0015, .052, .018), (RIGHT * .0182, -.03, .053), PK, .0005),
+    BOLT = [B('boltface', (.02, .05, .014), (RIGHT * .01, -.03, .068), S, .002)]
+    P += [B('portdoor', (.0015, .052, .018), (RIGHT * .0182, -.03, .053), PK, .0005),
           tube('fwdassist', .0075, .036, .09, .074, PK, 24, x=RIGHT * .02), cylz('fabtn', .0085, .006, (RIGHT * .02, .093, .074), PK, 24),
           B('deflector', (.008, .016, .02), (RIGHT * .019, .045, .066), PK, .003),
-          B('chandle', (.026, .028, .008), (0, .112, .086), PK, .002), B('chlatch', (.012, .012, .008), (.018, .106, .086), PK, .002)]
+          ]
+    CHARGE = [B('chandle', (.026, .028, .008), (0, .112, .086), PK, .002), B('chlatch', (.012, .012, .008), (.018, .106, .086), PK, .002)]
     # buffer tube, castle nut, collapsible stock and butt pad
     P += [tube('buffer', .0155, .2, .3, .065, PK, 32), tube('castlenut', .019, .012, .112, .065, S, 12),
           ext('stock', [(.2, .086), (.33, .086), (.345, .08), (.35, .04), (.35, -.03), (.335, -.042), (.3, -.012), (.24, .035), (.2, .046)], .036, PO, .006,
@@ -483,15 +508,17 @@ def carbine():
     P += [tube('barrel', .0085, .1, -.43, zb, S, 32), tube('gasblock', .012, .02, -.36, zb, S, 24)]
     P += K.birdcage(-.53, zb, .011, .05, S, 6) + [tube('barrel_in', .0085, .3, -.13, zb, S, 24)]
     # magazine
-    P += [ext('mag', [(-.058, .012), (-.06, -.08), (-.074, -.17), (-.088, -.205), (-.152, -.198), (-.136, -.162), (-.122, -.08), (-.118, .012)], .022, PK, .002),
-          B('magfloor', (.026, .068, .01), (0, -.121, -.205), PO, .003, rot=(-.08, 0, 0))]
+    MAG = [ext('magbody', [(-.058, .012), (-.06, -.08), (-.074, -.17), (-.088, -.205), (-.152, -.198), (-.136, -.162), (-.122, -.08), (-.118, .012)], .022, PK, .002),
+           B('magfloor', (.026, .068, .01), (0, -.121, -.205), PO, .003, rot=(-.08, 0, 0)),
+           cylx('magtop', .0042, .02, (0, -.075, .012), M['brass'], 16)]
     for k in range(3):
-        P.append(B('magrib', (.0235, .004, .17), (0, -.075 - k * .022, -.08), PK, .001, rot=(-.12, 0, 0)))
+        MAG.append(B('magrib', (.0235, .004, .17), (0, -.075 - k * .022, -.08), PK, .001, rot=(-.12, 0, 0)))
     sz = .1335
     optic = [B('buis_base', (.022, .03, .012), (0, .07, .1055), PK, .002)] + K.iron_rear(M, .07, sz, PK) + \
             [B('fbuis_base', (.022, .03, .012), (0, -.41, .1055), PK, .002), B('fbuis_arm', (.008, .012, .022), (0, -.41, .12), PK, .002)] + \
             K.iron_front(M, -.41, sz, ears=True, m=PK)
-    finish('gun_carbine', P, (0, -.585, zb), (0, -.3, .028), (0, .1, sz), optic=optic, rail=(0, -.02, .0995))
+    finish('gun_carbine', P, (0, -.585, zb), (0, -.3, .028), (0, .1, sz), optic=optic, rail=(0, -.02, .0995),
+           moving=[('mag', MAG, (0, -.088, .012)), ('charge', CHARGE, (0, .112, .086)), ('bolt', BOLT, (RIGHT * .01, -.03, .068))])
 
 
 def bolt_rifle():
@@ -607,12 +634,13 @@ def compact_smg():
     bl.reset(); M = K.kinetic_mats(); S, PK, PO, RB = M['steel'], M['park'], M['poly'], M['rubber']
     zb = .068; P = []
     P += [ext('upper', [(.075, .05), (.075, .092), (-.17, .092), (-.17, .05)], .036, S, .003, cuts=[cbox((.01, .045, .018), (RIGHT * .018, -.04, .07))]),
-          B('boltface', (.02, .045, .014), (RIGHT * .01, -.04, .07), PK, .002),
           ext('lower', [(.075, .05), (.075, .026), (.03, .022), (-.04, .022), (-.04, -.01), (-.095, -.012), (-.095, .022), (-.17, .026), (-.17, .05)], .034, PO, .003),
           ext('handguard', [(-.17, .028), (-.17, .092), (-.315, .092), (-.325, .08), (-.325, .036), (-.315, .028)], .042, PO, .008,
               cuts=[cbox((.06, .02, .008), (0, -.2 - i * .03, .062)) for i in range(4)]),
           tube('barrel', .0085, .04, -.325, zb, S, 32)] + K.brake(-.36, zb, .0125, .05, S, 3)
-    P += [tube('chtube', .0075, .17, -.15, .102, S, 24, x=.0), B('chhandle', (.004, .012, .012), (.013, -.27, .102), S, .001)]
+    P += [tube('chtube', .0075, .17, -.15, .102, S, 24, x=.0)]
+    CHARGE = [B('chhandle', (.004, .012, .012), (.013, -.27, .102), S, .001), B('chstem', (.012, .006, .006), (.006, -.27, .102), S, .001)]
+    BOLT = [B('boltface', (.02, .045, .014), (RIGHT * .01, -.04, .07), PK, .002)]
     P += K.rail(M, .07, -.16, .092, .02, PK)
     P += [B('hinge', (.03, .025, .05), (0, .088, .066), PK, .003),
           tube('stockrod', .0045, .2, .3, .085, S, 20, x=.013), tube('stockrod2', .0045, .2, .3, .085, S, 20, x=-.013),
@@ -620,13 +648,15 @@ def compact_smg():
           ext('buttpad', [(.29, .1), (.315, .1), (.315, .02), (.29, .02)], .042, RB, .005)]
     P.append(K.grip_profile('grip', PO, ang=.25, h=.108, w=.03, z=.022, swell=.004))
     P += K.trigger_group(M, PO, S, y=-.0, z=.022, L=.042, drop=.044)
-    P += [ext('mag', [(-.047, .018), (-.049, -.17), (-.091, -.17), (-.089, .018)], .024, PO, .003),
-          B('magfloor', (.028, .048, .01), (0, -.07, -.172), PO, .003)]
+    MAG = [ext('magbody', [(-.047, .018), (-.049, -.17), (-.091, -.17), (-.089, .018)], .024, PO, .003),
+           B('magfloor', (.028, .048, .01), (0, -.07, -.172), PO, .003),
+           cylx('magtop', .0036, .016, (0, -.06, .019), M['brass'], 16)]
     for k in range(4):
-        P.append(B('magrib', (.0255, .036, .004), (0, -.07, -.03 - k * .035), PO, .0012))
+        MAG.append(B('magrib', (.0255, .036, .004), (0, -.07, -.03 - k * .035), PO, .0012))
     P += [cylz('vgrip', .014, .07, (0, -.255, -.008), RB, 32), cylz('vgripcap', .016, .008, (0, -.255, -.045), PO, 32)]
     P += K.pins(.035, [(.05, .035), (-.15, .035)], S, .002) + [cylx('selector', .0055, .004, (.018, .04, .036), S, 20)]
-    finish('gun_ksmg', P, (0, -.415, zb), (0, -.255, -.02), (0, .08, .125), rail=(0, -.04, .1015))
+    finish('gun_ksmg', P, (0, -.415, zb), (0, -.255, -.02), (0, .08, .125), rail=(0, -.04, .1015),
+           moving=[('mag', MAG, (0, -.069, .018)), ('charge', CHARGE, (.013, -.27, .102)), ('bolt', BOLT, (RIGHT * .01, -.04, .07))])
 
 
 def battle_rifle():
@@ -638,24 +668,26 @@ def battle_rifle():
                            (-.055, .03), (-.055, .02), (-.135, .02), (-.135, .03)], .044, W, .011, 4))
     P += [ext('receiver', [(.11, .058), (.11, .1), (-.15, .1), (-.15, .058)], .036, S, .002,
               cuts=[cbox((.01, .07, .02), (RIGHT * .018, -.03, .085))]),
-          B('boltface', (.02, .07, .016), (RIGHT * .01, -.03, .085), PK, .002),
-          B('oprod', (.006, .3, .012), (RIGHT * .021, -.19, .072), S, .002), B('ophandle', (.018, .014, .012), (RIGHT * .03, -.04, .08), S, .002),
           ext('hg_upper', [(-.15, .072), (-.15, .094), (-.36, .094), (-.36, .072)], .032, W, .008, 4),
           tube('gascyl', .0105, .1, -.36, .045, S, 32), ext('frontband', [(-.355, .03), (-.355, .09), (-.37, .09), (-.37, .03)], .046, S, .002),
           tube('barrel', .0105, .54, -.15, zb, S, 32)]
+    BOLT = [B('boltface', (.02, .07, .016), (RIGHT * .01, -.03, .085), PK, .002),
+            B('oprod', (.006, .3, .012), (RIGHT * .021, -.19, .072), S, .002), B('ophandle', (.018, .014, .012), (RIGHT * .03, -.04, .08), S, .002)]
     P += K.birdcage(-.69, zb, .012, .06, S, 6)
     P += [B('fsb', (.014, .016, .03), (0, -.675, zb + .02), S, .002)] + K.iron_front(M, -.675, .125, ears=True, m=S)
     P += K.trigger_group(M, S, S, y=-.006, z=.03, L=.06, drop=.05)
-    P += [ext('mag', [(-.058, .03), (-.062, -.12), (-.132, -.13), (-.132, .03)], .028, S, .002),
-          B('magfloor', (.032, .076, .008), (0, -.097, -.13), S, .002, rot=(-.07, 0, 0))]
+    MAG = [ext('magbody', [(-.058, .03), (-.062, -.12), (-.132, -.13), (-.132, .03)], .028, S, .002),
+           B('magfloor', (.032, .076, .008), (0, -.097, -.13), S, .002, rot=(-.07, 0, 0)),
+           cylx('magtop', .0046, .022, (0, -.075, .031), BR, 16)]
     for k in range(3):
-        P.append(B('magrib', (.0295, .06, .004), (0, -.096, -.01 - k * .035), S, .0012))
+        MAG.append(B('magrib', (.0295, .06, .004), (0, -.096, -.01 - k * .035), S, .0012))
     P += [ext('buttplate', [(.461, .066), (.472, .066), (.474, -.09), (.461, -.09)], .046, S, .003),
           B('trapdoor', (.0015, .03, .02), (.0228, .43, .0), S, .0006)]
     P += K.screw(.022, .2, .02, S, .003, 1) + K.screw(-.022, .2, .02, S, .003, -1) + K.sling_loop(.38, -.07, S) + K.sling_loop(-.4, .03, S)
     P += K.iron_rear(M, .085, .125, S)
     P += K.rail(M, .095, -.12, .1, .022, PK)
-    finish('gun_dmr', P, (0, -.755, zb), (0, -.32, .022), (0, .11, .125), rail=(0, -.01, .1095))
+    finish('gun_dmr', P, (0, -.755, zb), (0, -.32, .022), (0, .11, .125), rail=(0, -.01, .1095),
+           moving=[('mag', MAG, (0, -.095, .03)), ('bolt', BOLT, (RIGHT * .03, -.04, .08))])
 
 
 def revolver():

@@ -609,7 +609,7 @@ export class Population {
     if ((this.frame + (q.idx || 0)) % rate) return;
     if (d > 12 && !this.inView(q.pos.x, q.pos.y, q.pos.z, 1.3)) return;
     const a = Math.min(q.animAcc, .5); q.animAcc = 0;
-    av.play(q.anim || 'IdleRelaxed', .3, q.animSpeed || 1);
+    av.play(q.anim || 'IdleRelaxed', .3, q.animSpeed || 1); av.sitRelax = q.anim === 'Sit';   // relaxed arms on seats
     av.update(a);
     if (d < 32 && (q.group || q.state === 'sit' && q.partner && q.partner.state === 'sit') && a > 0) this.gesture(q);
   }
