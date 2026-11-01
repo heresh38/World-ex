@@ -98,7 +98,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => window.__sim(3));
   // ---------------------------------------------------------------- 3: the Brood Road (three Writhe waves, then light the gas main)
   st = await S(); check(st.i === 2 && st.stage === 'nest', 'stage 3 next', st);
-  await ev(() => { const s = window.__op().stages[2]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(1.2); const q = s.cp.clone().lerp(s.pos, .7); window.__tp(q.x, s.ground(q.x, q.z), q.z); window.__look(s.pos.x, s.pos.y + .5, s.pos.z, -.12); window.__sim(.3); });
+  await ev(() => { const s = window.__op().stages[2]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(1.2); const q = s.cp.clone().lerp(s.pos, .7); window.__tp(q.x, window.__op().ground(q.x, q.z), q.z); window.__look(s.pos.x, s.pos.y + .5, s.pos.z, -.12); window.__sim(.3); });
   st = await S(); check(st.phase === 'w1' && st.alive > 0, 'Writhe nest wakes', st);
   await wait(1500); await shot('op04_nest');
   const seen = new Set();
