@@ -107,7 +107,7 @@ fs.mkdirSync(OUT, { recursive: true });
   check(st.phase === 'valve', 'valve unlocked', st);
   pr = await ev(() => { const s = window.__op().stages[2]; window.__tp(s.valve.x, s.valve.y, s.valve.z); const P = window.__game.player; window.__look(s.pos.x, s.pos.y, s.pos.z, -.05); return window.__press(); });
   st = await S(); check(st.phase === 'purge', 'E opens the gas main', pr);
-  await ev(() => window.__sim(1.6)); await wait(1200); await shot('op05_purge');
+  await ev(() => { const s = window.__op().stages[2], d = s.valve.clone().sub(s.pos).setY(0).normalize(); window.__tp(s.pos.x + d.x * 34, window.__op().ground(s.pos.x + d.x * 34, s.pos.z + d.z * 34), s.pos.z + d.z * 34); window.__look(s.pos.x, s.pos.y + 2, s.pos.z, .05); window.__sim(1.6); }); await wait(1200); await shot('op05_purge');
   await ev(() => window.__sim(5));
   // ---------------------------------------------------------------- 4: the Spire lift (restore power under attack, ride up)
   st = await S(); check(st.i === 3 && st.stage === 'lift', 'stage 4 next', st);

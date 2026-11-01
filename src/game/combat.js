@@ -34,7 +34,7 @@ export class Combat {
   reset() {
     this.targets.clear();
     this.bolts.forEach(b => b.m.removeFromParent()); this.bolts = [];
-    this.pickups.forEach(p => p.obj.removeFromParent()); this.pickups = [];
+    this.pickups.forEach(p => this.freePickup(p)); this.pickups = [];
   }
 
   // nearest hit among targets (excluding owner side) and world geometry
@@ -160,7 +160,7 @@ export class Combat {
       const near = d < 1.6 && Math.abs(k.obj.position.y - p.pos.y) < 2.2 && !p.dead;
       if (near || k.life <= 0) {
         if (near) this.collect(k);
-        k.obj.removeFromParent(); this.pickups.splice(i, 1);
+        this.freePickup(k); this.pickups.splice(i, 1);
       }
     }
   }
@@ -181,6 +181,12 @@ export class Combat {
       g.audio.pickup(k.data.rarity);
       g.hud.feed(w.name + ' · ' + ARCHETYPES[w.arch].name + ' · ' + w.power, RARITY[w.rarity].color);
     }
+  }
+
+  // a pickup owns its cloned materials and its light-beam geometry (the mesh geometry is the shared model's)
+  freePickup(k) {
+    k.obj.removeFromParent();
+    k.obj.traverse(o => { if (!o.isMesh) return; o.material.dispose(); if (o.geometry.type === 'CylinderGeometry') o.geometry.dispose(); });
   }
 
   update(dt) { this.updateBolts(dt); this.updatePickups(dt); }

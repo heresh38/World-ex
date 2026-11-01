@@ -589,7 +589,8 @@ export class Enemy {
   dispose() {
     this.g.combat.targets.delete(this);
     if (this.box) this.g.world.collision.remove(this.box);
-    this.obj.removeFromParent();
+    // skinned enemies free their bone textures and cloned materials (an operation spawns dozens per run)
+    if (this.av && this.av.dispose) this.av.dispose(); else this.obj.removeFromParent();
   }
 }
 
