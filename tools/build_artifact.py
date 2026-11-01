@@ -10,7 +10,7 @@ import json, os, re, shutil, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.path.join(ROOT, 'dist')
 BINARY_EXT = os.environ.get('BINARY_EXT', '.wasm')
-TEXTURES = re.compile(r'(concrete|asphalt|rock|sand|ice|moss)_[cn]\.jpg$|(facade|ribbon)_e\.jpg$|(wheat|field_rows)_c\.jpg$|earth_(day|clouds|night|ms)\.jpg$|water_(n1|n2|foam)\.jpg$|water_spray\.png$')
+TEXTURES = re.compile(r'(concrete|asphalt|rock|sand|ice|moss)_[cn]\.jpg$|(facade|ribbon)_e\.jpg$|(wheat|field_rows)_c\.jpg$|earth_(day|clouds|night|ms)\.jpg$|water_(n1|n2|foam)\.jpg$|water_spray\.png$|hx_[a-z]+_[cmn]\.jpg$|snow_[cn]\.jpg$|veh_(bullethole|glasscrack)_[ce]\.jpg$')
 
 
 def main():

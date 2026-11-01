@@ -1627,7 +1627,7 @@ def main():
     out = 'trees.glb' if full else os.environ.get('TREE_OUT', '/tmp/trees_partial.glb')
     kw = dict(export_image_format='WEBP', export_image_quality=82, export_vertex_color='ACTIVE')
     if full:
-        bl.export(out, **kw)
+        bl.quantize_glb(bl.export(out, **kw))      # 8-bit normals/colours, 16-bit UVs (keeps the file under 15 MB)
     else:
         bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_apply=True, export_yup=True, export_extras=True,
                                   export_animations=False, export_lights=False, export_cameras=False, **kw)
