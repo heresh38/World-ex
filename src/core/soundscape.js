@@ -127,6 +127,79 @@ const GEN = {
       }
     } };
   },
+  // ---- VANTHOS, the dead city (vanthos/ambience.js)
+  // wind moaning through blown-out windows: narrow resonant bands that swell and whistle with the gusts
+  ruinwind(A, dest) {
+    const c = A.ctx, bands = [380, 690, 1150].map((f, i) => {
+      const n = A.noiseLoop(dest, f * (.9 + Math.random() * .2), 'bandpass', 14 + i * 6), g = c.createGain(); g.gain.value = 0;
+      n.fl.disconnect(); n.fl.connect(g); g.connect(dest); return { n, g, f: n.fl.frequency.value };
+    });
+    const bed = A.noiseLoop(dest, 500, 'lowpass', .5), bg = c.createGain(); bg.gain.value = .25; bed.fl.disconnect(); bed.fl.connect(bg); bg.connect(dest);
+    let t = 0;
+    return { nodes: [...bands.map(b => b.n.src), bed.src], tick(dt) {
+      t -= dt; if (t > 0) return; t = .8 + Math.random() * 2.2; const now = c.currentTime;
+      for (const b of bands) { b.g.gain.setTargetAtTime(Math.random() < .55 ? .35 + Math.random() * .9 : .02, now, .9); b.n.fl.frequency.setTargetAtTime(b.f * (.85 + Math.random() * .3), now, 1.4); }
+      bg.gain.setTargetAtTime(.12 + Math.random() * .3, now, 1.2);
+    } };
+  },
+  // steel and concrete settling: long low groans of bending metal, the odd tick and grinding shift
+  creak(A, dest) {
+    const c = A.ctx; let t = 2 + Math.random() * 5;
+    return { nodes: [], tick(dt) {
+      t -= dt; if (t > 0) return; t = 4 + Math.random() * 9; const now = c.currentTime;
+      const f = 70 + Math.random() * 90, d = 1.2 + Math.random() * 2.2;
+      A.tone(dest, now, d, f, f * (.7 + Math.random() * .5), 'sawtooth', .07, .4); A.tone(dest, now + .05, d * .8, f * 2.02, f * 1.6, 'square', .02, .5);
+      A.nz(dest, now, d * .9, 900, 300, 8, 'bandpass', .1, .3);
+      if (Math.random() < .4) for (let k = 0; k < 4; k++) A.nz(dest, now + d + k * .09, .04, 2500, 1200, 3, 'bandpass', .12);
+    } };
+  },
+  // water dripping in a dark ruin, echoing
+  drip(A, dest) {
+    const c = A.ctx; let t = Math.random();
+    return { nodes: [], tick(dt) {
+      t -= dt; if (t > 0) return; t = .35 + Math.random() * 1.6; const now = c.currentTime, f = 900 + Math.random() * 1400;
+      A.tone(dest, now, .09, f, f * 1.9, 'sine', .07 + Math.random() * .06); A.tone(dest, now + .16, .09, f, f * 1.9, 'sine', .02);
+    } };
+  },
+  // something small and many-legged moving in the rubble
+  skitter(A, dest) {
+    const c = A.ctx; let t = 1;
+    return { nodes: [], tick(dt) {
+      t -= dt; if (t > 0) return; t = .8 + Math.random() * 3.5; const now = c.currentTime;
+      for (let i = 0, n = 6 + Math.floor(Math.random() * 14); i < n; i++) { const at = now + i * (.025 + Math.random() * .03); A.nz(dest, at, .02, 4200 + Math.random() * 2500, 2000, 5, 'bandpass', .09); }
+      if (Math.random() < .3) A.nz(dest, now + .1, .5, 1800, 600, 2, 'bandpass', .05, .1);
+    } };
+  },
+  // a dead thing's moan, wet and throaty, now and then
+  groan(A, dest) {
+    const c = A.ctx; let t = 1 + Math.random() * 4;
+    return { nodes: [], tick(dt) {
+      t -= dt; if (t > 0) return; t = 5 + Math.random() * 10; const now = c.currentTime, f = 95 + Math.random() * 60, d = 1.4 + Math.random() * 1.4;
+      A.tone(dest, now, d, f, f * .7, 'sawtooth', .06, .35); A.tone(dest, now, d, f * 1.01, f * .72, 'sawtooth', .05, .4);
+      A.nz(dest, now, d, 650, 380, 6, 'bandpass', .09, .3);
+    } };
+  },
+  // the city far off: a shriek echoing between towers, a roar, something collapsing (follows the listener)
+  distant(A, dest) {
+    const c = A.ctx; let t = 6 + Math.random() * 10;
+    return { nodes: [], tick(dt) {
+      t -= dt; if (t > 0) return; t = 14 + Math.random() * 26; const now = c.currentTime, k = Math.random();
+      if (k < .4) {                                       // a far shriek, muffled by distance
+        const f = 600 + Math.random() * 400; A.tone(dest, now, 1.1, f, f * 1.6, 'sawtooth', .025, .08); A.tone(dest, now + .2, .9, f * 1.4, f * .6, 'sawtooth', .02, .1);
+      } else if (k < .7) { A.tone(dest, now, 2.2, 60, 38, 'sawtooth', .08, .5); A.nz(dest, now, 2.2, 400, 120, 1.5, 'bandpass', .14, .4); }   // a roar
+      else { A.nz(dest, now, 3.5, 300, 60, .8, 'lowpass', .25, .2); for (let i = 0; i < 6; i++) A.nz(dest, now + .4 + i * .3 * Math.random(), .2, 800, 200, 2, 'bandpass', .08); }   // something coming down
+    } };
+  },
+  // a low dread under everything: two detuned drones that slowly beat, a faint sub pulse
+  dread(A, dest) {
+    const c = A.ctx, o = [43.6, 44.1, 65.4].map((f, i) => { const os = c.createOscillator(); os.type = i < 2 ? 'sine' : 'triangle'; os.frequency.value = f; const g = c.createGain(); g.gain.value = [.14, .12, .025][i]; os.connect(g); g.connect(dest); os.start(); return os; });
+    const hiss = A.noiseLoop(dest, 160, 'lowpass', .6), hg = c.createGain(); hg.gain.value = .15; hiss.fl.disconnect(); hiss.fl.connect(hg); hg.connect(dest);
+    let t = 0;
+    return { nodes: [...o, hiss.src], tick(dt) {
+      t -= dt; if (t > 0) return; t = 6 + Math.random() * 8; const now = c.currentTime;
+      o[2].frequency.setTargetAtTime(Math.random() < .5 ? 65.4 : 61.7, now, 3);
+    } };
+  },
 };
 
 export class Soundscape {

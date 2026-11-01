@@ -2,8 +2,11 @@
 // recover a flight recorder, burn a Writhe nest, power the Spire lift and break the Spire Warden on the foundation.
 // Every visit starts a fresh run (save.vanthos.runs / best); a trip down the metro keeps the current stage.
 //
-// Each stage: a waypoint + HUD objective with distance, an arrival beat over the radio (HUD subtitles), scripted
-// waves (not distance streaming) and an interaction (hold an uplink, pull a recorder, open a gas main, power a lift).
+// Each stage: a waypoint + HUD objective with distance, an arrival beat over the radio (HUD subtitles), a resident
+// garrison that is already there when you arrive (creatures living at the site: sleeping, feeding, perched; spawned with
+// the streamed city and forced in on arrival), smaller scripted reinforcement waves after an interaction, and the
+// interaction itself (hold an uplink, pull a recorder, open a gas main, power a lift). The city has been empty of the
+// living for years: the relay's raider crew is still there, worn by the Writhe.
 // The boss fight: at 50 % the Warden is shielded (immune) until its three shield conduits are destroyed while adds
 // pour in; the shield breaks, it staggers; a shorter second shield phase (two conduits) comes at 20 %. Its reliquary
 // grants 2-3 rolled weapons (any class, weighted rarity, perks, stat rolls and a random compatible sight).
@@ -118,7 +121,7 @@ export class Operation {
     this.w = w; this.g = w.g;
     this.i = 0; this.phase = 'travel'; this.clock = 0; this.now = 0; this.intro = false; this.complete = false;   // clock: run time; now: timers
     this.waves = []; this.timers = []; this.cp = null; this.liftReady = false;
-    this.conduits = []; this.boss = null; this.adds = [];
+    this.conduits = []; this.boss = null; this.adds = []; this.garrison = [];
     this.hold = { p: 0, inside: true }; this.said = new Set();
     // returning from the metro: carry on with the stage you were on
     const g = this.g;
@@ -261,16 +264,34 @@ export class Operation {
       const t = prop('VX_terminal', p, face(p, c));
       this.addIt({ pos: local(t, 0, 1), r: 2.2, label: 'Terminal · ' + LOGS[id].title, verb: 'Read the log', action: () => this.readLog(id) });
     }
-    // ---- keep ambient packs off the route and out of the arenas (the operation's waves own those fights)
-    const segD = (p, a, b) => { const abx = b.x - a.x, abz = b.z - a.z, t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.z - a.z) * abz) / (abx * abx + abz * abz))); return Math.hypot(p.x - a.x - abx * t, p.z - a.z - abz * t); };
+    // ---- the city's residents stay along the route (that is the point); only the arenas themselves belong to the
+    // garrisons below, so ambient groups right inside an arena (and on the Spire's foundation) are kept out
     let off = 0;
     for (const st of w.sites) {
       if (st.o.boss) continue;
-      const nearArena = this.stages.some(s => Math.hypot(st.pos.x - s.pos.x, st.pos.z - s.pos.z) < 150);
-      let nearRoute = false; for (let k = 0; k < this.route.length - 1; k++) if (segD(st.pos, this.route[k], this.route[k + 1]) < 90) nearRoute = true;
-      if (nearArena || nearRoute || Math.hypot(st.pos.x, st.pos.z) < 160) { st.off = true; off++; }
+      if (this.stages.some(s => Math.hypot(st.pos.x - s.pos.x, st.pos.z - s.pos.z) < (s.id === 'lift' ? 70 : 55)) || Math.hypot(st.pos.x, st.pos.z) < 120) { st.off = true; off++; }
     }
     this.offSites = off;
+    // ---- garrisons: what lives at each stage site before you get there
+    const G = (i, types, c, n, beh, o = {}) => {
+      const p = this.clearSpot(c, 1.2);
+      const st = { D: w.map.district(p.x, p.z), types, pos: p, n, o: { op: true, keep: true, res: true, beh, spread: o.spread ?? 3, armed: o.armed, y: o.y }, live: [], cleared: false, spawned: false, stage: i };
+      w.sites.push(st); (this.garrison[i] = this.garrison[i] || []).push(st);
+    };
+    const around = (c, a, r) => c.clone().add(new V(Math.cos(a) * r, 0, Math.sin(a) * r));
+    this.garrison = [];
+    G(0, ['host'], around(relay, .4, 10), 3, 'feed', { armed: true, spread: 3 });              // the raider crew, worn by the parasite
+    G(0, ['host'], around(relay, 2.6, 13), 2, 'sleep', { armed: true });
+    G(0, ['mite'], around(relay, 4.4, 16), 4, 'wander', { spread: 4 });
+    G(1, ['stalker'], around(shuttle, 1.2, 9), 2, 'feed');                                       // nesting in the wreck
+    G(1, ['stalker'], around(shuttle, 3.8, 12), 1, 'sleep');
+    G(1, ['stalker'], around(shuttle, 5.2, 16), 1, 'perch');
+    G(2, ['mite'], nest, 7, 'wander', { spread: 6 });                                             // the Brood Road nest
+    G(2, ['host'], around(nest, 1, 8), 3, 'sleep', { spread: 4 });
+    G(2, ['bladder'], around(nest, 3.5, 9), 1, 'wander');
+    G(3, ['mutant'], around(lift, 2.2, 34), 2, 'wander');                                         // the crater: creatures at war
+    G(3, ['host', 'mite', 'mite'], around(lift, .9, 38), 5, 'feed', { spread: 4 });
+    G(3, ['stalker'], around(lift, 4.2, 30), 2, 'perch');
   }
 
   addIt(it) { it.id = 'op'; it.key = 'E'; this.w.interactables.push(it); (this.its = this.its || []).push(it); return it; }
@@ -326,7 +347,25 @@ export class Operation {
   arrive(S) {
     // lines still queued from earlier stages are stale once you are here (a fast board ride outruns the radio)
     const h = this.g.hud; h.radioQ = h.radioQ.filter(q => q.tag === undefined || q.tag >= this.i);
-    this.phase = 'arrived'; this.cp = S.cp; this.g.hud.banner(S.title, S.place + ' · objective ' + (this.i + 1) + ' / ' + this.stages.length, 3); }
+    this.phase = 'arrived'; this.cp = S.cp; this.g.hud.banner(S.title, S.place + ' · objective ' + (this.i + 1) + ' / ' + this.stages.length, 3);
+    // the garrison is already here (streamed in with the city); make sure all of it is, then count what greets you
+    const live = this.garrisonLive(this.i, true);
+    S.arrival = { garrison: live.length, near: this.g.enemies.list.filter(e => e.alive && Math.hypot(e.pos.x - S.pos.x, e.pos.z - S.pos.z) < S.r + 10).length };
+  }
+
+  // the stage's resident garrison (alive), spawning whatever has not streamed in yet when `force`
+  garrisonLive(i, force = false) {
+    const w = this.w, out = [];
+    for (const st of this.garrison[i] || []) {
+      if (st.cleared) continue;
+      if (force) {
+        if (!st.spawned) w.spawnSite(st, true);
+        else { const q = w.spawnQ.filter(x => x[0] === st); w.spawnQ = w.spawnQ.filter(x => x[0] !== st); for (const [s2, k] of q) w.spawnOne(s2, k); }
+      }
+      for (const e of st.live) if (e.alive) out.push(e);
+    }
+    return out;
+  }
 
   finishStage(lines) {
     const g = this.g, S = this.S;
@@ -375,13 +414,13 @@ export class Operation {
     const g = this.g, S = this.S;
     if (this.phase === 'travel' && d < S.r) {
       this.arrive(S); this.phase = 'ready';
-      this.say([[WREN, 'Raider tags all over that mast. They’ve been listening in on our channels.'], [WREN, 'Patch into the console and hold the area while it handshakes.']]);
+      this.say([[WREN, 'Raider tags all over that mast. The crew that held it never left, Captain. Something is wearing them.'], [WREN, 'Patch into the console and hold the area while it handshakes.']]);
     }
     if (this.phase === 'hold') {
       const pd = g.player.pos.distanceTo(S.pos);
       this.hold.inside = pd < 20 && !g.player.dead;
       if (this.hold.inside) this.hold.p = Math.min(1, this.hold.p + dt / 32);
-      const marks = [[.3, () => this.wave(['trooper', 'trooper', 'brute'], 3)], [.6, () => this.wave(['trooper', 'trooper'], 3)], [.85, () => this.wave(['trooper', 'brute'], 2)]];
+      const marks = [[.3, () => this.wave(['host', 'mite', 'mite'], 3)], [.6, () => this.wave(['stalker', 'host'], 2)], [.85, () => this.wave(['host', 'bladder'], 2)]];
       for (const [m, fn] of marks) if (this.hold.p >= m && !this.said.has('r' + m)) { this.said.add('r' + m); fn(); }
       if (this.hold.p >= .5) this.sayOnce('relay50', [[WREN, 'Halfway. The old city grid still answers to my codes. Who knew.']]);
       for (const m of this.relayGlow) { m.emissive.setRGB(1 - this.hold.p * .9, .68 + this.hold.p * .17, .18 + this.hold.p * .82); m.emissiveIntensity = 4 + Math.sin(g.time * 9) * 2; }
@@ -395,8 +434,8 @@ export class Operation {
   }
   relayStart() {
     this.phase = 'hold'; this.hold = { p: 0, inside: true }; this.g.audio.ui('confirm');
-    this.say([[WREN, 'Uplink running. Here they come. Keep them off the mast.']]);
-    this.wave(['trooper', 'trooper', 'trooper'], 3, { rMin: 30, rMax: 46 });
+    this.say([[WREN, 'Uplink running. The noise is drawing them out of the ruins. Keep them off the mast.']]);
+    this.wave(['host', 'mite', 'mite'], 3, { rMin: 30, rMax: 46 });
   }
 
   // ---- 2: Flight Nine (ambush in the wreck, pull the recorder, survive the second wave)
@@ -404,8 +443,9 @@ export class Operation {
     const S = this.S;
     if (this.phase === 'travel' && d < S.r) {
       this.arrive(S); this.phase = 'fight1';
-      this.say([[WREN, 'Flight Nine. I had friends booked on that one.'], [WREN, 'Movement in the wreck. Stalkers. They nest in anything that was ever warm.']]);
-      this.after(2, () => { this.w1 = this.wave(['stalker'], 4, { rMin: 6, rMax: 20 }); });
+      this.say([[WREN, 'Flight Nine. I had friends booked on that one.'], [WREN, 'Stalkers. They nest in anything that was ever warm. Clear the wreck.']]);
+      this.w1 = this.wave([], 0); this.w1.list.push(...this.garrisonLive(1));
+      this.after(2, () => { const wv = this.wave(['stalker'], 2, { rMin: 8, rMax: 22 }); this.w1.list.push(...wv.list); wv.req = false; });
     }
     if (this.phase === 'fight1' && this.w1 && this.w1.alive() === 0) {
       this.phase = 'recorder';
@@ -424,7 +464,7 @@ export class Operation {
     this.say([[REC, 'Vanthos Control, Flight Nine. We are heavy, two hundred and twelve souls, requesting the outer corridor—'],
       [REC, 'Control? Control, the Spire is open. The core is... it’s looking at us.'], [REC, 'Brace, brace, brace—'],
       [WREN, '...It went for the ships first. Hostiles inbound. The noise woke the whole block.']]);
-    this.after(5, () => { this.w2 = this.wave(['stalker', 'stalker', 'hulk', 'stalker'], 4, { rMin: 26, rMax: 42 }); this.phase = 'fight2'; });
+    this.after(5, () => { this.w2 = this.wave(['stalker', 'hulk', 'stalker'], 3, { rMin: 26, rMax: 42 }); this.phase = 'fight2'; });
   }
 
   // ---- 3: the Brood Road (three Writhe waves, an amalgam, then light the gas main)
@@ -434,15 +474,17 @@ export class Operation {
       this.arrive(S); this.phase = 'w1';
       this.say([[WREN, 'Writhe nest. That stuff eats the dead and wears them. Don’t let the little ones touch you.'],
         [WREN, 'There’s a district heating main under that road. Thin them out, then light it.']]);
-      this.nw = this.wave(['mite', 'mite', 'host', 'mite', 'mite', 'host', 'mite', 'mite'], 8, { rMin: 10, rMax: 28 });
+      const nest = this.garrisonLive(2);
+      for (const e of nest) e.alert();
+      this.nw = this.wave(['mite', 'mite', 'host'], 3, { rMin: 12, rMax: 28 }); this.nw.list.push(...nest);
     }
     if (this.phase === 'w1' && this.nw.alive() <= 1) {
       this.phase = 'w2'; this.say([[WREN, 'More coming up out of the drains!']]);
-      this.nw = this.wave(['host', 'bladder', 'mite', 'mite', 'host', 'bladder', 'mite', 'mite'], 8, { rMin: 14, rMax: 32 });
+      this.nw = this.wave(['host', 'bladder', 'mite', 'mite', 'mite'], 5, { rMin: 14, rMax: 32 });
     }
     if (this.phase === 'w2' && this.nw.alive() <= 1) {
       this.phase = 'w3'; this.say([[WREN, 'Something big is pushing up through the street. That’s a knot of hosts, fused.']]);
-      this.nw = this.wave(['amalgam', 'mite', 'mite', 'mite', 'mite'], 5, { rMin: 16, rMax: 28, name: 'The Knot' });
+      this.nw = this.wave(['amalgam', 'mite', 'mite'], 3, { rMin: 16, rMax: 28, name: 'The Knot' });
     }
     if (this.phase === 'w3' && this.nw.alive() === 0) {
       this.phase = 'valve';
@@ -476,9 +518,9 @@ export class Operation {
     if (this.phase === 'hold') {
       this.hold.inside = g.player.pos.distanceTo(S.console) < 22 && !g.player.dead;
       if (this.hold.inside) this.hold.p = Math.min(1, this.hold.p + dt / 42);
-      const marks = [[.2, () => this.wave(['stalker', 'stalker', 'stalker'], 3)], [.42, () => { this.wave(['mite', 'mite', 'host', 'mite', 'mite', 'host'], 6, { rMin: 20, rMax: 34 });
-        this.say([[WREN, 'Raiders, aliens and the Writhe, all at once. Let them chew on each other.']]); }],
-        [.66, () => this.wave(['trooper', 'brute', 'stalker', 'trooper'], 4)], [.88, () => this.wave(['mutant', 'mutant'], 2)]];
+      const marks = [[.2, () => this.wave(['stalker', 'stalker'], 2)], [.42, () => { this.wave(['mite', 'mite', 'host', 'mite', 'host'], 5, { rMin: 20, rMax: 34 });
+        this.say([[WREN, 'Stalkers and the Writhe, all at once. Let them chew on each other.']]); }],
+        [.66, () => this.wave(['host', 'stalker', 'host'], 3)], [.88, () => this.wave(['mutant', 'mutant'], 2)]];
       for (const [m, fn] of marks) if (this.hold.p >= m && !this.said.has('l' + m)) { this.said.add('l' + m); fn(); }
       if (this.hold.p >= 1) {
         this.phase = 'ride'; this.liftReady = true; g.audio.levelUp();
@@ -490,7 +532,7 @@ export class Operation {
   liftStart() {
     this.phase = 'hold'; this.hold = { p: 0, inside: true }; this.g.audio.ui('confirm');
     this.say([[WREN, 'Rerouting. It will take a minute, and every creature in the Crown can hear it.']]);
-    this.wave(['trooper', 'trooper', 'trooper'], 3, { rMin: 28, rMax: 44 });
+    this.wave(['stalker', 'host'], 2, { rMin: 28, rMax: 44 });
   }
   onLiftRide() {
     if (this.i === 3 && this.phase === 'ride') this.finishStage(null);

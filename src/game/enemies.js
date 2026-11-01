@@ -121,6 +121,14 @@ export class Enemy {
       this.box = game.world.collision.add(new THREE.Box3().setFromCenterAndSize(
         _v.set(pos.x, pos.y + (type === 'generator' ? 1.4 : 1), pos.z), _d.set(type === 'generator' ? 2.2 : 1.6, type === 'generator' ? 2.8 : 2, type === 'generator' ? 2.2 : 1.6)), 'enemy');
     }
+    // resident behaviour while idle (VANTHOS): sleep (lies where it fell, like a corpse, until something comes close or
+    // makes noise), feed (hunched over remains), perch (on a ledge or rubble top, watching), patrol / roam (walks a
+    // route; roaming packs share one), or the default wander around home
+    this.beh = opts.beh || null; this.route = opts.route || null; this.pack = opts.pack || null; this.packOff = opts.packOff || null; this.ri = 0;
+    if (this.beh === 'sleep' && this.av && this.av.actions.Death) {
+      this.av.play('Death', 0); const a = this.av.actions.Death; a.time = a.getClip().duration - .02; this.av.update(0); a.paused = true;
+    } else if (this.beh === 'sleep') this.beh = 'perch';
+    if (opts.face !== undefined) this.yaw = opts.face;
     // a corpse rising as a host: play the death fall backwards
     if (opts.rise && this.av && this.av.actions.Death) {
       this.riseT = 1.7; this.av.play('Death', 0);
@@ -188,6 +196,10 @@ export class Enemy {
   alert() {
     if (this.state !== 'idle') return;
     this.state = 'combat';
+    if (this.beh === 'sleep' && this.av && this.av.actions.Death) {
+      const a = this.av.actions.Death; a.paused = false; a.timeScale = -1.1; this.riseT = 1.25;
+    }
+    this.beh = null; this.pack = null;
     if (this.faction === 'writhe' && this.g.audio.shriek) { if (this.type !== 'mite') this.g.audio.shriek(this.pos, this.type === 'amalgam' ? .55 : this.type === 'bladder' ? .75 : 1); }
     else this.g.audio.alert(this.pos);
     this.g.music && (this.g.audio.combat = 1);
@@ -350,11 +362,22 @@ export class Enemy {
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
       this.thinkT = .35 + Math.random() * .2;
-      const range = (this.T.range || 0) + 14;
+      // how far a resident notices you depends on what it is doing (sleepers only when you are almost on them)
+      const sense = this.state !== 'idle' ? 1 : this.beh === 'sleep' ? .22 : this.beh === 'feed' ? .6 : this.beh === 'perch' ? 1.25 : 1;
+      const range = ((this.T.range || 0) + 14) * sense;
       this.seen = !p.dead && dist < range && this.type !== 'generator' && this.canSee(p.pos);
       if (this.seen && this.state === 'idle') this.alert();
       if (this.state === 'combat' && dist > 90) this.state = 'idle';
     }
+    // getting up from the ground (a sleeper woken, a corpse the parasite took)
+    if (this.riseT > 0 && this.av && !this.T.ai) {
+      this.riseT -= dt; this.vel.set(0, 0, 0); this.move(dt, 0, 0, 0);
+      if (this.riseT <= 0) { this.av.actions.Death.timeScale = 1; this.av.play('Idle', .3); }
+      this.av.update(dt);
+      return true;
+    }
+    // asleep: nothing moves (the pose is held), so nothing to update
+    if (this.beh === 'sleep' && this.state === 'idle') return true;
     const facePlayer = () => { const t = Math.atan2(dx, dz); let d = t - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * Math.min(1, dt * 8); };
     if (this.type === 'generator') { this.obj.rotation.y += dt * .3; return true; }
     if (this.type === 'turret') {
@@ -413,6 +436,27 @@ export class Enemy {
 
   // idle wander near home (sets the move direction in wmx/wmz)
   wander(dt, rad = 10, k = .5) {
+    const b = this.beh;
+    if (b === 'perch' || b === 'feed' || b === 'sleep') {
+      this.wmx = 0; this.wmz = 0;
+      if (b === 'perch') this.yaw += Math.sin(this.g.time * .4 + this.seed) * dt * .35;
+      if (b === 'feed' && this.av && this.av.actions.Attack) {
+        this.feedT = (this.feedT || Math.random() * 2) - dt;
+        if (this.feedT <= 0) { this.feedT = 1.4 + Math.random() * 2.4; this.act('Attack', .2, 1.1, .55 + Math.random() * .3); if (Math.random() < .3 && this.g.audio.squelch) this.g.audio.squelch(this.pos, .35); }
+      }
+      return;
+    }
+    if ((b === 'patrol' || b === 'roam') && (this.route || this.pack)) {
+      const P = this.pack, pts = P ? P.pts : this.route, i = P ? P.i : this.ri;
+      let tx = pts[i % pts.length].x, tz = pts[i % pts.length].z;
+      if (P && this.packOff) { tx += this.packOff.x; tz += this.packOff.z; }
+      const wx = tx - this.pos.x, wz = tz - this.pos.z, wl = Math.hypot(wx, wz);
+      if (wl < (P ? 5 : 2)) { if (P) { if (P.lead === this || !P.lead || !P.lead.alive) { P.lead = this; P.i++; } } else this.ri++; }
+      const kk = b === 'roam' ? .42 : .3;
+      this.wmx = wl > .5 ? wx / wl * kk : 0; this.wmz = wl > .5 ? wz / wl * kk : 0;
+      if (wl > .5) { const t = Math.atan2(wx, wz); let d = t - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * Math.min(1, dt * 3); }
+      return;
+    }
     this.wanderT = (this.wanderT || 0) - dt;
     if (this.wanderT <= 0) { this.wanderT = 3 + Math.random() * 4; this.wx = this.home.x + (Math.random() - .5) * rad; this.wz = this.home.z + (Math.random() - .5) * rad; }
     const wx = this.wx - this.pos.x, wz = this.wz - this.pos.z, wl = Math.hypot(wx, wz);
@@ -630,15 +674,40 @@ export class EnemyManager {
     return h;
   }
 
+  // a loud sound (a gunshot, an explosion): idle creatures within r come to look; sleepers only when it is close
+  noise(pos, r) {
+    for (const e of this.list) {
+      if (!e.alive || e.state !== 'idle') continue;
+      const k = e.beh === 'sleep' ? .45 : e.beh === 'feed' ? .75 : 1;
+      if ((e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2 < (r * k) ** 2) e.alert();
+    }
+  }
+
   update(dt) {
     WR.uT.value += dt;
     for (let i = this.timers.length - 1; i >= 0; i--) { const t = this.timers[i]; t.t -= dt; if (t.t <= 0) { this.timers.splice(i, 1); t.fn(); } }
     let combat = 0, wr = 0;
     const pp = this.g.player.pos;
+    this.frame = (this.frame || 0) + 1; this.asleep = 0;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
+      const md = Math.abs(e.pos.x - pp.x) + Math.abs(e.pos.z - pp.z);
       // stray spawns (brood, risen hosts) are dropped once the player has left them far behind
-      if (e.extra && e.alive && e.state !== 'combat' && Math.abs(e.pos.x - pp.x) + Math.abs(e.pos.z - pp.z) > 260) { e.dispose(); this.list.splice(i, 1); continue; }
+      if (e.extra && e.alive && e.state !== 'combat' && md > 260) { e.dispose(); this.list.splice(i, 1); continue; }
+      // idle creatures far away cost almost nothing: beyond ~250 m they are frozen and hidden (the fog hides them
+      // anyway), beyond ~95 m they think and move four times less often (their animation is not advanced)
+      if (e.alive && e.state === 'idle' && !(e.riseT > 0)) {
+        if (md > 250) { if (e.obj.visible) e.obj.visible = false; e.skipDt = 0; this.asleep++; if (e.faction === 'writhe') wr++; continue; }
+        if (!e.obj.visible && !e.hidden) e.obj.visible = true;
+        if (md > 95) {
+          e.skipDt = (e.skipDt || 0) + dt;
+          if ((this.frame + (e.seed | 0)) % 4) { this.asleep++; if (e.faction === 'writhe') wr++; continue; }
+          const d2 = Math.min(.25, e.skipDt); e.skipDt = 0;
+          if (!e.update(d2)) { e.dispose(); this.list.splice(i, 1); }
+          if (e.faction === 'writhe') wr++;
+          continue;
+        }
+      } else if (e.alive && !e.obj.visible && !e.hidden && !e.T.pop) e.obj.visible = true;
       if (!e.update(dt)) { e.dispose(); this.list.splice(i, 1); continue; }
       if (e.alive && e.state === 'combat') combat++;
       if (e.alive && e.faction === 'writhe') wr++;

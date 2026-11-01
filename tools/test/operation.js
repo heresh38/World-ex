@@ -1,7 +1,9 @@
 // Operation Heartline (src/worlds/vanthos/operation.js) end to end: land on VANTHOS, run every stage (relay uplink hold,
 // Flight Nine recorder, Brood Road purge, Spire lift hold + ride), fight the Spire Warden through both shield phases
 // (immune at 50 % until the conduits fall, again at 20 %), open the reliquary and check the randomized loot, duplicate
-// copies of one archetype in the inventory, the vault cap, the run record, and a replay. Screenshots in test-out/operation/.
+// copies of one archetype in the inventory, the vault cap, the run record, and a replay. VANTHOS is a dead city whose
+// creatures already live at every stage site: each arena must hold its resident garrison on arrival, before any
+// interaction (stages[i].arrival), and residents must fill the city. Screenshots in test-out/operation/.
 // Usage: python3 -m http.server 8765 &  then  NODE_PATH=$(npm root -g) node tools/test/operation.js
 // Software rendering runs at a few fps, so the game is advanced with fixed 1/30 s update steps (__sim) between shots.
 const { chromium } = require('playwright');
@@ -72,6 +74,11 @@ fs.mkdirSync(OUT, { recursive: true });
   const info = await ev(() => { const o = window.__op(); return { stages: o.stages.map(s => [s.id, Math.round(s.pos.x), Math.round(s.pos.y), Math.round(s.pos.z)]), off: o.offSites, sites: window.__game.world.sites.length, landing: window.__game.world.landing.toArray().map(Math.round) }; });
   console.log('operation', JSON.stringify(info));
   check(info.stages.length === 5, 'five stages');
+  const city = await ev(() => window.__game.world.stats());
+  console.log('city', JSON.stringify(city));
+  check(city.residents > 250 && city.residentSites > 80, 'the city is inhabited before you arrive (resident creatures)', { sites: city.residentSites, residents: city.residents });
+  check(!(await ev(() => { let lit = false; window.__game.scene.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) if (/facade|ribbon/.test(m.name) && m.emissive && m.emissive.getHex() !== 0 && m.emissiveIntensity > 0) lit = true; }); return lit; })), 'no lit windows');
+  const arrival = (i, what) => ev(i => window.__op().stages[i].arrival, i).then(a => check(!!a && a.garrison > 0 && a.near > 0, what + ': residents already there on arrival', a));
   // ---------------------------------------------------------------- landing: intro radio + first objective
   await ev(() => { window.__sim(2.2); const o = window.__op(), s = o.stages[0]; window.__look(s.pos.x, 10, s.pos.z, .02); });
   let st = await S(); console.log('landing', JSON.stringify(st));
@@ -81,6 +88,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // ---------------------------------------------------------------- 1: the relay (start the uplink, hold while raiders come)
   await ev(() => { const s = window.__op().stages[0]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(.6); });
   st = await S(); check(st.phase === 'ready', 'relay arrival beat', st);
+  await arrival(0, 'relay');
   let pr = await ev(() => { const s = window.__op().stages[0]; window.__tp(s.console.x, s.console.y, s.console.z); window.__look(s.pos.x, s.pos.y + 6, s.pos.z, .25); return window.__press(); });
   st = await S(); check(st.phase === 'hold', 'E starts the uplink', pr);
   let shotHold = false;
@@ -96,6 +104,7 @@ fs.mkdirSync(OUT, { recursive: true });
   st = await S(); check(st.i === 1 && st.stage === 'shuttle', 'stage 2 next', st);
   await ev(() => { const s = window.__op().stages[1]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(3); window.__look(s.pos.x, s.pos.y + 2, s.pos.z, .0); });
   st = await S(); check(st.phase === 'fight1' && st.alive > 0, 'stalker ambush in the wreck', st);
+  await arrival(1, 'Flight Nine');
   await wait(1500); await shot('op03_shuttle_ambush');
   await ev(() => { window.__killOp(); window.__sim(1.5); });
   st = await S(); check(st.phase === 'recorder', 'recorder unlocked after the ambush', st);
@@ -109,6 +118,7 @@ fs.mkdirSync(OUT, { recursive: true });
   st = await S(); check(st.i === 2 && st.stage === 'nest', 'stage 3 next', st);
   await ev(() => { const s = window.__op().stages[2]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(1.2); const q = s.cp.clone().lerp(s.pos, .7); window.__tp(q.x, window.__op().ground(q.x, q.z), q.z); window.__look(s.pos.x, s.pos.y + .5, s.pos.z, -.12); window.__sim(.3); });
   st = await S(); check(st.phase === 'w1' && st.alive > 0, 'Writhe nest wakes', st);
+  await arrival(2, 'Brood Road');
   await wait(1500); await shot('op04_nest');
   const seen = new Set();
   for (let k = 0; k < 20 && st.phase !== 'valve'; k++) { st = await ev(() => { window.__killOp(); window.__sim(1); return window.__state(); }); seen.add(st.phase); }
@@ -124,6 +134,7 @@ fs.mkdirSync(OUT, { recursive: true });
   check(denied.y < 20 && /no power/i.test(denied.verb), 'lift refuses without power', denied);
   await ev(() => { const s = window.__op().stages[3]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(.6); });
   st = await S(); check(st.phase === 'ready', 'lift arrival beat', st);
+  await arrival(3, 'Spire lift');
   pr = await ev(() => { const s = window.__op().stages[3]; window.__tp(s.console.x, s.console.y, s.console.z + 1.2); return window.__press(); });
   st = await S(); check(st.phase === 'hold', 'E starts rerouting power', pr);
   shotHold = false;

@@ -332,6 +332,26 @@ export class Avatar {
     }
   }
 
+  // reloads (weapons.js applyPose): two-bone IK pulls the left hand to a world target, blended by w. The elbow bends in
+  // the plane of its current position (dropped a little), so the arm keeps the clip's natural elbow direction.
+  reachL(target, w) {
+    const ua = this.bones.upperarmL, fa = this.bones.forearmL, hd = this.bones.handL;
+    if (!ua || !fa || !hd || !(w > 0) || this.rag) return;
+    ua.updateMatrixWorld(true);
+    const a = ua.getWorldPosition(new THREE.Vector3()), b = fa.getWorldPosition(new THREE.Vector3()), c = hd.getWorldPosition(new THREE.Vector3());
+    const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
+    const t = c.clone().lerp(target, Math.min(1, w));
+    const d = t.clone().sub(a); const len = Math.max(Math.abs(l1 - l2) + 1e-3, Math.min((l1 + l2) * .999, d.length())); d.normalize();
+    const cosA = Math.max(-1, Math.min(1, (l1 * l1 + len * len - l2 * l2) / (2 * l1 * len))), sinA = Math.sqrt(1 - cosA * cosA);
+    const pole = b.clone().add(_v.set(0, -.15, 0)).sub(a); pole.addScaledVector(d, -pole.dot(d));
+    if (pole.lengthSq() < 1e-8) pole.set(0, -1, 0);
+    pole.normalize();
+    const elbow = a.clone().addScaledVector(d, cosA * l1).addScaledVector(pole, sinA * l1);
+    this.aimBone(ua, fa, elbow.sub(a).normalize(), 1);
+    const e2 = fa.getWorldPosition(new THREE.Vector3());
+    this.aimBone(fa, hd, t.sub(e2).normalize(), 1);
+  }
+
   muzzleWorld(out) {
     if (this.muzzle) return this.muzzle.getWorldPosition(out);
     return this.root.getWorldPosition(out).add(_v.set(0, 1.4, 0));

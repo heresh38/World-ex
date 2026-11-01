@@ -23,7 +23,7 @@ const W = +(process.env.W || 800), H = +(process.env.H || 450);
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
-  const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
+  const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--mute-audio'] });
   const p = await b.newPage({ viewport: { width: W, height: H } });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400), (e.stack || '').split('\n').slice(0, 4).join(' | ')); });
@@ -42,6 +42,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const g = window.__game, R = g.renderer;
     if (!R.__render) { R.__render = R.render; R.render = () => {}; }
     g.paused = true; g.stationId = 'test';
+    // (procedural audio with no output device piles up buffers in headless Chrome: memory grows until the OOM killer)
+    try { g.audio.ctx && g.audio.ctx.suspend(); } catch (e) { /* none */ }
     if (g.clock) { g.clock.set(12.5); g.clock.paused = true; }
     const cv = document.createElement('canvas'); cv.width = W / 2; cv.height = H / 2; const cx = cv.getContext('2d', { willReadFrequently: true });
     const V = g.camera.position.constructor;

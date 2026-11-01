@@ -167,7 +167,7 @@ export class GunRig {
       case 'loader': { const L = this.prop('loader'); if (L) return at(L, _v2.set(0, 0, -.03)); break; }
       case 'cyl': if (p.cylinder) return at(p.cylinder, _v2.set(.012, -.01, 0)); break;
       case 'ejector': if (p.crane) return at(p.crane, _v2.set(-.004, .025, .06)); break;
-      case 'shell': { const o = this.prop('shell'); if (o) return at(o, _v2.set(0, -.012, -.012)); break; }
+      case 'shell': { const o = this.prop('shell'); if (o) return at(o, _v2.set(0, -.016, -.05)); break; }
       case 'round': { const o = this.prop('round'); if (o) return at(o, _v2.set(-.008, .004, -.02)); break; }
       default: {
         const o = p[name];
@@ -187,7 +187,10 @@ const POUCH = ['pouch', 0, 0, 0, .5, .3, -.6];
 
 function seg(dur, ch, ev = []) { return { dur, ch, ev }; }
 
-// magazine guns: the per-gun differences live in `o`
+// gun pose while chambering (empty reloads)
+const G2 = { rifle: [-.05, .05, .03, .2, .3, -.3], dmr: [-.05, .05, .03, .2, .3, -.3], carbine: [-.04, .05, .03, .2, .2, -.2],
+  ksmg: [-.04, .05, .03, .2, .2, -.2], pistol: [-.06, .05, .05, .3, .1, .2] };
+// magazine guns: per-gun differences in how the old mag leaves, how the new one seats and how a round is chambered
 function magReload(arch, empty) {
   const segs = [];
   const tilt = { rifle: [-.04, .03, .03, .22, .32, -.55], carbine: [-.05, .04, .02, .16, .26, -.42], dmr: [-.05, .02, .05, .26, .3, -.5],
@@ -197,10 +200,10 @@ function magReload(arch, empty) {
   let magOut, handOut;
   if (arch === 'rifle') {          // stamped rifle: thumb the catch, rock the mag forward off its front lip, toss it
     magOut = [[0, 0, 0, 0, 0, 0, 0], [.25, 0, 0, 0, 0, 0, 0], [.42, 0, -.004, .004, -.45, 0, 0], [.55, 0, -.07, .02, -.6, 0, .1]];
-    handOut = [[0, 'fore', 0, 0, 0, 0, 0, 0], [.22, 'mag', 0, -.01, -.01, .2, 0, -.3], [.55, 'mag', 0, -.01, -.01, .3, 0, -.3], [.7, 'pouch', .04, .1, .1, .4, .3, -.5]];
+    handOut = [[0, 'fore', 0, 0, 0, 0, 0, 0], [.22, 'mag', 0, -.01, -.01, -.2, 0, -.3], [.55, 'mag', 0, -.01, -.01, -.3, 0, -.3], [.7, 'pouch', .04, .1, .1, .4, .3, -.5]];
   } else if (arch === 'ksmg') {    // compact SMG: hook the mag with the fingers and strip it forward out of the well
     magOut = [[0, 0, 0, 0, 0, 0, 0], [.24, 0, 0, 0, 0, 0, 0], [.4, 0, -.03, .012, -.15, 0, 0], [.52, 0, -.09, .05, -.35, 0, 0]];
-    handOut = [[0, 'fore', 0, 0, 0, 0, 0, 0], [.2, 'mag', 0, -.02, .02, .3, 0, -.2], [.52, 'mag', 0, -.02, .03, .4, 0, -.2], [.7, 'pouch', .05, .12, .1, .4, .3, -.5]];
+    handOut = [[0, 'fore', 0, 0, 0, 0, 0, 0], [.2, 'mag', 0, -.02, .02, -.3, 0, -.2], [.52, 'mag', 0, -.02, .03, -.4, 0, -.2], [.7, 'pouch', .05, .12, .1, .4, .3, -.5]];
   } else {                         // drop-free: press the release, the empty falls clear on its own
     magOut = [[0, 0, 0, 0, 0, 0, 0], [.2, 0, 0, 0, 0, 0, 0], [.32, 0, -.035, 0, .04, 0, 0, 'in']];
     handOut = [[0, 'fore', 0, 0, 0, 0, 0, 0], [.2, 'fore', -.01, -.06, -.04, .25, .1, -.2], [.42, 'pouch', .02, .14, .12, .4, .25, -.4]];
@@ -215,11 +218,11 @@ function magReload(arch, empty) {
   else if (arch === 'dmr') spare.push([.85, 0, -.008, 0, 0, 0, 0], [.9, 0, 0, 0, 0, 0, 0, 'out']);                   // firm push
   else spare.push([seatT, 0, 0, 0, 0, 0, 0, 'out']);
   const hand = handOut.slice();
-  hand.push([.62, 'pouch', 0, 0, 0, .5, .3, -.6], [.74, 'spare', 0, 0, 0, .25, .05, -.25], [.84, 'spare', 0, 0, 0, .2, 0, -.2]);
-  if (arch === 'dmr') hand.push([.93, 'magbase', 0, -.03, 0, .1, 0, -.1], [.97, 'magbase', 0, -.004, 0, .1, 0, -.1, 'out']);      // tap the base
-  else if (arch === 'carbine' || arch === 'pistol') hand.push([.9, 'magbase', 0, -.035, 0, .1, 0, -.15], [.94, 'magbase', 0, -.006, 0, .1, 0, -.15, 'out']);  // slap
-  else hand.push([.95, 'spare', 0, -.006, 0, .2, 0, -.2]);
-  hand.push([1, 'spare', 0, -.012, 0, .2, 0, -.2]);
+  hand.push([.62, 'pouch', 0, 0, 0, .5, .3, -.6], [.74, 'spare', 0, 0, 0, -.25, .05, -.25], [.84, 'spare', 0, 0, 0, -.2, 0, -.2]);
+  if (arch === 'dmr') hand.push([.93, 'magbase', 0, -.03, 0, -.1, 0, -.1], [.97, 'magbase', 0, -.004, 0, -.1, 0, -.1, 'out']);      // tap the base
+  else if (arch === 'carbine' || arch === 'pistol') hand.push([.9, 'magbase', 0, -.035, 0, -.1, 0, -.15], [.94, 'magbase', 0, -.006, 0, -.1, 0, -.15, 'out']);  // slap
+  else hand.push([.95, 'spare', 0, -.006, 0, -.2, 0, -.2]);
+  hand.push([1, 'spare', 0, -.012, 0, -.2, 0, -.2]);
   const slapT = arch === 'dmr' ? .97 : arch === 'carbine' || arch === 'pistol' ? .94 : seatT;
   const gun = [[0, 0, 0, 0, 0, 0, 0], [.22, ...tilt], [.4, ...tilt.map((v, i) => i === 1 ? v - .01 : v)], [.5, ...tilt],
     [.7, ...t2], [.84, ...t2], [slapT, ...t2.map((v, i) => i === 1 ? v + .012 : i === 3 ? v + .05 : v), 'out'], [1, ...t2]];
@@ -231,9 +234,9 @@ function magReload(arch, empty) {
   segs.push(seg(1, ch1, ev));
   // empty: chamber a round (per-gun manual of arms)
   if (empty) {
-    const H = { rifle: ['bolt', -.01, .03, -.02, .7, -.3, -1.1], carbine: ['charge', .0, .025, -.02, .9, 0, -.4], dmr: ['bolt', -.012, .03, .0, .6, -.3, -1],
-      ksmg: ['charge', .01, -.0, .0, .2, 0, -.6], pistol: ['slide', 0, .015, -.06, .9, -.2, -.6] }[arch];
-    const g2 = arch === 'pistol' ? [-.06, .05, .05, .3, .1, .2] : arch === 'rifle' || arch === 'dmr' ? [-.05, .04, .03, .18, .35, .35] : [-.04, .05, .03, .2, .2, -.2];
+    const H = { rifle: ['bolt', .004, -.03, -.01, -.35, 0, .25], carbine: ['charge', .0, .02, -.02, -.6, 0, -.25], dmr: ['bolt', .004, -.032, .0, -.35, 0, .25],
+      ksmg: ['charge', .01, -.0, .0, -.3, 0, -.5], pistol: ['slide', 0, .015, -.06, -.5, -.2, -.35] }[arch];
+    const g2 = G2[arch];
     const travel = { rifle: .095, carbine: .065, dmr: .07, ksmg: .08, pistol: .045 }[arch];
     const k = arch === 'pistol' ? 'slide' : arch === 'carbine' || arch === 'ksmg' ? 'charge' : 'bolt';
     const pull = [[0, 0], [.42, 0], [.62, travel], [.7, travel], [.76, 0, 'out']];
@@ -246,7 +249,7 @@ function magReload(arch, empty) {
     segs.push(seg(.32, ch, [[.6, 'sfx', arch === 'pistol' ? 'slideback' : 'rackback'], [arch === 'pistol' ? .66 : .76, 'sfx', arch === 'pistol' ? 'slidefwd' : 'rackfwd']]));
   }
   // back on the foregrip
-  segs.push(seg(.24, { gun: [[0, ...(empty ? (arch === 'pistol' ? [-.06, .05, .05, .3, .1, .2] : arch === 'rifle' || arch === 'dmr' ? [-.05, .04, .03, .18, .35, .35] : [-.04, .05, .03, .2, .2, -.2]) : t2)], [1, 0, 0, 0, 0, 0, 0]],
+  segs.push(seg(.24, { gun: [[0, ...(empty ? G2[arch] : t2)], [1, 0, 0, 0, 0, 0, 0]],
     hand: [[0, 'cur', 0, 0, 0, .2, 0, -.2], [.85, 'fore', 0, 0, 0, 0, 0, 0], [1, 'fore', 0, 0, 0, 0, 0, 0]] }));
   return segs;
 }
@@ -256,10 +259,10 @@ function revolverReload() {
   return [seg(1, {
     gun: [[0, 0, 0, 0, 0, 0, 0], [.12, ...g1], [.24, ...g1], [.32, ...g2], [.4, ...g2.map((v, i) => i === 1 ? v - .02 : v)], [.46, ...g2], [.56, ...g3], [.82, ...g3],
       [.87, ...g3.map((v, i) => i === 5 ? v - .15 : v), 'out'], [1, 0, 0, 0, 0, 0, 0]],
-    hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.12, 'cyl', .01, 0, 0, .2, 0, -.6], [.22, 'cyl', .01, 0, 0, .2, 0, -.6], [.32, 'ejector', 0, 0, .01, -.2, 0, -.4],
+    hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.12, 'cyl', .01, 0, 0, -.2, 0, -.6], [.22, 'cyl', .01, 0, 0, -.2, 0, -.6], [.32, 'ejector', 0, 0, .01, -.2, 0, -.4],
       [.38, 'ejector', 0, 0, -.012, -.2, 0, -.4], [.42, 'ejector', 0, 0, .01, -.2, 0, -.4], [.52, 'pouch', 0, .05, .05, .5, .3, -.6], [.6, 'pouch', 0, 0, 0, .5, .3, -.6],
-      [.7, 'loader', 0, 0, 0, .2, 0, -.5], [.76, 'loader', 0, 0, 0, .2, 0, -.5], [.8, 'loader', .01, 0, -.02, .2, 0, -.5], [.84, 'cyl', .03, .0, -.01, .2, 0, -.6],
-      [.88, 'cyl', -.006, .0, 0, .2, 0, -.6, 'out'], [1, 'fore', 0, 0, 0, 0, 0, 0]],
+      [.7, 'loader', 0, 0, 0, -.2, 0, -.5], [.76, 'loader', 0, 0, 0, -.2, 0, -.5], [.8, 'loader', .01, 0, -.02, -.2, 0, -.5], [.84, 'cyl', .03, .0, -.01, -.2, 0, -.6],
+      [.88, 'cyl', -.006, .0, 0, -.2, 0, -.6, 'out'], [1, 'fore', 0, 0, 0, 0, 0, 0]],
     crane: [[0, 0], [.16, 0], [.24, -1.5, 'back'], [.84, -1.5], [.89, 0, 'out']],
     spin: [[0, 0], [.24, 0], [.3, .6, 'out'], [.84, .6], [1, .6 + Math.PI * 2 / 3 * 4, 'out']],
     loader: [[0, .03, -.2, -.3, 0], [.6, .03, -.2, -.3, 0], [.7, 0, 0, -.05, 0], [.74, 0, 0, -.01, 0], [.76, 0, 0, 0, .25], [.79, 0, 0, 0, .25], [.82, -.03, .02, -.12, .25]],
@@ -275,8 +278,8 @@ function pumpReload(n, empty) {
     segs.push(seg(1, {
       gun: [[0, ...g], [.62, ...g], [.72, ...g.map((v, i) => i === 1 ? v + .006 : i === 3 ? v + .03 : v), 'out'], [1, ...g]],
       shell: [[0, .02, -.3, -.15, 0, 0, 0], [.35, .015, -.07, .02, -.2, 0, 0], [.55, 0, -.012, .065, -.08, 0, 0], [.72, 0, .046, .14, 0, 0, 0, 'out']],
-      hand: [[0, 'pouch', 0, 0, 0, .5, .3, -.6], [.1, 'shell', 0, 0, 0, .3, 0, -.5], [.55, 'shell', 0, 0, 0, .2, 0, -.5], [.66, 'free', 0, .01, .12, .2, 0, -.5],
-        [.74, 'free', 0, .015, .15, .15, 0, -.5], [1, 'pouch', .01, .05, .06, .5, .3, -.6]],
+      hand: [[0, 'pouch', 0, 0, 0, .5, .3, -.6], [.1, 'shell', 0, 0, 0, -.3, 0, -.5], [.55, 'shell', 0, 0, 0, -.2, 0, -.5], [.66, 'free', 0, .01, .12, -.2, 0, -.5],
+        [.74, 'free', 0, .015, .15, -.15, 0, -.5], [1, 'pouch', .01, .05, .06, .5, .3, -.6]],
     }, [[0, 'shell', 1], [.6, 'sfx', 'shellin'], [.72, 'shell', 0], [.72, 'grant', 1]]));
   }
   const end = { gun: [[0, ...g], [.5, -.03, .02, .02, .1, .1, -.3], [1, 0, 0, 0, 0, 0, 0]], hand: [[0, 'cur', 0, 0, 0, .5, .3, -.6], [.6, 'pump', 0, -.02, 0, 0, 0, 0], [1, 'pump', 0, -.02, 0, 0, 0, 0]] };
@@ -291,8 +294,8 @@ function pumpReload(n, empty) {
 }
 // bolt-action: roll the rifle to show the port, bolt up and back, thumb rounds in one by one, bolt forward and down
 function boltReload(n) {
-  const g = [-.03, .05, .05, .12, .18, .85];
-  const knob = ['bolt', 0, 0, 0, .9, -.4, -1.2];
+  const g = [-.07, .09, .06, .2, .22, .6];
+  const knob = ['bolt', 0, 0, 0, -.45, -.2, -.5];
   const segs = [seg(1, {
     gun: [[0, 0, 0, 0, 0, 0, 0], [.4, ...g], [1, ...g]],
     hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.35, ...knob], [.7, ...knob], [1, 'pouch', -.04, .12, .12, .5, .3, -.6]],
@@ -303,7 +306,7 @@ function boltReload(n) {
       gun: [[0, ...g], [.6, ...g], [.7, ...g.map((v, i) => i === 1 ? v - .005 : v), 'out'], [1, ...g]],
       boltRot: [[0, -1.05]], bolt: [[0, .085]],
       round: [[0, -.15, -.15, -.2, 0, 0, 0], [.35, -.07, .1, -.005, 0, .2, 0], [.55, -.022, .09, 0, 0, 0, 0], [.7, -.004, .072, .002, 0, 0, 0, 'out']],
-      hand: [[0, 'pouch', 0, 0, 0, .5, .3, -.6], [.12, 'round', 0, 0, 0, .9, -.3, -1.3], [.55, 'round', 0, 0, 0, .9, -.3, -1.3], [.7, 'round', 0, -.004, 0, .9, -.3, -1.3],
+      hand: [[0, 'pouch', 0, 0, 0, .5, .3, -.6], [.12, 'round', 0, 0, 0, -.45, -.2, -.5], [.55, 'round', 0, 0, 0, -.45, -.2, -.5], [.7, 'round', 0, -.004, 0, -.45, -.2, -.5],
         [1, 'pouch', -.03, .1, .1, .5, .3, -.6]],
     }, [[0, 'round', 1], [.66, 'sfx', 'roundin'], [.7, 'round', 0], [.7, 'grant', 1]]));
   }
@@ -318,14 +321,14 @@ function boltReload(n) {
 function bioReload(arch) {
   const brood = arch === 'brood', bile = arch === 'bile';
   const open = brood ? -1.25 : bile ? -1.35 : 1.45;        // brood lid lifts at the back (about X); flank flaps swing out (about Z)
-  const g = brood ? [-.06, .06, .05, .32, .25, -.25] : [-.06, .03, .04, .18, .3, -.7];
+  const g = brood ? [-.08, .08, .1, .38, .3, -.2] : [-.1, .06, .1, .22, .5, -.8];
   const bioOff = brood ? [0, .2, -.16] : [.16, -.1, -.12];
   return [seg(1, {
     gun: [[0, 0, 0, 0, 0, 0, 0], [.16, ...g], [.26, ...g.map((v, i) => i === 1 ? v + .01 : v), 'out'], [.34, ...g], [.84, ...g],
       [.9, ...g.map((v, i) => i === 3 ? v + .05 : v), 'out'], [1, 0, 0, 0, 0, 0, 0]],
-    hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.14, 'hatch', 0, .02, 0, .2, 0, -.4], [.22, 'hatch', 0, .03, 0, .2, 0, -.4], [.4, 'pouch', 0, .1, .1, .5, .3, -.6],
-      [.5, 'pouch', 0, 0, 0, .5, .3, -.6], [.62, 'biomass', 0, -.025, 0, .3, 0, -.5], [.74, 'biomass', 0, -.022, 0, .3, 0, -.5], [.8, 'biomass', 0, -.01, 0, .3, 0, -.5],
-      [.86, 'hatch', 0, .015, 0, .2, 0, -.4], [.9, 'hatch', 0, .005, 0, .2, 0, -.4, 'out'], [1, 'fore', 0, 0, 0, 0, 0, 0]],
+    hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.14, 'hatch', 0, .02, 0, -.2, 0, -.4], [.22, 'hatch', 0, .03, 0, -.2, 0, -.4], [.4, 'pouch', 0, .1, .1, .5, .3, -.6],
+      [.5, 'pouch', 0, 0, 0, .5, .3, -.6], [.62, 'biomass', 0, -.025, 0, -.3, 0, -.5], [.74, 'biomass', 0, -.022, 0, -.3, 0, -.5], [.8, 'biomass', 0, -.01, 0, -.3, 0, -.5],
+      [.86, 'hatch', 0, .015, 0, -.2, 0, -.4], [.9, 'hatch', 0, .005, 0, -.2, 0, -.4, 'out'], [1, 'fore', 0, 0, 0, 0, 0, 0]],
     hatch: [[0, 0], [.18, 0], [.26, open * 1.15, 'back'], [.32, open * .92], [.4, open], [.8, open], [.86, open * .2, 'in'], [.9, -open * .06, 'out'], [.95, 0]],
     bio: [[0, ...bioOff, .6, .4, 0], [.5, ...bioOff, .6, .4, 0], [.66, ...bioOff.map(v => v * .25), .2, .1, 0], [.76, ...bioOff.map(v => v * .05), 0, 0, 0], [.8, 0, 0, 0, 0, 0, 0, 'out']],
   }, [[.2, 'sfx', 'hatchopen'], [.22, 'drip', 'hatch'], [.3, 'husk'], [.45, 'sfx', 'pouch'], [.5, 'bio', 1], [.76, 'sfx', 'bioin'], [.8, 'seat'], [.8, 'drip', 'biomass'],
@@ -341,7 +344,7 @@ function cycleSeq(arch) {
   })];
   if (arch === 'bolt') return [seg(1.05, {
     gun: [[0, 0, 0, 0, 0, 0, 0], [.2, -.02, .02, .03, .06, .08, .35], [.8, -.02, .02, .03, .06, .08, .35], [1, 0, 0, 0, 0, 0, 0]],
-    hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.3, 'bolt', 0, 0, 0, .9, -.4, -1.2], [.75, 'bolt', 0, 0, 0, .9, -.4, -1.2], [1, 'fore', 0, 0, 0, 0, 0, 0]],
+    hand: [[0, 'fore', 0, 0, 0, 0, 0, 0], [.3, 'bolt', 0, 0, 0, -.45, -.2, -.5], [.75, 'bolt', 0, 0, 0, -.45, -.2, -.5], [1, 'fore', 0, 0, 0, 0, 0, 0]],
     boltRot: [[0, 0], [.32, 0], [.42, -1.05, 'out'], [.66, -1.05], [.74, 0, 'out']], bolt: [[0, 0], [.42, 0], [.52, .085, 'out'], [.58, .085], [.66, 0, 'out']],
   }, [[.5, 'eject']])];
   return null;
@@ -413,6 +416,7 @@ export class Reload {
   interrupt() {
     const q = this.seq; if (!q || !q.loop || q.i >= q.segs.length - 1 || q.i === 0) return false;
     q.i = q.segs.length - 1; q.local = 0; q.fired = new Set(); this.snap();
+    this.P.st.shell = 0; this.P.st.round = 0;            // the one in hand goes back in the pouch
     q.dur = q.t + q.segs[q.i].dur;
     return true;
   }
@@ -545,6 +549,14 @@ export class Reload {
     }
   }
 
+  // third-person IK weight for the off hand: eases in and out at both ends of a reload / cycle
+  handWeight() {
+    const q = this.seq, c = this.cycle;
+    if (q && !q.energy) return Math.max(0, Math.min(1, q.t / .15, (q.dur - q.t) / .15));
+    if (c && c.delay <= 0) return Math.max(0, Math.min(1, c.local / .1, (c.dur - c.local) / .1));
+    return 0;
+  }
+
   // the pose rigs should show (null when nothing is displaced)
   pose() {
     const P = this.P;
@@ -563,7 +575,7 @@ export class Drops {
   // obj: a posed Object3D whose world transform is taken; kind: sound + rest behaviour
   spawn(obj, kind, vel, spin = 6, life = 22, at = null) {
     const g = this.g; if (!g.scene || !obj) return null;
-    obj.updateMatrixWorld(true);
+    obj.updateWorldMatrix(true, true);            // parents too: the viewmodel graph is otherwise only refreshed at render
     const c = obj.clone(true); c.visible = true;
     c.traverse(o => { o.visible = true; if (o.isMesh) { o.castShadow = true; o.frustumCulled = true; } });
     // pivot at the centre of the local box so it tumbles around its middle and rests on its side

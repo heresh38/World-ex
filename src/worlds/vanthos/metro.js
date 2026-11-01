@@ -7,10 +7,11 @@ import { mulberry } from '../../game/state.js';
 const CELL = 20;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
-// the Writhe (host, mite, bladder) has spread through the flooded and research tunnels and into the old lines
+// the Writhe (host, mite, bladder) has spread through the flooded and research tunnels and into the old lines; no one
+// living is left down here either (the military lines hold what the parasite made of their garrison)
 const FAUNA = { old: ['stalker', 'host', 'mite'], commercial: ['stalker'], flooded: ['swimmer', 'host', 'mite', 'mite', 'bladder'],
-  research: ['mutant', 'host', 'mite', 'mite', 'bladder'], military: ['trooper', 'brute'],
-  industrial: ['hulk', 'stalker'], crown: ['elite', 'stalker'], outskirts: ['stalker', 'trooper', 'host'] };
+  research: ['mutant', 'host', 'mite', 'mite', 'bladder'], military: ['host', 'host', 'mite'],
+  industrial: ['hulk', 'stalker'], crown: ['elite', 'stalker'], outskirts: ['stalker', 'host', 'mite'] };
 
 function instanceKit(scene, root, mats) {
   if (!mats.length) return;

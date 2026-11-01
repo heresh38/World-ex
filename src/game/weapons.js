@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { ARCHETYPES, RARITY, SHADERS, SIGHTS, weaponSight, sightZoom } from './data.js';
 import { weaponStats } from './state.js';
+import { Reload, GunRig } from './reload.js';
 
 const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Vector3(), _t = new THREE.Vector3(), _a = new THREE.Vector3(),
   _b = new THREE.Vector3(), _c = new THREE.Vector3(), _col = new THREE.Color(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _M = new THREE.Matrix4();
@@ -14,6 +15,7 @@ const MAX_ROUNDS = 256, MAX_GOO = 160;
 
 // living guns share one clock; 'gape' spikes when they fire
 const BIO = { t: { value: 0 }, gape: 0 };
+const BIO_LOAD = { spitter: [0xd8ff9a, 0x7cff3a, .9], bile: [0xfff2a0, 0xe0e040, .8], brood: [0xffc0b8, 0xff4a5a, .55] };
 
 // edge-wear looks per material (what shows through where the `_wear` attribute is high)
 const WEAR = {
@@ -75,7 +77,7 @@ function animateBio(mesh) {
       if (dict.pulse !== undefined) inf[dict.pulse] = beat;
       if (dict.gape !== undefined) inf[dict.gape] = Math.max(BIO.gape, .06 + .06 * Math.sin(t * 1.3));
     }
-    if (m.name === 'bio_glow') m.emissiveIntensity = base * (.45 + .75 * beat + BIO.gape * .6);
+    if (m.name === 'bio_glow' || m.name === 'bio_load') m.emissiveIntensity = base * (.45 + .75 * beat + BIO.gape * .6);
   };
 }
 
@@ -89,6 +91,8 @@ export class Weapons {
     this.lastFire = 9; this.rampage = 0; this.rampageT = 0;
     this.rockets = [];
     this.rounds = []; this.goo = []; this.afflicted = new Map(); this.dripT = 0;
+    this.rl = new Reload(game);    // physical reload sequences, post-shot cycling, dropped mags (reload.js)
+    this.avRig = null;
     // bullet / bolt streaks: one instanced draw
     const sg = new THREE.CylinderGeometry(1, .35, 1, 6, 1, true); sg.rotateX(Math.PI / 2); sg.translate(0, 0, .5);
     this.streaks = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true,
@@ -161,10 +165,12 @@ export class Weapons {
     const p = this.g.player; if (!p || !p.avatar) return;
     const w0 = p.armed ? this.equipped() : null;
     if (this.g.viewmodel) this.g.viewmodel.setWeapon(w0);
+    this.avRig = null;
     if (!p.armed || p.mode === 'car' || p.mode === 'sit') { p.avatar.attachGun(null); return; }   // stowed while riding/seated
     const w = this.equipped(); if (!w) { p.avatar.attachGun(null); return; }
     const A = ARCHETYPES[w.arch];
-    p.avatar.attachGun(A.model, mesh => Weapons.styleMesh(mesh, w));
+    const gun = p.avatar.attachGun(A.model, mesh => Weapons.styleMesh(mesh, w));
+    if (gun) this.avRig = new GunRig(gun, w.arch, this.g.assets);
     this.g.setAvatarLayer && this.g.setAvatarLayer();
   }
 
@@ -177,6 +183,8 @@ export class Weapons {
     if (m.name === 'gun_body') { const sh = SHADERS.find(s => s.id === w.shader) || SHADERS[0]; m.color.set(sh.body); }
     // optics are glass: see straight through red dots and scope lenses
     if (m.name === 'gun_lens') { m.transparent = true; m.opacity = .14; m.depthWrite = false; m.emissiveIntensity = .2; m.color.set(0x9fd8ff); }
+    // the loadable biomass: slime ball (spitter), bile bladder, larva egg (brood)
+    if (m.name === 'bio_load') { const L = BIO_LOAD[w.arch] || BIO_LOAD.spitter; m.color.set(L[0]); m.emissive.set(L[1]); m.emissiveIntensity = L[2]; m.roughness = .12; }
     if (WEAR[m.name] && mesh.geometry.attributes._wear) addWear(m, WEAR[m.name]);
     if (/^bio_/.test(m.name)) {
       if (m.name === 'bio_flesh' && mesh.geometry.attributes._wear) addFlesh(m);
@@ -190,6 +198,7 @@ export class Weapons {
   static dress(root, w) {
     if (root.userData.dressed) return;
     root.userData.dressed = true;
+    root.traverse(o => { if (o.name.startsWith('x_')) o.visible = false; });     // spare reload props (shells, casings, speedloader)
     const id = weaponSight(w);
     const rail = root.getObjectByName('rail');
     if (id === 'default' || !rail || !Weapons.assets) return;
@@ -210,7 +219,8 @@ export class Weapons {
 
   select(i) {
     if (i === this.slot || !this.equipped(i)) return;
-    this.slot = i; this.swap = .35; this.reloading = 0; this.burstLeft = 0;
+    this.cancelReload();
+    this.slot = i; this.swap = .35; this.burstLeft = 0;
     this.refreshModel(); this.g.audio.reload(1);
     this.g.hud.dirty = true;
   }
@@ -230,7 +240,12 @@ export class Weapons {
       if (i === this.slot) continue; const w = this.equipped(i);
       if (w && w.perks.includes('autoload')) { const a = this.ammoOf(w), s = weaponStats(w); if (a.mag < s.mag && a.reserve > 0) { const n = Math.min(s.mag - a.mag, a.reserve); a.mag += n; a.reserve -= n; } }
     }
-    if (!p.armed || p.mode !== 'foot' || p.dead) return;
+    this.rl.drops.update(dt);
+    if (!p.armed || p.mode !== 'foot' || p.dead) {
+      // riding, seated, dead or holstered: a reload in progress is abandoned and every part goes back to rest
+      if (this.reloading > 0 || this.rl.active || this.rl.cycle) this.cancelReload();
+      return;
+    }
     if (input.enabled) {
       for (let i = 0; i < 3; i++) if (input.pressed('Digit' + (i + 1))) this.select(i);
       if (input.wheel) { let n = this.slot; for (let k = 0; k < 3; k++) { n = (n + (input.wheel > 0 ? 1 : 2)) % 3; if (this.equipped(n)) break; } this.select(n); }
@@ -238,16 +253,18 @@ export class Weapons {
     const w = this.equipped(); if (!w) return;
     const A = ARCHETYPES[w.arch], S = weaponStats(w), a = this.ammoOf(w);
     if (A.cls === 'horror') this.drip(dt, A);
+    const ctx = this.reloadCtx(w, a, A);
+    if (this.reloading > 0 && p.running) this.cancelReload();          // sprinting drops the reload
     if (this.reloading > 0) {
-      this.reloading -= dt;
-      const gun = p.avatar.gun; if (gun) gun.rotation.x = Math.sin(Math.min(1, 1 - this.reloading / S.reload) * Math.PI) * .9;
-      if (this.reloading <= 0) {
-        const n = Math.min(S.mag - a.mag, a.reserve); a.mag += n; a.reserve -= n;
-        this.g.audio.reload(1); this.g.hud.dirty = true;
-        if (gun) gun.rotation.x = 0;
-      }
+      // shell-by-shell / round-by-round reloads stop when you pull the trigger (the action closes, then you can fire)
+      if (input.enabled && input.locked && input.lmbHit && a.mag > 0) this.rl.interrupt();
+      this.rl.update(dt, n => this.grant(w, S, a, n), ctx);
+      this.reloading = this.rl.active ? Math.max(.001, this.rl.seq.dur - this.rl.seq.t) : 0;
+      this.applyPose();
       return;
     }
+    this.rl.update(dt, null, ctx);
+    this.applyPose();
     if (input.enabled && input.pressed('KeyR') && a.mag < S.mag && a.reserve > 0) { this.startReload(S); return; }
     if (this.swap > 0) return;
     // continue a pulse burst
@@ -265,7 +282,95 @@ export class Weapons {
   }
 
   startReload(S) {
-    this.reloading = this.reloadTotal = S.reload; this.burstLeft = 0; this.g.audio.reload(0);
+    const w = this.equipped(), a = this.ammoOf(w);
+    this.burstLeft = 0;
+    if (ARCHETYPES[w.arch].cls === 'energy') this.g.audio.reload(0);
+    this.reloading = this.reloadTotal = this.rl.start(w, S, a);
+    this.g.hud.dirty = true;
+  }
+
+  // n = -1 fills the magazine (a new mag seats, the speedloader lets go, a biomass takes), otherwise n rounds go in
+  grant(w, S, a, n) {
+    const m = Math.max(0, Math.min(n < 0 ? S.mag - a.mag : n, S.mag - a.mag, a.reserve));
+    a.mag += m; a.reserve -= m;
+    if (ARCHETYPES[w.arch].cls === 'energy') this.g.audio.reload(1);
+    this.g.hud.dirty = true;
+  }
+
+  cancelReload() {
+    this.rl.cancel(); this.reloading = 0;
+    this.applyPose();
+    this.g.hud && (this.g.hud.dirty = true);
+  }
+
+  // the rig you are looking at: viewmodel in first person, the avatar's gun otherwise
+  shownRig() {
+    const g = this.g, vm = g.viewmodel;
+    return g.firstPerson && g.firstPerson() && vm && vm.gr ? vm.gr : this.avRig;
+  }
+
+  // callbacks the reload sequence uses (drops, slime, glow); cached per weapon
+  reloadCtx(w, a, A) {
+    const c = this._ctx;
+    if (c && c.uid === w.uid) { c.ammo = a; return c; }
+    const self = this, g = this.g, color = A.goo ? GOO[A.goo].color : 0x9aff4a;
+    return (this._ctx = {
+      uid: w.uid, arch: w.arch, ammo: a,
+      drop(kind) { self.dropPart(kind, w); },
+      glow() { BIO.gape = 1; const r = self.shownRig(); if (r && r.p.hatch) g.fx.glow(r.p.hatch.getWorldPosition(new THREE.Vector3()), .25, color, .25); },
+      drip(name) { const r = self.shownRig(), o = r && r.p[name]; if (o) g.fx.slimeDrops(o.getWorldPosition(new THREE.Vector3()), null, 5, 1.2, color, .6); },
+      casing() { self.dropPart('casing', w); },
+    });
+  }
+
+  // something leaves the gun as a physical object (old mag, revolver brass, speedloader, spent biomass, bolt case)
+  dropPart(kind, w) {
+    const g = this.g, rig = this.shownRig(), p = g.player; if (!rig) return;
+    const D = this.rl.drops;
+    rig.root.updateWorldMatrix(true, true);
+    const gq = rig.root.getWorldQuaternion(new THREE.Quaternion());
+    const toWorld = (x, y, z) => new THREE.Vector3(x, y, z).applyQuaternion(gq);
+    const base = p.vel.clone().multiplyScalar(.9);
+    if (kind === 'mag' && rig.p.mag) {
+      const toss = w.arch === 'rifle' || w.arch === 'ksmg' ? toWorld(.9, -.6, .5) : toWorld(.15, -1.4, 0);
+      D.spawn(rig.p.mag, 'mag', base.add(toss), 5);
+    } else if (kind === 'loader' && rig.extra.loader) {
+      D.spawn(rig.extra.loader, 'mag', base.add(toWorld(.6, -.8, -.4)), 7);
+    } else if (kind === 'casings' && rig.p.cylinder && rig.p.x_casing) {
+      const cyl = rig.p.cylinder, cq = cyl.getWorldQuaternion(new THREE.Quaternion());
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3 + Math.PI / 6;
+        const pos = cyl.localToWorld(new THREE.Vector3(Math.cos(a) * .0215, Math.sin(a) * .0215, -.03));
+        D.spawn(rig.p.x_casing, 'casing', base.clone().add(toWorld((Math.random() - .5) * .4, -.2, -1.2 - Math.random() * .6)), 14, 14, { pos, q: cq });
+      }
+    } else if (kind === 'husk' && rig.p.biomass) {
+      const h = rig.prop('husk'); if (!h) return;
+      h.position.copy(rig.p.biomass.position); h.quaternion.copy(rig.p.biomass.quaternion); h.scale.setScalar(.8);
+      const out = w.arch === 'brood' ? toWorld(.2, 1.2, -.3) : toWorld(1.1, .2, -.2);
+      D.spawn(h, 'husk', base.add(out), 4, 12);
+      h.visible = false;
+      g.fx.slimeDrops(rig.p.biomass.getWorldPosition(new THREE.Vector3()), null, 8, 1.6, GOO[ARCHETYPES[w.arch].goo].color, .8);
+      g.audio.reloadSfx && g.audio.reloadSfx('husk');
+    } else if (kind === 'casing' && rig.p.x_round && rig.p.bolt) {
+      const pos = rig.root.localToWorld(new THREE.Vector3(-.03, .085, 0));
+      D.spawn(rig.p.x_round, 'casing', base.add(toWorld(-1.6, 1.2, -.3)), 16, 10, { pos, q: gq });
+    }
+  }
+
+  // parts on the third-person gun + the avatar's off hand (the viewmodel reads the same pose in viewmodel.js)
+  applyPose() {
+    const p = this.g.player, av = p && p.avatar, rig = this.avRig;
+    const P = this.rl.pose();
+    if (!rig || !av || av.gun !== rig.root) return;
+    rig.apply(P);
+    const gun = av.gun;
+    if (!P) { if (this._avPosed) { gun.position.set(0, 0, 0); gun.rotation.set(0, 0, 0); this._avPosed = false; } return; }
+    this._avPosed = true;
+    const G = P.gun;     // view-space holder offsets -> the gun's own axes (barrel +Z, left +X), toned down for the body
+    gun.position.set(-G[0] * .5, G[1] * .5, -G[2] * .5);
+    gun.rotation.set(-G[3] * .7, G[4] * .7, -G[5] * .7);
+    const w = this.rl.handWeight();
+    if (w > 0 && av.reachL) { gun.updateWorldMatrix(true, false); av.reachL(gun.localToWorld(P.hand.clone()), w); }
   }
 
   // muzzle position of whatever the player sees (viewmodel in first person)
@@ -295,6 +400,7 @@ export class Weapons {
     p.camPitch += (A.pitch || .0035) * (p.aiming ? .6 : 1);
     this.muzzle(_m);
     if (g.firstPerson()) g.viewmodel.kick(A.kick ?? 1);
+    this.rl.shot(w);
     p.camForward(_d);
     if (A.cls === 'horror') { BIO.gape = 1; g.fx.slimeDrops(_m, _d, 6, 2.5, GOO[A.goo].color, .8); g.fx.glow(_m, .35, GOO[A.goo].color, .08); }
     else g.fx.muzzle(_m, _d, w.arch === 'rocket' ? 0xffa040 : A.cls === 'energy' ? (A.tracer ? new THREE.Color(A.tracer).getHex() : 0x8fd8ff) : 0xffc070);
@@ -581,6 +687,7 @@ export class Weapons {
 
   // world change: drop everything in flight
   clearRockets() {
+    this.rl.drops.clear(); this.cancelReload();
     this.rockets.forEach(r => r.m.removeFromParent()); this.rockets = [];
     this.rounds = []; this.goo = []; this.afflicted.clear();
     this.streaks.count = 0; this.globs.count = 0;

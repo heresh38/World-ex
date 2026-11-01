@@ -254,6 +254,8 @@ class Ruin:
         self.t = t
         self.nx = max(2, round(w / bay)); self.ny = max(2, round(d / bay))
         self.bx, self.by = w / self.nx, d / self.ny
+        self.pnx = max(2, round(w / 3.6)); self.pny = max(2, round(d / 3.6))      # floor plates / columns grid
+        self.pbx, self.pby = w / self.pnx, d / self.pny
         self.H = floors * fh
         self.shear = None; self.blobs = []; self.peel = set(); self.holes = []; self.front_open = .7
         self.jag = {}
@@ -321,18 +323,18 @@ class Ruin:
         # columns on a coarse grid
         for f in range(self.floors):
             z0 = f * fh
-            for i in range(1, self.nx, 2):
-                for j in range(1, self.ny, 2):
-                    x = -self.w / 2 + i * self.bx; y = -self.d / 2 + j * self.by
+            for i in range(1, self.pnx, 2):
+                for j in range(1, self.pny, 2):
+                    x = -self.w / 2 + i * self.pbx; y = -self.d / 2 + j * self.pby
                     if not self.gone(x, y, z0 + 1) and not self.gone(x, y, z0 + fh - .5):
                         box(mb, x - .3, y - .3, z0, x + .3, y + .3, z0 + fh - .3, M['slab_in'], bottom=False)
                         if f == 0:
                             mb.col(x - .3, y - .3, 0, x + .3, y + .3, fh)
         # ground floor interior: debris, the spots enemies hold
-        for i in range(self.nx):
-            for j in range(self.ny):
-                x = -self.w / 2 + (i + .5) * self.bx; y = -self.d / 2 + (j + .5) * self.by
-                if not self.gone(x, y, fh - .1) and i % 2 == 0 and j % 2 == 0 and 0 < i < self.nx - 1 and 0 < j < self.ny - 1:
+        for i in range(self.pnx):
+            for j in range(self.pny):
+                x = -self.w / 2 + (i + .5) * self.pbx; y = -self.d / 2 + (j + .5) * self.pby
+                if not self.gone(x, y, fh - .1) and i % 2 == 0 and j % 2 == 0 and 0 < i < self.pnx - 1 and 0 < j < self.pny - 1:
                     mb.spot('inside', x, y, 0)
                 if rg.random() < .25 and not self.gone(x, y, 1):
                     chunk(mb, rg, x + rg.uniform(-1, 1), y + rg.uniform(-1, 1), .2, rg.uniform(.3, .7), M['slab_in'])
@@ -356,13 +358,20 @@ class Ruin:
         for (p, q, zt, flip) in ((p0, q0, zt0, True), (p1, q1, zt1, False)):
             pts = [(p[0], p[1], z0), (q[0], q[1], z0), (q[0], q[1], zt), (p[0], p[1], zt)]
             mb.face(pts if not flip else [pts[1], pts[0], pts[3], pts[2]], [(0, z0 / 4), (.08, z0 / 4), (.08, zt / 4), (0, zt / 4)], M['slab'])
+        # floor ledge: the slab edge stands a hand proud of the facade (shadow lines between floors)
+        if f > 0 and getattr(self, 'fac', 'x') in ('conc', 'brick'):
+            e = .14; zb, zt = z0 - .05, z0 + .22
+            r0 = (p0[0] + n[0] * e, p0[1] + n[1] * e); r1 = (p1[0] + n[0] * e, p1[1] + n[1] * e)
+            mb.face([(r0[0], r0[1], zb), (r1[0], r1[1], zb), (r1[0], r1[1], zt), (r0[0], r0[1], zt)], [(s0 / 4, 0), (s1 / 4, 0), (s1 / 4, .07), (s0 / 4, .07)], M['slab'])
+            mb.face([(p0[0], p0[1], zt), (r0[0], r0[1], zt), (r1[0], r1[1], zt), (p1[0], p1[1], zt)], [(0, 0), (.04, 0), (.04, 1), (0, 1)], M['slab'])
+            mb.face([(p1[0], p1[1], zb), (r1[0], r1[1], zb), (r0[0], r0[1], zb), (p0[0], p0[1], zb)], [(0, 0), (.04, 0), (.04, 1), (0, 1)], M['slab_in'])
         if zt0 < (f + 1) * self.fh - .2 and self.rg.random() < .5:
             rebar(mb, self.rg, ((p0[0] + p1[0]) / 2 - n[0] * t / 2, (p0[1] + p1[1]) / 2 - n[1] * t / 2, (zt0 + zt1) / 2), (0, 0, 1), 2, M, (.4, 1.0))
 
     def plate(self, mb, f):
         M, rg, fh = self.M, self.rg, self.fh
         z = f * fh
-        nx, ny, bx, by = self.nx, self.ny, self.bx, self.by
+        nx, ny, bx, by = self.pnx, self.pny, self.pbx, self.pby
         have = {}
         for i in range(nx):
             for j in range(ny):

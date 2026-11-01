@@ -5,6 +5,8 @@ const MUSIC = {
   earth: { root: 43, chords: [[0, 7, 14, 16], [-2, 5, 12, 17], [3, 10, 14, 19], [5, 12, 16, 21]], tempo: 6, bright: 1300 },
   planet: { root: 40, chords: [[0, 7, 12, 15], [-4, 3, 8, 12], [-2, 5, 10, 14], [-5, 2, 7, 10]], tempo: 8, bright: 700 },
   title: { root: 38, chords: [[0, 7, 12, 19], [-4, 3, 12, 15], [-7, 0, 9, 12], [-2, 5, 10, 17]], tempo: 9, bright: 800 },
+  // VANTHOS: no tune, just slow dissonant clusters fading in and out of the dark
+  dread: { root: 33, chords: [[0, 1, 7, 13], [-1, 0, 6, 11], [0, 6, 7, 13], [-2, -1, 5, 12]], tempo: 13, bright: 260 },
 };
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -354,6 +356,54 @@ export class Audio {
     const t = this.ctx.currentTime;
     this.nz(this.sfx, t, .07, stage ? 3500 : 1800, 900, 3, 'bandpass', .3);
     this.tone(this.sfx, t, .04, stage ? 900 : 500, 300, 'square', .05);
+  }
+  // physical reload steps (src/game/reload.js events): clicks, scrapes, slaps, shells, brass, and wet organic pops
+  reloadSfx(kind) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, s = this.sfx, n = (d, dur, f0, f1, q, type, v, at) => this.nz(s, t + d, dur, f0, f1, q, type, v, at),
+      o = (d, dur, f0, f1, type, v) => this.tone(s, t + d, dur, f0, f1, type, v);
+    const click = (d, f = 3200, v = .22) => { n(d, .025, f, f * .6, 4, 'bandpass', v); o(d, .018, f * .55, f * .4, 'square', v * .12); };
+    switch (kind) {
+      case 'start': n(0, .14, 900, 300, .7, 'lowpass', .08, .03); break;                         // cloth shift as the gun comes off target
+      case 'magrelease': click(0, 3600, .25); n(.015, .05, 2200, 1200, 2, 'bandpass', .12); break;
+      case 'magclatter': n(0, .07, 2600, 1400, 2, 'bandpass', .12); click(.04, 2400, .1); break;
+      case 'pouch': for (let k = 0; k < 4; k++) n(k * .03, .035, 4200, 2600, 1.2, 'highpass', .07); n(.08, .12, 700, 300, .8, 'lowpass', .08, .02); break;
+      case 'magin': n(0, .06, 2000, 900, 2, 'bandpass', .22); o(0, .04, 620, 380, 'triangle', .1); click(.05, 3000, .26); break;
+      case 'slap': n(0, .07, 900, 200, .8, 'lowpass', .45, .002); click(.004, 3400, .3); o(0, .05, 180, 90, 'sine', .25); break;
+      case 'tap': n(0, .05, 1200, 400, .8, 'lowpass', .3, .002); click(0, 3800, .22); break;
+      case 'rackback': n(0, .1, 1400, 3200, 3, 'bandpass', .22, .01); click(.08, 2600, .22); break;
+      case 'rackfwd': n(0, .09, 2800, 700, 1.5, 'bandpass', .4, .002); o(0, .07, 320, 110, 'triangle', .22); click(0, 4200, .2); break;
+      case 'slideback': n(0, .07, 1800, 3800, 3, 'bandpass', .2, .005); click(.06, 3000, .2); break;
+      case 'slidefwd': n(0, .08, 3200, 900, 1.5, 'bandpass', .38, .002); o(0, .05, 360, 150, 'triangle', .18); break;
+      case 'shellin': n(0, .05, 1300, 700, 2, 'bandpass', .2); o(.01, .03, 900, 700, 'triangle', .06); click(.045, 2600, .2); break;
+      case 'pumpback': n(0, .1, 1800, 700, 2, 'bandpass', .4, .004); o(0, .07, 260, 130, 'triangle', .15); break;
+      case 'pumpfwd': n(0, .09, 2400, 900, 2, 'bandpass', .42, .003); click(.05, 3200, .22); break;
+      case 'latch': click(0, 3800, .2); break;
+      case 'cylopen': for (let k = 0; k < 3; k++) click(k * .025, 2800 + k * 300, .12); n(.03, .12, 800, 2000, 1.5, 'bandpass', .1, .02); break;
+      case 'eject': for (let k = 0; k < 6; k++) { const d = .02 + Math.random() * .12, f = 3600 + Math.random() * 2800; o(d, .07, f, f * .97, 'sine', .07); o(d, .05, f * 1.52, f * 1.5, 'sine', .03); }
+        n(0, .05, 1800, 900, 2, 'bandpass', .15); break;
+      case 'speedload': n(0, .06, 1700, 900, 2, 'bandpass', .25); click(.04, 2400, .25); o(.05, .1, 1200, 1150, 'sine', .04); break;
+      case 'cylclose': n(0, .06, 2600, 800, 1.5, 'bandpass', .4, .002); click(0, 3600, .25); for (let k = 0; k < 5; k++) click(.06 + k * .04, 3000, .08 * (1 - k * .15)); break;
+      case 'boltup': n(0, .06, 1100, 600, 2, 'bandpass', .3, .003); click(0, 2200, .2); break;
+      case 'boltback': n(0, .13, 1200, 2800, 3, 'bandpass', .22, .01); click(.11, 2000, .18); break;
+      case 'boltfwd': n(0, .12, 2800, 1100, 3, 'bandpass', .25, .01); click(.1, 2600, .22); break;
+      case 'boltdown': n(0, .05, 1000, 500, 2, 'bandpass', .32, .002); click(0, 1800, .2); o(0, .05, 210, 120, 'triangle', .12); break;
+      case 'roundin': n(0, .04, 1600, 900, 2.5, 'bandpass', .18); click(.03, 2800, .18); break;
+      case 'hatchopen': this.squelch(null, 1.2); o(0, .2, 70, 140, 'sine', .3); n(.02, .25, 400, 1400, 4, 'bandpass', .25, .02); break;
+      case 'husk': n(0, .16, 600, 180, 4, 'bandpass', .3, .005); o(0, .1, 140, 60, 'sine', .25); break;
+      case 'bioin': this.squelch(null, 1.6); for (let k = 0; k < 5; k++) o(.05 + k * .05, .06, 160 + Math.random() * 200, 80, 'sine', .12); break;
+      case 'hatchclose': this.squelch(null, .9); o(0, .12, 120, 60, 'sine', .3); n(.06, .3, 300, 900, 3, 'bandpass', .14, .05); break;
+      default: click(0);
+    }
+  }
+
+  // a reload drop landing: mags clatter, brass tinkles, husks splat (k = impact strength 0..1)
+  dropSfx(kind, pos, k = 1) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.out(pos, 30), v = .25 + .75 * k;
+    if (kind === 'casing') { const f = 4200 + Math.random() * 2600; this.tone(o, t, .09, f, f * .98, 'sine', .07 * v); this.tone(o, t, .06, f * 1.48, f * 1.46, 'sine', .035 * v); }
+    else if (kind === 'husk') { this.nz(o, t, .18, 700, 160, 4, 'bandpass', .35 * v, .004); this.tone(o, t, .1, 120, 50, 'sine', .2 * v); }
+    else { this.nz(o, t, .08, 2200, 900, 1.6, 'bandpass', .3 * v, .002); this.tone(o, t, .05, 700 + Math.random() * 300, 400, 'triangle', .1 * v); this.nz(o, t + .03, .05, 3800, 2400, 2, 'bandpass', .1 * v); }
   }
   empty() { if (this.ready) this.tone(this.sfx, this.ctx.currentTime, .04, 1400, 900, 'square', .05); }
   hurt() { if (this.ready) { const t = this.ctx.currentTime; this.nz(this.sfx, t, .25, 900, 150, .8, 'lowpass', .35); this.tone(this.sfx, t, .2, 160, 70, 'sine', .3); } }

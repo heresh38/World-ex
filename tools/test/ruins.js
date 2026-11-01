@@ -98,6 +98,57 @@ fs.mkdirSync(OUT, { recursive: true });
     return { textures: r.memory.textures, geometries: r.memory.geometries, maxSide: px, sceneTex: tex, heapMB: Math.round(performance.memory.usedJSHeapSize / 1e6) }; });
   console.log('PERF', JSON.stringify(perf));
   if (PERF_ONLY) { console.log('page errors:', errs.length); await b.close(); process.exit(errs.length ? 1 : 0); }
+  // ---------------------------------------------------------------- the dead city
+  const st = await ev(() => window.__game.world.stats());
+  console.log('city', JSON.stringify(st));
+  check(st.ruins.placed > 400 && Object.keys(st.ruins.per).length >= 20, 'ruins placed from the Blender kit', { placed: st.ruins.placed, designs: Object.keys(st.ruins.per).length });
+  check(st.ruins.mounds > 60, 'rubble mounds in the height function', st.ruins.mounds);
+  check(st.trees > 300, 'nature reclaiming the city (trees / scrub)', st.trees);
+  check(st.residents > 250 && st.residentSites > 80, 'residents everywhere (sites / creatures)', { sites: st.residentSites, residents: st.residents });
+  // no lit windows: every facade material is dark (no emissive), the old kit's window masks are gone
+  const lit = await ev(() => { const bad = new Set(); window.__game.scene.traverse(o => { if (!o.isMesh) return; for (const m of [].concat(o.material)) {
+    if (/facade|ribbon|^vr_(conc|brick|frame|slab)/.test(m.name) && m.emissive && (m.emissiveMap || m.emissive.getHex() !== 0 && m.emissiveIntensity > 0)) bad.add(m.name); } }); return [...bad]; });
+  check(lit.length === 0, 'no lit windows anywhere', lit);
+  // the walkable rubble: a mound raises the ground and the player stands on it
+  const mound = await ev(() => { const g = window.__game, w = g.world, m = w.ruins.mounds.find(m => m.H > 4) || w.ruins.mounds[0];
+    window.__tp(m.x, m.y + m.H + 2, m.z); window.__sim(1.5); return { H: +m.H.toFixed(1), base: +m.y.toFixed(1), stand: +g.player.pos.y.toFixed(2), ground: +w.collision.ground(m.x, m.z).toFixed(2) }; });
+  check(mound.stand > mound.base + mound.H * .7, 'you can stand on a rubble mound', mound);
+  // residents: streets near the landing are inhabited, far ones throttled
+  const res = await ev(() => { const g = window.__game, w = g.world, l = w.landing; window.__tp(l.x, l.y, l.z); window.__sim(4);
+    const live = g.enemies.list.filter(e => e.alive), beh = {}; for (const e of live) beh[e.beh || e.state] = (beh[e.beh || e.state] || 0) + 1;
+    return { alive: live.length, idle: live.filter(e => e.state === 'idle').length, asleep: g.enemies.asleep, beh, queue: w.spawnQ.length }; });
+  console.log('residents', JSON.stringify(res));
+  check(res.alive >= 10, 'creatures already in the streets around the landing zone', res.alive);
+  // ---------------------------------------------------------------- screenshots
+  const view = async (n, pos, look, fov = 62) => { await cam(pos, look, fov); await ev(() => window.__sim(.2)); await wait(1500); await shot(n); };
+  const W = await ev(() => { const g = window.__game, w = g.world, M = w.map;
+    const blk = id => { const bs = M.blocks.filter(b => b.district.id === id); return bs[Math.floor(bs.length / 2)]; };
+    const out = {};
+    for (const id of ['old', 'crown', 'commercial', 'industrial', 'flooded', 'outskirts']) { const b = blk(id); if (b) out[id] = [b.x + 47, b.z - 40]; }
+    const hall = w.ruins.designs.get('VR_hall').list[3] || w.ruins.designs.get('VR_hall').list[0], hm = hall.elements;
+    out.hall = [hm[12], hm[13], hm[14], Math.atan2(hm[8], hm[10])];
+    const tw = w.ruins.designs.get('VR_tower_a').list[0].elements; out.tower = [tw[12], tw[13], tw[14]];
+    const tb = w.ruins.designs.get('VR_tower_b').list[1].elements; out.towerb = [tb[12], tb[13], tb[14]];
+    const site = w.sites.filter(s => s.o.res && !s.off && s.types[0] !== 'turret' && s.n >= 3 && s.o.beh !== 'sleep')[5]; out.site = [site.pos.x, site.pos.y, site.pos.z];
+    const op = w.op; out.nest = op.stages[2].pos.toArray(); out.relay = op.stages[0].pos.toArray(); out.landing = w.landing.toArray();
+    return out; });
+  for (const [k, [x, z]] of Object.entries(W)) if (['old', 'crown', 'commercial', 'industrial', 'flooded', 'outskirts'].includes(k)) {
+    await ev(([x, z]) => { const g = window.__game; window.__tp(x, Math.max(g.world.collision.ground(x, z), -2.4), z); window.__sim(2); }, [x, z]);
+    const y = await ev(([x, z]) => Math.max(window.__game.world.collision.ground(x, z), -1.2), [x, z]);
+    await view('r_street_' + k, [x, y + 1.7, z], [x, y + 4, z + 60]);
+  }
+  { const [x, y, z] = W.landing; await ev(() => { const l = window.__game.world.landing; window.__tp(l.x, l.y, l.z); window.__sim(2); }); await view('r01_landing', [x, y + 1.7, z], [0, 60, 0]); }
+  await view('r02_aerial', [-420, 150, 900], [-150, 20, 380], 60);
+  await view('r03_spire', [300, 40, 420], [0, 200, 0], 60);
+  { const [x, y, z, yaw] = W.hall; await ev(([x, z]) => { window.__tp(x, 0, z); window.__sim(2); }, [x, z]);
+    await view('r04_hall_inside', [x - 14 * Math.cos(yaw), y + 2.2, z + 14 * Math.sin(yaw)], [x + 8 * Math.cos(yaw), y + 5, z - 8 * Math.sin(yaw)], 70); }
+  { const [x, y, z] = W.tower; await ev(([x, z]) => { window.__tp(x + 20, 0, z + 22); window.__sim(2); }, [x, z]); await view('r05_overgrowth', [x + 6, y + 1.6, z + 22], [x - 4, y + 9, z + 8], 62); }
+  { const [x, y, z] = W.towerb; await view('r06_tower', [x + 40, y + 6, z + 50], [x, y + 30, z], 62); }
+  { const [x, y, z] = W.site; await ev(([x, z]) => { window.__tp(x + 26, 0, z + 26); window.__sim(5); }, [x, z]);
+    const n = await ev(([x, z]) => window.__game.enemies.list.filter(e => e.alive && Math.hypot(e.pos.x - x, e.pos.z - z) < 30).length, [x, z]);
+    console.log('enemies near the roaming / resident site', n);
+    await view('r07_residents', [x + 16, y + 4, z + 16], [x, y + 1, z], 60); }
+  { const [x, y, z] = W.nest; await ev(([x, z]) => { window.__tp(x + 60, 0, z); window.__sim(3); }, [x, z]); await view('r08_nest', [x + 22, y + 5, z + 14], [x, y, z], 62); }
   await b.close();
   process.exit(fails.length || errs.length ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

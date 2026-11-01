@@ -20,6 +20,21 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
   Sights (`gun_attach.glb`: reflex, holo, 2x/4x/8x) mount per weapon (`w.sight`, changed at the Gunsmith); magnified optics
   use the object name `scope` + `gun_lens`. Kinetic/horror guns use their own material names (`gun_steel`, `gun_wood`,
   `bio_flesh`, ...) so rarity/shader tints only touch `gun_glow`/`gun_body`.
+- Reload parts (`weapons.py finish(moving=, loose=)`: own objects with their origin at the pivot, children of the gun root;
+  node names are an API): `mag` (all kinetic mag guns; pivot at the mag top, the rifle's at its front lip for rock-in),
+  `bolt` (carrier/bolt face/op rod; bolt-action: on the bore axis, rotates + slides), `charge` (carbine T-handle, compact SMG
+  cocking handle), `slide` (pistol), `pump` (forend), `crane` > `cylinder` > `rounds` (revolver), `hatch` + `biomass`
+  (horror: flank flap about Z for spitter/bile, top lid plate about X for brood; material `bio_load`, tinted per gun in
+  `styleMesh`). Loose props `x_shell`, `x_round`, `x_casing`, `x_speedloader` are hidden (`Weapons.dress`) and cloned.
+- Reload system (`src/game/reload.js`, owned by `Weapons.rl`): keyframed segments (gun pose, off hand resolved against
+  moving parts, part offsets, events) sampled each frame; `GunRig` poses the viewmodel gun and the avatar gun the same way
+  (third person: `Avatar.reachL` two-bone IK). Mag guns: tactical = `S.reload`, empty adds the chambering segment (rifle
+  overhand rack, carbine T-handle, DMR op rod, SMG slap, pistol slingshot); per-gun out/in styles (rock, drop-free, hook,
+  firm push + tap). Revolver: crane out, eject brass, speedloader, flick shut. Pump/bolt: per shell / per round segments
+  (ammo +1 each, firing interrupts via `rl.interrupt()`), pump racks if empty. Horror: hatch pops, husk slops out, new
+  biomass, glow pulse. Ammo arrives on the `seat`/`grant` events. `Drops` = pooled physical drops (max 14, ~22 s).
+  Cancelled by weapon swap, sprint, vehicle, death (`Weapons.cancelReload`). Post-shot: pump/bolt cycle, slide/carrier
+  blowback, pistol slide locks back on empty. Sounds: `audio.reloadSfx(kind)`, `audio.dropSfx`. Test: `tools/test/reload.js`.
 - Material **names are an API**: the game recolours by name (`armor_primary`, `armor_secondary`, `glow`, `visor`,
   `gun_body`, `gun_glow`, `car_paint`, `hover_glow`, `facade`, `ribbon`, `rock`, `core_glow`, `ammo_glow`, glass names).
 - Bone names lose dots in three (`hand.R` → `handR`). Characters share one rig and 9 clips
@@ -151,13 +166,34 @@ into fresh human corpses which rise as hosts), `host` (lurching reanimated troop
 (`nest()` in `districts.js`, hospital boss), metro `FAUNA`, and overrun outposts on frontier planets.
 `FLESH_PREVIEW=<dir>` writes texture-embedded copies for `preview.py`. Test: `tools/test/horror.js` (WORLD=vanthos_metro default).
 
+## VANTHOS (dead city)
+A ruined circular city, years after its people (`src/worlds/vanthos/`). `world.js` builds it: overcast hazy dusk (linear fog
+16-520 m; the Spire's materials see a thinner fog so it looms from anywhere; its core beats slow and red), drifting ash
+(Points VFX), `ground.js` (textured streets as merged ribbons with worn lane paint, kerb gutters, drifts and grass; raised
+block slabs with a broken sidewalk band and an overgrown lot; terrain splat), `ruins.js` (instanced ruin designs with
+hero/far tiers cross-faded by `core/lodfade.js`; colliders, rubble `mound`s folded into `map.height`, `spots` inside /
+perch / tree / glow), trees from `trees.glb` via `meridian/flora.js` (`GROW` pools), weeds, rare sputtering dead lamps, and
+`ambience.js` (soundscape kinds `ruinwind`, `creak`, `drip`, `skitter`, `groan`, `distant`, `dread` in `core/soundscape.js`;
+music kind `dread`). `styleKit` darkens the old `vanthos.glb` kit (no lit windows, no neon; facade/ribbon get the ruin
+textures). Kit: `tools/blender/ruins.py` -> `vanthos_ruins.glb` (`VR_*`: towers a-c, mid a-c, low a-b, hall, stub, mounds,
+debris, slabs, burnt/rusted cars, bus, signs, toppled lamp, barricade, remains, weeds; `_lod` for standing ruins; vertex
+colour grime/moss/soot; extras `vr`), textures `tools/blender/vanthos_textures.py` (`vr_*`: asphalt, pavers, dirt, grass,
+moss, conc, brick, frame, slab, rubble, rust, burnt, signs, ivy/weeds cut-outs). Districts (`districts.js`) fill lots with
+standing ruins / rubble / foundations / wild scrub and place **residents** (`ctx.resident(types, x, z, n, beh)`; behaviours
+`sleep` (lies in its Death pose and gets up when you are close or loud), `feed`, `perch`, `patrol`, `roam` (packs share a
+route), `wander`). Sites stream in at 230 m (queued, 3 spawns per frame) and out at 340 m; `EnemyManager` freezes idle
+creatures past ~250 m and thinks/moves them 4x less often past ~95 m; `world.onGunshot` -> `enemies.noise()`. No living
+humans: the raiders are gone (hosts wear them; the military zone keeps only its automated turrets). Test: `tools/test/ruins.js`
+(`PERF_ONLY=1` for the fixed-viewpoint numbers; screenshots in `test-out/ruins/`).
+
 ## Operation (VANTHOS)
 `src/worlds/vanthos/operation.js` (`Operation`, owned by `VanthosWorld.op`) plays VANTHOS as a linear, replayable mission,
 "Operation Heartline": landing zone → relay mast (Outskirts, hold the uplink vs raiders) → Flight Nine shuttle (Commercial,
 stalker ambush, pull the recorder) → Brood Road (Crown ring, three Writhe waves + amalgam, open the gas main) → Spire lift
-(crater, hold vs mixed factions, then ride; the lift is unpowered until then) → the Spire Warden on the foundation. Stages are
-scripted waves (`wave()`, enemies flagged `e.op`), not distance streaming; ambient `sites` near the route/arenas get
-`st.off`, and the raider convoy waits until the run is done. Radio lines are HUD subtitles (`hud.radio(who, text)`, queued),
+(crater, hold vs mixed factions, then ride; the lift is unpowered until then) → the Spire Warden on the foundation. Each stage
+has a resident **garrison** (`G()` in `build()`, sites with `o.op/keep`, streamed with the city and forced in by `arrive()`,
+which records `S.arrival`); scripted reinforcement `wave()`s after the interaction are smaller (enemies flagged `e.op`).
+Ambient residents stay along the route; only those inside an arena get `st.off`. Radio lines are HUD subtitles (`hud.radio(who, text)`, queued),
 terminal logs use `hud.lore()`. Boss: `Enemy.hpFloor/onFloor` (50 % and 20 %), `immune` (hits return `{immune}` → HUD
 "IMMUNE"), `stunT`/`vuln` stagger; shield conduits are `Conduit` combat targets (not enemies; floating bars via
 `world.barTargets()`), boss bar `hud.bossBar()`. Reliquary loot = `rollWeapon()` (state.js: any archetype, weighted rarity,
