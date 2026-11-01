@@ -39,7 +39,7 @@ button{font-family:var(--font);cursor:pointer}
 @keyframes pulse{50%{opacity:.35}}
 
 /* ---------- loading ---------- */
-#loading{position:fixed;inset:0;pointer-events:auto;background:radial-gradient(120% 90% at 70% 40%,#0d1424 0%,#03050a 60%);display:flex;flex-direction:column;justify-content:flex-end;padding:0 7vw 8vh;z-index:15}
+#loading{position:fixed;inset:0;pointer-events:auto;background:radial-gradient(120% 90% at 70% 40%,#0d1424 0%,#03050a 60%);display:flex;flex-direction:column;justify-content:flex-end;padding:0 7vw 8vh;z-index:21}
 .l-dest{font:700 clamp(40px,6vw,84px)/.9 var(--font);letter-spacing:.14em;text-transform:uppercase}
 .l-kind{font:600 14px var(--font);letter-spacing:.5em;color:var(--gold);text-transform:uppercase;margin-bottom:12px}
 .l-desc{max-width:560px;color:var(--dim);font-size:15px;line-height:1.6;margin:16px 0 40px}

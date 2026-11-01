@@ -24,17 +24,29 @@ import { spaceSky, orbitPlanet, planetMaps } from './worlds/sky.js';
 import { DESTINATIONS, ARCHETYPES, armorStats } from './game/data.js';
 import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS } from './game/state.js';
 
-const MODELS = [
-  ['ship_interior', 'ship_interior.glb', 10], ['player_female', 'player_female.glb', 5], ['player_male', 'player_male.glb', 5],
-  ['enemy_trooper', 'enemy_trooper.glb', 4], ['enemy_brute', 'enemy_brute.glb', 4], ['npc_vendor', 'npc_vendor.glb', 4],
-  ['car_sport', 'car_sport.glb', 2], ['car_utility', 'car_utility.glb', 2], ['ship_jumper', 'ship_jumper.glb', 2],
-  ['cars', 'cars.glb', 8], ['board_sport', 'board_sport.glb', 1], ['board_utility', 'board_utility.glb', 1],
-  ['ship_dropship', 'ship_dropship.glb', 2], ['viewmodel_arms', 'viewmodel_arms.glb', 1],
-  ['civ_female', 'civ_female.glb', 3], ['civ_male', 'civ_male.glb', 3], ['player_female_npc', 'player_female_npc.glb', 3], ['player_male_npc', 'player_male_npc.glb', 3], ['rural', 'rural.glb', 2], ['city_buildings', 'city_buildings.glb', 5], ['props_world', 'props_world.glb', 8],
-  ['vanthos', 'vanthos.glb', 8], ['spaceport', 'spaceport.glb', 5], ...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
-  ...['mite', 'host', 'bladder', 'amalgam'].map(k => ['writhe_' + k, 'writhe_' + k + '.glb', 1]),
+// Models are loaded per world: BOOT_MODELS before the ship (everything the hub and the player always need), the
+// rest when a world is entered (WORLD_MODELS). Leaving a world frees its large models again, so memory stays bounded.
+const BOOT_MODELS = [
+  ['ship_interior', 'ship_interior.glb', 10], ['viewmodel_arms', 'viewmodel_arms.glb', 1], ['ship_jumper', 'ship_jumper.glb', 2],
+  ['board_sport', 'board_sport.glb', 1], ['board_utility', 'board_utility.glb', 1], ['props_world', 'props_world.glb', 2],
+  ['enemy_trooper', 'enemy_trooper.glb', 1], ['enemy_brute', 'enemy_brute.glb', 1], ['npc_vendor', 'npc_vendor.glb', 1],
   ...Object.values(ARCHETYPES).map(a => [a.model, a.model + '.glb', 1]), ['gun_attach', 'gun_attach.glb', 1],
 ];
+const CREATURES = [...['stalker', 'hulk', 'mutant', 'swimmer', 'elite'].map(k => ['alien_' + k, 'alien_' + k + '.glb', 1]),
+  ...['mite', 'host', 'bladder', 'amalgam'].map(k => ['writhe_' + k, 'writhe_' + k + '.glb', 1])];
+const WORLD_MODELS = {
+  ship: [],
+  earth: [['cars', 'cars.glb', 8], ['trees', 'trees.glb', 8], ['spaceport', 'spaceport.glb', 6], ['city_buildings', 'city_buildings.glb', 2],
+    ['rural', 'rural.glb', 1], ['player_female_npc', 'player_female_npc.glb', 4], ['player_male_npc', 'player_male_npc.glb', 3],
+    ['civ_female', 'civ_female.glb', 1], ['civ_male', 'civ_male.glb', 1], ['car_sport', 'car_sport.glb', 1], ['car_utility', 'car_utility.glb', 1],
+    ['ship_dropship', 'ship_dropship.glb', 1]],
+  vanthos: [['vanthos', 'vanthos.glb', 4], ['cars', 'cars.glb', 8], ...CREATURES],
+  vanthos_metro: [['vanthos', 'vanthos.glb', 4], ...CREATURES],
+  planet: [['trees', 'trees.glb', 8], ['cars', 'cars.glb', 8], ...CREATURES],
+};
+const worldModels = id => WORLD_MODELS[id] || WORLD_MODELS.planet;
+const ALL_WORLD_MODELS = new Set(Object.values(WORLD_MODELS).flat().map(m => m[0]));
+const playerModel = body => body === 'male' ? ['player_male', 'player_male.glb', 10] : ['player_female', 'player_female.glb', 10];
 const TEXTURES = ['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss', 'facade_e', 'ribbon_e'];
 
 class Game {
@@ -141,7 +153,7 @@ class Game {
     this.audio.music('ship');
     try {
       await this.assets.loadAll([
-        ...MODELS.map(([name, file, weight]) => ({ type: 'model', name, file, weight, label: 'Loading ' + name.replace(/_/g, ' ') })),
+        ...[...BOOT_MODELS, playerModel(this.save.character.body)].map(([name, file, weight]) => ({ type: 'model', name, file, weight, label: 'Loading ' + name.replace(/_/g, ' ') })),
         ...TEXTURES.map(t => ({ type: 'texture', name: t, file: t.endsWith('_e') ? t + '.jpg' : t + '_c.jpg', weight: .3, label: 'Texture ' + t })),
         ...['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss'].map(t => ({ type: 'texture', name: t + '_n', file: t + '_n.jpg', color: false, weight: .3 })),
         { type: 'json', name: 'ship_interior', file: 'ship_interior.json', weight: .2 },
@@ -210,6 +222,16 @@ class Game {
       this.fx && this.fx.dispose();
       this.world.dispose();
     }
+    // free the large models the next world does not use, then fetch the ones it needs
+    const need = worldModels(id), keep = new Set(need.map(m => m[0]));
+    this.assets.unload([...ALL_WORLD_MODELS].filter(n => !keep.has(n)));
+    const fetchP = need.length ? .55 : 0;
+    try {
+      await this.assets.loadAll(need.map(([name, file, weight]) => ({ type: 'model', name, file, weight, label: 'Loading ' + name.replace(/_/g, ' ') })),
+        (p, l) => progress(p * fetchP, l));
+    } catch (e) { return this.fatal(e); }
+    const buildProgress = progress;
+    progress = (p, l) => buildProgress(fetchP + p * (1 - fetchP), l);
     let w;
     if (id === 'ship') w = new ShipWorld(this);
     else if (id === 'earth') w = new EarthWorld(this);
@@ -240,7 +262,8 @@ class Game {
     this.renderer.setBloom(id === 'ship' ? .38 : .3, 1.0, .4);
     this.renderer.r.toneMappingExposure = id === 'ship' ? 1.0 : 1.05;
     // compile shaders up front so the first frame does not hitch
-    try { this.renderer.r.compile(w.scene, this.camera); } catch (e) { /* optional */ }
+    // (async: the browser compiles in parallel where it can, and the loading screen keeps animating meanwhile)
+    try { await Promise.race([this.renderer.r.compileAsync(w.scene, this.camera), new Promise(r => setTimeout(r, 8000))]); } catch (e) { /* optional */ }
     this.persist();
   }
 

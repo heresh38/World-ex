@@ -420,7 +420,11 @@ export class Menus {
       case 'claim': g.claimContract(+v); break;
       case 'body':
         if (sv.character.body !== v) sv.character = defaultCharacter(v);
-        g.player.setBody(v); g.player.avatar.play('IdleRelaxed', 0); g.placeInWardrobe(); g.setAvatarLayer(); g.weapons.refreshModel(); break;
+        // the other body is fetched the first time it is picked
+        g.assets.ensure(v === 'male' ? 'player_male' : 'player_female').then(() => {
+          g.player.setBody(v); g.player.avatar.play('IdleRelaxed', 0); g.placeInWardrobe(); g.setAvatarLayer(); g.weapons.refreshModel(); this.render();
+        }).catch(e => console.error(e));
+        break;
       case 'charreset': sv.character = defaultCharacter(sv.character.body); g.player.applyLook(); break;
       case 'skin': sv.character.skin = v; g.player.applyLook(); break;
       case 'eyecol': sv.character.eyes = v; g.player.applyLook(); break;

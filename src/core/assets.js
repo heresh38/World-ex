@@ -106,4 +106,25 @@ export class Assets {
   }
 
   clips(name) { return this.models[name].animations; }
+
+  // Drop loaded models and free their GPU buffers (clones in a disposed world share these, so call after teardown).
+  unload(names) {
+    for (const n of names) {
+      const g = this.models[n]; if (!g) continue;
+      g.scene.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        for (const m of o.material ? [].concat(o.material) : []) {
+          for (const k in m) { const t = m[k]; if (t && t.isTexture) t.dispose(); }
+          m.dispose();
+        }
+      });
+      delete this.models[n];
+    }
+  }
+
+  // Load one model on demand (no progress UI); resolves when it is ready.
+  async ensure(name, file = name + '.glb') {
+    if (!this.models[name]) await this.loadAll([{ type: 'model', name, file }]);
+    return this.models[name];
+  }
 }
