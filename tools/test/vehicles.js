@@ -165,17 +165,17 @@ fs.mkdirSync(OUT, { recursive: true });
     const b = g.vehicles.current;
     if (!b || !b.board) return 'no board';
     g.input.down.add('KeyW');
-    let jumpH = 0;
+    let jumpH = 0, inHover = 0;
     for (let i = 0; i < 30; i++) {
       await window.__waitGame(0.1); g.paused = false; g.input.locked = true;
       if (i === 15) g.input.pressed = (k => c => c === 'Space' || k(c))(g.input.pressed.bind(g.input));
       if (i === 16) delete g.input.pressed;
-      jumpH = Math.max(jumpH, b.pos.y - g.world.collision.ground(b.pos.x, b.pos.z));
+      const hh = b.pos.y - b.surface(b.pos.x, b.pos.z, b.pos.y + .5); jumpH = Math.max(jumpH, hh); if (hh > .15 && hh < .9) inHover++;
     }
     const h = b.pos.y - g.world.collision.support(b.pos.x, b.pos.z, b.pos.y + 1);
-    return { model: b.model, speed: +b.speed.toFixed(1), hover: +h.toFixed(2), jumpH: +jumpH.toFixed(2), mode: g.player.mode, save: g.save.car.model };
+    return { model: b.model, speed: +b.speed.toFixed(1), hover: +h.toFixed(2), inHover, jumpH: +jumpH.toFixed(2), mode: g.player.mode, save: g.save.car.model };
   });
-  check('hover board summoned and ridden', board.mode === 'car' && board.speed > 5 && board.hover > .15 && board.hover < 1.2, board);
+  check('hover board summoned and ridden', board.mode === 'car' && board.speed > 5 && board.inHover >= 8, board);
   await shot('06_board_third');
   await ev(() => { const g = window.__game; g.save.settings.view = 'first'; g.setAvatarLayer(); g.player.camPitch = -.5; });
   await run(2500); await shot('07_board_first');

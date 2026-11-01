@@ -40,11 +40,11 @@ fs.mkdirSync(OUT, { recursive: true });
   console.log('slide', JSON.stringify(await sim(['KeyW', 'ShiftLeft'], .6, ['KeyC'])));
   // a 1.6 m crate wall in front: jump into it and mantle
   const crate = await ev(() => { const g = window.__game, P = g.player, c = g.world.collision; const x = P.pos.x, z = P.pos.z + 3, y = P.pos.y;
-    c.add([x - 2, y, z, x + 2, y + 1.6, z + 2], 'test'); P.vel.set(0, 0, 0); P.crouch = false; P.slideT = 0; return y + 1.6; });
+    c.add([x - 2, y, z, x + 2, y + 1.6, z + 8], 'test'); P.vel.set(0, 0, 0); P.crouch = false; P.slideT = 0; return y + 1.6; });
   await sim(['KeyW'], .5);
   const cl = await sim(['KeyW'], 1.4, ['Space']);
-  console.log('climb', JSON.stringify(cl), 'top', crate, cl.climbed && Math.abs(cl.pos[1] - crate) < .1 ? 'OK' : 'FAIL');
-  if (!(cl.climbed && Math.abs(cl.pos[1] - crate) < .1)) console.log('  ledge check:', await ev(() => { const g = window.__game, P = g.player;
+  console.log('climb', JSON.stringify(cl), 'top', crate, cl.climbed && Math.abs(cl.pos[1] - crate) < .1 && cl.maxY < crate + .3 ? 'OK' : 'FAIL');
+  if (!(cl.climbed && Math.abs(cl.pos[1] - crate) < .1 && cl.maxY < crate + .3)) console.log('  ledge check:', await ev(() => { const g = window.__game, P = g.player;
     const f = new P.pos.constructor(0, 0, 1); P.findLedge(g.world.collision, f); return P.ledgeWhy; }));
   // sit on the nearest bench
   const seat = await ev(() => { const g = window.__game, P = g.player; const s = g.world.interactables.filter(i => i.id === 'seat').sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];

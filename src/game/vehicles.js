@@ -827,7 +827,7 @@ export class Vehicles {
       const surf = base + (inCab ? c.meta.roof : c.meta.belt) - .02;
       // standing on the bonnet / roof (came from above)
       if (p.pos.y > surf - .45 && p.vel.y <= 0 && h.d > .3) { p.pos.y = surf; p.vel.y = 0; p.grounded = true; p.airTime = 0; continue; }
-      const v = this.carVel(c), vn = -(v.x * h.nx + v.z * h.nz);      // car speed toward the player
+      const v = this.carVel(c), vn = v.x * h.nx + v.z * h.nz;          // car speed toward the player (n points car -> player)
       p.pos.x += h.nx * h.d; p.pos.z += h.nz * h.d;
       const pv = p.vel.x * h.nx + p.vel.z * h.nz; if (pv < 0) { p.vel.x -= pv * h.nx; p.vel.z -= pv * h.nz; }
       if (vn > 6 && !(p.hitCd > 0)) {
@@ -848,7 +848,7 @@ export class Vehicles {
         if (e.pos.y > c.pos.y + c.meta.roof || e.pos.y + 1.8 < c.pos.y) continue;
         const h = circleCar(c, e.pos.x, e.pos.z, .5); if (!h) continue;
         e.pos.x += h.nx * h.d; e.pos.z += h.nz * h.d;
-        const v = this.carVel(c), vn = -(v.x * h.nx + v.z * h.nz);
+        const v = this.carVel(c), vn = v.x * h.nx + v.z * h.nz;
         if (vn > 7 && e.takeDamage && !(e.carCd > g.time)) { e.carCd = g.time + 1; e.takeDamage(vn * 12, false, e.pos.clone().setY(e.pos.y + 1), new THREE.Vector3(-h.nx, .3, -h.nz), c === this.current ? 'player' : 'traffic'); }
       }
     }
@@ -860,7 +860,7 @@ export class Vehicles {
     for (const c of this.carsNear(q.pos.x, q.pos.z, this._near3 || (this._near3 = []))) {
       if (q.pos.y > c.pos.y + c.meta.roof || q.pos.y + 1.7 < c.pos.y + .1) continue;
       const h = circleCar(c, q.pos.x, q.pos.z, r); if (!h) continue;
-      const v = this.carVel(c), vn = -(v.x * h.nx + v.z * h.nz), sp = Math.hypot(v.x, v.z);
+      const v = this.carVel(c), vn = v.x * h.nx + v.z * h.nz, sp = Math.hypot(v.x, v.z);
       if (vn > 6 || (sp > 6 && h.d > r * .5)) return { car: c, speed: Math.max(vn, sp) };
       q.pos.x += h.nx * h.d; q.pos.z += h.nz * h.d;
       if (vn > 1.5 && q.flee) q.flee(c.pos);
