@@ -131,7 +131,7 @@ export class Population {
   constructor(game, map, paths) {
     this.g = game; this.map = map; this.paths = paths;
     this.peds = [];
-    const COUNT = 150;
+    const COUNT = game.touch ? 60 : 150;          // phones: smaller crowd (each pedestrian is a full skinned body)
     // spread the crowd along every path, weighted by path length
     const total = paths.reduce((a, p) => a + p.total, 0);
     for (let i = 0; i < COUNT; i++) {

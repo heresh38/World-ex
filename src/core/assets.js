@@ -13,6 +13,23 @@ export class Assets {
     this.texLoader = new THREE.TextureLoader();
     this.models = {}; this.textures = {}; this.json = {};
     this.maxAniso = renderer.capabilities.getMaxAnisotropy();
+    this.maxTex = Infinity;        // longest texture side kept on the GPU (phones / low preset set this lower)
+  }
+
+  // Downscale a texture's image so its longest side is at most max (shared sources are resized once).
+  shrink(t, max = this.maxTex) {
+    const img = t && t.image;
+    if (!img || !img.width || Math.max(img.width, img.height) <= max || t.source.__shrunk) return;
+    const k = max / Math.max(img.width, img.height), w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    if (img.close) img.close();
+    t.source.data = c; t.source.__shrunk = true; t.source.needsUpdate = true; t.needsUpdate = true;
+  }
+
+  shrinkModel(g) {
+    if (this.maxTex === Infinity) return;
+    g.scene.traverse(o => { for (const m of o.material ? [].concat(o.material) : []) for (const k in m) { const t = m[k]; if (t && t.isTexture) this.shrink(t); } });
   }
 
   async fetchBytes(url, onBytes) {
@@ -49,10 +66,11 @@ export class Assets {
         if (j.type === 'model') {
           const buf = await this.fetchBytes(MODEL_DIR + j.file, (g, t) => { prog.set(j, .9 * g / t); report(j.label || j.name); });
           const g = await this.gltf.parseAsync(buf, MODEL_DIR);
-          this.prepModel(g);
+          this.prepModel(g); this.shrinkModel(g);
           this.models[j.name] = g;
         } else if (j.type === 'texture') {
-          this.textures[j.name] = await this.loadTexture(j.file, j.color !== false);
+          const t = this.textures[j.name] = await this.loadTexture(j.file, j.color !== false);
+          this.shrink(t, j.max ? Math.max(j.max, this.maxTex) : this.maxTex);
         } else if (j.type === 'json') {
           this.json[j.name] = await (await fetch(MODEL_DIR + j.file)).json();
         }

@@ -69,6 +69,8 @@ class Game {
     this.input.onLockChange = locked => this.onLockChange(locked);
     this.touch = isTouchDevice() ? new TouchControls(this) : null;
     if (this.touch && !sv) { this.save.settings.quality = 'medium'; this.save.settings.fov = 74; }
+    // phones (and the low preset) keep textures small: GPU memory is what kills a mobile tab on the big worlds
+    this.assets.maxTex = window.__MAXTEX || (this.touch ? 512 : this.save.settings.quality === 'low' ? 1024 : Infinity);
     addEventListener('keydown', e => this.onKey(e));
     window.__game = this;
     this.loop = this.loop.bind(this);
@@ -157,7 +159,7 @@ class Game {
         ...TEXTURES.map(t => ({ type: 'texture', name: t, file: t.endsWith('_e') ? t + '.jpg' : t + '_c.jpg', weight: .3, label: 'Texture ' + t })),
         ...['concrete', 'asphalt', 'rock', 'sand', 'ice', 'moss'].map(t => ({ type: 'texture', name: t + '_n', file: t + '_n.jpg', color: false, weight: .3 })),
         { type: 'json', name: 'ship_interior', file: 'ship_interior.json', weight: .2 },
-        ...['earth_day', 'earth_clouds', 'earth_night', 'earth_ms'].map(t => ({ type: 'texture', name: t, file: t + '.jpg', color: t === 'earth_day', weight: .4, label: 'Charting Earth' })),
+        ...['earth_day', 'earth_clouds', 'earth_night', 'earth_ms'].map(t => ({ type: 'texture', name: t, file: t + '.jpg', color: t === 'earth_day', weight: .4, label: 'Charting Earth', max: 2048 })),
       ], (p, l) => this.menus.loading(p * .7, l));
       const T = this.assets.textures;
       planetMaps.earth = { day: T.earth_day, clouds: T.earth_clouds, night: T.earth_night, ms: T.earth_ms };

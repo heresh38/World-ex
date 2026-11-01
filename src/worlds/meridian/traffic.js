@@ -178,8 +178,9 @@ export class Traffic {
     let seed = 777;
     const r = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
     const city = map.lanes.filter(l => l.city), hwy = map.lanes.filter(l => !l.city);
-    this.populate(city, COUNT_CITY, r);
-    this.populate(hwy, COUNT_HWY, r);
+    const k = this.g && this.g.touch ? .5 : 1;      // phones: half the traffic
+    this.populate(city, Math.round(COUNT_CITY * k), r);
+    this.populate(hwy, Math.round(COUNT_HWY * k), r);
   }
 
   // city lanes are straight lines: remember axis, direction and road centre so cars can turn at crossings
