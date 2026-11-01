@@ -1,7 +1,7 @@
 // Title screen, loading screen, pause menu and every ship-station panel (the old main menu, moved aboard).
 import { DESTINATIONS, ARCHETYPES, RARITY, PERKS, SLOT_NAMES, SHADERS, ARMOR_COLORS, GLOW_COLORS, PAINTS, TIPS,
   SKIN_TONES, EYE_COLORS, HAIR_COLORS, SLOT_ORDER, SLOT_LABELS, FACE_LABELS, SLIDER_LABELS, BROW_LABELS, ARMOR_SLOT, armorPiece, SIGHTS, sightOptions, weaponSight } from '../game/data.js';
-import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter, rollQuality } from '../game/state.js';
+import { weaponStats, makeWeapon, randomArch, rollRarity, xpForLevel, defaultCharacter, rollQuality, arenaRecord } from '../game/state.js';
 
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const presetName = id => cap(id.split('_').slice(1).join(' '));
@@ -69,7 +69,7 @@ export class Menus {
       <button class="btn pri" data-act="resume">Resume</button>
       <button class="btn" data-act="pause-inventory">Inventory</button>
       <button class="btn" data-act="pause-settings">Settings</button>
-      ${!inShip ? '<button class="btn gold" data-act="orbit">Return to orbit</button>' : ''}
+      ${!inShip ? `<button class="btn gold" data-act="orbit">${g.world.kind === 'sim' ? 'Leave simulation' : 'Return to orbit'}</button>` : ''}
       <button class="btn" data-act="quit">Save &amp; quit to title</button></div>`;
   }
   hidePause() { this.pauseEl.classList.add('hidden'); }
@@ -149,6 +149,8 @@ export class Menus {
         <div class="pb"><i style="width:${Math.min(100, c.p / c.n * 100)}%"></i></div>
         ${c.done ? `<button class="btn gold" style="margin-top:10px" data-act="claim" data-v="${i}">Claim reward</button>` : ''}</div>`).join('') +
         `<p class="guide" style="margin-top:12px">Contracts completed: <b>${g.save.contractsDone}</b>. New contracts are posted when you claim one.</p>`;
+    } else if (this.tab === 'sim') {
+      body = this.simHtml();
     } else if (this.tab === 'guide') {
       body = `<p class="guide"><b>Your ship is home.</b> Walk the decks: the <b>captain’s chair</b> on the bridge plots jumps, the <b>armory</b> and <b>gunsmith bench</b> in the hangar manage weapons, the <b>wardrobe pod</b> restyles your armour, the <b>engineering terminal</b> holds settings and the <b>service record</b> keeps your stats.</p>
         <p class="guide"><b>Earth</b> is New Meridian City: the spaceport Quartermaster sells weapons and raiders hold a district to the north-east.</p>
@@ -156,7 +158,25 @@ export class Menus {
         <p class="guide"><b>Loot</b> drops as data cores coloured by rarity: <span style="color:var(--r-common)">Common</span>, <span style="color:var(--r-uncommon)">Uncommon</span>, <span style="color:var(--r-rare)">Rare</span>, <span style="color:var(--r-legendary)">Legendary</span>, <span style="color:var(--r-exotic)">Exotic</span>. Your <b>power</b> is the average of your equipped weapons.</p>
         <p class="guide"><b>Shields</b> recharge a few seconds after you stop taking fire. Precision hits on heads and glowing weak points deal bonus damage.</p>`;
     } else body = this.controlsHtml();
-    return this.frame('Briefing table', 'Contracts', 'Bounties posted by the city council and the frontier relays.', body, [['contracts', 'Contracts'], ['guide', 'Field guide'], ['controls', 'Controls']]);
+    return this.frame('Briefing table', this.tab === 'sim' ? 'Shellbreak' : 'Contracts', this.tab === 'sim' ? 'The Wayfarer’s combat simulation: squad against squad.' : 'Bounties posted by the city council and the frontier relays.', body,
+      [['contracts', 'Contracts'], ['sim', 'Simulation'], ['guide', 'Field guide'], ['controls', 'Controls']]);
+  }
+
+  // Shellbreak (worlds/arena): match settings, service record, enter
+  simHtml() {
+    const g = this.g, A = g.save.arena = arenaRecord(g.save.arena), c = A.cfg;
+    const opt = (k, list) => `<div class="row" style="margin:8px 0 14px;flex-wrap:wrap">${list.map(([v, n]) => `<button class="btn ${String(c[k]) === String(v) ? 'pri' : ''}" data-act="simcfg" data-k="${k}" data-v="${v}">${n}</button>`).join('')}</div>`;
+    const lab = s => `<div class="ty" style="letter-spacing:.3em;color:var(--dim);font-size:12px;margin-top:6px">${s}</div>`;
+    const kd = A.deaths ? (A.elims / A.deaths).toFixed(2) : A.elims;
+    return `<p class="guide">Two squads of ghost-shells fight in a ruined foundry yard, <b>Brennick Works</b>: three lanes, a casting hall at the centre, rail cut and gatehouse on the flanks.
+      Eliminated shells re-sleeve at their squad’s end a few seconds later. <b>First squad to the score limit</b> wins, or the squad ahead when time runs out.
+      Weapon power is at parity inside; you bring your own guns. Rewards: XP, credits and a weapon from the simulation’s cache.</p>
+      ${lab('OPPOSITION')}${opt('difficulty', [['easy', 'Recruit'], ['normal', 'Regular'], ['hard', 'Veteran']])}
+      ${lab('SQUAD SIZE')}${opt('size', [[3, '3 v 3'], [4, '4 v 4'], [6, '6 v 6']])}
+      ${lab('SCORE LIMIT')}${opt('limit', [[25, '25'], [50, '50'], [75, '75']])}
+      ${lab('TIME LIMIT')}${opt('minutes', [[5, '5 min'], [10, '10 min'], [15, '15 min']])}
+      <div class="big-stat" style="margin-top:6px">${[[A.matches, 'Matches'], [A.wins, 'Won'], [A.elims, 'Eliminations'], [kd, 'E / D'], [A.bestElims, 'Best match'], [A.bestStreak, 'Best streak']].map(([v, l]) => `<div><b>${v}</b><small>${l}</small></div>`).join('')}</div>
+      <div class="row" style="margin-top:16px"><button class="btn pri" data-act="simgo">Enter simulation</button></div>`;
   }
 
   controlsHtml() {
@@ -431,6 +451,8 @@ export class Menus {
       case 'dest': this.sel = v; break;
       case 'launch': g.audio.ui('confirm'); g.closeStation(); g.travel(v); return;
       case 'claim': g.claimContract(+v); break;
+      case 'simcfg': { const A = sv.arena = arenaRecord(sv.arena); A.cfg[t.dataset.k] = t.dataset.k === 'difficulty' ? v : +v; break; }
+      case 'simgo': g.audio.ui('confirm'); g.closeStation(); g.travel('arena'); return;
       case 'body':
         if (sv.character.body !== v) sv.character = defaultCharacter(v);
         // the other body is fetched the first time it is picked

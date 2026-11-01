@@ -151,7 +151,6 @@ fs.mkdirSync(OUT, { recursive: true });
     const t0 = Date.now();
     await ev(() => { window.__game.cineTime = 99; window.__game.travel('earth'); });
     await waitPlay();
-    await ev(() => { window.__game.cineTime = null; });
     console.log('earth load seconds', Math.round((Date.now() - t0) / 1000));
     await p.waitForTimeout(3000);
     await install();

@@ -170,7 +170,7 @@ export class VanthosWorld extends World {
         else if (n === 'core_glow') { m.emissive.set(0xa01428); m.color.set(0x400810); }
         else if (/^(roof_green|roof_leaves)$/.test(n)) m.color.multiplyScalar(.6);
         else if (/glass/.test(n)) { m.color.set(0x1a1e20); m.opacity = Math.min(m.opacity, .45); }
-        if (/alien_glow|alien_acid/.test(n)) this.pulseMats.push({ m, base: m.emissiveIntensity || 1, ph: Math.random() * 6 });
+        if (/alien_glow|alien_acid/.test(n)) { m.emissiveIntensity = (m.emissiveIntensity || 1) * .35; m.color.multiplyScalar(.4); this.pulseMats.push({ m, base: m.emissiveIntensity, ph: Math.random() * 6 }); }
         m.needsUpdate = true;
       }
     });

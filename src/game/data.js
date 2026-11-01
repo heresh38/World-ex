@@ -59,6 +59,21 @@ export function weaponSight(w) {
 export function sightZoom(w) { const s = weaponSight(w); return s === 'default' ? ARCHETYPES[w.arch].zoom : SIGHTS[s].zoom; }
 export const SLOT_NAMES = ['Primary', 'Special', 'Heavy'];
 
+// Handling: ADS-in time (s, to full magnification) and sprint-to-fire delay (s, the gun comes back up after a sprint;
+// tactical sprint adds TAC_SPRINT_OUT). Light guns are quick, long guns slow. Used by player.js / weapons.js / viewmodel.js.
+const HANDLING = {
+  pistol: [.13, .14], sidearm: [.13, .14], revolver: [.16, .15], handcannon: [.17, .16],
+  smg: [.18, .16], ksmg: [.17, .15], spitter: [.22, .19],
+  auto: [.23, .2], pulse: [.24, .2], rifle: [.24, .2], carbine: [.22, .19], scout: [.27, .22], energy: [.26, .22],
+  shotgun: [.22, .2], pump: [.22, .2], bile: [.22, .2], dmr: [.3, .23],
+  hmg: [.38, .26], rocket: [.4, .26], brood: [.38, .25], sniper: [.42, .25], bolt: [.42, .25],
+};
+export const TAC_SPRINT_OUT = .08;
+export function weaponHandling(arch) {
+  const h = HANDLING[arch] || [.25, .2];
+  return { ads: h[0], sprintOut: h[1] };
+}
+
 export const PERKS = {
   overflow: { name: 'Overflow', desc: 'Magazine +40%.' },
   rampage: { name: 'Rampage', desc: 'Kills grant +15% damage, stacking 3x for 4s.' },
@@ -139,6 +154,8 @@ export const DESTINATIONS = [
   { id: 'vanthos', name: 'Vanthos', region: 'The Fallen Metropolis', kind: 'metropolis', level: 6, power: 40, seed: 4401,
     orb: 'radial-gradient(circle at 35% 35%,#d9b8ff,#6a3a8c 45%,#1a0c26 72%)',
     desc: 'A gigantic city built around a central reactor, now consumed by an alien infestation. Eight districts, the Spire at its heart, and a metro full of secrets beneath. The closer you get to the Spire, the worse it gets.' },
+  { id: 'arena', hidden: true, name: 'Brennick Works', region: 'Shellbreak · combat simulation', kind: 'sim', level: 1, power: 0,
+    desc: 'The Wayfarer’s combat simulation. Two squads of ghost-shells in a ruined foundry yard: first squad to the score limit wins.' },
   { id: 'vanthos_metro', hidden: true, name: 'Vanthos Metro', region: 'Underground', kind: 'metro', level: 8,
     desc: 'Flooded platforms, collapsed tunnels and whatever nests in the dark under the city.' },
   { id: 'ares', name: 'Ares Verge', region: 'Red Dust Expanse', kind: 'planet', level: 4, power: 20, seed: 1301,

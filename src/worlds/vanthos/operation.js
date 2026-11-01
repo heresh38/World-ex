@@ -227,7 +227,7 @@ export class Operation {
     for (let k = 0; k < 5; k++) {
       const a = k * 1.256 + .4, p = this.clearSpot(nest.clone().add(new V(Math.cos(a) * (9 + k * 2), 0, Math.sin(a) * (9 + k * 2))), 2);
       prop(k % 2 ? 'VX_growth_s' : 'VX_growth_l', p, k * 1.7, false);
-      if (k < 3) { w.lights.push({ pos: p.clone().setY(p.y + 2.5), color: new THREE.Color(0xb8ff40), intensity: 2.4, flicker: true }); this.nestLights.push(w.lights[w.lights.length - 1]); }
+      if (k < 3) { w.lights.push({ pos: p.clone().setY(p.y + 2.5), color: new THREE.Color(0xb8ff40), intensity: 1.0, flicker: true }); this.nestLights.push(w.lights[w.lights.length - 1]); }
     }
     S3.valve = this.clearSpot(nest.clone().add(nest.clone().sub(shuttle).setY(0).normalize().multiplyScalar(-14)), 1.5);
     const valve = prop('VX_terminal', S3.valve, face(S3.valve, shuttle));

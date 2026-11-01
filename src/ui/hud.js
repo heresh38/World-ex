@@ -137,6 +137,7 @@ export class HUD {
 
   // n: a number, or a word ('IMMUNE' when a shield takes the hit)
   damageNumber(pos, n, crit) {
+    if (this.g.world && this.g.world.hideDamageNumbers) return;        // the simulation (worlds/arena) reads hits from the marker only
     let d = this.nums.find(x => x.t <= 0);
     if (!d) { const el = document.createElement('div'); el.className = 'h-num'; this.numsEl.appendChild(el); d = { el, t: 0, p: new THREE.Vector3() }; this.nums.push(d); }
     const word = typeof n === 'string';
@@ -305,6 +306,8 @@ export class HUD {
     for (const it of w.interactables) { if (it.enabled && !it.enabled()) continue; const q = typeof it.pos === 'function' ? it.pos() : it.pos; if (q) blip(q.x, q.z, 'rgba(236,230,216,.75)', 2.2); }
     // hostiles in range
     if (w.combat) for (const e of g.enemies.list) if (e.alive && e.state !== 'idle') blip(e.pos.x, e.pos.z, '#ff4a3d', 2.4);
+    // world-supplied blips (Shellbreak squads: allies blue, spotted enemies red)
+    if (w.blips) for (const b of w.blips()) blip(b.x, b.z, b.color, b.r || 2.6);
     // world markers (objectives, landing zone, loot): icons, pinned to the rim when far away
     for (const m of this.markers) blip(m.pos.x, m.pos.z, m.color, 3, m.icon || null, true);
     x.restore();

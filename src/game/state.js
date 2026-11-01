@@ -157,8 +157,15 @@ export function load() {
     if (!/^#[0-9a-f]{6}$/i.test(s.car.paint || '')) s.car.paint = '#a3121f';
     s.armoryDelivered = grantArmory(s).length;           // new weapon classes reach existing saves
     if (s.vanthos) s.vanthos = { shards: [], bosses: [], runs: 0, best: null, logs: [], ...s.vanthos };
+    if (s.arena) s.arena = arenaRecord(s.arena);
     return s;
   } catch (e) { return null; }
+}
+
+// Shellbreak (worlds/arena) service record + the last match settings
+export const ARENA_CFG = { difficulty: 'normal', size: 6, limit: 50, minutes: 10 };
+export function arenaRecord(a = {}) {
+  return { matches: 0, wins: 0, losses: 0, draws: 0, elims: 0, deaths: 0, assists: 0, bestElims: 0, bestStreak: 0, time: 0, ...a, cfg: { ...ARENA_CFG, ...(a.cfg || {}) } };
 }
 
 export function save(s) {

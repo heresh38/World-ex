@@ -20,6 +20,7 @@ import { EarthWorld } from './worlds/earth.js';
 import { PlanetWorld } from './worlds/planet.js';
 import { VanthosWorld } from './worlds/vanthos/world.js';
 import { MetroWorld } from './worlds/vanthos/metro.js';
+import { ArenaWorld } from './worlds/arena/world.js';
 import { spaceSky, orbitPlanet, planetMaps } from './worlds/sky.js';
 import { DESTINATIONS, ARCHETYPES, armorStats } from './game/data.js';
 import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS, vaultOverflow } from './game/state.js';
@@ -43,6 +44,7 @@ const WORLD_MODELS = {
     ['ship_dropship', 'ship_dropship.glb', 1], ['fauna', 'fauna.glb', 1]],
   vanthos: [['vanthos', 'vanthos.glb', 4], ['vanthos_ruins', 'vanthos_ruins.glb', 4], ['trees', 'trees.glb', 8], ['cars', 'cars.glb', 8], ...CREATURES],
   vanthos_metro: [['vanthos', 'vanthos.glb', 4], ...CREATURES],
+  arena: [['arena_brennick', 'arena_brennick.glb', 4]],          // Shellbreak (worlds/arena): squad bodies are fetched by the world
   planet: [['trees', 'trees.glb', 8], ['cars', 'cars.glb', 8], ...CREATURES],
 };
 const worldModels = id => WORLD_MODELS[id] || WORLD_MODELS.planet;
@@ -206,7 +208,7 @@ class Game {
     const dest = toShip ? { name: 'The Wayfarer', desc: 'Breaking atmosphere. The ship will hold orbit above ' + (DESTINATIONS.find(d => d.id === this.save.lastDest) || DESTINATIONS[0]).name + '.' } : DESTINATIONS.find(d => d.id === id);
     if (!toShip) this.audio.warp();
     await this.fade(true);
-    this.menus.showLoading(dest, toShip ? 'Returning to orbit' : (dest.kind === 'city' ? 'Descending to' : 'Jumping to'));
+    this.menus.showLoading(dest, toShip ? 'Returning to orbit' : (dest.kind === 'city' ? 'Descending to' : dest.kind === 'sim' ? 'Simulation' : 'Jumping to'));
     await new Promise(r => setTimeout(r, 60));
     await this.enterWorld(id, (p, l) => this.menus.loading(p, l));
     await new Promise(r => setTimeout(r, 250));
@@ -238,6 +240,7 @@ class Game {
       await this.assets.loadAll(need.map(([name, file, weight]) => ({ type: 'model', name, file, weight, label: 'Loading ' + name.replace(/_/g, ' ') })),
         (p, l) => progress(p * fetchP, l));
     } catch (e) { return this.fatal(e); }
+    if (id === 'arena' && !this.assets.json.arena_brennick) await this.assets.loadAll([{ type: 'json', name: 'arena_brennick', file: 'arena_brennick.json' }]);
     const buildProgress = progress;
     progress = (p, l) => buildProgress(fetchP + p * (1 - fetchP), l);
     let w;
@@ -245,6 +248,7 @@ class Game {
     else if (id === 'earth') w = new EarthWorld(this);
     else if (id === 'vanthos') w = new VanthosWorld(this, DESTINATIONS.find(d => d.id === id));
     else if (id === 'vanthos_metro') w = new MetroWorld(this, this.metroEntry);
+    else if (id === 'arena') w = new ArenaWorld(this);
     else w = new PlanetWorld(this, DESTINATIONS.find(d => d.id === id));
     this.world = w; this.scene = w.scene;
     this.fx = new FX(w.scene);
@@ -260,7 +264,7 @@ class Game {
     this.weapons.refill(); this.weapons.refreshModel();
     this.hud.setMode(w.combat); this.hud.setLocation(w.region, w.name);
     this.hud.show(true); this.hud.dirty = true;
-    if (id !== 'ship') {
+    if (id !== 'ship' && id !== 'arena') {          // the simulation runs aboard: no orbit change, not a charted world
       if (id !== 'vanthos_metro') this.save.lastDest = id;
       if (!this.save.stats.visited.includes(id)) this.save.stats.visited.push(id);
     }
@@ -362,7 +366,8 @@ class Game {
 
   get water() { return (this.world && this.world.water) || null; }   // shared water API (src/game/water.js)
 
-  get armor() { return armorStats(this.save.character, (this.player && this.player.avatar && this.player.avatar.wardrobe) || {}); }
+  // the simulation (worlds/arena) runs at parity: no armour resist, full mobility
+  get armor() { if (this.world && this.world.parity) return { armor: 0, resist: 0, mobility: 100, pieces: [] }; return armorStats(this.save.character, (this.player && this.player.avatar && this.player.avatar.wardrobe) || {}); }
 
   openInventory() {
     if (this.state !== 'play' || this.stationId || this.paused || !this.player || this.player.dead) return;
@@ -467,6 +472,7 @@ class Game {
   }
 
   onPlayerDeath() {
+    if (this.world.onPlayerDeath) { this.input.enabled = true; return this.world.onPlayerDeath(); }   // the world runs its own respawns
     if (this.world.wanted) this.world.wanted.reset();
     this.hud.banner('You fell', 'Ghost-shell revival in 4 seconds', 4);
     this.input.enabled = true;
@@ -511,6 +517,7 @@ class Game {
   // ---------------------------------------------------------------- input routing
   onKey(e) {
     if (e.code === 'F3') { this.save.settings.showFps = !this.save.settings.showFps; this.hud.dirty = true; e.preventDefault(); }
+    if ((e.code === 'KeyI' || e.code === 'Tab') && this.state === 'play' && this.world && this.world.scoreKey && !this.paused && !this.stationId) { e.preventDefault(); this.world.scoreKey(e, true); return; }
     if ((e.code === 'KeyI' || e.code === 'Tab') && this.state === 'play') {
       if (this.stationId === 'inventory') { this.closeStation(); return; }
       if (!this.stationId) { this.openInventory(); return; }
@@ -533,6 +540,7 @@ class Game {
   }
 
   onLockChange(locked) {
+    if (this.world && this.world.holdPause && this.world.holdPause()) return;      // a world menu (simulation loadout / results) owns the pointer
     // browser released the pointer (Esc) while playing -> pause menu
     if (!locked && this.state === 'play' && !this.stationId && !this.paused && !this.player.dead) this.pause();
   }
@@ -624,7 +632,7 @@ class Game {
     }
     this.setAvatarLayer();
     this.viewmodel.update(dt, input);
-    if (this.touch) { this.touch.show(!this.stationId && !p.dead); this.touch.update(); }
+    if (this.touch) { this.touch.show(!this.stationId && !p.dead && !(w.hideTouch && w.hideTouch())); this.touch.update(); }
     this.fx.update(dt, (x, z) => w.collision.ground(x, z));
     this.hud.markers = w.markers();
     this.objT = (this.objT || 0) - dt;
