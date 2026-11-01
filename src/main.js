@@ -180,6 +180,10 @@ class Game {
     this.state = 'play';
     await this.fade(false);
     this.hud.banner('The Wayfarer', 'Welcome aboard, Captain', 3.5);
+    if (this.save.armoryDelivered) {
+      const n = this.save.armoryDelivered; delete this.save.armoryDelivered; this.persist();
+      setTimeout(() => this.hud.toast(n + ' new weapons delivered to your armoury — kinetic and living. Press I to see them'), 4200);
+    }
     if (!this.save.stats.visited.length) setTimeout(() => this.hud.toast('Walk to the captain’s chair on the bridge to plot a jump'), 3800);
   }
 
@@ -418,7 +422,7 @@ class Game {
     s.inventory.push(w);
     // keep the vault bounded: auto-dismantle the weakest spare
     if (s.inventory.length > 60) {
-      const spare = s.inventory.filter(x => !s.equipped.includes(x.uid)).sort((a, b) => a.rarity - b.rarity || a.power - b.power)[0];
+      const spare = s.inventory.filter(x => !s.equipped.includes(x.uid) && !x.keep).sort((a, b) => a.rarity - b.rarity || a.power - b.power)[0];
       if (spare) { s.inventory.splice(s.inventory.indexOf(spare), 1); s.alloy += 2 + spare.rarity * 3; }
     }
     // empty slot? equip immediately
@@ -577,7 +581,8 @@ class Game {
     if (p.mode === 'car') {
       // chase camera drifts behind the car when the mouse is idle
       const c = this.vehicles.current;
-      if (c && Math.abs(input.mx) < 1 && c.speed > 3) { let d = (c.yaw + Math.PI) - p.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); p.camYaw += d * Math.min(1, dt * 2.5); p.camPitch += (-.18 - p.camPitch) * Math.min(1, dt * 2); }
+      // (not while a touch stick is steering: the stick is camera-relative, a moving camera would keep turning the ride)
+      if (c && Math.abs(input.mx) < 1 && c.speed > 3 && !(input.axisX || input.axisY)) { let d = (c.yaw + Math.PI) - p.camYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); p.camYaw += d * Math.min(1, dt * 2.5); p.camPitch += (-.18 - p.camPitch) * Math.min(1, dt * 2); }
     }
     this.enemies.update(dt);
     this.combat.update(dt);

@@ -64,6 +64,18 @@ function decals(g) {
   return DECAL;
 }
 
+// Touch stick: camera-relative steering. The stick points where the rider wants to go (relative to the camera); the
+// vehicle turns toward that heading and straightens out, instead of spinning while the stick is held sideways.
+export function stickSteer(input, camYaw, yaw, speed) {
+  const ax = input.axisX || 0, ay = input.axisY || 0, mag = Math.min(1, Math.hypot(ax, ay));
+  if (mag < .2) return { thr: 0, st: 0 };
+  const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = -fz, rz = fx;
+  const dx = fx * ay + rx * ax, dz = fz * ay + rz * ax;
+  let diff = Math.atan2(dx, dz) - yaw; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  if (Math.abs(diff) > 2.5 && speed > 2) return { thr: -1, st: 0 };        // stick pulled back: brake / reverse
+  return { thr: mag > .35 ? 1 : 0, st: Math.max(-1, Math.min(1, diff * 2.2)) };
+}
+
 // ================================================================ road car
 export class Car {
   constructor(game, model, paint, pos, yaw) {
@@ -472,8 +484,8 @@ export class Board {
     if (riding && input.enabled) {
       thr = (input.key('KeyW') ? 1 : 0) - (input.key('KeyS') ? 1 : 0);
       st = (input.key('KeyA') ? 1 : 0) - (input.key('KeyD') ? 1 : 0);
-      boost = input.key('ShiftLeft') || input.key('ShiftRight'); jump = input.pressed('Space');
-      if (input.axisX || input.axisY) { thr = Math.abs(input.axisY) > .2 ? Math.sign(input.axisY) : 0; st = -input.axisX; }
+      boost = input.key('ShiftLeft') || input.key('ShiftRight') || !!input.axisRun; jump = input.pressed('Space');
+      if (input.axisX || input.axisY) ({ thr, st } = stickSteer(input, g.player.camYaw, this.yaw, Math.abs(this.vF || 0)));
     }
     this.ctl = { thr, st, brake: thr < 0, boost };
     // hover: probe front, centre and back
@@ -705,7 +717,7 @@ export class Vehicles {
       thr = (input.key('KeyW') ? 1 : 0) - (input.key('KeyS') ? 1 : 0);
       st = (input.key('KeyA') ? 1 : 0) - (input.key('KeyD') ? 1 : 0);
       boost = input.key('ShiftLeft') || input.key('ShiftRight'); hand = input.key('Space');
-      if (input.axisX || input.axisY) { thr = Math.abs(input.axisY) > .2 ? Math.sign(input.axisY) : 0; st = -input.axisX; }
+      if (input.axisX || input.axisY) { const c = this.current; ({ thr, st } = stickSteer(input, this.g.player.camYaw, c.yaw, Math.abs(c.vF || 0))); }
     }
     return { thr, st, hand, boost, brake: false, driver: true };
   }

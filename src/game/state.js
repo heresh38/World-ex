@@ -71,8 +71,26 @@ export function newSave() {
   starters[0].name = 'Ashen Oath'; starters[1].name = 'Last Lantern'; starters[2].name = 'Iron Verdict';
   s.inventory.push(...starters);
   s.equipped = starters.map(w => w.uid);
+  grantArmory(s);
   refreshContracts(s);
   return s;
+}
+
+// One-time armoury delivery: every kinetic and horror archetype (added after the first saves existed), at the power of
+// the best gun the player already owns. Bumping ARMORY_V delivers whatever newer archetypes appear later.
+const ARMORY_V = 2;
+export function grantArmory(s) {
+  if ((s.armoryV || 0) >= ARMORY_V) return [];
+  const have = new Set(s.inventory.map(w => w.arch));
+  const power = Math.max(10, ...s.inventory.map(w => w.power || 0));
+  const out = [];
+  for (const [k, A] of Object.entries(ARCHETYPES)) {
+    if (A.cls === 'energy' || have.has(k)) continue;
+    const w = makeWeapon(k, A.cls === 'horror' ? 2 : 1, power); w.keep = true;      // never auto-dismantled
+    s.inventory.push(w); out.push(w);
+  }
+  s.armoryV = ARMORY_V;
+  return out;
 }
 
 export function refreshContracts(s) {
@@ -100,6 +118,7 @@ export function load() {
     if (!s.car || typeof s.car !== 'object') s.car = { model: 'board_sport', paint: '#a3121f' };
     if (!/^board_/.test(s.car.model)) s.car.model = s.car.model === 'car_utility' ? 'board_utility' : 'board_sport';
     if (!/^#[0-9a-f]{6}$/i.test(s.car.paint || '')) s.car.paint = '#a3121f';
+    s.armoryDelivered = grantArmory(s).length;           // new weapon classes reach existing saves
     return s;
   } catch (e) { return null; }
 }
