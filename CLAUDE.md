@@ -67,6 +67,18 @@ plaza, and glowing cyan kerb strips.
 - Orbit: `sky.js` `spaceSky` (sparse stars, faint galaxy band) and `orbitPlanet`; Earth uses maps baked by
   `tools/blender/planets.py` (`earth_day/clouds/night/ms.jpg`, registered in `planetMaps` at boot).
 
+## Creatures
+Organic enemies are sculpted with `fleshkit.py` (tagged SDF primitives → Surface Nets → skinned GLB: soft-min skin
+weights per primitive bone, vertex colours with cavity darkening/bruising/veins, `_writhe` vertex attribute for tentacle
+wriggle, baked FK clips Idle/Walk/Run/Attack/Death). `horror_textures.py` bakes the shared `hx_*` sets (flesh, skin,
+chitin, bone, sac, rag); the GLBs ship without images and `enemies.js` (`fleshify`) applies the maps by material name
+(`writhe_*`, `alien_*`) and adds the wriggle shader + glow pulse. `aliens.py` = VANTHOS species (stalker, hulk, mutant,
+swimmer, elite); `writhe.py` = the Writhe, a parasite faction hostile to everyone: `mite` (swarms, leaps, bursts, burrows
+into fresh human corpses which rise as hosts), `host` (lurching reanimated trooper, lunges, may fire a scavenged gun),
+`bladder` (waddles in, swells and ruptures into mites), `amalgam` (fused brute, slam + bile). Placed in VANTHOS districts
+(`nest()` in `districts.js`, hospital boss), metro `FAUNA`, and overrun outposts on frontier planets.
+`FLESH_PREVIEW=<dir>` writes texture-embedded copies for `preview.py`. Test: `tools/test/horror.js` (WORLD=vanthos_metro default).
+
 ## Camera
 First person is the primary view (`settings.view = 'first'`), third person is a toggle (T) that may be removed later.
 In first person the body moves to layer 1 (shadows only) and `src/game/viewmodel.js` draws the Blender arms + gun in a

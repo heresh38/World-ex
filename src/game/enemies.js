@@ -52,7 +52,7 @@ function fleshify(av) {
       m.map = tex(set + '_c.jpg', true); m.normalMap = tex(set + '_n.jpg', false);
       m.roughnessMap = m.metalnessMap = tex(set + '_m.jpg', false);
       m.roughness = 1; m.metalness = 1; m.normalScale = new THREE.Vector2(1, -1); m.envMapIntensity = 1.3;
-      m.color.setRGB(1, 1, 1);
+      m.color.setRGB(.82, .8, .78);   // vertex colours carry the hue; keep wet flesh from washing out under torches
     }
     if (/^(writhe|alien)_/.test(m.name)) {
       // tentacles and tendrils (`_writhe` vertex attribute) wriggle after skinning
