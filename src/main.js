@@ -23,6 +23,7 @@ import { MetroWorld } from './worlds/vanthos/metro.js';
 import { spaceSky, orbitPlanet, planetMaps } from './worlds/sky.js';
 import { DESTINATIONS, ARCHETYPES, armorStats } from './game/data.js';
 import { newSave, load, save, wipe, xpForLevel, refreshContracts, DEFAULT_SETTINGS, vaultOverflow } from './game/state.js';
+import { Clock } from './game/clock.js';
 
 // Models are loaded per world: BOOT_MODELS before the ship (everything the hub and the player always need), the
 // rest when a world is entered (WORLD_MODELS). Leaving a world frees its large models again, so memory stays bounded.
@@ -560,6 +561,8 @@ class Game {
   update(dt) {
     const p = this.player, input = this.input, w = this.world;
     this.save.stats.time += dt;
+    if (!this.clock || this.clock.save !== this.save) this.clock = new Clock(this.save);
+    this.clock.update(dt);
     if (input.enabled && input.locked) p.look(input, dt);
     // interactions
     const canAct = input.enabled && !this.stationId && !p.dead;
