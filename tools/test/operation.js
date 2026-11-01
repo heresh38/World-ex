@@ -60,7 +60,7 @@ fs.mkdirSync(OUT, { recursive: true });
   let st = await S(); console.log('landing', JSON.stringify(st));
   check(st.stage === 'relay' && st.phase === 'travel' && /relay/i.test(st.obj || ''), 'stage 1 objective with distance', st.obj);
   check(!!st.radio, 'intro radio subtitle', st.radio);
-  await wait(5000); await shot('op01_landing_radio');
+  await wait(5000); await shot('op01_landing_radio'); await mem('after op01');
   // ---------------------------------------------------------------- 1: the relay (start the uplink, hold while raiders come)
   await ev(() => { const s = window.__op().stages[0]; window.__tp(s.cp.x, s.cp.y, s.cp.z); window.__sim(.6); });
   st = await S(); check(st.phase === 'ready', 'relay arrival beat', st);
@@ -69,6 +69,7 @@ fs.mkdirSync(OUT, { recursive: true });
   let shotHold = false;
   for (let k = 0; k < 40; k++) {
     st = await ev(() => { window.__sim(2); if (Math.random() < .7) window.__killOp(); return window.__state(); });
+    if (process.env.MEMLOG) await mem('hold ' + st.hold);
     if (!shotHold && st.hold > .35) { shotHold = true; await ev(() => { const o = window.__op(), s = o.stages[0], L = window.__game.world.landing, d = L.clone().sub(s.pos).setY(0).normalize(); window.__tp(s.pos.x + d.x * 15, s.pos.y, s.pos.z + d.z * 15); window.__look(s.pos.x, s.pos.y + 9, s.pos.z, .32); window.__sim(.1); }); await wait(1500); await shot('op02_relay_hold'); await setup(); }
     if (st.i > 0 || st.phase === 'done') break;
   }
