@@ -318,7 +318,7 @@ export class Weapons {
       uid: w.uid, arch: w.arch, ammo: a,
       drop(kind) { self.dropPart(kind, w); },
       glow() { BIO.gape = 1; const r = self.shownRig(); if (r && r.p.hatch) g.fx.glow(r.p.hatch.getWorldPosition(new THREE.Vector3()), .25, color, .25); },
-      drip(name) { const r = self.shownRig(), o = r && r.p[name]; if (o) g.fx.slimeDrops(o.getWorldPosition(new THREE.Vector3()), null, 5, 1.2, color, .6); },
+      drip(name) { const r = self.shownRig(), o = r && r.p[name]; if (o) g.fx.slimeDrops(o.getWorldPosition(new THREE.Vector3()), null, 4, .9, color, .22); },
       casing() { self.dropPart('casing', w); },
     });
   }
@@ -349,7 +349,7 @@ export class Weapons {
       const out = w.arch === 'brood' ? toWorld(.2, 1.2, -.3) : toWorld(1.1, .2, -.2);
       D.spawn(h, 'husk', base.add(out), 4, 12);
       h.visible = false;
-      g.fx.slimeDrops(rig.p.biomass.getWorldPosition(new THREE.Vector3()), null, 8, 1.6, GOO[ARCHETYPES[w.arch].goo].color, .8);
+      g.fx.slimeDrops(rig.p.biomass.getWorldPosition(new THREE.Vector3()), null, 6, 1.4, GOO[ARCHETYPES[w.arch].goo].color, .28);
       g.audio.reloadSfx && g.audio.reloadSfx('husk');
     } else if (kind === 'casing' && rig.p.x_round && rig.p.bolt) {
       const pos = rig.root.localToWorld(new THREE.Vector3(-.03, .085, 0));
