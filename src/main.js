@@ -69,8 +69,8 @@ class Game {
     this.input.onLockChange = locked => this.onLockChange(locked);
     this.touch = isTouchDevice() ? new TouchControls(this) : null;
     if (this.touch && !sv) { this.save.settings.quality = 'medium'; this.save.settings.fov = 74; }
-    // phones (and the low preset) keep textures small: GPU memory is what kills a mobile tab on the big worlds
-    this.assets.maxTex = window.__MAXTEX || (this.touch ? 512 : this.save.settings.quality === 'low' ? 1024 : Infinity);
+    // phones (and the low preset) cap textures at 1024 px: GPU memory is what kills a mobile tab on the big worlds
+    this.assets.maxTex = window.__MAXTEX || (this.touch ? 1024 : this.save.settings.quality === 'low' ? 1024 : Infinity);
     addEventListener('keydown', e => this.onKey(e));
     window.__game = this;
     this.loop = this.loop.bind(this);

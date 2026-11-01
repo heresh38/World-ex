@@ -152,7 +152,7 @@ export class Weapons {
     const p = this.g.player; if (!p || !p.avatar) return;
     const w0 = p.armed ? this.equipped() : null;
     if (this.g.viewmodel) this.g.viewmodel.setWeapon(w0);
-    if (!p.armed) { p.avatar.attachGun(null); return; }
+    if (!p.armed || p.mode === 'car' || p.mode === 'sit') { p.avatar.attachGun(null); return; }   // stowed while riding/seated
     const w = this.equipped(); if (!w) { p.avatar.attachGun(null); return; }
     const A = ARCHETYPES[w.arch];
     p.avatar.attachGun(A.model, mesh => Weapons.styleMesh(mesh, w));

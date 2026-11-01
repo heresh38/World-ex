@@ -87,6 +87,7 @@ export class Player {
     const blocked = world.raycast(_t.copy(this.pos).setY(this.pos.y + .9), f, .9);
     this.pos.copy(blocked && this.standFrom ? this.standFrom : out);
     this.seat = null; this.avatar.play(this.armed ? 'Idle' : 'IdleRelaxed', .3);
+    this.g.weapons && this.g.weapons.refreshModel();
   }
 
   // ledge in front of the player that can be climbed: returns the stand point on top, or null

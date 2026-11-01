@@ -23,6 +23,7 @@ export class Renderer {
     this.r.shadowMap.enabled = true;
     this.r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scale = 1;          // dynamic resolution multiplier (0.5..1)
+    this.touch = matchMedia && matchMedia('(pointer: coarse)').matches;
     this.fpsAvg = 60;
     this.scene = null; this.camera = null;
     this.composer = null;
@@ -35,7 +36,9 @@ export class Renderer {
   applyQuality() {
     const q = this.q;
     this.r.shadowMap.enabled = q.shadowsOn;
-    this.basePixel = Math.min(devicePixelRatio || 1, q.pixel) * (this.settings.resScale || 1);
+    // phones have 3x screens: 1 css pixel would look smeared, so they get at least 1.5 (2 on high)
+    const pix = this.touch ? Math.max(q.pixel, this.settings.quality === 'high' ? 2 : 1.5) : q.pixel;
+    this.basePixel = Math.min(devicePixelRatio || 1, pix) * (this.settings.resScale || 1);
     this.buildComposer();
     this.resize();
   }
@@ -93,7 +96,8 @@ export class Renderer {
     if (this._t < 1.5) return;
     this._t = 0;
     let s = this.scale;
-    if (this.fpsAvg < 52 && s > 0.55) s = Math.max(0.55, s - 0.1);
+    const floor = this.touch ? .75 : .55;          // never drop a phone below ~1.1x: blur reads worse than a few fps
+    if (this.fpsAvg < 52 && s > floor) s = Math.max(floor, s - 0.1);
     else if (this.fpsAvg > 59 && s < 1) s = Math.min(1, s + 0.05);
     if (s !== this.scale) { this.scale = s; this.resize(); }
   }
