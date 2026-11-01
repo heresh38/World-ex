@@ -124,8 +124,8 @@ fs.mkdirSync(OUT, { recursive: true });
   }
   check(st.phase === 'ride', 'lift powered', st);
   pr = await ev(() => { const b = window.__game.world.spireLiftBase; window.__killOp(); window.__tp(b.pos.x, b.pos.y, b.pos.z + 1); return window.__press(); });
-  const up = await ev(() => window.__game.player.pos.y);
-  check(up > 25, 'lift rides to the foundation', { pr, y: up });
+  const up = await ev(() => { window.__sim(1); return window.__game.player.pos.y; });
+  check(up > 27.5, 'lift rides to the foundation (and you stand on it)', { pr, y: up });
   await ev(() => window.__sim(3.2));
   // ---------------------------------------------------------------- 5: the Spire Warden
   st = await S(); check(st.i === 4 && st.phase === 'intro', 'the Warden wakes on the foundation', st);
