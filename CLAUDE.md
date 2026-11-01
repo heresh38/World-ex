@@ -57,6 +57,13 @@ plaza, and glowing cyan kerb strips.
 `src/worlds/meridian/`: `layout.js` (heightmap, river, highways, lanes, villages/farms, districts), `population.js` (pedestrians),
 `traffic.js` (lane cars, hijack), `wanted.js` (stars + security drones). Assets: `rural.py` (RU_* kit). No missions on Earth.
 
+- Spaceport (`spaceport.py`, `SPACEPORT` in `layout.js`): a ship landing field south of the city (VTOL pads, terminal with the
+  Quartermaster, control tower, hangars, fuel farm, container yard; no runways — ships land vertically). The player's ship lands
+  on pad 1; `src/game/cinematic.js` plays the landing / take-off cutscenes (`g.cineTime` pins the clock for tests).
+- Water (`src/game/water.js`, textures from `water_textures.py`): river, bay and Vanthos flood water. API `g.water`:
+  `heightAt`, `depthAt`, `splash(pos, kind|size)`, `hitTest(from, to, kind)`; ripples, splashes, wading and swimming.
+  `src/game/puffs.js` is the shared dust/spray sprite system.
+
 ## Trees
 `tools/blender/trees.py` grows every tree (`trees.glb`, roots `TR_*`; `-- oak birch --fast` builds only those into
 `$TREE_OUT`, `$TREE_PREVIEW=<dir>` writes per-species GLBs for preview.py). Broadleaf crowns by space colonisation, conifers
@@ -68,12 +75,6 @@ Runtime: `src/worlds/meridian/flora.js` (`Flora`: instanced LOD buckets by camer
 oak/maple, quays willow/ash, suburbs maple/birch + hedges, villages, lone field trees, woods by altitude up to the
 `SNOW_LINE` of the Meridian Peaks massif in `layout.js`); trunks collide via `kitColliders`. `planet.js` streams
 snowy conifers (glacier), jungle canopy and savanna trees (mesa) per chunk. Test: `tools/test/trees.js`.
-- Spaceport (`spaceport.py`, `SPACEPORT` in `layout.js`): a ship landing field south of the city (VTOL pads, terminal with the
-  Quartermaster, control tower, hangars, fuel farm, container yard; no runways — ships land vertically). The player's ship lands
-  on pad 1; `src/game/cinematic.js` plays the landing / take-off cutscenes (`g.cineTime` pins the clock for tests).
-- Water (`src/game/water.js`, textures from `water_textures.py`): river, bay and Vanthos flood water. API `g.water`:
-  `heightAt`, `depthAt`, `splash(pos, kind|size)`, `hitTest(from, to, kind)`; ripples, splashes, wading and swimming.
-  `src/game/puffs.js` is the shared dust/spray sprite system.
 
 ## Player, UI and sky
 - Movement (`player.js`): walk 4.4, sprint 8.6, coyote time + jump buffer, C = crouch (slide when sprinting), automatic
