@@ -15,11 +15,11 @@ fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
-  const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await b.newPage({ viewport: { width: 960, height: 540 } });
   const errs = [], fails = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'medium'; window.__MAXTEX = 1024; });
+  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
   const check = (ok, what, info = '') => { console.log((ok ? 'PASS ' : 'FAIL ') + what + (info !== '' ? ' · ' + (typeof info === 'string' ? info : JSON.stringify(info)) : '')); if (!ok) fails.push(what); };
@@ -35,7 +35,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await ev(() => { const g = window.__game; g.paused = false; g.menus.hidePause && g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; }); };
   await p.goto(BASE + '/index.html');
   await p.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 300000, polling: 500 });
-  await ev(() => { const g = window.__game; g.save.settings.quality = 'medium'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
+  await ev(() => { const g = window.__game; g.save.settings.quality = 'low'; g.save.settings.dynamicRes = false; g.renderer.settings = g.save.settings; g.renderer.applyQuality(); });
   await p.click('[data-act="title-play"]');
   await waitPlay();
   const t0 = Date.now();

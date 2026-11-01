@@ -102,7 +102,7 @@ export class Weapons {
       t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 4; return t; };
     const gmap = gtex('hx_sac_c.jpg', true);
     this.globs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .32, metalness: 0,
-      map: gmap, normalMap: gtex('hx_sac_n.jpg', false), emissive: 0xffffff, emissiveMap: gmap, emissiveIntensity: .45 }), MAX_GOO);
+      map: gmap, normalMap: gtex('hx_sac_n.jpg', false), emissive: 0xffffff, emissiveMap: gmap, emissiveIntensity: .2 }), MAX_GOO);
     this.globs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_GOO * 3), 3);
     // the inner glow takes each glob's own tint (spit green, bile yellow, brood pink) instead of the raw map colour
     this.globs.material.onBeforeCompile = sh => {
