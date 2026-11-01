@@ -34,7 +34,14 @@ fs.mkdirSync(OUT, { recursive: true });
   }
   const ev = (fn, a) => p.evaluate(fn, a);
   const wait = ms => p.waitForTimeout(ms);
-  const shot = async n => { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 82, timeout: 600000 }); console.log('shot', n); };
+  // the last frame stays on the canvas while the capture runs; frames piling up behind a slow swiftshader capture
+  // otherwise balloon the browser's memory until it is OOM-killed (see tools/test/operation.js)
+  const shot = async n => {
+    await p.evaluate(() => { const r = window.__game.renderer; if (!r.__render) { r.__render = r.render; r.render = () => {}; } });
+    try { await p.screenshot({ path: `${OUT}/${n}.jpg`, type: 'jpeg', quality: 82, timeout: 600000 }); }
+    finally { await p.evaluate(() => { const r = window.__game.renderer; if (r.__render) { r.render = r.__render; r.__render = null; } }).catch(() => {}); }
+    console.log('shot', n);
+  };
   const waitPlay = async () => {
     await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 1200000, polling: 1000 });
     await ev(() => { const g = window.__game; g.paused = false; g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; });
