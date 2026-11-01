@@ -19,7 +19,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const errs = [], fails = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400)); });
   p.on('console', m => { if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; });
+  await p.addInitScript(() => { localStorage.clear(); window.__TEST_QUALITY = 'low'; window.__MAXTEX = 1024; window.__BREAK = true; });
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const wait = ms => p.waitForTimeout(ms);
   const check = (ok, what, info = '') => { console.log((ok ? 'PASS ' : 'FAIL ') + what + (info !== '' ? ' · ' + (typeof info === 'string' ? info : JSON.stringify(info)) : '')); if (!ok) fails.push(what); };
@@ -61,6 +61,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const t = performance.now();
     R.render(g.scene, g.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
     const ms = performance.now() - t, out = { calls: info.render.calls, tris: info.render.triangles, ms: Math.round(ms), geo: info.memory.geometries, tex: info.memory.textures };
+    if (window.__BREAK) { const k = {}; g.scene.traverse(o => { if (!o.isMesh || !o.visible || (o.isInstancedMesh && !o.count)) return; let p = o; while (p) { if (!p.visible) return; p = p.parent; }
+      const n = o.isSkinnedMesh ? 'skinned' : o.isInstancedMesh ? (/^vr_/.test(o.material.name) ? 'ruins' : /^(bark|leaves)/.test(o.material.name) ? 'flora' : 'kit') : 'mesh'; k[n] = (k[n] || 0) + 1; }); out.objs = k; }
     info.autoReset = true;
     return out;
   });
@@ -87,9 +89,13 @@ fs.mkdirSync(OUT, { recursive: true });
       const g = window.__game, w = g.world; g.stationId = null; g.camFocus = null;
       if (x === null) { const l = w.landing; x = l.x; z = l.z; }
       window.__tp(x, Math.max(w.collision.ground(x, z), -2.4), z); window.__sim(2);
+      const T = { en: 0, world: 0 }, eu = g.enemies.update, wu = w.update;
+      g.enemies.update = function (dt) { const t = performance.now(); eu.call(this, dt); T.en += performance.now() - t; };
+      w.update = function (dt) { const t = performance.now(); wu.call(this, dt); T.world += performance.now() - t; };
       const t = performance.now(); window.__sim(3); const ms = (performance.now() - t) / 90;
+      delete g.enemies.update; delete w.update;
       const live = g.enemies.list.filter(e => e.alive);
-      return { updMs: +ms.toFixed(2), enemies: live.length, near100: live.filter(e => e.pos.distanceTo(g.player.pos) < 100).length };
+      return { updMs: +ms.toFixed(2), enemiesMs: +(T.en / 90).toFixed(2), worldMs: +(T.world / 90).toFixed(2), enemies: live.length, near100: live.filter(e => e.pos.distanceTo(g.player.pos) < 100).length };
     }, [x, z]);
     console.log('perf', k, JSON.stringify(perf[k]));
   }

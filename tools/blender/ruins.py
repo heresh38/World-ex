@@ -71,6 +71,10 @@ def tmat(name, tex, tint='#ffffff', rough=.85, metal=0.0, normal=True, aux=True,
     return m
 
 
+# tinted variants are merged into their base material with the tint in the vertex colour (fewer draw calls per design)
+MERGE = {'vr_conc_warm': ('vr_conc', (.91, .85, .77)), 'vr_conc_grey': ('vr_conc', (.74, .76, .78)), 'vr_slab_in': ('vr_slab', (.56, .55, .53))}
+
+
 def mats():
     return dict(
         conc=tmat('vr_conc', 'vr_conc'), conc2=tmat('vr_conc_warm', 'vr_conc', '#e8d8c4'), conc3=tmat('vr_conc_grey', 'vr_conc', '#b8bcc0'),
@@ -118,8 +122,12 @@ class MB:
 
     def face(self, pts, uvs, m, cols=None):
         i0 = len(self.V); self.V += [tuple(p) for p in pts]
+        cols = cols or [self.shade(p, m) for p in pts]
+        if m.name in MERGE:
+            base, t = MERGE[m.name]
+            cols = [(c[0] * t[0], c[1] * t[1], c[2] * t[2]) for c in cols]; m = bl._MATS[base]
         self.F.append(tuple(range(i0, i0 + len(pts)))); self.UV.append(list(uvs)); self.M.append(self.mi(m))
-        self.C.append(cols or [self.shade(p, m) for p in pts])
+        self.C.append(cols)
 
     def col(self, x0, y0, z0, x1, y1, z1):
         """collider in Blender coords -> three space"""
