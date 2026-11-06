@@ -1,0 +1,16 @@
+# Unreal build products and caches
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.sln
+*.slnx
+*.VC.db
+*.opensdf
+*.sdf
+*.suo
+*.xcworkspace
+.idea/
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
