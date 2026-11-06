@@ -65,12 +65,12 @@ export class ArenaWorld extends World {
     this.sunDir = sunDir;
     // dusk grade: deep blue overhead, a warm band low in the west, a dusty mauve haze that swallows the far city;
     // cool fill from the sky, warm bounce from the ground, a low gold sun
-    const FOG = '#977f76', SUNC = '#ffb26e';
+    const FOG = '#8a7e84', SUNC = '#ffb26e';
     const skyOpts = { fog: FOG, ground: '#2a2420', groundK: .6 };
     const sky = atmosphereSky(this.map.sky[1], this.map.sky[0], SUNC, sunDir, { fog: FOG });
     sky.material.uniforms.cloudC.value.set('#e8b8a0');
     sc.add(sky); this.sky = sky;
-    sc.fog = new THREE.FogExp2(new THREE.Color(FOG), .0034);
+    sc.fog = new THREE.FogExp2(new THREE.Color(FOG), .003);
     sc.add(new THREE.HemisphereLight(new THREE.Color('#8ea4cc'), new THREE.Color('#6a4a34'), 1.05));
     // chimney smoke over the district (soft sprite VFX)
     this.smoke = new Puffs(sc, g.touch ? 220 : 480, { soft: .8 }); this.smokeT = 0;

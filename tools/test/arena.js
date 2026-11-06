@@ -62,6 +62,7 @@ fs.mkdirSync(OUT, { recursive: true });
         inp.down.clear(); inp.rmb = false;
         return { vmax: +vmax.toFixed(2), vend: +tr[tr.length - 1].toFixed(2), jump: +(ymax - p0.y).toFixed(2), tr };
       };
+      out.mob = g.armor.mobility / 100;           // worn armour slows you a little (the simulation runs at parity: 1.0)
       reset(); out.walk = run(['KeyW'], 1.5).vend;
       reset(); out.walkAccel90 = +(run(['KeyW'], .5).tr.findIndex(v => v > out.walk * .9) * dt).toFixed(3);
       reset(); run(['KeyW'], 1.5); out.stop90 = +(run([], .5).tr.findIndex(v => v < out.walk * .1) * dt).toFixed(3);
@@ -96,8 +97,9 @@ fs.mkdirSync(OUT, { recursive: true });
       return out;
     });
     console.log('movement', JSON.stringify(mv));
-    check(mv.walk >= 4.5 && mv.walk <= 5.0, 'walk speed 4.5-5', mv.walk);
-    check(mv.sprint >= 6.7 && mv.sprint <= 7.3, 'sprint ~7', mv.sprint);
+    const bw = mv.walk / mv.mob, bs = mv.sprint / mv.mob;
+    check(bw >= 4.5 && bw <= 5.0, 'walk speed 4.5-5 (before armour mobility ' + mv.mob + ')', bw.toFixed(2));
+    check(bs >= 6.7 && bs <= 7.3, 'sprint ~7 (before armour mobility)', bs.toFixed(2));
     check(mv.ads / mv.walk >= .53 && mv.ads / mv.walk <= .62, 'ADS move 55-60% of walk', (mv.ads / mv.walk).toFixed(2));
     check(mv.walkAccel90 <= .15, 'reaches walk speed fast', mv.walkAccel90);
     check(mv.stop90 <= .12, 'stops fast', mv.stop90);
@@ -163,7 +165,8 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { const g = window.__game, w = g.world; delete w.flyover; w.ui.loadEl.classList.remove('hidden'); });
 
   // ------------------------------------------------------------------ deploy and play the match
-  await p.click('#arena .ar-load [data-a="deploy"]', { timeout: 20000 }).catch(async e => { console.log('deploy click fell back to world.deploy():', e.message.split('\n')[0]); await ev(() => window.__game.world.deploy()); });
+  // the real Deploy button (a DOM click: software-rendered frames are too slow for Playwright's pointer actionability wait)
+  await p.$eval('#arena .ar-load [data-a="deploy"]', b => b.click());
   await live();
   const st = await ev(() => { const g = window.__game, m = g.world.match; return { state: m.state, alive: m.bots.filter(b => b.alive).length, player: m.player.alive, eq: g.save.equipped.slice() }; });
   check(st.state === 'live' && st.alive === 11 && st.player, 'deploy starts the match, everyone spawned', st);

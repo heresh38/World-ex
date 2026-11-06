@@ -44,6 +44,10 @@ fs.mkdirSync(OUT, { recursive: true });
     g.paused = true; g.stationId = 'test';
     // (procedural audio with no output device piles up buffers in headless Chrome: memory grows until the OOM killer)
     try { g.audio.ctx && g.audio.ctx.suspend(); } catch (e) { /* none */ }
+    // hide the page (canvas + HUD): frames are read back from the WebGL drawing buffer, and a visible canvas makes the
+    // headless compositor keep every presented frame of these slow software renders (the browser process balloons)
+    for (const el of document.body.children) el.style.visibility = 'hidden';
+    R.r.domElement.style.display = 'none';
     if (g.clock) { g.clock.set(12.5); g.clock.paused = true; }
     const cv = document.createElement('canvas'); cv.width = W / 2; cv.height = H / 2; const cx = cv.getContext('2d', { willReadFrequently: true });
     const V = g.camera.position.constructor;

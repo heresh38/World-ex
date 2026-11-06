@@ -83,7 +83,7 @@ def materials():
         team_b=bl.mat('ar_team_b', '#ffffff', 0, .4, emit='#ffffff', strength=6),
         far=bl.mat('ar_far', '#2a2a2e', 0, .9), far_lit=bl.mat('ar_far_lit', '#ffcf8a', 0, .5, emit='#ffb860', strength=4),
         far_cool=bl.mat('ar_far_cool', '#cfe0ff', 0, .5, emit='#bcd4ff', strength=3), far_glass=bl.mat('ar_far_glass', '#1c232c', .6, .22),
-        warn=bl.mat('ar_warn', '#ff3020', 0, .4, emit='#ff2a18', strength=9), far_ground=tmat('ar_far_ground', 'ar_floor', '#6e6458', .95),
+        warn=bl.mat('ar_warn', '#ff3020', 0, .4, emit='#ff2a18', strength=9), far_ground=tmat('ar_far_ground', 'ar_floor', '#5c5650', .95),
         tower=tmat('ar_tower', 'ar_conc', '#8a8e98'), tower_dark=tmat('ar_tower_dark', 'ar_conc', '#4a4e58'),
     )
 
@@ -1050,7 +1050,7 @@ def skyline():
     G = 520
     for (xa, za, xb, zb) in ((-G, -G, G, Z0 - .8), (-G, Z1 + .8, G, G), (-G, Z0 - .8, X0 - .8, Z1 + .8), (X1 + .8, Z0 - .8, G, Z1 + .8)):
         P = [(xa, -.02, zb), (xb, -.02, zb), (xb, -.02, za), (xa, -.02, za)]
-        mb.poly(P, [(p[0] / 16, -p[2] / 16) for p in P], m['far_ground'], (1, 1, 1, 1))
+        mb.poly(P, [(p[0] / 29, -p[2] / 29) for p in P], m['far_ground'], (1, 1, 1, 1))
 
     # ---- south: the works' own sawtooth shop, the gabled store with its yard crane, stacks, silos, conveyor
     sawtooth(-70, -8, -96, -58, 12, face='+z')
