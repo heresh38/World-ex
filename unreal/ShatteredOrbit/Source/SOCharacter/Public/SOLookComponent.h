@@ -19,8 +19,10 @@ class SOCHARACTER_API USOLookComponent : public UActorComponent
 public:
 	USOLookComponent();
 
+	/** Degrees per unit of mouse input. The engine already scales raw counts by 0.07 (BaseInput.ini Mouse2D), so
+	 *  1.0 = 0.07 degrees per count at sensitivity 1. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look")
-	float MouseDegreesPerCount = 0.07f;
+	float MouseDegreesPerCount = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look")
 	float GamepadYawRate = 230.0f;

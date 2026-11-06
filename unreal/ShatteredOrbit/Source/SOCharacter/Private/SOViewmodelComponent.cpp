@@ -35,7 +35,7 @@ void USOViewmodelComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	// ADS (smoothstep of the character's aim progress), sway from look, bob from speed.
 	const float A = Character->GetAimProgress();
 	Ads = A * A * (3.0f - 2.0f * A);
-	const FVector2D Look = Character->GetLook() ? Character->GetLook()->GetLastDelta() / 0.07f : FVector2D::ZeroVector; // ~mouse counts
+	const FVector2D Look = Character->GetLook() ? Character->GetLook()->GetLastDelta() / 0.07f : FVector2D::ZeroVector; // ~mouse counts (0.07 deg each)
 	SwayX += ((-Look.X * 0.0006f) - SwayX) * FMath::Min(1.0f, Dt * 10.0f);
 	SwayY += ((Look.Y * 0.0006f) - SwayY) * FMath::Min(1.0f, Dt * 10.0f);
 	const float Speed = Character->GetVelocity().Size2D() / 100.0f; // m/s

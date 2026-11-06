@@ -62,6 +62,8 @@ struct SOCOMBAT_API FSOReloadPose
 
 	bool bMagVisible = true;
 	bool bSpareVisible = false;
+	/** The new magazine is home: from here on the mag sits at rest (the old mag channel no longer applies). */
+	bool bMagSeated = false;
 
 	void Reset() { *this = FSOReloadPose(); }
 };

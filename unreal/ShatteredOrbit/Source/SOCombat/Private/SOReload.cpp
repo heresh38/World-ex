@@ -111,6 +111,7 @@ void FSOReloadPlayer::FireEvents(const FSOReloadSegment& Segment, float T, TArra
 		{
 			Pose.bSpareVisible = false;
 			Pose.bMagVisible = true;
+			Pose.bMagSeated = true;
 			FMemory::Memzero(Pose.Mag, sizeof(Pose.Mag));
 		}
 		OutEvents.Add(Event);
@@ -120,7 +121,7 @@ void FSOReloadPlayer::FireEvents(const FSOReloadSegment& Segment, float T, TArra
 void FSOReloadPlayer::Sample(const FSOReloadSegment& Segment, float T)
 {
 	if (const TArray<FSOKey>* Keys = Segment.Channels.Find(NGun)) { SampleKeys(*Keys, T, 6, Pose.Gun); }
-	if (const TArray<FSOKey>* Keys = Segment.Channels.Find(NMag)) { SampleKeys(*Keys, T, 6, Pose.Mag); }
+	if (const TArray<FSOKey>* Keys = Segment.Channels.Find(NMag); Keys && !Pose.bMagSeated) { SampleKeys(*Keys, T, 6, Pose.Mag); }
 	if (const TArray<FSOKey>* Keys = Segment.Channels.Find(NSpare)) { SampleKeys(*Keys, T, 6, Pose.Spare); }
 	if (const TArray<FSOKey>* Keys = Segment.Channels.Find(NBolt)) { SampleKeys(*Keys, T, 1, &Pose.Bolt); }
 	if (const TArray<FSOKey>* Keys = Segment.Channels.Find(NHand); Keys && Keys->Num() > 0)

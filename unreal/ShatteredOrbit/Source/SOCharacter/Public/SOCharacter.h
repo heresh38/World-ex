@@ -70,14 +70,22 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	FName WeaponSocket = TEXT("hand_R"); // Blender hand.R (dots become underscores on import)
 
-	/** Pitch kick per unit of weapon kick (degrees). */
+	/** Recoil (weapons.js / player.js): each shot adds to a kick that decays RecoilRecovery per second; the view and
+	 *  the rounds tilt up by kick * RecoilRadians and come back down by themselves. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
-	float RecoilPitch = 0.3f;
+	float RecoilRadians = 0.03f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
+	float RecoilRecovery = 6.0f;
+
+	/** Current recoil pitch in degrees (view and aim). */
+	float GetRecoilPitch() const { return FMath::RadiansToDegrees(RecoilKick * RecoilRadians); }
 
 	USOViewmodelComponent* GetViewmodel() const { return Viewmodel; }
 
 	//~ ASOCombatCharacter
 	virtual FVector GetAimOrigin() const override;
+	virtual FVector GetAimDirection() const override;
 	virtual bool CanFireWeapon() const override;
 	virtual bool IsAimingDownSights() const override { return bAiming; }
 	virtual float GetSpreadScale() const override;
@@ -213,6 +221,7 @@ private:
 	float CrouchPressTime = -1.0f;
 	bool bSprintLatched = false;
 	float AimProgress = 0.0f;
+	float RecoilKick = 0.0f;
 	float LastSprintTime = -100.0f;
 	bool bCrouchLatched = false;
 };

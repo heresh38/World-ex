@@ -167,6 +167,18 @@ bool FSORifleTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("empty reload fills"), Rifle->GetMag(), 30);
 	TestEqual(TEXT("reserve after empty reload"), Rifle->GetReserve(), 70);
 
+	// Recoil kicks the aim up and recovers by itself.
+	const FVector Before0 = Player->GetAimDirection();
+	float PeakRecoil = 0.0f;
+	Rifle->StartFire();
+	W.Run(0.25f, [&]() { PeakRecoil = FMath::Max(PeakRecoil, Player->GetRecoilPitch()); });
+	Rifle->StopFire();
+	TestTrue(FString::Printf(TEXT("recoil kicks the aim up (peak %.2f deg)"), PeakRecoil), PeakRecoil > 0.3f);
+	W.Run(0.6f);
+	TestEqual(TEXT("recoil recovered"), Player->GetRecoilPitch(), 0.0f, 0.01f);
+	TestTrue(TEXT("aim back where it was"), Player->GetAimDirection().Equals(Before0, 1e-3f));
+	Rifle->SetAmmo(30, 70);
+
 	// Sprinting blocks the trigger.
 	Player->GetSOMovement()->SetWantsToSprint(true);
 	W.Run(0.5f, [Player]() { Player->AddMovementInput(FVector::ForwardVector, 1.0f); });
@@ -192,6 +204,7 @@ bool FSOReloadTimelineTest::RunTest(const FString& Parameters)
 	Player.Start(MoveTemp(Tactical));
 	float SeatAt = -1.0f, DropAt = -1.0f;
 	float T = 0.0f;
+	int32 FramesOffRestAfterSeat = 0;
 	while (Player.IsActive() && T < 5.0f)
 	{
 		TArray<FSOReloadEvent> Events;
@@ -202,7 +215,16 @@ bool FSOReloadTimelineTest::RunTest(const FString& Parameters)
 			if (E.Name == TEXT("seat")) { SeatAt = T; }
 			if (E.Name == TEXT("drop")) { DropAt = T; }
 		}
+		// Once seated the magazine must stay home and visible (it used to snap back to the dropped pose).
+		if (SeatAt >= 0.0f && Player.IsActive())
+		{
+			const FSOReloadPose& P = Player.GetPose();
+			float Off = 0.0f;
+			for (float V : P.Mag) { Off += FMath::Abs(V); }
+			FramesOffRestAfterSeat += (Off > 1e-4f || !P.bMagVisible) ? 1 : 0;
+		}
 	}
+	TestEqual(TEXT("seated magazine stays at rest"), FramesOffRestAfterSeat, 0);
 	const float K = 2.3f / 1.24f;
 	TestEqual(TEXT("mag drops at 0.55 of the main segment"), DropAt, 0.55f * K, 0.02f);
 	TestEqual(TEXT("seat at 0.88 of the main segment"), SeatAt, 0.88f * K, 0.02f);

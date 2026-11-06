@@ -198,18 +198,25 @@ bool ASOCharacter::CanFireWeapon() const
 	return GetWorld()->GetTimeSeconds() - LastSprintTime >= Ready;
 }
 
+FVector ASOCharacter::GetAimDirection() const
+{
+	// Rounds follow the kicked view, like the browser build (the kick recovers by itself).
+	FRotator Aim = GetBaseAimRotation();
+	Aim.Pitch += GetRecoilPitch();
+	return Aim.Vector();
+}
+
 float ASOCharacter::GetSpreadScale() const
 {
-	float Scale = FMath::Lerp(1.0f, 0.35f, AimProgress);
-	if (bIsCrouched)
+	// weapons.js spreadDir: aiming x0.45, moving x1.35, airborne x1.6.
+	float Scale = FMath::Lerp(1.0f, 0.45f, AimProgress);
+	if (GetVelocity().Size2D() > 50.0f)
 	{
-		Scale *= 0.75f;
+		Scale *= 1.35f;
 	}
-	const float Speed = GetVelocity().Size2D();
-	Scale *= 1.0f + FMath::Clamp(Speed / 860.0f, 0.0f, 1.0f) * 0.8f;
 	if (const USOCharacterMovementComponent* Move = GetSOMovement(); Move && Move->IsFalling())
 	{
-		Scale *= 2.0f;
+		Scale *= 1.6f;
 	}
 	return Scale;
 }
@@ -220,14 +227,10 @@ void ASOCharacter::OnWeaponFired(float Kick)
 	{
 		Viewmodel->Kick(Kick);
 	}
-	if (IsLocallyControlled() && Controller)
-	{
-		FRotator Rotation = Controller->GetControlRotation();
-		const float Scale = bAiming ? 0.7f : 1.0f;
-		Rotation.Pitch = FMath::ClampAngle(FRotator::NormalizeAxis(Rotation.Pitch) + RecoilPitch * Kick * Scale, -88.0f, 88.0f);
-		Rotation.Yaw += FMath::FRandRange(-0.08f, 0.08f) * Kick;
-		Controller->SetControlRotation(Rotation);
-	}
+	// weapons.js: recoil += 0.35 / spread * 0.3 + 0.15 per shot, capped at 1.5.
+	const USOWeaponData* Data = Weapon ? Weapon->GetData() : nullptr;
+	const float Spread = Data ? FMath::Max(Data->Spread, 0.1f) : 1.0f;
+	RecoilKick = FMath::Min(1.5f, RecoilKick + (0.35f / Spread * 0.3f + 0.15f) * (Kick > 0.0f ? 1.0f : 0.0f));
 }
 
 void ASOCharacter::HandleDeath()
@@ -259,6 +262,14 @@ float ASOCharacter::GetTargetEyeOffset() const
 void ASOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// Recoil recovers on its own; the camera shows it as an additive pitch.
+	RecoilKick = FMath::Max(0.0f, RecoilKick - DeltaSeconds * RecoilRecovery);
+	FirstPersonCamera->ClearAdditiveOffset();
+	if (RecoilKick > 0.0f)
+	{
+		FirstPersonCamera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch(), 0.0f, 0.0f)), 0.0f);
+	}
 
 	// Eye height eases across crouch / slide transitions.
 	EyeOffset = FMath::FInterpTo(EyeOffset, GetTargetEyeOffset(), DeltaSeconds, EyeHeightInterpSpeed);
