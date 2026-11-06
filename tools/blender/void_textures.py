@@ -16,7 +16,53 @@ import bpy, math, os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import bl
 from textures import setup
-from weapon_textures import aniso, mr, bake_set
+from textures import bake
+
+SIZE = 512
+
+
+# same helpers as weapon_textures.py (importing that module would re-bake every weapon set)
+def aniso(g, fu, fv, detail=4, rough=.55, seed=0.0):
+    """Seamless noise with different feature counts along U and V (streaks along the gun when fv >> fu)."""
+    tc = g.n('ShaderNodeTexCoord')
+    sep = g.n('ShaderNodeSeparateXYZ'); g.nt.links.new(tc.outputs['UV'], sep.inputs[0])
+    out = []
+    for comp, f in ((sep.outputs[0], fu), (sep.outputs[1], fv)):
+        R = f / (2 * math.pi)
+        ang = g.math('MULTIPLY', comp, 2 * math.pi)
+        out.append(g.math('MULTIPLY', g.math('COSINE', ang), R))
+        out.append(g.math('MULTIPLY', g.math('SINE', ang), R))
+    cmb = g.n('ShaderNodeCombineXYZ')
+    for i in range(3):
+        g.nt.links.new(out[i], cmb.inputs[i])
+    w = g.math('ADD', out[3], seed * 17.31)
+    nd = g.n('ShaderNodeTexNoise', noise_dimensions='4D')
+    g.nt.links.new(cmb.outputs[0], nd.inputs['Vector']); g.nt.links.new(w, nd.inputs['W'])
+    nd.inputs['Scale'].default_value = 1.0; nd.inputs['Detail'].default_value = detail
+    nd.inputs['Roughness'].default_value = rough
+    return nd.outputs['Fac']
+
+
+def mr(g, rough, metal):
+    """Roughness (G) and metalness (B), pre-gamma so the JPG stores them linear."""
+    def lin(v):
+        return g.math('POWER', v, 2.2) if isinstance(v, bpy.types.NodeSocket) else v ** 2.2
+    cmb = g.n('ShaderNodeCombineColor')
+    for i, v in enumerate((1.0, rough, metal)):
+        v = lin(v)
+        if isinstance(v, bpy.types.NodeSocket):
+            g.nt.links.new(v, cmb.inputs[i])
+        else:
+            cmb.inputs[i].default_value = v
+    return cmb.outputs[0]
+
+
+def bake_set(p, name, c, n, m=None, strength=.5):
+    bake(p, name, c, n, strength=strength, size=SIZE)
+    if m:
+        out = bake(p, name + '_mtmp', m, size=SIZE)
+        os.replace(out['c'], os.path.join(bl.TEXTURES, name + '_m.jpg'))
+        print('[texture]', name + '_m.jpg')
 
 
 def main():
