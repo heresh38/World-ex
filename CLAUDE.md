@@ -301,7 +301,8 @@ second render pass with depth cleared. Touch controls live in `src/ui/touch.js` 
 ## Unreal port
 `unreal/ShatteredOrbit` (UE 5.8, C++ modules ShatteredOrbit/SOCore/SOCharacter/SOCombat/SOAI/SOWorld/SOUI) is the
 staged port described in `docs/unreal/MIGRATION_PLAN.md`; build, content scripts, tests and gaps are in its README.
-Blender GLB -> FBX: `tools/blender/export_fbx.py` (`export_unreal.sh` for the project's set). Do not change `src/` for it.
+Blender GLB -> FBX: `tools/blender/export_fbx.py` (`export_unreal.sh` for the project's set; effect cards from
+`fx_kit.py`). Sounds for it: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis). Do not change `src/` for it.
 
 ## Testing
 `node tools/test/e2e.js` (Playwright, global install: `NODE_PATH=$(npm root -g)`), screenshots in `test-out/`.

@@ -81,7 +81,11 @@ protected:
 	void ServerCancelReload();
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastShotFired();
+	void MulticastShotFired(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Dir);
+
+	/** Muzzle flash, tracer, impact (cosmetic trace) and the shot sound, on every machine that renders. */
+	void PlayShotEffects(const FVector& Origin, const FVector& Dir);
+	void PlayEventSound(FName Event);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastReload(bool bStart, bool bEmpty);
@@ -113,6 +117,7 @@ protected:
 	bool bReloading = false;
 	float NextShotTime = 0.0f;
 	float LastShotTime = -100.0f;
+	float LastDryFireTime = -100.0f;
 	int32 ShotsFired = 0;
 	FRandomStream SpreadStream;
 };

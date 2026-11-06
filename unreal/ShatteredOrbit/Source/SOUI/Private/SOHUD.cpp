@@ -8,6 +8,7 @@
 #include "SOCharacter.h"
 #include "SOCombatCharacter.h"
 #include "SOProjectileSubsystem.h"
+#include "SOSound.h"
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
 
@@ -55,6 +56,7 @@ void ASOHUD::OnRoundHit(const FSOProjectile& Round, const FHitResult& Hit, float
 	bLastHitCrit = USOProjectileSubsystem::IsPrecisionBone(Hit.BoneName);
 	const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Hit.GetActor());
 	bLastHitKill = Victim && Victim->IsDead();
+	USOSoundLibrary::Play2D(this, bLastHitKill ? TEXT("hit_kill") : (bLastHitCrit ? TEXT("hit_crit") : TEXT("hit_tick")), 0.55f, 0.02f);
 }
 
 void ASOHUD::DrawBar(float X, float Y, float W, float H, float Fraction, const FLinearColor& Color)
@@ -83,6 +85,21 @@ void ASOHUD::DrawHUD()
 		return;
 	}
 	const ASOWeapon* Weapon = Player->GetWeapon();
+
+	// Damage flash: red when health drops, blue when only the shield takes it.
+	if (LastHealth >= 0.0f && (Player->GetHealth() < LastHealth - 0.5f || Player->GetShield() < LastShield - 0.5f))
+	{
+		LastDamageTime = Now;
+		bLastDamageHealth = Player->GetHealth() < LastHealth - 0.5f;
+	}
+	LastHealth = Player->GetHealth();
+	LastShield = Player->GetShield();
+	const float DamageAge = Now - LastDamageTime;
+	if (DamageAge < 0.45f)
+	{
+		const float A = (1.0f - DamageAge / 0.45f) * (bLastDamageHealth ? 0.28f : 0.16f);
+		DrawRect(bLastDamageHealth ? FLinearColor(0.7f, 0.02f, 0.0f, A) : FLinearColor(0.1f, 0.45f, 1.0f, A), 0.0f, 0.0f, W, H);
+	}
 
 	// Bars over hurt creatures in view (within 40 m).
 	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)

@@ -17,6 +17,7 @@
 #include "SOViewmodelComponent.h"
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
+#include "SOSound.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Engine/SkeletalMesh.h"
 
@@ -233,6 +234,81 @@ void ASOCharacter::OnWeaponFired(float Kick)
 	RecoilKick = FMath::Min(1.5f, RecoilKick + (0.35f / Spread * 0.3f + 0.15f) * (Kick > 0.0f ? 1.0f : 0.0f));
 }
 
+FVector ASOCharacter::ViewmodelToWorld(const FVector& ViewmodelPoint) const
+{
+	// The viewmodel renders with FirstPersonFieldOfView; at the same depth a world point appears at the same screen
+	// position when its lateral offsets are scaled by tan(worldFov / 2) / tan(viewmodelFov / 2).
+	const FTransform Eye = FirstPersonCamera->GetComponentTransform();
+	FVector Local = Eye.InverseTransformPosition(ViewmodelPoint);
+	if (FirstPersonCamera->bEnableFirstPersonFieldOfView)
+	{
+		const float World = FMath::Tan(FMath::DegreesToRadians(FirstPersonCamera->FieldOfView) * 0.5f);
+		const float View = FMath::Tan(FMath::DegreesToRadians(FirstPersonCamera->FirstPersonFieldOfView) * 0.5f);
+		const float K = View > 1e-3f ? World / View : 1.0f;
+		Local.Y *= K;
+		Local.Z *= K;
+	}
+	return Eye.TransformPosition(Local);
+}
+
+bool ASOCharacter::IsFirstPersonView() const
+{
+	return ViewMode == ESOViewMode::FirstPerson && IsLocallyControlled() && IsPlayerControlled();
+}
+
+void ASOCharacter::UpdateFeedbackSounds(float DeltaSeconds)
+{
+	UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+
+	// Footsteps: one per stride on the ground (2D for yourself, positional for others).
+	const USOCharacterMovementComponent* Move = GetSOMovement();
+	const float Speed = GetVelocity().Size2D();
+	if (Move && Move->MovementMode == MOVE_Walking && Speed > 120.0f && !bDead)
+	{
+		StepDistance += Speed * DeltaSeconds;
+		const float Stride = Move->IsSprinting() ? 240.0f : (bIsCrouched ? 140.0f : 185.0f);
+		if (StepDistance >= Stride)
+		{
+			StepDistance = 0.0f;
+			const float Volume = bIsCrouched ? 0.22f : (Move->IsSprinting() ? 0.6f : 0.42f);
+			const FName Step(*FString::Printf(TEXT("footstep_%d"), FMath::RandRange(1, 4)));
+			USOSoundLibrary::PlayFor(this, Step, GetActorLocation() - FVector(0, 0, 85.0f), Volume, ESOSoundRange::Near, 0.08f);
+		}
+	}
+
+	// Hurt / shield cues for the local player.
+	if (IsLocallyControlled() && IsPlayerControlled())
+	{
+		const float Health = GetHealth();
+		const float Shield = GetShield();
+		if (LastHealthSeen >= 0.0f)
+		{
+			if (Health < LastHealthSeen - 0.5f && Now - LastHurtSound > 0.25f)
+			{
+				LastHurtSound = Now;
+				USOSoundLibrary::Play2D(this, TEXT("player_hurt"), 0.8f, 0.06f);
+			}
+			if (LastShieldSeen > 0.0f && Shield <= 0.0f)
+			{
+				USOSoundLibrary::Play2D(this, TEXT("shield_break"), 0.7f, 0.02f);
+			}
+			const bool bRising = Shield > LastShieldSeen + 0.01f && Shield < GetMaxShield();
+			if (bRising && !bShieldRecharging)
+			{
+				USOSoundLibrary::Play2D(this, TEXT("shield_recharge"), 0.45f, 0.0f);
+			}
+			bShieldRecharging = bRising || (bShieldRecharging && Shield < GetMaxShield() && Shield >= LastShieldSeen);
+		}
+		LastHealthSeen = Health;
+		LastShieldSeen = Shield;
+	}
+}
+
 void ASOCharacter::HandleDeath()
 {
 	Super::HandleDeath();
@@ -262,6 +338,8 @@ float ASOCharacter::GetTargetEyeOffset() const
 void ASOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	UpdateFeedbackSounds(DeltaSeconds);
 
 	// Recoil recovers on its own; the camera shows it as an additive pitch.
 	RecoilKick = FMath::Max(0.0f, RecoilKick - DeltaSeconds * RecoilRecovery);

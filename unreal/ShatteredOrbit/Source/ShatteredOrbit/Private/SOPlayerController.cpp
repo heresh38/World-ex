@@ -14,6 +14,9 @@
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Engine/GameViewportClient.h"
+#include "RHI.h"
+#include "UnrealEngine.h"
 
 ASOPlayerController::ASOPlayerController()
 {
@@ -98,13 +101,16 @@ void ASOPlayerController::CaptureStep()
 	switch (CaptureIndex++)
 	{
 	// A screenshot is taken at the end of the frame, so every change of pose gets its own step.
-	case 0: Shot(TEXT("1_hip")); if (Hero) { Hero->HandleAimPressed(); } break;
-	case 1: Shot(TEXT("2_ads")); if (Hero) { Hero->HandleAimReleased(); if (ASOWeapon* W = Hero->GetWeapon()) { W->SetAmmo(0, 120); W->StartReload(); } } break;
-	case 2: Shot(TEXT("3_reload")); break;
-	case 3: if (Hero) { Hero->SetViewMode(ESOViewMode::ThirdPerson); } break;
-	case 4: Shot(TEXT("4_third_person")); SetControlRotation(FRotator(-10.0f, 180.0f, 0.0f)); break;
-	case 5: break;
-	case 6: Shot(TEXT("5_third_person_front")); break;
+	case 0: Shot(TEXT("1_hip")); if (Hero) { Hero->HandleFirePressed(); } break;
+	case 1: Shot(TEXT("2_firing")); break;
+	case 2: Shot(TEXT("3_impacts")); if (Hero) { Hero->HandleFireReleased(); Hero->HandleAimPressed(); } break;
+	case 3: Shot(TEXT("4_ads")); if (Hero) { Hero->HandleAimReleased(); if (ASOWeapon* W = Hero->GetWeapon()) { W->SetAmmo(0, 120); W->StartReload(); } } break;
+	case 4: Shot(TEXT("5_reload")); break;
+	case 5: if (Hero) { Hero->SetViewMode(ESOViewMode::ThirdPerson); } break;
+	case 6: Shot(TEXT("6_third_person")); if (Hero) { Hero->HandleFirePressed(); } break;
+	case 7: Shot(TEXT("7_third_person_firing")); if (Hero) { Hero->HandleFireReleased(); } SetControlRotation(FRotator(-10.0f, 180.0f, 0.0f)); break;
+	case 8: break;
+	case 9: Shot(TEXT("8_third_person_front")); break;
 	default:
 		GetWorldTimerManager().ClearTimer(CaptureTimer);
 		if (bCaptureQuit)
@@ -112,5 +118,73 @@ void ASOPlayerController::CaptureStep()
 			UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 		}
 		break;
+	}
+}
+
+void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)
+{
+	BenchWarmup = 5.0f;
+	BenchLeft = FMath::Max(Seconds, 1.0f);
+	bBenchQuit = bQuitWhenDone != 0;
+	BenchFrame.Reset();
+	BenchGame.Reset();
+	BenchRender.Reset();
+	BenchGpu.Reset();
+	UE_LOG(LogShatteredOrbit, Log, TEXT("Benchmark: 5 s warm-up, then %.0f s"), BenchLeft);
+}
+
+void ASOPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	if (BenchWarmup < 0.0f && BenchLeft <= 0.0f)
+	{
+		return;
+	}
+	if (BenchWarmup > 0.0f)
+	{
+		BenchWarmup -= DeltaTime;
+		return;
+	}
+	BenchFrame.Add(DeltaTime * 1000.0f);
+	BenchGame.Add(FPlatformTime::ToMilliseconds(GGameThreadTime));
+	BenchRender.Add(FPlatformTime::ToMilliseconds(GRenderThreadTime));
+	BenchGpu.Add(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles(0)));
+	BenchLeft -= DeltaTime;
+	if (BenchLeft <= 0.0f)
+	{
+		BenchWarmup = -1.0f;
+		FinishBenchmark();
+	}
+}
+
+void ASOPlayerController::FinishBenchmark()
+{
+	auto Stats = [](TArray<float> V, float& Avg, float& P95)
+	{
+		Avg = P95 = 0.0f;
+		if (V.Num() == 0)
+		{
+			return;
+		}
+		V.Sort();
+		for (float X : V) { Avg += X; }
+		Avg /= V.Num();
+		P95 = V[FMath::Min(V.Num() - 1, FMath::FloorToInt(V.Num() * 0.95f))];
+	};
+	float FA, FP, GA, GP, RA, RP, UA, UP;
+	Stats(BenchFrame, FA, FP);
+	Stats(BenchGame, GA, GP);
+	Stats(BenchRender, RA, RP);
+	Stats(BenchGpu, UA, UP);
+	FVector2D Size(0, 0);
+	if (GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->GetViewportSize(Size);
+	}
+	UE_LOG(LogShatteredOrbit, Log, TEXT("Benchmark %dx%d, %d frames: frame %.2f ms avg (%.0f fps), %.2f ms p95 | game %.2f / %.2f | render %.2f / %.2f | GPU %.2f / %.2f (avg / p95 ms)"),
+		(int32)Size.X, (int32)Size.Y, BenchFrame.Num(), FA, FA > 0.0f ? 1000.0f / FA : 0.0f, FP, GA, GP, RA, RP, UA, UP);
+	if (bBenchQuit)
+	{
+		UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 	}
 }

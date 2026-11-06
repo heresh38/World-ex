@@ -7,7 +7,9 @@
 #include "SOCombatStatics.h"
 #include "SOCombatTypes.h"
 #include "SOGunRigComponent.h"
+#include "SOFxSubsystem.h"
 #include "SOProjectileSubsystem.h"
+#include "SOSound.h"
 #include "SOWeaponData.h"
 
 ASOWeapon::ASOWeapon()
@@ -123,6 +125,13 @@ void ASOWeapon::StartFire()
 	}
 	bTriggerHeld = true;
 	bShotQueued = true;
+	// Click on an empty gun with nothing left to load.
+	UWorld* World = GetWorld();
+	if (World && Mag <= 0 && Reserve <= 0 && World->GetTimeSeconds() - LastDryFireTime > 0.2f)
+	{
+		LastDryFireTime = World->GetTimeSeconds();
+		USOSoundLibrary::PlayFor(GetHolder(), TEXT("dry_fire"), GetActorLocation(), 0.9f, ESOSoundRange::Near);
+	}
 }
 
 void ASOWeapon::StopFire()
@@ -175,10 +184,10 @@ void ASOWeapon::FireShot()
 		Rounds->Fire(Round);
 	}
 	USOCombatStatics::ReportNoise(this, Origin, Holder, 4500.0f);
-	MulticastShotFired();
+	MulticastShotFired(Origin, Dir);
 }
 
-void ASOWeapon::MulticastShotFired_Implementation()
+void ASOWeapon::MulticastShotFired_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Dir)
 {
 	Reload.NotifyShot();
 	if (!HasAuthority())
@@ -189,7 +198,69 @@ void ASOWeapon::MulticastShotFired_Implementation()
 	{
 		Holder->OnWeaponFired(Data ? Data->Kick : 1.0f);
 	}
+	PlayShotEffects(Origin, Dir);
 	OnWeaponEvent.Broadcast(TEXT("fired"));
+}
+
+void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Dir)
+{
+	UWorld* World = GetWorld();
+	ASOCombatCharacter* Holder = GetHolder();
+	if (!World || !Holder || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	const bool bFirstPerson = Holder->IsFirstPersonView() && FirstPersonRig->IsBuilt();
+	FVector Muzzle = Origin + Dir * 60.0f;
+	if (bFirstPerson)
+	{
+		Muzzle = Holder->ViewmodelToWorld(FirstPersonRig->GetMuzzleLocation());
+	}
+	else if (ThirdPersonRig->IsBuilt() && ThirdPersonRig->GetAttachParent())
+	{
+		Muzzle = ThirdPersonRig->GetMuzzleLocation();
+	}
+
+	// Where the round lands (cosmetic: the same ray the server's round takes, without drop).
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOShotFx), true, Holder);
+	Params.AddIgnoredActor(this);
+	FHitResult Hit;
+	const float Reach = 30000.0f;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, Origin, Origin + Dir * Reach, SO_TRACE_BULLET, Params);
+	const FVector End = bHit ? FVector(Hit.ImpactPoint) : Origin + Dir * Reach;
+	const float Speed = (Data ? Data->MuzzleVelocity : 700.0f) * 100.0f;
+
+	if (USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>())
+	{
+		Fx->MuzzleFlash(Muzzle, (End - Muzzle).GetSafeNormal(), bFirstPerson ? 0.7f : 1.0f);
+		Fx->Tracer(Muzzle, End, Speed);
+		if (bHit)
+		{
+			const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Hit.GetActor());
+			const UPrimitiveComponent* Comp = Hit.GetComponent();
+			const bool bDecal = !Victim && Comp && Comp->Mobility != EComponentMobility::Movable;
+			Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, Victim != nullptr, Victim ? Victim->BloodColor : FLinearColor::Black,
+				FVector::Dist(Origin, Hit.ImpactPoint) / Speed, bDecal || (Comp && Comp->GetCollisionObjectType() == ECC_WorldStatic));
+		}
+	}
+	const FName Prefix = Data ? Data->SoundPrefix : FName(TEXT("rifle"));
+	const bool bOwn = Holder->IsLocallyControlled() && Holder->IsPlayerControlled();
+	const FName Sound(*FString::Printf(TEXT("%s_shot_%s"), *Prefix.ToString(), bOwn ? TEXT("fp") : TEXT("world")));
+	USOSoundLibrary::PlayFor(Holder, Sound, Muzzle, bOwn ? 0.85f : 1.0f, ESOSoundRange::Far, 0.035f);
+}
+
+void ASOWeapon::PlayEventSound(FName Event)
+{
+	static const TMap<FName, FName> Sounds = {
+		{ TEXT("reload"), TEXT("reload_start") }, { TEXT("magrelease"), TEXT("mag_release") }, { TEXT("drop"), TEXT("mag_out") },
+		{ TEXT("pouch"), TEXT("pouch") }, { TEXT("magin"), TEXT("mag_in") }, { TEXT("slap"), TEXT("mag_slap") },
+		{ TEXT("rackback"), TEXT("rack_back") }, { TEXT("rackfwd"), TEXT("rack_fwd") } };
+	const FName* Sound = Sounds.Find(Event);
+	ASOCombatCharacter* Holder = GetHolder();
+	if (Sound && Holder)
+	{
+		USOSoundLibrary::PlayFor(Holder, *Sound, Holder->GetActorLocation(), 0.9f, ESOSoundRange::Near, 0.05f);
+	}
 }
 
 // --- Reload ----------------------------------------------------------------------------------
@@ -266,6 +337,7 @@ void ASOWeapon::BeginReloadLocal(bool bEmpty)
 	bReloading = true;
 	Reload.Start(SOReload::BuildMagReload(Data->Archetype, bEmpty, Data->ReloadTime));
 	OnWeaponEvent.Broadcast(TEXT("reload"));
+	PlayEventSound(TEXT("reload"));
 }
 
 void ASOWeapon::GrantAmmo()
@@ -317,7 +389,9 @@ void ASOWeapon::Tick(float DeltaSeconds)
 		{
 			GrantAmmo();
 		}
-		OnWeaponEvent.Broadcast(Event.Name == TEXT("sfx") ? Event.Arg : Event.Name);
+		const FName Name = Event.Name == TEXT("sfx") ? Event.Arg : Event.Name;
+		OnWeaponEvent.Broadcast(Name);
+		PlayEventSound(Name);
 	}
 	if (bFinished)
 	{

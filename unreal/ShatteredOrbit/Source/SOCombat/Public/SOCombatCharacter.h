@@ -35,6 +35,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
 	float StartMaxShield = 0.0f;
 
+	/** Colour of the mist and drops when rounds hit this body. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
+	FLinearColor BloodColor = FLinearColor(0.32f, 0.015f, 0.012f);
+
 	/** Seconds the body stays after death (0 = until removed by someone else). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
 	float CorpseLifeSpan = 0.0f;
@@ -83,6 +87,13 @@ public:
 	/** Attach points for the weapon's first-person and third-person rigs. */
 	virtual USceneComponent* GetFirstPersonWeaponParent() const { return nullptr; }
 	virtual FName GetThirdPersonWeaponSocket() const { return NAME_None; }
+
+	/** World point where a point of the first-person viewmodel appears on screen (the viewmodel renders with its own
+	 *  field of view); effects such as the muzzle flash are placed there. */
+	virtual FVector ViewmodelToWorld(const FVector& ViewmodelPoint) const { return ViewmodelPoint; }
+
+	/** True while the local player sees this character's first-person viewmodel. */
+	virtual bool IsFirstPersonView() const { return false; }
 
 	/** A shot left the muzzle (all machines): recoil, viewmodel kick. */
 	virtual void OnWeaponFired(float Kick) {}

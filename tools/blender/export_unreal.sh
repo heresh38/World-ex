@@ -22,4 +22,9 @@ run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # Weapon: the kinetic assault rifle with its reload parts, and the first-person arms
 run "$M/gun_rifle.glb" "$OUT/Weapons/Rifle" --split-parts
 run "$M/viewmodel_arms.glb" "$OUT/Weapons/Arms"
+# Effect cards (tracers, sparks, smoke, muzzle flash) from tools/blender/fx_kit.py
+[ -f "$M/fx_kit.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/fx_kit.py" >/dev/null 2>&1
+run "$M/fx_kit.glb" "$OUT/FX"
+# Sound effects (tools/audio/sfx_synth.py; needs numpy + scipy)
+python "$ROOT/tools/audio/sfx_synth.py" "$OUT/Audio" | tail -1
 echo "SourceArt written to $OUT"

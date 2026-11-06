@@ -78,5 +78,7 @@ protected:
 	float LastAttackTime = -100.0f;
 	float PendingStrikeTime = -1.0f;
 	int32 StrikesLanded = 0;
+	float LastHealthSeen = -1.0f;
+	float LastHurtSound = -100.0f;
 	TWeakObjectPtr<AActor> AttackTarget;
 };

@@ -92,6 +92,8 @@ public:
 	virtual USceneComponent* GetFirstPersonWeaponParent() const override;
 	virtual FName GetThirdPersonWeaponSocket() const override { return WeaponSocket; }
 	virtual void OnWeaponFired(float Kick) override;
+	virtual FVector ViewmodelToWorld(const FVector& ViewmodelPoint) const override;
+	virtual bool IsFirstPersonView() const override;
 
 	/** Eye height above the feet when standing / crouched (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
@@ -222,6 +224,12 @@ private:
 	bool bSprintLatched = false;
 	float AimProgress = 0.0f;
 	float RecoilKick = 0.0f;
+	float StepDistance = 0.0f;
+	float LastHealthSeen = -1.0f;
+	float LastShieldSeen = -1.0f;
+	float LastHurtSound = -100.0f;
+	bool bShieldRecharging = false;
+	void UpdateFeedbackSounds(float DeltaSeconds);
 	float LastSprintTime = -100.0f;
 	bool bCrouchLatched = false;
 };

@@ -187,6 +187,15 @@ def main():
     fog_comp.set_editor_property("enable_volumetric_fog", True)
     ppv = spawn(unreal.PostProcessVolume, (0, 0, 0), label="PostProcess")
     ppv.set_editor_property("unbound", True)
+    # Stage 4 look: restrained bloom so muzzle flashes and sparks glow, soft vignette, a little grain, firmer AO,
+    # exposure biased slightly up for the bright test range.
+    pps = ppv.get_editor_property("settings")
+    for key, value in (("bloom_intensity", 0.6), ("bloom_threshold", 1.0), ("vignette_intensity", 0.35),
+                       ("film_grain_intensity", 0.06), ("ambient_occlusion_intensity", 0.65),
+                       ("auto_exposure_bias", 0.3), ("scene_fringe_intensity", 0.15)):
+        pps.set_editor_property("override_" + key, True)
+        pps.set_editor_property(key, value)
+    ppv.set_editor_property("settings", pps)
     for a in (sun, sky, fog, ppv):
         a.set_folder_path("Lighting")
 

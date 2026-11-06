@@ -47,6 +47,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	ESOWeaponClass WeaponClass = ESOWeaponClass::Kinetic;
 
+	/** Sounds: <prefix>_shot_fp (own, 2D) and <prefix>_shot_world (everyone else, 3D). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName SoundPrefix = TEXT("rifle");
+
 	// --- Stats (data.js units: damage per round, rpm, m, m/s) ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	float Damage = 19.0f;

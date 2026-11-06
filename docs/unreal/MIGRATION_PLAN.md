@@ -1,7 +1,7 @@
 # Unreal Engine 5 migration — audit and plan
 
-Status: **Stage 3 (first playable combat) built** on top of stage 2 — `unreal/ShatteredOrbit` compiles with UE 5.8 and
-its 21 automation tests pass (see its README). The game is **Shattered Orbit**. The Three.js game in this repository stays intact and playable; the Unreal
+Status: **Stage 4 (graphics + feedback) built** on top of stages 2-3 — `unreal/ShatteredOrbit` compiles with UE 5.8 and
+its 24 automation tests pass (see its README). The game is **Shattered Orbit**. The Three.js game in this repository stays intact and playable; the Unreal
 project is built beside it in `unreal/ShatteredOrbit` and takes over feature by feature. Nothing is deleted until the Unreal build
 has reached parity for that feature.
 
@@ -94,8 +94,12 @@ single-player in "listen server" mode.
    melee), GAS health / shield / damage, death and respawn, a canvas HUD. Pipeline: `tools/blender/export_unreal.sh` +
    `Content/Python/import_assets.py`. Deferred: StateTree (when the roster grows), sound + VFX (stage 4), left-hand IK
    on the third-person body. *Owner check:* shoot, reload, kill, die, respawn.
-4. **Graphics + asset pipeline** — `export_fbx.py`, 2K/4K PBR bakes, Lumen/Nanite/VSM, Niagara muzzle/impact/blood
-   sets, post-process volume presets. *Owner check:* profile with `stat unit` / Unreal Insights at 1440p.
+4. **Graphics + asset pipeline** (done, with substitutions) — `export_fbx.py` (cm-native skeletal files, reload parts,
+   materials.json), Lumen/VSM/TSR on, post-process preset, combat effects (tracers, muzzle flash + light, sparks,
+   dust, creature blood, bullet-hole decals) as a C++ instanced-card particle system instead of Niagara (Niagara cannot
+   be authored headless), all sounds synthesised offline by `tools/audio/sfx_synth.py` (instead of MetaSounds),
+   `SOBenchmark` (1440p on an RTX 4070 Ti: 98 fps). Still open: 2K/4K texture re-bakes, Nanite for the big kits.
+   *Owner check:* profile with `stat unit` / Unreal Insights at 1440p.
 5. **Looter systems** — data assets for all archetypes, perks, rarity, inventory UI, VANTHOS reward pool.
 6. **World + missions** — VANTHOS operation level, the main city hub, one frontier world.
 7. **Advanced** — remaining enemies, bosses, vehicles, streaming, dedicated-server build target.

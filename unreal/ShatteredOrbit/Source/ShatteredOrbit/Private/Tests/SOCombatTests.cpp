@@ -17,6 +17,9 @@
 #include "SOEnemy.h"
 #include "SOEnemyAIController.h"
 #include "SOEnemySpawner.h"
+#include "SOFxSubsystem.h"
+#include "SOSound.h"
+#include "Sound/SoundBase.h"
 #include "SOGunRigComponent.h"
 #include "SOLocomotionAnimInstance.h"
 #include "SOProjectileSubsystem.h"
@@ -416,6 +419,83 @@ bool FSOCombatContentTest::RunTest(const FString& Parameters)
 		TEXT("/Game/Characters/Stalker/Anims/A_Stalker_Attack.A_Stalker_Attack") })
 	{
 		TestNotNull(Clip, LoadObject<UAnimSequenceBase>(nullptr, Clip));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOFxLifetimeTest, "ShatteredOrbit.FX.ImpactsSpawnAndExpire", SOTest::Flags)
+bool FSOFxLifetimeTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	USOFxSubsystem* Fx = W.World->GetSubsystem<USOFxSubsystem>();
+	if (!TestNotNull(TEXT("fx subsystem"), Fx))
+	{
+		return false;
+	}
+	Fx->Impact(FVector(500, 0, 100), FVector(-1, 0, 0), false, FLinearColor::Black);
+	Fx->Impact(FVector(500, 50, 100), FVector(-1, 0, 0), true, FLinearColor(0.3f, 0.0f, 0.5f));
+	Fx->MuzzleFlash(FVector(0, 0, 150), FVector::ForwardVector);
+	Fx->Tracer(FVector(0, 0, 150), FVector(3000, 0, 150), 71500.0f);
+	TestTrue(FString::Printf(TEXT("particles spawned (%d)"), Fx->GetNumParticles()), Fx->GetNumParticles() > 20);
+	W.Run(0.05f);
+	TestEqual(TEXT("one bullet hole (none on flesh)"), Fx->GetNumDecals(), 1);
+	W.Run(2.0f);
+	TestEqual(TEXT("all particles expired"), Fx->GetNumParticles(), 0);
+	TestEqual(TEXT("decal stays"), Fx->GetNumDecals(), 1);
+
+	// Delayed impact (flight time) and the decal cap.
+	Fx->Impact(FVector(800, 0, 100), FVector(-1, 0, 0), false, FLinearColor::Black, 0.2f);
+	W.Run(0.1f);
+	TestEqual(TEXT("impact waits for the round"), Fx->GetNumImpactsPlayed(), 2);
+	W.Run(0.15f);
+	TestEqual(TEXT("then plays"), Fx->GetNumImpactsPlayed(), 3);
+	for (int32 i = 0; i < USOFxSubsystem::MaxDecals + 10; ++i)
+	{
+		Fx->Impact(FVector(900, i * 10.0f, 100), FVector(-1, 0, 0), false, FLinearColor::Black);
+	}
+	W.Run(0.05f);
+	TestEqual(TEXT("decals capped"), Fx->GetNumDecals(), USOFxSubsystem::MaxDecals);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOShotFxTest, "ShatteredOrbit.FX.ShotsShowWhereTheyLand", SOTest::Flags)
+bool FSOShotFxTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-4000, -4000, -100), FVector(4000, 4000, 0));
+	W.AddBox(FVector(1500, -500, 0), FVector(1600, 500, 400)); // a wall 15 m ahead
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	W.Run(0.3f);
+	USOFxSubsystem* Fx = W.World->GetSubsystem<USOFxSubsystem>();
+	ASOWeapon* Rifle = Player->GetWeapon();
+	if (!TestNotNull(TEXT("rifle"), Rifle))
+	{
+		return false;
+	}
+	Rifle->StartFire();
+	W.Run(0.35f);
+	Rifle->StopFire();
+	W.Run(0.1f);
+	TestTrue(FString::Printf(TEXT("impacts played on the wall (%d for %d shots)"), Fx->GetNumImpactsPlayed(), Rifle->GetShotsFired()),
+		Fx->GetNumImpactsPlayed() >= Rifle->GetShotsFired() && Rifle->GetShotsFired() >= 3);
+	TestTrue(FString::Printf(TEXT("bullet holes on the wall (%d)"), Fx->GetNumDecals()), Fx->GetNumDecals() >= 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSoundsTest, "ShatteredOrbit.Audio.SoundsImported", SOTest::Flags)
+bool FSOSoundsTest::RunTest(const FString& Parameters)
+{
+	for (const TCHAR* Name : { TEXT("rifle_shot_fp"), TEXT("rifle_shot_world"), TEXT("dry_fire"), TEXT("reload_start"), TEXT("mag_release"),
+		TEXT("mag_out"), TEXT("pouch"), TEXT("mag_in"), TEXT("mag_slap"), TEXT("rack_back"), TEXT("rack_fwd"), TEXT("impact_hard"),
+		TEXT("impact_flesh"), TEXT("stalker_attack"), TEXT("stalker_hurt"), TEXT("stalker_death"), TEXT("player_hurt"),
+		TEXT("shield_break"), TEXT("shield_recharge"), TEXT("hit_tick"), TEXT("hit_crit"), TEXT("hit_kill"), TEXT("footstep_1"),
+		TEXT("footstep_4") })
+	{
+		const USoundBase* Sound = USOSoundLibrary::Find(Name);
+		if (TestNotNull(*FString::Printf(TEXT("S_%s (run import_assets.py)"), Name), Sound))
+		{
+			TestTrue(*FString::Printf(TEXT("%s has a duration"), Name), Sound->GetDuration() > 0.03f);
+		}
 	}
 	return true;
 }

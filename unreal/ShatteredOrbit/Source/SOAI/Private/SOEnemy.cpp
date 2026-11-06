@@ -9,6 +9,7 @@
 #include "SOCombatStatics.h"
 #include "SOEnemyAIController.h"
 #include "SOLocomotionAnimInstance.h"
+#include "SOSound.h"
 
 ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -18,6 +19,7 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	StartMaxHealth = 140.0f;
 	StartMaxShield = 0.0f;
 	CorpseLifeSpan = 6.0f;
+	BloodColor = FLinearColor::FromSRGBColor(FColor(0x5a, 0x2a, 0x8a)); // enemies.js stalker blood
 
 	GetCapsuleComponent()->InitCapsuleSize(38.0f, 92.0f);
 	USkeletalMeshComponent* Body = GetMesh();
@@ -128,6 +130,7 @@ bool ASOEnemy::TryAttack(AActor* Target)
 
 void ASOEnemy::MulticastAttack_Implementation()
 {
+	USOSoundLibrary::PlayAt(this, TEXT("stalker_attack"), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.08f, ESOSoundRange::Mid);
 	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
 		const float Length = Anim->GetAttackLength();
@@ -138,6 +141,16 @@ void ASOEnemy::MulticastAttack_Implementation()
 void ASOEnemy::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (UWorld* W = GetWorld(); W && !bDead)
+	{
+		const float Health = GetHealth();
+		if (LastHealthSeen >= 0.0f && Health < LastHealthSeen - 0.5f && W->GetTimeSeconds() - LastHurtSound > 0.35f)
+		{
+			LastHurtSound = W->GetTimeSeconds();
+			USOSoundLibrary::PlayAt(this, TEXT("stalker_hurt"), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid);
+		}
+		LastHealthSeen = Health;
+	}
 	UWorld* World = GetWorld();
 	if (!HasAuthority() || !World || PendingStrikeTime < 0.0f || World->GetTimeSeconds() < PendingStrikeTime)
 	{
@@ -164,6 +177,7 @@ void ASOEnemy::Tick(float DeltaSeconds)
 void ASOEnemy::HandleDeath()
 {
 	Super::HandleDeath();
+	USOSoundLibrary::PlayAt(this, TEXT("stalker_death"), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
 	PendingStrikeTime = -1.0f;
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	if (AController* AI = GetController())

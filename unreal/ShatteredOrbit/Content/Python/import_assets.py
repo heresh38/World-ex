@@ -7,6 +7,8 @@ Creates:
   /Game/Characters/Stalker/SK_Stalker      (+ Anims/A_Stalker_<Clip>, hx_* flesh textures from assets/textures)
   /Game/Weapons/Rifle/SM_Rifle, SM_Rifle_mag, SM_Rifle_bolt, DA_Rifle (USOWeaponData with data.js stats)
   /Game/Weapons/Arms/SM_ArmLeft, SM_ArmRight
+  /Game/FX/SM_FX_Quad, SM_FX_Streak, SM_FX_Star, M_SOFx (+ MI_FxGlow/Streak/Flash/Smoke), M_SOBulletHole
+  /Game/Audio/S_* (tools/audio/sfx_synth.py)
 
 Headless:
     UnrealEditor-Cmd.exe <path>/ShatteredOrbit.uproject -run=pythonscript -script="<path>/Content/Python/import_assets.py" -unattended -nullrhi
@@ -442,6 +444,169 @@ def rifle(master):
     log(f"DA_Rifle: {len(parts)} parts, muzzle {sockets['muzzle']['loc']}")
 
 
+# ---------------------------------------------------------------- effects + audio (stage 4)
+
+FX_SHAPE_HLSL = """
+float2 d = UV - 0.5;
+float dotS = saturate(1.0 - length(d) * 2.0);
+dotS = dotS * dotS * (3.0 - 2.0 * dotS);
+float across = saturate(1.0 - abs(d.y) * 2.0);
+across *= across;
+float head = UV.x * saturate((1.0 - UV.x) * 6.0);
+float root = saturate(1.0 - UV.x) * saturate(UV.x * 8.0 + 0.25);
+float s = Mode < 0.5 ? dotS : (Mode < 1.5 ? across * head : across * root);
+return pow(s, Softness);
+"""
+
+DECAL_HLSL = """
+float r = length(UV - 0.5) * 2.0;
+float hole = 1.0 - smoothstep(0.12, 0.2, r);
+float burn = (1.0 - smoothstep(0.2, 0.95, r)) * 0.55;
+return saturate(hole + burn);
+"""
+
+
+def fx_master():
+    """Unlit effect material: colour + intensity from per-instance custom data (0..3), shape from UVs (Mode param:
+    0 soft dot, 1 streak bright at the head (U=1), 2 streak bright at the root). Additive by default; instances
+    switch to translucent for smoke and blood."""
+    path = "/Game/FX/M_SOFx"
+    ensure_dir("/Game/FX")
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_SOFx", "/Game/FX", unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("used_with_instanced_static_meshes", True)
+
+    def custom_data(index, default, x, y):
+        e = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, x, y)
+        e.set_editor_property("data_index", index)
+        e.set_editor_property("const_default_value", default)
+        return e
+
+    def scalar(name, value, x, y):
+        e = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x, y)
+        e.set_editor_property("parameter_name", name)
+        e.set_editor_property("default_value", value)
+        return e
+
+    r, g, b, i = (custom_data(k, 1.0, -900, -200 + k * 110) for k in range(4))
+    rgb = mel.create_material_expression(mat, unreal.MaterialExpressionAppendVector, -650, -150)
+    rg = mel.create_material_expression(mat, unreal.MaterialExpressionAppendVector, -760, -180)
+    mel.connect_material_expressions(r, "", rg, "A")
+    mel.connect_material_expressions(g, "", rg, "B")
+    mel.connect_material_expressions(rg, "", rgb, "A")
+    mel.connect_material_expressions(b, "", rgb, "B")
+
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -900, 300)
+    shape = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -650, 300)
+    shape.set_editor_property("code", FX_SHAPE_HLSL)
+    shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    inputs = []
+    for name in ("UV", "Mode", "Softness"):
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", name)
+        inputs.append(ci)
+    shape.set_editor_property("inputs", inputs)
+    mel.connect_material_expressions(uv, "", shape, "UV")
+    mel.connect_material_expressions(scalar("Mode", 0.0, -900, 420), "", shape, "Mode")
+    mel.connect_material_expressions(scalar("Softness", 1.0, -900, 500), "", shape, "Softness")
+
+    amount = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -400, 150)
+    mel.connect_material_expressions(shape, "", amount, "A")
+    mel.connect_material_expressions(i, "", amount, "B")
+    emissive = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -200, -50)
+    mel.connect_material_expressions(rgb, "", emissive, "A")
+    mel.connect_material_expressions(amount, "", emissive, "B")
+    mel.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    opacity = mel.create_material_expression(mat, unreal.MaterialExpressionSaturate, -200, 150)
+    mel.connect_material_expressions(amount, "", opacity, "")
+    mel.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+
+    def instance(name, mode, softness, translucent):
+        ipath = f"/Game/FX/{name}"
+        mi = eal.load_asset(ipath) if eal.does_asset_exist(ipath) else tools.create_asset(
+            name, "/Game/FX", unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+        mel.set_material_instance_parent(mi, mat)
+        mel.set_material_instance_scalar_parameter_value(mi, "Mode", mode)
+        mel.set_material_instance_scalar_parameter_value(mi, "Softness", softness)
+        if translucent:
+            o = mi.get_editor_property("base_property_overrides")
+            o.set_editor_property("override_blend_mode", True)
+            o.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+            mi.set_editor_property("base_property_overrides", o)
+        mel.update_material_instance(mi)
+        eal.save_loaded_asset(mi, only_if_is_dirty=False)
+
+    instance("MI_FxGlow", 0.0, 1.5, False)
+    instance("MI_FxStreak", 1.0, 1.0, False)
+    instance("MI_FxFlash", 2.0, 0.8, False)
+    instance("MI_FxSmoke", 0.0, 1.2, True)
+    log("effect materials ready")
+
+
+def decal_material():
+    path = "/Game/FX/M_SOBulletHole"
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_SOBulletHole", "/Game/FX", unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -700, 0)
+    shape = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -450, 0)
+    shape.set_editor_property("code", DECAL_HLSL)
+    shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    ci = unreal.CustomInput()
+    ci.set_editor_property("input_name", "UV")
+    shape.set_editor_property("inputs", [ci])
+    mel.connect_material_expressions(uv, "", shape, "UV")
+    colour = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -450, -150)
+    colour.set_editor_property("constant", unreal.LinearColor(0.02, 0.018, 0.016, 1.0))
+    rough = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, -450, 150)
+    rough.set_editor_property("r", 0.95)
+    mel.connect_material_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(shape, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+
+
+def fx_meshes():
+    src = os.path.join(SOURCE, "FX")
+    for name in ("FX_Quad", "FX_Streak", "FX_Star"):
+        mesh = next(o for o in import_fbx(os.path.join(src, name + ".fbx"), "/Game/FX", "SM_" + name, False) if isinstance(o, unreal.StaticMesh))
+        eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+    log("effect meshes ready")
+
+
+def audio():
+    src = os.path.join(SOURCE, "Audio")
+    ensure_dir("/Game/Audio")
+    count = 0
+    for f in sorted(os.listdir(src)):
+        if not f.endswith(".wav"):
+            continue
+        name = "S_" + os.path.splitext(f)[0]
+        task = unreal.AssetImportTask()
+        task.set_editor_property("filename", os.path.join(src, f))
+        task.set_editor_property("destination_path", "/Game/Audio")
+        task.set_editor_property("destination_name", name)
+        task.set_editor_property("automated", True)
+        task.set_editor_property("replace_existing", True)
+        task.set_editor_property("save", True)
+        tools.import_asset_tasks([task])
+        count += 1
+    log(f"{count} sounds imported")
+
+
 def main():
     if not os.path.isdir(SOURCE):
         raise RuntimeError(f"{SOURCE} is missing: run bash tools/blender/export_unreal.sh first")
@@ -454,6 +619,10 @@ def main():
     character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
               master, stalker_extra, flesh=True)
     rifle(master)
+    fx_master()
+    decal_material()
+    fx_meshes()
+    audio()
     log("done")
 
 

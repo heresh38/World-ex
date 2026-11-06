@@ -31,6 +31,10 @@ private:
 	void DrawBar(float X, float Y, float W, float H, float Fraction, const FLinearColor& Color);
 
 	float LastHitTime = -100.0f;
+	float LastDamageTime = -100.0f;
+	bool bLastDamageHealth = false;
+	float LastHealth = -1.0f;
+	float LastShield = -1.0f;
 	bool bLastHitCrit = false;
 	bool bLastHitKill = false;
 	FDelegateHandle HitHandle;

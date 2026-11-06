@@ -1,4 +1,4 @@
-using UnrealBuildTool;
+﻿using UnrealBuildTool;
 
 public class ShatteredOrbit : ModuleRules
 {
@@ -6,7 +6,7 @@ public class ShatteredOrbit : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"GameplayAbilities", "GameplayTags", "AIModule", "NavigationSystem",
+			"GameplayAbilities", "GameplayTags", "AIModule", "NavigationSystem", "RHI", "RenderCore",
 			"SOCore", "SOCharacter", "SOCombat", "SOWorld", "SOUI", "SOAI" });
 	}
 }

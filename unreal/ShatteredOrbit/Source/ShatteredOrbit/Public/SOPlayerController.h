@@ -29,12 +29,24 @@ public:
 	UFUNCTION(Exec)
 	void SOCaptureSeries(int32 bQuitWhenDone = 0);
 
+	/** Dev: after a warm-up, measures frame / game / render / GPU times for Seconds and logs avg + 95th percentile.
+	 *  e.g. -game -windowed -ResX=2560 -ResY=1440 -ExecCmds="SOBenchmark 15 1" */
+	UFUNCTION(Exec)
+	void SOBenchmark(float Seconds = 15.0f, int32 bQuitWhenDone = 0);
+
+	virtual void PlayerTick(float DeltaTime) override;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
 	void CaptureStep();
 	int32 CaptureIndex = 0;
+	float BenchWarmup = -1.0f;
+	float BenchLeft = 0.0f;
+	bool bBenchQuit = false;
+	TArray<float> BenchFrame, BenchGame, BenchRender, BenchGpu;
+	void FinishBenchmark();
 	bool bCaptureQuit = false;
 	FTimerHandle CaptureTimer;
 };
