@@ -83,16 +83,16 @@ export class Viewmodel {
     if (!this.active) return;
     this.rig.position.copy(cam.position); this.rig.quaternion.copy(cam.quaternion);
     this.scene.environment = g.scene.environment;
-    // aim-down-sights blend
+    // aim-down-sights blend: follows the player's per-class ADS progress (player.js adsK, eased)
     const wpn = g.weapons, P = wpn.rl.pose();
-    const adsT = p.aiming && !(wpn.reloading > 0) ? 1 : 0;
-    this.ads += (adsT - this.ads) * Math.min(1, dt * 14);
+    const ak = p.adsK || 0;
+    this.ads = ak * ak * (3 - 2 * ak);
     // sway from look input, bob from movement
     const hs = Math.hypot(p.vel.x, p.vel.z);
     this.swayX += ((-input.mx * .0006) - this.swayX) * Math.min(1, dt * 10);
     this.swayY += ((input.my * .0006) - this.swayY) * Math.min(1, dt * 10);
     if (p.grounded) this.bobT += dt * hs * 1.15;
-    const bobA = Math.min(1, hs / 7) * (1 - this.ads * .85) * (p.running ? 1.6 : 1);
+    const bobA = Math.min(1, hs / 7) * (1 - this.ads * .92) * (p.running ? 1.6 : 1);
     const bx = Math.sin(this.bobT) * .012 * bobA, by = -Math.abs(Math.cos(this.bobT)) * .014 * bobA;
     this.kickZ *= Math.pow(.0005, dt); this.kickR *= Math.pow(.0008, dt);
     // reload / cycling pose (reload.js): holder offsets, the off hand and the gun's moving parts
@@ -103,17 +103,20 @@ export class Viewmodel {
     // weapon swap lower/raise
     this.lower = Math.max(0, this.lower - dt * 4);
     if (wpn.swap > 0) this.lower = Math.max(this.lower, wpn.swap / .35);
-    const run = p.running && !p.aiming ? 1 : 0;
-    this.runT = (this.runT || 0) + (run - (this.runT || 0)) * Math.min(1, dt * 8);
+    // sprint pose: down while sprinting, back up over the class sprint-to-fire delay (player.js runK / readyT);
+    // the tactical sprint carries the gun high and away (tacK)
+    const rk = Math.min(1, p.runK || 0), tk = p.tacK || 0;
+    this.runT = rk * rk * (3 - 2 * rk) * (1 - tk);
+    const dip = (p.dip || 0) * .35;
     // position: hip vs ADS (sight on the camera axis)
     const adsPos = _v.set(this.sight.x, -this.sight.y, -.3 + this.sight.z);
     const pos = HIP.clone().lerp(adsPos, this.ads);
-    pos.x += bx + this.swayX * (1 - this.ads * .7) + this.runT * .05;
-    pos.y += by + this.swayY * (1 - this.ads * .7) - this.lower * .35 - this.runT * .04;
+    pos.x += bx + this.swayX * (1 - this.ads * .8) + this.runT * .05 + tk * .07;
+    pos.y += by + this.swayY * (1 - this.ads * .8) - this.lower * .35 - this.runT * .04 + tk * .05 - dip;
     pos.z += this.kickZ * (1 - this.ads * .5);
     pos.x += G[0]; pos.y += G[1]; pos.z += G[2];
     this.holder.position.copy(pos);
-    _e.set(this.kickR * (1 - this.ads * .6) + G[3] - this.lower * .6 - this.runT * .35, this.swayX * 2 + this.runT * .6 + G[4], G[5] + this.runT * .25);
+    _e.set(this.kickR * (1 - this.ads * .6) + G[3] - this.lower * .6 - this.runT * .35 + tk * .95, this.swayX * 2 * (1 - this.ads * .5) + this.runT * .6 + G[4] + tk * .35, G[5] + this.runT * .25 + tk * .55);
     this.holder.quaternion.setFromEuler(_e);
   }
 }

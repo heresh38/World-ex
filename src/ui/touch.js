@@ -11,6 +11,7 @@ const ICON = {
   view: '<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>',
   menu: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2"/></svg>',
   sprint: '<svg viewBox="0 0 24 24"><path d="M13 3l-6 10h5l-1 8 6-10h-5z" fill="currentColor"/></svg>',
+  crouch: '<svg viewBox="0 0 24 24"><path d="M12 13l7-7M12 13L5 6M4 18h16" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>',
 };
 
 const cap = (el, id) => { try { el.setPointerCapture(id); } catch (e) { /* synthetic or ended pointer */ } };
@@ -39,6 +40,7 @@ export class TouchControls {
         <button class="tb reload" data-b="reload" aria-label="Reload">${ICON.reload}</button>
         <button class="tb use" data-b="use" aria-label="Interact">${ICON.use}</button>
         <button class="tb sprint" data-b="sprint" aria-label="Sprint">${ICON.sprint}</button>
+        <button class="tb crouch" data-b="crouch" aria-label="Crouch / slide" style="width:48px;height:48px;right:76px;bottom:142px">${ICON.crouch}</button>
       </div>
       <div class="t-top">
         <button class="ts" data-b="swap" aria-label="Switch weapon">${ICON.swap}</button>
@@ -126,8 +128,15 @@ export class TouchControls {
         case 'use': key('KeyE', down); break;
         case 'sprint':
           if (g.player && g.player.mode === 'car') key('ShiftLeft', down);
-          else if (down) { this.sprintLatch = !this.sprintLatch; inp.axisRun = this.sprintLatch; }
+          else if (down) {
+            // double tap while sprinting: tactical sprint (player.js); otherwise the latch toggles
+            const now = performance.now();
+            if (this.sprintLatch && now - (this.sprintTap || 0) < 350) inp.tacHit = true;
+            else { this.sprintLatch = !this.sprintLatch; inp.axisRun = this.sprintLatch; }
+            this.sprintTap = now;
+          }
           break;
+        case 'crouch': key('KeyC', down); break;
         case 'swap': if (down) inp.wheel += 1; break;
         case 'car': key('KeyV', down); break;
         case 'view': key('KeyT', down); break;
@@ -154,6 +163,8 @@ export class TouchControls {
     cls.toggle('aiming', !!this.input.rmb);
     cls.toggle('sprinting', !!this.sprintLatch);
     cls.toggle('cars', !!(g.world && g.world.allowCars));
+    const cb = this.crouchBtn || (this.crouchBtn = this.el.querySelector('.crouch'));
+    if (cb && (cb._car !== car)) { cb._car = car; cb.style.display = car ? 'none' : ''; }
     if (!armed && this.input.rmb) this.input.rmb = false;
   }
 }

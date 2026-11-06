@@ -1,10 +1,18 @@
-// Player controller: WASD walk, Shift sprint, Space jump (with coyote time and a jump buffer), C crouch / slide
-// while sprinting, automatic mantling onto ledges up to ~2.4 m, sitting on seats, mouse look, and a third-person
-// camera that never clips walls.
+// Player controller: WASD walk, Shift sprint (double-tap for a short tactical sprint), Space jump (coyote time and a jump
+// buffer), C crouch / slide while sprinting, automatic mantling onto ledges up to ~2.4 m, sitting on seats, mouse look,
+// and a third-person camera that never clips walls.
+// Movement feel (fast modern military shooter): instant ground acceleration and stops, little air control, a slide that
+// carries momentum (jump cancels it, a cooldown stops chaining), ADS-in time and sprint-to-fire delay per weapon class
+// (data.js weaponHandling) that the viewmodel shows; the values are listed in CLAUDE.md.
 import * as THREE from 'three';
 import { Avatar } from './avatar.js';
+import { weaponHandling, TAC_SPRINT_OUT } from './data.js';
 
-const WALK = 4.4, RUN = 8.6, AIMWALK = 3.0, CROUCH = 2.4, JUMP = 6.1, GRAV = 19;
+const WALK = 4.8, RUN = 7.0, TAC = 8.6, AIMWALK = WALK * .58, CROUCH = 2.7, JUMP = 6.1, GRAV = 19;
+const ACC = 55, DEC = 70, RUN_ACC = 24, AIR_ACC = 6;                      // m/s^2: ground start / stop, sprint build-up, air
+const SLIDE_MIN = 6.0, SLIDE_BOOST = 2.4, SLIDE_MAX = 11, SLIDE_T = .9, SLIDE_FRIC = 1.35, SLIDE_CD = 1.0;
+const TAC_TIME = 3.2, TAC_CD = 4.5, DOUBLE_TAP = .3;
+export const MOVE = { WALK, RUN, TAC, AIMWALK, CROUCH, JUMP, GRAV, ACC, DEC, AIR_ACC, SLIDE_BOOST, SLIDE_T, SLIDE_CD, TAC_TIME, TAC_CD };
 const R = .38, H = 1.8, HC = 1.15;
 const COYOTE = .12, BUFFER = .15, CLIMB_MIN = .5, CLIMB_MAX = 2.45;
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _d = new THREE.Vector3(), _p = new THREE.Vector3(), _t = new THREE.Vector3();
@@ -23,6 +31,7 @@ export class Player {
     this.shake = 0; this.recoil = 0;
     this.lockYawToCam = 0;
     this.crouch = false; this.slideT = 0; this.coyote = 0; this.jumpBuf = 0; this.climb = null; this.dip = 0; this.eyeDrop = 0; this.seat = null;
+    this.slideCd = 0; this.tacT = 0; this.tacCd = 0; this.tacK = 0; this.readyT = 0; this.readyMax = 0; this.runK = 0; this.adsK = 0; this.fovKick = 0; this.clock = 0;
   }
 
   setBody(body) {
@@ -50,6 +59,7 @@ export class Player {
     this.pos.copy(p); this.vel.set(0, 0, 0); this.yaw = yaw; this.camYaw = yaw + Math.PI; this.camPitch = -.12;
     this.mode = 'foot'; this.dead = false; this.health = this.maxHealth; this.shield = this.maxShield;
     this.crouch = false; this.slideT = 0; this.climb = null; this.seat = null; this.dip = 0; this.eyeDrop = 0;
+    this.slideCd = 0; this.tacT = 0; this.tacCd = 0; this.readyT = 0; this.runK = 0; this.adsK = 0;
     if (this.avatar.rag) { this.avatar.rag = null; this.avatar.play('IdleRelaxed', 0); this.g.weapons && this.g.weapons.refreshModel(); }
     this.avatar.root.position.copy(p); this.avatar.root.rotation.set(0, yaw, 0);
     this.camCur = this.camDist;
@@ -144,6 +154,8 @@ export class Player {
 
   update(dt, input, world) {
     const av = this.avatar;
+    this.clock += dt;
+    if (this.mode !== 'foot' || this.dead) { this.adsK = 0; this.runK = 0; this.readyT = 0; this.tacT = 0; this.aiming = false; this.running = false; }
     if (this.mode === 'seat' || this.mode === 'car') { av.update(dt); return; }
     if (this.dead) { av.update(dt); return; }
     const k = c => input.key(c);
@@ -168,27 +180,51 @@ export class Player {
     if (input.axisX || input.axisY) { mx = input.axisX; mz = input.axisY; }
     if (!input.enabled) mx = mz = 0;
     const moving = mx || mz;
+    const W = this.g.weapons, gun = this.armed && W ? W.equipped() : null, hd = weaponHandling(gun ? gun.arch : null);
     this.aiming = this.armed && input.enabled && input.rmb;
-    this.running = moving && (k('ShiftLeft') || input.axisRun) && !this.aiming && mz > 0 && !this.crouch || moving && k('ShiftRight');
-    if (this.g.weapons && this.g.weapons.firingRecently()) this.running = false;
+    const fireHeld = this.armed && input.enabled && input.lmb;
+    // ---- sprint: forward only, not while aiming or holding the trigger; double-tap for a tactical sprint
+    let tacReq = false;
+    if (input.enabled && (input.pressed('ShiftLeft') || input.pressed('ShiftRight'))) { if (this.clock - (this.shiftT ?? -9) < DOUBLE_TAP) tacReq = true; this.shiftT = this.clock; }
+    if (input.tacHit) { input.tacHit = false; tacReq = true; }          // touch: double-tap the sprint button (touch.js)
+    this.running = !!(moving && mz > 0 && (k('ShiftLeft') || input.axisRun) && !this.aiming && !fireHeld || moving && k('ShiftRight') && !this.aiming && !fireHeld);
+    if (W && W.lastFire < .15) this.running = false;
+    this.tacCd = Math.max(0, this.tacCd - dt);
+    if (tacReq && this.running && this.tacCd <= 0 && this.tacT <= 0 && this.slideT <= 0) this.tacT = TAC_TIME;
+    if (this.tacT > 0) {
+      if (!this.running || mz <= 0) { this.tacT = 0; this.tacCd = TAC_CD * .6; }
+      else { this.tacT -= dt; if (this.tacT <= 0) { this.tacT = 0; this.tacCd = TAC_CD; } }
+    }
+    const tac = this.tacT > 0;
+    this.tacK += ((tac ? 1 : 0) - this.tacK) * Math.min(1, dt * 10);
+    // ---- sprint-to-fire: the gun is down while sprinting and comes back up over the class delay (weapons.js waits)
+    if (this.running) { this.readyMax = this.readyT = hd.sprintOut + (tac ? TAC_SPRINT_OUT : 0); }
+    else this.readyT = Math.max(0, this.readyT - dt);
+    this.runK = this.running ? 1 : this.readyMax ? this.readyT / this.readyMax : 0;
+    // ---- ADS: in over the class time (out a little faster), only once the gun is up and not reloading
+    const adsOn = this.aiming && this.readyT <= 0 && !(W && W.reloading > 0);
+    this.adsK = Math.max(0, Math.min(1, this.adsK + (adsOn ? dt / hd.ads : -dt / (hd.ads * .8))));
     const hs0 = Math.hypot(this.vel.x, this.vel.z);
-    // ---- crouch / slide (C)
+    this.slideCd = Math.max(0, this.slideCd - dt);
+    // ---- crouch / slide (C): sprinting into C slides (not again until the cooldown is over)
     if (input.enabled && input.pressed('KeyC')) {
-      if (this.grounded && this.running && hs0 > 6 && this.slideT <= 0) {
-        this.slideT = .85; this.crouch = true; this.running = false;
-        const boost = Math.max(hs0, RUN) + 2.8; this.vel.x *= boost / hs0; this.vel.z *= boost / hs0;
+      if (this.grounded && this.running && hs0 > SLIDE_MIN && this.slideT <= 0 && this.slideCd <= 0) {
+        this.slideT = SLIDE_T; this.crouch = true; this.running = false; this.tacT = 0;
+        const boost = Math.min(SLIDE_MAX, Math.max(hs0, RUN) + SLIDE_BOOST); this.vel.x *= boost / hs0; this.vel.z *= boost / hs0;
         this.g.audio.step && this.g.audio.step(true, 'gravel');
-      } else this.crouch = !this.crouch;
+      } else if (this.slideT > 0) { this.slideT = 0; this.slideCd = SLIDE_CD; }
+      else this.crouch = !this.crouch;
     }
     if (this.running && this.crouch && this.slideT <= 0) this.crouch = false;     // sprinting stands you up
     if (!this.crouch && this.slideT <= 0 && this.wasCrouch) {
       // only stand up if there is head room
       const up = world.raycast(_t.set(this.pos.x, this.pos.y + HC - .05, this.pos.z), _d.set(0, 1, 0), H - HC + .1);
-      if (up) this.crouch = true;
+      if (up) { this.crouch = true; this.running = false; }
     }
     this.wasCrouch = this.crouch;
     const mob = this.g.armor ? this.g.armor.mobility / 100 : 1;
-    const speed = (this.aiming ? AIMWALK : this.crouch ? CROUCH : this.running ? RUN : WALK) * mob;
+    const base = this.crouch ? CROUCH : this.running ? (tac ? TAC : RUN) : WALK;
+    const speed = (base + (Math.min(base, this.crouch ? CROUCH * .8 : AIMWALK) - base) * (this.aiming ? Math.max(this.adsK, .5) : this.adsK)) * mob;
     // camera-relative move direction
     _f.set(-Math.sin(this.camYaw), 0, -Math.cos(this.camYaw));
     _r.set(-_f.z, 0, _f.x);
@@ -198,15 +234,23 @@ export class Player {
     if (this.slideT > 0) {
       // sliding: momentum carries, friction bleeds it off, slight steering
       this.slideT -= dt;
-      const f = Math.max(0, 1 - dt * 1.6); this.vel.x *= f; this.vel.z *= f;
-      this.vel.x += _d.x * dt * 3; this.vel.z += _d.z * dt * 3;
-      if (this.slideT <= 0 || Math.hypot(this.vel.x, this.vel.z) < 3) { this.slideT = 0; }
-    } else {
-      // snappy on the ground (quick to speed, quicker to stop), light air control
-      const want = _d.lengthSq() > 0;
-      const accel = this.grounded ? (want ? 16 : 20) : 3.5;
-      this.vel.x += (_d.x * speed - this.vel.x) * Math.min(1, accel * dt);
-      this.vel.z += (_d.z * speed - this.vel.z) * Math.min(1, accel * dt);
+      const f = Math.max(0, 1 - dt * SLIDE_FRIC); this.vel.x *= f; this.vel.z *= f;
+      this.vel.x += _d.x * dt * 2.5; this.vel.z += _d.z * dt * 2.5;
+      if (this.slideT <= 0 || Math.hypot(this.vel.x, this.vel.z) < 3.2) { this.slideT = 0; this.slideCd = SLIDE_CD; }
+    } else if (this.grounded) {
+      // ground: a fixed-rate approach to the wanted velocity (instant feel: walk speed in ~0.09 s, a stop in ~0.07 s);
+      // building up to a sprint takes a moment, reversing brakes hard
+      const tx = _d.x * speed, tz = _d.z * speed, ex = tx - this.vel.x, ez = tz - this.vel.z, el = Math.hypot(ex, ez);
+      let a = ACC;
+      if (_d.lengthSq() === 0 || tx * this.vel.x + tz * this.vel.z < 0) a = DEC;
+      else if (speed > WALK * mob + .2 && hs0 > WALK * mob - .4) a = RUN_ACC;
+      const st = a * dt;
+      if (el <= st) { this.vel.x = tx; this.vel.z = tz; } else { this.vel.x += ex / el * st; this.vel.z += ez / el * st; }
+    } else if (_d.lengthSq() > 0) {
+      // air: a little steering, momentum is kept (no drag, never pushed past the faster of target and current speed)
+      const cap = Math.max(speed, hs0);
+      this.vel.x += _d.x * AIR_ACC * dt; this.vel.z += _d.z * AIR_ACC * dt;
+      const h = Math.hypot(this.vel.x, this.vel.z); if (h > cap) { this.vel.x *= cap / h; this.vel.z *= cap / h; }
     }
     // ---- jump: coyote time + buffered presses; mantle when a ledge is in front
     this.coyote = this.grounded ? COYOTE : Math.max(0, this.coyote - dt);
@@ -224,7 +268,7 @@ export class Player {
     }
     if (this.jumpBuf > 0 && this.coyote > 0) {
       this.vel.y = JUMP; this.grounded = false; this.coyote = 0; this.jumpBuf = 0; this.g.audio.jump();
-      if (this.slideT > 0) { this.slideT = 0; }              // slide-jump keeps the momentum
+      if (this.slideT > 0) { this.slideT = 0; this.slideCd = SLIDE_CD; }       // jump cancels the slide, keeping the momentum
       this.crouch = false;
     }
     this.vel.y -= GRAV * dt;
@@ -360,11 +404,12 @@ export class Player {
     const sk = this.shake * this.shake * .06;
     cam.rotation.order = 'YXZ';
     cam.rotation.set(this.camPitch + this.recoil * .03 + (Math.random() - .5) * sk, this.camYaw + (Math.random() - .5) * sk, 0);
-    // zoom when aiming
-    // sprinting and sliding widen the view a touch
-    const kick = this.mode === 'foot' && !this.aiming ? (this.slideT > 0 ? 10 : this.running && Math.hypot(this.vel.x, this.vel.z) > 6 ? 7 : 0) : 0;
-    const fov = (this.g.save.settings.fov + kick) / (this.aiming && this.g.weapons ? this.g.weapons.zoom() : 1);
-    if (Math.abs(cam.fov - fov) > .05) { cam.fov += (fov - cam.fov) * Math.min(1, dt * (kick ? 6 : 14)); cam.updateProjectionMatrix(); }
+    // zoom follows the ADS progress (per-class ADS time, eased); sprinting, the tactical sprint and slides widen the view
+    const kick = this.mode === 'foot' && !this.aiming ? (this.slideT > 0 ? 10 : this.running && Math.hypot(this.vel.x, this.vel.z) > 6 ? (this.tacT > 0 ? 11 : 7) : 0) : 0;
+    this.fovKick += (kick - this.fovKick) * Math.min(1, dt * 6);
+    const e = this.adsK * this.adsK * (3 - 2 * this.adsK), z = this.g.weapons && this.adsK > 0 ? this.g.weapons.zoom() : 1;
+    const fov = (this.g.save.settings.fov + this.fovKick) / (1 + (z - 1) * e);
+    if (Math.abs(cam.fov - fov) > .02) { cam.fov = fov; cam.updateProjectionMatrix(); }
     this.g.audio.listener(cam.position, this.camYaw);
   }
 }

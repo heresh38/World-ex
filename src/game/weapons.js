@@ -269,8 +269,14 @@ export class Weapons {
     if (this.swap > 0) return;
     // continue a pulse burst
     if (this.burstLeft > 0 && this.burstCool <= 0 && a.mag > 0) { this.fire(w, A, S, a); this.burstLeft--; this.burstCool = 60 / A.burstRpm; return; }
-    const trigger = input.enabled && input.locked && (A.auto ? input.lmb : input.lmbHit);
+    // sprint-to-fire (player.js readyT, per class in data.js weaponHandling): the gun is still coming up from a sprint;
+    // a click made meanwhile is held and fires the moment it is ready
+    this.fireBuf = Math.max(0, (this.fireBuf || 0) - dt);
+    if (input.enabled && input.lmbHit) this.fireBuf = .35;
+    if (p.readyT > 0) return;
+    const trigger = input.enabled && input.locked && (A.auto ? input.lmb : input.lmbHit || this.fireBuf > 0);
     if (!trigger || this.cool > 0 || this.burstLeft > 0) return;
+    this.fireBuf = 0;
     if (a.mag <= 0) {
       if (a.reserve > 0) this.startReload(S); else if (input.lmbHit) this.g.audio.empty();
       return;

@@ -126,6 +126,7 @@ export class ArenaUI {
     const g = this.g, sv = g.save, cfg = this.w.cfg;
     this.modal = true; this.loadMid = mid;
     g.input.enabled = false; g.input.unlock();
+    if (mid) this.w.menuMode(true);
     const col = slot => {
       const list = sv.inventory.filter(w => ARCHETYPES[w.arch].slot === slot).sort((a, b) => (b.uid === this.pick[slot]) - (a.uid === this.pick[slot]) || b.power - a.power || b.rarity - a.rarity);
       const cards = list.slice(0, 40).map(w => {

@@ -66,7 +66,7 @@ def materials():
     return dict(
         brick=tmat('ar_brick', 'ar_brick'), brick_dark=tmat('ar_brick_dark', 'ar_brick', '#8a7a70'),
         conc=tmat('ar_conc', 'ar_conc'), conc_dark=tmat('ar_conc_dark', 'ar_conc', '#7a7672'), conc_warm=tmat('ar_conc_warm', 'ar_conc', '#d8c8b0'),
-        floor=tmat('ar_floor', 'ar_floor'), floor_in=tmat('ar_floor_hall', 'ar_floor', '#a8a29a'), ballast=tmat('ar_ballast', 'ar_floor', '#6a5e52', .95),
+        floor=tmat('ar_floor', 'ar_floor', '#c4b8a8'), floor_in=tmat('ar_floor_hall', 'ar_floor', '#968e84'), ballast=tmat('ar_ballast', 'ar_floor', '#6a5e52', .95),
         corr_red=tmat('ar_corr_red', 'ar_corr', '#9a3a2a'), corr_blue=tmat('ar_corr_blue', 'ar_corr', '#3a5a7a'),
         corr_green=tmat('ar_corr_green', 'ar_corr', '#4a6a4a'), corr_grey=tmat('ar_corr_grey', 'ar_corr', '#8a8c8a'),
         corr_rust=tmat('ar_corr_rust', 'ar_corr', '#7a4a32'), corr_dark=tmat('ar_corr_dark', 'ar_corr', '#4a4a4c'),

@@ -88,6 +88,7 @@ export class ArenaWorld extends World {
     this.oldShield = p.maxShield; p.maxShield = 50; p.maxHealth = 100;
     this.ui = new ArenaUI(g, this);
     this.warmTextures();
+    this.pendingMenu = true;          // the HUD is shown by Game.enterWorld after build: hide it on the first update
     progress(1, 'Ready');
   }
 
@@ -97,9 +98,18 @@ export class ArenaWorld extends World {
   }
 
   // ---------------------------------------------------------------- loadout -> deploy, end -> again / leave
+  // behind the loadout / results screens: no HUD, no gun on screen (the player waits seated, out of the way)
+  menuMode(on) {
+    const g = this.g;
+    g.hud.show(!on);
+    if (on && !g.player.dead) g.player.mode = 'seat';
+    else if (!on && g.player.mode === 'seat') g.player.mode = 'foot';
+  }
+
   deploy() {
     const g = this.g, m = this.match;
     this.ui.hideLoadout();
+    this.menuMode(false);
     g.camFocus = null; g.camera.clearViewOffset();
     g.input.enabled = true; g.input.wantLock = true; g.input.lock();
     if (m.state === 'loadout') m.start();
@@ -110,12 +120,14 @@ export class ArenaWorld extends World {
   onMatchEnd(res) {
     const g = this.g;
     g.input.enabled = false; g.input.unlock();
+    this.menuMode(true);
     this.ui.showEnd(res);
   }
 
   again() {
     const g = this.g;
     this.ui.hideEnd();
+    this.menuMode(false);
     g.input.enabled = true; g.input.wantLock = true; g.input.lock();
     this.match.restart();
   }
@@ -147,6 +159,7 @@ export class ArenaWorld extends World {
 
   update(dt) {
     const m = this.match;
+    if (this.pendingMenu) { this.pendingMenu = false; this.menuMode(true); }
     if (m.state === 'loadout' || (m.state === 'over' && this.ui.endShown)) this.flyover(dt);
     m.update(dt);
     this.ui.update(dt);

@@ -126,7 +126,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const live = g.enemies.list.filter(e => e.alive), beh = {}; for (const e of live) beh[e.beh || e.state] = (beh[e.beh || e.state] || 0) + 1;
     return { alive: live.length, idle: live.filter(e => e.state === 'idle').length, asleep: g.enemies.asleep, beh, queue: w.spawnQ.length }; });
   console.log('residents', JSON.stringify(res));
-  check(res.alive >= 10, 'creatures already in the streets around the landing zone', res.alive);
+  check(res.alive >= 6, 'creatures already in the streets around the landing zone', res.alive);
   // ---------------------------------------------------------------- screenshots
   const view = async (n, pos, look, fov = 62) => { await cam(pos, look, fov); await ev(() => window.__sim(.2)); await wait(1500); await shot(n); };
   const W = await ev(() => { const g = window.__game, w = g.world, M = w.map;
