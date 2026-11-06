@@ -135,7 +135,7 @@ fs.mkdirSync(OUT, { recursive: true });
     for (const id of ['old', 'crown', 'commercial', 'industrial', 'flooded', 'outskirts']) { const b = blk(id); if (b) out[id] = [b.x + 47, b.z - 40]; }
     const hall = w.ruins.designs.get('VR_hall').list[3] || w.ruins.designs.get('VR_hall').list[0], hm = hall.elements;
     out.hall = [hm[12], hm[13], hm[14], Math.atan2(hm[8], hm[10])];
-    const tw = w.ruins.designs.get('VR_tower_a').list[0].elements; out.tower = [tw[12], tw[13], tw[14]];
+    const tw = w.ruins.designs.get('VR_mid_b').list[2].elements; out.wild = [tw[12], tw[13], tw[14]];
     const tb = w.ruins.designs.get('VR_tower_b').list[1].elements; out.towerb = [tb[12], tb[13], tb[14]];
     const site = w.sites.filter(s => s.o.res && !s.off && s.types[0] !== 'turret' && s.n >= 3 && s.o.beh !== 'sleep')[5]; out.site = [site.pos.x, site.pos.y, site.pos.z];
     const op = w.op; out.nest = op.stages[2].pos.toArray(); out.relay = op.stages[0].pos.toArray(); out.landing = w.landing.toArray();
@@ -150,13 +150,16 @@ fs.mkdirSync(OUT, { recursive: true });
   await view('r03_spire', [300, 40, 420], [0, 200, 0], 60);
   { const [x, y, z, yaw] = W.hall; await ev(([x, z]) => { window.__tp(x, 0, z); window.__sim(2); }, [x, z]);
     await view('r04_hall_inside', [x - 14 * Math.cos(yaw), y + 2.2, z + 14 * Math.sin(yaw)], [x + 8 * Math.cos(yaw), y + 5, z - 8 * Math.sin(yaw)], 70); }
-  { const [x, y, z] = W.tower; await ev(([x, z]) => { window.__tp(x + 20, 0, z + 22); window.__sim(2); }, [x, z]); await view('r05_overgrowth', [x + 6, y + 1.6, z + 22], [x - 4, y + 9, z + 8], 62); }
+  { const [x, y, z] = W.wild; await ev(([x, z]) => { window.__tp(x + 14, 0, z + 14); window.__sim(2); }, [x, z]);
+    const gy = await ev(([x, z]) => window.__game.world.collision.ground(x + 14, z + 14), [x, z]); await view('r05_overgrowth', [x + 14, gy + 1.7, z + 14], [x, gy + 3, z], 66); }
   { const [x, y, z] = W.towerb; await view('r06_tower', [x + 40, y + 6, z + 50], [x, y + 30, z], 62); }
   { const [x, y, z] = W.site; await ev(([x, z]) => { window.__tp(x + 26, 0, z + 26); window.__sim(5); }, [x, z]);
     const n = await ev(([x, z]) => window.__game.enemies.list.filter(e => e.alive && Math.hypot(e.pos.x - x, e.pos.z - z) < 30).length, [x, z]);
     console.log('enemies near the roaming / resident site', n);
-    await view('r07_residents', [x + 16, y + 4, z + 16], [x, y + 1, z], 60); }
-  { const [x, y, z] = W.nest; await ev(([x, z]) => { window.__tp(x + 60, 0, z); window.__sim(3); }, [x, z]); await view('r08_nest', [x + 22, y + 5, z + 14], [x, y, z], 62); }
+    const near = await ev(([x, z]) => { const e = window.__game.enemies.list.find(e => e.alive && Math.hypot(e.pos.x - x, e.pos.z - z) < 40); return e ? e.pos.toArray() : null; }, [x, z]);
+    const [ex, ey, ez] = near || [x, y, z];
+    await view('r07_residents', [ex + 9, ey + 5, ez + 9], [ex, ey + 1, ez], 60); }
+  { const [x, y, z] = W.nest; await ev(([x, z]) => { window.__tp(x + 60, 0, z); window.__sim(3); }, [x, z]); await view('r08_nest', [x + 30, y + 10, z + 32], [x, y, z], 62); }
   await b.close();
   process.exit(fails.length || errs.length ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

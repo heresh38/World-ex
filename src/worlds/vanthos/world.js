@@ -422,8 +422,12 @@ export class VanthosWorld extends World {
         if (done.has(m0)) return done.get(m0);
         const m = m0.clone();
         if (m.name === 'core_glow') this.coreMat = m;
-        m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
-          float fogFactor = smoothstep( fogNear, fogFar * 3.2, vFogDepth ) * .9;
+        // (the thin fog only from ~40 m up: the foundation melts into the haze with the ground around it)
+        m.onBeforeCompile = sh => {
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vSpY;')
+            .replace('#include <fog_vertex>', '#include <fog_vertex>\nvSpY = (modelMatrix * vec4(transformed, 1.)).y;');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vSpY;').replace('#include <fog_fragment>', `#ifdef USE_FOG
+          float fogFactor = mix(smoothstep( fogNear, fogFar, vFogDepth ), smoothstep( fogNear, fogFar * 3.2, vFogDepth ) * .9, smoothstep(30., 110., vSpY));
           gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
           #endif`); };
         m.customProgramCacheKey = () => 'spirefog';

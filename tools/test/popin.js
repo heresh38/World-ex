@@ -28,7 +28,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const errs = [];
   p.on('pageerror', e => { errs.push(e.message); console.log('PAGE ERROR', e.message.slice(0, 400), (e.stack || '').split('\n').slice(0, 4).join(' | ')); });
   p.on('console', m => { if (process.env.DBG && m.type() === 'log') console.log('page:', m.text().slice(0, 300)); if (m.type() === 'error') { errs.push(m.text()); console.log('CONSOLE ERROR', m.text().slice(0, 400)); } });
-  await p.addInitScript(([q, touch]) => { localStorage.clear(); window.__TEST_QUALITY = q; window.__POPDBG = true; if (touch) window.__MAXTEX = 1024; }, [Q, !!process.env.TOUCH]);
+  await p.addInitScript(([q, touch, dbg]) => { localStorage.clear(); window.__TEST_QUALITY = q; window.__POPDBG = !!dbg; if (touch) window.__MAXTEX = 1024; }, [Q, !!process.env.TOUCH, process.env.DBG]);
   const ev = (fn, arg) => p.evaluate(fn, arg);
   const waitPlay = async () => { await p.waitForFunction(() => window.__game && window.__game.state === 'play', null, { timeout: 1200000, polling: 1000 });
     await ev(() => { const g = window.__game; g.paused = false; g.menus.hidePause && g.menus.hidePause(); g.input.locked = true; g.input.enabled = true; }); };
