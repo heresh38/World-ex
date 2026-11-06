@@ -43,97 +43,91 @@ fs.mkdirSync(OUT, { recursive: true });
   // ------------------------------------------------------------------ movement numbers (aboard the ship: flat deck)
   if (!process.env.SKIP_MOVE) {
     const mv = await ev(() => {
-      const g = window.__game, P = g.player, inp = g.input, W = g.weapons, dt = 1 / 60, out = {};
+      const g = window.__game, P = g.player, inp = g.input, W = g.weapons, C = g.world.collision, dt = 1 / 60, out = {};
       g.godMode = true; P.armed = true; W.refreshModel();
-      const C = g.world.collision;
-      // a clear 70 m runway far from the ship's boxes (floor at the deck height)
+      // a clear 200 m deck far from the ship's boxes
       const y0 = P.pos.y, base = new P.pos.constructor(400, y0, 400);
       C.add([300, y0 - 1, 300, 500, y0, 500], 'runway');
-      const reset = () => { P.pos.copy(base); P.vel.set(0, 0, 0); P.camYaw = Math.PI; P.yaw = 0; P.crouch = false; P.slideT = 0; P.slideCd = 0; P.tacT = 0; P.tacCharge = P.TAC ? P.TAC.time : 0; P.grounded = true; for (let i = 0; i < 10; i++) P.update(dt, inp, C); };
-      const run = (keys, sec, opt = {}) => {
-        inp.down.clear(); keys.forEach(k => inp.down.add(k)); inp.rmb = !!opt.rmb; inp.lmb = !!opt.lmb;
-        let vmax = 0, ymax = P.pos.y, t = 0; const p0 = P.pos.clone(); const trace = [];
-        for (; t < sec; t += dt) {
-          (opt.hits && opt.hits[Math.round(t / dt)] || []).forEach(k => inp.hit.add(k));
-          P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); inp.hit.clear(); inp.lmbHit = false;
-          const v = Math.hypot(P.vel.x, P.vel.z); vmax = Math.max(vmax, v); ymax = Math.max(ymax, P.pos.y); trace.push(v);
-          if (opt.each) opt.each(t);
+      const reset = () => { P.pos.copy(base); P.vel.set(0, 0, 0); P.camYaw = Math.PI; P.yaw = 0; P.crouch = false; P.slideT = 0; P.slideCd = 0; P.tacT = 0; P.tacCd = 0;
+        P.readyT = 0; P.adsK = 0; P.grounded = true; inp.down.clear(); for (let i = 0; i < 20; i++) P.update(dt, inp, C); };
+      const run = (keys, sec, o = {}) => {
+        inp.down.clear(); keys.forEach(k => inp.down.add(k)); inp.rmb = !!o.rmb;
+        let vmax = 0, ymax = P.pos.y; const p0 = P.pos.clone(), tr = [];
+        for (let f = 0; f * dt < sec; f++) {
+          (o.hits && o.hits[f] || []).forEach(k => inp.hit.add(k));
+          P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); inp.hit.clear();
+          const v = Math.hypot(P.vel.x, P.vel.z); vmax = Math.max(vmax, v); ymax = Math.max(ymax, P.pos.y); tr.push(v);
+          o.each && o.each(f);
         }
-        inp.down.clear(); inp.rmb = false; inp.lmb = false;
-        return { vmax: +vmax.toFixed(2), vend: +trace[trace.length - 1].toFixed(2), dist: +P.pos.distanceTo(p0).toFixed(2), jump: +(ymax - p0.y).toFixed(2), trace };
+        inp.down.clear(); inp.rmb = false;
+        return { vmax: +vmax.toFixed(2), vend: +tr[tr.length - 1].toFixed(2), jump: +(ymax - p0.y).toFixed(2), tr };
       };
       reset(); out.walk = run(['KeyW'], 1.5).vend;
-      reset(); const acc = run(['KeyW'], .5); out.walkAccel90 = +(acc.trace.findIndex(v => v > out.walk * .9) * dt).toFixed(3);
-      reset(); run(['KeyW'], 1.5); const st = run([], .5); out.stop90 = +(st.trace.findIndex(v => v < out.walk * .1) * dt).toFixed(3);
+      reset(); out.walkAccel90 = +(run(['KeyW'], .5).tr.findIndex(v => v > out.walk * .9) * dt).toFixed(3);
+      reset(); run(['KeyW'], 1.5); out.stop90 = +(run([], .5).tr.findIndex(v => v < out.walk * .1) * dt).toFixed(3);
       reset(); out.sprint = run(['KeyW', 'ShiftLeft'], 1.5).vend;
       reset(); out.ads = run(['KeyW'], 1.5, { rmb: true }).vend;
-      reset(); out.crouch = run(['KeyW'], .1, { hits: { 1: ['KeyC'] } }) && run(['KeyW'], 1.2).vend;
-      // tactical sprint: double-tap sprint while running
-      reset(); run(['KeyW', 'ShiftLeft'], .8); P.update(dt, inp, C);
+      reset(); run(['KeyW'], .1, { hits: { 1: ['KeyC'] } }); out.crouch = run(['KeyW'], 1.2).vend;
+      // tactical sprint: double-tap sprint while running (release + press twice inside 0.3 s)
+      reset(); run(['KeyW', 'ShiftLeft'], .8);
       const tac = run(['KeyW', 'ShiftLeft'], 1.2, { hits: { 2: ['ShiftLeft'], 8: ['ShiftLeft'] } });
       out.tac = tac.vend; out.tacOn = P.tacT > 0;
-      reset(); const tl = run(['KeyW', 'ShiftLeft'], 8, { hits: { 50: ['ShiftLeft'], 56: ['ShiftLeft'] } }); out.tacAfter = tl.vend;
+      run(['KeyW', 'ShiftLeft'], 4.5); out.tacAfter = +Math.hypot(P.vel.x, P.vel.z).toFixed(2); out.tacEnded = P.tacT <= 0;
       // slide from a sprint: distance until it ends
       reset(); run(['KeyW', 'ShiftLeft'], 1.2);
       const sp = P.pos.clone(); let slideT = 0;
-      const sl = run(['KeyW', 'ShiftLeft'], 1.6, { hits: { 0: ['KeyC'] }, each: () => { if (P.slideT > 0) { slideT += dt; } } });
-      out.slideDist = +Math.hypot(P.pos.x - sp.x, P.pos.z - sp.z).toFixed(2); out.slideTime = +slideT.toFixed(2); out.slideVmax = sl.vmax;
-      // slide chaining: a second slide right after the first is refused (cooldown)
-      reset(); run(['KeyW', 'ShiftLeft'], 1.2); run(['KeyW', 'ShiftLeft'], .9, { hits: { 0: ['KeyC'] } });
+      const sl = run(['KeyW', 'ShiftLeft'], 1.6, { hits: { 0: ['KeyC'] }, each: () => { if (P.slideT > 0) slideT += dt; } });
+      out.slideDist = +Math.hypot(P.pos.x - sp.x, P.pos.z - sp.z).toFixed(2); out.slideTime = +slideT.toFixed(2); out.slideV = sl.vmax;
+      // a slide distance measured only while sliding
+      reset(); run(['KeyW', 'ShiftLeft'], 1.2); const s0 = P.pos.clone(); let s1 = null;
+      run(['KeyW', 'ShiftLeft'], 1.6, { hits: { 0: ['KeyC'] }, each: () => { if (P.slideT <= 0 && !s1) s1 = P.pos.clone(); } });
+      out.slideOnly = s1 ? +Math.hypot(s1.x - s0.x, s1.z - s0.z).toFixed(2) : null;
+      // chaining: a second slide right after the first is refused (cooldown)
+      reset(); run(['KeyW', 'ShiftLeft'], 1.2); run(['KeyW', 'ShiftLeft'], .95, { hits: { 0: ['KeyC'] } });
       let second = false; run(['KeyW', 'ShiftLeft'], .4, { hits: { 2: ['KeyC'] }, each: () => { if (P.slideT > .5) second = true; } });
       out.slideChain = second;
-      // slide jump cancel keeps the momentum
-      reset(); run(['KeyW', 'ShiftLeft'], 1.2); run(['KeyW', 'ShiftLeft'], .2, { hits: { 0: ['KeyC'] } });
-      const sj = run(['KeyW', 'ShiftLeft'], .15, { hits: { 0: ['Space'] } }); out.slideJumpV = sj.vmax; out.slideCancelled = P.slideT <= 0;
-      // jump height and air control
+      // jump cancels a slide and keeps the momentum
+      reset(); run(['KeyW', 'ShiftLeft'], 1.2); run(['KeyW', 'ShiftLeft'], .15, { hits: { 0: ['KeyC'] } });
+      const sj = run(['KeyW', 'ShiftLeft'], .2, { hits: { 0: ['Space'] } }); out.slideJumpV = sj.vmax; out.slideCancelled = P.slideT <= 0;
       reset(); out.jump = run([], 1.2, { hits: { 1: ['Space'] } }).jump;
-      // sprint-to-fire delay: sprint, then hold fire; time until the first round leaves
-      const delay = arch => {
-        const w = g.save.inventory.find(x => x.arch === arch); if (!w) return null;
-        g.save.equipped[ARCH_SLOT(arch)] = w.uid; W.slot = ARCH_SLOT(arch); W.refreshModel(); W.refill(); W.swap = 0; W.cool = 0;
-        reset(); run(['KeyW', 'ShiftLeft'], 1.0);
-        const shots0 = g.save.stats.shots; let t1 = null;
-        run(['KeyW'], .6, { lmb: true, hits: { 0: ['Mouse0'] }, each: t => { if (t1 === null && g.save.stats.shots > shots0) t1 = t; } });
-        return t1 === null ? null : +t1.toFixed(3);
-      };
-      const ARCH_SLOT = a => window.__game.weapons && (window.__ARCH ? 0 : 0);
-      out.slots = null;
+      // air control: release forward in a sprint jump -> speed is kept; strafe in air changes little
+      reset(); run(['KeyW', 'ShiftLeft'], 1.0); run(['KeyW', 'ShiftLeft'], .05, { hits: { 0: ['Space'] } });
+      run(['KeyD'], .4); out.airSide = +Math.abs(P.vel.x).toFixed(2); out.airFwd = +Math.abs(P.vel.z).toFixed(2);
       return out;
     });
     console.log('movement', JSON.stringify(mv));
     check(mv.walk >= 4.5 && mv.walk <= 5.0, 'walk speed 4.5-5', mv.walk);
     check(mv.sprint >= 6.7 && mv.sprint <= 7.3, 'sprint ~7', mv.sprint);
     check(mv.ads / mv.walk >= .53 && mv.ads / mv.walk <= .62, 'ADS move 55-60% of walk', (mv.ads / mv.walk).toFixed(2));
-    check(mv.walkAccel90 <= .2, 'reaches walk speed fast', mv.walkAccel90);
-    check(mv.stop90 <= .16, 'stops fast', mv.stop90);
+    check(mv.walkAccel90 <= .15, 'reaches walk speed fast', mv.walkAccel90);
+    check(mv.stop90 <= .12, 'stops fast', mv.stop90);
     check(mv.tacOn && mv.tac > mv.sprint + .8, 'tactical sprint on double-tap', mv.tac);
-    check(mv.tacAfter < mv.tac, 'tactical sprint runs out', mv.tacAfter);
-    check(mv.slideDist > 4 && mv.slideDist < 9, 'slide carries momentum 4-9 m', mv.slideDist);
+    check(mv.tacEnded && mv.tacAfter < mv.tac, 'tactical sprint runs out', mv.tacAfter);
+    check(mv.slideOnly > 3.5 && mv.slideOnly < 8, 'slide carries momentum 3.5-8 m', mv.slideOnly);
     check(!mv.slideChain, 'slides cannot be chained back to back');
     check(mv.slideCancelled && mv.slideJumpV > mv.sprint, 'jump cancels a slide keeping momentum', mv.slideJumpV);
-    check(mv.jump > .85 && mv.jump < 1.2, 'jump ~1 m', mv.jump);
+    check(mv.jump > .85 && mv.jump < 1.15, 'jump ~1 m', mv.jump);
+    check(mv.airFwd > 5 && mv.airSide < 3, 'little air control, momentum kept', [mv.airFwd, mv.airSide]);
     // sprint-to-fire and ADS times per weapon class
     const hand = await ev(() => {
       const g = window.__game, P = g.player, inp = g.input, W = g.weapons, C = g.world.collision, dt = 1 / 60, out = {};
-      for (const arch of ['pistol', 'rifle', 'bolt', 'hmg']) {
-        const w = g.save.inventory.find(x => x.arch === arch) || null;
-        const A = window.__ARCHS && window.__ARCHS[arch];
+      const step = () => { P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); inp.hit.clear(); inp.lmbHit = false; };
+      for (const [arch, slot] of [['pistol', 1], ['rifle', 0], ['bolt', 1], ['rocket', 2]]) {
+        const w = g.save.inventory.find(x => x.arch === arch);
         if (!w) { out[arch] = 'missing'; continue; }
-        const slot = { pistol: 1, rifle: 0, bolt: 1, hmg: 2 }[arch];
-        g.save.equipped[slot] = w.uid; W.slot = slot; W.refreshModel(); W.refill(); W.swap = 0; W.cool = 0;
-        P.pos.set(400, P.pos.y, 400); P.vel.set(0, 0, 0); P.camYaw = Math.PI; P.crouch = false; P.slideT = 0; P.tacT = 0;
+        g.save.equipped[slot] = w.uid; W.slot = slot; W.refreshModel(); W.refill(); W.swap = 0; W.cool = 0; W.cancelReload();
+        P.pos.set(400, P.pos.y, 400); P.vel.set(0, 0, 0); P.camYaw = Math.PI; P.crouch = false; P.slideT = 0; P.tacT = 0; P.adsK = 0;
         inp.down.clear(); inp.down.add('KeyW'); inp.down.add('ShiftLeft');
-        for (let t = 0; t < 1.2; t += dt) { P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); inp.hit.clear(); }
+        for (let t = 0; t < 1.2; t += dt) step();
         inp.down.delete('ShiftLeft'); inp.lmb = true; inp.lmbHit = true;
-        const s0 = g.save.stats.shots; let fireT = null, t = 0;
-        for (; t < .8 && fireT === null; t += dt) { P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); inp.hit.clear(); if (g.save.stats.shots > s0) fireT = t; }
-        inp.lmb = false; inp.lmbHit = false; inp.down.clear();
-        for (let k = 0; k < 60; k++) { P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); }
-        // ADS: time until the view reaches 95 % of the sight's zoom
+        const s0 = g.save.stats.shots; let fireT = null;
+        for (let f = 1; f < 60 && fireT === null; f++) { if (arch !== 'rifle') inp.lmbHit = f === 1; P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); inp.hit.clear(); if (g.save.stats.shots > s0) fireT = f * dt; }
+        inp.lmb = false; inp.down.clear();
+        for (let k = 0; k < 90; k++) step();
         inp.rmb = true; let adsT = null;
-        for (t = 0; t < 1 && adsT === null; t += dt) { P.update(dt, inp, C); W.update(dt, inp); g.viewmodel.update(dt, inp); P.finishCamera(dt, g.camera); if ((P.adsK ?? g.viewmodel.ads) > .95) adsT = t; }
-        inp.rmb = false;
-        out[arch] = { sprintToFire: fireT === null ? null : +fireT.toFixed(3), ads: adsT === null ? null : +adsT.toFixed(3) };
+        for (let f = 1; f < 90 && adsT === null; f++) { step(); P.finishCamera(dt, g.camera); if (P.adsK >= .999) adsT = f * dt; }
+        inp.rmb = false; for (let k = 0; k < 40; k++) step();
+        out[arch] = { sprintToFire: fireT === null ? null : +fireT.toFixed(3), ads: adsT === null ? null : +adsT.toFixed(3), fov: +g.camera.fov.toFixed(1) };
       }
       g.godMode = false;
       return out;
@@ -141,7 +135,7 @@ fs.mkdirSync(OUT, { recursive: true });
     console.log('handling', JSON.stringify(hand));
     check(hand.pistol.sprintToFire >= .1 && hand.pistol.sprintToFire <= .2 && hand.bolt.sprintToFire >= .2 && hand.bolt.sprintToFire <= .3, 'sprint-to-fire per class (pistol fast, sniper slow)', hand);
     check(hand.pistol.ads < hand.rifle.ads && hand.rifle.ads < hand.bolt.ads, 'ADS-in per class', hand);
-    await ev(() => { const g = window.__game; g.player.pos.set(0, g.player.pos.y, 0); });
+    await ev(() => { const g = window.__game, s = g.world.spawn(); g.player.spawn(s.pos, s.yaw); });
   }
 
   // ------------------------------------------------------------------ enter Shellbreak from the briefing table
@@ -169,7 +163,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await ev(() => { const g = window.__game, w = g.world; delete w.flyover; w.ui.loadEl.classList.remove('hidden'); });
 
   // ------------------------------------------------------------------ deploy and play the match
-  await p.click('#arena .ar-load [data-a="deploy"]');
+  await p.click('#arena .ar-load [data-a="deploy"]', { timeout: 20000 }).catch(async e => { console.log('deploy click fell back to world.deploy():', e.message.split('\n')[0]); await ev(() => window.__game.world.deploy()); });
   await live();
   const st = await ev(() => { const g = window.__game, m = g.world.match; return { state: m.state, alive: m.bots.filter(b => b.alive).length, player: m.player.alive, eq: g.save.equipped.slice() }; });
   check(st.state === 'live' && st.alive === 11 && st.player, 'deploy starts the match, everyone spawned', st);

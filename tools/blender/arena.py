@@ -82,6 +82,9 @@ def materials():
         team_a=bl.mat('ar_team_a', '#ffffff', 0, .4, emit='#ffffff', strength=6),
         team_b=bl.mat('ar_team_b', '#ffffff', 0, .4, emit='#ffffff', strength=6),
         far=bl.mat('ar_far', '#2a2a2e', 0, .9), far_lit=bl.mat('ar_far_lit', '#ffcf8a', 0, .5, emit='#ffb860', strength=4),
+        far_cool=bl.mat('ar_far_cool', '#cfe0ff', 0, .5, emit='#bcd4ff', strength=3), far_glass=bl.mat('ar_far_glass', '#1c232c', .6, .22),
+        warn=bl.mat('ar_warn', '#ff3020', 0, .4, emit='#ff2a18', strength=9), far_ground=tmat('ar_far_ground', 'ar_floor', '#6e6458', .95),
+        tower=tmat('ar_tower', 'ar_conc', '#8a8e98'), tower_dark=tmat('ar_tower_dark', 'ar_conc', '#4a4e58'),
     )
 
 
@@ -201,6 +204,38 @@ class MB:
                 uvs = [((p[0] + p[2]) / tile, (p[1] + p[2]) / tile) for p in ring]
                 self.poly(ring, uvs, m, (ao,) * seg)
 
+    def beam(self, p0, p1, w, m, d=None, tile=None):
+        """box of cross-section w x d along p0 -> p1 (truss members, cables, conveyors, pipes)"""
+        tile = tile or tile_of(m); d = d or w
+        ax = (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]); L = math.sqrt(dot(ax, ax)) or 1e-6
+        a = (ax[0] / L, ax[1] / L, ax[2] / L)
+        up = (0, 1, 0) if abs(a[1]) < .95 else (1, 0, 0)
+        sv = unit(cross(a, up)); uv = cross(sv, a)
+        S = lambda k, v: (v[0] * k, v[1] * k, v[2] * k)
+        A, Su, Uu = S(L, a), S(w, sv), S(d, uv)
+        hs, hu = S(w / 2, sv), S(d / 2, uv)
+        neg = lambda v: (-v[0], -v[1], -v[2])
+        b = add(add(p0, neg(hs)), neg(hu))           # p0 corner (-s, -u)
+        self.quad(add(b, Su), A, Uu, m, tile)                 # +s: (a, u)
+        self.quad(b, Uu, A, m, tile)                           # -s: (u, a)
+        self.quad(add(b, Uu), Su, A, m, tile)                  # +u: (s, a)
+        self.quad(b, A, Su, m, tile)                           # -u: (a, s)
+        self.quad(add(b, A), Uu, Su, m, tile)                  # end at p1: (u, s)
+        self.quad(b, Su, Uu, m, tile)                          # end at p0: (s, u)
+
+    def tcyl(self, cx, cy, cz, r0, r1, h, m, seg=16, tile=None, cap=True):
+        """vertical tapered cylinder (cone when r1 = 0)"""
+        tile = tile or tile_of(m)
+        pt = lambda a, r, y: (cx + math.cos(a) * r, y, cz + math.sin(a) * r)
+        for i in range(seg):
+            a0, a1 = 2 * math.pi * i / seg, 2 * math.pi * (i + 1) / seg
+            P = [pt(a1, r0, cy), pt(a0, r0, cy), pt(a0, r1, cy + h), pt(a1, r1, cy + h)]
+            u0, u1 = 2 * math.pi * r0 * (1 - (i + 1) / seg) / tile, 2 * math.pi * r0 * (1 - i / seg) / tile
+            self.poly(P, [(u0, 0), (u1, 0), (u1, h / tile), (u0, h / tile)], m, (1, 1, 1, 1))
+        if cap and r1 > 0:
+            ring = [pt(2 * math.pi * i / seg, r1, cy + h) for i in range(seg)][::-1]
+            self.poly(ring, [(p[0] / tile, p[2] / tile) for p in ring], m, (1,) * seg)
+
     def build(self, name, shade_flat=True):
         me = bpy.data.meshes.new(name)
         me.from_pydata(self.V, [], self.F)
@@ -225,6 +260,10 @@ class MB:
 
 def add(a, b):
     return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
 def dot(a, b):
@@ -707,14 +746,7 @@ def layout():
             P(x + math.cos(a) * d - w, 0, z + math.sin(a) * d - w * .7, x + math.cos(a) * d + w, R.uniform(.2, .7) * s, z + math.sin(a) * d + w * .7,
               m['brick'] if i % 3 else m['conc'], col=False, rot=R.uniform(0, 3))
 
-    # ---------------- backdrop beyond the walls (no collisions)
-    far = []
-    for (x, z, r, h) in ((-22, Z0 - 14, 2.2, 34), (-15, Z0 - 18, 1.8, 28), (20, Z0 - 22, 2.6, 40)):
-        far.append(('cyl', (x, 0, z, r, h)))
-    for (xa, za, xb, zb, h) in ((-60, Z0 - 40, -8, Z0 - 6, 16), (6, Z0 - 36, 52, Z0 - 8, 20), (X1 + 4, -40, X1 + 30, -6, 14),
-                                (X0 - 30, -46, X0 - 4, -14, 18), (-90, Z0 - 120, 90, Z0 - 90, 34)):
-        far.append(('box', (xa, 0, za, xb, h, zb)))
-    return far
+    return []
 
 
 # ------------------------------------------------------------------ mirror, build, colliders
@@ -830,37 +862,279 @@ def signs(mb):
         mb.poly(pts, [(cu, v0), (cu + .25, v0), (cu + .25, v1), (cu, v1)], m, (1, 1, 1, 1))
 
 
-def backdrop(far):
+SMOKE = []      # chimney tops for the runtime smoke (three space [x, y, z, r])
+
+
+def skyline():
+    """The district around Brennick Works (no collisions, never reachable): sawtooth and gabled halls, office blocks with
+    lit window bands and rooftop kit, banded chimneys with warning lamps, silos, a blast furnace with its stoves, lattice
+    gantry cranes, a conveyor bridge, pylons with cables, a water tower, and the city's towers on the far horizon."""
     mb = MB()
-    mir = []
-    for kind, a in far:
-        if kind == 'cyl':
-            x, y, z, r, h = a; mir.append((kind, (x, y, -z, r, h)))
+    r = random.Random(9071)
+    m = M
+
+    def windows(x0, x1, z0, z1, y0, y1, face, floor=3.6, every=3.2, lit=.35, w=1.6, h=1.5, cool=False):
+        """window grid on one face of a box: dark glass with some lit rooms (warm, a few cool)"""
+        L = (x1 - x0) if face in ('+z', '-z') else (z1 - z0)
+        nx, ny = int(L / every), int((y1 - y0 - 1.5) / floor)
+        for j in range(ny):
+            y = y0 + 1.2 + j * floor
+            for i in range(nx):
+                a = (i + .5) * L / nx
+                mt = m['far_lit'] if r.random() < lit else m['far_glass']
+                if mt is m['far_lit'] and cool and r.random() < .35:
+                    mt = m['far_cool']
+                if face == '+z':
+                    mb.box(x0 + a - w / 2, y, z1, x0 + a + w / 2, y + h, z1 + .06, mt, ao=False)
+                elif face == '-z':
+                    mb.box(x0 + a - w / 2, y, z0 - .06, x0 + a + w / 2, y + h, z0, mt, ao=False)
+                elif face == '+x':
+                    mb.box(x1, y, z0 + a - w / 2, x1 + .06, y + h, z0 + a + w / 2, mt, ao=False)
+                else:
+                    mb.box(x0 - .06, y, z0 + a - w / 2, x0, y + h, z0 + a + w / 2, mt, ao=False)
+
+    def rooftop(x0, x1, z0, z1, y):
+        """parapet, HVAC boxes, vents and sometimes a tank on legs"""
+        t = .4
+        for (a, b, c, d) in ((x0, z0, x1, z0 + t), (x0, z1 - t, x1, z1), (x0, z0, x0 + t, z1), (x1 - t, z0, x1, z1)):
+            mb.box(a, y, b, c, y + 1.0, d, m['conc_dark'], ao=False)
+        for k in range(r.randint(2, 5)):
+            cx, cz = r.uniform(x0 + 3, x1 - 3), r.uniform(z0 + 3, z1 - 3)
+            sx, sz, sh = r.uniform(1.5, 4), r.uniform(1.5, 3), r.uniform(1, 2.4)
+            mb.box(cx - sx / 2, y, cz - sz / 2, cx + sx / 2, y + sh, cz + sz / 2, m['steel_grey'], ao=False)
+            if r.random() < .5:
+                mb.cyl(cx, y + sh, cz, .4, 1.2, m['steel_dark'], seg=8, tile=2)
+        if r.random() < .45:
+            cx, cz = r.uniform(x0 + 4, x1 - 4), r.uniform(z0 + 4, z1 - 4)
+            for dx, dz in ((-1.3, -1.3), (1.3, -1.3), (-1.3, 1.3), (1.3, 1.3)):
+                mb.box(cx + dx - .12, y, cz + dz - .12, cx + dx + .12, y + 4, cz + dz + .12, m['steel_dark'], ao=False)
+            mb.cyl(cx, y + 4, cz, 2.0, 3.2, m['wood_dark'], seg=14, tile=2)
+            mb.tcyl(cx, y + 7.2, cz, 2.1, .2, 1.2, m['steel_dark'], seg=14)
+
+    def block(x0, x1, z0, z1, h, mat, faces, lit=.35, roof=True, cool=False):
+        mb.box(x0, 0, z0, x1, h, z1, mat, tile=4, ao=True)
+        for f in faces:
+            windows(x0, x1, z0, z1, 0, h, f, lit=lit, cool=cool)
+        if roof:
+            rooftop(x0, x1, z0, z1, h)
+
+    def sawtooth(x0, x1, z0, z1, h, rise=3.6, pitch=6.0, face='+z'):
+        """factory hall with a sawtooth roof; the glazed upright of every tooth faces `face`"""
+        mb.box(x0, 0, z0, x1, h, z1, m['brick_dark'], tile=4)
+        n = int((z1 - z0) / pitch)
+        for k in range(n):
+            za, zb = z0 + k * pitch, z0 + (k + 1) * pitch
+            lo, hi = (za, zb) if face == '+z' else (zb, za)
+            # sloped roof plane from the low edge up to the glazed upright
+            P = [(x0, h, lo), (x1, h, lo), (x1, h + rise, hi), (x0, h + rise, hi)]
+            if face != '+z':
+                P = [P[1], P[0], P[3], P[2]]
+            mb.poly(P, [(p[0] / 4, p[2] / 4) for p in P], m['corr_dark'], (1, 1, 1, 1))
+            # glazed upright: strip of dark glass with lit panes
+            if face == '+z':
+                mb.poly([(x0, h, hi), (x1, h, hi), (x1, h + rise, hi), (x0, h + rise, hi)], [(0, 0), (1, 0), (1, 1), (0, 1)], m['far_glass'], (1, 1, 1, 1))
+            else:
+                mb.poly([(x1, h, hi), (x0, h, hi), (x0, h + rise, hi), (x1, h + rise, hi)], [(0, 0), (1, 0), (1, 1), (0, 1)], m['far_glass'], (1, 1, 1, 1))
+            for i in range(int((x1 - x0) / 5)):
+                if r.random() < .22:
+                    xx = x0 + 2.5 + i * 5
+                    zz = hi + (.06 if face == '+z' else -.06)
+                    mb.box(xx - 1.8, h + .4, min(hi, zz), xx + 1.8, h + rise - .4, max(hi, zz), m['far_lit'], ao=False)
+            # gable ends of the tooth
+            for x in (x0, x1):
+                tri = [(x, h, lo), (x, h + rise, hi), (x, h, hi)]
+                if (x == x0) == (face == '+z'):
+                    tri = tri[::-1]
+                mb.poly(tri, [(p[2] / 4, p[1] / 4) for p in tri], m['brick_dark'], (1, 1, 1))
+        windows(x0, x1, z0, z1, 0, h, face, floor=5, every=4, lit=.25, w=2.6, h=2.6)
+
+    def gabled(x0, x1, z0, z1, h, ridge, wall, roof, along='x', lit=.3, face='+z'):
+        mb.box(x0, 0, z0, x1, h, z1, wall, tile=4)
+        if along == 'x':
+            zm = (z0 + z1) / 2
+            for (za, zb) in ((z0, zm), (z1, zm)):
+                P = [(x0, h, za), (x1, h, za), (x1, ridge, zb), (x0, ridge, zb)]
+                if za > zb:
+                    P = [P[1], P[0], P[3], P[2]]
+                mb.poly(P, [(p[0] / 4, p[2] / 4 + p[1] / 4) for p in P], roof, (1, 1, 1, 1))
+            for x, sg in ((x0, -1), (x1, 1)):
+                tri = [(x, h, z0), (x, h, z1), (x, ridge, zm)]
+                if sg < 0:
+                    tri = tri[::-1]
+                mb.poly(tri, [(p[2] / 4, p[1] / 4) for p in tri], wall, (1, 1, 1))
+            # clerestory band of lit panes under the eaves
+            windows(x0, x1, z0, z1, h - 5, h, face, floor=4, every=4, lit=lit, w=2.8, h=1.6)
         else:
-            x0, y0, z0, x1, y1, z1 = a; mir.append((kind, (x0, y0, -z1, x1, y1, -z0)))
-    for kind, a in far + mir:
-        if kind == 'cyl':
-            x, y, z, r, h = a
-            mb.cyl(x, y, z, r, h, M['brick_dark'], seg=16, tile=4)
-            mb.cyl(x, y + h - 1.2, z, r * 1.08, 1.2, M['conc_dark'], seg=16, tile=4)
-        else:
-            x0, y0, z0, x1, y1, z1 = a
-            mb.box(x0, y0, z0, x1, y1, z1, M['corr_dark'] if (x1 - x0) * (z1 - z0) < 2000 else M['far'], tile=4, ao=False)
-            # a few lit windows in a band
-            for i in range(int((x1 - x0) / 6)):
-                if R.random() < .45:
-                    xx = x0 + 3 + i * 6
-                    if z1 < Z0:
-                        mb.box(xx - 1, y1 * .55, z1, xx + 1, y1 * .55 + .8, z1 + .05, M['far_lit'], ao=False)
-                    elif z0 > Z1:
-                        mb.box(xx - 1, y1 * .55, z0 - .05, xx + 1, y1 * .55 + .8, z0, M['far_lit'], ao=False)
-    # gantry crane silhouettes over both backdrops
-    for sz in (1, -1):
-        for x in (-40, -20):
-            z0, z1 = sorted((sz * (Z0 - 30), sz * (Z0 - 29.2)))
-            mb.box(x - .4, 0, z0, x + .4, 24, z1, M['steel_yellow'], ao=False)
-        z0, z1 = sorted((sz * (Z0 - 30.4), sz * (Z0 - 28.8)))
-        mb.box(-44, 24, z0, 4, 25.6, z1, M['steel_yellow'], ao=False)
+            xm = (x0 + x1) / 2
+            for (xa, xb) in ((x0, xm), (x1, xm)):
+                P = [(xa, h, z1), (xa, h, z0), (xb, ridge, z0), (xb, ridge, z1)]
+                if xa > xb:
+                    P = [P[1], P[0], P[3], P[2]]
+                mb.poly(P, [(p[2] / 4, p[0] / 4 + p[1] / 4) for p in P], roof, (1, 1, 1, 1))
+            for z, sg in ((z0, -1), (z1, 1)):
+                tri = [(x1, h, z), (x0, h, z), (xm, ridge, z)]
+                if sg < 0:
+                    tri = tri[::-1]
+                mb.poly(tri, [(p[0] / 4, p[1] / 4) for p in tri], wall, (1, 1, 1))
+            windows(x0, x1, z0, z1, h - 5, h, face, floor=4, every=4, lit=lit, w=2.8, h=1.6)
+
+    def chimney(x, z, r0, h):
+        mb.tcyl(x, 0, z, r0, r0 * .78, h, m['brick_dark'], seg=20, tile=4)
+        for k in range(1, int(h / 7)):
+            y = k * 7; rr = r0 - (r0 * .22) * y / h + .12
+            mb.tcyl(x, y, z, rr, rr, .5, m['conc_dark'], seg=20, cap=False)
+        rt = r0 * .78
+        mb.tcyl(x, h, z, rt + .35, rt + .2, 1.4, m['conc_dark'], seg=20, cap=False)
+        mb.tcyl(x, h + 1.4, z, rt * .8, rt * .8, .01, m['steel_dark'], seg=16)        # dark mouth
+        for a in (0, 2.1, 4.2):
+            lx, lz = x + math.cos(a) * (rt + .5), z + math.sin(a) * (rt + .5)
+            mb.box(lx - .25, h + .4, lz - .25, lx + .25, h + .9, lz + .25, m['warn'], ao=False)
+        SMOKE.append([round(x, 2), round(h + 1.6, 2), round(z, 2), round(rt, 2)])
+
+    def silo(x, z, rr, h):
+        mb.cyl(x, 0, z, rr, h, m['conc_warm'], seg=20, tile=4)
+        mb.tcyl(x, h, z, rr, .6, rr * .7, m['corr_grey'], seg=20)
+        for k in range(1, int(h / 4)):
+            mb.tcyl(x, k * 4, z, rr + .06, rr + .06, .15, m['steel_dark'], seg=20, cap=False)
+
+    def lattice_leg(p0, p1, w, mat, step=3.0):
+        """4-chord square lattice between two points (crane legs / girders / pylons)"""
+        ax = (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]); L = math.sqrt(dot(ax, ax)); a = unit(ax)
+        up = (0, 1, 0) if abs(a[1]) < .95 else (1, 0, 0)
+        sv = unit(cross(a, up)); uv = cross(sv, a)
+        C = [(sx * w / 2, sy * w / 2) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        P = lambda t, c: (p0[0] + ax[0] * t + sv[0] * c[0] + uv[0] * c[1], p0[1] + ax[1] * t + sv[1] * c[0] + uv[1] * c[1], p0[2] + ax[2] * t + sv[2] * c[0] + uv[2] * c[1])
+        for c in C:
+            mb.beam(P(0, c), P(1, c), .22, mat)
+        n = max(1, int(L / step))
+        for k in range(n + 1):
+            t = k / n
+            for i in range(4):
+                mb.beam(P(t, C[i]), P(t, C[(i + 1) % 4]), .1, mat)
+            if k < n:
+                for i in range(4):
+                    if (i + k) % 2 == 0:
+                        mb.beam(P(t, C[i]), P((k + 1) / n, C[(i + 1) % 4]), .08, mat)
+
+    def gantry(x0, x1, za, zb, h):
+        for x in (x0, x1):
+            for z in (za, zb):
+                lattice_leg((x, 0, z), (x, h, z), 1.4, m['steel_yellow'])
+            lattice_leg((x, h - 1, za), (x, h - 1, zb), 1.2, m['steel_yellow'])
+        for z in (za, zb):
+            lattice_leg((x0 - 4, h + .8, z), (x1 + 4, h + .8, z), 2.0, m['steel_yellow'], step=4)
+        tx = x0 + (x1 - x0) * .62
+        mb.box(tx - 2, h + 1.8, za - 1, tx + 2, h + 4, zb + 1, m['steel_yellow'], ao=False)   # trolley
+        mb.box(tx - .3, h - 6, (za + zb) / 2 - .3, tx + .3, h + 1.8, (za + zb) / 2 + .3, m['steel_dark'], ao=False)
+        mb.box(tx - 1.2, h - 7, (za + zb) / 2 - .8, tx + 1.2, h - 6, (za + zb) / 2 + .8, m['steel_yellow'], ao=False)
+
+    def pylon(x, z, h=34):
+        base = 5.0
+        feet = [(x - base, 0, z - base), (x + base, 0, z - base), (x + base, 0, z + base), (x - base, 0, z + base)]
+        top = [(x - 1, h, z - 1), (x + 1, h, z - 1), (x + 1, h, z + 1), (x - 1, h, z + 1)]
+        for f, t in zip(feet, top):
+            mb.beam(f, t, .3, m['steel_grey'])
+        for k in range(1, 7):
+            t = k / 7
+            ring = [(f[0] + (tp[0] - f[0]) * t, h * t, f[2] + (tp[2] - f[2]) * t) for f, tp in zip(feet, top)]
+            for i in range(4):
+                mb.beam(ring[i], ring[(i + 1) % 4], .12, m['steel_grey'])
+                if k > 1:
+                    prev = [(f[0] + (tp[0] - f[0]) * (k - 1) / 7, h * (k - 1) / 7, f[2] + (tp[2] - f[2]) * (k - 1) / 7) for f, tp in zip(feet, top)]
+                    mb.beam(prev[i], ring[(i + 1) % 4], .08, m['steel_grey'])
+        for y, w in ((h * .72, 9), (h * .88, 7)):
+            mb.beam((x - w, y, z), (x + w, y, z), .5, m['steel_grey'])
+        return [(x - 9, h * .72 - .6, z), (x + 9, h * .72 - .6, z), (x - 7, h * .88 - .6, z), (x + 7, h * .88 - .6, z)]
+
+    # ---- far ground around the walls (four quads, no overdraw on the yard)
+    G = 520
+    for (xa, za, xb, zb) in ((-G, -G, G, Z0 - .8), (-G, Z1 + .8, G, G), (-G, Z0 - .8, X0 - .8, Z1 + .8), (X1 + .8, Z0 - .8, G, Z1 + .8)):
+        P = [(xa, -.02, zb), (xb, -.02, zb), (xb, -.02, za), (xa, -.02, za)]
+        mb.poly(P, [(p[0] / 16, -p[2] / 16) for p in P], m['far_ground'], (1, 1, 1, 1))
+
+    # ---- south: the works' own sawtooth shop, the gabled store with its yard crane, stacks, silos, conveyor
+    sawtooth(-70, -8, -96, -58, 12, face='+z')
+    gabled(-4, 50, -88, -60, 13, 20, m['corr_rust'], m['corr_dark'], along='x', face='+z')
+    windows(-4, 50, -88, -60, 0, 9, '+z', floor=4.5, every=5, lit=.3, w=3, h=2)
+    chimney(-26, -66, 2.4, 44); chimney(-14, -72, 1.9, 34); chimney(28, -108, 3.0, 58)
+    for k, (x, z) in enumerate(((62, -70), (71, -70), (66.5, -78))):
+        silo(x, z, 4.0, 22 + k * 2)
+    gantry(56, 94, -66, -54, 22)
+    for k in range(5):            # conveyor bridge from the silos down onto the store roof
+        t0, t1 = k / 5, (k + 1) / 5
+        pa = (62 + (44 - 62) * t0, 23 + (17 - 23) * t0, -74 + (-74 + 74) * t0)
+        pb = (62 + (44 - 62) * t1, 23 + (17 - 23) * t1, -74)
+        mb.beam(pa, pb, 2.2, m['corr_grey'], d=2.0)
+    for x in (58, 51):
+        mb.beam((x, 0, -74), (x, 21 - (62 - x) * .33, -74), .5, m['steel_dark'])
+    block(60, 92, -110, -86, 16, m['brick_dark'], ['+z', '-x'], lit=.3)
+
+    # ---- north: blast furnace and stoves, a gabled hall, a stack and a second crane
+    mb.tcyl(12, 0, 86, 7.5, 6.0, 10, m['steel_rust'], seg=24)
+    mb.tcyl(12, 10, 86, 6.0, 3.8, 26, m['steel_rust'], seg=24)
+    mb.tcyl(12, 36, 86, 3.8, 2.4, 6, m['steel_dark'], seg=20)
+    for y in (12, 22, 32):
+        mb.tcyl(12, y, 86, 7.2 - y * .1, 7.2 - y * .1, .4, m['steel_dark'], seg=24, cap=False)
+        mb.tcyl(12, y + .4, 86, 7.4 - y * .1, 7.4 - y * .1, .06, m['plate'], seg=24)
+    for k, x in enumerate((-8, -17, -26)):
+        mb.cyl(x, 0, 92, 3.6, 30 + k, m['steel_grey'], seg=20, tile=4)
+        mb.tcyl(x, 30 + k, 92, 3.6, 0, 3, m['steel_dark'], seg=20)
+        mb.beam((x, 26, 92), (12, 30, 86), .9, m['steel_rust'])
+    gabled(-76, -32, 60, 96, 14, 21, m['brick'], m['corr_dark'], along='x', face='-z')
+    windows(-76, -32, 60, 96, 0, 10, '-z', floor=4.5, every=5, lit=.3, w=3, h=2)
+    chimney(40, 74, 2.6, 48)
+    gantry(30, 70, 60, 70, 20)
+    block(-30, -6, 104, 128, 20, m['conc_dark'], ['-z'], lit=.35)
+
+    # ---- east: office and warehouse blocks facing the yard, rooftops; pylons and cables beyond
+    block(41, 60, -44, -14, 18, m['brick_dark'], ['-x', '+z', '-z'], lit=.4)
+    block(42, 66, -8, 22, 24, m['tower'], ['-x', '-z'], lit=.45, cool=True)
+    gabled(40, 58, 28, 56, 10, 15, m['corr_green'], m['corr_dark'], along='z', face='-x')
+    windows(40, 58, 28, 56, 0, 10, '-x', floor=4, every=5, lit=.25, w=3, h=1.8)
+    block(70, 96, -30, 30, 14, m['brick'], ['-x'], lit=.2)
+    wires = []
+    for z in (-120, -40, 40, 120):
+        wires.append(pylon(118, z))
+    for a, b in zip(wires, wires[1:]):
+        for pa, pb in zip(a, b):
+            mid = ((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2 - 4, (pa[2] + pb[2]) / 2)
+            mb.beam(pa, mid, .06, m['steel_dark']); mb.beam(mid, pb, .06, m['steel_dark'])
+
+    # ---- west: the rail shed, a water tower, a tall brick block
+    gabled(-74, -42, -34, 34, 10, 16, m['corr_rust'], m['corr_dark'], along='z', face='+x')
+    windows(-74, -42, -34, 34, 0, 9, '+x', floor=4, every=6, lit=.2, w=3.4, h=2)
+    for dx, dz in ((-2, -2), (2, -2), (-2, 2), (2, 2)):
+        mb.beam((-50 + dx * 1.4, 0, 44 + dz * 1.4), (-50 + dx * .8, 18, 44 + dz * .8), .35, m['steel_dark'])
+    mb.cyl(-50, 18, 44, 4.2, 6, m['steel_green'], seg=18, tile=3)
+    mb.tcyl(-50, 24, 44, 4.3, .3, 2.2, m['steel_dark'], seg=18)
+    block(-66, -42, 40 + 12, 74, 22, m['brick_dark'], ['+x', '-z'], lit=.35)
+    block(-68, -44, -76, -48, 16, m['conc'], ['+x', '+z'], lit=.3, cool=True)
+
+    # ---- the city on the horizon (towers with lit floors, mostly to the north-east, a few to the south-west)
+    for k in range(34):
+        ne = k < 24
+        a = r.uniform(.15, 1.35) if ne else r.uniform(3.4, 4.4)
+        d = r.uniform(240, 400) if ne else r.uniform(260, 380)
+        cx, cz = math.sin(a) * d, math.cos(a) * d
+        w, dd = r.uniform(14, 30), r.uniform(14, 30)
+        h = r.uniform(50, 140) if ne else r.uniform(30, 70)
+        mat = m['tower'] if r.random() < .5 else m['tower_dark']
+        mb.box(cx - w / 2, 0, cz - dd / 2, cx + w / 2, h, cz + dd / 2, mat, tile=8, ao=False)
+        # lit floors as bands facing the yard (no per-window quads this far out)
+        face = '-z' if abs(cz) > abs(cx) and cz > 0 else '+z' if abs(cz) > abs(cx) else '-x' if cx > 0 else '+x'
+        for j in range(int(h / 4)):
+            if r.random() < .38:
+                y = 3 + j * 4
+                u0, u1 = sorted((r.uniform(-.45, .1), r.uniform(.0, .45)))
+                if face in ('+z', '-z'):
+                    zf = cz - dd / 2 - .1 if face == '-z' else cz + dd / 2
+                    mb.box(cx + u0 * w, y, zf, cx + u1 * w, y + 1.6, zf + .1, m['far_cool'] if r.random() < .3 else m['far_lit'], ao=False)
+                else:
+                    xf = cx - w / 2 - .1 if face == '-x' else cx + w / 2
+                    mb.box(xf, y, cz + u0 * dd, xf + .1, y + 1.6, cz + u1 * dd, m['far_cool'] if r.random() < .3 else m['far_lit'], ao=False)
+        if r.random() < .5:
+            mb.box(cx - .25, h, cz - .25, cx + .25, h + r.uniform(6, 16), cz + .25, m['steel_dark'], ao=False)
+            mb.box(cx - .5, h + 6, cz - .5, cx + .5, h + 7, cz + .5, m['warn'], ao=False)
     return mb.build('ARENA_far')
 
 
@@ -1061,7 +1335,7 @@ def main():
     ground(mb, cols)
     arena = mb.build('ARENA')
     gb = MB(); glazing(gb); signs(gb); glass = gb.build('ARENA_glass')
-    backdrop(far)
+    skyline()
     # spawns: squad A at -z facing +z, mirrored for squad B
     A = [(-6, 1.2, -50), (0, 1.2, -50.2), (6, 1.2, -50), (-3, 1.2, -48.6), (3, 1.2, -48.6), (-16, 0, -43.5), (-8, 0, -43),
          (8, 0, -43), (20.5, 0, -44.5), (28, 0, -42), (-31, 0, -42), (-22.5, 0, -42.5), (15, 0, -40), (-11, 0, -41)]
@@ -1079,7 +1353,7 @@ def main():
     data = dict(name='Brennick Works', bounds=[X0, Z0, X1, Z1], colliders=cols, spawns=spawns, nav=navg, lanes=lanes, perches=perches,
                 lights=[dict(pos=[round(v, 2) for v in L['pos']], color=L['color'], intensity=L['intensity'], dist=L['dist'], team=L.get('team'))
                         for L in LIGHTS],
-                sun=dict(dir=[-.55, .32, -.77], color='#ffc890', intensity=2.6), sky=['#c98a5a', '#3a4a66'])
+                smoke=SMOKE, sun=dict(dir=[-.55, .26, -.79], color='#ffc08a', intensity=2.7), sky=['#e3a072', '#33476e'])
     json.dump(data, open(os.path.join(bl.MODELS, NAME + '.json'), 'w'), separators=(',', ':'))
     print('[arena] colliders', len(cols), 'lights', len(LIGHTS), 'signs', len(SIGNS), 'glazing', len(GLAZE))
     p = bl.export(NAME + '.glb', export_vertex_color='ACTIVE')

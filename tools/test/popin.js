@@ -105,8 +105,8 @@ fs.mkdirSync(OUT, { recursive: true });
         P.lod(pos); const s1 = P.sig();
         let d = { mean: 0, changed: 0 };
         if (Math.abs(s0 - s1) > 1e-6) {
-          P.lod(prev); const A = P.grab();
-          P.lod(pos); const B = P.grab();
+          P.lod(prev); const A = P.grab(); await new Promise(r => setTimeout(r, 30));
+          P.lod(pos); const B = P.grab(); await new Promise(r => setTimeout(r, 30));
           d = P.diff(A, B);
           if (!worst || d.mean > worst.mean) worst = { ...d, i, dist: +pts[i].toFixed(1), px: Math.round(size * P.ppm(pts[i])), A: P.png(A), B: P.png(B), heat: P.heat(A, B) };
         }
