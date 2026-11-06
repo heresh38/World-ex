@@ -154,8 +154,20 @@ oak/maple, quays willow/ash, suburbs maple/birch + hedges, villages, lone field 
 snowy conifers (glacier), jungle canopy and savanna trees (mesa) per chunk. Test: `tools/test/trees.js`.
 
 ## Player, UI and sky
-- Movement (`player.js`): walk 4.4, sprint 8.6, coyote time + jump buffer, C = crouch (slide when sprinting), automatic
-  mantling onto ledges 0.5–2.45 m (`findLedge`), sitting (`Player.sit`, `World.addSeat`; layouts may export `seats`).
+- Movement (`player.js`, constants exported as `MOVE`; tuned for a fast modern military shooter): walk 4.8 m/s, sprint
+  7.0 (forward only; firing or aiming stops it), tactical sprint 8.6 on a double-tap of Shift (touch: double-tap the
+  sprint button; 3.2 s, then a 4.5 s cooldown; the gun is carried high and away), ADS move 2.78 (58 % of walk, blended by
+  the ADS progress), crouch 2.7. Ground acceleration is a fixed-rate approach to the wanted velocity: 55 m/s² to start
+  (walk speed in ~0.09 s), 70 m/s² to stop or reverse, 24 m/s² to build from walk to sprint; air control 6 m/s² with no
+  drag (momentum kept). Jump 6.1 m/s at gravity 19 (~1.0 m), coyote 0.12 s, buffer 0.15 s, landing dip (camera + gun).
+  Slide (C while sprinting > 6 m/s): +2.4 m/s (cap 11), up to 0.9 s, friction 1.35/s (~5 m), jump cancels it keeping the
+  momentum, 1.0 s cooldown so slides cannot chain. Per weapon class (`data.js weaponHandling(arch)`: [ADS-in s,
+  sprint-to-fire s]): pistols .13/.14, SMGs .17-.18/.15-.16, rifles .22-.24/.19-.2, shotguns .22/.2, DMR .3/.23,
+  heavy/sniper .38-.42/.25-.26; tactical sprint adds .08 to the sprint-out. `Player.readyT` counts the sprint-to-fire
+  delay (weapons.js holds the trigger and buffers a click), `Player.adsK` the ADS progress (FOV zoom, eased; viewmodel
+  blend; bob x0.08 and sway x0.2 when fully aimed), `runK`/`tacK` drive the viewmodel's sprint poses. C = crouch (touch:
+  crouch button), automatic mantling onto ledges 0.5–2.45 m (`findLedge`), sitting (`Player.sit`, `World.addSeat`;
+  layouts may export `seats`).
 - Inventory (I / Tab): `Menus.st_inventory` (weapons, armour, missions, overview) + `src/ui/inspect.js` (turning gun or an
   orbit shot of the player drawn by `Renderer.preview` into `.inv-stage`). Equipping only works aboard the ship.
 - Armour: `armorStats` in `data.js` (worn pieces → armour rating, damage resisted, mobility), used by `Game.armor`.
@@ -215,6 +227,46 @@ perks, stat rolls, random compatible sight); every copy has its own uid, `isNew`
 restarts the run, a metro trip resumes the stage (`g.opResume`), deaths revive at the stage checkpoint. Props `VX_conduit`,
 `VX_relay`, `VX_terminal`, `VX_reliquary` (`vanthos.py`; materials `conduit_glow`, `relay_glow`, `terminal_screen`,
 `reliquary_glow`). Test: `tools/test/operation.js` (screenshots in `test-out/operation/`).
+
+## Shellbreak (team mode)
+The Wayfarer's combat simulation: two squads of ghost-shells, first to the score limit (25/50/75 eliminations) or ahead
+when the clock (5/10/15 min) runs out; 3v3 / 4v4 / 6v6 (player + 5 allies vs 6, never more than 11 bots on touch);
+opposition Recruit / Regular / Veteran. Entry: Briefing table > Simulation tab (settings + service record), destination
+`arena` (hidden in `DESTINATIONS`, kind `sim`: no orbit change, not a charted world); pause > Leave simulation and the
+results screen return to the ship. Files: `src/worlds/arena/world.js` (`ArenaWorld`: map, dusk sky/fog/grade, chimney
+smoke, loadout flyover, main.js hooks `parity` (no armour resist, full mobility), `onPlayerDeath`, `holdPause`, `hideTouch`,
+`scoreKey` (Tab hold / I toggle), `hideDamageNumbers`, `blips()` for the minimap), `match.js` (`Match`: combatants, spawns
+scored away from enemy sight lines + 2 s protection (broken by firing), respawn 3.5 s bots / 4.5 s player, eliminations
++100 (+25 precision), assists (>= 40 damage) +50, streaks, feed, end + rewards: XP, credits and `rollWeapon` -> `addWeapon`,
+record in `save.arena` via `state.js arenaRecord` incl. `cfg`), `nav.js` (`NavGraph`: CSR A*, nearest, cover map),
+`src/game/bots.js` (`Bot`, `BotManager`), `src/ui/arena.js` (score bar + clock, feed, eliminated / assist confirm, ally name
+tags, death card (L = change loadout), scoreboard, loadout and end screens). Every shell is 100 health + 50 shield, all
+hits x1.4 (`MODE_DMG`), the player's damage is normalised to power 25 (parity). Friendly fire is off (ally bots use combat
+side `player`, which the player's rounds skip; bot rounds only test the other squad).
+Bots: player bodies (`player_<sex>.glb`, the other sex is fetched by the world) in tactical kit, team colour on
+`armor_primary__*` and the tinted cloth slots, hidden pieces removed, face morphs stripped (geometry shared per source),
+standard hair material. Roles (rifleman, cqb, marksman, support, sidearm) pick guns from `ROLES` and a preferred range
+(`PREF`). Brain (10 Hz near / in a fight, 5.5 Hz < 60 m, 3.3 Hz beyond): perception cone + LOS raycasts, shared squad intel
+(sightings, which also ping the minimap), gunfire heard within 60-85 m, awareness of hits from behind; goals = lane push
+(`lanes`), intel, flanks via other lanes / alleys, marksman perches, wingmen near the player; fight = strafe, close or open
+range, cover points facing the threat (crouch-peek behind waist cover), reload in cover. Aim: reaction 220-380 ms
+(Regular), an error that decays with `aimTau`, tracking lag from the target's angular speed, lead + drop compensation,
+per-shot jitter growing with distance, burst control on automatics. Shooting uses the gun's real stats (dmg, rpm, burst,
+pellets, spread, falloff, crit, vel/grav, goo splash + acid). Movement: A* + string pulling, moveCapsule, mantle / drop
+edges (climb lerp), separation, a stuck watchdog (hop, repath, new goal, nudge onto the graph; counted in `stats.stuck`).
+Animation only in view (every frame < 55 m, 20 Hz further, 2 Hz out of view), procedural crouch bends.
+Map: `tools/blender/arena.py` -> `assets/models/arena_brennick.glb` (ARENA merged per material, ARENA_glass, ARENA_far)
++ `.json` (colliders, nav graph: 1 m cells on every level with walk/drop/mantle edges incl. 2-cell ledges, cover, lanes,
+perches, spawns per squad (A at -z), light anchors, chimney `smoke`, sun/sky); textures `tools/blender/arena_textures.py`
+(`ar_*`, numpy painted). Brennick Works is mirrored across z = 0: west rail cut (box car to climb into, flatcar, hopper,
+1.2 m platform under a 60 m canopy sightline, walk-through shed on the alley), mid casting hall (furnaces, two mezzanines +
+bridge, four stairs, crate stacks to mantle up, windows over both lanes), east yard + two-storey gatehouse (outside stair,
+balcony), 2.4 m containers (roofs mantle-able), a walk-through container on the alley. The script audits spawn-to-spawn
+sight lines (must be 0) and keeps only the nav part reachable both ways from a spawn. The district outside (no collisions)
+is procedural Blender geometry: sawtooth and gabled halls, office blocks with lit window grids and rooftop kit, banded
+chimneys with warning lamps, silos, a blast furnace with stoves, lattice gantry cranes, a conveyor, pylons with cables,
+a water tower and the city's towers on the horizon. Test: `tools/test/arena.js` (movement numbers on the ship, then a full
+simulated match; `SKIP_MOVE`, `SKIP_MATCH`, `MATCH_MIN`, `DIFF`, `TOUCH`; screenshots in `test-out/arena/`).
 
 ## Vehicles
 `vehicle_textures.py` bakes `veh_*` maps (seat fabric/quilt, leather, dash, carpet, headliner, grille, speaker, disc, grip;

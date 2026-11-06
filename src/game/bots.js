@@ -94,7 +94,9 @@ export class Bot {
     this.w = w; this.A = A; this.S = weaponStats(w); this.mag = this.S.mag; this.reloadT = 0; this.burstN = 0;
     this.pref = PREF[arch] || 18;
     const av = this.av;
-    if (this.gunArch !== arch || !av.gunHolder) {
+    if (this.gunArch !== arch || !this.holder) {
+      const old = this.holder;
+      if (old && this.gunArch !== arch) { old.removeFromParent(); old.traverse(o => { if (o.isMesh) o.material.dispose(); }); this.holder = null; }
       av.attachGun(A.model, m => { m.castShadow = true; Weapons.styleMesh(m, w); });
       this.gunArch = arch; this.holder = av.gunHolder;
     } else if (this.holder && !this.holder.parent) { av.handR.add(this.holder); av.gunHolder = this.holder; av.gun = this.holder.children[0]; av.muzzle = av.gun.getObjectByName('muzzle'); }
@@ -217,6 +219,7 @@ export class Bot {
           const d = best.center(_a).distanceTo(_e);
           const k = D.err * (.035 + Math.min(.06, d * .0012));
           this.errY = (this.rnd() - .5) * 2 * k; this.errP = (this.rnd() - .5) * 1.2 * k;
+          this.headAim = this.rnd() < ({ easy: .04, normal: .14, hard: .3 }[mgr.diff] || .14) && d < 35;
         }
       }
       this.target = best; this.targetVisible = true; this.seenT = now; best.center(this.lastSeen);
@@ -470,7 +473,7 @@ export class Bot {
     if (et === 2 && dy > .35 && d < 2.3 && this.grounded) {
       // mantle up to the node
       this.climb = { from: this.pos.clone(), to: new THREE.Vector3(nav.x[n], nav.y[n], nav.z[n]), t: 0, dur: .36 + dy * .15 };
-      this.vel.set(0, 0, 0); this.mgr.g.audio.jump && this.g.audio.jump();
+      this.vel.set(0, 0, 0);
       this.pi++;
       return 'climb';
     }
@@ -631,7 +634,7 @@ export class Bot {
       const fwd = this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw);
       av.play('Walk', .2, (fwd < -.3 ? -1 : 1) * Math.max(.6, hs / WALK) * 1.1);
     } else av.play('Idle', .25);
-    av.aimPitch = -this.aimPitch * .9;
+    av.aimPitch = this.aimPitch * .9;
     av.update(Math.min(step, .1));
     if (this.crouch > .02) this.crouchPose(this.crouch);
     else av.model.position.y = 0;
