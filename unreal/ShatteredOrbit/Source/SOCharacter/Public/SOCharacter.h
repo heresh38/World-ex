@@ -1,10 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "SOCombatCharacter.h"
 #include "SOCharacter.generated.h"
 
+class UAnimSequenceBase;
 class UCameraComponent;
+class USOViewmodelComponent;
+class USOWeaponData;
 class UInputAction;
 class USkeletalMeshComponent;
 class USOCharacterMovementComponent;
@@ -22,10 +25,11 @@ enum class ESOViewMode : uint8
 /**
  * The player character. First person by default (eye at ~165 cm, arms mesh rendered with the camera's
  * first-person FOV, body hidden from the owner but still casting shadows); T toggles a third-person
- * spring-arm camera with collision.
+ * spring-arm camera with collision. Carries a weapon (viewmodel in first person, hand socket in third person),
+ * aims down sights (zoom from the weapon), and plays the Blender body's clips through USOLocomotionAnimInstance.
  */
 UCLASS(config = Game)
-class SOCHARACTER_API ASOCharacter : public ACharacter
+class SOCHARACTER_API ASOCharacter : public ASOCombatCharacter
 {
 	GENERATED_BODY()
 
@@ -47,6 +51,40 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SO|Combat")
 	bool IsAiming() const { return bAiming; }
 
+	/** 0..1 aim-down-sights progress (rate from the weapon's AdsTime). */
+	UFUNCTION(BlueprintPure, Category = "SO|Combat")
+	float GetAimProgress() const { return AimProgress; }
+
+	// --- Content (loaded at spawn if present; created by Content/Python/import_assets.py) ---
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	TSoftObjectPtr<USkeletalMesh> BodyMesh;
+
+	/** Folder + prefix of the body clips: <prefix>Idle, <prefix>Walk, ... */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FString ClipPathPrefix = TEXT("/Game/Characters/PlayerMale/Anims/A_PlayerMale_");
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	TSoftObjectPtr<USOWeaponData> DefaultWeapon;
+
+	/** Hand bone the third-person gun attaches to, with an offset from the bone to the grip. */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FName WeaponSocket = TEXT("hand_R"); // Blender hand.R (dots become underscores on import)
+
+	/** Pitch kick per unit of weapon kick (degrees). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
+	float RecoilPitch = 0.3f;
+
+	USOViewmodelComponent* GetViewmodel() const { return Viewmodel; }
+
+	//~ ASOCombatCharacter
+	virtual FVector GetAimOrigin() const override;
+	virtual bool CanFireWeapon() const override;
+	virtual bool IsAimingDownSights() const override { return bAiming; }
+	virtual float GetSpreadScale() const override;
+	virtual USceneComponent* GetFirstPersonWeaponParent() const override;
+	virtual FName GetThirdPersonWeaponSocket() const override { return WeaponSocket; }
+	virtual void OnWeaponFired(float Kick) override;
+
 	/** Eye height above the feet when standing / crouched (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float StandingEyeHeight = 165.0f;
@@ -58,6 +96,7 @@ public:
 	float EyeHeightInterpSpeed = 14.0f;
 
 	/** Aim-down-sights field of view as a fraction of the hip field of view. */
+	/** Aim zoom when no weapon is held (the weapon's AimZoom wins otherwise). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float AimFovScale = 0.8f;
 
@@ -129,8 +168,12 @@ public:
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual bool CanJumpInternal_Implementation() const override;
 	virtual bool CanJumpWhileFalling() const override;
+	virtual void PostInitializeComponents() override;
 
 protected:
+	virtual void HandleDeath() override;
+	void LoadContent();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
 
@@ -146,6 +189,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Look")
 	TObjectPtr<USOLookComponent> Look;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	TObjectPtr<USOViewmodelComponent> Viewmodel;
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "SO|Camera")
 	ESOViewMode ViewMode = ESOViewMode::FirstPerson;
@@ -166,5 +212,7 @@ private:
 	float SprintPressTime = -1.0f;
 	float CrouchPressTime = -1.0f;
 	bool bSprintLatched = false;
+	float AimProgress = 0.0f;
+	float LastSprintTime = -100.0f;
 	bool bCrouchLatched = false;
 };

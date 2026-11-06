@@ -79,6 +79,9 @@ public:
 	/** Computes this frame's yaw / pitch in degrees from the pending input and clears it. */
 	FVector2D ConsumeLookDelta(float DeltaTime);
 
+	/** Degrees applied last frame (viewmodel sway). */
+	FVector2D GetLastDelta() const { return LastDelta; }
+
 	float GetSmoothingTimeConstant() const { return FMath::Max(0.0f, AimSmoothing) * SmoothingTimeScale; }
 	float GetCurrentSensitivityScale() const;
 
@@ -97,6 +100,7 @@ private:
 	FVector2D PendingMouseCounts = FVector2D::ZeroVector;
 	FVector2D PendingStick = FVector2D::ZeroVector;
 	FVector2D SmoothedRate = FVector2D::ZeroVector;
+	FVector2D LastDelta = FVector2D::ZeroVector;
 	bool bAiming = false;
 	float HipFov = 90.0f;
 	float AimFov = 90.0f;

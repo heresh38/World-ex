@@ -4,7 +4,7 @@
 #include "GameFramework/PlayerState.h"
 #include "SOPlayerState.generated.h"
 
-/** Replicated per-player state. The ability system component moves here in stage 3. */
+/** Replicated per-player state (score, name). The ability system lives on the pawn (ASOCombatCharacter) for now. */
 UCLASS()
 class SHATTEREDORBIT_API ASOPlayerState : public APlayerState
 {

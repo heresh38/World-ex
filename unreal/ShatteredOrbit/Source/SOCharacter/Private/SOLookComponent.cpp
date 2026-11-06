@@ -120,6 +120,7 @@ FVector2D USOLookComponent::ConsumeLookDelta(float DeltaTime)
 	{
 		Delta.Y = -Delta.Y;
 	}
+	LastDelta = Delta;
 	return Delta;
 }
 

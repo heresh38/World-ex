@@ -16,6 +16,7 @@ public:
 
 	uint8 bSavedWantsToSprint : 1;
 	uint8 bSavedWantsToMantle : 1;
+	uint8 bSavedWantsToAim : 1;
 	float SavedFallTime = 0.0f;
 	float SavedSlideElapsed = 0.0f;
 	float SavedSlideCooldownLeft = 0.0f;
@@ -27,6 +28,7 @@ public:
 	FSOSavedMove()
 		: bSavedWantsToSprint(false)
 		, bSavedWantsToMantle(false)
+		, bSavedWantsToAim(false)
 	{
 	}
 
@@ -35,6 +37,7 @@ public:
 		Super::Clear();
 		bSavedWantsToSprint = false;
 		bSavedWantsToMantle = false;
+		bSavedWantsToAim = false;
 		SavedFallTime = 0.0f;
 		SavedSlideElapsed = 0.0f;
 		SavedSlideCooldownLeft = 0.0f;
@@ -55,13 +58,18 @@ public:
 		{
 			Result |= FLAG_Custom_1;
 		}
+		if (bSavedWantsToAim)
+		{
+			Result |= FLAG_Custom_2;
+		}
 		return Result;
 	}
 
 	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const override
 	{
 		const FSOSavedMove* Other = static_cast<const FSOSavedMove*>(NewMove.Get());
-		if (bSavedWantsToSprint != Other->bSavedWantsToSprint || bSavedWantsToMantle != Other->bSavedWantsToMantle)
+		if (bSavedWantsToSprint != Other->bSavedWantsToSprint || bSavedWantsToMantle != Other->bSavedWantsToMantle
+			|| bSavedWantsToAim != Other->bSavedWantsToAim)
 		{
 			return false;
 		}
@@ -75,6 +83,7 @@ public:
 		{
 			bSavedWantsToSprint = Move->bWantsToSprint;
 			bSavedWantsToMantle = Move->bWantsToMantle;
+			bSavedWantsToAim = Move->bWantsToAim;
 			SavedFallTime = Move->FallTime;
 			SavedSlideElapsed = Move->SlideElapsed;
 			SavedSlideCooldownLeft = Move->SlideCooldownLeft;
@@ -122,6 +131,7 @@ public:
 USOCharacterMovementComponent::USOCharacterMovementComponent()
 	: bWantsToSprint(false)
 	, bWantsToMantle(false)
+	, bWantsToAim(false)
 {
 	// Fast modern shooter feel (numbers from the browser build's MOVE table, in cm).
 	MaxWalkSpeed = 440.0f;
@@ -148,7 +158,7 @@ USOCharacterMovementComponent::USOCharacterMovementComponent()
 
 bool USOCharacterMovementComponent::IsSprinting() const
 {
-	if (!bWantsToSprint || !UpdatedComponent || IsCrouching() || MovementMode != MOVE_Walking)
+	if (!bWantsToSprint || bWantsToAim || !UpdatedComponent || IsCrouching() || MovementMode != MOVE_Walking)
 	{
 		return false;
 	}
@@ -177,7 +187,7 @@ float USOCharacterMovementComponent::GetMaxSpeed() const
 		{
 			return SprintSpeed;
 		}
-		return MaxWalkSpeed;
+		return bWantsToAim ? MaxWalkSpeed * AimSpeedScale : MaxWalkSpeed;
 	}
 	return Super::GetMaxSpeed();
 }
@@ -239,6 +249,7 @@ void USOCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 	Super::UpdateFromCompressedFlags(Flags);
 	bWantsToSprint = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
 	bWantsToMantle = (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
+	bWantsToAim = (Flags & FSavedMove_Character::FLAG_Custom_2) != 0;
 }
 
 FNetworkPredictionData_Client* USOCharacterMovementComponent::GetPredictionData_Client() const

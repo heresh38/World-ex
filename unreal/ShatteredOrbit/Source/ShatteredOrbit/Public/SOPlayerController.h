@@ -24,6 +24,17 @@ public:
 	/** Adds DefaultMappingContext to the local player's Enhanced Input subsystem; false if it is missing. */
 	bool AddDefaultMappingContext();
 
+	/** Dev: screenshots of the hip / ADS / mid-reload / third-person views into Saved/Screenshots/SO_*.png, then
+	 *  quits if bQuitWhenDone. Run headless-free: -game -RenderOffscreen -ExecCmds="SOCaptureSeries 1". */
+	UFUNCTION(Exec)
+	void SOCaptureSeries(int32 bQuitWhenDone = 0);
+
 protected:
 	virtual void BeginPlay() override;
+
+private:
+	void CaptureStep();
+	int32 CaptureIndex = 0;
+	bool bCaptureQuit = false;
+	FTimerHandle CaptureTimer;
 };

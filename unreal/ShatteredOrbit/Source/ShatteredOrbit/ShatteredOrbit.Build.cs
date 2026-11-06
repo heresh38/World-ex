@@ -6,6 +6,7 @@ public class ShatteredOrbit : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"SOCore", "SOCharacter", "SOCombat", "SOWorld", "SOUI" });
+			"GameplayAbilities", "GameplayTags", "AIModule", "NavigationSystem",
+			"SOCore", "SOCharacter", "SOCombat", "SOWorld", "SOUI", "SOAI" });
 	}
 }

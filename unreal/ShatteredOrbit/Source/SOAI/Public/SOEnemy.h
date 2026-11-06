@@ -1,0 +1,82 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "SOCombatCharacter.h"
+#include "SOEnemy.generated.h"
+
+class USkeletalMesh;
+
+/**
+ * A creature. Defaults are the VANTHOS stalker from the browser build (enemies.js: hp 140, speed 5.4 m/s,
+ * melee 18 damage at 2.2 m every 0.9 s). Melee strikes land after a wind-up if the target is still in reach.
+ */
+UCLASS()
+class SOAI_API ASOEnemy : public ASOCombatCharacter
+{
+	GENERATED_BODY()
+
+public:
+	ASOEnemy(const FObjectInitializer& ObjectInitializer);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float WalkSpeed = 220.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float RunSpeed = 540.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float MeleeDamage = 18.0f;
+
+	/** Reach from capsule edge to capsule edge (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float MeleeRange = 220.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float MeleeCooldown = 0.9f;
+
+	/** Strike lands this long after the attack starts. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float MeleeWindup = 0.35f;
+
+	/** Forward lunge speed at the start of an attack (cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float LungeSpeed = 520.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float SightRange = 3500.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	TSoftObjectPtr<USkeletalMesh> BodyMesh;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FString ClipPathPrefix = TEXT("/Game/Characters/Stalker/Anims/A_Stalker_");
+
+	/** Server: starts a melee attack on Target if off cooldown. */
+	bool TryAttack(AActor* Target);
+
+	bool IsAttacking() const { return PendingStrikeTime >= 0.0f; }
+	float GetLastAttackTime() const { return LastAttackTime; }
+	int32 GetStrikesLanded() const { return StrikesLanded; }
+
+	/** Gap between two capsules (cm). */
+	float DistanceTo(const AActor* Other) const;
+
+	void SetRunning(bool bRun);
+
+	//~ AActor
+	virtual void PostInitializeComponents() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+protected:
+	virtual void HandleDeath() override;
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastAttack();
+
+	void LoadContent();
+
+	float LastAttackTime = -100.0f;
+	float PendingStrikeTime = -1.0f;
+	int32 StrikesLanded = 0;
+	TWeakObjectPtr<AActor> AttackTarget;
+};

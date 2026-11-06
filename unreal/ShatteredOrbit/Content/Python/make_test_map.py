@@ -192,6 +192,15 @@ def main():
 
     spawn(unreal.PlayerStart, (0, 0, 100), (0, 0, 0), "PlayerStart")
 
+    # Stage 3: nav mesh over the floor (generated at runtime, RuntimeGeneration=Dynamic) and three stalker spawners
+    # out past the ledges, facing the start.
+    nav = spawn(unreal.NavMeshBoundsVolume, (0, 0, 150), label="NavBounds")
+    nav.set_actor_scale3d(unreal.Vector(40.0, 40.0, 4.0))  # default brush is 200 cm
+    nav.set_folder_path("Gameplay")
+    for i, (x, y) in enumerate(((2600, -700), (2900, 600), (3400, 0))):
+        spawner = spawn(unreal.SOEnemySpawner, (x, y, 0), (0, 180, 0), f"StalkerSpawner_{i}")
+        spawner.set_folder_path("Gameplay")
+
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     world.get_world_settings().set_editor_property("default_game_mode", unreal.SOGameMode)
 

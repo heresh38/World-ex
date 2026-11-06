@@ -41,6 +41,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Sprint")
 	float SprintForwardDot = 0.7f;
 
+	/** Move speed while aiming down sights, as a fraction of walk speed. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Sprint")
+	float AimSpeedScale = 0.58f;
+
 	// --- Jump ---
 	/** A jump is still allowed this long after walking off a ledge. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Jump", meta = (Units = "s"))
@@ -106,6 +110,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SO|Movement")
 	void SetWantsToMantle(bool bWants) { bWantsToMantle = bWants; }
 
+	UFUNCTION(BlueprintCallable, Category = "SO|Movement")
+	void SetWantsToAim(bool bWants) { bWantsToAim = bWants; }
+
+	bool WantsToAim() const { return bWantsToAim; }
+
 	bool WantsToSprint() const { return bWantsToSprint; }
 	bool WantsToMantle() const { return bWantsToMantle; }
 
@@ -153,6 +162,7 @@ protected:
 
 	uint8 bWantsToSprint : 1;
 	uint8 bWantsToMantle : 1;
+	uint8 bWantsToAim : 1;
 
 	float FallTime = 0.0f;
 	float SlideElapsed = 0.0f;

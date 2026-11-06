@@ -1,22 +1,34 @@
 """Converts our GLBs into Unreal-ready FBX files.
 
-    blender --background --python tools/blender/export_fbx.py -- in.glb out_dir [--single] [--keep-location]
+    blender --background --python tools/blender/export_fbx.py -- in.glb out_dir [options]
 
-- One FBX per top-level asset (root object of the GLB) in out_dir, named after the root
-  (--single writes the whole file as one FBX named after the GLB).
-- Units: Blender metres with "FBX units scale", so Unreal imports 1 m = 100 cm without touching the import scale.
-- Axes: Z up, -Y forward (Blender's native frame, written into the FBX axis system; Unreal converts on import).
-- Skeletons: no leaf bones, deform bones only, every action baked (Unreal imports them as animation sequences).
+Options:
+  --single           the whole file as one FBX named after the GLB (default: one FBX per root object)
+  --keep-location    keep each asset's GLB position (default: exported at the origin)
+  --split-parts      guns: the reload parts (mag, bolt, charge, slide, pump, crane, cylinder, rounds, hatch, biomass)
+                     become their own FBX files with the origin at their pivot; <asset>.parts.json gives their rest
+                     transforms and the gun's empties (muzzle, sight, rail, foregrip, ...) in Unreal mesh space
+  --only=a,b,c       keep only these mesh objects (e.g. one wardrobe loadout); armatures and empties are kept
+
+- Units: static files stay in Blender metres with "FBX units scale" (import with "Convert Scene Unit"); files with an
+  armature are rewritten in centimetres first (mesh, shape keys, rest bones, location keys; scene unit 1 cm) because
+  Unreal converts skinned vertices but not the bind pose. export_fbx.json says which ("units": "m" | "cm").
+- Axes: Z up, -Y forward (Blender's native frame, written into the FBX axis system). Unreal's importer flips Y, so a
+  Blender point (x, y, z) m lands at (100x, -100y, 100z) cm in the imported mesh: models face +Y in Unreal.
+- Skeletons: no leaf bones, deform bones only, every action baked (Unreal imports them as animation sequences);
+  bone display shapes the glTF importer adds (Icosphere) are dropped.
 - Collision: objects named UCX_* (or ending in _col / _collision) are kept, unparented next to their mesh and
   renamed UCX_<Mesh>_NN so Unreal picks them up as custom collision.
 - LODs: X / X_mid / X_lod (also X_lod1, X_LOD2, ...) become one FBX LodGroup "X" with children X_LOD0, X_LOD1, X_LOD2.
-- Textures embedded in the GLB are written next to the FBX in out_dir/Textures and referenced relatively.
-- Assets are exported at the origin (their GLB position is ignored) unless --keep-location is given.
+- Materials: out_dir/materials.json lists every glTF material (factors, texture files, alpha mode, double sided,
+  whether its meshes carry vertex colours); the images embedded in the GLB are written byte for byte to
+  out_dir/Textures. The Unreal import script builds material instances from this (the FBX carries slot names only).
 Writes out_dir/export_fbx.json listing every file.
 """
 import json
 import os
 import re
+import struct
 import sys
 
 import bpy
@@ -24,16 +36,18 @@ from mathutils import Matrix
 
 LOD_RE = re.compile(r"^(?P<base>.+?)_(?:(?P<mid>mid)|(?:lod|LOD)(?P<n>\d*))$")
 COL_RE = re.compile(r"^(UCX_.+|.+_(?:col|collision)(?:\.\d+)?)$", re.I)
+PARTS = ("mag", "bolt", "charge", "slide", "pump", "crane", "cylinder", "rounds", "hatch", "biomass")
 
 
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    flags = {a for a in argv if a.startswith("--")}
+    flags = {a.split("=")[0]: (a.split("=", 1)[1] if "=" in a else True) for a in argv if a.startswith("--")}
     pos = [a for a in argv if not a.startswith("--")]
     if len(pos) != 2:
         print(__doc__)
-        raise SystemExit("usage: export_fbx.py -- in.glb out_dir [--single] [--keep-location]")
-    return os.path.abspath(pos[0]), os.path.abspath(pos[1]), "--single" in flags, "--keep-location" in flags
+        raise SystemExit("usage: export_fbx.py -- in.glb out_dir [--single] [--keep-location] [--split-parts] [--only=a,b]")
+    only = set(flags["--only"].split(",")) if isinstance(flags.get("--only"), str) else None
+    return os.path.abspath(pos[0]), os.path.abspath(pos[1]), flags, only
 
 
 def safe(name):
@@ -52,30 +66,146 @@ def has_armature(ob):
     return ob.type == "ARMATURE" or any(d.type == "ARMATURE" for d in descendants(ob))
 
 
-def write_textures(out_dir):
+def ue_loc(v):
+    """Blender metres -> Unreal mesh space centimetres (the importer flips Y)."""
+    return [round(v[0] * 100.0, 4), round(-v[1] * 100.0, 4), round(v[2] * 100.0, 4)]
+
+
+def ue_quat(q):
+    """Blender quaternion -> Unreal mesh space [x, y, z, w] (mirror in Y: (w, x, y, z) -> (w, -x, y, -z))."""
+    return [round(-q.x, 6), round(q.y, 6), round(-q.z, 6), round(q.w, 6)]
+
+
+# ---------------------------------------------------------------- materials + images straight from the GLB
+
+def read_glb(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    magic, _version, _length = struct.unpack_from("<4sII", data, 0)
+    if magic != b"glTF":
+        raise SystemExit(f"{path} is not a GLB")
+    off, doc, binary = 12, None, b""
+    while off < len(data):
+        clen, ctype = struct.unpack_from("<I4s", data, off)
+        chunk = data[off + 8: off + 8 + clen]
+        if ctype == b"JSON":
+            doc = json.loads(chunk.decode("utf-8"))
+        elif ctype == b"BIN\x00":
+            binary = chunk
+        off += 8 + clen
+    return doc, binary
+
+
+def export_materials(src, out_dir):
+    doc, binary = read_glb(src)
+    images = doc.get("images", [])
+    files = {}
     tex_dir = os.path.join(out_dir, "Textures")
-    written = []
-    for img in bpy.data.images:
-        if img.source != "FILE" and not img.packed_file:
+    for i, img in enumerate(images):
+        if "bufferView" not in img:
             continue
-        if img.size[0] == 0:
-            continue
-        ext = ".jpg" if img.file_format == "JPEG" else ".png"
-        if img.file_format not in ("JPEG", "PNG"):
-            img.file_format = "PNG"
+        bv = doc["bufferViews"][img["bufferView"]]
+        raw = binary[bv.get("byteOffset", 0): bv.get("byteOffset", 0) + bv["byteLength"]]
+        ext = ".jpg" if img.get("mimeType") == "image/jpeg" else ".png"
+        name = safe(img.get("name") or f"image_{i}")
         os.makedirs(tex_dir, exist_ok=True)
-        path = os.path.join(tex_dir, safe(os.path.splitext(img.name)[0]) + ext)
-        img.filepath_raw = path
-        try:
-            img.save()
-        except RuntimeError as e:  # image without pixel data
-            print(f"[export_fbx] could not write {img.name}: {e}")
-            continue
-        if img.packed_file:
-            img.unpack(method="REMOVE")
-            img.filepath = path
-        written.append(os.path.relpath(path, out_dir))
-    return written
+        with open(os.path.join(tex_dir, name + ext), "wb") as f:
+            f.write(raw)
+        files[i] = f"Textures/{name}{ext}"
+
+    def tex(info):
+        if not info:
+            return None
+        t = doc["textures"][info["index"]]
+        return files.get(t.get("source"))
+
+    vc_materials = set()
+    for mesh in doc.get("meshes", []):
+        for prim in mesh.get("primitives", []):
+            if "COLOR_0" in prim.get("attributes", {}) and "material" in prim:
+                vc_materials.add(prim["material"])
+
+    out = {}
+    for i, m in enumerate(doc.get("materials", [])):
+        pbr = m.get("pbrMetallicRoughness", {})
+        ext = m.get("extensions", {})
+        out[m.get("name", f"material_{i}")] = {
+            "baseColor": pbr.get("baseColorFactor", [1, 1, 1, 1]),
+            "baseColorTex": tex(pbr.get("baseColorTexture")),
+            "metallic": pbr.get("metallicFactor", 1.0),
+            "roughness": pbr.get("roughnessFactor", 1.0),
+            "mrTex": tex(pbr.get("metallicRoughnessTexture")),
+            "normalTex": tex(m.get("normalTexture")),
+            "normalScale": (m.get("normalTexture") or {}).get("scale", 1.0),
+            "emissive": m.get("emissiveFactor", [0, 0, 0]),
+            "emissiveStrength": ext.get("KHR_materials_emissive_strength", {}).get("emissiveStrength", 1.0),
+            "emissiveTex": tex(m.get("emissiveTexture")),
+            "alphaMode": m.get("alphaMode", "OPAQUE"),
+            "alphaCutoff": m.get("alphaCutoff", 0.5),
+            "doubleSided": m.get("doubleSided", False),
+            "vertexColor": i in vc_materials,
+        }
+    with open(os.path.join(out_dir, "materials.json"), "w") as f:
+        json.dump(out, f, indent=2)
+    return out, sorted(files.values())
+
+
+# ---------------------------------------------------------------- scene preparation
+
+def drop_helpers(only):
+    """Removes bone display shapes and (with --only) every mesh not in the list."""
+    shapes = set()
+    for ob in bpy.context.scene.objects:
+        if ob.type == "ARMATURE" and ob.pose:
+            for pb in ob.pose.bones:
+                if pb.custom_shape:
+                    shapes.add(pb.custom_shape.name)
+    for ob in list(bpy.context.scene.objects):
+        is_shape = ob.name in shapes or (ob.type == "MESH" and ob.parent is None and not ob.data.materials and re.match(r"^Icosphere", ob.name))
+        filtered = only is not None and ob.type == "MESH" and ob.name not in only
+        if is_shape or filtered:
+            bpy.data.objects.remove(ob, do_unlink=True)
+
+
+def action_fcurves(action):
+    """F-curves of an action (Blender 4.4+ slotted actions; the legacy action.fcurves on older versions)."""
+    if hasattr(action, "layers"):
+        for layer in action.layers:
+            for strip in layer.strips:
+                for bag in getattr(strip, "channelbags", []):
+                    yield from bag.fcurves
+    elif hasattr(action, "fcurves"):
+        yield from action.fcurves
+
+
+def scene_to_centimetres():
+    """Skeletal files: rewrite everything in centimetres (mesh data + shape keys, armature rest bones, object and
+    bone-location animation) and set the scene unit to 1 cm, so the FBX is cm-native. Unreal's unit conversion
+    scales the vertices but not the bind pose, which leaves skeletons in metres; native cm avoids any conversion."""
+    k = 100.0
+    scale = Matrix.Scale(k, 4)
+    done = set()
+    for ob in bpy.context.scene.objects:
+        if ob.data is not None and ob.data.name not in done and ob.type in ("MESH", "ARMATURE"):
+            done.add(ob.data.name)
+            if ob.type == "MESH":
+                ob.data.transform(scale, shape_keys=True)
+            else:
+                ob.data.transform(scale)
+        ob.location = ob.location * k
+        if ob.type == "EMPTY":
+            ob.empty_display_size *= k
+    for action in bpy.data.actions:
+        for fc in action_fcurves(action):
+            if fc.data_path.endswith("location"):
+                for kp in fc.keyframe_points:
+                    kp.co[1] *= k
+                    kp.handle_left[1] *= k
+                    kp.handle_right[1] *= k
+                fc.update()
+    us = bpy.context.scene.unit_settings
+    us.system = "METRIC"
+    us.scale_length = 0.01
 
 
 def prepare_collision(roots):
@@ -135,6 +265,16 @@ def group_lods(roots):
     return groups
 
 
+def mesh_materials(objects):
+    names = []
+    for ob in objects:
+        if ob.type == "MESH":
+            for m in ob.data.materials:
+                if m and m.name not in names:
+                    names.append(m.name)
+    return names
+
+
 def export(path, objects, skeletal):
     bpy.ops.object.select_all(action="DESELECT")
     for ob in objects:
@@ -167,30 +307,72 @@ def export(path, objects, skeletal):
         bake_anim_use_nla_strips=False,
         bake_anim_force_startend_keying=True,
         bake_anim_simplify_factor=0.0,
-        path_mode="RELATIVE",
+        path_mode="STRIP",
         embed_textures=False,
     )
 
 
+def split_parts(name, root, out_dir):
+    """Exports each reload part at its own pivot; returns the parts.json dict (Unreal mesh space, root = origin)."""
+    info = {"parts": {}, "sockets": {}}
+    inv = root.matrix_world.inverted()
+    for ob in descendants(root):
+        rel = inv @ ob.matrix_world
+        loc, rot, _scale = rel.decompose()
+        if ob.type == "EMPTY" and ob.name not in PARTS:
+            info["sockets"][ob.name] = {"loc": ue_loc(loc), "rot": ue_quat(rot)}
+    for part in PARTS + tuple(o.name for o in descendants(root) if o.name.startswith("x_")):
+        ob = next((o for o in descendants(root) if o.name == part), None)
+        if ob is None or ob.type != "MESH":
+            continue
+        rel = inv @ ob.matrix_world
+        loc, rot, _scale = rel.decompose()
+        parent = ob.parent.name if ob.parent is not root else ""
+        saved_parent, saved = ob.parent, ob.matrix_world.copy()
+        kids = [c for c in ob.children]
+        kid_saved = [(c, c.matrix_world.copy()) for c in kids]
+        ob.parent = None
+        ob.matrix_world = Matrix.Identity(4)
+        for c, m in kid_saved:  # nested parts (crane > cylinder) stay with their own files
+            c.parent = None
+            c.matrix_world = m
+        fname = f"{name}__{safe(part)}.fbx"
+        export(os.path.join(out_dir, fname), [ob], False)
+        info["parts"][part] = {"file": fname, "loc": ue_loc(loc), "rot": ue_quat(rot), "parent": parent,
+                               "materials": mesh_materials([ob])}
+        ob.parent = saved_parent
+        ob.matrix_world = saved
+        for c, m in kid_saved:
+            c.parent = ob
+            c.matrix_world = m
+        ob.hide_set(True)  # left out of the body export
+    return info
+
+
 def main():
-    src, out_dir, single, keep_location = parse_args()
+    src, out_dir, flags, only = parse_args()
+    single, keep_location, do_split = "--single" in flags, "--keep-location" in flags, "--split-parts" in flags
     os.makedirs(out_dir, exist_ok=True)
+    materials, textures = export_materials(src, out_dir)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=src, merge_vertices=False)
+    drop_helpers(only)
+    skeletal_file = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
+    if skeletal_file:
+        scene_to_centimetres()
 
-    textures = write_textures(out_dir)
     roots = [ob for ob in bpy.context.scene.objects if ob.parent is None]
     ucx = prepare_collision(roots)
     roots = [ob for ob in bpy.context.scene.objects if ob.parent is None and not ob.name.startswith("UCX_")]
 
     if single:
         stem = safe(os.path.splitext(os.path.basename(src))[0])
-        objects = list(bpy.context.scene.objects)
-        groups = [(stem, objects, False)]
+        groups = [(stem, list(bpy.context.scene.objects), False)]
     else:
         groups = group_lods(roots)
 
-    manifest = {"source": os.path.basename(src), "textures": textures, "assets": []}
+    manifest = {"source": os.path.basename(src), "textures": textures, "materials": "materials.json",
+                "units": "cm" if skeletal_file else "m", "assets": []}
     for name, objects, is_lod in groups:
         root = objects[0]
         cols = [] if single else [c for o in objects for c in ucx.get(o, [])]
@@ -204,23 +386,34 @@ def main():
         skeletal = any(has_armature(o) for o in objects)
         if name.lower().startswith("armature"):
             name = safe(os.path.splitext(os.path.basename(src))[0])
-        path = os.path.join(out_dir, name + ".fbx")
-        export(path, objects + cols, skeletal)
-        manifest["assets"].append({
-            "file": os.path.basename(path),
-            "kind": "skeletal" if skeletal else "static",
+        entry = {"file": name + ".fbx", "kind": "skeletal" if skeletal else "static"}
+        if do_split and not skeletal:
+            entry["parts"] = f"{name}.parts.json"
+            info = split_parts(name, root, out_dir)
+            with open(os.path.join(out_dir, entry["parts"]), "w") as f:
+                json.dump(info, f, indent=2)
+        body = [o for o in objects if not o.hide_get()]
+        export(os.path.join(out_dir, entry["file"]), body + cols, skeletal)
+        entry.update({
             "lods": sum(1 for o in objects if re.search(r"_LOD\d+$", o.name)) if is_lod else 1,
             "collision": [c.name for c in cols],
-            "meshes": sum(1 for o in objects if o.type == "MESH"),
+            "meshes": sum(1 for o in body if o.type == "MESH"),
+            "materials": mesh_materials(body),
+            "actions": [a.name for a in bpy.data.actions] if skeletal else [],
         })
+        manifest["assets"].append(entry)
+        for o in objects:
+            o.hide_set(False)
         root.matrix_world = saved
         for c, m in zip(cols, saved_cols):
             c.matrix_world = m
-        print(f"[export_fbx] {path} ({manifest['assets'][-1]['kind']}, lods {manifest['assets'][-1]['lods']}, ucx {len(cols)})")
+        print(f"[export_fbx] {entry['file']} ({entry['kind']}, lods {entry['lods']}, ucx {len(cols)}"
+              f"{', parts ' + entry['parts'] if 'parts' in entry else ''})")
 
     with open(os.path.join(out_dir, "export_fbx.json"), "w") as f:
         json.dump(manifest, f, indent=2)
-    print(f"[export_fbx] {len(manifest['assets'])} FBX file(s), {len(textures)} texture(s) -> {out_dir}")
+    print(f"[export_fbx] {len(manifest['assets'])} FBX file(s), {len(textures)} texture(s), "
+          f"{len(materials)} material(s) -> {out_dir}")
 
 
 main()

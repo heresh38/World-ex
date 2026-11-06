@@ -12,7 +12,13 @@
 #include "SOCharacterMovementComponent.h"
 #include "SOGameUserSettings.h"
 #include "SOLog.h"
+#include "SOLocomotionAnimInstance.h"
 #include "SOLookComponent.h"
+#include "SOViewmodelComponent.h"
+#include "SOWeapon.h"
+#include "SOWeaponData.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Engine/SkeletalMesh.h"
 
 namespace SOInputPaths
 {
@@ -33,6 +39,9 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<USOCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
+	Faction = ESOFaction::Player;
+	StartMaxHealth = 100.0f;
+	StartMaxShield = 50.0f;
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	Capsule->InitCapsuleSize(34.0f, 90.0f);
@@ -89,6 +98,12 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 
 	Look = CreateDefaultSubobject<USOLookComponent>(TEXT("Look"));
 
+	Viewmodel = CreateDefaultSubobject<USOViewmodelComponent>(TEXT("Viewmodel"));
+	Viewmodel->SetupAttachment(FirstPersonCamera);
+
+	BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/PlayerMale/SK_PlayerMale.SK_PlayerMale")));
+	DefaultWeapon = TSoftObjectPtr<USOWeaponData>(FSoftObjectPath(TEXT("/Game/Weapons/Rifle/DA_Rifle.DA_Rifle")));
+
 	MoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Move));
 	LookAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Look));
 	LookGamepadAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::LookGamepad));
@@ -107,11 +122,125 @@ USOCharacterMovementComponent* ASOCharacter::GetSOMovement() const
 	return Cast<USOCharacterMovementComponent>(GetCharacterMovement());
 }
 
+void ASOCharacter::PostInitializeComponents()
+{
+	LoadContent();
+	Super::PostInitializeComponents();
+}
+
+void ASOCharacter::LoadContent()
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body->GetSkeletalMeshAsset() && !BodyMesh.IsNull())
+	{
+		if (USkeletalMesh* Loaded = BodyMesh.LoadSynchronous())
+		{
+			Body->SetSkeletalMesh(Loaded);
+		}
+	}
+	if (Body->GetSkeletalMeshAsset() && !Body->GetAnimInstance())
+	{
+		Body->SetAnimInstanceClass(USOLocomotionAnimInstance::StaticClass());
+	}
+	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance()))
+	{
+		auto Clip = [this](const TCHAR* Name) -> UAnimSequenceBase*
+		{
+			const FString Asset = FPaths::GetBaseFilename(ClipPathPrefix) + Name;
+			const FString Path = ClipPathPrefix + Name + TEXT(".") + Asset;
+			return TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(Path)).LoadSynchronous();
+		};
+		Anim->Clips.Idle = Clip(TEXT("Idle"));
+		Anim->Clips.Walk = Clip(TEXT("Walk"));
+		Anim->Clips.Run = Clip(TEXT("Run"));
+		Anim->Clips.Jump = Clip(TEXT("Jump"));
+		Anim->Clips.Death = Clip(TEXT("Death"));
+		Anim->Clips.Slide = Clip(TEXT("Slide"));
+		Anim->Clips.WalkSpeed = 440.0f;
+		Anim->Clips.RunSpeed = 860.0f;
+	}
+}
+
 void ASOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentFov = GetHipFov();
+	if (HasAuthority() && !Weapon && !DefaultWeapon.IsNull())
+	{
+		EquipWeapon(DefaultWeapon.LoadSynchronous());
+	}
 	ApplyViewMode();
+}
+
+FVector ASOCharacter::GetAimOrigin() const
+{
+	return FirstPersonCamera->GetComponentLocation();
+}
+
+USceneComponent* ASOCharacter::GetFirstPersonWeaponParent() const
+{
+	return Viewmodel;
+}
+
+bool ASOCharacter::CanFireWeapon() const
+{
+	if (bDead)
+	{
+		return false;
+	}
+	const USOCharacterMovementComponent* Move = GetSOMovement();
+	if (Move && (Move->IsSprinting() || Move->IsMantling()))
+	{
+		return false;
+	}
+	const USOWeaponData* Data = Weapon ? Weapon->GetData() : nullptr;
+	const float Ready = Data ? Data->SprintToFireTime : 0.2f;
+	return GetWorld()->GetTimeSeconds() - LastSprintTime >= Ready;
+}
+
+float ASOCharacter::GetSpreadScale() const
+{
+	float Scale = FMath::Lerp(1.0f, 0.35f, AimProgress);
+	if (bIsCrouched)
+	{
+		Scale *= 0.75f;
+	}
+	const float Speed = GetVelocity().Size2D();
+	Scale *= 1.0f + FMath::Clamp(Speed / 860.0f, 0.0f, 1.0f) * 0.8f;
+	if (const USOCharacterMovementComponent* Move = GetSOMovement(); Move && Move->IsFalling())
+	{
+		Scale *= 2.0f;
+	}
+	return Scale;
+}
+
+void ASOCharacter::OnWeaponFired(float Kick)
+{
+	if (Viewmodel)
+	{
+		Viewmodel->Kick(Kick);
+	}
+	if (IsLocallyControlled() && Controller)
+	{
+		FRotator Rotation = Controller->GetControlRotation();
+		const float Scale = bAiming ? 0.7f : 1.0f;
+		Rotation.Pitch = FMath::ClampAngle(FRotator::NormalizeAxis(Rotation.Pitch) + RecoilPitch * Kick * Scale, -88.0f, 88.0f);
+		Rotation.Yaw += FMath::FRandRange(-0.08f, 0.08f) * Kick;
+		Controller->SetControlRotation(Rotation);
+	}
+}
+
+void ASOCharacter::HandleDeath()
+{
+	Super::HandleDeath();
+	bAiming = false;
+	if (USOCharacterMovementComponent* Move = GetSOMovement())
+	{
+		Move->SetWantsToAim(false);
+		Move->SetWantsToSprint(false);
+	}
+	// Watch the body fall from behind.
+	SetViewMode(ESOViewMode::ThirdPerson);
 }
 
 float ASOCharacter::GetHipFov() const
@@ -135,10 +264,14 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	EyeOffset = FMath::FInterpTo(EyeOffset, GetTargetEyeOffset(), DeltaSeconds, EyeHeightInterpSpeed);
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
 
-	// Aim zoom.
+	// Aim down sights: progress at the weapon ADS rate, zoom by the weapon magnification.
+	const USOWeaponData* WeaponData = Weapon ? Weapon->GetData() : nullptr;
+	const float AdsTime = WeaponData ? WeaponData->AdsTime : 0.2f;
+	AimProgress = FMath::FInterpConstantTo(AimProgress, bAiming ? 1.0f : 0.0f, DeltaSeconds, 1.0f / FMath::Max(AdsTime, 0.05f));
+	const float Ads = AimProgress * AimProgress * (3.0f - 2.0f * AimProgress);
 	const float HipFov = GetHipFov();
-	const float TargetFov = bAiming ? HipFov * AimFovScale : HipFov;
-	CurrentFov = FMath::FInterpTo(CurrentFov, TargetFov, DeltaSeconds, FovInterpSpeed);
+	const float Zoom = WeaponData ? WeaponData->AimZoom : 1.0f / AimFovScale;
+	CurrentFov = HipFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
 	FirstPersonCamera->SetFieldOfView(CurrentFov);
 	ThirdPersonCamera->SetFieldOfView(CurrentFov);
 	Look->SetAim(bAiming, HipFov, CurrentFov);
@@ -146,6 +279,14 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	// A latched (tapped) sprint ends once you stop pushing forward; a latched crouch follows the movement state.
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
 	{
+		if (Move->IsSprinting())
+		{
+			LastSprintTime = GetWorld()->GetTimeSeconds();
+			if (Weapon && Weapon->IsReloading())
+			{
+				Weapon->CancelReload(); // sprinting cancels a reload
+			}
+		}
 		if (bSprintLatched)
 		{
 			const FVector Input = Move->GetCurrentAcceleration().GetSafeNormal2D();
@@ -348,29 +489,60 @@ void ASOCharacter::HandleInteract()
 
 void ASOCharacter::HandleFirePressed()
 {
-	UE_LOG(LogShatteredOrbit, Log, TEXT("Fire pressed (combat arrives in stage 3)"));
+	if (bDead)
+	{
+		return;
+	}
+	// Firing stops a sprint (the sprint-to-fire delay then applies).
+	if (USOCharacterMovementComponent* Move = GetSOMovement(); Move && Move->WantsToSprint())
+	{
+		bSprintLatched = false;
+		Move->SetWantsToSprint(false);
+	}
+	if (Weapon)
+	{
+		Weapon->StartFire();
+	}
 }
 
 void ASOCharacter::HandleFireReleased()
 {
-	UE_LOG(LogShatteredOrbit, Verbose, TEXT("Fire released"));
+	if (Weapon)
+	{
+		Weapon->StopFire();
+	}
 }
 
 void ASOCharacter::HandleAimPressed()
 {
+	if (bDead)
+	{
+		return;
+	}
 	bAiming = true;
-	UE_LOG(LogShatteredOrbit, Log, TEXT("Aim on"));
+	if (USOCharacterMovementComponent* Move = GetSOMovement())
+	{
+		bSprintLatched = false;
+		Move->SetWantsToSprint(false);
+		Move->SetWantsToAim(true);
+	}
 }
 
 void ASOCharacter::HandleAimReleased()
 {
 	bAiming = false;
-	UE_LOG(LogShatteredOrbit, Log, TEXT("Aim off"));
+	if (USOCharacterMovementComponent* Move = GetSOMovement())
+	{
+		Move->SetWantsToAim(false);
+	}
 }
 
 void ASOCharacter::HandleReload()
 {
-	UE_LOG(LogShatteredOrbit, Log, TEXT("Reload (combat arrives in stage 3)"));
+	if (Weapon && !bDead)
+	{
+		Weapon->StartReload();
+	}
 }
 
 // --- Movement hooks ----------------------------------------------------------------------------
@@ -438,4 +610,8 @@ void ASOCharacter::ApplyViewMode()
 	ThirdPersonCamera->SetActive(!bFirst);
 	FirstPersonArms->SetVisibility(bFirst, true);
 	GetMesh()->SetOwnerNoSee(bFirst);
+	if (Weapon)
+	{
+		Weapon->SetFirstPersonView(bFirst);
+	}
 }

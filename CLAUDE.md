@@ -298,6 +298,11 @@ second render pass with depth cleared. Touch controls live in `src/ui/touch.js` 
 - `src/ui/` hud, menus (title/loading/pause/station panels), style.css.
 - `legacy/` is the previous single-file engine (reference only).
 
+## Unreal port
+`unreal/ShatteredOrbit` (UE 5.8, C++ modules ShatteredOrbit/SOCore/SOCharacter/SOCombat/SOAI/SOWorld/SOUI) is the
+staged port described in `docs/unreal/MIGRATION_PLAN.md`; build, content scripts, tests and gaps are in its README.
+Blender GLB -> FBX: `tools/blender/export_fbx.py` (`export_unreal.sh` for the project's set). Do not change `src/` for it.
+
 ## Testing
 `node tools/test/e2e.js` (Playwright, global install: `NODE_PATH=$(npm root -g)`), screenshots in `test-out/`.
 Software rendering is slow (~5–20 fps); the test drives the game through `window.__game`.
