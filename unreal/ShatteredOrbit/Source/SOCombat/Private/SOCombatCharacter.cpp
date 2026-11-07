@@ -146,6 +146,7 @@ void ASOCombatCharacter::HandleDeath()
 	{
 		Weapon->StopFire();
 		Weapon->CancelReload();
+		Weapon->DropOnDeath(GetVelocity());
 	}
 }
 

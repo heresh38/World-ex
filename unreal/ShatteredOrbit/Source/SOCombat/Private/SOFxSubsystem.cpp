@@ -102,7 +102,7 @@ int32 USOFxSubsystem::GetNumDecals() const
 
 // --- Effects -------------------------------------------------------------------------------------
 
-void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale)
+void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel)
 {
 	const FVector D = Dir.GetSafeNormal();
 	FSOFxParticle Star;
@@ -143,7 +143,9 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 		Wisp.Spin = Random.FRandRange(0.0f, 360.0f);
 		Spawn(Wisp);
 	}
-	FlashLight(Muzzle + D * 10.0f, 220.0f * Scale, Fire, 0.05f);
+	// The flash lights the surroundings; for the gun in your own hands it sits well ahead of the muzzle and gentler,
+	// so the gun itself does not flare white on every shot.
+	FlashLight(Muzzle + D * (bViewmodel ? 80.0f : 10.0f), 220.0f * Scale * (bViewmodel ? 0.25f : 1.0f), Fire, 0.05f);
 }
 
 void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Width)

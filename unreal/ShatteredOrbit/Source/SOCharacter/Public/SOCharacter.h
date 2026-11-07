@@ -173,6 +173,8 @@ public:
 	TSoftObjectPtr<UInputAction> PrevWeaponAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> InventoryAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> MapAction;
 
 	UCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
 	UCameraComponent* GetThirdPersonCamera() const { return ThirdPersonCamera; }
@@ -203,6 +205,21 @@ public:
 	void HandleNextWeapon();
 	void HandlePrevWeapon();
 	void HandleInventory();
+	void HandleMap();
+
+	/** Quick travel to a map point (an actor tagged SOFastTravel; the server moves the pawn beside it). */
+	void FastTravel(AActor* Point);
+	/** Travel to another area (level), e.g. /Game/Maps/L_Nexus (the server / standalone game opens it). */
+	void TravelToArea(const FString& Level);
+
+	UFUNCTION(Server, Reliable)
+	void ServerFastTravel(AActor* Point);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTravelToArea(const FString& Level);
+
+	/** The HUD opens / closes the map screen. */
+	TFunction<void()> ToggleMapScreen;
 
 	/** The owning player's vault + loadout (on the player state); null without one (tests, AI). */
 	USOInventoryComponent* GetInventory() const;

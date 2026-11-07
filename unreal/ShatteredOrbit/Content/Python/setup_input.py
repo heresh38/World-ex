@@ -31,6 +31,7 @@ ACTIONS = {
     "IA_NextWeapon": unreal.InputActionValueType.BOOLEAN,
     "IA_PrevWeapon": unreal.InputActionValueType.BOOLEAN,
     "IA_Inventory": unreal.InputActionValueType.BOOLEAN,
+    "IA_Map": unreal.InputActionValueType.BOOLEAN,
 }
 
 # (action, key, modifiers) - modifiers: "neg" negate, "swz" swizzle YXZ (so a 1D key drives Y), "dz" radial dead zone
@@ -70,6 +71,8 @@ MAPPINGS = [
     ("IA_Inventory", "I", []),
     ("IA_Inventory", "Tab", []),
     ("IA_Inventory", "Gamepad_Special_Left", []),
+    ("IA_Map", "M", []),
+    ("IA_Map", "Gamepad_DPad_Down", []),
 ]
 
 

@@ -37,6 +37,8 @@
 #include "SOSound.h"
 #include "SOWardrobe.h"
 #include "SOWeaponData.h"
+#include "SOCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Styling/CoreStyle.h"
 #include "HAL/IConsoleManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -154,13 +156,35 @@ namespace
 
 // --- Character preview -----------------------------------------------------------------------------
 
-void USOCharacterPreview::Start(APawn* Pawn)
+void USOCharacterPreview::Start(APlayerController* Player)
 {
-	UWorld* World = Pawn ? Pawn->GetWorld() : nullptr;
+	UWorld* World = Player ? Player->GetWorld() : nullptr;
 	if (!World)
 	{
 		return;
 	}
+	// the stand-in: a character of the player's class far above the range, still (no movement, no gravity)
+	TSubclassOf<ASOCharacter> Class = ASOCharacter::StaticClass();
+	if (const APawn* Own = Player->GetPawn(); Own && Own->IsA<ASOCharacter>())
+	{
+		Class = Own->GetClass();
+	}
+	FActorSpawnParameters Spawn;
+	Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Spawn.ObjectFlags |= RF_Transient;
+	ASOCharacter* Pawn = World->SpawnActor<ASOCharacter>(Class, FVector(0.0f, 0.0f, 100000.0f), FRotator::ZeroRotator, Spawn);
+	if (!Pawn)
+	{
+		return;
+	}
+	Pawn->SetReplicates(false);
+	if (UCharacterMovementComponent* Move = Pawn->GetCharacterMovement())
+	{
+		Move->GravityScale = 0.0f;
+		Move->DisableMovement();
+	}
+	Pawn->SetViewMode(ESOViewMode::ThirdPerson);
+	Pawn->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	Subject = Pawn;
 	// alpha through post-processing: what the capture does not draw stays transparent over the screen
 	if (IConsoleVariable* Alpha = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PostProcessing.PropagateAlpha")))
@@ -181,10 +205,6 @@ void USOCharacterPreview::Start(APawn* Pawn)
 	C->TextureTarget = Target;
 	C->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 	C->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-	C->ShowOnlyActors.Add(Pawn);
-	TArray<AActor*> Attached;
-	Pawn->GetAttachedActors(Attached, true, true);
-	C->ShowOnlyActors.Append(Attached);
 	C->bCaptureEveryFrame = true;
 	C->bConsiderUnrenderedOpaquePixelAsFullyTranslucent = true;
 	C->bCaptureOnMovement = false;
@@ -201,6 +221,7 @@ void USOCharacterPreview::Start(APawn* Pawn)
 	C->PostProcessSettings.bOverride_BloomIntensity = true;
 	C->PostProcessSettings.BloomIntensity = 0.6f;
 	Capture = Cam;
+	UpdateShowList();
 
 	auto Light = [&](float Intensity, const FLinearColor& Color) -> APointLight*
 	{
@@ -220,9 +241,43 @@ void USOCharacterPreview::Start(APawn* Pawn)
 	Tick(0.0f);
 }
 
+void USOCharacterPreview::UpdateShowList()
+{
+	ASceneCapture2D* Cam = Capture.Get();
+	APawn* Pawn = Subject.Get();
+	if (!Cam || !Pawn)
+	{
+		return;
+	}
+	USceneCaptureComponent2D* C = Cam->GetCaptureComponent2D();
+	C->ShowOnlyActors.Reset();
+	C->ShowOnlyActors.Add(Pawn);
+	TArray<AActor*> Attached;
+	Pawn->GetAttachedActors(Attached, true, true);
+	C->ShowOnlyActors.Append(Attached);
+}
+
+void USOCharacterPreview::Sync(USOInventoryComponent* Inventory)
+{
+	ASOCharacter* Pawn = Cast<ASOCharacter>(Subject.Get());
+	if (!Pawn || !Inventory)
+	{
+		return;
+	}
+	Pawn->SetOutfit(Inventory->GetOutfit());
+	const FSOWeaponInstance* Held = Inventory->GetEquipped(Inventory->GetActiveSlot());
+	const FString Want = Held ? Held->Uid + Held->Sight.ToString() + FString::FromInt(Held->Rarity) : FString();
+	if (Held && Want != ShownWeapon)
+	{
+		ShownWeapon = Want;
+		Pawn->EquipInstance(*Held);
+	}
+	UpdateShowList();
+}
+
 void USOCharacterPreview::Stop()
 {
-	for (AActor* A : { (AActor*)Capture.Get(), (AActor*)Key.Get(), (AActor*)Rim.Get() })
+	for (AActor* A : { (AActor*)Capture.Get(), (AActor*)Key.Get(), (AActor*)Rim.Get(), (AActor*)Subject.Get() })
 	{
 		if (A)
 		{
@@ -393,9 +448,10 @@ void USOInventoryWidget::NativeConstruct()
 	{
 		Preview = NewObject<USOCharacterPreview>(this);
 	}
-	if (APawn* Pawn = GetOwningPlayerPawn())
+	if (APlayerController* Player = GetOwningPlayer())
 	{
-		Preview->Start(Pawn);
+		Preview->Start(Player);
+		Preview->Sync(Inventory);
 		if (PreviewImage && Preview->GetTarget())
 		{
 			// the capture's alpha is inverse opacity: M_UI_Stage turns it round so only the character draws
@@ -628,6 +684,10 @@ void USOInventoryWidget::Refresh()
 	if (!Inventory || !WidgetTree || !LeftColumn)
 	{
 		return;
+	}
+	if (Preview)
+	{
+		Preview->Sync(Inventory);
 	}
 	PowerText->SetText(FText::AsNumber(Inventory->GetPower()));
 	StatsText->SetText(FText::FromString(FString::Printf(TEXT("ARMOUR %d     LEVEL %d     %d CREDITS     %d ALLOY     VAULT %d / %d"), Inventory->GetArmorRating(),

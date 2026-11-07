@@ -404,7 +404,7 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 	USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>();
 	if (Fx)
 	{
-		Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.7f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f));
+		Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.7f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f), bFirstPerson);
 	}
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOShotFx), true, Holder);
@@ -755,6 +755,75 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	const FSOReloadPose& Pose = Reload.GetPose();
 	FirstPersonRig->ApplyPose(Pose);
 	ThirdPersonRig->ApplyPose(Pose);
+}
+
+void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)
+{
+	if (bDropped)
+	{
+		return;
+	}
+	bDropped = true;
+	UWorld* World = GetWorld();
+	USceneComponent* Space = ThirdPersonRig->IsBuilt() ? ThirdPersonRig->GetGunSpace() : nullptr;
+	if (World && Space && World->GetNetMode() != NM_DedicatedServer)
+	{
+		TArray<USceneComponent*> RigParts;
+		Space->GetChildrenComponents(true, RigParts);
+		TArray<UStaticMeshComponent*> Meshes;
+		FBox Local(ForceInit);
+		const FTransform Frame = ThirdPersonRig->GetComponentTransform();
+		for (USceneComponent* Child : RigParts)
+		{
+			UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Child);
+			if (Mesh && Mesh->GetStaticMesh() && Mesh->IsVisible())
+			{
+				Meshes.Add(Mesh);
+				Local += Mesh->GetStaticMesh()->GetBoundingBox().TransformBy(Mesh->GetComponentTransform().GetRelativeTransform(Frame));
+			}
+		}
+		if (Meshes.Num() > 0 && Local.IsValid)
+		{
+			// One body the size of the gun carrying copies of its visible parts; it tumbles out of the hands and rests.
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			const FTransform At(Frame.GetRotation(), Frame.TransformPosition(Local.GetCenter()));
+			AActor* Drop = World->SpawnActor<AActor>(AActor::StaticClass(), At, Params);
+			if (Drop)
+			{
+				UBoxComponent* Body = NewObject<UBoxComponent>(Drop);
+				Body->SetBoxExtent(Local.GetExtent().ComponentMax(FVector(1.5f)));
+				Body->SetCollisionProfileName(TEXT("PhysicsActor"));
+				Body->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+				Body->SetCollisionResponseToChannel(SO_TRACE_BULLET, ECR_Ignore);
+				Drop->SetRootComponent(Body);
+				Body->RegisterComponent();
+				Body->SetWorldTransform(At);
+				const FTransform BodyFrame = Body->GetComponentTransform();
+				for (UStaticMeshComponent* Source : Meshes)
+				{
+					UStaticMeshComponent* Copy = NewObject<UStaticMeshComponent>(Drop);
+					Copy->SetStaticMesh(Source->GetStaticMesh());
+					for (int32 i = 0; i < Source->GetNumMaterials(); ++i)
+					{
+						Copy->SetMaterial(i, Source->GetMaterial(i));
+					}
+					Copy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Copy->SetCastShadow(true);
+					Copy->SetupAttachment(Body);
+					Copy->SetRelativeTransform(Source->GetComponentTransform().GetRelativeTransform(BodyFrame));
+					Copy->RegisterComponent();
+				}
+				Body->SetSimulatePhysics(true);
+				Body->SetMassOverrideInKg(NAME_None, 3.5f, true);
+				Body->SetPhysicsLinearVelocity(HolderVelocity * 0.6f + FVector(0, 0, 60.0f) + FMath::VRand() * 60.0f);
+				Body->SetPhysicsAngularVelocityInDegrees(FMath::VRand() * 180.0f);
+				Drop->SetLifeSpan(30.0f);
+			}
+		}
+	}
+	FirstPersonRig->SetShown(false);
+	ThirdPersonRig->SetShown(false);
 }
 
 void ASOWeapon::DropPart(FName Part)

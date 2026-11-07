@@ -16,6 +16,7 @@
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
 #include "SOHUD.h"
+#include "SOCombatStatics.h"
 #include "SOInventoryWidget.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
@@ -156,7 +157,23 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		// Loadout screen and both bodies only (files l3..l6, p1..p5).
 		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
 		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
-		Do(4.0f, [=, this]() { Look(0.0f); });
+		Do(4.0f, [=, this]() { Look(0.0f); View(ESOViewMode::FirstPerson); });
+		// first person at the pitch limits, firing, and sprinting (the gun stays in view)
+		Act([=]() { Look(-88.0f); });
+		Snap(0.8f, TEXT("f1_fp_look_down"));
+		Act([=]() { Look(88.0f); });
+		Snap(0.8f, TEXT("f2_fp_look_up"));
+		Act([=]() { Look(0.0f); Fire(true); });
+		Snap(0.08f, TEXT("f3_fp_fire"));
+		Act([=]() { Fire(false); if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } });
+		Act([this]() { CaptureForward = 1.0f; });
+		Snap(1.6f, TEXT("f4_fp_sprint"));
+		Act([this]() { CaptureForward = 0.0f; });
+		Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleSprintReleased(); } });
+		Snap(4.0f, TEXT("m1_minimap"));                       // the map picture is captured ~1-3.5 s after load
+		Act([=]() { if (ASOHUD* H = Hud()) { H->ToggleMap(); } });
+		Snap(1.0f, TEXT("m2_map_screen"));
+		Act([=]() { if (ASOHUD* H = Hud()) { H->ToggleMap(); } });
 		Act([=]() { if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
 		Snap(1.5f, TEXT("l3_inventory"));
 		Act([=]() { OpenSlot(TEXT("0")); });
@@ -177,6 +194,9 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.5f, TEXT("p4_male_back"));
 		Act([=, this]() { Orbit(40.0f, 90.0f, 75.0f); });
 		Snap(0.5f, TEXT("p5_male_face"));
+		// dying: the gun leaves the hands and falls with the body
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { USOCombatStatics::ApplyDamage(nullptr, H, 100000.0f, false); } Orbit(70.0f, 320.0f, 120.0f); });
+		Snap(2.5f, TEXT("d1_death_gun_dropped"));
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
@@ -428,6 +448,13 @@ void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)
 void ASOPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
+	if (CaptureForward != 0.0f)
+	{
+		if (APawn* P = GetPawn())
+		{
+			P->AddMovementInput(P->GetActorForwardVector(), CaptureForward);
+		}
+	}
 	if (BenchWarmup < 0.0f && BenchLeft <= 0.0f)
 	{
 		return;

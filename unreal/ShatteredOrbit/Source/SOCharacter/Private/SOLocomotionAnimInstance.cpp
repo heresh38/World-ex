@@ -64,6 +64,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		Rig->GetFingerPoses(RightFingers, LeftFingers);
 		const float Ads = Player->GetViewmodel() ? Player->GetViewmodel()->GetAds() : 0.0f;
 		AimPitch = FRotator::NormalizeAxis(Player->GetAimRotation().Pitch);
+		EyeCS = ToMesh.InverseTransformPosition(Player->GetEyeTransform(false).GetLocation());
 		// First person keeps a gentler stance so the off shoulder stays out of the corner of the view.
 		const float Stance = bArmsOnly ? 0.5f : 1.0f;
 		Blade = FMath::Lerp(12.0f, 24.0f, Ads) * Stance;
@@ -171,6 +172,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	LeftTarget = Instance->LeftTarget;
 	RightFingers = Instance->RightFingers;
 	LeftFingers = Instance->LeftFingers;
+	EyeCS = Instance->EyeCS;
 }
 
 bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
@@ -293,13 +295,22 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	const FQuat NeckBefore = Neck != INDEX_NONE ? CS[Neck].GetRotation() : FQuat::Identity;
 
 	// 1. Stance: the torso follows the aim pitch (70 %), leans into the gun and turns the off shoulder forward.
+	//    First person: the shoulders turn with the whole view about the eye instead, so looking down never shows the
+	//    shoulders from above and looking up never leaves the gun out of the arms' reach.
+	const float StancePitch = bArmsOnly ? 0.0f : Pitch;
 	if (Spine != INDEX_NONE)
 	{
-		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, Pitch * 0.3f - LeanRad * 0.5f));
+		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * 0.3f - LeanRad * 0.5f));
 	}
 	if (Chest != INDEX_NONE)
 	{
-		Turn(Chest, FQuat(Up, BladeRad * 0.6f) * FQuat(Side, Pitch * 0.4f - LeanRad * 0.5f));
+		Turn(Chest, FQuat(Up, BladeRad * 0.6f) * FQuat(Side, StancePitch * 0.4f - LeanRad * 0.5f));
+		if (bArmsOnly)
+		{
+			const FQuat View(Side, Pitch);
+			const FTransform C = CS[Chest];
+			SetCS(Chest, FTransform(View * C.GetRotation(), EyeCS + View.RotateVector(C.GetLocation() - EyeCS), C.GetScale3D()));
+		}
 	}
 	// 2. The head looks along the aim regardless of the stance.
 	if (Neck != INDEX_NONE && !bArmsOnly)

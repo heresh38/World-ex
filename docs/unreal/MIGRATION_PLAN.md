@@ -110,7 +110,12 @@ single-player in "listen server" mode.
    Follow-up (owner feedback): fingers on the grips, no shots after reloads, poison pools, one name per gun with tight
    rolls (perks are the variety; ideas in `docs/design/PERK_IDEAS.md`), new modular players (male + female Orion set)
    with armour in the inventory, and a loadout screen with the live character and rendered icons.
-6. **World + missions** — VANTHOS operation level, the main city hub, one frontier world.
+6. **World + missions** (in progress) — VANTHOS operation level, the main city hub, one frontier world.
+   Started: a map in every area (`ASOMapInfo` top-down picture, `ASOMapPoint` places, HUD mini-map, map screen with
+   quick travel to fast-travel points and other areas), worn guns (Blender wear mask + per-material wear inputs), the
+   Nexus Prime kit (`nexus.py`). Next: Nexus Prime at full scale from the owner's master plan (about 6 x 4 km inside an
+   octagonal wall: four gates, highways, ring and radial roads, district street grids, the elevated metro loop with
+   transit hubs, the express rail), generated from one plan file that later also drives NPCs, traffic and trains.
 7. **Advanced** — remaining enemies, bosses, vehicles, streaming, dedicated-server build target.
 8. **Optimisation + Steam** — Steamworks (OnlineSubsystemSteam), achievements, cloud saves, packaging, crash reports.
 

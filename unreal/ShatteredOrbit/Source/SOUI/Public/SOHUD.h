@@ -31,6 +31,8 @@ public:
 
 	/** Opens or closes the inventory screen. */
 	void ToggleInventory();
+	void ToggleMap();
+	bool IsMapOpen() const { return MapWidget != nullptr; }
 	bool IsInventoryOpen() const { return InventoryWidget != nullptr; }
 	USOInventoryWidget* GetInventoryWidget() const { return InventoryWidget; }
 
@@ -51,6 +53,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<USOInventoryWidget> InventoryWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class USOMapWidget> MapWidget;
+
+	/** The mini-map (top left): the area's map picture round the player, north up, the important places, you. */
+	void DrawMinimap(float S);
 
 	TWeakObjectPtr<USOInventoryComponent> FeedInventory;
 	FDelegateHandle FeedHandle;

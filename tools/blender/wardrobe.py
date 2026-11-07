@@ -1083,7 +1083,9 @@ class Kit:
         lg = self.piece('orion_leggings', [(leggings, 0), (plates, 1), (belt, 2), (holster, 2), (buckle, 1), (buckle_light, 3)],
                         lo, hi, [T('cloth_legs__orion', 'or_stretch', '#ffffff', 0, .55), plate('legs'), leather('legs'), glow],
                         target=13000, uv=.12, cover=('torso', 'legL', 'legR'))
-        self.add('legs', 'orion', 'Orion plated leggings', [lg], hide=['pelvis', 'thigh', 'shin'])
+        # the pelvis skin region reaches up to the navel: low-rise leggings leave it visible above the waistband (the
+        # leggings sit over it), so nothing between the cropped top and the belt shows through
+        self.add('legs', 'orion', 'Orion plated leggings', [lg], hide=['thigh', 'shin'])
 
     def underwear(self, M):
         """Non-removable base layer: the game never shows the body naked. Hidden while clothing covers it."""

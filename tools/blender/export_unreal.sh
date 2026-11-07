@@ -29,6 +29,8 @@ for sex in male female; do
 done
 # Inventory icons (guns and armour pieces) rendered from the same models
 "$BLENDER" --background --python "$ROOT/tools/blender/icons.py" -- "$OUT/Icons" 2>&1 | grep -E "^\[icons\]|Error|Traceback" || true
+# Nexus Prime, the city hub (nexus.py kit: one FBX per piece)
+run "$M/nexus.glb" "$OUT/Nexus"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail

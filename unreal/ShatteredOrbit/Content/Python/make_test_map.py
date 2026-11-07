@@ -214,6 +214,27 @@ def main():
     reliquary = spawn(unreal.SOReliquary, (950, -800, 0), (0, 140, 0), "Reliquary")
     reliquary.set_folder_path("Gameplay")
 
+    # Stage 6: the area map (mini-map, map screen) with its places and the way to Nexus Prime
+    info = spawn(unreal.SOMapInfo, (0, 0, 0), (0, 0, 0), "MapInfo")
+    info.set_editor_property("area_name", unreal.Text("Proving Range"))
+    info.set_editor_property("half_size", 4300.0)
+    info.set_folder_path("Map")
+    beacon = unreal.load_asset("/Game/Environments/Nexus/SM_NX_beacon")
+    for label, sub, kind, loc, yaw, level in (
+            ("Firing Line", "Where you start", unreal.SOMapPointKind.FAST_TRAVEL, (-300, 0, 0), 0, ""),
+            ("Reliquary", "The VANTHOS reward pool", unreal.SOMapPointKind.MISSION, (950, -1250, 0), 90, ""),
+            ("Stalker Field", "Live targets", unreal.SOMapPointKind.LANDMARK, (3000, 0, 0), 180, ""),
+            ("Shuttle to Nexus Prime", "The city hub", unreal.SOMapPointKind.AREA_TRAVEL, (-2600, 2400, 0), -90, "/Game/Maps/L_Nexus")):
+        p = spawn(unreal.SOMapPoint, loc, (0, yaw, 0), f"Map_{label}")
+        p.set_editor_property("label", unreal.Text(label))
+        p.set_editor_property("subtitle", unreal.Text(sub))
+        p.set_editor_property("kind", kind)
+        p.set_editor_property("fast_travel", kind != unreal.SOMapPointKind.LANDMARK)
+        p.set_editor_property("travel_level", level)
+        if beacon and kind != unreal.SOMapPointKind.LANDMARK:
+            p.get_editor_property("beacon").set_static_mesh(beacon)
+        p.set_folder_path("Map")
+
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     world.get_world_settings().set_editor_property("default_game_mode", unreal.SOGameMode)
 

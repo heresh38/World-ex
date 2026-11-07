@@ -53,6 +53,8 @@ private:
 	TArray<FCaptureCue> CaptureCues;
 	int32 CaptureIndex = 0;
 	float CaptureWait = 0.0f;
+	/** Forward move input the capture series holds down (fed in PlayerTick, where real input arrives, before the movement tick). */
+	float CaptureForward = 0.0f;
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> CaptureCamera;
 	float BenchWarmup = -1.0f;

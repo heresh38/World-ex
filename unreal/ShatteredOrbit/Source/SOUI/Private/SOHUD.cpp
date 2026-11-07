@@ -10,6 +10,9 @@
 #include "GameFramework/PlayerController.h"
 #include "SOInventoryComponent.h"
 #include "SOInventoryWidget.h"
+#include "SOMapWidget.h"
+#include "SOMap.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
 #include "SOCombatCharacter.h"
@@ -48,6 +51,7 @@ void ASOHUD::BindInventory()
 		BoundPawn = Player;
 		TWeakObjectPtr<ASOHUD> Self(this);
 		Player->ToggleInventoryScreen = [Self]() { if (Self.IsValid()) { Self->ToggleInventory(); } };
+		Player->ToggleMapScreen = [Self]() { if (Self.IsValid()) { Self->ToggleMap(); } };
 	}
 	USOInventoryComponent* Inventory = SOFindInventory(GetOwningPlayerController());
 	if (Inventory && FeedInventory.Get() != Inventory)
@@ -107,6 +111,104 @@ void ASOHUD::ToggleInventory()
 	PC->SetInputMode(Mode);
 	PC->SetShowMouseCursor(true);
 	USOSoundLibrary::Play2D(this, TEXT("ui_open"), 0.6f, 0.0f);
+}
+
+void ASOHUD::ToggleMap()
+{
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC)
+	{
+		return;
+	}
+	if (MapWidget)
+	{
+		MapWidget->RemoveFromParent();
+		MapWidget = nullptr;
+		PC->SetInputMode(FInputModeGameOnly());
+		PC->SetShowMouseCursor(false);
+		USOSoundLibrary::Play2D(this, TEXT("ui_close"), 0.6f, 0.0f);
+		return;
+	}
+	if (InventoryWidget)
+	{
+		ToggleInventory();
+	}
+	if (ASOCharacter* Player = Cast<ASOCharacter>(GetOwningPawn()))
+	{
+		Player->HandleFireReleased();
+		Player->HandleAimReleased();
+	}
+	MapWidget = CreateWidget<USOMapWidget>(PC, USOMapWidget::StaticClass());
+	TWeakObjectPtr<ASOHUD> Self(this);
+	MapWidget->OnClose = [Self]() { if (Self.IsValid() && Self->MapWidget) { Self->ToggleMap(); } };
+	MapWidget->AddToViewport(11);
+	FInputModeUIOnly Mode;
+	Mode.SetWidgetToFocus(MapWidget->TakeWidget());
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
+	PC->SetInputMode(Mode);
+	PC->SetShowMouseCursor(true);
+	USOSoundLibrary::Play2D(this, TEXT("ui_open"), 0.6f, 0.0f);
+}
+
+void ASOHUD::DrawMinimap(float S)
+{
+	const ASOMapInfo* Info = ASOMapInfo::Get(this);
+	const APawn* Pawn = GetOwningPawn();
+	UTextureRenderTarget2D* Map = Info ? Info->GetMapTexture() : nullptr;
+	if (!Info || !Pawn || !Map || !Map->GetResource())
+	{
+		return;
+	}
+	// a 300 m window round the player, north up
+	const float Side = 230.0f * S;
+	const FVector2D Origin(28.0f * S, 28.0f * S);
+	// share of the map shown (never more than the whole map; the window stops at the map's edges, no wrapping)
+	const float Window = FMath::Min(1.0f, 30000.0f / FMath::Max(Info->HalfSize * 2.0f, 1.0f));
+	const FVector2D Me = Info->WorldToMap(Pawn->GetActorLocation());
+	FVector2D UV0 = Me - FVector2D(Window * 0.5f);
+	UV0.X = FMath::Clamp(UV0.X, 0.0f, 1.0f - Window);
+	UV0.Y = FMath::Clamp(UV0.Y, 0.0f, 1.0f - Window);
+	const FVector2D UV1 = UV0 + FVector2D(Window);
+	DrawRect(FLinearColor(0.01f, 0.015f, 0.03f, 0.85f), Origin.X - 3 * S, Origin.Y - 3 * S, Side + 6 * S, Side + 6 * S);
+	FCanvasTileItem Tile(Origin, Map->GetResource(), FVector2D(Side, Side), UV0, UV1, FLinearColor(0.8f, 0.85f, 0.95f, 0.95f));
+	Tile.BlendMode = SE_BLEND_Opaque;
+	Canvas->DrawItem(Tile);
+	// frame: thin cyan edges with brighter corners
+	const FLinearColor Edge(0.1f, 0.85f, 1.0f, 0.55f);
+	DrawRect(Edge, Origin.X - 3 * S, Origin.Y - 3 * S, Side + 6 * S, 1.5f * S);
+	DrawRect(Edge, Origin.X - 3 * S, Origin.Y + Side + 1.5f * S, Side + 6 * S, 1.5f * S);
+	DrawRect(Edge, Origin.X - 3 * S, Origin.Y - 3 * S, 1.5f * S, Side + 6 * S);
+	DrawRect(Edge, Origin.X + Side + 1.5f * S, Origin.Y - 3 * S, 1.5f * S, Side + 6 * S);
+	UFont* Small = GEngine ? GEngine->GetSmallFont() : nullptr;
+	DrawText(TEXT("N"), FLinearColor(0.1f, 0.85f, 1.0f), Origin.X + Side * 0.5f - 4 * S, Origin.Y + 2 * S, Small, 1.0f * S);
+	// the important places in view (fast travel and gates labelled)
+	for (TActorIterator<ASOMapPoint> It(GetWorld()); It; ++It)
+	{
+		const FVector2D UV = Info->WorldToMap(It->GetActorLocation());
+		const FVector2D T = (UV - UV0) / Window;
+		if (T.X < 0.03f || T.X > 0.97f || T.Y < 0.06f || T.Y > 0.97f)
+		{
+			continue;
+		}
+		const FVector2D P = Origin + T * Side;
+		const FLinearColor C = ASOMapPoint::KindColor(It->Kind);
+		DrawRect(FLinearColor(0, 0, 0, 0.6f), P.X - 5 * S, P.Y - 5 * S, 10 * S, 10 * S);
+		DrawRect(C, P.X - 3.5f * S, P.Y - 3.5f * S, 7 * S, 7 * S);
+		if (It->bFastTravel || It->Kind == ESOMapPointKind::AreaTravel)
+		{
+			DrawText(It->Label.ToString(), FLinearColor(0.88f, 0.92f, 0.97f, 0.9f), P.X + 7 * S, P.Y - 7 * S, Small, 0.85f * S);
+		}
+	}
+	// you: an arrow pointing where you look
+	const FVector2D C = Origin + ((Me - UV0) / Window).ClampAxes(0.0f, 1.0f) * Side;
+	const float Yaw = FMath::DegreesToRadians(Pawn->GetControlRotation().Yaw);
+	// map space: up = world +X, right = world +Y
+	const FVector2D Fwd(FMath::Sin(Yaw), -FMath::Cos(Yaw));
+	const FVector2D Rt(-Fwd.Y, Fwd.X);
+	FCanvasTriangleItem Arrow(C + Fwd * 9.0f * S, C - Fwd * 6.0f * S + Rt * 6.0f * S, C - Fwd * 6.0f * S - Rt * 6.0f * S, GWhiteTexture);
+	Arrow.SetColor(FLinearColor(0.1f, 0.85f, 1.0f));
+	Canvas->DrawItem(Arrow);
+	DrawText(Info->AreaName.ToString().ToUpper(), FLinearColor(0.88f, 0.92f, 0.97f, 0.9f), Origin.X, Origin.Y + Side + 8 * S, Small, 1.0f * S);
 }
 
 void ASOHUD::DrawScope(float W, float H)
@@ -215,6 +317,10 @@ void ASOHUD::DrawHUD()
 	if (!Player)
 	{
 		return;
+	}
+	if (!InventoryWidget && !MapWidget && !Player->IsScopeView())
+	{
+		DrawMinimap(S);
 	}
 	const ASOWeapon* Weapon = Player->GetWeapon();
 	if (Player->IsScopeView())

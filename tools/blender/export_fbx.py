@@ -520,6 +520,8 @@ def export(path, objects, skeletal):
         bake_anim_use_nla_strips=False,
         bake_anim_force_startend_keying=True,
         bake_anim_simplify_factor=0.0,
+        colors_type="LINEAR",
+        prioritize_active_color=True,
         path_mode="STRIP",
         embed_textures=False,
     )
@@ -599,6 +601,30 @@ def export_per_item(src, out_dir, textures, with_clips=True):
         json.dump(manifest, f, indent=2)
 
 
+def wear_to_vertex_colour():
+    """Guns: the per-vertex `_wear` (gunkit.wear_attr: convex edges) goes into the vertex colour alpha as 1 - wear (RGB
+    white), so Unreal's master material can rub the edges bare; meshes without it stay white / opaque (no wear)."""
+    n = 0
+    for ob in bpy.context.scene.objects:
+        name = next((n for n in ("_wear", "_WEAR") if ob.type == "MESH" and n in ob.data.attributes), None)  # glTF upper-cases it
+        if not name:
+            continue
+        me = ob.data
+        src = me.attributes[name]
+        values = [d.value for d in src.data]
+        col = me.color_attributes.get("Wear") or me.color_attributes.new("Wear", "BYTE_COLOR", src.domain)
+        for i, v in enumerate(values):
+            col.data[i].color = (1.0, 1.0, 1.0, 1.0 - max(0.0, min(1.0, v)))
+        me.color_attributes.active_color = col
+        try:
+            me.color_attributes.render_color_index = list(me.color_attributes).index(col)
+        except Exception:
+            pass
+        n += 1
+    if n:
+        print(f"[export_fbx] edge wear into vertex colour: {n} meshes")
+
+
 def main():
     src, out_dir, flags, only = parse_args()
     single, keep_location, do_split = "--single" in flags, "--keep-location" in flags, "--split-parts" in flags
@@ -611,6 +637,8 @@ def main():
         add_finger_rig(flags["--finger-rig"] != "female")
     if "--arms-only" in flags:
         keep_arms_only()
+    if do_split:
+        wear_to_vertex_colour()
     skeletal_file = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
     if "--per-item" in flags:
         scene_to_centimetres()

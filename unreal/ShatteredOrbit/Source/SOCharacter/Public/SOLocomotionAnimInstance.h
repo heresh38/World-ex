@@ -74,6 +74,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
+	/** Eye position in component space (first person: the shoulders turn with the view about it). */
+	FVector EyeCS = FVector::ZeroVector;
 
 private:
 	/** Stance (aim pitch through the spine, lean, blade), head on the aim, both arms onto the grips (two-bone IK);
@@ -125,6 +127,7 @@ public:
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
+	FVector EyeCS = FVector::ZeroVector;
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide. */
 	float Weights[7] = { 1, 0, 0, 0, 0, 0, 0 };

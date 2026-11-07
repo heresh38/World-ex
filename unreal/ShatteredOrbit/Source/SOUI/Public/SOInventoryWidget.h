@@ -22,9 +22,10 @@ struct FSOArmorInstance;
 struct FSOWeaponInstance;
 
 /**
- * The live picture of the player in the middle of the loadout screen: a scene capture in front of the pawn that sees
- * only the pawn and its gun (so the real outfit, gun and idle pose show), lit by its own soft key light, turned by
- * dragging.
+ * The picture of the player in the middle of the loadout screen: a stand-in character of its own (always there,
+ * whatever the pawn is doing, dead or alive), high above the world, wearing the inventory's outfit and holding the gun
+ * in hand, seen by a scene capture that draws only it (transparent background), lit by its own key and rim lights,
+ * turned by dragging.
  */
 UCLASS()
 class SOUI_API USOCharacterPreview : public UObject
@@ -32,9 +33,12 @@ class SOUI_API USOCharacterPreview : public UObject
 	GENERATED_BODY()
 
 public:
-	void Start(APawn* Pawn);
+	void Start(APlayerController* Player);
+	/** Dresses and arms the stand-in like the inventory says (cheap when nothing changed). */
+	void Sync(class USOInventoryComponent* Inventory);
 	void Stop();
 	void Tick(float DeltaTime);
+	APawn* GetMannequin() const { return Subject.Get(); }
 	UTextureRenderTarget2D* GetTarget() const { return Target; }
 
 	/** Degrees round the character (0 = from the front). */
@@ -48,6 +52,8 @@ private:
 	TWeakObjectPtr<APointLight> Key;
 	TWeakObjectPtr<APointLight> Rim;
 	TWeakObjectPtr<APawn> Subject;
+	FString ShownWeapon;
+	void UpdateShowList();
 	/** r.PostProcessing.PropagateAlpha before the preview turned it on (the picture's background is transparent). */
 	int32 PreviousAlpha = -1;
 };

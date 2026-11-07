@@ -100,6 +100,12 @@ In the editor: Tools > Execute Python Script.
   Stage 4 adds the effect cards `/Game/FX/SM_FX_Quad|Streak|Star` (from `tools/blender/fx_kit.py`), the unlit effect
   material `M_SOFx` (colour + intensity per instance, procedural dot / streak shapes; `MI_FxGlow`, `MI_FxStreak`,
   `MI_FxFlash`, `MI_FxSmoke`), the procedural bullet-hole decal `M_SOBulletHole`, and the 26 sounds `/Game/Audio/S_*`.
+  Gun wear: `tools/blender/wear_textures.py` bakes `assets/textures/wear_mask_c.jpg` (R scratches, G grime, B chips);
+  the guns' `_wear` vertex attribute (edges / exposed parts) reaches the FBX as vertex colour alpha (`1 - wear`), and
+  the master material's wear inputs (`WearTex`, `WearTiling`, `EdgeWear`, `Scratches`, `Grime`, `WearMetal`; all 0 by
+  default) are set per gun material from `GUN_WEAR` in `import_assets.py`: worn steel shows bright metal on the edges,
+  polymer and wood scuff and gather grime. `SO_IMPORT_ONLY=ui` adds `M_UI_Stage` (the loadout stage picture);
+  `nexus` imports the Nexus Prime kit (`tools/blender/nexus.py` + `nexus_textures.py`) as `/Game/Environments/Nexus/SM_NX_*`.
 
 ## Automation tests
 
@@ -224,6 +230,12 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 - **Sound:** gunshot (your own in stereo, others positional with distance filtering), every reload step (catch, mag
   out, pouch, mag in, seat, bolt rack), dry fire, impacts, footsteps, stalker attack / hurt / death, your hurt grunt,
   shield break and recharge, hit / precision / kill ticks.
+- **Map and quick travel:** the mini-map (top left, north up, 300 m round you or the whole area if it is smaller)
+  shows the important places in their kind's colour. M (D-pad down) opens the map screen: hover a place for its
+  name, click a fast-travel point to go there, an area gate or an area on the right (Nexus Prime, Proving Range) to
+  travel. Each level carries an `ASOMapInfo` (area name, half size; it captures the top-down picture) and
+  `ASOMapPoint`s (kind, label, fast travel, travel level).
+- **Death:** the gun leaves the hands and falls with the body (physics copy of the third-person gun, 30 s).
 - **Interact** (E) only logs for now.
 - **Graphics settings:** console `r.DynamicGlobalIlluminationMethod`, or in a Blueprint / Python get
   `SOGameUserSettings`, change e.g. `bLumen`, `AntiAliasing`, `ScreenPercentage` and call `ApplyGraphics`.
@@ -239,8 +251,8 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 | `SOCharacter` | `ASOCharacter` (weapon, ADS, recoil, body + clips), `USOCharacterMovementComponent` (sprint, ADS speed, coyote, slide, mantle, saved moves), `USOLookComponent`, `USOViewmodelComponent` (the gun holds: first person locked to the kicked eye, third person kept in front of the body; hip / ADS, sway, bob, kick, sprint, reload offsets), `USOLocomotionAnimInstance` (native blend of the Blender clips, no anim blueprint; stance, head aim and two-bone arm IK onto the gun's grips) |
 | `SOCombat` | GAS: `USOAttributeSet` (health, shield, incoming damage), `USOAbilitySystemComponent` (shield regen), `USOGameplayEffect_Damage`, `USOCombatStatics` (damage, factions, death + noise events); `ASOCombatCharacter` (base for player and creatures), `USOWeaponData`, `ASOWeapon` (server-authoritative trigger / ammo / reload), `USOGunRigComponent` (posable gun, optics, finish / rarity tint; hand grips per anchor for the arm IK), `USOLootLibrary` + `USOLootTables` (rolls, stats, names, drops, reliquary pool), `USOInventoryComponent` (vault, slots, save), `ASOLootPickup`, `ASOReliquary`, `USOLootSubsystem` (kill drops), `ISOInteractable`, `SOReload` (reload.js keyframe port), `USOProjectileSubsystem` (rounds with drop on the SOBullet channel), `USOFxSubsystem` (instanced-card particles, decals, flash lights), `USOSoundLibrary` (named sounds, range presets) |
 | `SOAI` | `ASOEnemy` (stalker), `ASOEnemyAIController` (sight / hearing / chase / melee), `ASOEnemySpawner` |
-| `SOWorld` | `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`) |
-| `SOUI` | `ASOHUD` (canvas combat HUD, damage flash, hit sounds, weapon slots, loot feed, interact prompt, scope picture), `USOInventoryWidget` (the loadout screen, UMG built in C++, with `USOCharacterPreview`: a scene capture of the pawn), `USOActivatableWidget` (CommonUI base) |
+| `SOWorld` | `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`), `ASOMapInfo` (area name, map picture by an orthographic top-down capture, `WorldToMap`, the area list), `ASOMapPoint` (map places, fast travel, area gates) |
+| `SOUI` | `ASOHUD` (canvas combat HUD, damage flash, hit sounds, weapon slots, loot feed, interact prompt, scope picture), `USOInventoryWidget` (the loadout screen, UMG built in C++, with `USOCharacterPreview`: a scene capture of its own mannequin of the player, so it stays while the player is dead), `USOMapWidget` (map screen, quick travel), the mini-map (`ASOHUD::DrawMinimap`), `USOActivatableWidget` (CommonUI base) |
 
 Assets come from Blender: `tools/blender/export_fbx.py -- in.glb out_dir [--single] [--split-parts] [--only=a,b] [--arms-only] [--per-item] [--finger-rig=male|female]`
 turns our GLBs into Unreal-ready FBX (units, Z up, no leaf bones, UCX_ collision, LOD groups, reload parts at their
@@ -255,8 +267,7 @@ uses.
 - Stalker ranged bolts are not in yet.
 - The stalker brain is C++; the StateTree version comes when the creature roster grows.
 - Finger poses are presets per grip (trigger, wrap, pinch, flat), not traced against each gun's shape; the firing
-  hand uses one grip shape for every gun (the origin is always the top of the pistol grip). Looking far down in first
-  person shows the cut shoulders of the arms mesh.
+  hand uses one grip shape for every gun (the origin is always the top of the pistol grip).
 - The players are procedural (signed-distance sculpting in Blender): far better than before, still short of
   hand-sculpted / scanned AAA faces. Armour has no perks or loot drops yet (every piece is owned from the start).
 - The brood launcher's swarm is an area of chewing damage (the Writhe mites themselves come with the enemies of stage

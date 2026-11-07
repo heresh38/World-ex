@@ -56,6 +56,11 @@ public:
 	/** First person: show the viewmodel rig, hide the world rig from the owner. */
 	void SetFirstPersonView(bool bFirstPerson);
 
+	/** The holder died: the gun leaves the hands and falls (a physics copy of what the world sees; cosmetic, every
+	 *  machine), the held rigs hide. */
+	void DropOnDeath(const FVector& HolderVelocity);
+	bool IsDropped() const { return bDropped; }
+
 	void StartFire();
 	void StopFire();
 	void StartReload();
@@ -164,6 +169,7 @@ protected:
 	float ShotQueuedUntil = 0.0f;
 	void QueueShot(float Window);
 	bool bReloading = false;
+	bool bDropped = false;
 	float NextShotTime = 0.0f;
 	float LastShotTime = -100.0f;
 	float LastDryFireTime = -100.0f;

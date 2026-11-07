@@ -52,7 +52,7 @@ class SOCOMBAT_API USOFxSubsystem : public UTickableWorldSubsystem
 
 public:
 	/** Muzzle flash along Dir (star + light + a wisp of smoke). */
-	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f);
+	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f, bool bViewmodel = false);
 
 	/** A tracer from the muzzle to where the round lands, at the round's speed (cm/s). */
 	void Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), float Width = 2.2f);

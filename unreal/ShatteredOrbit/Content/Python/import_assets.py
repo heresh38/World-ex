@@ -108,6 +108,26 @@ def default_textures():
 
 # ---------------------------------------------------------------- master material
 
+
+WEAR_HLSL = {
+    "color": """
+float edge = saturate((1.0 - A) * EdgeWear * (0.45 + W.b * 1.1));
+float g = W.g * Grime;
+float s = W.r * Scratches;
+float3 c = C * lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.46, 0.4), g);
+float3 bare = lerp(float3(0.6, 0.6, 0.58), saturate(C * 1.7 + 0.1), 1.0 - WearMetal);
+return lerp(c, bare, saturate(edge + s * 0.5));
+""",
+    "metal": """
+float edge = saturate((1.0 - A) * EdgeWear * (0.45 + W.b * 1.1));
+return lerp(M, max(M, WearMetal), edge);
+""",
+    "rough": """
+float edge = saturate((1.0 - A) * EdgeWear * (0.45 + W.b * 1.1));
+return saturate(lerp(R + W.g * Grime * 0.3, 0.3, saturate(edge * 0.8 + W.r * Scratches * 0.45)));
+""",
+}
+
 def master_material(defaults):
     path = "/Game/Materials/M_SOStandard"
     if eal.does_asset_exist(path):
@@ -154,14 +174,45 @@ def master_material(defaults):
     mel.connect_material_expressions(vamt, "", vlerp, "Alpha")
     tinted = mul(base, "RGB", tint, "", -650, -250)
     colour = mul(tinted, "", vlerp, "", -400, -200)
-    mel.connect_material_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(base, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
 
     mr = tex_param("MRTex", S.SAMPLERTYPE_MASKS, defaults["mask"], -900, 340)
     metal = mul(mr, "B", scalar("Metallic", 0.0, -900, 560), "", -650, 360)
     rough = mul(mr, "G", scalar("Roughness", 0.5, -900, 640), "", -650, 480)
-    mel.connect_material_property(metal, "", unreal.MaterialProperty.MP_METALLIC)
-    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+
+    # Wear (guns): edges rubbed bare where the vertex colour alpha says (1 - edge wear), scratches and grime from the
+    # shared wear mask (R scratches, G grime, B chip breakup). Every amount is 0 by default: no effect elsewhere.
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1300, 1500)
+    tiling = scalar("WearTiling", 3.0, -1300, 1600)
+    uvs = mul(uv, "", tiling, "", -1150, 1520)
+    wear = tex_param("WearTex", S.SAMPLERTYPE_MASKS, defaults["mask"], -1000, 1500)
+    mel.connect_material_expressions(uvs, "", wear, "UVs")
+    amounts = {n: scalar(n, 0.0, -1000, 1700 + i * 80) for i, n in enumerate(("EdgeWear", "Scratches", "Grime", "WearMetal"))}
+
+    def wear_node(kind, inputs, out_type, y):
+        node = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -250, y)
+        node.set_editor_property("code", WEAR_HLSL[kind])
+        node.set_editor_property("output_type", out_type)
+        ins = []
+        for name in list(inputs) + ["A", "W", "EdgeWear", "Scratches", "Grime", "WearMetal"]:
+            ci = unreal.CustomInput()
+            ci.set_editor_property("input_name", name)
+            ins.append(ci)
+        node.set_editor_property("inputs", ins)
+        for name, (src, pin) in inputs.items():
+            mel.connect_material_expressions(src, pin, node, name)
+        mel.connect_material_expressions(vcol, "A", node, "A")
+        mel.connect_material_expressions(wear, "RGB", node, "W")
+        for n, e in amounts.items():
+            mel.connect_material_expressions(e, "", node, n)
+        return node
+    F = unreal.CustomMaterialOutputType
+    worn_colour = wear_node("color", {"C": (colour, "")}, F.CMOT_FLOAT3, -200)
+    worn_metal = wear_node("metal", {"M": (metal, "")}, F.CMOT_FLOAT1, 360)
+    worn_rough = wear_node("rough", {"R": (rough, "")}, F.CMOT_FLOAT1, 480)
+    mel.connect_material_property(worn_colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(worn_metal, "", unreal.MaterialProperty.MP_METALLIC)
+    mel.connect_material_property(worn_rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
 
     normal = tex_param("NormalTex", S.SAMPLERTYPE_NORMAL, defaults["normal"], -900, 760)
     mel.connect_material_property(normal, "RGB", unreal.MaterialProperty.MP_NORMAL)
@@ -642,9 +693,27 @@ def shared_textures(src, materials):
     return out
 
 
+# Gun wear per material (edge wear, scratches, grime, bare metal under the finish): nothing looks factory-new.
+GUN_WEAR = {
+    "gun_steel": (.9, .3, .4, 1), "gun_parkerized": (.85, .32, .45, 1), "gun_dark": (.8, .3, .45, 1), "gun_metal": (.85, .3, .4, 1),
+    "gun_trim": (.7, .25, .3, 1), "gun_body": (.75, .28, .45, 1), "gun_paint": (.75, .28, .45, 1), "gun_brass": (.5, .2, .35, 1),
+    "gun_polymer": (.55, .22, .5, 0), "gun_odg": (.55, .22, .5, 0), "gun_grip": (.35, .1, .55, 0), "gun_wood": (.5, .2, .4, 0),
+    "gun_sightpaint": (.3, .1, .3, 0),
+}
+_WEAR_TEX = {}
+
+
+def wear_texture():
+    if "mask" not in _WEAR_TEX:
+        f = os.path.join(REPO_TEXTURES, "wear_mask_c.jpg")
+        _WEAR_TEX["mask"] = import_texture(f, WEAPON_TEX, "T_wear_mask", "mask") if os.path.exists(f) else None
+    return _WEAR_TEX["mask"]
+
+
 def gun_instances(master, src, dest, materials, clear):
     tex = shared_textures(src, materials)
     out = {}
+    worn = wear_texture()
     for k, v in materials.items():
         key = base_slot(k)
         m = dict(v)
@@ -654,7 +723,15 @@ def gun_instances(master, src, dest, materials, clear):
             m["alphaMode"] = "MASK"
             extra = {"baseColorTex": "__clear"}
             tex = dict(tex, __clear=clear)
-        out[key] = make_instance(master, dest, key, m, tex, extra)
+        mi = make_instance(master, dest, key, m, tex, extra)
+        amounts = next((a for name, a in GUN_WEAR.items() if key == name or key.startswith(name + "__")), None)
+        if amounts and worn:
+            mel.set_material_instance_texture_parameter_value(mi, "WearTex", worn)
+            for name, value in zip(("EdgeWear", "Scratches", "Grime", "WearMetal"), amounts):
+                mel.set_material_instance_scalar_parameter_value(mi, name, float(value))
+            mel.update_material_instance(mi)
+            eal.save_loaded_asset(mi, only_if_is_dirty=False)
+        out[key] = mi
     return out
 
 
@@ -977,6 +1054,31 @@ def fx_master():
     log("effect materials ready")
 
 
+def nexus(master):
+    """tools/blender/nexus.py (via export_fbx.py) -> /Game/Environments/Nexus/SM_NX_*: the city hub kit, with
+    complex-as-simple collision so every surface can be walked on."""
+    src = os.path.join(SOURCE, "Nexus")
+    dest = "/Game/Environments/Nexus"
+    if not os.path.isdir(src):
+        log("Nexus: skipped (SourceArt/Nexus missing, run export_unreal.sh)")
+        return
+    ensure_dir(dest)
+    manifest = load_json(os.path.join(src, "export_fbx.json"))
+    materials = load_json(os.path.join(src, "materials.json"))
+    used = {base_slot(n) for a in manifest["assets"] for n in a["materials"]}
+    tex = import_textures_for(src, materials, dest + "/Textures", used)
+    instances = {key: make_instance(master, dest, key, materials.get(key) or {}, tex) for key in used}
+    for a in manifest["assets"]:
+        name = os.path.splitext(a["file"])[0]
+        mesh = import_static(src, a["file"], dest, f"SM_{name}", instances)
+        body = mesh.get_editor_property("body_setup")
+        if body:
+            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+        eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"Nexus: {len(manifest['assets'])} pieces")
+
+
 def ui_materials():
     """/Game/UI/M_UI_Stage: the loadout screen's live character picture. The scene capture stores inverse opacity in
     alpha (1 where it drew nothing), so the material shows the colour with opacity = 1 - alpha."""
@@ -1083,6 +1185,8 @@ def main():
         audio()
     if want("ui"):
         ui_materials()
+    if want("nexus"):
+        nexus(master)
     log("done")
 
 

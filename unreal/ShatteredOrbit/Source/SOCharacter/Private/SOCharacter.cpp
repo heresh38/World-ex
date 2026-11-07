@@ -26,6 +26,8 @@
 #include "SOLootActors.h"
 #include "SOGunRigComponent.h"
 #include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h"
+#include "Components/CapsuleComponent.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 
@@ -48,6 +50,7 @@ namespace SOInputPaths
 	static const TCHAR* NextWeapon = TEXT("/Game/Input/IA_NextWeapon.IA_NextWeapon");
 	static const TCHAR* PrevWeapon = TEXT("/Game/Input/IA_PrevWeapon.IA_PrevWeapon");
 	static const TCHAR* Inventory = TEXT("/Game/Input/IA_Inventory.IA_Inventory");
+	static const TCHAR* Map = TEXT("/Game/Input/IA_Map.IA_Map");
 }
 
 ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
@@ -146,6 +149,7 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	NextWeaponAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::NextWeapon));
 	PrevWeaponAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PrevWeapon));
 	InventoryAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Inventory));
+	MapAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Map));
 }
 
 USOCharacterMovementComponent* ASOCharacter::GetSOMovement() const
@@ -762,6 +766,7 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (UInputAction* A = Load(NextWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleNextWeapon); }
 	if (UInputAction* A = Load(PrevWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePrevWeapon); }
 	if (UInputAction* A = Load(InventoryAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInventory); }
+	if (UInputAction* A = Load(MapAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleMap); }
 
 	if (Missing > 0)
 	{
@@ -1004,6 +1009,74 @@ void ASOCharacter::HandleWeapon2() { SelectSlot(1); }
 void ASOCharacter::HandleWeapon3() { SelectSlot(2); }
 void ASOCharacter::HandleNextWeapon() { CycleSlot(1); }
 void ASOCharacter::HandlePrevWeapon() { CycleSlot(-1); }
+
+void ASOCharacter::HandleMap()
+{
+	if (ToggleMapScreen)
+	{
+		ToggleMapScreen();
+	}
+}
+
+void ASOCharacter::FastTravel(AActor* Point)
+{
+	if (HasAuthority())
+	{
+		ServerFastTravel_Implementation(Point);
+	}
+	else
+	{
+		ServerFastTravel(Point);
+	}
+}
+
+void ASOCharacter::ServerFastTravel_Implementation(AActor* Point)
+{
+	if (!Point || !Point->ActorHasTag(TEXT("SOFastTravel")) || bDead)
+	{
+		return;
+	}
+	// beside the point on its front, facing it (the map point's own arrival spot)
+	const FVector Front = Point->GetActorForwardVector();
+	const FVector At = Point->GetActorLocation() + Front * 400.0f + FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 20.0f);
+	const FRotator Facing = (-Front).Rotation();
+	TeleportTo(At, FRotator(0.0f, Facing.Yaw, 0.0f), false, true);
+	if (AController* C = GetController())
+	{
+		C->SetControlRotation(FRotator(0.0f, Facing.Yaw, 0.0f));
+	}
+	USOSoundLibrary::PlayFor(this, TEXT("reliquary_open"), At, 0.5f, ESOSoundRange::Near);
+}
+
+void ASOCharacter::TravelToArea(const FString& Level)
+{
+	if (HasAuthority())
+	{
+		ServerTravelToArea_Implementation(Level);
+	}
+	else
+	{
+		ServerTravelToArea(Level);
+	}
+}
+
+void ASOCharacter::ServerTravelToArea_Implementation(const FString& Level)
+{
+	UWorld* World = GetWorld();
+	if (!World || !Level.StartsWith(TEXT("/Game/Maps/")))
+	{
+		return;
+	}
+	StoreWeaponAmmo();
+	if (World->GetNetMode() == NM_Standalone)
+	{
+		UGameplayStatics::OpenLevel(this, FName(*Level));
+	}
+	else
+	{
+		World->ServerTravel(Level + TEXT("?listen"));
+	}
+}
 
 void ASOCharacter::HandleInventory()
 {
