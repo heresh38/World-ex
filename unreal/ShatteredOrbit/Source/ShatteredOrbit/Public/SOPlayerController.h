@@ -24,8 +24,9 @@ public:
 	/** Adds DefaultMappingContext to the local player's Enhanced Input subsystem; false if it is missing. */
 	bool AddDefaultMappingContext();
 
-	/** Dev: screenshots of the hip / ADS / mid-reload / third-person views into Saved/Screenshots/SO_*.png, then
-	 *  quits if bQuitWhenDone. Run headless-free: -game -RenderOffscreen -ExecCmds="SOCaptureSeries 1". */
+	/** Dev: screenshots into Saved/Screenshots/SO_*.png (first person: hip, firing, sights, mag change, rack, looking
+	 *  down; third person: behind, aiming, and side / front / rack views from a free camera), then quits if
+	 *  bQuitWhenDone. Run: -game -RenderOffscreen -ExecCmds="SOCaptureSeries 1". */
 	UFUNCTION(Exec)
 	void SOCaptureSeries(int32 bQuitWhenDone = 0);
 
@@ -41,7 +42,18 @@ protected:
 
 private:
 	void CaptureStep();
+	/** A capture cue runs Action once Delay seconds have passed since the previous cue and Ready (if any) is true. */
+	struct FCaptureCue
+	{
+		float Delay = 0.5f;
+		TFunction<bool()> Ready;
+		TFunction<void()> Action;
+	};
+	TArray<FCaptureCue> CaptureCues;
 	int32 CaptureIndex = 0;
+	float CaptureWait = 0.0f;
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> CaptureCamera;
 	float BenchWarmup = -1.0f;
 	float BenchLeft = 0.0f;
 	bool bBenchQuit = false;

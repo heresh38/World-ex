@@ -17,6 +17,8 @@ run() { "$BLENDER" --background --python "$ROOT/tools/blender/export_fbx.py" -- 
 # Player: male body with the default tactical loadout (players.py defaults; hidden body regions dropped)
 run "$M/player_male.glb" "$OUT/Characters/PlayerMale" --single \
   "--only=B_head,B_eyes,B_brows,B_lashes,C_hair__sidepart,C_top__undersuit,C_vest__vanguard,C_hands__gloves,C_legs__armoured,C_feet__combat"
+# First-person arms: the same body and outfit, cut to what the arm bones carry (same skeleton, so the same IK)
+run "$M/player_male.glb" "$OUT/Characters/PlayerMaleArms" --single --arms-only   "--only=C_top__undersuit,C_vest__vanguard,C_hands__gloves"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # Weapon: the kinetic assault rifle with its reload parts, and the first-person arms

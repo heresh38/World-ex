@@ -10,9 +10,28 @@ class USOWeaponData;
 struct FSOReloadPose;
 
 /**
- * A posable gun: body + reload parts (+ spare mag, + the first-person arms) built from a USOWeaponData.
+ * Where a hand holds something, in rig space (+X barrel, +Y right, +Z up, cm): the wrist location and an anatomical
+ * basis (X along the hand wrist -> fingers, Y towards the thumb, Z out of the palm). The character's arm IK reaches
+ * the wrist and turns the hand bone onto the basis, so the same grips work for any body on the shared rig.
+ */
+struct SOCOMBAT_API FSOHandGrip
+{
+	FVector Wrist = FVector::ZeroVector;
+	FQuat Basis = FQuat::Identity;
+
+	/** Basis from the finger direction and the thumb side (a proper rotation; X along, Y thumb, Z = X x Y). */
+	static FQuat MakeBasis(const FVector& Along, const FVector& Thumb, bool bLeft);
+	/** Out of the palm: +Z of the basis on the right hand, -Z on the (mirrored) left hand. */
+	static FVector PalmNormal(const FQuat& Basis, bool bLeft);
+	/** A grip whose palm centre touches Contact (the wrist sits behind it along the hand, off the palm surface). */
+	static FSOHandGrip AtPalm(const FVector& Contact, const FVector& Along, const FVector& Thumb, bool bLeft);
+};
+
+/**
+ * A posable gun: body + reload parts (+ spare mag) built from a USOWeaponData.
  * The component's +X is the barrel. Children live under GunSpace, which turns the imported mesh space (gun along +Y)
- * onto +X. ApplyPose() moves the parts and the left hand like reload.js GunRig.apply().
+ * onto +X. ApplyPose() moves the parts and the off hand's grip (reload choreography); GetHandTargets() tells the
+ * holder's arm IK where both hands go.
  */
 UCLASS(ClassGroup = (ShatteredOrbit))
 class SOCOMBAT_API USOGunRigComponent : public USceneComponent
@@ -22,7 +41,7 @@ class SOCOMBAT_API USOGunRigComponent : public USceneComponent
 public:
 	USOGunRigComponent();
 
-	/** Creates the mesh components. First person: owner-only, first-person rendering, no shadows, with arms. */
+	/** Creates the mesh components. First person: owner-only, first-person rendering, no shadows. */
 	void Build(const USOWeaponData* Data, bool bInFirstPerson);
 
 	void ApplyPose(const FSOReloadPose& Pose);
@@ -35,7 +54,15 @@ public:
 
 	UStaticMeshComponent* GetPart(FName Name) const;
 	UStaticMeshComponent* GetSpare() const { return Spare; }
-	UStaticMeshComponent* GetArmLeft() const { return ArmLeft; }
+
+	/** World-space wrist targets with the hand bases as rotations (see FSOHandGrip). False until built. */
+	bool GetHandTargets(FTransform& OutRight, FTransform& OutLeft) const;
+
+	/** Rig-space grips (tests / debugging). */
+	const FSOHandGrip& GetRightGrip() const { return RightGrip; }
+	const FSOHandGrip& GetLeftGrip() const { return LeftGrip; }
+	/** Off-hand grip for an anchor (fore, mag, spare, magbase, bolt, pouch) against the current part poses. */
+	FSOHandGrip GripForAnchor(FName Anchor) const;
 	USceneComponent* GetGunSpace() const { return GunSpace; }
 	bool IsBuilt() const { return bBuilt; }
 
@@ -43,6 +70,9 @@ public:
 	static FVector GltfToMesh(float X, float Y, float Z) { return FVector(X * 100.0f, Z * 100.0f, Y * 100.0f); }
 	/** glTF Euler XYZ (rad) -> mesh space rotation. */
 	static FQuat GltfEulerToMesh(float RX, float RY, float RZ);
+
+	/** Imported mesh space (gun along +Y) -> rig space (gun along +X). */
+	static FVector MeshToRig(const FVector& V) { return FVector(V.Y, -V.X, V.Z); }
 
 	/** Applies owner visibility rules to every mesh (third person: hide from owner while in first person). */
 	void SetOwnerNoSeeAll(bool bNoSee);
@@ -62,14 +92,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Spare;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMeshComponent> ArmLeft;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UStaticMeshComponent> ArmRight;
-
 	TMap<FName, FTransform> Rest;
 	FVector Foregrip = FVector::ZeroVector;
+	FSOHandGrip RightGrip;
+	FSOHandGrip LeftGrip;
 	FVector Muzzle = FVector::ZeroVector;
 	bool bFirstPerson = false;
 	bool bBuilt = false;

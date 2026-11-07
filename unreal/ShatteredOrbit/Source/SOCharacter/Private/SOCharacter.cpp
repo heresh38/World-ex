@@ -20,6 +20,7 @@
 #include "SOSound.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Engine/SkeletalMesh.h"
+#include "Net/UnrealNetwork.h"
 
 namespace SOInputPaths
 {
@@ -66,19 +67,22 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	FirstPersonCamera->bEnableFirstPersonFieldOfView = true;
 	FirstPersonCamera->FirstPersonFieldOfView = ViewmodelFov;
 
-	FirstPersonArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArms"));
-	FirstPersonArms->SetupAttachment(FirstPersonCamera);
-	FirstPersonArms->SetOnlyOwnerSee(true);
-	FirstPersonArms->SetCastShadow(false);
-	FirstPersonArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	FirstPersonArms->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
-	FirstPersonArms->SetRelativeLocation(FVector(-4.0f, 0.0f, -160.0f));
-
 	// The full body: hidden from the owner in first person but it still casts the player's shadow.
 	USkeletalMeshComponent* Body = GetMesh();
 	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -Capsule->GetUnscaledCapsuleHalfHeight()));
 	Body->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f)); // Blender -Y forward -> UE +X
 	Body->SetCastHiddenShadow(true);
+
+	// First person: the same body again, owner-only, arms only (the anim instance collapses the rest).
+	FirstPersonArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArms"));
+	FirstPersonArms->SetupAttachment(Capsule);
+	FirstPersonArms->SetRelativeLocation(Body->GetRelativeLocation());
+	FirstPersonArms->SetRelativeRotation(Body->GetRelativeRotation());
+	FirstPersonArms->SetOnlyOwnerSee(true);
+	FirstPersonArms->SetCastShadow(false);
+	FirstPersonArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FirstPersonArms->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
+	FirstPersonArms->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
 
 	ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
 	ThirdPersonBoom->SetupAttachment(Capsule);
@@ -99,10 +103,15 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 
 	Look = CreateDefaultSubobject<USOLookComponent>(TEXT("Look"));
 
+	// The holds are placed in world space every frame (from the aim, not the camera component, which only turns
+	// when the view is computed at the end of the frame).
 	Viewmodel = CreateDefaultSubobject<USOViewmodelComponent>(TEXT("Viewmodel"));
-	Viewmodel->SetupAttachment(FirstPersonCamera);
+	Viewmodel->SetupAttachment(Capsule);
+	ThirdPersonHold = CreateDefaultSubobject<USceneComponent>(TEXT("ThirdPersonHold"));
+	ThirdPersonHold->SetupAttachment(Capsule);
 
 	BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/PlayerMale/SK_PlayerMale.SK_PlayerMale")));
+	ArmsMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/PlayerMale/SK_PlayerMaleArms.SK_PlayerMaleArms")));
 	DefaultWeapon = TSoftObjectPtr<USOWeaponData>(FSoftObjectPath(TEXT("/Game/Weapons/Rifle/DA_Rifle.DA_Rifle")));
 
 	MoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Move));
@@ -131,13 +140,34 @@ void ASOCharacter::PostInitializeComponents()
 
 void ASOCharacter::LoadContent()
 {
-	USkeletalMeshComponent* Body = GetMesh();
-	if (!Body->GetSkeletalMeshAsset() && !BodyMesh.IsNull())
+	LoadBody(GetMesh());
+	LoadBody(FirstPersonArms);
+}
+
+void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
+{
+	if (!Body)
 	{
-		if (USkeletalMesh* Loaded = BodyMesh.LoadSynchronous())
+		return;
+	}
+	const bool bArms = Body == FirstPersonArms;
+	if (!Body->GetSkeletalMeshAsset())
+	{
+		USkeletalMesh* Loaded = bArms && !ArmsMesh.IsNull() ? ArmsMesh.LoadSynchronous() : nullptr;
+		if (!Loaded && !BodyMesh.IsNull())
+		{
+			Loaded = BodyMesh.LoadSynchronous();
+		}
+		if (Loaded)
 		{
 			Body->SetSkeletalMesh(Loaded);
 		}
+	}
+	if (bArms && GetMesh()->GetPhysicsAsset())
+	{
+		// Bounds from the body's physics shapes, so arms reaching forward are never culled (the arms mesh has none).
+		Body->SetPhysicsAsset(GetMesh()->GetPhysicsAsset());
+		Body->bComponentUseFixedSkelBounds = false;
 	}
 	if (Body->GetSkeletalMeshAsset() && !Body->GetAnimInstance())
 	{
@@ -199,12 +229,49 @@ bool ASOCharacter::CanFireWeapon() const
 	return GetWorld()->GetTimeSeconds() - LastSprintTime >= Ready;
 }
 
+FRotator ASOCharacter::GetAimRotation() const
+{
+	// The controller's own rotation (this frame's look input). GetBaseAimRotation() would return the camera's last
+	// view, which already contains the recoil kick, is a frame late and follows any other view target.
+	if (Controller)
+	{
+		return Controller->GetControlRotation();
+	}
+	return GetBaseAimRotation(); // others: replicated view pitch + actor yaw
+}
+
+FTransform ASOCharacter::GetEyeTransform(bool bWithRecoil) const
+{
+	FRotator Aim = GetAimRotation();
+	Aim.Pitch = FRotator::NormalizeAxis(Aim.Pitch) + (bWithRecoil ? GetRecoilPitch() : 0.0f);
+	Aim.Roll = 0.0f;
+	return FTransform(Aim, FirstPersonCamera->GetComponentLocation());
+}
+
 FVector ASOCharacter::GetAimDirection() const
 {
-	// Rounds follow the kicked view, like the browser build (the kick recovers by itself).
-	FRotator Aim = GetBaseAimRotation();
-	Aim.Pitch += GetRecoilPitch();
-	return Aim.Vector();
+	// Rounds follow the kicked view (the kick recovers by itself).
+	const FVector Forward = GetEyeTransform(true).GetRotation().GetForwardVector();
+	if (ViewMode != ESOViewMode::ThirdPerson || !ThirdPersonCamera || bDead)
+	{
+		return Forward;
+	}
+	// Third person: the crosshair is the middle of the shoulder camera, which sits beside the head. Find what the
+	// camera's centre ray hits and send the round from the eye to that point.
+	UWorld* World = GetWorld();
+	const FVector Origin = GetAimOrigin();
+	const FVector Camera = ThirdPersonCamera->GetComponentLocation();
+	const FVector Start = Camera + Forward * FMath::Max(0.0f, FVector::DotProduct(Origin - Camera, Forward)); // skip what is behind the character
+	const FVector End = Start + Forward * 30000.0f;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOThirdPersonAim), true, this);
+	if (Weapon)
+	{
+		Params.AddIgnoredActor(Weapon);
+	}
+	FHitResult Hit;
+	const FVector Target = World && World->LineTraceSingleByChannel(Hit, Start, End, SO_TRACE_BULLET, Params) ? FVector(Hit.ImpactPoint) : End;
+	const FVector Dir = (Target - Origin).GetSafeNormal();
+	return FVector::DotProduct(Dir, Forward) > 0.5f ? Dir : Forward;
 }
 
 float ASOCharacter::GetSpreadScale() const
@@ -238,7 +305,7 @@ FVector ASOCharacter::ViewmodelToWorld(const FVector& ViewmodelPoint) const
 {
 	// The viewmodel renders with FirstPersonFieldOfView; at the same depth a world point appears at the same screen
 	// position when its lateral offsets are scaled by tan(worldFov / 2) / tan(viewmodelFov / 2).
-	const FTransform Eye = FirstPersonCamera->GetComponentTransform();
+	const FTransform Eye = GetEyeTransform(true); // what the camera shows (the component itself turns late)
 	FVector Local = Eye.InverseTransformPosition(ViewmodelPoint);
 	if (FirstPersonCamera->bEnableFirstPersonFieldOfView)
 	{
@@ -343,10 +410,13 @@ void ASOCharacter::Tick(float DeltaSeconds)
 
 	// Recoil recovers on its own; the camera shows it as an additive pitch.
 	RecoilKick = FMath::Max(0.0f, RecoilKick - DeltaSeconds * RecoilRecovery);
-	FirstPersonCamera->ClearAdditiveOffset();
-	if (RecoilKick > 0.0f)
+	for (UCameraComponent* Camera : { FirstPersonCamera.Get(), ThirdPersonCamera.Get() })
 	{
-		FirstPersonCamera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch(), 0.0f, 0.0f)), 0.0f);
+		Camera->ClearAdditiveOffset();
+		if (RecoilKick > 0.0f)
+		{
+			Camera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch(), 0.0f, 0.0f)), 0.0f);
+		}
 	}
 
 	// Eye height eases across crouch / slide transitions.
@@ -685,6 +755,22 @@ void ASOCharacter::SetViewMode(ESOViewMode NewMode)
 {
 	ViewMode = NewMode;
 	ApplyViewMode();
+	if (!HasAuthority() && IsLocallyControlled())
+	{
+		ServerSetViewMode(NewMode);
+	}
+}
+
+void ASOCharacter::ServerSetViewMode_Implementation(ESOViewMode NewMode)
+{
+	ViewMode = NewMode;
+	ApplyViewMode();
+}
+
+void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ASOCharacter, ViewMode, COND_SkipOwner);
 }
 
 void ASOCharacter::ToggleViewMode()

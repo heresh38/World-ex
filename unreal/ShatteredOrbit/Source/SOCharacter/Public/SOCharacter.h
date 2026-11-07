@@ -23,10 +23,11 @@ enum class ESOViewMode : uint8
 };
 
 /**
- * The player character. First person by default (eye at ~165 cm, arms mesh rendered with the camera's
- * first-person FOV, body hidden from the owner but still casting shadows); T toggles a third-person
- * spring-arm camera with collision. Carries a weapon (viewmodel in first person, hand socket in third person),
- * aims down sights (zoom from the weapon), and plays the Blender body's clips through USOLocomotionAnimInstance.
+ * The player character. First person by default: the eye at ~165 cm, and an arms-only copy of the player's own body
+ * rendered with the camera's first-person FOV (the full body is hidden from the owner but still casts the shadow), so
+ * the hands you see are the same hands everyone else sees. T toggles a third-person spring-arm camera with collision.
+ * The gun is held by USOViewmodelComponent (a first-person and a third-person hold) and both bodies reach for its grips
+ * with arm IK; aims down sights (zoom from the weapon); plays the Blender body's clips through USOLocomotionAnimInstance.
  */
 UCLASS(config = Game)
 class SOCHARACTER_API ASOCharacter : public ASOCombatCharacter
@@ -59,6 +60,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	TSoftObjectPtr<USkeletalMesh> BodyMesh;
 
+	/** First-person arms: the body's own sleeves and gloves on the body's skeleton (export_fbx.py --arms-only). Without
+	 *  it the first-person copy uses the whole body with everything but the arms collapsed. */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	TSoftObjectPtr<USkeletalMesh> ArmsMesh;
+
 	/** Folder + prefix of the body clips: <prefix>Idle, <prefix>Walk, ... */
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	FString ClipPathPrefix = TEXT("/Game/Characters/PlayerMale/Anims/A_PlayerMale_");
@@ -66,9 +72,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	TSoftObjectPtr<USOWeaponData> DefaultWeapon;
 
-	/** Hand bone the third-person gun attaches to, with an offset from the bone to the grip. */
+	/** Firing-hand bone (Blender hand.R; dots become underscores on import). The gun is held by the hold components
+	 *  and this hand reaches for its grip with IK. */
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
-	FName WeaponSocket = TEXT("hand_R"); // Blender hand.R (dots become underscores on import)
+	FName WeaponSocket = TEXT("hand_R");
 
 	/** Recoil (weapons.js / player.js): each shot adds to a kick that decays RecoilRecovery per second; the view and
 	 *  the rounds tilt up by kick * RecoilRadians and come back down by themselves. */
@@ -82,6 +89,14 @@ public:
 	float GetRecoilPitch() const { return FMath::RadiansToDegrees(RecoilKick * RecoilRadians); }
 
 	USOViewmodelComponent* GetViewmodel() const { return Viewmodel; }
+	USceneComponent* GetThirdPersonHold() const { return ThirdPersonHold; }
+
+	/** The eye: camera eye position with the aim rotation (control rotation, or the replicated view for others),
+	 *  optionally with the recoil kick the camera shows. */
+	FTransform GetEyeTransform(bool bWithRecoil) const;
+
+	/** Where the player looks, without recoil: the control rotation (or the replicated view for others). */
+	FRotator GetAimRotation() const;
 
 	//~ ASOCombatCharacter
 	virtual FVector GetAimOrigin() const override;
@@ -90,7 +105,7 @@ public:
 	virtual bool IsAimingDownSights() const override { return bAiming; }
 	virtual float GetSpreadScale() const override;
 	virtual USceneComponent* GetFirstPersonWeaponParent() const override;
-	virtual FName GetThirdPersonWeaponSocket() const override { return WeaponSocket; }
+	virtual USceneComponent* GetThirdPersonWeaponParent() const override { return ThirdPersonHold; }
 	virtual void OnWeaponFired(float Kick) override;
 	virtual FVector ViewmodelToWorld(const FVector& ViewmodelPoint) const override;
 	virtual bool IsFirstPersonView() const override;
@@ -179,17 +194,24 @@ public:
 	virtual bool CanJumpInternal_Implementation() const override;
 	virtual bool CanJumpWhileFalling() const override;
 	virtual void PostInitializeComponents() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
 	virtual void HandleDeath() override;
 	void LoadContent();
+	void LoadBody(USkeletalMeshComponent* Body);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
 
-	/** Placeholder for the Blender-built first-person arms (assigned once the FBX is imported). */
+	/** First person: a copy of the body seen only by its owner, posed like the body but with everything except the
+	 *  arms collapsed (first-person rendering: own FOV, never clips into walls, no shadow). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<USkeletalMeshComponent> FirstPersonArms;
+
+	/** Third-person hold: the gun's place as seen from outside (set every frame by the viewmodel component). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	TObjectPtr<USceneComponent> ThirdPersonHold;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<USpringArmComponent> ThirdPersonBoom;
@@ -203,8 +225,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<USOViewmodelComponent> Viewmodel;
 
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "SO|Camera")
+	/** Replicated so the server aims third-person shots at the crosshair the owner sees. */
+	UPROPERTY(Replicated, Transient, BlueprintReadOnly, Category = "SO|Camera")
 	ESOViewMode ViewMode = ESOViewMode::FirstPerson;
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetViewMode(ESOViewMode NewMode);
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "SO|Combat")
 	bool bAiming = false;

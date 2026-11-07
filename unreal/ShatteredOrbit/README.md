@@ -75,7 +75,10 @@ In the editor: Tools > Execute Python Script.
   on import), then from `SourceArt`: `/Game/Characters/PlayerMale/SK_PlayerMale` (default tactical loadout, 10 clips
   as `Anims/A_PlayerMale_*`), `/Game/Characters/Stalker/SK_Stalker` (5 clips, hx_* flesh textures by material name),
   `/Game/Weapons/Rifle/SM_Rifle` + `SM_Rifle_mag` + `SM_Rifle_bolt` and `DA_Rifle` (USOWeaponData with the data.js
-  numbers and the part pivots / muzzle / sight / foregrip from `gun_rifle.parts.json`), `/Game/Weapons/Arms/*`.
+  numbers and the part pivots / muzzle / sight / foregrip from `gun_rifle.parts.json`), `/Game/Weapons/Arms/*`, and
+  `/Game/Characters/PlayerMale/SK_PlayerMaleArms` (the first-person arms: the body's own sleeves, gloves and shoulder
+  plates cut by `export_fbx.py --arms-only`, imported onto the body's skeleton). `SO_IMPORT_ONLY=arms,rifle,...`
+  re-imports just those steps (player, arms, stalker, rifle, fx, audio).
   Material instances are built from each GLB's `materials.json`; the FBX carry slot names only.
   Stage 4 adds the effect cards `/Game/FX/SM_FX_Quad|Streak|Star` (from `tools/blender/fx_kit.py`), the unlit effect
   material `M_SOFx` (colour + intensity per instance, procedural dot / streak shapes; `MI_FxGlow`, `MI_FxStreak`,
@@ -88,7 +91,8 @@ In the editor: Tools > Execute Python Script.
 ```
 
 Or in the editor: Tools > Session Frontend > Automation, filter `ShatteredOrbit`. Tests
-(`Source/ShatteredOrbit/Private/Tests/SOAutomationTests.cpp`, `SOCombatTests.cpp`; transient worlds ticked by hand):
+(`Source/ShatteredOrbit/Private/Tests/SOAutomationTests.cpp`, `SOCombatTests.cpp`, `SOHoldTests.cpp`; transient worlds
+ticked by hand):
 
 | Test | Checks |
 |---|---|
@@ -116,9 +120,14 @@ Or in the editor: Tools > Session Frontend > Automation, filter `ShatteredOrbit`
 | `FX.ImpactsSpawnAndExpire` | sparks / dust / blood / flash / tracer particles spawn and expire, delayed impacts, decal cap |
 | `FX.ShotsShowWhereTheyLand` | firing at a wall leaves an impact and a bullet hole for every round |
 | `Audio.SoundsImported` | every synthesised sound asset loads |
+| `Hold.HandsOnGrips` | first-person arms (the arms mesh on the body skeleton) and the third-person body: both hands on the grips at the hip, aiming and in third person |
+| `Hold.SightsOnCrosshair` | aimed, the sight line lies on the eye axis and the barrel is parallel; while firing, recoil kicks the view, the rounds and the sights together |
+| `Aim.ThirdPersonHitsCrosshair` | third person: the round lands where the shoulder camera's centre ray hits; first person: rounds go along the view |
+| `Weapon.ReloadHandStaysOutsideTheGun` | through a whole empty reload the off hand never enters the receiver; on the rack it is palm-down on top and rides the charging handle |
 
-Screenshots for a visual check (needs a GPU; writes `Saved/Screenshots/SO_*.png`: hip, firing, impacts, ADS,
-mid-reload, third person, third person firing):
+Screenshots for a visual check (needs a GPU; writes `Saved/Screenshots/SO_*.png`: first person hip, firing, impacts,
+sights, sights while firing, mid mag change, mid rack, looking down; third person from behind (hip, firing, aiming)
+and from a free camera: both sides, the front, looking down / up, mid mag change, mid rack):
 
 ```bash
 "/c/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "C:/Dev/World-ex/unreal/ShatteredOrbit/ShatteredOrbit.uproject" -game -RenderOffscreen -windowed -ResX=1600 -ResY=900 -nosound -ExecCmds="SOCaptureSeries 1"
@@ -145,13 +154,20 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 - **Mantle:** walk or jump at a ledge while holding jump: the orange blocks (60-240 cm) are climbable, the grey
   300 cm wall is not.
 - **Coyote time / jump buffer:** jump just after running off a ledge, or press jump just before landing.
-- **Camera:** T (D-pad up) toggles third person; RMB / LT zooms (aim) with zoom-matched sensitivity.
+- **Camera:** T (D-pad up) toggles third person; RMB / LT zooms (aim) with zoom-matched sensitivity. Third-person
+  shots go where the crosshair is (the round flies from the eyes to what the shoulder camera's centre ray hits).
+- **Holding the gun:** the first-person arms are your own body's arms (same sleeves and gloves as in third person),
+  and both bodies reach for the gun with arm IK: firing hand on the grip, support hand under the handguard. In first
+  person aiming puts the iron sights on the crosshair (the rounds land on the front post, also while firing: the
+  recoil kicks the view and the gun together). In third person the torso follows your pitch, blades and leans in, and
+  aiming raises the rifle to the cheek.
 - **Look:** mouse = 0.07 degrees per count at sensitivity 1 (`SOGameUserSettings.MouseSensitivity` scales it).
 - **Shoot:** LMB / RT fires the rifle (600 rpm, real rounds with drop, 19 damage, x1.6 on the head). RMB / LT aims
   down the sights (1.35x zoom, 58 % move speed, tighter cone). Firing or aiming stops a sprint; after a sprint the
   rifle needs 0.2 s before it fires.
 - **Reload:** R / X. Watch the mag rock forward off its lip and drop, the left hand fetch a new one from the pouch,
-  hook and seat it; on an empty mag the hand then racks the bolt. Sprinting cancels the reload; pulling the trigger on
+  hook and seat it; on an empty mag the hand comes over the top, palm down, hooks the charging handle and rides it
+  back. Sprinting cancels the reload; pulling the trigger on
   an empty mag starts one.
 - **Stalkers:** three spawn 26-34 m out. They wander, notice you by sight (or your gunfire), run you down along the
   nav mesh and lunge in with 18-damage strikes. 140 health; dead ones respawn after 8 s. Bars show over hurt ones.
@@ -176,13 +192,13 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 |---|---|
 | `ShatteredOrbit` (primary) | `ASOGameMode` (HUD, respawn after 4 s), `ASOPlayerController` (adds `IMC_Default`, `SOCaptureSeries`), `ASOPlayerState`, `USOGameInstance`, tests |
 | `SOCore` | `LogShatteredOrbit`, `USOGameUserSettings` (look + graphics settings, `ApplyGraphics()`) |
-| `SOCharacter` | `ASOCharacter` (weapon, ADS, recoil, body + clips), `USOCharacterMovementComponent` (sprint, ADS speed, coyote, slide, mantle, saved moves), `USOLookComponent`, `USOViewmodelComponent` (viewmodel.js port), `USOLocomotionAnimInstance` (native blend of the Blender clips, no anim blueprint) |
-| `SOCombat` | GAS: `USOAttributeSet` (health, shield, incoming damage), `USOAbilitySystemComponent` (shield regen), `USOGameplayEffect_Damage`, `USOCombatStatics` (damage, factions, death + noise events); `ASOCombatCharacter` (base for player and creatures), `USOWeaponData`, `ASOWeapon` (server-authoritative trigger / ammo / reload), `USOGunRigComponent` (posable gun + arms), `SOReload` (reload.js keyframe port), `USOProjectileSubsystem` (rounds with drop on the SOBullet channel), `USOFxSubsystem` (instanced-card particles, decals, flash lights), `USOSoundLibrary` (named sounds, range presets) |
+| `SOCharacter` | `ASOCharacter` (weapon, ADS, recoil, body + clips), `USOCharacterMovementComponent` (sprint, ADS speed, coyote, slide, mantle, saved moves), `USOLookComponent`, `USOViewmodelComponent` (the gun holds: first person locked to the kicked eye, third person kept in front of the body; hip / ADS, sway, bob, kick, sprint, reload offsets), `USOLocomotionAnimInstance` (native blend of the Blender clips, no anim blueprint; stance, head aim and two-bone arm IK onto the gun's grips) |
+| `SOCombat` | GAS: `USOAttributeSet` (health, shield, incoming damage), `USOAbilitySystemComponent` (shield regen), `USOGameplayEffect_Damage`, `USOCombatStatics` (damage, factions, death + noise events); `ASOCombatCharacter` (base for player and creatures), `USOWeaponData`, `ASOWeapon` (server-authoritative trigger / ammo / reload), `USOGunRigComponent` (posable gun; hand grips per anchor for the arm IK), `SOReload` (reload.js keyframe port), `USOProjectileSubsystem` (rounds with drop on the SOBullet channel), `USOFxSubsystem` (instanced-card particles, decals, flash lights), `USOSoundLibrary` (named sounds, range presets) |
 | `SOAI` | `ASOEnemy` (stalker), `ASOEnemyAIController` (sight / hearing / chase / melee), `ASOEnemySpawner` |
 | `SOWorld` | `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`) |
 | `SOUI` | `ASOHUD` (canvas combat HUD, damage flash, hit sounds), `USOActivatableWidget` (CommonUI base) |
 
-Assets come from Blender: `tools/blender/export_fbx.py -- in.glb out_dir [--single] [--split-parts] [--only=a,b]`
+Assets come from Blender: `tools/blender/export_fbx.py -- in.glb out_dir [--single] [--split-parts] [--only=a,b] [--arms-only]`
 turns our GLBs into Unreal-ready FBX (units, Z up, no leaf bones, UCX_ collision, LOD groups, reload parts at their
 pivots, materials.json + the embedded images). `tools/blender/export_unreal.sh` runs it for everything the project
 uses.
@@ -194,7 +210,7 @@ uses.
   swapped for editor-authored assets later without touching gameplay code. No 2K/4K texture re-bakes yet.
 - Stalker ranged bolts are not in yet.
 - The stalker brain is C++; the StateTree version comes when the creature roster grows.
-- Third person: the rifle grip follows `hand_R` and the barrel follows the aim; no left-hand IK or upper-body aim
-  offset yet, so the arms do not wrap the gun.
-- First-person arms are the browser build's static `viewmodel_arms.glb` (no fingers), posed by the reload timeline.
+- The hands are single bones (no finger bones in the shared rig), so the fingers keep their modelled relaxed curl
+  instead of closing round the grip. Looking far down in first person shows the cut shoulders of the arms mesh.
+- Only the rifle has grips and choreography so far; other archetypes need their grips in `SOGunRigComponent`.
 - Clients see the server's shots (no client-side prediction yet); hit markers only for the listen-server host.

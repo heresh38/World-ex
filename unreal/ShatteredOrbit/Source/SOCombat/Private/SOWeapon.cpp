@@ -99,13 +99,17 @@ void ASOWeapon::AttachToHolder(ASOCombatCharacter* Holder)
 	{
 		FirstPersonRig->SetVisibility(false, true);
 	}
+	if (USceneComponent* Hold = Holder->GetThirdPersonWeaponParent())
+	{
+		// Held guns: the holder places the gun and its body's arm IK reaches for the rig's grips.
+		ThirdPersonRig->AttachToComponent(Hold, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		return;
+	}
 	const FName Socket = Holder->GetThirdPersonWeaponSocket();
 	USkeletalMeshComponent* Body = Holder->GetMesh();
 	if (Body && Body->GetSkeletalMeshAsset() && Socket != NAME_None && Body->DoesSocketExist(Socket))
 	{
-		// The grip follows the hand; the barrel follows the aim (no hand-to-grip calibration needed yet).
 		ThirdPersonRig->AttachToComponent(Body, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
-		ThirdPersonRig->SetUsingAbsoluteRotation(true);
 	}
 }
 
@@ -396,11 +400,6 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	if (bFinished)
 	{
 		bReloading = false;
-	}
-
-	if (Holder && ThirdPersonRig->IsUsingAbsoluteRotation())
-	{
-		ThirdPersonRig->SetWorldRotation(Holder->GetAimDirection().Rotation());
 	}
 
 	const FSOReloadPose& Pose = Reload.GetPose();

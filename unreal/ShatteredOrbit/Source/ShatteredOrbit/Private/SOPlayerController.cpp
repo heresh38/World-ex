@@ -1,9 +1,10 @@
-﻿#include "SOPlayerController.h"
+#include "SOPlayerController.h"
 
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 #include "EngineUtils.h"
+#include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "SOCharacter.h"
 #include "SOGunRigComponent.h"
@@ -56,6 +57,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone)
 {
 	bCaptureQuit = bQuitWhenDone != 0;
 	CaptureIndex = 0;
+	CaptureWait = 0.0f;
 	// Freeze the creatures so they pose for the pictures instead of ending them.
 	for (TActorIterator<ASOEnemy> It(GetWorld()); It; ++It)
 	{
@@ -65,60 +67,146 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone)
 			AI->StopMovement();
 		}
 	}
-	// The first steps give shaders and streaming time to settle.
-	GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 1.0f, true, 4.0f);
-}
 
-void ASOPlayerController::CaptureStep()
-{
-	ASOCharacter* Hero = Cast<ASOCharacter>(GetPawn());
+	auto Hero = [this]() { return Cast<ASOCharacter>(GetPawn()); };
 	auto Shot = [this, Hero](const TCHAR* Name)
 	{
 		const FString File = FPaths::ProjectSavedDir() / TEXT("Screenshots") / FString::Printf(TEXT("SO_%s.png"), Name);
 		FScreenshotRequest::RequestScreenshot(File, false, false);
 		UE_LOG(LogShatteredOrbit, Log, TEXT("Capture: %s"), *File);
-		if (Hero && PlayerCameraManager)
+		if (ASOCharacter* H = Hero(); H && PlayerCameraManager)
 		{
-			const FBox Body = Hero->GetMesh()->Bounds.GetBox();
-			UE_LOG(LogShatteredOrbit, Log, TEXT("  camera %s | actor %s | FP active %d TP active %d at %s | body %s..%s visible %d ownerNoSee %d | viewmodel rel %s"),
-				*PlayerCameraManager->GetCameraLocation().ToCompactString(), *Hero->GetActorLocation().ToCompactString(),
-				Hero->GetFirstPersonCamera()->IsActive(), Hero->GetThirdPersonCamera()->IsActive(),
-				*Hero->GetThirdPersonCamera()->GetComponentLocation().ToCompactString(), *Body.Min.ToCompactString(), *Body.Max.ToCompactString(),
-				Hero->GetMesh()->IsVisible(), Hero->GetMesh()->bOwnerNoSee, *Hero->GetViewmodel()->GetRelativeLocation().ToCompactString());
-			if (const ASOWeapon* W = Hero->GetWeapon())
+			UE_LOG(LogShatteredOrbit, Log, TEXT("  camera %s rot %s | actor %s yaw %.1f | aim %.2f"), *PlayerCameraManager->GetCameraLocation().ToCompactString(),
+				*PlayerCameraManager->GetCameraRotation().ToCompactString(), *H->GetActorLocation().ToCompactString(), H->GetActorRotation().Yaw, H->GetAimProgress());
+			if (const ASOWeapon* W = H->GetWeapon())
 			{
-				const float* G = W->GetPose().Gun;
-				TArray<USceneComponent*> Kids;
-				W->GetFirstPersonRig()->GetChildrenComponents(true, Kids);
-				int32 Visible = 0;
-				for (USceneComponent* K : Kids) { Visible += K->IsVisible(); }
-				const FVector Rel = PlayerCameraManager->GetCameraRotation().UnrotateVector(W->GetFirstPersonRig()->GetComponentLocation() - PlayerCameraManager->GetCameraLocation());
-				UE_LOG(LogShatteredOrbit, Log, TEXT("  gun pose %.3f %.3f %.3f %.3f %.3f %.3f | fp rig rel cam %s | %d/%d fp parts visible | rig visible %d"),
-					G[0], G[1], G[2], G[3], G[4], G[5], *Rel.ToCompactString(), Visible, Kids.Num(), W->GetFirstPersonRig()->IsVisible());
+				const USkeletalMeshComponent* Bodies[2] = { H->GetFirstPersonArms(), H->GetMesh() };
+				const USOGunRigComponent* Rigs[2] = { W->GetFirstPersonRig(), W->GetThirdPersonRig() };
+				for (int32 i = 0; i < 2; ++i)
+				{
+					FTransform R, L;
+					if (Rigs[i] && Rigs[i]->GetHandTargets(R, L))
+					{
+						const FVector Local = H->GetActorTransform().InverseTransformPosition(Rigs[i]->GetComponentLocation());
+						UE_LOG(LogShatteredOrbit, Log, TEXT("  %s rig at %s (actor space) fwd %s | R target %s bone %s | L target %s bone %s"),
+							i == 0 ? TEXT("FP") : TEXT("TP"), *Local.ToCompactString(),
+							*H->GetActorTransform().InverseTransformVector(Rigs[i]->GetForwardVector()).ToCompactString(),
+							*H->GetActorTransform().InverseTransformPosition(R.GetLocation()).ToCompactString(),
+							*H->GetActorTransform().InverseTransformPosition(Bodies[i]->GetBoneLocation(TEXT("hand_R"))).ToCompactString(),
+							*H->GetActorTransform().InverseTransformPosition(L.GetLocation()).ToCompactString(),
+							*H->GetActorTransform().InverseTransformPosition(Bodies[i]->GetBoneLocation(TEXT("hand_L"))).ToCompactString());
+					}
+				}
 			}
 		}
 	};
-	switch (CaptureIndex++)
+	auto Weapon = [Hero]() { ASOCharacter* H = Hero(); return H ? H->GetWeapon() : nullptr; };
+	// A free camera around the character (yaw relative to the character's facing, 0 = in front looking back).
+	auto Orbit = [this, Hero](float Yaw, float Distance, float Height)
 	{
-	// A screenshot is taken at the end of the frame, so every change of pose gets its own step.
-	case 0: Shot(TEXT("1_hip")); if (Hero) { Hero->HandleFirePressed(); } break;
-	case 1: Shot(TEXT("2_firing")); break;
-	case 2: Shot(TEXT("3_impacts")); if (Hero) { Hero->HandleFireReleased(); Hero->HandleAimPressed(); } break;
-	case 3: Shot(TEXT("4_ads")); if (Hero) { Hero->HandleAimReleased(); if (ASOWeapon* W = Hero->GetWeapon()) { W->SetAmmo(0, 120); W->StartReload(); } } break;
-	case 4: Shot(TEXT("5_reload")); break;
-	case 5: if (Hero) { Hero->SetViewMode(ESOViewMode::ThirdPerson); } break;
-	case 6: Shot(TEXT("6_third_person")); if (Hero) { Hero->HandleFirePressed(); } break;
-	case 7: Shot(TEXT("7_third_person_firing")); if (Hero) { Hero->HandleFireReleased(); } SetControlRotation(FRotator(-10.0f, 180.0f, 0.0f)); break;
-	case 8: break;
-	case 9: Shot(TEXT("8_third_person_front")); break;
-	default:
+		ASOCharacter* H = Hero();
+		if (!H)
+		{
+			return;
+		}
+		if (!CaptureCamera)
+		{
+			CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+		}
+		const FVector Focus = H->GetActorLocation() + FVector(0, 0, 50.0f);
+		const FRotator Around(0.0f, H->GetActorRotation().Yaw + Yaw, 0.0f);
+		const FVector Eye = Focus + Around.Vector() * Distance + FVector(0, 0, Height);
+		CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+		SetViewTarget(CaptureCamera);
+	};
+	auto Look = [this](float Pitch) { SetControlRotation(FRotator(Pitch, GetControlRotation().Yaw, 0.0f)); };
+	auto Do = [this](float Delay, TFunction<void()> Action, TFunction<bool()> Ready = nullptr) -> void
+	{
+		CaptureCues.Add({ Delay, MoveTemp(Ready), MoveTemp(Action) });
+	};
+
+	CaptureCues.Reset();
+	// The first cue waits for shaders and streaming to settle.
+	// A screenshot is taken at the end of the frame, so a shot cue never changes anything else.
+	auto Snap = [Do, Shot](float Delay, const TCHAR* Name, TFunction<bool()> Ready = nullptr) { Do(Delay, [Shot, Name]() { Shot(Name); }, MoveTemp(Ready)); };
+	auto Act = [Do](TFunction<void()> Action) { Do(0.05f, MoveTemp(Action)); };
+	auto Fire = [Hero](bool bDown) { if (ASOCharacter* H = Hero()) { if (bDown) { H->HandleFirePressed(); } else { H->HandleFireReleased(); } } };
+	auto Aim = [Hero](bool bDown) { if (ASOCharacter* H = Hero()) { if (bDown) { H->HandleAimPressed(); } else { H->HandleAimReleased(); } } };
+	auto EmptyReload = [Weapon]() { if (ASOWeapon* W = Weapon()) { W->SetAmmo(0, 120); W->StartReload(); } };
+	auto MidMag = [Weapon]() { const ASOWeapon* W = Weapon(); return W && W->GetPose().bSpareVisible && W->GetPose().HandAlpha > 0.5f; };
+	auto MidRack = [Weapon]() { const ASOWeapon* W = Weapon(); return W && W->GetPose().Bolt > 0.06f; };
+	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
+
+	CaptureCues.Reset();
+	Do(4.0f, [=, this]() { Look(0.0f); }); // shaders and streaming settle first
+	Snap(1.0f, TEXT("1_hip"));
+	Act([=, this]() { Fire(true); });
+	Snap(0.3f, TEXT("2_firing"));
+	Act([=, this]() { Fire(false); });
+	Snap(0.6f, TEXT("3_impacts"));
+	Act([=, this]() { Aim(true); });
+	Snap(1.0f, TEXT("4_ads"));
+	Act([=, this]() { Fire(true); });
+	Snap(0.25f, TEXT("4b_ads_firing"));
+	Act([=, this]() { Fire(false); });
+	Snap(1.2f, TEXT("4c_ads_impacts"));
+	Act([=, this]() { Aim(false); EmptyReload(); });
+	Snap(0.0f, TEXT("5_reload_mag"), MidMag);
+	Snap(0.0f, TEXT("5b_rack"), MidRack);
+	Act([=, this]() { Look(-60.0f); });
+	Snap(2.0f, TEXT("5c_look_down"));
+	Act([=, this]() { Look(0.0f); View(ESOViewMode::ThirdPerson); });
+	Snap(1.0f, TEXT("6_third_person"));
+	Act([=, this]() { Fire(true); });
+	Snap(0.6f, TEXT("7_third_person_firing"));
+	Act([=, this]() { Fire(false); });
+	Snap(0.5f, TEXT("7a_third_person_impacts"));
+	Act([=, this]() { Aim(true); });
+	Snap(0.8f, TEXT("7b_third_person_ads"));
+	Act([=, this]() { Orbit(90.0f, 190.0f, 20.0f); });
+	Snap(0.4f, TEXT("8_right_side_ads"));
+	Act([=, this]() { Aim(false); });
+	Snap(0.8f, TEXT("8b_right_side_hip"));
+	Act([=, this]() { Orbit(-90.0f, 190.0f, 20.0f); });
+	Snap(0.4f, TEXT("8c_left_side_hip"));
+	Act([=, this]() { Orbit(30.0f, 210.0f, 30.0f); });
+	Snap(0.4f, TEXT("9_front_hip"));
+	Act([=, this]() { Aim(true); });
+	Snap(0.8f, TEXT("9a_front_ads"));
+	Act([=, this]() { Aim(false); Orbit(90.0f, 190.0f, 20.0f); Look(-45.0f); });
+	Snap(0.8f, TEXT("9b_side_look_down"));
+	Act([=, this]() { Look(35.0f); });
+	Snap(0.8f, TEXT("9c_side_look_up"));
+	Act([=, this]() { Look(0.0f); Orbit(-70.0f, 170.0f, 30.0f); EmptyReload(); });
+	Snap(0.0f, TEXT("9d_left_side_mag"), MidMag);
+	Snap(0.0f, TEXT("9e_left_side_rack"), MidRack);
+	Act([=, this]() { SetViewTarget(GetPawn()); });
+	Do(1.5f, []() {});
+
+	// Poll often so condition cues (mid-reload) land on the right frame.
+	GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+}
+
+void ASOPlayerController::CaptureStep()
+{
+	CaptureWait += 0.02f;
+	if (!CaptureCues.IsValidIndex(CaptureIndex))
+	{
 		GetWorldTimerManager().ClearTimer(CaptureTimer);
 		if (bCaptureQuit)
 		{
 			UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 		}
-		break;
+		return;
 	}
+	const FCaptureCue& Cue = CaptureCues[CaptureIndex];
+	if (CaptureWait < Cue.Delay || (Cue.Ready && !Cue.Ready()))
+	{
+		return;
+	}
+	CaptureWait = 0.0f;
+	++CaptureIndex;
+	Cue.Action();
 }
 
 void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)

@@ -61,6 +61,21 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 
 	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide */
 	FSOLocomotionLayer Layers[7];
+
+	// Held gun (players): copied from the instance each update.
+	bool bHold = false;
+	bool bArmsOnly = false;
+	bool bCollapseBody = false;
+	float AimPitch = 0.0f;
+	float Blade = 0.0f;
+	float Lean = 0.0f;
+	FTransform RightTarget;
+	FTransform LeftTarget;
+
+private:
+	/** Stance (aim pitch through the spine, lean, blade), head on the aim, both arms onto the grips (two-bone IK);
+	 *  first-person copies keep only the arms. */
+	void ApplyHold(FPoseContext& Output) const;
 };
 
 /**
@@ -94,6 +109,17 @@ public:
 	bool bSliding = false;
 	float AttackTime = -1.0f;
 	float AttackRate = 1.0f;
+
+	/** Held gun (players): component-space wrist targets with hand bases (FSOHandGrip) for the arm IK. */
+	bool bHold = false;
+	/** First-person copy of the body: everything but the arms collapses. */
+	bool bArmsOnly = false;
+	bool bCollapseBody = false;
+	float AimPitch = 0.0f;
+	float Blade = 0.0f;
+	float Lean = 0.0f;
+	FTransform RightTarget;
+	FTransform LeftTarget;
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide. */
 	float Weights[7] = { 1, 0, 0, 0, 0, 0, 0 };

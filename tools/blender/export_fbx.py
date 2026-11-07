@@ -9,6 +9,8 @@ Options:
                      become their own FBX files with the origin at their pivot; <asset>.parts.json gives their rest
                      transforms and the gun's empties (muzzle, sight, rail, foregrip, ...) in Unreal mesh space
   --only=a,b,c       keep only these mesh objects (e.g. one wardrobe loadout); armatures and empties are kept
+  --arms-only        skinned meshes keep only what the arm bones (upperarm / forearm / hand) mostly carry: the
+                     first-person arms cut from the very body (and outfit) everyone else sees
 
 - Units: static files stay in Blender metres with "FBX units scale" (import with "Convert Scene Unit"); files with an
   armature are rewritten in centimetres first (mesh, shape keys, rest bones, location keys; scene unit 1 cm) because
@@ -165,6 +167,30 @@ def drop_helpers(only):
         filtered = only is not None and ob.type == "MESH" and ob.name not in only
         if is_shape or filtered:
             bpy.data.objects.remove(ob, do_unlink=True)
+
+
+ARM_BONES = tuple(f"{b}.{s}" for b in ("upperarm", "forearm", "hand") for s in "LR")
+
+
+def keep_arms_only(threshold=0.5):
+    """Deletes every vertex whose arm-bone weight is below threshold; meshes left empty are removed."""
+    import bmesh
+    for ob in list(bpy.context.scene.objects):
+        if ob.type != "MESH" or not ob.vertex_groups:
+            continue
+        arm = {g.index for g in ob.vertex_groups if g.name in ARM_BONES}
+        bm = bmesh.new()
+        bm.from_mesh(ob.data)
+        deform = bm.verts.layers.deform.active
+        drop = [v for v in bm.verts if deform is None or sum(w for i, w in v[deform].items() if i in arm) < threshold]
+        bmesh.ops.delete(bm, geom=drop, context="VERTS")
+        left = len(bm.verts)
+        bm.to_mesh(ob.data)
+        bm.free()
+        if left == 0:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        else:
+            print(f"[export_fbx] arms only: {ob.name} keeps {left} vertices")
 
 
 def action_fcurves(action):
@@ -357,6 +383,8 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=src, merge_vertices=False)
     drop_helpers(only)
+    if "--arms-only" in flags:
+        keep_arms_only()
     skeletal_file = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
     if skeletal_file:
         scene_to_centimetres()

@@ -1,7 +1,9 @@
 #include "SOViewmodelComponent.h"
 
+#include "Components/SkeletalMeshComponent.h"
 #include "SOCharacter.h"
 #include "SOCharacterMovementComponent.h"
+#include "SOGunRigComponent.h"
 #include "SOLookComponent.h"
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
@@ -9,7 +11,31 @@
 USOViewmodelComponent::USOViewmodelComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.TickGroup = TG_PostPhysics;
+	// After movement and look, before the bodies animate (their arm IK reads the holds).
+	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+}
+
+void USOViewmodelComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (ASOCharacter* Character = Cast<ASOCharacter>(GetOwner()))
+	{
+		if (UActorComponent* Move = Character->GetCharacterMovement())
+		{
+			AddTickPrerequisiteComponent(Move);
+		}
+		if (USOLookComponent* Look = Character->GetLook())
+		{
+			AddTickPrerequisiteComponent(Look);
+		}
+		for (USkeletalMeshComponent* Body : { Character->GetMesh(), Character->GetFirstPersonArms() })
+		{
+			if (Body)
+			{
+				Body->AddTickPrerequisiteComponent(this);
+			}
+		}
+	}
 }
 
 void USOViewmodelComponent::Kick(float Strength)
@@ -21,8 +47,12 @@ void USOViewmodelComponent::Kick(float Strength)
 void USOViewmodelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateHold(DeltaTime);
+}
 
-	const ASOCharacter* Character = Cast<ASOCharacter>(GetOwner());
+void USOViewmodelComponent::UpdateHold(float DeltaTime)
+{
+	ASOCharacter* Character = Cast<ASOCharacter>(GetOwner());
 	if (!Character)
 	{
 		return;
@@ -58,24 +88,42 @@ void USOViewmodelComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 	static const float Zero[6] = { 0, 0, 0, 0, 0, 0 };
 	const float* G = Weapon ? Weapon->GetPose().Gun : Zero;
 
-	// Hip vs ADS: with the sight on the camera axis. Sight in rig space = mesh (x, y, z) -> (y, -x, z).
+	// Hip vs ADS: in ADS the sight (rear sight line) lies on the eye axis, AdsSightDistance ahead.
 	FVector AdsOffset(AdsSightDistance, 0.0f, 0.0f);
 	if (Data)
 	{
-		const FVector SightRig(Data->SightLocation.Y, -Data->SightLocation.X, Data->SightLocation.Z);
-		AdsOffset = FVector(AdsSightDistance - SightRig.X, -SightRig.Y, -SightRig.Z - AdsEyeLift);
+		const FVector SightRig = USOGunRigComponent::MeshToRig(Data->SightLocation);
+		AdsOffset = FVector(AdsSightDistance - SightRig.X, -SightRig.Y, -SightRig.Z);
 	}
 	const float Lift = 1.0f - Ads * 0.8f;
 	// view-space metres (x right, y up, z back) accumulated like viewmodel.js, then converted
-	float VX = BobX + SwayX * Lift + RunT * 0.05f + G[0];
-	float VY = BobY + SwayY * Lift - Lower * 0.35f - RunT * 0.04f + G[1];
-	float VZ = KickBack * (1.0f - Ads * 0.5f) + G[2];
+	const float VX = BobX + SwayX * Lift + RunT * 0.05f + G[0];
+	const float VY = BobY + SwayY * Lift - Lower * 0.35f - RunT * 0.04f + G[1];
+	const float VZ = KickBack * (1.0f - Ads * 0.5f) + G[2];
 	const FVector Base = FMath::Lerp(HipOffset, AdsOffset, Ads);
 	const FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
-	const float EX = KickPitch * (1.0f - Ads * 0.6f) + G[3] - Lower * 0.6f - RunT * 0.35f;
+	// The muzzle flip stays small on the sights so the front post settles back on the target.
+	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f - RunT * 0.35f;
 	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.5f) + RunT * 0.6f + G[4];
 	const float EZ = G[5] + RunT * 0.25f;
-	const FRotator Rot(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ));
-	SetRelativeLocationAndRotation(Offset, Rot);
+	const FTransform Local(FRotator(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ)), Offset);
+
+	// First person: locked to the kicked eye, exactly what the camera shows.
+	const FTransform Eye = Character->GetEyeTransform(true);
+	SetWorldTransform(Local * Eye);
+
+	// Third person: the same hold at the character's own eyes; looking down pushes the hip hold forward so the gun
+	// stays in front of the chest instead of sinking into it.
+	if (USceneComponent* ThirdPerson = Character->GetThirdPersonHold())
+	{
+		FTransform EyeTP = Eye;
+		EyeTP.AddToTranslation(FVector(0.0f, 0.0f, ThirdPersonEyeLift));
+		FTransform World = Local * EyeTP;
+		const float Pitch = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
+		const float Down = FMath::Max(0.0f, -FMath::Sin(FMath::DegreesToRadians(Pitch)));
+		const FVector Flat = FRotator(0.0f, Eye.Rotator().Yaw, 0.0f).Vector();
+		World.AddToTranslation(Flat * ThirdPersonDownReach * Down * (1.0f - Ads));
+		ThirdPerson->SetWorldTransform(World);
+	}
 }

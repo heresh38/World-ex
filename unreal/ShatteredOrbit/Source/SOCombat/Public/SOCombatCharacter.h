@@ -87,6 +87,8 @@ public:
 	/** Attach points for the weapon's first-person and third-person rigs. */
 	virtual USceneComponent* GetFirstPersonWeaponParent() const { return nullptr; }
 	virtual FName GetThirdPersonWeaponSocket() const { return NAME_None; }
+	/** A component the third-person rig attaches to instead of a socket (held guns); null = use the socket. */
+	virtual USceneComponent* GetThirdPersonWeaponParent() const { return nullptr; }
 
 	/** World point where a point of the first-person viewmodel appears on screen (the viewmodel renders with its own
 	 *  field of view); effects such as the muzzle flash are placed there. */

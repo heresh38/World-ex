@@ -370,6 +370,58 @@ def character(src, dest, mesh_name, clip_prefix, master, extra_for=None, flesh=F
     return mesh
 
 
+def player_arms(master):
+    """First-person arms: the body's own sleeves / gloves / shoulder plates (export_fbx.py --arms-only) on the body's
+    skeleton, so the same clips and arm IK drive them and the hands match what everyone else sees."""
+    src = os.path.join(SOURCE, "Characters", "PlayerMaleArms")
+    dest = "/Game/Characters/PlayerMale"
+    body = eal.load_asset(dest + "/SK_PlayerMale")
+    if not body or not os.path.isdir(src):
+        log("SK_PlayerMaleArms: skipped (needs SK_PlayerMale and SourceArt/Characters/PlayerMaleArms)")
+        return None
+    manifest = load_json(os.path.join(src, "export_fbx.json"))
+    materials = load_json(os.path.join(src, "materials.json"))
+    asset = manifest["assets"][0]
+    used = {base_slot(n) for n in asset["materials"]}
+    tex = import_textures_for(src, materials, dest + "/Textures", used)
+    instances = {}
+    for name in asset["materials"]:
+        key = base_slot(name)
+        m = materials.get(key) or materials.get(name) or {}
+        instances[key] = make_instance(master, dest, key, m, tex, player_extra(key, m))
+
+    ui = unreal.FbxImportUI()
+    ui.set_editor_property("import_mesh", True)
+    ui.set_editor_property("import_textures", False)
+    ui.set_editor_property("import_materials", False)
+    ui.set_editor_property("import_as_skeletal", True)
+    ui.set_editor_property("automated_import_should_detect_type", False)
+    ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    ui.set_editor_property("skeleton", body.get_editor_property("skeleton"))
+    ui.set_editor_property("import_animations", False)
+    ui.set_editor_property("create_physics_asset", False)
+    sk = ui.get_editor_property("skeletal_mesh_import_data")
+    sk.set_editor_property("convert_scene_unit", False)
+    sk.set_editor_property("normal_import_method", unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS_AND_TANGENTS)
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", os.path.join(src, asset["file"]))
+    task.set_editor_property("destination_path", dest)
+    task.set_editor_property("destination_name", "SK_PlayerMaleArms")
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", False)
+    task.set_editor_property("options", ui)
+    tools.import_asset_tasks([task])
+    mesh = next((unreal.load_asset(p) for p in task.get_editor_property("imported_object_paths")
+                 if isinstance(unreal.load_asset(p), unreal.SkeletalMesh)), None)
+    if not mesh:
+        raise RuntimeError("SK_PlayerMaleArms import failed")
+    assign_materials(mesh, instances)
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=False)
+    log(f"SK_PlayerMaleArms: {len(instances)} materials on the body skeleton")
+    return mesh
+
+
 def stalker_extra(key, m):
     if key in FLESH:
         s = FLESH[key]
@@ -614,15 +666,25 @@ def main():
     unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX 0")
     defaults = default_textures()
     master = master_material(defaults)
-    character(os.path.join(SOURCE, "Characters", "PlayerMale"), "/Game/Characters/PlayerMale", "SK_PlayerMale", "A_PlayerMale_",
-              master, player_extra)
-    character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
-              master, stalker_extra, flesh=True)
-    rifle(master)
-    fx_master()
-    decal_material()
-    fx_meshes()
-    audio()
+    # SO_IMPORT_ONLY=arms,rifle,... re-imports just those steps (default: everything).
+    only = {s.strip() for s in os.environ.get("SO_IMPORT_ONLY", "").split(",") if s.strip()}
+    want = lambda step: not only or step in only
+    if want("player"):
+        character(os.path.join(SOURCE, "Characters", "PlayerMale"), "/Game/Characters/PlayerMale", "SK_PlayerMale", "A_PlayerMale_",
+                  master, player_extra)
+    if want("player") or want("arms"):
+        player_arms(master)
+    if want("stalker"):
+        character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
+                  master, stalker_extra, flesh=True)
+    if want("rifle"):
+        rifle(master)
+    if want("fx"):
+        fx_master()
+        decal_material()
+        fx_meshes()
+    if want("audio"):
+        audio()
     log("done")
 
 
