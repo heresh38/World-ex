@@ -1,4 +1,5 @@
 #include "SOCombatCharacter.h"
+#include "SOAttributeSet.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -159,7 +160,25 @@ void ASOCombatCharacter::Destroyed()
 
 ASOWeapon* ASOCombatCharacter::EquipWeapon(USOWeaponData* Data)
 {
-	if (!HasAuthority() || !Data || !GetWorld())
+	if (!Data)
+	{
+		return nullptr;
+	}
+	return SpawnWeapon([Data](ASOWeapon* W) { W->SetData(Data); });
+}
+
+ASOWeapon* ASOCombatCharacter::EquipInstance(const FSOWeaponInstance& Instance)
+{
+	if (!Instance.IsValid())
+	{
+		return nullptr;
+	}
+	return SpawnWeapon([&Instance](ASOWeapon* W) { W->SetInstance(Instance); });
+}
+
+ASOWeapon* ASOCombatCharacter::SpawnWeapon(TFunctionRef<void(ASOWeapon*)> Setup)
+{
+	if (!HasAuthority() || !GetWorld())
 	{
 		return nullptr;
 	}
@@ -178,7 +197,12 @@ ASOWeapon* ASOCombatCharacter::EquipWeapon(USOWeaponData* Data)
 	{
 		return nullptr;
 	}
-	NewWeapon->SetData(Data);
+	Setup(NewWeapon);
+	if (!NewWeapon->GetData())
+	{
+		NewWeapon->Destroy();
+		return nullptr;
+	}
 	NewWeapon->FinishSpawning(GetActorTransform());
 	Weapon = NewWeapon;
 	OnRep_Weapon();
@@ -191,6 +215,7 @@ void ASOCombatCharacter::OnRep_Weapon()
 	{
 		Weapon->AttachToHolder(this);
 	}
+	OnWeaponEquipped();
 }
 
 FVector ASOCombatCharacter::GetAimOrigin() const
@@ -201,4 +226,12 @@ FVector ASOCombatCharacter::GetAimOrigin() const
 FVector ASOCombatCharacter::GetAimDirection() const
 {
 	return GetBaseAimRotation().Vector();
+}
+
+void ASOCombatCharacter::Heal(float Amount)
+{
+	if (HasAuthority() && AbilitySystem && !bDead && Amount > 0.0f)
+	{
+		AbilitySystem->SetNumericAttributeBase(USOAttributeSet::GetHealthAttribute(), FMath::Min(GetMaxHealth(), GetHealth() + Amount));
+	}
 }

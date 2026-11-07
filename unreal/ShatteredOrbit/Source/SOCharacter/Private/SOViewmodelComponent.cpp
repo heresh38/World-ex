@@ -92,7 +92,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	FVector AdsOffset(AdsSightDistance, 0.0f, 0.0f);
 	if (Data)
 	{
-		const FVector SightRig = USOGunRigComponent::MeshToRig(Data->SightLocation);
+		const FVector SightRig = USOGunRigComponent::MeshToRig(Weapon->GetSightLocation());
 		AdsOffset = FVector(AdsSightDistance - SightRig.X, -SightRig.Y, -SightRig.Z);
 	}
 	const float Lift = 1.0f - Ads * 0.8f;
@@ -100,7 +100,8 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float VX = BobX + SwayX * Lift + RunT * 0.05f + G[0];
 	const float VY = BobY + SwayY * Lift - Lower * 0.35f - RunT * 0.04f + G[1];
 	const float VZ = KickBack * (1.0f - Ads * 0.5f) + G[2];
-	const FVector Base = FMath::Lerp(HipOffset, AdsOffset, Ads);
+	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
+	const FVector Base = FMath::Lerp(bHandgun ? HandgunHipOffset : HipOffset, AdsOffset, Ads);
 	const FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
 	// The muzzle flip stays small on the sights so the front post settles back on the target.

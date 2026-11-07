@@ -25,6 +25,12 @@ ACTIONS = {
     "IA_Fire": unreal.InputActionValueType.BOOLEAN,
     "IA_Aim": unreal.InputActionValueType.BOOLEAN,
     "IA_Reload": unreal.InputActionValueType.BOOLEAN,
+    "IA_Weapon1": unreal.InputActionValueType.BOOLEAN,
+    "IA_Weapon2": unreal.InputActionValueType.BOOLEAN,
+    "IA_Weapon3": unreal.InputActionValueType.BOOLEAN,
+    "IA_NextWeapon": unreal.InputActionValueType.BOOLEAN,
+    "IA_PrevWeapon": unreal.InputActionValueType.BOOLEAN,
+    "IA_Inventory": unreal.InputActionValueType.BOOLEAN,
 }
 
 # (action, key, modifiers) - modifiers: "neg" negate, "swz" swizzle YXZ (so a 1D key drives Y), "dz" radial dead zone
@@ -54,6 +60,16 @@ MAPPINGS = [
     ("IA_Aim", "Gamepad_LeftTrigger", []),
     ("IA_Reload", "R", []),
     ("IA_Reload", "Gamepad_FaceButton_Left", []),
+    ("IA_Weapon1", "One", []),
+    ("IA_Weapon2", "Two", []),
+    ("IA_Weapon3", "Three", []),
+    ("IA_NextWeapon", "MouseScrollDown", []),
+    ("IA_NextWeapon", "Gamepad_DPad_Right", []),
+    ("IA_PrevWeapon", "MouseScrollUp", []),
+    ("IA_PrevWeapon", "Gamepad_DPad_Left", []),
+    ("IA_Inventory", "I", []),
+    ("IA_Inventory", "Tab", []),
+    ("IA_Inventory", "Gamepad_Special_Left", []),
 ]
 
 

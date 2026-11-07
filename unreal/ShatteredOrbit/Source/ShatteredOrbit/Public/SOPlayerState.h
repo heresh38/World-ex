@@ -4,7 +4,10 @@
 #include "GameFramework/PlayerState.h"
 #include "SOPlayerState.generated.h"
 
-/** Replicated per-player state (score, name). The ability system lives on the pawn (ASOCombatCharacter) for now. */
+class USOInventoryComponent;
+
+/** Replicated per-player state (score, name) and the player's vault + loadout (USOInventoryComponent), which outlive
+ *  the pawn. The ability system lives on the pawn (ASOCombatCharacter) for now. */
 UCLASS()
 class SHATTEREDORBIT_API ASOPlayerState : public APlayerState
 {
@@ -12,4 +15,10 @@ class SHATTEREDORBIT_API ASOPlayerState : public APlayerState
 
 public:
 	ASOPlayerState();
+
+	USOInventoryComponent* GetInventory() const { return Inventory; }
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Loot")
+	TObjectPtr<USOInventoryComponent> Inventory;
 };

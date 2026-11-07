@@ -8,6 +8,7 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class USOWeaponData;
 struct FSOReloadPose;
+struct FSOWeaponInstance;
 
 /**
  * Where a hand holds something, in rig space (+X barrel, +Y right, +Z up, cm): the wrist location and an anatomical
@@ -44,12 +45,20 @@ public:
 	/** Creates the mesh components. First person: owner-only, first-person rendering, no shadows. */
 	void Build(const USOWeaponData* Data, bool bInFirstPerson);
 
+	/** The copy's looks: mounts its optic on the rail (hiding the built-in sight it replaces), paints the body in its
+	 *  finish and the glow in its rarity colour (material names are an API: gun_body, gun_glow). */
+	void Dress(const FSOWeaponInstance& Instance);
+
+	/** Shows or hides the whole gun; parts the pose or a mounted optic keep hidden stay hidden. */
+	void SetShown(bool bInShown);
+
 	void ApplyPose(const FSOReloadPose& Pose);
 
 	/** World-space muzzle position. */
 	FVector GetMuzzleLocation() const;
 
-	/** Hand anchor in mesh space (cm): fore, mag, spare, magbase, bolt, pouch. */
+	/** Off-hand anchor in mesh space (cm) against the parts as currently posed: fore, mag, spare, magbase, bolt,
+	 *  charge, slide, pump, cyl, ejector, loader, shell, round, hatch, biomass, pouch, free. */
 	FVector ResolveAnchor(FName Anchor) const;
 
 	UStaticMeshComponent* GetPart(FName Name) const;
@@ -92,10 +101,24 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Spare;
 
-	TMap<FName, FTransform> Rest;
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> Optic;
+
+	TMap<FName, FTransform> Rest;      // relative to the parent part (or the gun)
+	TMap<FName, FTransform> RootRest;  // relative to the gun
 	FVector Foregrip = FVector::ZeroVector;
 	FSOHandGrip RightGrip;
 	FSOHandGrip LeftGrip;
+	/** Where the off hand was when the current reload segment began (anchor "cur"). */
+	FSOHandGrip CurGrip;
+	int32 LastSegment = -1;
+	FName Archetype;
+	bool bShown = true;
+	bool bOpticMounted = false;
+	bool bHandgun = false;
+
+	/** A part's current transform in mesh space (nested parts included). */
+	FTransform PartInMesh(const UStaticMeshComponent* Comp) const;
 	FVector Muzzle = FVector::ZeroVector;
 	bool bFirstPerson = false;
 	bool bBuilt = false;

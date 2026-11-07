@@ -7,6 +7,18 @@
 
 class UStaticMesh;
 
+/** What leaves the muzzle (data.js: kinetic rounds with drop, energy bolts, rockets, horror goo). */
+UENUM(BlueprintType)
+enum class ESOProjectileKind : uint8
+{
+	Round,   // kinetic bullet (gravity)
+	Bolt,    // energy bolt (no drop, coloured tracer)
+	Rocket,  // slow, splash
+	Spit,    // horror: acid glob, splash + acid damage over time
+	Bile,    // horror: bile pellets
+	Brood    // horror: a brood sac that bursts into a swarm
+};
+
 /** One moving reload part (node names are an API: mag, bolt, charge, slide, pump, ...). Mesh space = imported FBX space. */
 USTRUCT(BlueprintType)
 struct SOCOMBAT_API FSOWeaponPart
@@ -25,6 +37,10 @@ struct SOCOMBAT_API FSOWeaponPart
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part")
 	FQuat RestRotation = FQuat::Identity;
+
+	/** Nested parts (crane > cylinder > rounds) move with their parent part; None = the gun body. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part")
+	FName Parent;
 };
 
 /**
@@ -43,6 +59,14 @@ public:
 	/** data.js archetype key (rifle, carbine, ...): picks the reload choreography. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FName Archetype = TEXT("rifle");
+
+	/** Equip slot: 0 Primary, 1 Special, 2 Heavy. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	int32 Slot = 0;
+
+	/** Relative chance in random loot (horror guns are rarer finds). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	float LootWeight = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	ESOWeaponClass WeaponClass = ESOWeaponClass::Kinetic;
@@ -85,6 +109,35 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	bool bAutomatic = true;
 
+	/** Rounds per trigger pull in a burst (0 = none) and the rate inside the burst. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	int32 Burst = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	float BurstRpm = 0.0f;
+
+	/** Projectiles per shot (shotguns); Damage is per pellet. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	int32 Pellets = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	ESOProjectileKind Projectile = ESOProjectileKind::Round;
+
+	/** Splash radius (m) for rockets and goo; 0 = none. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats", meta = (Units = "m"))
+	float Splash = 0.0f;
+
+	/** Share of the damage dealt again as acid over 3 s (horror). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	float Dot = 0.0f;
+
+	/** Brood: parasites released where the sac bursts. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	int32 Swarm = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	FLinearColor TracerColor = FLinearColor(1.0f, 0.78f, 0.45f);
+
 	/** ADS magnification (field of view divided by this). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	float AimZoom = 1.35f;
@@ -122,6 +175,24 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	FVector ForegripLocation = FVector(0.0f, 30.0f, 0.0f);
+
+	/** Optic mount (mesh space); bHasRail = optics can be mounted. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	FVector RailLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	bool bHasRail = false;
+
+	/** The factory sight is magnified glass (scout, sniper): fully aimed, the scope picture replaces the gun. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	bool bBuiltInScope = false;
+
+	/** Optics this gun takes (data.js sights: default = factory sights, reflex, holo, x2, x4, x8) and the one it ships with. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	TArray<FName> Sights;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	FName DefaultSight = TEXT("default");
 
 	/** First-person arms (viewmodel_arms.glb): the right arm sits at the gun origin, the left on the foregrip. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")

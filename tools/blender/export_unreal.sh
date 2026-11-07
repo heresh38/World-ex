@@ -21,9 +21,18 @@ run "$M/player_male.glb" "$OUT/Characters/PlayerMale" --single \
 run "$M/player_male.glb" "$OUT/Characters/PlayerMaleArms" --single --arms-only   "--only=C_top__undersuit,C_vest__vanguard,C_hands__gloves"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
-# Weapon: the kinetic assault rifle with its reload parts, and the first-person arms
-run "$M/gun_rifle.glb" "$OUT/Weapons/Rifle" --split-parts
+# Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail
+for f in "$M"/gun_*.glb; do
+  stem="$(basename "$f" .glb)"
+  case "$stem" in gun_attach|gun_void_rifle) continue ;; esac
+  dir="$(echo "$stem" | sed -E 's/^gun_//; s/(^|_)([a-z])/\U\2/g')"          # gun_bio_spitter -> BioSpitter
+  run "$f" "$OUT/Weapons/$dir" --split-parts
+done
+run "$M/gun_attach.glb" "$OUT/Weapons/Attach" --split-parts
 run "$M/viewmodel_arms.glb" "$OUT/Weapons/Arms"
+# Loot: the loot core and ammo pickups, and the VANTHOS reliquary (its lid is a child part)
+run "$M/props_world.glb" "$OUT/Props/Loot" "--only=PR_core_mesh,PR_ammo_mesh"
+run "$M/vanthos.glb" "$OUT/Props/Reliquary" "--only=VX_reliquary_mesh,reliquary_lid_mesh"
 # Effect cards (tracers, sparks, smoke, muzzle flash) from tools/blender/fx_kit.py
 [ -f "$M/fx_kit.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/fx_kit.py" >/dev/null 2>&1
 run "$M/fx_kit.glb" "$OUT/FX"

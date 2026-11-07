@@ -27,6 +27,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	FVector HipOffset = FVector(30.0f, 13.0f, -22.0f);
 
+	/** Handguns (short barrel, support hand on the grip) are held out at arm's length, higher and nearer the middle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector HandgunHipOffset = FVector(42.0f, 9.0f, -14.0f);
+
 	/** ADS: the sight sits this far in front of the eye, on the line of sight. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float AdsSightDistance = 30.0f;

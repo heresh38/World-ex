@@ -53,7 +53,20 @@ public:
 	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f);
 
 	/** A tracer from the muzzle to where the round lands, at the round's speed (cm/s). */
-	void Tracer(const FVector& From, const FVector& To, float Speed);
+	void Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), float Width = 2.2f);
+
+	/** What a slow projectile looks like in flight and where it lands. */
+	enum class ETrail : uint8 { Rocket, Acid, Bile, Brood };
+
+	/** A slow projectile (rocket, horror goo): a glowing head that flies the real ballistic arc for FlightTime,
+	 *  leaving smoke (rocket) or drips (goo) behind it. */
+	void Trail(const FVector& From, const FVector& Velocity, float Gravity, float FlightTime, ETrail Kind, const FLinearColor& Color);
+
+	/** What a blast looks like. */
+	enum class EBlast : uint8 { Fire, Acid, Zap };
+
+	/** An explosion / splash / energy burst of about Radius cm, Delay seconds from now. */
+	void Blast(const FVector& Point, const FVector& Normal, float Radius, EBlast Kind, const FLinearColor& Color, float Delay = 0.0f);
 
 	/** A round hitting something: sparks + dust + a bullet hole on hard surfaces, a mist of Blood on creatures.
 	 *  Delay = flight time. */
@@ -96,8 +109,16 @@ private:
 		float Age = 0.0f, Life = 0.0f, Peak = 0.0f;
 	};
 
+	struct FPendingLight
+	{
+		FVector Point;
+		FLinearColor Color;
+		float Intensity, Duration, Delay;
+	};
+
 	TArray<FSOFxParticle> Particles;
 	TArray<FPendingImpact> Pending;
+	TArray<FPendingLight> PendingLights;
 	TArray<FLightFlash> Lights;
 	TWeakObjectPtr<AActor> Host;
 	TWeakObjectPtr<UInstancedStaticMeshComponent> Cards[static_cast<int32>(ESOFxKind::Count)];

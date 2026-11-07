@@ -210,6 +210,10 @@ def main():
         spawner = spawn(unreal.SOEnemySpawner, (x, y, 0), (0, 180, 0), f"StalkerSpawner_{i}")
         spawner.set_folder_path("Gameplay")
 
+    # Stage 5: the VANTHOS reward pool to try on the range (it reseals after 30 s here).
+    reliquary = spawn(unreal.SOReliquary, (950, -800, 0), (0, 140, 0), "Reliquary")
+    reliquary.set_folder_path("Gameplay")
+
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     world.get_world_settings().set_editor_property("default_game_mode", unreal.SOGameMode)
 

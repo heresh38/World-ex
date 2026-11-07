@@ -1,4 +1,4 @@
-﻿#include "SOFxSubsystem.h"
+#include "SOFxSubsystem.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/DecalComponent.h"
@@ -146,7 +146,7 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 	FlashLight(Muzzle + D * 10.0f, 220.0f * Scale, Fire, 0.05f);
 }
 
-void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed)
+void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Width)
 {
 	const FVector Path = To - From;
 	const float Distance = Path.Size();
@@ -161,10 +161,141 @@ void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed)
 	T.Velocity = T.Axis * Speed;
 	T.Life = Distance / Speed;
 	T.Length = 380.0f;
-	T.Size0 = T.Size1 = 2.2f;
+	T.Size0 = T.Size1 = Width;
 	T.Intensity0 = T.Intensity1 = 22.0f;
-	T.Color = Fire;
+	T.Color = Color;
 	Spawn(T);
+}
+
+void USOFxSubsystem::Trail(const FVector& From, const FVector& Velocity, float Gravity, float FlightTime, ETrail Kind, const FLinearColor& Color)
+{
+	if (FlightTime <= 0.0f)
+	{
+		return;
+	}
+	const bool bRocket = Kind == ETrail::Rocket;
+	// The head: particles follow ballistic arcs on their own (velocity + gravity, no drag).
+	FSOFxParticle Head;
+	Head.Kind = ESOFxKind::Glow;
+	Head.Position = From;
+	Head.Velocity = Velocity;
+	Head.Gravity = Gravity;
+	Head.Life = FlightTime;
+	Head.Size0 = Head.Size1 = bRocket ? 26.0f : (Kind == ETrail::Brood ? 22.0f : 12.0f);
+	Head.Intensity0 = Head.Intensity1 = bRocket ? 40.0f : 9.0f;
+	Head.Color = Color;
+	Spawn(Head);
+	if (Kind != ETrail::Rocket)
+	{
+		FSOFxParticle Core = Head; // a darker, wet core inside the glow
+		Core.Kind = ESOFxKind::Smoke;
+		Core.Size0 = Core.Size1 = Head.Size0 * 0.6f;
+		Core.Intensity0 = Core.Intensity1 = 1.0f;
+		Core.Color = Color * 0.35f;
+		Spawn(Core);
+	}
+	// Behind it: smoke puffs (rocket) or drips (goo) released along the path at the time the head passes.
+	const float Step = bRocket ? 0.018f : 0.05f;
+	for (float T = Step; T < FlightTime; T += Step)
+	{
+		const FVector At = From + Velocity * T + FVector(0.0f, 0.0f, -0.5f * Gravity * T * T);
+		FSOFxParticle P;
+		P.Position = At;
+		P.Delay = T;
+		if (bRocket)
+		{
+			P.Kind = ESOFxKind::Smoke;
+			P.Velocity = Random.VRand() * 25.0f + FVector(0, 0, 20.0f);
+			P.Drag = 1.5f;
+			P.Life = Random.FRandRange(0.9f, 1.6f);
+			P.Size0 = 14.0f;
+			P.Size1 = Random.FRandRange(60.0f, 95.0f);
+			P.Intensity0 = 0.55f;
+			P.Color = FLinearColor(0.42f, 0.41f, 0.4f);
+			P.Spin = Random.FRandRange(0.0f, 360.0f);
+			Spawn(P);
+			FSOFxParticle Ember = P;
+			Ember.Kind = ESOFxKind::Glow;
+			Ember.Life = 0.12f;
+			Ember.Size0 = 18.0f;
+			Ember.Size1 = 6.0f;
+			Ember.Intensity0 = 16.0f;
+			Ember.Color = Fire;
+			Spawn(Ember);
+		}
+		else
+		{
+			P.Kind = ESOFxKind::Smoke;
+			P.Velocity = Velocity * 0.05f + Random.VRand() * 20.0f;
+			P.Gravity = 980.0f;
+			P.Life = Random.FRandRange(0.4f, 0.8f);
+			P.Size0 = Random.FRandRange(2.5f, 4.5f);
+			P.Size1 = P.Size0 * 0.7f;
+			P.Intensity0 = 1.0f;
+			P.Intensity1 = 0.6f;
+			P.Color = Color * 0.6f;
+			Spawn(P);
+		}
+	}
+}
+
+void USOFxSubsystem::Blast(const FVector& Point, const FVector& Normal, float Radius, EBlast Kind, const FLinearColor& Color, float Delay)
+{
+	const FVector N = Normal.IsNearlyZero() ? FVector::UpVector : Normal.GetSafeNormal();
+	const float R = FMath::Max(Radius, 30.0f);
+	const int32 Sparks = Kind == EBlast::Fire ? 28 : (Kind == EBlast::Zap ? 14 : 10);
+	// flash / fireball core
+	for (int32 i = 0; i < (Kind == EBlast::Fire ? 6 : 3); ++i)
+	{
+		FSOFxParticle Core;
+		Core.Kind = ESOFxKind::Glow;
+		Core.Position = Point + N * R * 0.15f + Random.VRand() * R * 0.15f;
+		Core.Velocity = Random.VRand() * R * 0.6f;
+		Core.Drag = 5.0f;
+		Core.Delay = Delay;
+		Core.Life = Kind == EBlast::Fire ? Random.FRandRange(0.18f, 0.32f) : 0.16f;
+		Core.Size0 = R * 0.5f;
+		Core.Size1 = R * (Kind == EBlast::Fire ? 1.1f : 0.6f);
+		Core.Intensity0 = Kind == EBlast::Fire ? 30.0f : 14.0f;
+		Core.Color = Color;
+		Spawn(Core);
+	}
+	// sparks / spatter
+	for (int32 i = 0; i < Sparks; ++i)
+	{
+		FSOFxParticle S;
+		S.Kind = Kind == EBlast::Acid ? ESOFxKind::Smoke : ESOFxKind::Streak;
+		S.Position = Point + N * 2.0f;
+		S.Velocity = Random.VRandCone(N, FMath::DegreesToRadians(75.0f)) * Random.FRandRange(R * 2.0f, R * 6.0f);
+		S.Gravity = 980.0f;
+		S.Drag = Kind == EBlast::Acid ? 0.5f : 1.5f;
+		S.Delay = Delay;
+		S.Life = Random.FRandRange(0.3f, 0.7f);
+		S.Size0 = Kind == EBlast::Acid ? Random.FRandRange(3.0f, 6.0f) : 1.6f;
+		S.Size1 = S.Size0 * 0.6f;
+		S.Intensity0 = Kind == EBlast::Acid ? 1.0f : 30.0f;
+		S.Color = Kind == EBlast::Fire ? Spark : Color;
+		Spawn(S);
+	}
+	// smoke / acid mist
+	for (int32 i = 0; i < (Kind == EBlast::Fire ? 10 : 5); ++i)
+	{
+		FSOFxParticle M;
+		M.Kind = ESOFxKind::Smoke;
+		M.Position = Point + N * R * 0.2f + Random.VRand() * R * 0.3f;
+		M.Velocity = (N * 0.7f + Random.VRand() * 0.6f) * R * 0.9f;
+		M.Drag = 2.5f;
+		M.Delay = Delay + Random.FRandRange(0.02f, 0.12f);
+		M.Life = Random.FRandRange(1.2f, 2.4f);
+		M.Size0 = R * 0.3f;
+		M.Size1 = R * Random.FRandRange(1.0f, 1.6f);
+		M.Intensity0 = Kind == EBlast::Fire ? 0.6f : 0.45f;
+		M.Color = Kind == EBlast::Fire ? FLinearColor(0.16f, 0.15f, 0.14f) : Color * 0.5f;
+		M.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(M);
+	}
+	const float Light = Kind == EBlast::Fire ? 2600.0f : 500.0f;
+	PendingLights.Add({ Point + N * 30.0f, Kind == EBlast::Fire ? Fire : Color, Light, Kind == EBlast::Fire ? 0.25f : 0.12f, Delay });
 }
 
 void USOFxSubsystem::Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay, bool bDecal)
@@ -312,6 +443,7 @@ void USOFxSubsystem::FlashLight(const FVector& Point, float Intensity, const FLi
 	if (UPointLightComponent* Light = Flash.Light.Get())
 	{
 		Light->SetWorldLocation(Point);
+		Light->SetAttenuationRadius(Intensity > 1000.0f ? 1600.0f : 450.0f); // explosions light the surroundings
 		Light->SetLightColor(Color);
 		Light->SetIntensity(Intensity);
 		Flash.Age = 0.0f;
@@ -332,6 +464,16 @@ void USOFxSubsystem::Tick(float DeltaTime)
 			const FPendingImpact P = Pending[i];
 			Pending.RemoveAtSwap(i, 1, EAllowShrinking::No);
 			Impact(P.Point, P.Normal, P.bFlesh, P.Blood, 0.0f, P.bDecal);
+		}
+	}
+	for (int32 i = PendingLights.Num() - 1; i >= 0; --i)
+	{
+		PendingLights[i].Delay -= DeltaTime;
+		if (PendingLights[i].Delay <= 0.0f)
+		{
+			const FPendingLight L = PendingLights[i];
+			PendingLights.RemoveAtSwap(i, 1, EAllowShrinking::No);
+			FlashLight(L.Point, L.Intensity, L.Color, L.Duration);
 		}
 	}
 	for (FLightFlash& Flash : Lights)

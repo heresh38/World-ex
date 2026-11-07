@@ -21,6 +21,11 @@
 #include "Animation/AnimSequenceBase.h"
 #include "Engine/SkeletalMesh.h"
 #include "Net/UnrealNetwork.h"
+#include "GameFramework/PlayerState.h"
+#include "SOInventoryComponent.h"
+#include "SOLootActors.h"
+#include "SOGunRigComponent.h"
+#include "EngineUtils.h"
 
 namespace SOInputPaths
 {
@@ -35,6 +40,12 @@ namespace SOInputPaths
 	static const TCHAR* Fire = TEXT("/Game/Input/IA_Fire.IA_Fire");
 	static const TCHAR* Aim = TEXT("/Game/Input/IA_Aim.IA_Aim");
 	static const TCHAR* Reload = TEXT("/Game/Input/IA_Reload.IA_Reload");
+	static const TCHAR* Weapon1 = TEXT("/Game/Input/IA_Weapon1.IA_Weapon1");
+	static const TCHAR* Weapon2 = TEXT("/Game/Input/IA_Weapon2.IA_Weapon2");
+	static const TCHAR* Weapon3 = TEXT("/Game/Input/IA_Weapon3.IA_Weapon3");
+	static const TCHAR* NextWeapon = TEXT("/Game/Input/IA_NextWeapon.IA_NextWeapon");
+	static const TCHAR* PrevWeapon = TEXT("/Game/Input/IA_PrevWeapon.IA_PrevWeapon");
+	static const TCHAR* Inventory = TEXT("/Game/Input/IA_Inventory.IA_Inventory");
 }
 
 ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
@@ -82,7 +93,9 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	FirstPersonArms->SetCastShadow(false);
 	FirstPersonArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FirstPersonArms->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
-	FirstPersonArms->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+	// Animated whenever first person is on (ticking is switched off in third person): "only when rendered" would leave
+	// them stuck in the rest pose below the camera after a third-person spell, never rendered and so never animated.
+	FirstPersonArms->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
 	ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
 	ThirdPersonBoom->SetupAttachment(Capsule);
@@ -125,6 +138,12 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	FireAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Fire));
 	AimAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Aim));
 	ReloadAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Reload));
+	Weapon1Action = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Weapon1));
+	Weapon2Action = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Weapon2));
+	Weapon3Action = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Weapon3));
+	NextWeaponAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::NextWeapon));
+	PrevWeaponAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PrevWeapon));
+	InventoryAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Inventory));
 }
 
 USOCharacterMovementComponent* ASOCharacter::GetSOMovement() const
@@ -297,7 +316,7 @@ void ASOCharacter::OnWeaponFired(float Kick)
 	}
 	// weapons.js: recoil += 0.35 / spread * 0.3 + 0.15 per shot, capped at 1.5.
 	const USOWeaponData* Data = Weapon ? Weapon->GetData() : nullptr;
-	const float Spread = Data ? FMath::Max(Data->Spread, 0.1f) : 1.0f;
+	const float Spread = Weapon ? FMath::Max(Weapon->GetStats().Spread, 0.1f) : 1.0f;
 	RecoilKick = FMath::Min(1.5f, RecoilKick + (0.35f / Spread * 0.3f + 0.15f) * (Kick > 0.0f ? 1.0f : 0.0f));
 }
 
@@ -378,6 +397,7 @@ void ASOCharacter::UpdateFeedbackSounds(float DeltaSeconds)
 
 void ASOCharacter::HandleDeath()
 {
+	StoreWeaponAmmo(); // the respawned body draws the same gun with the same rounds
 	Super::HandleDeath();
 	bAiming = false;
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
@@ -429,11 +449,23 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	AimProgress = FMath::FInterpConstantTo(AimProgress, bAiming ? 1.0f : 0.0f, DeltaSeconds, 1.0f / FMath::Max(AdsTime, 0.05f));
 	const float Ads = AimProgress * AimProgress * (3.0f - 2.0f * AimProgress);
 	const float HipFov = GetHipFov();
-	const float Zoom = WeaponData ? WeaponData->AimZoom : 1.0f / AimFovScale;
+	const float Zoom = WeaponData ? Weapon->GetStats().Zoom : 1.0f / AimFovScale;
 	CurrentFov = HipFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
 	FirstPersonCamera->SetFieldOfView(CurrentFov);
 	ThirdPersonCamera->SetFieldOfView(CurrentFov);
 	Look->SetAim(bAiming, HipFov, CurrentFov);
+
+	// Magnified optics: fully aimed, the scope picture replaces the gun (viewmodel.js inScope).
+	const bool bScope = IsFirstPersonView() && Weapon && Weapon->IsScoped() && AimProgress > 0.82f && bAiming;
+	if (bScope != bScopeView)
+	{
+		bScopeView = bScope;
+		FirstPersonArms->SetVisibility(!bScope && ViewMode == ESOViewMode::FirstPerson, true);
+		if (Weapon->GetFirstPersonRig())
+		{
+			Weapon->GetFirstPersonRig()->SetShown(!bScope && ViewMode == ESOViewMode::FirstPerson);
+		}
+	}
 
 	// A latched (tapped) sprint ends once you stop pushing forward; a latched crouch follows the movement state.
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
@@ -516,6 +548,12 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleAimReleased);
 	}
 	if (UInputAction* A = Load(ReloadAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleReload); }
+	if (UInputAction* A = Load(Weapon1Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon1); }
+	if (UInputAction* A = Load(Weapon2Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon2); }
+	if (UInputAction* A = Load(Weapon3Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon3); }
+	if (UInputAction* A = Load(NextWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleNextWeapon); }
+	if (UInputAction* A = Load(PrevWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePrevWeapon); }
+	if (UInputAction* A = Load(InventoryAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInventory); }
 
 	if (Missing > 0)
 	{
@@ -643,7 +681,56 @@ void ASOCharacter::HandleToggleView()
 
 void ASOCharacter::HandleInteract()
 {
-	UE_LOG(LogShatteredOrbit, Log, TEXT("Interact"));
+	if (AActor* Target = FindInteractable(); Target && !bDead)
+	{
+		ServerInteract(Target);
+	}
+}
+
+AActor* ASOCharacter::FindInteractable() const
+{
+	const FTransform Eye = GetEyeTransform(false);
+	AActor* Best = nullptr;
+	float BestScore = 0.0f;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		const ISOInteractable* Thing = Cast<ISOInteractable>(*It);
+		if (!Thing)
+		{
+			continue;
+		}
+		const FVector To = It->GetActorLocation() + FVector(0, 0, 60.0f) - Eye.GetLocation();
+		const float Distance = To.Size();
+		const float Facing = FVector::DotProduct(To.GetSafeNormal(), Eye.GetRotation().GetForwardVector());
+		if (Distance > Thing->GetInteractRange() || Facing < 0.35f)
+		{
+			continue;
+		}
+		const float Score = Facing / FMath::Max(Distance, 1.0f);
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			Best = *It;
+		}
+	}
+	return Best;
+}
+
+void ASOCharacter::ServerInteract_Implementation(AActor* Target)
+{
+	ISOInteractable* Thing = Cast<ISOInteractable>(Target);
+	if (!Thing || bDead || FVector::Dist(Target->GetActorLocation(), GetActorLocation()) > Thing->GetInteractRange() + 150.0f)
+	{
+		return;
+	}
+	if (Thing->CanInteract(this))
+	{
+		Thing->Interact(this);
+	}
+	else
+	{
+		USOSoundLibrary::PlayFor(this, TEXT("ui_deny"), GetActorLocation(), 0.6f, ESOSoundRange::Near);
+	}
 }
 
 void ASOCharacter::HandleFirePressed()
@@ -701,6 +788,133 @@ void ASOCharacter::HandleReload()
 	if (Weapon && !bDead)
 	{
 		Weapon->StartReload();
+	}
+}
+
+void ASOCharacter::HandleWeapon1() { SelectSlot(0); }
+void ASOCharacter::HandleWeapon2() { SelectSlot(1); }
+void ASOCharacter::HandleWeapon3() { SelectSlot(2); }
+void ASOCharacter::HandleNextWeapon() { CycleSlot(1); }
+void ASOCharacter::HandlePrevWeapon() { CycleSlot(-1); }
+
+void ASOCharacter::HandleInventory()
+{
+	if (ToggleInventoryScreen)
+	{
+		ToggleInventoryScreen();
+	}
+}
+
+USOInventoryComponent* ASOCharacter::GetInventory() const
+{
+	const APlayerState* PS = GetPlayerState();
+	return PS ? PS->FindComponentByClass<USOInventoryComponent>() : nullptr;
+}
+
+void ASOCharacter::SelectSlot(int32 Slot)
+{
+	USOInventoryComponent* Inventory = GetInventory();
+	if (!Inventory || bDead || Slot == Inventory->GetActiveSlot() || !Inventory->GetEquipped(Slot))
+	{
+		return;
+	}
+	Inventory->ServerSelectSlot(Slot);
+}
+
+void ASOCharacter::CycleSlot(int32 Step)
+{
+	const USOInventoryComponent* Inventory = GetInventory();
+	if (!Inventory)
+	{
+		return;
+	}
+	for (int32 i = 1; i < USOInventoryComponent::NumSlots; ++i)
+	{
+		const int32 Slot = (Inventory->GetActiveSlot() + Step * i + USOInventoryComponent::NumSlots * 2) % USOInventoryComponent::NumSlots;
+		if (Inventory->GetEquipped(Slot))
+		{
+			SelectSlot(Slot);
+			return;
+		}
+	}
+}
+
+void ASOCharacter::StoreWeaponAmmo()
+{
+	USOInventoryComponent* Inventory = GetInventory();
+	if (Inventory && Weapon && HasAuthority())
+	{
+		Inventory->StoreAmmo(Weapon->GetInstance().Uid, Weapon->GetMag(), Weapon->GetReserve());
+	}
+}
+
+void ASOCharacter::EquipFromInventory()
+{
+	USOInventoryComponent* Inventory = GetInventory();
+	if (!HasAuthority() || !Inventory || bDead)
+	{
+		return;
+	}
+	const FSOWeaponInstance* Wanted = Inventory->GetEquipped(Inventory->GetActiveSlot());
+	if (!Wanted || (Weapon && Weapon->GetInstance().Uid == Wanted->Uid))
+	{
+		return;
+	}
+	const FString Uid = Wanted->Uid;
+	StoreWeaponAmmo();
+	EquipInstance(Inventory->PrepareForEquip(Uid));
+}
+
+void ASOCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	BindInventory();
+}
+
+void ASOCharacter::BindInventory()
+{
+	if (USOInventoryComponent* Inventory = GetInventory())
+	{
+		if (BoundInventory.IsValid())
+		{
+			BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
+		}
+		BoundInventory = Inventory;
+		LoadoutHandle = Inventory->OnLoadoutChanged.AddUObject(this, &ASOCharacter::EquipFromInventory);
+		EquipFromInventory();
+	}
+}
+
+void ASOCharacter::UnPossessed()
+{
+	StoreWeaponAmmo();
+	if (BoundInventory.IsValid())
+	{
+		BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
+	}
+	BoundInventory = nullptr;
+	Super::UnPossessed();
+}
+
+void ASOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (BoundInventory.IsValid())
+	{
+		BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void ASOCharacter::OnWeaponEquipped()
+{
+	ApplyViewMode();
+	if (Viewmodel)
+	{
+		Viewmodel->Raise();
+	}
+	if (Weapon && IsLocallyControlled() && HasActorBegunPlay())
+	{
+		USOSoundLibrary::Play2D(this, TEXT("weapon_raise"), 0.7f, 0.04f);
 	}
 }
 
@@ -784,6 +998,7 @@ void ASOCharacter::ApplyViewMode()
 	FirstPersonCamera->SetActive(bFirst);
 	ThirdPersonCamera->SetActive(!bFirst);
 	FirstPersonArms->SetVisibility(bFirst, true);
+	FirstPersonArms->SetComponentTickEnabled(bFirst);
 	GetMesh()->SetOwnerNoSee(bFirst);
 	if (Weapon)
 	{

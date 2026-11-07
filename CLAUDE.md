@@ -304,7 +304,8 @@ staged port described in `docs/unreal/MIGRATION_PLAN.md`; build, content scripts
 Blender GLB -> FBX: `tools/blender/export_fbx.py` (`export_unreal.sh` for the project's set; effect cards from
 `fx_kit.py`; `--arms-only` cuts the first-person arms from the player body). In Unreal both views hold the gun with
 arm IK onto the rig's grips (`USOGunRigComponent` grips, `USOLocomotionAnimInstance` IK); the browser `viewmodel_arms`
-are not used there. Sounds for it: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis). Do not change `src/` for it.
+are not used there. Weapon / loot data reaches Unreal through `node tools/unreal/export_game_data.mjs`
+(`unreal/ShatteredOrbit/Data/game_data.json`, read by `import_assets.py`): change numbers in `src/game/data.js`, re-export. Sounds for it: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis). Do not change `src/` for it.
 
 ## Testing
 `node tools/test/e2e.js` (Playwright, global install: `NODE_PATH=$(npm root -g)`), screenshots in `test-out/`.

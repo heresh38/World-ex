@@ -47,11 +47,11 @@ bool FSOHandsOnGripsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("arms mesh shares the body skeleton"), Arms && Player->GetMesh()->GetSkeletalMeshAsset() &&
 		Arms->GetSkeleton() == Player->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton());
 
-	auto Check = [&](const TCHAR* When)
+	auto Check = [&](const TCHAR* When, bool bFirstPersonOn = true)
 	{
 		const USkeletalMeshComponent* Bodies[2] = { Player->GetFirstPersonArms(), Player->GetMesh() };
 		const USOGunRigComponent* Rigs[2] = { Rifle->GetFirstPersonRig(), Rifle->GetThirdPersonRig() };
-		for (int32 i = 0; i < 2; ++i)
+		for (int32 i = bFirstPersonOn ? 0 : 1; i < 2; ++i) // the first-person arms only animate in first person
 		{
 			FTransform Right, Left;
 			if (!TestTrue(TEXT("hand targets"), Rigs[i]->GetHandTargets(Right, Left)))
@@ -72,7 +72,7 @@ bool FSOHandsOnGripsTest::RunTest(const FString& Parameters)
 	Player->HandleAimReleased();
 	Player->SetViewMode(ESOViewMode::ThirdPerson);
 	W.Run(0.5f);
-	Check(TEXT("third-person view"));
+	Check(TEXT("third-person view"), false);
 	return true;
 }
 

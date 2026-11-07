@@ -13,6 +13,7 @@ class USkeletalMeshComponent;
 class USOCharacterMovementComponent;
 class USOLookComponent;
 class USpringArmComponent;
+class USOInventoryComponent;
 struct FInputActionValue;
 
 UENUM(BlueprintType)
@@ -159,6 +160,18 @@ public:
 	TSoftObjectPtr<UInputAction> AimAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> ReloadAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> Weapon1Action;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> Weapon2Action;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> Weapon3Action;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> NextWeaponAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> PrevWeaponAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> InventoryAction;
 
 	UCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
 	UCameraComponent* GetThirdPersonCamera() const { return ThirdPersonCamera; }
@@ -183,6 +196,33 @@ public:
 	void HandleAimPressed();
 	void HandleAimReleased();
 	void HandleReload();
+	void HandleWeapon1();
+	void HandleWeapon2();
+	void HandleWeapon3();
+	void HandleNextWeapon();
+	void HandlePrevWeapon();
+	void HandleInventory();
+
+	/** The owning player's vault + loadout (on the player state); null without one (tests, AI). */
+	USOInventoryComponent* GetInventory() const;
+
+	/** Server: follow the player state's inventory (loadout changes re-equip) and hold its active copy. */
+	void BindInventory();
+
+	/** Server: hold the copy the inventory has in the active slot (stores the current one's ammo first). */
+	void EquipFromInventory();
+
+	/** Fully aimed through magnified glass: the scope picture replaces the gun (HUD draws it). */
+	bool IsScopeView() const { return bScopeView; }
+
+	/** The interactable in reach that Interact would use (nearest one in front), or null. */
+	AActor* FindInteractable() const;
+
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* Target);
+
+	/** Opens / closes the inventory screen (set by the HUD). */
+	TFunction<void()> ToggleInventoryScreen;
 
 	//~ ACharacter
 	virtual void BeginPlay() override;
@@ -194,12 +234,21 @@ public:
 	virtual bool CanJumpInternal_Implementation() const override;
 	virtual bool CanJumpWhileFalling() const override;
 	virtual void PostInitializeComponents() override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
 	virtual void HandleDeath() override;
 	void LoadContent();
 	void LoadBody(USkeletalMeshComponent* Body);
+	virtual void OnWeaponEquipped() override;
+	void SelectSlot(int32 Slot);
+	void CycleSlot(int32 Step);
+	void StoreWeaponAmmo();
+	FDelegateHandle LoadoutHandle;
+	TWeakObjectPtr<USOInventoryComponent> BoundInventory;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
@@ -257,5 +306,6 @@ private:
 	bool bShieldRecharging = false;
 	void UpdateFeedbackSounds(float DeltaSeconds);
 	float LastSprintTime = -100.0f;
+	bool bScopeView = false;
 	bool bCrouchLatched = false;
 };

@@ -64,6 +64,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SO|Combat")
 	float GetDeathTime() const { return DeathTime; }
 
+	/** Server: restores health up to the maximum (Siphon). */
+	void Heal(float Amount);
+
 	/** Server: health reached zero. */
 	virtual void Die(AActor* Killer);
 
@@ -73,6 +76,9 @@ public:
 
 	/** Server: spawns and equips a weapon built from Data (replaces the current one). */
 	ASOWeapon* EquipWeapon(USOWeaponData* Data);
+
+	/** Server: spawns and equips a rolled copy (replaces the current one). */
+	ASOWeapon* EquipInstance(const struct FSOWeaponInstance& Instance);
 
 	/** Where rounds start and which way they go (the camera for players, the eyes for creatures). */
 	virtual FVector GetAimOrigin() const;
@@ -120,6 +126,11 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Weapon();
+
+	/** The weapon actor changed (all machines, after it attached). */
+	virtual void OnWeaponEquipped() {}
+
+	ASOWeapon* SpawnWeapon(TFunctionRef<void(ASOWeapon*)> Setup);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Combat")
 	TObjectPtr<USOAbilitySystemComponent> AbilitySystem;

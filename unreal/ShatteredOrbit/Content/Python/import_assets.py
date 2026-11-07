@@ -30,10 +30,7 @@ tools = unreal.AssetToolsHelpers.get_asset_tools()
 eal = unreal.EditorAssetLibrary
 mel = unreal.MaterialEditingLibrary
 
-# The rifle, from src/game/data.js ARCHETYPES.rifle and weaponHandling (ADS in, sprint to fire).
-RIFLE = dict(display_name="Assault Rifle", archetype="rifle", damage=19.0, rounds_per_minute=600.0, magazine_size=30,
-             reserve_ammo=300, reload_time=2.3, range=40.0, spread=1.0, crit_multiplier=1.6, automatic=True,
-             aim_zoom=1.35, muzzle_velocity=715.0, gravity_scale=1.0, kick=1.3, ads_time=0.24, sprint_to_fire_time=0.2)
+# Weapon numbers come from Data/game_data.json (node tools/unreal/export_game_data.mjs, from src/game/data.js).
 
 # Creature flesh: the GLBs ship without images; enemies.js applies these hx_* sets by material name.
 FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac"}
@@ -99,7 +96,9 @@ def default_textures():
     write_png(os.path.join(folder, "T_White.png"), (255, 255, 255, 255))
     write_png(os.path.join(folder, "T_WhiteMask.png"), (255, 255, 255, 255))
     write_png(os.path.join(folder, "T_FlatNormal.png"), (128, 128, 255, 255))
+    write_png(os.path.join(folder, "T_Clear.png"), (255, 255, 255, 0))
     return {
+        "clear": import_texture(os.path.join(folder, "T_Clear.png"), "/Game/Materials", "T_Clear", "color"),
         "white": import_texture(os.path.join(folder, "T_White.png"), "/Game/Materials", "T_White", "color"),
         "mask": import_texture(os.path.join(folder, "T_WhiteMask.png"), "/Game/Materials", "T_WhiteMask", "mask"),
         "normal": import_texture(os.path.join(folder, "T_FlatNormal.png"), "/Game/Materials", "T_FlatNormal", "normal"),
@@ -436,29 +435,140 @@ def player_extra(key, m):
     return None
 
 
-def rifle(master):
-    src = os.path.join(SOURCE, "Weapons", "Rifle")
-    dest = "/Game/Weapons/Rifle"
+# ---------------------------------------------------------------- weapons + loot (stage 5)
+
+GAME_DATA = os.path.normpath(os.path.join(PROJECT, "Data", "game_data.json"))
+WEAPON_TEX = "/Game/Weapons/Textures"
+_TEX_DONE = {}
+
+
+def weapon_dir(model):
+    """gun_bio_spitter -> BioSpitter (SourceArt/Weapons/<dir>, /Game/Weapons/<dir>)."""
+    return "".join(p.capitalize() for p in model[len("gun_"):].split("_"))
+
+
+def hex_color(h, default=(1.0, 0.78, 0.45)):
+    if not h or not h.startswith("#"):
+        return unreal.LinearColor(*default, 1.0)
+    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (1, 3, 5))
+    srgb = lambda c: c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return unreal.LinearColor(srgb(r), srgb(g), srgb(b), 1.0)
+
+
+def shared_textures(src, materials):
+    """Weapon textures share file names across guns (wpn_steel_c.jpg ...): import each once into /Game/Weapons/Textures."""
+    ensure_dir(WEAPON_TEX)
+    out = {}
+    for m in materials.values():
+        for key, kind in (("baseColorTex", "color"), ("emissiveTex", "color"), ("mrTex", "mask"), ("normalTex", "normal")):
+            f = m.get(key)
+            if not f:
+                continue
+            base = os.path.splitext(os.path.basename(f))[0]
+            if base not in _TEX_DONE:
+                _TEX_DONE[base] = import_texture(os.path.join(src, f), WEAPON_TEX, "T_" + base, kind)
+            out[f] = _TEX_DONE[base]
+    return out
+
+
+def gun_instances(master, src, dest, materials, clear):
+    tex = shared_textures(src, materials)
+    out = {}
+    for k, v in materials.items():
+        key = base_slot(k)
+        m = dict(v)
+        extra = None
+        if key == "gun_lens":
+            # optic glass: see straight through (the browser draws it at 14 % opacity)
+            m["alphaMode"] = "MASK"
+            extra = {"baseColorTex": "__clear"}
+            tex = dict(tex, __clear=clear)
+        out[key] = make_instance(master, dest, key, m, tex, extra)
+    return out
+
+
+def import_static(src, file, dest, name, instances):
+    mesh = next(o for o in import_fbx(os.path.join(src, file), dest, name, False) if isinstance(o, unreal.StaticMesh))
+    assign_materials(mesh, instances)
+    return mesh
+
+
+def projectile_kind(a):
+    if a.get("goo"):
+        return {"spit": unreal.SOProjectileKind.SPIT, "bile": unreal.SOProjectileKind.BILE, "brood": unreal.SOProjectileKind.BROOD}[a["goo"]]
+    if a.get("projectile"):
+        return unreal.SOProjectileKind.ROCKET
+    return unreal.SOProjectileKind.ROUND if a["cls"] == "kinetic" else unreal.SOProjectileKind.BOLT
+
+
+def weapon(master, arch, a, clear):
+    folder = weapon_dir(a["model"])
+    src = os.path.join(SOURCE, "Weapons", folder)
+    dest = f"/Game/Weapons/{folder}"
+    if not os.path.isdir(src):
+        log(f"DA_{folder}: skipped ({src} missing, run export_unreal.sh)")
+        return None
     ensure_dir(dest)
     materials = load_json(os.path.join(src, "materials.json"))
-    tex = import_textures_for(src, materials, dest + "/Textures")
-    instances = {base_slot(k): make_instance(master, dest, base_slot(k), v, tex) for k, v in materials.items()}
-    info = load_json(os.path.join(src, "gun_rifle.parts.json"))
-
-    body = next(o for o in import_fbx(os.path.join(src, "gun_rifle.fbx"), dest, "SM_Rifle", False) if isinstance(o, unreal.StaticMesh))
-    assign_materials(body, instances)
+    instances = gun_instances(master, src, dest, materials, clear)
+    info = load_json(os.path.join(src, a["model"] + ".parts.json"))
+    body = import_static(src, a["model"] + ".fbx", dest, f"SM_{folder}", instances)
     parts = []
     for name, p in info["parts"].items():
-        mesh = next(o for o in import_fbx(os.path.join(src, p["file"]), dest, f"SM_Rifle_{name}", False) if isinstance(o, unreal.StaticMesh))
-        assign_materials(mesh, instances)
+        mesh = import_static(src, p["file"], dest, f"SM_{folder}_{name}", instances)
         part = unreal.SOWeaponPart()
         part.set_editor_property("name", name)
         part.set_editor_property("mesh", mesh)
         part.set_editor_property("rest_location", unreal.Vector(*p["loc"]))
         q = p["rot"]
         part.set_editor_property("rest_rotation", unreal.Quat(q[0], q[1], q[2], q[3]))
+        part.set_editor_property("parent", p.get("parent") or "")
         parts.append(part)
 
+    path = f"{dest}/DA_{folder}"
+    if eal.does_asset_exist(path):
+        data = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SOWeaponData)
+        data = tools.create_asset(f"DA_{folder}", dest, unreal.SOWeaponData, factory)
+    cls = {"kinetic": unreal.SOWeaponClass.KINETIC, "energy": unreal.SOWeaponClass.ENERGY, "horror": unreal.SOWeaponClass.HORROR}[a["cls"]]
+    kind = projectile_kind(a)
+    velocity = a.get("vel") or (60.0 if kind == unreal.SOProjectileKind.ROCKET else 500.0)
+    tracer = a.get("tracer") or {"kinetic": "#ffc873", "energy": "#7fe8ff", "horror": "#9cff4a"}[a["cls"]]
+    values = dict(display_name=unreal.Text(a["name"]), archetype=arch, slot=int(a["slot"]), loot_weight=float(a.get("weight", 1.0)),
+                  weapon_class=cls, sound_prefix=arch, damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]),
+                  magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]), reload_time=float(a["reload"]),
+                  range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
+                  automatic=bool(a.get("auto")), burst=int(a.get("burst", 0)), burst_rpm=float(a.get("burstRpm", 0.0)),
+                  pellets=int(a.get("pellets", 1)), projectile=kind, splash=float(a.get("splash", 0.0)), dot=float(a.get("dot", 0.0)),
+                  swarm=int(a.get("swarm", 0)), aim_zoom=float(a["zoom"]), muzzle_velocity=float(velocity),
+                  gravity_scale=float(a.get("grav", 0.0)) if kind == unreal.SOProjectileKind.ROUND else (0.35 if kind in (
+                      unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
+                  kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
+                  tracer_color=hex_color(tracer), body_mesh=body, parts=parts,
+                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"])
+    for key, value in values.items():
+        data.set_editor_property(key, value)
+    sockets = info["sockets"]
+    for key, prop in (("muzzle", "muzzle_location"), ("sight", "sight_location"), ("foregrip", "foregrip_location")):
+        if key in sockets:
+            data.set_editor_property(prop, unreal.Vector(*sockets[key]["loc"]))
+    data.set_editor_property("has_rail", "rail" in sockets)
+    data.set_editor_property("built_in_scope", "scope" in sockets)
+    if "rail" in sockets:
+        data.set_editor_property("rail_location", unreal.Vector(*sockets["rail"]["loc"]))
+    if arch == "rifle":
+        arms = rifle_arms(master)
+        data.set_editor_property("arm_left_mesh", arms["Left"])
+        data.set_editor_property("arm_right_mesh", arms["Right"])
+    eal.save_loaded_asset(data, only_if_is_dirty=False)
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"DA_{folder}: {arch}, {len(parts)} parts, sockets {sorted(sockets)}")
+    return data
+
+
+def rifle_arms(master):
     arms_src = os.path.join(SOURCE, "Weapons", "Arms")
     arms_dest = "/Game/Weapons/Arms"
     ensure_dir(arms_dest)
@@ -466,34 +576,124 @@ def rifle(master):
     arm_instances = {base_slot(k): make_instance(master, arms_dest, base_slot(k), v, {}) for k, v in arm_mats.items()}
     arms = {}
     for side, file in (("Left", "arm_L.fbx"), ("Right", "arm_R.fbx")):
-        mesh = next(o for o in import_fbx(os.path.join(arms_src, file), arms_dest, f"SM_Arm{side}", False) if isinstance(o, unreal.StaticMesh))
-        assign_materials(mesh, arm_instances)
-        arms[side] = mesh
+        arms[side] = import_static(arms_src, file, arms_dest, f"SM_Arm{side}", arm_instances)
+    eal.save_directory(arms_dest, only_if_is_dirty=False, recursive=True)
+    return arms
 
-    path = f"{dest}/DA_Rifle"
+
+def optics(master, clear):
+    """gun_attach.glb: ATT_<id> optics with their eye points (relative to the rail)."""
+    src = os.path.join(SOURCE, "Weapons", "Attach")
+    dest = "/Game/Weapons/Attach"
+    ensure_dir(dest)
+    materials = load_json(os.path.join(src, "materials.json"))
+    instances = gun_instances(master, src, dest, materials, clear)
+    out = {}
+    for sight_id in ("reflex", "holo", "x2", "x4", "x8"):
+        name = f"ATT_{sight_id}"
+        if not os.path.exists(os.path.join(src, name + ".fbx")):
+            continue
+        mesh = import_static(src, name + ".fbx", dest, f"SM_{name}", instances)
+        sockets = load_json(os.path.join(src, name + ".parts.json"))["sockets"]
+        eye = sockets.get(f"{name}_sight", {"loc": [0, 0, 0]})["loc"]
+        out[sight_id] = (mesh, eye)
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    return out
+
+
+def loot_props(master):
+    out = {}
+    for folder, files in (("Loot", ("PR_core", "PR_ammo")), ("Reliquary", ("VX_reliquary",))):
+        src = os.path.join(SOURCE, "Props", folder)
+        dest = f"/Game/Props/{folder}"
+        if not os.path.isdir(src):
+            continue
+        ensure_dir(dest)
+        materials = load_json(os.path.join(src, "materials.json"))
+        manifest = load_json(os.path.join(src, "export_fbx.json"))
+        used = {base_slot(n) for a in manifest["assets"] if a["file"][:-4] in files for n in a["materials"]}
+        tex = import_textures_for(src, materials, dest + "/Textures", used)
+        instances = {k: make_instance(master, dest, k, m, tex) for k, m in ((base_slot(k), m) for k, m in materials.items()) if k in used}
+        for f in files:
+            out[f] = import_static(src, f + ".fbx", dest, f"SM_{f}", instances)
+        eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"loot props: {sorted(out)}")
+    return out
+
+
+def loot_tables(datas, sight_meshes):
+    game = load_json(GAME_DATA)
+    ensure_dir("/Game/Data")
+    path = "/Game/Data/DA_LootTables"
     if eal.does_asset_exist(path):
-        data = eal.load_asset(path)
+        tables = eal.load_asset(path)
     else:
         factory = unreal.DataAssetFactory()
-        factory.set_editor_property("data_asset_class", unreal.SOWeaponData)
-        data = tools.create_asset("DA_Rifle", dest, unreal.SOWeaponData, factory)
-    for key, value in RIFLE.items():
-        if key == "display_name":
-            value = unreal.Text(value)
-        data.set_editor_property(key, value)
-    data.set_editor_property("weapon_class", unreal.SOWeaponClass.KINETIC)
-    data.set_editor_property("body_mesh", body)
-    data.set_editor_property("parts", parts)
-    sockets = info["sockets"]
-    data.set_editor_property("muzzle_location", unreal.Vector(*sockets["muzzle"]["loc"]))
-    data.set_editor_property("sight_location", unreal.Vector(*sockets["sight"]["loc"]))
-    data.set_editor_property("foregrip_location", unreal.Vector(*sockets["foregrip"]["loc"]))
-    data.set_editor_property("arm_left_mesh", arms["Left"])
-    data.set_editor_property("arm_right_mesh", arms["Right"])
-    eal.save_loaded_asset(data, only_if_is_dirty=False)
-    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
-    eal.save_directory(arms_dest, only_if_is_dirty=False, recursive=True)
-    log(f"DA_Rifle: {len(parts)} parts, muzzle {sockets['muzzle']['loc']}")
+        factory.set_editor_property("data_asset_class", unreal.SOLootTables)
+        tables = tools.create_asset("DA_LootTables", "/Game/Data", unreal.SOLootTables, factory)
+    rarities = []
+    for r in game["rarity"]:
+        info = unreal.SORarityInfo()
+        info.set_editor_property("id", r["id"])
+        info.set_editor_property("name", unreal.Text(r["name"]))
+        info.set_editor_property("color", hex_color(r["color"]))
+        info.set_editor_property("mult", float(r["mult"]))
+        info.set_editor_property("perks", int(r["perks"]))
+        rarities.append(info)
+    perks = []
+    for pid, p in game["perks"].items():
+        info = unreal.SOPerkInfo()
+        info.set_editor_property("id", pid)
+        info.set_editor_property("name", unreal.Text(p["name"]))
+        info.set_editor_property("description", unreal.Text(p["desc"]))
+        perks.append(info)
+    sights = []
+    for sid, s in game["sights"].items():
+        info = unreal.SOSightInfo()
+        info.set_editor_property("id", sid)
+        info.set_editor_property("name", unreal.Text(s["name"]))
+        info.set_editor_property("zoom", float(s.get("zoom", 0.0)))
+        info.set_editor_property("scope", bool(s.get("scope", False)))
+        if sid in sight_meshes:
+            mesh, eye = sight_meshes[sid]
+            info.set_editor_property("mesh", mesh)
+            info.set_editor_property("eye_point", unreal.Vector(*eye))
+        sights.append(info)
+    shaders = []
+    for s in game["shaders"]:
+        info = unreal.SOShaderInfo()
+        info.set_editor_property("id", s["id"])
+        info.set_editor_property("name", unreal.Text(s["name"]))
+        info.set_editor_property("body", hex_color(s["body"]))
+        shaders.append(info)
+    entries = []
+    for arch, data in datas.items():
+        e = unreal.SOArchetypeEntry()
+        e.set_editor_property("id", arch)
+        e.set_editor_property("data", data)
+        entries.append(e)
+    n = game["names"]
+    values = dict(rarities=rarities, perks=perks, sights=sights, shaders=shaders, archetypes=entries,
+                  slot_names=[unreal.Text(s) for s in game["slots"]], prefix=n["prefix"], noun=n["noun"], maker=n["maker"],
+                  model_code={unreal.Name(k): v for k, v in n["modelCode"].items()}, bio_prefix=n["bioPrefix"], bio_noun=n["bioNoun"],
+                  exotic_names={unreal.Name(k): v for k, v in n["exotic"].items()})
+    for key, value in values.items():
+        tables.set_editor_property(key, value)
+    eal.save_loaded_asset(tables, only_if_is_dirty=False)
+    log(f"DA_LootTables: {len(rarities)} rarities, {len(perks)} perks, {len(sights)} sights, {len(entries)} archetypes")
+    return tables
+
+
+def weapons(master, defaults):
+    game = load_json(GAME_DATA)
+    sight_meshes = optics(master, defaults["clear"])
+    datas = {}
+    for arch, a in game["archetypes"].items():
+        data = weapon(master, arch, a, defaults["clear"])
+        if data:
+            datas[arch] = data
+    loot_tables(datas, sight_meshes)
+    loot_props(master)
 
 
 # ---------------------------------------------------------------- effects + audio (stage 4)
@@ -666,7 +866,7 @@ def main():
     unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX 0")
     defaults = default_textures()
     master = master_material(defaults)
-    # SO_IMPORT_ONLY=arms,rifle,... re-imports just those steps (default: everything).
+    # SO_IMPORT_ONLY=arms,weapons,... re-imports just those steps (default: everything).
     only = {s.strip() for s in os.environ.get("SO_IMPORT_ONLY", "").split(",") if s.strip()}
     want = lambda step: not only or step in only
     if want("player"):
@@ -677,8 +877,8 @@ def main():
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
                   master, stalker_extra, flesh=True)
-    if want("rifle"):
-        rifle(master)
+    if want("weapons") or want("rifle"):
+        weapons(master, defaults)
     if want("fx"):
         fx_master()
         decal_material()

@@ -2,6 +2,8 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "SOLootLibrary.h"
 #include "SOReload.h"
 #include "SOWeaponData.h"
 
@@ -47,6 +49,13 @@ namespace
 	FSOHandGrip RifleGrip()
 	{
 		return FSOHandGrip::AtPalm(FVector(-2.2f, 1.6f, -4.5f), FVector(0.93f, 0.0f, -0.37f), FVector(0.37f, 0.0f, 0.93f), false);
+	}
+
+	// Handguns: the support hand wraps the firing hand from the left (palm on the grip's left side, fingers round the
+	// front below the trigger guard, thumb forward along the frame).
+	FSOHandGrip HandgunSupportGrip()
+	{
+		return FSOHandGrip::AtPalm(FVector(-1.5f, -2.4f, -5.5f), FVector(0.35f, 0.45f, -0.8f), FVector(0.9f, 0.0f, 0.4f), true);
 	}
 
 	// Support hand under the handguard: palm up, fingers wrapping the right side, thumb along the left pointing forward.
@@ -131,8 +140,26 @@ void USOGunRigComponent::Build(const USOWeaponData* Data, bool bInFirstPerson)
 	{
 		UStaticMeshComponent* Comp = MakeMesh(Part.Name, Part.Mesh.LoadSynchronous());
 		Comp->ComponentTags.Add(Part.Name);
-		Comp->SetRelativeLocationAndRotation(Part.RestLocation, Part.RestRotation);
-		Rest.Add(Part.Name, FTransform(Part.RestRotation, Part.RestLocation));
+		const FTransform PartRest(Part.RestRotation, Part.RestLocation);
+		// Nested parts (crane > cylinder > rounds) ride on their parent part; rest transforms are kept relative to it.
+		UStaticMeshComponent* ParentComp = Part.Parent.IsNone() ? nullptr : GetPart(Part.Parent);
+		RootRest.Add(Part.Name, PartRest);
+		if (ParentComp)
+		{
+			Comp->AttachToComponent(ParentComp, FAttachmentTransformRules::KeepRelativeTransform);
+			const FTransform Relative = PartRest.GetRelativeTransform(RootRest.FindRef(Part.Parent));
+			Comp->SetRelativeTransform(Relative);
+			Rest.Add(Part.Name, Relative);
+		}
+		else
+		{
+			Comp->SetRelativeLocationAndRotation(Part.RestLocation, Part.RestRotation);
+			Rest.Add(Part.Name, PartRest);
+		}
+		if (Part.Name.ToString().StartsWith(TEXT("x_")))
+		{
+			Comp->SetVisibility(false); // loose reload props (shell, round, casing, speedloader) appear only in reloads
+		}
 		PartComponents.Add(Comp);
 		if (Part.Name == NMag)
 		{
@@ -143,8 +170,114 @@ void USOGunRigComponent::Build(const USOWeaponData* Data, bool bInFirstPerson)
 	}
 	Foregrip = Data->ForegripLocation;
 	Muzzle = Data->MuzzleLocation;
+	Archetype = Data->Archetype;
+	bHandgun = Data->MuzzleLocation.Y < 35.0f; // short barrel, the support hand on the grip
 	RightGrip = RifleGrip();
-	LeftGrip = SupportGrip(MeshToRig(Foregrip));
+	LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
+}
+
+void USOGunRigComponent::SetShown(bool bInShown)
+{
+	bShown = bInShown;
+	SetVisibility(bShown, true);
+	// parts the pose or the optic keep hidden stay hidden (SetVisibility above reaches every child)
+	for (UStaticMeshComponent* Part : PartComponents)
+	{
+		if (!Part)
+		{
+			continue;
+		}
+		const FString Name = Part->ComponentTags.Num() > 0 ? Part->ComponentTags[0].ToString() : FString();
+		if (Name.StartsWith(TEXT("x_")) || (Name == TEXT("OPTIC") && bOpticMounted))
+		{
+			Part->SetVisibility(false);
+		}
+	}
+	if (Spare)
+	{
+		Spare->SetVisibility(false);
+	}
+}
+
+void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
+{
+	if (!bBuilt || !GunSpace)
+	{
+		return;
+	}
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	const USOWeaponData* Data = Tables ? Tables->LoadArchetype(Instance.Archetype) : nullptr;
+
+	// Optic on the rail (data.js SIGHTS; gun_attach.glb ATT_<id>).
+	if (Optic)
+	{
+		Optic->DestroyComponent();
+		Optic = nullptr;
+	}
+	UStaticMeshComponent* BuiltIn = GetPart(TEXT("OPTIC"));
+	const FSOSightInfo* Sight = Tables && Instance.Sight != TEXT("default") ? Tables->FindSight(Instance.Sight) : nullptr;
+	if (Sight && Data && Data->bHasRail && !Sight->Mesh.IsNull())
+	{
+		Optic = MakeMesh(TEXT("Optic"), Sight->Mesh.LoadSynchronous());
+		Optic->SetRelativeLocation(Data->RailLocation);
+		bOpticMounted = true;
+	}
+	else
+	{
+		bOpticMounted = false;
+	}
+	if (BuiltIn)
+	{
+		BuiltIn->SetVisibility(bShown && !bOpticMounted);
+	}
+
+	// Finish and rarity glow by material name.
+	FLinearColor BodyColor = FLinearColor::White;
+	bool bPaint = false;
+	if (Tables)
+	{
+		if (const FSOShaderInfo* Shader = Tables->Shaders.FindByPredicate([&](const FSOShaderInfo& S) { return S.Id == Instance.Shader; }))
+		{
+			BodyColor = Shader->Body;
+			bPaint = Data && Data->WeaponClass == ESOWeaponClass::Energy; // kinetic / horror keep their own materials
+		}
+	}
+	const FLinearColor Glow = Tables ? Tables->GetRarity(Instance.Rarity).Color : FLinearColor(0.2f, 0.8f, 1.0f);
+	TArray<USceneComponent*> Children;
+	GunSpace->GetChildrenComponents(true, Children);
+	for (USceneComponent* Child : Children)
+	{
+		UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Child);
+		if (!Mesh || !Mesh->GetStaticMesh())
+		{
+			continue;
+		}
+		const TArray<FName> Slots = Mesh->GetMaterialSlotNames();
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			const FString SlotName = Slots[i].ToString();
+			const bool bGlow = SlotName.StartsWith(TEXT("gun_glow"));
+			const bool bBody = bPaint && SlotName.StartsWith(TEXT("gun_body"));
+			if (!bGlow && !bBody)
+			{
+				continue;
+			}
+			UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(i);
+			if (!MID)
+			{
+				continue;
+			}
+			if (bGlow)
+			{
+				MID->SetVectorParameterValue(TEXT("BaseColorTint"), Glow);
+				MID->SetVectorParameterValue(TEXT("EmissiveColor"), Glow);
+			}
+			else
+			{
+				MID->SetVectorParameterValue(TEXT("BaseColorTint"), BodyColor);
+			}
+		}
+	}
 }
 
 UStaticMeshComponent* USOGunRigComponent::GetPart(FName Name) const
@@ -180,13 +313,22 @@ void USOGunRigComponent::SetOwnerNoSeeAll(bool bNoSee)
 	}
 }
 
+FTransform USOGunRigComponent::PartInMesh(const UStaticMeshComponent* Comp) const
+{
+	if (!Comp || !GunSpace)
+	{
+		return FTransform::Identity;
+	}
+	return Comp->GetComponentTransform().GetRelativeTransform(GunSpace->GetComponentTransform());
+}
+
 FVector USOGunRigComponent::ResolveAnchor(FName Anchor) const
 {
-	auto MagPoint = [](const UStaticMeshComponent* Comp, float Up) -> FVector
+	auto MagPoint = [this](const UStaticMeshComponent* Comp, float Up) -> FVector
 	{
 		if (!Comp)
 		{
-			return FVector::ZeroVector;
+			return Foregrip;
 		}
 		FVector Local(0.0f, 0.0f, -10.0f + Up);
 		if (const UStaticMesh* Mesh = Comp->GetStaticMesh())
@@ -194,35 +336,51 @@ FVector USOGunRigComponent::ResolveAnchor(FName Anchor) const
 			const FBox Box = Mesh->GetBoundingBox();
 			Local = FVector(Box.GetCenter().X, Box.GetCenter().Y, Box.Min.Z + Up);
 		}
-		return Comp->GetRelativeTransform().TransformPosition(Local);
+		return PartInMesh(Comp).TransformPosition(Local);
+	};
+	auto At = [this](FName Part, const FVector& Local) -> FVector
+	{
+		const UStaticMeshComponent* Comp = GetPart(Part);
+		return Comp ? PartInMesh(Comp).TransformPosition(Local) : Foregrip;
+	};
+	auto Centre = [this](FName Part) -> FVector
+	{
+		const UStaticMeshComponent* Comp = GetPart(Part);
+		if (!Comp)
+		{
+			return Foregrip;
+		}
+		const UStaticMesh* Mesh = Comp->GetStaticMesh();
+		return PartInMesh(Comp).TransformPosition(Mesh ? Mesh->GetBoundingBox().GetCenter() : FVector::ZeroVector);
 	};
 
-	if (Anchor == NFore)
-	{
-		return Foregrip;
-	}
-	if (Anchor == NPouch)
-	{
-		return GltfToMesh(0.1f, -0.42f, -0.22f);
-	}
-	if (Anchor == NMag)
-	{
-		return MagPoint(GetPart(NMag), 3.5f);
-	}
-	if (Anchor == NMagBase)
-	{
-		return MagPoint(GetPart(NMag), 0.0f);
-	}
-	if (Anchor == NSpare)
-	{
-		return MagPoint(Spare, 3.5f);
-	}
+	if (Anchor == NFore || Anchor.IsNone()) return Foregrip;
+	if (Anchor == NPouch) return GltfToMesh(0.1f, -0.42f, -0.22f);
+	if (Anchor == TEXT("free")) return FVector::ZeroVector;
+	if (Anchor == NMag) return MagPoint(GetPart(NMag), 3.5f);
+	if (Anchor == NMagBase) return MagPoint(GetPart(NMag), 0.0f);
+	if (Anchor == NSpare) return MagPoint(Spare, 3.5f);
+	if (Anchor == TEXT("loader")) return At(TEXT("x_speedloader"), GltfToMesh(0, 0, -0.03f));
+	if (Anchor == TEXT("cyl")) return At(TEXT("cylinder"), GltfToMesh(0.012f, -0.01f, 0));
+	if (Anchor == TEXT("ejector")) return At(TEXT("crane"), GltfToMesh(-0.004f, 0.025f, 0.06f));
+	if (Anchor == TEXT("shell")) return At(TEXT("x_shell"), GltfToMesh(0, -0.016f, -0.05f));
+	if (Anchor == TEXT("round")) return At(TEXT("x_round"), GltfToMesh(-0.008f, 0.004f, -0.02f));
 	if (Anchor == NBolt)
 	{
 		const UStaticMeshComponent* Bolt = GetPart(NBolt);
-		return Bolt ? Bolt->GetRelativeLocation() : Foregrip; // current (travelling) position of the handle
+		return Bolt ? PartInMesh(Bolt).GetLocation() : Foregrip; // the handle's pivot, travelling with it
 	}
-	return Foregrip;
+	if (Anchor == TEXT("charge") || Anchor == TEXT("slide"))
+	{
+		// the top of the part, where the palm goes
+		const UStaticMeshComponent* Comp = GetPart(Anchor);
+		if (const UStaticMesh* Mesh = Comp ? Comp->GetStaticMesh() : nullptr)
+		{
+			const FBox Box = Mesh->GetBoundingBox();
+			return PartInMesh(Comp).TransformPosition(FVector(Box.GetCenter().X, Box.GetCenter().Y, Box.Max.Z));
+		}
+	}
+	return Centre(Anchor); // pump, hatch, biomass, ...
 }
 
 FSOHandGrip USOGunRigComponent::GripForAnchor(FName Anchor) const
@@ -230,7 +388,11 @@ FSOHandGrip USOGunRigComponent::GripForAnchor(FName Anchor) const
 	const FVector Point = MeshToRig(ResolveAnchor(Anchor));
 	if (Anchor == NFore || Anchor.IsNone())
 	{
-		return SupportGrip(MeshToRig(Foregrip));
+		return bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
+	}
+	if (Anchor == TEXT("pump"))
+	{
+		return SupportGrip(Point - FVector(0.0f, 0.0f, 2.5f)); // palm under the forend
 	}
 	if (Anchor == NMagBase)
 	{
@@ -240,7 +402,11 @@ FSOHandGrip USOGunRigComponent::GripForAnchor(FName Anchor) const
 	{
 		return RackGrip(Point);
 	}
-	return MagGrip(Point); // mag, spare, pouch
+	if (Anchor == TEXT("charge") || Anchor == TEXT("slide"))
+	{
+		return FSOHandGrip::AtPalm(Point + FVector(0.0f, 1.0f, 0.8f), FVector(0.0f, 0.8f, -0.6f), FVector(-1.0f, 0.0f, 0.0f), true);
+	}
+	return MagGrip(Point); // mag, spare, pouch, cyl, ejector, loader, shell, round, hatch, biomass, free
 }
 
 bool USOGunRigComponent::GetHandTargets(FTransform& OutRight, FTransform& OutLeft) const
@@ -261,35 +427,87 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 	{
 		return;
 	}
+	auto Place = [this](FName Name, const FVector& Offset, const FQuat& Turn, bool bShow = true)
+	{
+		if (UStaticMeshComponent* Comp = GetPart(Name))
+		{
+			const FTransform& R = Rest.FindRef(Name);
+			Comp->SetRelativeLocationAndRotation(R.GetLocation() + Offset, R.GetRotation() * Turn);
+			Comp->SetVisibility(bShown && bShow);
+		}
+	};
+	auto Six = [](const float* P) { return GltfToMesh(P[0], P[1], P[2]); };
+	auto SixRot = [](const float* P) { return GltfEulerToMesh(P[3], P[4], P[5]); };
+
+	// magazine (old) and spare
 	if (UStaticMeshComponent* Mag = GetPart(NMag))
 	{
-		const FTransform& R = Rest.FindRef(NMag);
-		Mag->SetRelativeLocationAndRotation(R.GetLocation() + GltfToMesh(Pose.Mag[0], Pose.Mag[1], Pose.Mag[2]),
-			R.GetRotation() * GltfEulerToMesh(Pose.Mag[3], Pose.Mag[4], Pose.Mag[5]));
-		Mag->SetVisibility(Pose.bMagVisible);
+		Place(NMag, Six(Pose.Mag), SixRot(Pose.Mag), Pose.bMagVisible);
 		if (Spare)
 		{
-			Spare->SetVisibility(Pose.bSpareVisible);
+			Spare->SetVisibility(bShown && Pose.bSpareVisible);
 			if (Pose.bSpareVisible)
 			{
-				Spare->SetRelativeLocationAndRotation(R.GetLocation() + GltfToMesh(Pose.Spare[0], Pose.Spare[1], Pose.Spare[2]),
-					R.GetRotation() * GltfEulerToMesh(Pose.Spare[3], Pose.Spare[4], Pose.Spare[5]));
+				const FTransform& R = Rest.FindRef(NMag);
+				Spare->SetRelativeLocationAndRotation(R.GetLocation() + Six(Pose.Spare), R.GetRotation() * SixRot(Pose.Spare));
 			}
 		}
 	}
-	if (UStaticMeshComponent* Bolt = GetPart(NBolt))
+	// sliding parts back along the bore; the bolt-action bolt also turns about it
+	Place(NBolt, GltfToMesh(0.0f, 0.0f, -Pose.Bolt), GltfEulerToMesh(0.0f, 0.0f, Pose.BoltRot));
+	Place(TEXT("charge"), GltfToMesh(0.0f, Pose.ChargeUp, -Pose.Charge), FQuat::Identity);
+	Place(TEXT("slide"), GltfToMesh(0.0f, 0.0f, -Pose.Slide), FQuat::Identity);
+	Place(TEXT("pump"), GltfToMesh(0.0f, 0.0f, -Pose.Pump), FQuat::Identity);
+	// revolver: crane swings out, cylinder spins, rounds leave and return
+	Place(TEXT("crane"), FVector::ZeroVector, GltfEulerToMesh(0.0f, 0.0f, Pose.Crane));
+	Place(TEXT("cylinder"), FVector::ZeroVector, GltfEulerToMesh(0.0f, 0.0f, Pose.Spin));
+	if (UStaticMeshComponent* Rounds = GetPart(TEXT("rounds")))
 	{
-		const FTransform& R = Rest.FindRef(NBolt);
-		Bolt->SetRelativeLocation(R.GetLocation() + GltfToMesh(0.0f, 0.0f, -Pose.Bolt));
+		Rounds->SetVisibility(bShown && Pose.bRounds);
 	}
-	// Off hand: from grip A to grip B. Offsets only matter for the pouch (the keys' other offsets were tuned for the
-	// browser build's arm mesh); the hand's turn comes from the grips themselves.
+	// horror: the hatch (flank flap about the barrel, brood lid about X) and the biomass
+	const bool bBrood = Archetype == TEXT("brood");
+	Place(TEXT("hatch"), FVector::ZeroVector, bBrood ? GltfEulerToMesh(Pose.Hatch, 0.0f, 0.0f) : GltfEulerToMesh(0.0f, 0.0f, Pose.Hatch));
+	Place(TEXT("biomass"), Six(Pose.Bio), SixRot(Pose.Bio), Pose.bBio);
+	// loose props held by the hand (absolute in gun space)
+	if (UStaticMeshComponent* Loader = GetPart(TEXT("x_speedloader")))
+	{
+		Loader->SetVisibility(bShown && Pose.bLoader);
+		if (Pose.bLoader)
+		{
+			Loader->SetRelativeLocationAndRotation(GltfToMesh(Pose.Loader[0], Pose.Loader[1], -0.0245f + Pose.Loader[2]), GltfEulerToMesh(0.0f, 0.0f, Pose.Loader[3]));
+		}
+	}
+	for (const TPair<FName, const float*>& Prop : { TPair<FName, const float*>(TEXT("x_shell"), Pose.Shell), TPair<FName, const float*>(TEXT("x_round"), Pose.Round) })
+	{
+		if (UStaticMeshComponent* Comp = GetPart(Prop.Key))
+		{
+			const bool bShow = Prop.Key == TEXT("x_shell") ? Pose.bShell : Pose.bRound;
+			Comp->SetVisibility(bShown && bShow);
+			if (bShow)
+			{
+				Comp->SetRelativeLocationAndRotation(Six(Prop.Value), SixRot(Prop.Value));
+			}
+		}
+	}
+
+	// Off hand: from grip A to grip B ("cur" = where the hand was when the segment began). The keys' offsets move
+	// the palm (they were authored for the browser build's palm pivot); the hand's turn comes from the grips.
+	if (Pose.Segment != LastSegment)
+	{
+		LastSegment = Pose.Segment;
+		CurGrip = LeftGrip;
+	}
 	if (Pose.bHand)
 	{
 		auto Grip = [this](FName Anchor, const float* Offset)
 		{
+			if (Anchor == TEXT("cur"))
+			{
+				return CurGrip;
+			}
 			FSOHandGrip G = GripForAnchor(Anchor);
-			if (Anchor == NPouch)
+			if (Anchor != NBolt && Anchor != TEXT("charge") && Anchor != TEXT("slide"))
 			{
 				G.Wrist += MeshToRig(GltfToMesh(Offset[0], Offset[1], Offset[2]));
 			}
@@ -302,14 +520,15 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		if (Pose.HandAnchorA != Pose.HandAnchorB)
 		{
 			// Between two grips the hand arcs out past the gun's left side instead of cutting through it, and comes
-			// down onto the charging handle from above (over the top edge of the receiver).
+			// down onto a charging handle / slide from above (over the top edge of the receiver).
 			const float Arc = FMath::Sin(PI * FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f));
-			const bool bOverTop = Pose.HandAnchorA == NBolt || Pose.HandAnchorB == NBolt;
+			auto Over = [](FName N) { return N == NBolt || N == TEXT("charge") || N == TEXT("slide"); };
+			const bool bOverTop = Over(Pose.HandAnchorA) || Over(Pose.HandAnchorB);
 			LeftGrip.Wrist += FVector(0.0f, -8.0f, bOverTop ? 9.0f : 0.0f) * Arc;
 		}
 	}
 	else
 	{
-		LeftGrip = SupportGrip(MeshToRig(Foregrip));
+		LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
 	}
 }

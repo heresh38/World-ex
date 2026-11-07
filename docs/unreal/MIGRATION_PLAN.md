@@ -1,7 +1,7 @@
 # Unreal Engine 5 migration — audit and plan
 
-Status: **Stage 4 (graphics + feedback) built** on top of stages 2-3 — `unreal/ShatteredOrbit` compiles with UE 5.8 and
-its 24 automation tests pass (see its README). The game is **Shattered Orbit**. The Three.js game in this repository stays intact and playable; the Unreal
+Status: **Stage 5 (looter systems) built** on top of stages 2-4 — `unreal/ShatteredOrbit` compiles with UE 5.8 and
+its 33 automation tests pass (see its README). The game is **Shattered Orbit**. The Three.js game in this repository stays intact and playable; the Unreal
 project is built beside it in `unreal/ShatteredOrbit` and takes over feature by feature. Nothing is deleted until the Unreal build
 has reached parity for that feature.
 
@@ -100,7 +100,13 @@ single-player in "listen server" mode.
    be authored headless), all sounds synthesised offline by `tools/audio/sfx_synth.py` (instead of MetaSounds),
    `SOBenchmark` (1440p on an RTX 4070 Ti: 98 fps). Still open: 2K/4K texture re-bakes, Nanite for the big kits.
    *Owner check:* profile with `stat unit` / Unreal Insights at 1440p.
-5. **Looter systems** — data assets for all archetypes, perks, rarity, inventory UI, VANTHOS reward pool.
+5. **Looter systems** (done) — `Data/game_data.json` exported from data.js; a data asset, model, optics and the full
+   reload choreography for all 22 archetypes (magazine guns, revolver, pump, bolt-action, horror biomass, energy cell
+   swap) with pellets / bursts / bolts / rockets / goo (splash, acid, swarm); rolled copies (rarity, perks with their
+   effects, stat rolls, names), `USOInventoryComponent` on the player state (save game, three slots, vault cap 200,
+   dismantle for alloy), kill drops (credits, xp, ammo, loot cores), the reliquary reward pool, the inventory screen
+   (UMG in C++). Kept in SOCombat rather than a separate SOLoot module (the weapon fires the rolled stats).
+   *Owner check:* open the reliquary, switch slots, compare and equip in the inventory, play with a few archetypes.
 6. **World + missions** — VANTHOS operation level, the main city hub, one frontier world.
 7. **Advanced** — remaining enemies, bosses, vehicles, streaming, dedicated-server build target.
 8. **Optimisation + Steam** — Steamworks (OnlineSubsystemSteam), achievements, cloud saves, packaging, crash reports.
