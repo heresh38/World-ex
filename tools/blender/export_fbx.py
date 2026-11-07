@@ -12,6 +12,11 @@ Options:
   --only=a,b,c       keep only these mesh objects (e.g. one wardrobe loadout); armatures and empties are kept
   --arms-only        skinned meshes keep only what the arm bones (upperarm / forearm / hand) mostly carry: the
                      first-person arms cut from the very body (and outfit) everyone else sees
+  --per-item         players: the body (head, eyes, brows, lashes and every B_<region>, each region its own material slot
+                     skin__<region> so the game can hide what clothing covers) as <stem>__Body.fbx with the clips, and
+                     every wardrobe piece C_<slot>__<item> as its own <stem>__C_<slot>__<item>.fbx on the same skeleton
+                     (no clips); wardrobe.json keeps the armature's `worldex` meta (labels, regions each piece hides,
+                     defaults). With --arms-only: the first-person cut of each of them.
   --finger-rig=male|female
                      players: adds finger bones under hand.L / hand.R (index, middle, ring, pinky, thumb; three each,
                      <finger>_01..03.<side>) laid along the fingers anatomy.py sculpts, and moves the finger skin (body
@@ -557,6 +562,43 @@ def split_parts(name, root, out_dir):
     return info
 
 
+def export_per_item(src, out_dir, textures, with_clips=True):
+    """--per-item: the body and each wardrobe piece as their own skeletal FBX on one skeleton (see the docstring)."""
+    arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+    meta = json.loads(arm["worldex"]) if "worldex" in arm.keys() else {}
+    with open(os.path.join(out_dir, "wardrobe.json"), "w") as f:
+        json.dump({"wardrobe": meta.get("wardrobe", {}), "defaults": meta.get("defaults", {}), "regions": meta.get("regions", [])}, f, indent=1)
+    stem = safe(os.path.splitext(os.path.basename(src))[0])
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    body = [o for o in meshes if o.name.split(".")[0].startswith("B_")]
+    # one material slot per body region: the game hides the regions the worn pieces cover
+    for o in body:
+        region = o.name.split(".")[0][2:]
+        for i, slot in enumerate(o.material_slots):
+            if slot.material and slot.material.name.split(".")[0] == "skin":
+                m = slot.material.copy()
+                m.name = "skin__" + region
+                o.material_slots[i].material = m
+    groups = [("Body", body)] + [(o.name.split(".")[0], [o]) for o in meshes if o.name.split(".")[0].startswith("C_")]
+    manifest = {"source": os.path.basename(src), "textures": textures, "materials": "materials.json", "units": "cm",
+                "per_item": True, "assets": []}
+    for name, objs in groups:
+        if not objs:
+            continue
+        file = f"{stem}__{name}.fbx"
+        clips = with_clips and name == "Body"
+        export(os.path.join(out_dir, file), [arm] + objs, clips)
+        entry = {"file": file, "kind": "skeletal", "name": name, "materials": mesh_materials(objs),
+                 "actions": [a.name for a in bpy.data.actions] if clips else []}
+        if name.startswith("C_"):
+            slot, item = name[2:].split("__", 1)
+            entry.update({"slot": slot, "item": item})
+        manifest["assets"].append(entry)
+        print(f"[export_fbx] {file} ({len(objs)} mesh{'es' if len(objs) > 1 else ''}{', clips' if clips else ''})")
+    with open(os.path.join(out_dir, "export_fbx.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+
 def main():
     src, out_dir, flags, only = parse_args()
     single, keep_location, do_split = "--single" in flags, "--keep-location" in flags, "--split-parts" in flags
@@ -570,6 +612,10 @@ def main():
     if "--arms-only" in flags:
         keep_arms_only()
     skeletal_file = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
+    if "--per-item" in flags:
+        scene_to_centimetres()
+        export_per_item(src, out_dir, textures, with_clips="--arms-only" not in flags)
+        return
     if skeletal_file:
         scene_to_centimetres()
 

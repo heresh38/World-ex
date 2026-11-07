@@ -27,6 +27,8 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(USOInventoryComponent, Alloy);
 	DOREPLIFETIME(USOInventoryComponent, Xp);
 	DOREPLIFETIME(USOInventoryComponent, Level);
+	DOREPLIFETIME(USOInventoryComponent, Armor);
+	DOREPLIFETIME(USOInventoryComponent, Body);
 }
 
 void USOInventoryComponent::BeginPlay()
@@ -51,6 +53,124 @@ void USOInventoryComponent::BeginPlay()
 const FSOWeaponInstance* USOInventoryComponent::Find(const FString& Uid) const
 {
 	return Uid.IsEmpty() ? nullptr : Items.FindByPredicate([&Uid](const FSOWeaponInstance& W) { return W.Uid == Uid; });
+}
+
+const FSOArmorInstance* USOInventoryComponent::FindArmor(const FString& Uid) const
+{
+	return Uid.IsEmpty() ? nullptr : Armor.FindByPredicate([&Uid](const FSOArmorInstance& A) { return A.Uid == Uid; });
+}
+
+const FSOArmorInstance* USOInventoryComponent::GetEquippedArmor(FName Slot) const
+{
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	return Armor.FindByPredicate([&](const FSOArmorInstance& A) { return A.bEquipped && A.Slot == Slot && (!Wardrobe || Wardrobe->Find(A.Slot, A.Item)); });
+}
+
+int32 USOInventoryComponent::GetArmorRating() const
+{
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	int32 Sum = 0;
+	for (const FName Slot : USOWardrobeData::ArmourSlots())
+	{
+		if (const FSOArmorInstance* A = GetEquippedArmor(Slot))
+		{
+			const FSOWardrobeItem* Item = Wardrobe ? Wardrobe->Find(A->Slot, A->Item) : nullptr;
+			Sum += Item ? Item->Armor : 0;
+		}
+	}
+	return Sum;
+}
+
+FSOOutfit USOInventoryComponent::GetOutfit() const
+{
+	FSOOutfit Outfit;
+	Outfit.Body = Body;
+	if (const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body))
+	{
+		for (const TPair<FName, FName>& D : Wardrobe->Defaults)
+		{
+			const bool bArmourSlot = USOWardrobeData::ArmourSlots().Contains(D.Key);
+			Outfit.Set(D.Key, bArmourSlot ? FName(TEXT("none")) : D.Value); // armour slots: only what is worn
+		}
+	}
+	for (const FName Slot : USOWardrobeData::ArmourSlots())
+	{
+		const FSOArmorInstance* A = GetEquippedArmor(Slot);
+		Outfit.Set(Slot, A ? A->Item : FName(TEXT("none")));
+	}
+	return Outfit;
+}
+
+bool USOInventoryComponent::EquipArmor(const FString& Uid)
+{
+	FSOArmorInstance* Piece = Armor.FindByPredicate([&Uid](const FSOArmorInstance& A) { return A.Uid == Uid; });
+	if (!Piece)
+	{
+		return false;
+	}
+	const bool bWear = !Piece->bEquipped;
+	for (FSOArmorInstance& A : Armor)
+	{
+		if (A.Slot == Piece->Slot)
+		{
+			A.bEquipped = false;
+		}
+	}
+	Piece->bEquipped = bWear;
+	Piece->bNew = false;
+	Changed(false, true);
+	return true;
+}
+
+bool USOInventoryComponent::SetBody(FName NewBody)
+{
+	if (NewBody == Body || !USOWardrobeData::Get(NewBody))
+	{
+		return false;
+	}
+	Body = NewBody;
+	GrantWardrobe(false);
+	// keep wearing what the new body has; anything else falls back to its default
+	if (const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body))
+	{
+		for (const FName Slot : USOWardrobeData::ArmourSlots())
+		{
+			if (!GetEquippedArmor(Slot))
+			{
+				const FName Want = Wardrobe->Defaults.FindRef(Slot);
+				if (FSOArmorInstance* A = Armor.FindByPredicate([&](const FSOArmorInstance& X) { return X.Slot == Slot && X.Item == Want; }))
+				{
+					A->bEquipped = true;
+				}
+			}
+		}
+	}
+	Changed(false, true);
+	return true;
+}
+
+void USOInventoryComponent::GrantWardrobe(bool bWearDefaults)
+{
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	if (!Wardrobe)
+	{
+		return;
+	}
+	for (const FSOWardrobeItem& Item : Wardrobe->Items)
+	{
+		if (!Item.bArmour || Armor.ContainsByPredicate([&](const FSOArmorInstance& A) { return A.Slot == Item.Slot && A.Item == Item.Item; }))
+		{
+			continue;
+		}
+		FSOArmorInstance A;
+		A.Uid = FString::Printf(TEXT("ar_%s_%s_%08x"), *Item.Slot.ToString(), *Item.Item.ToString(), Rng.RandHelper(0x7fffffff));
+		A.Slot = Item.Slot;
+		A.Item = Item.Item;
+		A.Rarity = Item.Item == TEXT("orion") ? 3 : 2;
+		A.Power = 10;
+		A.bEquipped = bWearDefaults && Wardrobe->Defaults.FindRef(Item.Slot) == Item.Item;
+		Armor.Add(A);
+	}
 }
 
 const FSOWeaponInstance* USOInventoryComponent::GetEquipped(int32 Slot) const
@@ -303,6 +423,9 @@ void USOInventoryComponent::NewProfile()
 	Alloy = 20;
 	Xp = 0;
 	Level = 1;
+	Armor.Reset();
+	Body = TEXT("male");
+	GrantWardrobe(true);
 	// state.js newSave: the three starters (names as the browser build gives them)...
 	struct FStarter { const TCHAR* Arch; int32 Rarity; const TCHAR* Name; };
 	const FStarter Starters[] = { { TEXT("auto"), 1, TEXT("") }, { TEXT("handcannon"), 1, TEXT("") }, { TEXT("rocket"), 0, TEXT("") } };
@@ -335,7 +458,7 @@ void USOInventoryComponent::NewProfile()
 			}
 		}
 	}
-	Changed(true);
+	Changed(true, true);
 }
 
 bool USOInventoryComponent::LoadProfile()
@@ -363,6 +486,9 @@ bool USOInventoryComponent::LoadProfile()
 	Alloy = Save->Alloy;
 	Xp = Save->Xp;
 	Level = FMath::Max(1, Save->Level);
+	Body = USOWardrobeData::Get(Save->Body) ? Save->Body : FName(TEXT("male"));
+	Armor = Save->Armor;
+	GrantWardrobe(Armor.Num() == 0); // version 1 saves had no armour: the wardrobe, wearing its defaults
 	if (!GetEquipped(ActiveSlot))
 	{
 		for (int32 Slot = 0; Slot < NumSlots; ++Slot)
@@ -374,7 +500,7 @@ bool USOInventoryComponent::LoadProfile()
 			}
 		}
 	}
-	Changed(true);
+	Changed(true, true);
 	return true;
 }
 
@@ -392,10 +518,13 @@ void USOInventoryComponent::SaveProfile() const
 	Save->Alloy = Alloy;
 	Save->Xp = Xp;
 	Save->Level = Level;
+	Save->Version = 2;
+	Save->Armor = Armor;
+	Save->Body = Body;
 	UGameplayStatics::SaveGameToSlot(Save, SaveSlot, 0);
 }
 
-void USOInventoryComponent::Changed(bool bLoadout)
+void USOInventoryComponent::Changed(bool bLoadout, bool bOutfit)
 {
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
@@ -410,6 +539,10 @@ void USOInventoryComponent::Changed(bool bLoadout)
 	if (bLoadout)
 	{
 		OnLoadoutChanged.Broadcast();
+	}
+	if (bOutfit)
+	{
+		OnOutfitChanged.Broadcast();
 	}
 }
 
@@ -441,3 +574,5 @@ void USOInventoryComponent::ServerSelectSlot_Implementation(int32 Slot) { Select
 void USOInventoryComponent::ServerSetKeep_Implementation(const FString& Uid, bool bKeep) { SetKeep(Uid, bKeep); }
 void USOInventoryComponent::ServerDismantle_Implementation(const FString& Uid) { Dismantle(Uid); }
 void USOInventoryComponent::ServerMarkSeen_Implementation(const FString& Uid) { MarkSeen(Uid); }
+void USOInventoryComponent::ServerEquipArmor_Implementation(const FString& Uid) { EquipArmor(Uid); }
+void USOInventoryComponent::ServerSetBody_Implementation(FName NewBody) { SetBody(NewBody); }

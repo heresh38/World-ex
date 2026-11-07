@@ -43,7 +43,9 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
 
 ## Characters
-Players are built by `players.py` (base body, regions `B_*`, eyes, brows, lashes, face morphs from `face.py`) and
+Players are built by `players.py` (base body, regions `B_*`, eyes, brows, lashes, face morphs from `face.py`; the head's bone
+structure (cheekbones, jaw, brow, nose, lips) is in `anatomy.Head.structure`, quick look: `python tools/blender/headview.py
+out.png male`) and
 `wardrobe.py` (hair and clothing as `C_<slot>__<item>`). The anatomy is signed-distance fields in `anatomy.py`,
 meshed by `sdf.py` (Surface Nets + narrow band). Meta (wardrobe items with the regions they hide, defaults, morph groups)
 lives in the armature's `worldex` extra. `Avatar.applyCharacter(save.character)` applies the look, using character v3:
@@ -54,6 +56,12 @@ for quick checks; `sdfview.py` previews a field without Blender. `refs.py` cuts 
 (owner's art, allowed). `civilians.py` builds the pedestrians with `npc_kit.py` (tinted by prefix skin/hair/shirt/pants/shoes).
 `characters.py` still makes the enemies. The player rig uses the IK pole angle of 90 degrees, which keeps the elbows down
 and the upper-arm twist small for skinned shoulders.
+The default outfit for both bodies is the Orion set from the owner's concept sheet (`art/reference/orion_pair.jpg`;
+`wardrobe.Kit.orion`, built from named SDF components with `Kit.piece`; textures `orion_textures.py` -> `or_*`): male
+quilted jacket + harness + gaiter, long storm coat, fingerless gloves with lit bracers, cargo trousers with knee
+armour, plated boots; female bodice with a lit V, cropped white shell jacket, the gloves, plated leggings with a
+holster, tall boots. Preview a player with `blender --background --python tools/blender/render_player.py -- out.png
+player_male.glb [slot=item ...]` (EEVEE sheet, runtime skin / hair tints applied).
 Hair is grown by `hair.py` (scalp cap + alpha-tested strand cards on the `hair_strands.png` atlas; materials `hair` and
 `hair__cap`, both tinted by hairColor). Player clips add Slide; Walk, Run, Jump and the Relaxed clips are gendered per GLB
 (`characters.animate(style=)`), enemies keep the neutral set. `players.py` also writes `player_<sex>_npc.glb` (crowd version:
@@ -302,9 +310,13 @@ second render pass with depth cleared. Touch controls live in `src/ui/touch.js` 
 `unreal/ShatteredOrbit` (UE 5.8, C++ modules ShatteredOrbit/SOCore/SOCharacter/SOCombat/SOAI/SOWorld/SOUI) is the
 staged port described in `docs/unreal/MIGRATION_PLAN.md`; build, content scripts, tests and gaps are in its README.
 Blender GLB -> FBX: `tools/blender/export_fbx.py` (`export_unreal.sh` for the project's set; effect cards from
-`fx_kit.py`; `--arms-only` cuts the first-person arms from the player body). In Unreal both views hold the gun with
-arm IK onto the rig's grips (`USOGunRigComponent` grips, `USOLocomotionAnimInstance` IK); the browser `viewmodel_arms`
-are not used there. Weapon / loot data reaches Unreal through `node tools/unreal/export_game_data.mjs`
+`fx_kit.py`; `--per-item --finger-rig=<sex>` writes the player body (one `skin__<region>` section per region) and every
+wardrobe piece as its own skeletal FBX with finger bones added along anatomy.py's fingers; `--arms-only` cuts the
+first-person arms). In Unreal the player is modular (`USOWardrobeData` per body, one follower skeletal mesh per slot,
+armour pieces owned / worn through the inventory, body male / female), both views hold the gun with arm IK onto the
+rig's grips and the fingers close by grip preset (`USOGunRigComponent` grips + `FSOFingerPose`,
+`USOLocomotionAnimInstance` IK); the browser `viewmodel_arms` are not used there. Inventory icons: `tools/blender/icons.py`
+(Cycles renders of the guns and of each wardrobe piece). Weapon / loot data reaches Unreal through `node tools/unreal/export_game_data.mjs`
 (`unreal/ShatteredOrbit/Data/game_data.json`, read by `import_assets.py`): change numbers in `src/game/data.js`, re-export. Sounds for it: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis). Do not change `src/` for it.
 
 ## Testing

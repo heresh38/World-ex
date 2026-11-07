@@ -1,7 +1,7 @@
 # Unreal Engine 5 migration — audit and plan
 
 Status: **Stage 5 (looter systems) built** on top of stages 2-4 — `unreal/ShatteredOrbit` compiles with UE 5.8 and
-its 33 automation tests pass (see its README). The game is **Shattered Orbit**. The Three.js game in this repository stays intact and playable; the Unreal
+its 35 automation tests pass (see its README). The game is **Shattered Orbit**. The Three.js game in this repository stays intact and playable; the Unreal
 project is built beside it in `unreal/ShatteredOrbit` and takes over feature by feature. Nothing is deleted until the Unreal build
 has reached parity for that feature.
 
@@ -107,6 +107,9 @@ single-player in "listen server" mode.
    dismantle for alloy), kill drops (credits, xp, ammo, loot cores), the reliquary reward pool, the inventory screen
    (UMG in C++). Kept in SOCombat rather than a separate SOLoot module (the weapon fires the rolled stats).
    *Owner check:* open the reliquary, switch slots, compare and equip in the inventory, play with a few archetypes.
+   Follow-up (owner feedback): fingers on the grips, no shots after reloads, poison pools, one name per gun with tight
+   rolls (perks are the variety; ideas in `docs/design/PERK_IDEAS.md`), new modular players (male + female Orion set)
+   with armour in the inventory, and a loadout screen with the live character and rendered icons.
 6. **World + missions** — VANTHOS operation level, the main city hub, one frontier world.
 7. **Advanced** — remaining enemies, bosses, vehicles, streaming, dedicated-server build target.
 8. **Optimisation + Steam** — Steamworks (OnlineSubsystemSteam), achievements, cloud saves, packaging, crash reports.

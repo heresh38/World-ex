@@ -79,13 +79,17 @@ In the editor: Tools > Execute Python Script.
   nav mesh bounds volume (the nav mesh builds at runtime) and three stalker spawners 26-34 m out.
 - `import_assets.py` → our own default textures and the master material `/Game/Materials/M_SOStandard` (glTF
   semantics: base colour x tint x vertex colour, metal/rough map G = roughness, B = metal, OpenGL normal maps flipped
-  on import), then from `SourceArt`: `/Game/Characters/PlayerMale/SK_PlayerMale` (default tactical loadout, 10 clips
-  as `Anims/A_PlayerMale_*`), `/Game/Characters/Stalker/SK_Stalker` (5 clips, hx_* flesh textures by material name),
+  on import), then from `SourceArt`: the players (below), `/Game/Characters/Stalker/SK_Stalker` (5 clips, hx_* flesh textures by material name),
   `/Game/Weapons/Rifle/SM_Rifle` + `SM_Rifle_mag` + `SM_Rifle_bolt` and `DA_Rifle` (USOWeaponData with the data.js
-  numbers and the part pivots / muzzle / sight / foregrip from `gun_rifle.parts.json`), `/Game/Weapons/Arms/*`, and
-  `/Game/Characters/PlayerMale/SK_PlayerMaleArms` (the first-person arms: the body's own sleeves, gloves and shoulder
-  plates cut by `export_fbx.py --arms-only`, imported onto the body's skeleton). `SO_IMPORT_ONLY=arms,rifle,...`
-  re-imports just those steps (player, arms, stalker, weapons, fx, audio).
+  numbers and the part pivots / muzzle / sight / foregrip from `gun_rifle.parts.json`) and `/Game/Weapons/Arms/*`.
+  `SO_IMPORT_ONLY=player,weapons,...` re-imports just those steps (player, stalker, weapons, fx, audio).
+  Players (modular, both bodies): `export_fbx.py --per-item --finger-rig` writes the body (every skin region its own
+  `skin__<region>` section) and every wardrobe piece as its own skeletal FBX on one skeleton (with finger bones), plus
+  the first-person cut of each (`--arms-only`). They become `/Game/Characters/Player<Male|Female>/SK_Player<Sex>` (body,
+  clips as `Anims/A_Player<Sex>_*`, physics), `SK_Player<Sex>Arms`, `Wardrobe/SK_<Sex>_<slot>_<item>`,
+  `Arms/SK_<Sex>Arms_<slot>_<item>`, `Icons/T_Icon_<slot>_<item>` and `DA_Wardrobe` (USOWardrobeData: labels, the
+  regions each piece hides, locked underwear, armour ratings from data.js `armorStats`, defaults). Gun icons
+  (`tools/blender/icons.py`, Cycles renders of our models) land as `/Game/Weapons/<Gun>/T_Icon_<Gun>`.
   Stage 5: every gun of `Data/game_data.json` becomes `/Game/Weapons/<Gun>/DA_<Gun>` (stats, slot, projectile kind,
   sockets, rail, optics it takes) with `SM_<Gun>` + its reload parts (shared textures in `/Game/Weapons/Textures`), the
   optics `/Game/Weapons/Attach/SM_ATT_*` (eye points from `gun_attach.glb`), `/Game/Data/DA_LootTables` (rarities,
@@ -141,6 +145,8 @@ ticked by hand):
 | `Loot.Inventory` | new profile (starters + armoury, rifle in hand), possession equips, slot switching keeps each copy's ammo, NEW tags, lock / dismantle rules, equip swaps the gun, the 200 vault cap |
 | `Loot.PickupsAndReliquary` | loot cores become weapons of their rarity, ammo tops up the reserve, walking over pickups, the reliquary pays out once and reseals |
 | `Weapon.EveryArchetypeFiresAndReloads` | all 22 guns: both rigs build, one trigger pull = one shot with all its pellets / a full burst, an empty reload of each choreography ends with a full magazine |
+| `Wardrobe.Dresses` | both wardrobes import (body, arms, the Orion set with icons and armour, first-person cuts only where the arms reach); the player wears one follower mesh per slot, covered skin is hidden, the coat comes off, the female body swaps meshes and clips |
+| `Wardrobe.ArmorInventory` | a new profile owns and wears armour, the rating adds up, one piece per slot, taking off empties the slot, the female body gets her own pieces |
 | `Weapon.ReloadHandStaysOutsideTheGun` | through a whole empty reload the off hand never enters the receiver; on the rack it is palm-down on top and rides the charging handle |
 
 Screenshots for a visual check (needs a GPU; writes `Saved/Screenshots/SO_*.png`: first person hip, firing, impacts,
@@ -186,13 +192,19 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
   down the sights (1.35x zoom, 58 % move speed, tighter cone). Firing or aiming stops a sprint; after a sprint the
   rifle needs 0.2 s before it fires.
 - **Weapons:** 1 / 2 / 3 (or the mouse wheel, D-pad left / right) switch between the Primary, Special and Heavy
-  slots. A new profile starts with the browser build's starters (Ashen Oath auto rifle, Last Lantern hand cannon, Iron
-  Verdict rocket launcher) plus an armoury copy of every kinetic and horror gun; the assault rifle is in hand. Every
-  copy fires with its own numbers (rarity x1.0-1.3, power, rolls, perks) and wears its rolled optic (reflex, holo,
-  2x / 4x / 8x scopes; fully aimed through magnified glass the scope picture replaces the gun).
-- **Inventory:** I / Tab (View on the gamepad) opens it: the three slot columns, the details of the hovered / selected
-  copy against the one equipped, Equip (E), Lock (L), Dismantle (X twice, +alloy). NEW tags clear when you look.
-  Saved in `Saved/SaveGames/ShatteredOrbit.sav` (delete it for a fresh profile).
+  slots. A new profile starts with the browser build's starters (auto rifle, hand cannon, rocket launcher) plus an
+  armoury copy of every kinetic and horror gun; the assault rifle is in hand. Every gun has one name (data.js
+  `EXOTIC_NAMES`); copies differ by small stat rolls (a few percent) and by their perks, and wear their rolled optic
+  (reflex, holo, 2x / 4x / 8x scopes; fully aimed through magnified glass the scope picture replaces the gun). Both
+  hands grip the gun: the fingers close round the pistol grip (index on the trigger), the handguard, magazines and
+  rounds. The horror guns leave a poison pool for 5 s where they land.
+- **Loadout (inventory):** I / Tab (View on the gamepad). Weapons and the outer layers (coat, rig) on the left,
+  armour (head, chest, arms, legs, feet) on the right, the player in the middle as they stand (drag to turn; the
+  body button switches male / female). Click a slot: its grid of everything owned (icons in rarity colours, NEW and
+  locked marks) and the hovered item's details (stats against the equipped one, perks, armour). Equip / wear (E, or
+  click the selected item again), Lock (L), Dismantle (X twice, +alloy), Esc backs out. Armour pieces are the
+  players' wardrobe pieces (the Orion set from the owner's concept sheet is worn by default). Saved in
+  `Saved/SaveGames/ShatteredOrbit.sav` (delete it for a fresh profile).
 - **Loot:** kills pay credits and xp; 35 % leave ammo, 15 % a loot core glowing in its rarity colour (a light shaft
   from Rare up). Walk over it: the core becomes a rolled weapon around your power, announced in the feed on the right.
 - **Reliquary:** the gold box near the start. Interact (E / Y) when the prompt shows: 2-3 weapons from the VANTHOS
@@ -228,9 +240,9 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 | `SOCombat` | GAS: `USOAttributeSet` (health, shield, incoming damage), `USOAbilitySystemComponent` (shield regen), `USOGameplayEffect_Damage`, `USOCombatStatics` (damage, factions, death + noise events); `ASOCombatCharacter` (base for player and creatures), `USOWeaponData`, `ASOWeapon` (server-authoritative trigger / ammo / reload), `USOGunRigComponent` (posable gun, optics, finish / rarity tint; hand grips per anchor for the arm IK), `USOLootLibrary` + `USOLootTables` (rolls, stats, names, drops, reliquary pool), `USOInventoryComponent` (vault, slots, save), `ASOLootPickup`, `ASOReliquary`, `USOLootSubsystem` (kill drops), `ISOInteractable`, `SOReload` (reload.js keyframe port), `USOProjectileSubsystem` (rounds with drop on the SOBullet channel), `USOFxSubsystem` (instanced-card particles, decals, flash lights), `USOSoundLibrary` (named sounds, range presets) |
 | `SOAI` | `ASOEnemy` (stalker), `ASOEnemyAIController` (sight / hearing / chase / melee), `ASOEnemySpawner` |
 | `SOWorld` | `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`) |
-| `SOUI` | `ASOHUD` (canvas combat HUD, damage flash, hit sounds, weapon slots, loot feed, interact prompt, scope picture), `USOInventoryWidget` (the inventory screen, UMG built in C++), `USOActivatableWidget` (CommonUI base) |
+| `SOUI` | `ASOHUD` (canvas combat HUD, damage flash, hit sounds, weapon slots, loot feed, interact prompt, scope picture), `USOInventoryWidget` (the loadout screen, UMG built in C++, with `USOCharacterPreview`: a scene capture of the pawn), `USOActivatableWidget` (CommonUI base) |
 
-Assets come from Blender: `tools/blender/export_fbx.py -- in.glb out_dir [--single] [--split-parts] [--only=a,b] [--arms-only]`
+Assets come from Blender: `tools/blender/export_fbx.py -- in.glb out_dir [--single] [--split-parts] [--only=a,b] [--arms-only] [--per-item] [--finger-rig=male|female]`
 turns our GLBs into Unreal-ready FBX (units, Z up, no leaf bones, UCX_ collision, LOD groups, reload parts at their
 pivots, materials.json + the embedded images). `tools/blender/export_unreal.sh` runs it for everything the project
 uses.
@@ -242,10 +254,11 @@ uses.
   swapped for editor-authored assets later without touching gameplay code. No 2K/4K texture re-bakes yet.
 - Stalker ranged bolts are not in yet.
 - The stalker brain is C++; the StateTree version comes when the creature roster grows.
-- The hands are single bones (no finger bones in the shared rig), so the fingers keep their modelled relaxed curl
-  instead of closing round the grip. Looking far down in first person shows the cut shoulders of the arms mesh.
-- Grips: one firing-hand grip shape for every gun (the origin is always the top of the pistol grip) and a handgun
-  support grip; per-gun grip tuning (e.g. the rocket launcher's or the horror guns' odd shapes) is still to do.
+- Finger poses are presets per grip (trigger, wrap, pinch, flat), not traced against each gun's shape; the firing
+  hand uses one grip shape for every gun (the origin is always the top of the pistol grip). Looking far down in first
+  person shows the cut shoulders of the arms mesh.
+- The players are procedural (signed-distance sculpting in Blender): far better than before, still short of
+  hand-sculpted / scanned AAA faces. Armour has no perks or loot drops yet (every piece is owned from the start).
 - The brood launcher's swarm is an area of chewing damage (the Writhe mites themselves come with the enemies of stage
   7). Shells / casings ejected from the guns are not simulated yet (spent mags, speedloaders and husks drop).
 - The inventory profile is local (the listen-server host's save); clients get a fresh profile until the profile

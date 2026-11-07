@@ -26,6 +26,8 @@
 #include "SOLootActors.h"
 #include "SOGunRigComponent.h"
 #include "EngineUtils.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
 
 namespace SOInputPaths
 {
@@ -155,6 +157,212 @@ void ASOCharacter::PostInitializeComponents()
 {
 	LoadContent();
 	Super::PostInitializeComponents();
+	if (Outfit.Slots.Num() == 0)
+	{
+		// dressed in the wardrobe's defaults until an inventory says otherwise
+		if (const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Outfit.Body))
+		{
+			for (const TPair<FName, FName>& D : Wardrobe->Defaults)
+			{
+				Outfit.Set(D.Key, D.Value);
+			}
+		}
+	}
+	ApplyOutfit();
+}
+
+// --- Outfit ------------------------------------------------------------------------------------
+
+namespace
+{
+	/** Shows / hides the body's skin__<region> sections (export_fbx.py --per-item gives each region its own slot). */
+	void ShowRegions(USkeletalMeshComponent* Body, const TSet<FName>& Hidden)
+	{
+		USkeletalMesh* Mesh = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+		const FSkeletalMeshRenderData* Render = Mesh ? Mesh->GetResourceForRendering() : nullptr;
+		if (!Render)
+		{
+			return;
+		}
+		const TArray<FSkeletalMaterial>& Materials = Mesh->GetMaterials();
+		for (int32 Lod = 0; Lod < Render->LODRenderData.Num(); ++Lod)
+		{
+			const TArray<FSkelMeshRenderSection>& Sections = Render->LODRenderData[Lod].RenderSections;
+			const FSkeletalMeshLODInfo* Info = Mesh->GetLODInfo(Lod);
+			for (int32 Section = 0; Section < Sections.Num(); ++Section)
+			{
+				int32 Material = Sections[Section].MaterialIndex;
+				if (Info && Info->LODMaterialMap.IsValidIndex(Section) && Info->LODMaterialMap[Section] != INDEX_NONE)
+				{
+					Material = Info->LODMaterialMap[Section];
+				}
+				if (!Materials.IsValidIndex(Material))
+				{
+					continue;
+				}
+				const FString Slot = Materials[Material].MaterialSlotName.ToString();
+				if (Slot.StartsWith(TEXT("skin__")))
+				{
+					Body->ShowMaterialSection(Material, Section, !Hidden.Contains(FName(*Slot.RightChop(6))), Lod);
+				}
+			}
+		}
+	}
+}
+
+void ASOCharacter::SetOutfit(const FSOOutfit& NewOutfit)
+{
+	if (NewOutfit == Outfit && AppliedBody == NewOutfit.Body && WornThirdPerson.Num() > 0)
+	{
+		return;
+	}
+	Outfit = NewOutfit;
+	ApplyOutfit();
+}
+
+void ASOCharacter::OnRep_Outfit()
+{
+	ApplyOutfit();
+}
+
+void ASOCharacter::OutfitFromInventory()
+{
+	if (const USOInventoryComponent* Inventory = GetInventory(); Inventory && HasAuthority())
+	{
+		SetOutfit(Inventory->GetOutfit());
+	}
+}
+
+USkeletalMeshComponent* ASOCharacter::GetWornPiece(FName Slot, bool bFirstPerson) const
+{
+	const TObjectPtr<USkeletalMeshComponent>* Found = (bFirstPerson ? WornFirstPerson : WornThirdPerson).Find(Slot);
+	return Found ? Found->Get() : nullptr;
+}
+
+void ASOCharacter::ApplyOutfit()
+{
+	USOWardrobeData* Wardrobe = USOWardrobeData::Get(Outfit.Body);
+	if (!Wardrobe)
+	{
+		return;
+	}
+	// another body: its meshes and clips (both views)
+	if (AppliedBody != Outfit.Body)
+	{
+		AppliedBody = Outfit.Body;
+		BodyMesh = Wardrobe->BodyMesh;
+		ArmsMesh = Wardrobe->ArmsMesh;
+		if (!Wardrobe->ClipPathPrefix.IsEmpty())
+		{
+			ClipPathPrefix = Wardrobe->ClipPathPrefix;
+		}
+		USkeletalMesh* Body = BodyMesh.LoadSynchronous();
+		USkeletalMesh* Arms = ArmsMesh.LoadSynchronous();
+		if (Body && GetMesh()->GetSkeletalMeshAsset() != Body)
+		{
+			GetMesh()->SetSkeletalMesh(Body);
+			LoadBody(GetMesh());
+		}
+		if (Arms && FirstPersonArms->GetSkeletalMeshAsset() != Arms)
+		{
+			FirstPersonArms->SetSkeletalMesh(Arms);
+			LoadBody(FirstPersonArms);
+		}
+	}
+
+	// what shows: replaced slots and hair under a helmet go; locked underwear only while nothing covers it
+	TMap<FName, const FSOWardrobeItem*> Worn;
+	for (int32 i = 0; i < Outfit.Slots.Num(); ++i)
+	{
+		if (const FSOWardrobeItem* Item = Outfit.Items.IsValidIndex(i) ? Wardrobe->Find(Outfit.Slots[i], Outfit.Items[i]) : nullptr)
+		{
+			Worn.Add(Outfit.Slots[i], Item);
+		}
+	}
+	TSet<FName> Gone;
+	for (const TPair<FName, const FSOWardrobeItem*>& P : Worn)
+	{
+		Gone.Append(P.Value->Replaces);
+		if (P.Value->bHideHair)
+		{
+			Gone.Add(TEXT("hair"));
+		}
+	}
+	for (const TPair<FName, const FSOWardrobeItem*>& P : Worn)
+	{
+		for (const FName Cover : P.Value->CoveredBy)
+		{
+			if (P.Value->bLocked && Worn.Contains(Cover) && !Gone.Contains(Cover))
+			{
+				Gone.Add(P.Key);
+			}
+		}
+	}
+	HiddenRegions.Reset();
+	for (const TPair<FName, const FSOWardrobeItem*>& P : Worn)
+	{
+		if (!Gone.Contains(P.Key))
+		{
+			HiddenRegions.Append(P.Value->Hide);
+		}
+	}
+
+	auto Dress = [&](TMap<FName, TObjectPtr<USkeletalMeshComponent>>& Pieces, USkeletalMeshComponent* Leader, bool bFirstPerson)
+	{
+		TSet<FName> Keep;
+		for (const TPair<FName, const FSOWardrobeItem*>& P : Worn)
+		{
+			USkeletalMesh* Mesh = Gone.Contains(P.Key) ? nullptr : (bFirstPerson ? P.Value->ArmsMesh : P.Value->Mesh).LoadSynchronous();
+			if (!Mesh)
+			{
+				continue;
+			}
+			TObjectPtr<USkeletalMeshComponent>& Piece = Pieces.FindOrAdd(P.Key);
+			if (!Piece)
+			{
+				const FName Name = MakeUniqueObjectName(this, USkeletalMeshComponent::StaticClass(),
+					*FString::Printf(TEXT("%s_%s"), bFirstPerson ? TEXT("WornFP") : TEXT("Worn"), *P.Key.ToString()));
+				Piece = NewObject<USkeletalMeshComponent>(this, Name);
+				Piece->SetupAttachment(Leader);
+				Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Piece->SetGenerateOverlapEvents(false);
+				Piece->bUseBoundsFromLeaderPoseComponent = true;
+				if (bFirstPerson)
+				{
+					Piece->SetOnlyOwnerSee(true);
+					Piece->SetCastShadow(false);
+					Piece->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
+				}
+				else
+				{
+					Piece->SetCastHiddenShadow(true);
+				}
+				Piece->RegisterComponent();
+			}
+			if (Piece->GetSkeletalMeshAsset() != Mesh)
+			{
+				Piece->SetSkeletalMesh(Mesh);
+			}
+			Piece->SetLeaderPoseComponent(Leader);
+			Keep.Add(P.Key);
+		}
+		for (auto It = Pieces.CreateIterator(); It; ++It)
+		{
+			if (!Keep.Contains(It.Key()))
+			{
+				if (It.Value())
+				{
+					It.Value()->DestroyComponent();
+				}
+				It.RemoveCurrent();
+			}
+		}
+	};
+	Dress(WornThirdPerson, GetMesh(), false);
+	Dress(WornFirstPerson, FirstPersonArms, true);
+	ShowRegions(GetMesh(), HiddenRegions);
+	ShowRegions(FirstPersonArms, HiddenRegions);
+	ApplyViewMode();
 }
 
 void ASOCharacter::LoadContent()
@@ -878,10 +1086,17 @@ void ASOCharacter::BindInventory()
 		if (BoundInventory.IsValid())
 		{
 			BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
+		BoundInventory->OnOutfitChanged.Remove(OutfitHandle);
+		}
+		if (BoundInventory.IsValid())
+		{
+			BoundInventory->OnOutfitChanged.Remove(OutfitHandle);
 		}
 		BoundInventory = Inventory;
 		LoadoutHandle = Inventory->OnLoadoutChanged.AddUObject(this, &ASOCharacter::EquipFromInventory);
+		OutfitHandle = Inventory->OnOutfitChanged.AddUObject(this, &ASOCharacter::OutfitFromInventory);
 		EquipFromInventory();
+		OutfitFromInventory();
 	}
 }
 
@@ -891,6 +1106,7 @@ void ASOCharacter::UnPossessed()
 	if (BoundInventory.IsValid())
 	{
 		BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
+		BoundInventory->OnOutfitChanged.Remove(OutfitHandle);
 	}
 	BoundInventory = nullptr;
 	Super::UnPossessed();
@@ -901,6 +1117,7 @@ void ASOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (BoundInventory.IsValid())
 	{
 		BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
+		BoundInventory->OnOutfitChanged.Remove(OutfitHandle);
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -985,6 +1202,7 @@ void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(ASOCharacter, ViewMode, COND_SkipOwner);
+	DOREPLIFETIME(ASOCharacter, Outfit);
 }
 
 void ASOCharacter::ToggleViewMode()
@@ -1000,6 +1218,13 @@ void ASOCharacter::ApplyViewMode()
 	FirstPersonArms->SetVisibility(bFirst, true);
 	FirstPersonArms->SetComponentTickEnabled(bFirst);
 	GetMesh()->SetOwnerNoSee(bFirst);
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& Piece : WornThirdPerson)
+	{
+		if (Piece.Value)
+		{
+			Piece.Value->SetOwnerNoSee(bFirst);
+		}
+	}
 	if (Weapon)
 	{
 		Weapon->SetFirstPersonView(bFirst);

@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "GameFramework/SaveGame.h"
 #include "SOLootTypes.h"
+#include "SOWardrobe.h"
 #include "SOInventoryComponent.generated.h"
 
 /** What a player owns, on disk (state.js save: inventory, equipped, credits, alloy, xp, level). */
@@ -36,6 +37,13 @@ public:
 
 	UPROPERTY(SaveGame)
 	int32 Level = 1;
+
+	/** Version 2: armour pieces and the body. */
+	UPROPERTY(SaveGame)
+	TArray<FSOArmorInstance> Armor;
+
+	UPROPERTY(SaveGame)
+	FName Body = TEXT("male");
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -72,6 +80,24 @@ public:
 	int32 GetLevel() const { return Level; }
 	/** main.js power(): average power of the equipped copies. */
 	int32 GetPower() const;
+
+	// --- Armour (wardrobe pieces of the body; see USOWardrobeData) ---
+	const TArray<FSOArmorInstance>& GetArmor() const { return Armor; }
+	const FSOArmorInstance* FindArmor(const FString& Uid) const;
+	/** The armour piece worn in a slot (head, top, vest, outer, hands, legs, feet), null if none. */
+	const FSOArmorInstance* GetEquippedArmor(FName Slot) const;
+	/** Total armour rating of what is worn. */
+	int32 GetArmorRating() const;
+	FName GetBody() const { return Body; }
+	/** Body + every slot: the wardrobe's defaults (hair, underwear) with the worn armour on top. */
+	FSOOutfit GetOutfit() const;
+
+	/** Wears (or, if it is worn, takes off) an armour piece (server). */
+	bool EquipArmor(const FString& Uid);
+	/** Switches the body (male / female): the pieces that body has are owned for it too (server). */
+	bool SetBody(FName NewBody);
+	/** Owns one of every armour piece of the body's wardrobe (missing ones only) and wears its defaults. */
+	void GrantWardrobe(bool bWearDefaults);
 
 	// --- Server ---
 	/** Adds a copy (unique uid, NEW tag); equips it if its slot is empty; keeps the vault under the cap. */
@@ -116,12 +142,20 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerMarkSeen(const FString& Uid);
 
+	UFUNCTION(Server, Reliable)
+	void ServerEquipArmor(const FString& Uid);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetBody(FName NewBody);
+
 	/** Anything changed (all machines). */
 	FSOOnInventoryChanged OnChanged;
 	/** A line for the loot feed (pickups, dismantles) on the machine that owns the inventory. */
 	FSOOnLootFeed OnFeed;
 	/** The equipped copy in the active slot changed: the pawn re-equips (server). */
 	FSOOnInventoryChanged OnLoadoutChanged;
+	/** The worn armour or the body changed: the pawn re-dresses (server). */
+	FSOOnInventoryChanged OnOutfitChanged;
 
 	//~ UActorComponent
 	virtual void BeginPlay() override;
@@ -134,7 +168,7 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void ClientFeed(const FString& Text, FLinearColor Color);
 
-	void Changed(bool bLoadout);
+	void Changed(bool bLoadout, bool bOutfit = false);
 	void Feed(const FString& Text, const FLinearColor& Color);
 	FString UniqueUid(FString Uid) const;
 	int32 SlotOf(const FSOWeaponInstance& Weapon) const;
@@ -159,6 +193,12 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	int32 Level = 1;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FSOArmorInstance> Armor;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	FName Body = TEXT("male");
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

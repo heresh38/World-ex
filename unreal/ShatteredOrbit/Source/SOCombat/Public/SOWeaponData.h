@@ -6,6 +6,7 @@
 #include "SOWeaponData.generated.h"
 
 class UStaticMesh;
+class UTexture2D;
 
 /** What leaves the muzzle (data.js: kinetic rounds with drop, energy bolts, rockets, horror goo). */
 UENUM(BlueprintType)
@@ -168,6 +169,10 @@ public:
 	// --- Visuals (mesh space: cm, gun faces +Y) ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	TSoftObjectPtr<UStaticMesh> BodyMesh;
+
+	/** Inventory icon: the gun rendered side-on from our model (tools/blender/icons.py). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	TSoftObjectPtr<UTexture2D> Icon;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	TArray<FSOWeaponPart> Parts;

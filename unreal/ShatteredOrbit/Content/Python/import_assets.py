@@ -48,7 +48,8 @@ def ensure_dir(path):
 
 
 def base_slot(name):
-    return re.sub(r"[._]\d{3}$", "", str(name))
+    name = re.sub(r"[._]\d{3}$", "", str(name))
+    return "skin" if name.startswith("skin__") else name     # per-region body sections share the skin material
 
 
 # ---------------------------------------------------------------- default textures (ours)
@@ -429,10 +430,180 @@ def stalker_extra(key, m):
     return None
 
 
+HAIR_TONE = (0.035, 0.024, 0.018)     # dark brown (the concept pair); the game may recolour it later
+
+
 def player_extra(key, m):
     if key == "skin":
         return {"tint": list(SKIN_TONE)}
+    if key in ("hair", "hair__cap", "brow"):
+        return {"tint": list(HAIR_TONE)}
     return None
+
+
+# ---------------------------------------------------------------- modular players (wardrobe pieces)
+
+ARMOR_SLOT = {"head": 10, "top": 4, "vest": 20, "outer": 14, "dress": 4, "hands": 6, "legs": 10, "feet": 6}
+HEAVY = re.compile(r"plate|armou?r|guard|helmet|vest|harness|pauldron|greave|gauntlet|tactical|carrier|kevlar|combat", re.I)
+ICONS = os.path.join(SOURCE, "Icons")
+
+
+def import_ui_texture(file_path, dest, name):
+    tex = import_texture(file_path, dest, name, "color")
+    tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
+    tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
+    tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+    tex.set_editor_property("never_stream", True)
+    return tex
+
+
+def import_piece(fbx, dest, name, skeleton):
+    """A wardrobe piece: skeletal mesh on an existing skeleton, no clips, no physics."""
+    ui = unreal.FbxImportUI()
+    ui.set_editor_property("import_mesh", True)
+    ui.set_editor_property("import_textures", False)
+    ui.set_editor_property("import_materials", False)
+    ui.set_editor_property("import_as_skeletal", True)
+    ui.set_editor_property("automated_import_should_detect_type", False)
+    ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    ui.set_editor_property("skeleton", skeleton)
+    ui.set_editor_property("import_animations", False)
+    ui.set_editor_property("create_physics_asset", False)
+    sk = ui.get_editor_property("skeletal_mesh_import_data")
+    sk.set_editor_property("convert_scene_unit", False)
+    sk.set_editor_property("import_morph_targets", False)
+    sk.set_editor_property("normal_import_method", unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS_AND_TANGENTS)
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", fbx)
+    task.set_editor_property("destination_path", dest)
+    task.set_editor_property("destination_name", name)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", False)
+    task.set_editor_property("options", ui)
+    tools.import_asset_tasks([task])
+    for p in task.get_editor_property("imported_object_paths"):
+        a = unreal.load_asset(p)
+        if isinstance(a, unreal.SkeletalMesh):
+            return a
+    raise RuntimeError(f"wardrobe piece import failed: {fbx}")
+
+
+def player_wardrobe(sex, master):
+    """export_fbx.py --per-item output of player_<sex>.glb (body + every piece, and their first-person cuts) ->
+    SK_Player<Sex> (body, clips, physics), SK_Player<Sex>Arms, Wardrobe/SK_<Sex>_<slot>_<item>,
+    Arms/SK_<Sex>Arms_<slot>_<item>, Icons/T_Icon_<slot>_<item> and DA_Wardrobe (USOWardrobeData)."""
+    Sex = sex.capitalize()
+    src = os.path.join(SOURCE, "Characters", f"Player{Sex}")
+    arms_src = os.path.join(SOURCE, "Characters", f"Player{Sex}Arms")
+    dest = f"/Game/Characters/Player{Sex}"
+    if not os.path.isdir(src):
+        log(f"Player{Sex}: skipped ({src} missing, run export_unreal.sh)")
+        return None
+    manifest = load_json(os.path.join(src, "export_fbx.json"))
+    if not manifest.get("per_item"):
+        log(f"Player{Sex}: {src} is not a --per-item export, skipped")
+        return None
+    materials = load_json(os.path.join(src, "materials.json"))
+    meta = load_json(os.path.join(src, "wardrobe.json"))
+    # start clean: a re-import over an older mesh keeps its material slots (the per-region skin sections would fold
+    # into them) and the pieces must bind to the new skeleton
+    if eal.does_directory_exist(dest):
+        eal.delete_directory(dest)
+    ensure_dir(dest)
+    used = {base_slot(n) for a in manifest["assets"] for n in a["materials"]}
+    tex = import_textures_for(src, materials, dest + "/Textures", used)
+    instances = {}
+    for key in used:
+        m = materials.get(key) or {}
+        instances[key] = make_instance(master, dest, key, m, tex, player_extra(key, m))
+
+    # the body: skeleton, physics and clips
+    body_entry = next(a for a in manifest["assets"] if a["name"] == "Body")
+    objs = import_fbx(os.path.join(src, body_entry["file"]), dest, f"SK_Player{Sex}", True)
+    body = next(o for o in objs if isinstance(o, unreal.SkeletalMesh))
+    assign_materials(body, instances)
+    skeleton = body.get_editor_property("skeleton")
+    ensure_dir(dest + "/Anims")
+    actions = sorted(body_entry.get("actions", []), key=len, reverse=True)
+    for path in eal.list_assets(dest, recursive=False, include_folder=False):
+        obj = eal.load_asset(path)
+        if not isinstance(obj, unreal.AnimSequence):
+            continue
+        clip = next((a for a in actions if obj.get_name().endswith(a)), None)
+        if not clip:
+            continue
+        target = f"{dest}/Anims/A_Player{Sex}_{clip}"
+        if eal.does_asset_exist(target):
+            eal.delete_asset(target)
+        if eal.rename_asset(path, target):
+            fix_clip_units(eal.load_asset(target))
+
+    # every piece, and the first-person cuts
+    ensure_dir(dest + "/Wardrobe"); ensure_dir(dest + "/Arms"); ensure_dir(dest + "/Icons")
+    pieces = {}
+    for a in manifest["assets"]:
+        if a["name"] == "Body":
+            continue
+        mesh = import_piece(os.path.join(src, a["file"]), dest + "/Wardrobe", f"SK_{Sex}_{a['slot']}_{a['item']}", skeleton)
+        assign_materials(mesh, instances)
+        pieces[(a["slot"], a["item"])] = {"mesh": mesh}
+    arms_body = None
+    if os.path.isdir(arms_src):
+        arms_manifest = load_json(os.path.join(arms_src, "export_fbx.json"))
+        for a in arms_manifest["assets"]:
+            if a["name"] == "Body":
+                arms_body = import_piece(os.path.join(arms_src, a["file"]), dest, f"SK_Player{Sex}Arms", skeleton)
+                assign_materials(arms_body, instances)
+            elif (a["slot"], a["item"]) in pieces:
+                mesh = import_piece(os.path.join(arms_src, a["file"]), dest + "/Arms", f"SK_{Sex}Arms_{a['slot']}_{a['item']}", skeleton)
+                assign_materials(mesh, instances)
+                pieces[(a["slot"], a["item"])]["arms"] = mesh
+
+    # the data asset
+    path = f"{dest}/DA_Wardrobe"
+    if eal.does_asset_exist(path):
+        data = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SOWardrobeData)
+        data = tools.create_asset("DA_Wardrobe", dest, unreal.SOWardrobeData, factory)
+    items = []
+    wardrobe = meta.get("wardrobe", {})
+    for (slot, item), got in sorted(pieces.items()):
+        info = wardrobe.get(slot, {}).get(item, {})
+        label = info.get("label", item)
+        armour = slot in ARMOR_SLOT and not info.get("locked")
+        w = unreal.SOWardrobeItem()
+        w.set_editor_property("slot", slot)
+        w.set_editor_property("item", item)
+        w.set_editor_property("label", unreal.Text(label))
+        w.set_editor_property("hide", [unreal.Name(r) for r in info.get("hide", [])])
+        w.set_editor_property("covered_by", [unreal.Name(r) for r in info.get("coveredBy", [])])
+        w.set_editor_property("replaces", [unreal.Name(r) for r in info.get("replaces", [])])
+        w.set_editor_property("locked", bool(info.get("locked")))
+        w.set_editor_property("hide_hair", bool(info.get("hideHair")))
+        w.set_editor_property("armour", armour)
+        heavy = bool(HEAVY.search(item + " " + label))
+        w.set_editor_property("armor", int(round(ARMOR_SLOT.get(slot, 0) * (1.7 if heavy else 1.0))) if armour else 0)
+        w.set_editor_property("mesh", got["mesh"])
+        if "arms" in got:
+            w.set_editor_property("arms_mesh", got["arms"])
+        icon = os.path.join(ICONS, "armour", f"icon_{sex}_{slot}_{item}.png")
+        if armour and os.path.exists(icon):
+            w.set_editor_property("icon", import_ui_texture(icon, dest + "/Icons", f"T_Icon_{slot}_{item}"))
+        items.append(w)
+    data.set_editor_property("body", sex)
+    data.set_editor_property("body_mesh", body)
+    if arms_body:
+        data.set_editor_property("arms_mesh", arms_body)
+    data.set_editor_property("clip_path_prefix", f"{dest}/Anims/A_Player{Sex}_")
+    data.set_editor_property("items", items)
+    data.set_editor_property("defaults", {unreal.Name(k): unreal.Name(v) for k, v in meta.get("defaults", {}).items()})
+    eal.save_loaded_asset(data, only_if_is_dirty=False)
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"Player{Sex}: body + {len(pieces)} pieces ({sum(1 for p in pieces.values() if 'arms' in p)} first-person cuts)")
+    return data
 
 
 # ---------------------------------------------------------------- weapons + loot (stage 5)
@@ -558,6 +729,9 @@ def weapon(master, arch, a, clear):
     data.set_editor_property("built_in_scope", "scope" in sockets)
     if "rail" in sockets:
         data.set_editor_property("rail_location", unreal.Vector(*sockets["rail"]["loc"]))
+    icon = os.path.join(ICONS, "guns", f"icon_{a['model']}.png")
+    if os.path.exists(icon):
+        data.set_editor_property("icon", import_ui_texture(icon, dest, f"T_Icon_{folder}"))
     if arch == "rifle":
         arms = rifle_arms(master)
         data.set_editor_property("arm_left_mesh", arms["Left"])
@@ -803,6 +977,30 @@ def fx_master():
     log("effect materials ready")
 
 
+def ui_materials():
+    """/Game/UI/M_UI_Stage: the loadout screen's live character picture. The scene capture stores inverse opacity in
+    alpha (1 where it drew nothing), so the material shows the colour with opacity = 1 - alpha."""
+    ensure_dir("/Game/UI")
+    path = "/Game/UI/M_UI_Stage"
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_UI_Stage", "/Game/UI", unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_UI)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    tex = mel.create_material_expression(mat, unreal.MaterialExpressionTextureSampleParameter2D, -500, 0)
+    tex.set_editor_property("parameter_name", "Stage")
+    tex.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    inv = mel.create_material_expression(mat, unreal.MaterialExpressionOneMinus, -200, 150)
+    mel.connect_material_expressions(tex, "A", inv, "")
+    mel.connect_material_property(tex, "RGB", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.connect_material_property(inv, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    log("UI materials ready")
+
+
 def decal_material():
     path = "/Game/FX/M_SOBulletHole"
     if eal.does_asset_exist(path):
@@ -870,10 +1068,8 @@ def main():
     only = {s.strip() for s in os.environ.get("SO_IMPORT_ONLY", "").split(",") if s.strip()}
     want = lambda step: not only or step in only
     if want("player"):
-        character(os.path.join(SOURCE, "Characters", "PlayerMale"), "/Game/Characters/PlayerMale", "SK_PlayerMale", "A_PlayerMale_",
-                  master, player_extra)
-    if want("player") or want("arms"):
-        player_arms(master)
+        for sex in ("male", "female"):
+            player_wardrobe(sex, master)
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
                   master, stalker_extra, flesh=True)
@@ -885,6 +1081,8 @@ def main():
         fx_meshes()
     if want("audio"):
         audio()
+    if want("ui"):
+        ui_materials()
     log("done")
 
 

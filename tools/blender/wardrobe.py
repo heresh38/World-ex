@@ -715,6 +715,361 @@ class Kit:
         self.add('head', 'cap', 'Peaked cap', [cp])
 
     # ====================================================================== underwear (always worn)
+    # ====================================================================== Orion outfits (the owner's concept pair)
+    def piece(self, name, comps, lo, hi, mats, **kw):
+        """A garment made of named components: comps = [(fn(P, c) -> distance, material index)]. c is shared per
+        evaluation (body parts, body distance f, arm parameter s, z, |x|, neck radius nr), so every component costs
+        only its own shape; each face takes the material of the component it lies on."""
+        F = self.F
+
+        def ctx(P):
+            p = self.parts(P)
+            s_, lw_ = self.arm_s(P)
+            return dict(p=p, f=F(P), s=s_, lw=lw_, z=P[:, 2], ax=np.abs(P[:, 0]),
+                        nr=np.sqrt(P[:, 0] ** 2 + (P[:, 1] - .004) ** 2))
+
+        def fn(P):
+            c = ctx(P)
+            return np.minimum.reduce([g(P, c) for g, _ in comps])
+
+        def mat(C):
+            c = ctx(C)
+            D = np.stack([g(C, c) for g, _ in comps])
+            return np.array([i for _, i in comps])[D.argmin(0)]
+        return self.build(name, fn, lo, hi, mats, mat, **kw)
+
+    def orion(self, M):
+        """The owner's concept pair (art/reference/orion_pair.jpg): tactical-futuristic black, storm grey and white with
+        cyan light. Male: quilted jacket with a harness and shoulder plates + neck gaiter, long storm-grey coat with a
+        hooded funnel collar and blue lining, fingerless gloves with knuckle plates and lit bracers, black cargo
+        trousers with knee armour and a belt, heavy plated boots. Female: black bodice with a lit V, cropped white shell
+        jacket with a stand collar, the same gloves, black leggings with grey plates and a holster belt, tall plated
+        boots. One item per slot, so every piece can be swapped for loot."""
+        B, F = self.B, self.F
+        m = self.m
+        z = B.z; ho = B.head_o; H = B.head; s = H.s
+        zcol = float(ho[2] - .105 * s - .016)
+        le = float(np.linalg.norm(B.elbow - B.shoulder)); lw = le + float(np.linalg.norm(B.wrist - B.elbow))
+        hip = float(B.hip[2]); kn = B.knee; an = B.ankle; zsh = B.zsh; sx = B.sx
+
+        def T(name, base, col='#ffffff', metal=0.0, rough=.7):
+            return bl.mat(name, col, metal, rough, image=base + '_c.jpg', normal=base + '_n.jpg')
+        glow = bl.mat('glow__orion', '#1ad8ff', 0, .35, emit='#1ad8ff', strength=5)
+        leather = lambda slot: T('trim_%s__orion' % slot, 'or_leather', '#ffffff', 0, .5)
+        plate = lambda slot, col='#ffffff': T('armor_primary__%s__orion' % slot, 'or_plate', col, .75, .38)
+
+        def dom(c, keep):
+            p = c['p']
+            a = np.min(np.stack([p[k] for k in keep]), 0)
+            b = np.min(np.stack([p[k] for k in p if k not in keep]), 0)
+            return a - b
+
+        def seg2(x, y, a, b):
+            """Distance in a plane from (x, y) to the segment a-b."""
+            ax_, ay_ = b[0] - a[0], b[1] - a[1]
+            t = np.clip(((x - a[0]) * ax_ + (y - a[1]) * ay_) / (ax_ * ax_ + ay_ * ay_), 0, 1)
+            return np.sqrt((x - a[0] - t * ax_) ** 2 + (y - a[1] - t * ay_) ** 2)
+
+        def arms(c):
+            return dom(c, ['armL', 'armR'])
+
+        def hand_x(c):
+            """x of the hand's centre line at the arm parameter (to tell the back of the hand from the palm)."""
+            t = np.clip((c['s'] - lw) / .2, 0, 1)
+            return B.wrist[0] + (B.tip[0] - B.wrist[0]) * t
+
+        UP = (-.36, -.22, hip - .08); UPH = (.36, .22, zcol + .06)
+
+        # ------------------------------------------------------------ hands: fingerless gloves + lit bracers (both)
+        def glove(P, c):
+            reg = np.maximum(arms(c), np.maximum((lw - .012) - c['s'], c['s'] - (lw + .128)))
+            return np.maximum(c['f'] - .0022, reg)
+
+        def knuckles(P, c):
+            back = hand_x(c) + .006 - c['ax']                   # negative on the back of the hand
+            return np.maximum.reduce([c['f'] - .0068, arms(c), np.abs(c['s'] - (lw + .102)) - .013, back])
+
+        def bracer(P, c):
+            return np.maximum(c['f'] - .0105, np.maximum(arms(c), np.maximum((lw - .1) - c['s'], c['s'] - (lw - .004))))
+
+        def screen(P, c):
+            back = (hand_x(c) - .004) - c['ax']
+            return np.maximum.reduce([c['f'] - .0122, arms(c), np.abs(c['s'] - (lw - .05)) - .016, back,
+                                      np.abs(P[:, 1] - (B.wrist[1] - .002)) - .012])
+        lo = (-B.tip[0] - .08, -.13, B.tip[2] - .04); hi = (B.tip[0] + .08, .13, B.wrist[2] + .14)
+        gl = self.piece('orion_gloves', [(glove, 0), (knuckles, 1), (bracer, 1), (screen, 2)], lo, hi,
+                        [T('cloth_hands__orion', 'or_leather', '#ffffff', 0, .5), plate('hands', '#4a5058'), glow],
+                        target=10000, uv=.07, h=self.res * .6, cover=('armL', 'armR'), hands=True)
+        self.add('hands', 'orion', 'Orion fingerless gloves', [gl])
+
+        # ------------------------------------------------------------ feet: plated boots (both; the female pair taller)
+        top_z = .29 if m else .33
+        heel = 0.0 if m else .012
+
+        def boot(P, c):
+            legs = dom(c, ['legL', 'legR'])
+            up = np.maximum(c['f'] - .0085, np.maximum(legs, c['z'] - top_z))
+            return up
+
+        def sole(P, c):
+            legs = dom(c, ['legL', 'legR'])
+            back = P[:, 1] - (an[1] - .02)                      # heel half (+y)
+            th = .016 + heel * np.clip(back / .04 + 1, 0, 1)
+            return np.maximum(c['f'] - th, np.maximum(legs, c['z'] - (.024 + heel)))
+
+        def toe(P, c):
+            legs = dom(c, ['legL', 'legR'])
+            return np.maximum.reduce([c['f'] - .013, legs, P[:, 1] - (an[1] - .12), c['z'] - .075, .028 - c['z']])
+
+        def shin_guard(P, c):
+            legs = dom(c, ['legL', 'legR'])
+            front = P[:, 1] - (an[1] - .035)
+            return np.maximum.reduce([c['f'] - .0135, legs, front, c['z'] - (top_z - .015), (an[2] + .03) - c['z']])
+
+        def heelcap(P, c):
+            legs = dom(c, ['legL', 'legR'])
+            return np.maximum.reduce([c['f'] - .0125, legs, (an[1] + .035) - P[:, 1], c['z'] - .11, .03 - c['z']])
+
+        def straps(P, c):
+            legs = dom(c, ['legL', 'legR'])
+            return np.maximum.reduce([c['f'] - .011, legs, np.minimum(np.abs(c['z'] - .16) - .009, np.abs(c['z'] - (top_z - .05)) - .009),
+                                      c['z'] - top_z])
+        A = an
+        lo = (-A[0] - .1, A[1] - .3, -.02); hi = (A[0] + .1, A[1] + .1, top_z + .02)
+        bt = self.piece('orion_boots', [(boot, 0), (sole, 1), (toe, 2), (shin_guard, 2), (heelcap, 2), (straps, 0)], lo, hi,
+                        [T('cloth_feet__orion', 'or_leather', '#ffffff', 0, .45), T('trim_feet__orion', 'or_sole', '#ffffff', 0, .9),
+                         plate('feet')], target=11000, uv=.09, cover=('legL', 'legR'))
+        self.add('feet', 'orion', 'Orion plated boots', [bt], hide=['foot'])
+
+        if m:
+            self._orion_male(T, glow, leather, plate, dom, seg2, arms, UP, UPH, zcol, le, lw, hip, kn, an, zsh, sx)
+        else:
+            self._orion_female(T, glow, leather, plate, dom, seg2, arms, UP, UPH, zcol, le, lw, hip, kn, an, zsh, sx)
+
+    def _orion_male(self, T, glow, leather, plate, dom, seg2, arms, UP, UPH, zcol, le, lw, hip, kn, an, zsh, sx):
+        B, F = self.B, self.F
+        z = B.z
+        zc = z['chest']
+
+        # ------------------------------------------------------------ top: quilted jacket, harness, shoulder plates, gaiter
+        def jacket(P, c):
+            reg = np.maximum(dom(c, ['torso', 'armL', 'armR']), np.maximum((hip - .03) - c['z'], c['z'] - zcol))
+            reg = np.maximum(reg, np.where(arms(c) < 0, c['s'] - (lw - .04), -1))      # sleeves end under the bracers
+            reg = np.maximum(reg, .066 - c['nr'])
+            return np.maximum(c['f'] - .0075, reg)
+
+        def harness(P, c):
+            tor = dom(c, ['torso'])
+            x, zz = P[:, 0], c['z']
+            d = np.minimum(seg2(x, zz, (.12, zsh - .02), (-.11, zc - .14)), seg2(x, zz, (-.12, zsh - .02), (.11, zc - .14)))
+            band = np.maximum(d - .013, P[:, 1] + .01)
+            belt = np.abs(zz - (zc - .16)) - .014                  # strap round the ribs
+            return np.maximum(c['f'] - .0125, np.maximum(tor, np.minimum(band, belt)))
+
+        def pauldrons(P, c):
+            near = np.where(arms(c) < .02, -1, arms(c) - .02)
+            a = np.maximum(c['f'] - .013, np.maximum.reduce([c['s'] - .12, (zsh - .16) - c['z'], near]))
+            b = np.maximum(c['f'] - .017, np.maximum.reduce([c['s'] - .075, (zsh - .1) - c['z'], near]))
+            return np.minimum(a, b)
+
+        def lights(P, c):
+            near = np.where(arms(c) < .02, -1, arms(c) - .02)
+            return np.maximum.reduce([c['f'] - .0185, np.abs(c['s'] - .05) - .008, P[:, 1] + .02, (zsh - .1) - c['z'], near])
+
+        def gaiter(P, c):
+            r = .064 + .006 * np.clip((c['z'] - z['neck']) / .05, -1, 1)
+            return np.maximum(np.abs(c['nr'] - r) - .0125, np.maximum((z['neck'] - .035) - c['z'], c['z'] - (zcol + .004)))
+        jk = self.piece('orion_jacket', [(jacket, 0), (harness, 1), (pauldrons, 2), (lights, 3), (gaiter, 4)], UP, UPH,
+                        [T('cloth_top__orion', 'or_quilt', '#ffffff', 0, .55), leather('top'), plate('top'), glow,
+                         T('armor_secondary__top__orion', 'or_knit', '#ffffff', 0, .9)],
+                        target=14000, uv=.14, cover=('torso', 'armL', 'armR'))
+        self.add('top', 'orion', 'Orion quilted jacket', [jk], hide=['chest', 'midriff', 'upperarm', 'forearm', 'neck'])
+
+        # ------------------------------------------------------------ outer: long storm-grey coat
+        hem = an[2] + .3
+        loft = self.skirt_loft(hem - .02, hip + .12, [.215, .205, .196, .178, .158], [.16, .152, .143, .126, .108],
+                               [.17, .164, .156, .128, .102])
+
+        def opening(P, c):
+            """Negative in the open front: narrow at the chest, widening towards the hem."""
+            w = .05 + np.clip((zc - c['z']) / (zc - hem), 0, 1) * .11
+            return np.where(P[:, 1] < -.01, w - c['ax'], -1.0)
+
+        def coat_up(P, c):
+            off = .0145 + .0065 * smoothstep(zsh - .15, zsh - .04, c['z'])
+            reg = np.maximum(dom(c, ['torso', 'armL', 'armR']), np.maximum((hip + .05) - c['z'], c['z'] - (zsh + .08)))
+            reg = np.maximum(reg, np.where(arms(c) < 0, c['s'] - (le + .1), -1))       # sleeves pushed up below the elbow
+            reg = np.maximum(reg, .074 - c['nr'])
+            return np.maximum(np.maximum(c['f'] - off, reg), opening(P, c))
+
+        def cuffs(P, c):
+            return np.maximum.reduce([c['f'] - .019, arms(c), np.abs(c['s'] - (le + .085)) - .02])
+
+        def skirt(P, c):
+            sk = np.abs(loft(P)) - .0045
+            sk = np.maximum(sk, np.maximum(hem - c['z'], c['z'] - (hip + .14)))
+            sk = np.maximum(sk, opening(P, c))
+            vent = np.maximum(np.abs(P[:, 0]) - .012, np.maximum(c['z'] - (hip - .25), P[:, 1] * -1 + .05))   # back vent
+            return np.maximum(sk, -vent)
+
+        def edges(P, c):
+            """The blue lining shows along the open front and the hem."""
+            sk = np.minimum(coat_up(P, c), skirt(P, c))
+            w = .05 + np.clip((zc - c['z']) / (zc - hem), 0, 1) * .11
+            near_front = np.where(P[:, 1] < -.01, np.abs(c['ax'] - w) - .014, 1.0)
+            near_hem = np.abs(c['z'] - hem) - .02
+            return np.where(np.minimum(near_front, near_hem) < 0, sk - .0003, 1.0)
+
+        def collar(P, c):
+            r = .082 + (c['z'] - z['neck']) * .3
+            d = np.maximum(np.abs(c['nr'] - r) - .006, np.maximum((z['neck'] - .03) - c['z'], c['z'] - (zcol + .05)))
+            return np.maximum(d, np.where(P[:, 1] < -.03, .03 - c['ax'], -1.0))
+
+        def hood(P, c):
+            d = sdf.torus(P, (0, .045, z['neck'] + .015), .085, .026, sdf.rot((1, 0, 0), -.35))
+            return np.maximum(d, -.01 - P[:, 1])
+
+        def coat_tabs(P, c):
+            return np.maximum.reduce([np.abs(c['nr'] - (.082 + (c['z'] - z['neck']) * .3)) - .0075,
+                                      np.abs(c['z'] - (zcol + .02)) - .008, np.abs(c['ax'] - .05) - .008, P[:, 1] + .04])
+        lo = (-.42, -.25, hem - .04); hi = (.42, .26, zcol + .08)
+        def coat_w(V):
+            """Sleeves and body follow the torso and arms; below the hip the tails blend to the hips and thighs."""
+            up = self.xfer(('torso', 'armL', 'armR'))(V)
+            low = self.skirt_w(V)
+            t = smoothstep(hip - .06, hip + .08, V[:, 2])
+            return {b: up.get(b, 0) * t + low.get(b, 0) * (1 - t) for b in set(up) | set(low)}
+        ct = self.piece('orion_coat', [(coat_up, 0), (cuffs, 0), (skirt, 0), (edges, 1), (collar, 0), (hood, 0), (coat_tabs, 2)], lo, hi,
+                        [T('cloth_outer__orion', 'or_coat', '#ffffff', 0, .8), T('trim_outer__orion', 'or_lining', '#ffffff', 0, .35), glow],
+                        target=16000, uv=.3, weights=coat_w)
+        self.add('outer', 'orion', 'Orion storm coat', [ct], hide=['upperarm'])
+
+        # ------------------------------------------------------------ legs: cargo trousers, knee armour, belt
+        waist = hip + .04
+
+        def pants(P, c):
+            reg = np.maximum(dom(c, ['torso', 'legL', 'legR']), np.maximum(c['z'] - waist, (an[2] + .1) - c['z']))
+            return np.maximum(c['f'] - .0062, reg)
+
+        def knee(P, c):
+            Q = P.copy(); Q[:, 0] = np.abs(Q[:, 0])
+            k = np.maximum(c['f'] - .021, ellipsoid(Q, kn + np.array([0, -.05, .0]), (.055, .05, .075)))
+            t = np.maximum(c['f'] - .016, ellipsoid(Q, kn + np.array([.006, -.045, .105]), (.05, .045, .04)))
+            return np.minimum(k, t)
+
+        def thigh_straps(P, c):
+            zt = (B.hip[2] + kn[2]) / 2 + .03
+            return np.maximum.reduce([c['f'] - .0105, dom(c, ['legL', 'legR']), np.minimum(np.abs(c['z'] - zt) - .011, np.abs(c['z'] - (zt - .09)) - .009)])
+
+        def belt(P, c):
+            return np.maximum.reduce([c['f'] - .012, dom(c, ['torso']), np.abs(c['z'] - (hip + .025)) - .022])
+
+        def pouches(P, c):
+            return np.maximum.reduce([c['f'] - .036, dom(c, ['torso', 'legL', 'legR']), np.abs(c['ax'] - .135) - .032,
+                                      np.abs(c['z'] - (hip - .005)) - .036, P[:, 1] + .02])
+
+        def buckle(P, c):
+            return np.maximum.reduce([c['f'] - .019, c['ax'] - .03, np.abs(c['z'] - (hip + .025)) - .02, P[:, 1] + .05])
+
+        def buckle_light(P, c):
+            return np.maximum.reduce([c['f'] - .0205, c['ax'] - .014, np.abs(c['z'] - (hip + .025)) - .01, P[:, 1] + .05])
+        lo = (-.27, -.21, an[2] + .05); hi = (.27, .22, waist + .04)
+        lg = self.piece('orion_cargo', [(pants, 0), (knee, 1), (thigh_straps, 2), (belt, 2), (pouches, 2), (buckle, 1), (buckle_light, 3)],
+                        lo, hi, [T('cloth_legs__orion', 'or_twill', '#ffffff', 0, .85), plate('legs'), leather('legs'), glow],
+                        target=14000, uv=.13, cover=('torso', 'legL', 'legR'))
+        self.add('legs', 'orion', 'Orion cargo trousers', [lg], hide=['pelvis', 'thigh', 'shin'])
+
+    def _orion_female(self, T, glow, leather, plate, dom, seg2, arms, UP, UPH, zcol, le, lw, hip, kn, an, zsh, sx):
+        B, F = self.B, self.F
+        z = B.z
+        zc = z['chest']
+
+        # ------------------------------------------------------------ top: black bodice with a lit V
+        hem = zc - .135            # below where the chest skin region ends, so the hidden region never shows its edge
+
+        def bodice(P, c):
+            reg = np.maximum(dom(c, ['torso']), np.maximum(hem - c['z'], c['z'] - zcol))
+            reg = np.maximum(reg, .064 - c['nr'])
+            return np.maximum(c['f'] - .0065, reg)      # clear of the skin (no runtime skin push in Unreal)
+
+        def under_band(P, c):
+            # a trim band that wraps the raw hem edge (a thin shell's cut edge reads ragged against the skin)
+            return np.maximum.reduce([c['f'] - .0105, dom(c, ['torso']), np.abs(c['z'] - (hem + .005)) - .011])
+
+        def vee(P, c):
+            line = np.abs(c['z'] - (zc + .075 - c['ax'] * 1.35)) - .0045
+            return np.maximum.reduce([c['f'] - .0085, dom(c, ['torso']), line, c['ax'] - .055, P[:, 1] + .03])
+        lo = (-.24, -.2, hem - .03); hi = (.24, .2, zcol + .02)
+        bd = self.piece('orion_bodice', [(bodice, 0), (under_band, 1), (vee, 2)], lo, hi,
+                        [T('cloth_top__orion', 'or_quilt', '#ffffff', 0, .5), leather('top'), glow],
+                        target=9000, uv=.12, cover=('torso',))
+        self.add('top', 'orion', 'Orion bodice', [bd], hide=['chest'])
+
+        # ------------------------------------------------------------ outer: cropped white shell jacket
+        jhem = zc - .055
+
+        def shell(P, c):
+            reg = np.maximum(dom(c, ['torso', 'armL', 'armR']), np.maximum(jhem - c['z'], c['z'] - (zsh + .07)))
+            reg = np.maximum(reg, np.where(arms(c) < 0, c['s'] - (le + (lw - le) * .62), -1))   # three-quarter sleeves
+            reg = np.maximum(reg, .07 - c['nr'])
+            open_front = np.where(P[:, 1] < -.02, (.045 + (zsh - c['z']) * .25) - c['ax'], -1.0)
+            return np.maximum(np.maximum(c['f'] - .011, reg), open_front)
+
+        def stand_collar(P, c):
+            r = .078 + (c['z'] - z['neck']) * .35
+            d = np.maximum(np.abs(c['nr'] - r) - .0055, np.maximum((z['neck'] - .025) - c['z'], c['z'] - (zcol + .055)))
+            return np.maximum(d, np.where(P[:, 1] < -.03, .045 - c['ax'], -1.0))
+
+        def shoulder_straps(P, c):
+            near = np.where(arms(c) < .02, -1, arms(c) - .02)
+            return np.maximum.reduce([c['f'] - .0145, np.abs(c['s'] - .06) - .012, (zsh - .12) - c['z'], near])
+
+        def sleeve_bands(P, c):
+            return np.maximum.reduce([c['f'] - .0145, arms(c), np.abs(c['s'] - (le + (lw - le) * .58)) - .014])
+
+        def collar_lights(P, c):
+            return np.maximum.reduce([np.abs(c['nr'] - (.078 + (c['z'] - z['neck']) * .35)) - .0068, np.abs(c['z'] - (zcol + .025)) - .007,
+                                      np.abs(c['ax'] - .06) - .007, P[:, 1] + .035])
+        lo = (-.34, -.22, jhem - .03); hi = (.34, .22, zcol + .08)
+        jk = self.piece('orion_jacket', [(shell, 0), (stand_collar, 0), (shoulder_straps, 1), (sleeve_bands, 1), (collar_lights, 2)], lo, hi,
+                        [T('cloth_outer__orion', 'or_white', '#ffffff', 0, .6), leather('outer'), glow],
+                        target=12000, uv=.16, cover=('torso', 'armL', 'armR'))
+        self.add('outer', 'orion', 'Orion cropped shell jacket', [jk], hide=['upperarm'])
+
+        # ------------------------------------------------------------ legs: leggings with grey plates and a holster belt
+        waist = hip + .055
+
+        def leggings(P, c):
+            reg = np.maximum(dom(c, ['torso', 'legL', 'legR']), np.maximum(c['z'] - waist, (an[2] + .12) - c['z']))
+            return np.maximum(c['f'] - .0052, reg)
+
+        def plates(P, c):
+            Q = P.copy(); Q[:, 0] = np.abs(Q[:, 0])
+            legs = dom(c, ['legL', 'legR'])
+            outer = np.maximum.reduce([c['f'] - .011, legs, (kn[0] + .035) - Q[:, 0], np.abs(c['z'] - (kn[2] + .17)) - .09])
+            knee = np.maximum(c['f'] - .016, ellipsoid(Q, kn + np.array([0, -.045, .005]), (.045, .045, .06)))
+            shin = np.maximum.reduce([c['f'] - .011, legs, Q[:, 1] - (kn[1] - .03), np.abs(c['z'] - (kn[2] - .15)) - .07,
+                                      np.abs(Q[:, 0] - kn[0]) - .04])
+            return np.minimum.reduce([outer, knee, shin])
+
+        def belt(P, c):
+            return np.maximum.reduce([c['f'] - .011, dom(c, ['torso']), np.abs(c['z'] - (hip + .03)) - .019])
+
+        def holster(P, c):
+            zt = hip - .12
+            return np.maximum.reduce([c['f'] - .034, dom(c, ['legR']), P[:, 0] + .07, np.abs(c['z'] - zt) - .075, -.02 - P[:, 1] * -1 + .0])
+
+        def buckle(P, c):
+            return np.maximum.reduce([c['f'] - .017, c['ax'] - .026, np.abs(c['z'] - (hip + .03)) - .017, P[:, 1] + .04])
+
+        def buckle_light(P, c):
+            return np.maximum.reduce([c['f'] - .0185, c['ax'] - .012, np.abs(c['z'] - (hip + .03)) - .008, P[:, 1] + .04])
+        lo = (-.25, -.2, an[2] + .07); hi = (.25, .21, waist + .04)
+        lg = self.piece('orion_leggings', [(leggings, 0), (plates, 1), (belt, 2), (holster, 2), (buckle, 1), (buckle_light, 3)],
+                        lo, hi, [T('cloth_legs__orion', 'or_stretch', '#ffffff', 0, .55), plate('legs'), leather('legs'), glow],
+                        target=13000, uv=.12, cover=('torso', 'legL', 'legR'))
+        self.add('legs', 'orion', 'Orion plated leggings', [lg], hide=['pelvis', 'thigh', 'shin'])
+
     def underwear(self, M):
         """Non-removable base layer: the game never shows the body naked. Hidden while clothing covers it."""
         B, F = self.B, self.F
@@ -751,14 +1106,15 @@ class Kit:
         M = self.mats()
         self.underwear(M)
         g = hair.Groom(self)
+        # default outfit: the Orion pair from the owner's concept sheet (every slot swappable)
         if self.m:
-            hair.male_styles(g); self.male_set(M); self.casual(M)
-            defaults = {'underbottom': 'base', 'hair': 'sidepart', 'head': 'none', 'top': 'undersuit', 'vest': 'vanguard', 'outer': 'none', 'hands': 'gloves',
-                        'legs': 'armoured', 'feet': 'combat'}
+            hair.male_styles(g); self.male_set(M); self.casual(M); self.orion(M)
+            defaults = {'underbottom': 'base', 'hair': 'textured', 'head': 'none', 'top': 'orion', 'vest': 'none', 'outer': 'orion', 'hands': 'orion',
+                        'legs': 'orion', 'feet': 'orion'}
         else:
-            hair.female_styles(g); self.female_set(M); self.casual(M)
-            defaults = {'undertop': 'base', 'underbottom': 'base', 'hair': 'ponytail', 'head': 'none', 'top': 'ribbed', 'vest': 'harness', 'outer': 'circuit_coat',
-                        'hands': 'gauntlets', 'legs': 'leggings', 'feet': 'tech'}
+            hair.female_styles(g); self.female_set(M); self.casual(M); self.orion(M)
+            defaults = {'undertop': 'base', 'underbottom': 'base', 'hair': 'ponytail', 'head': 'none', 'top': 'orion', 'vest': 'none', 'outer': 'orion',
+                        'hands': 'orion', 'legs': 'orion', 'feet': 'orion'}
         return {'items': self.items, 'defaults': defaults}
 
 

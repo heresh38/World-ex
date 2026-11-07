@@ -16,6 +16,7 @@
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
 #include "SOHUD.h"
+#include "SOInventoryWidget.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -150,6 +151,34 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 2)
+	{
+		// Loadout screen and both bodies only (files l3..l6, p1..p5).
+		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
+		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
+		Do(4.0f, [=, this]() { Look(0.0f); });
+		Act([=]() { if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
+		Snap(1.5f, TEXT("l3_inventory"));
+		Act([=]() { OpenSlot(TEXT("0")); });
+		Snap(0.6f, TEXT("l4_inventory_primary"));
+		Act([=]() { OpenSlot(TEXT("outer")); });
+		Snap(0.6f, TEXT("l5_inventory_coat"));
+		Act([=, this]() { OpenSlot(TEXT("")); if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(TEXT("female")); } });
+		Snap(1.5f, TEXT("l6_inventory_female"));
+		Act([=, this]() { if (ASOHUD* H = Hud()) { H->ToggleInventory(); } View(ESOViewMode::ThirdPerson); Orbit(10.0f, 260.0f, 30.0f); });
+		Snap(1.0f, TEXT("p1_female_front"));
+		Act([=, this]() { Orbit(40.0f, 90.0f, 75.0f); });
+		Snap(0.5f, TEXT("p2_female_face"));
+		Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(TEXT("male")); } Orbit(10.0f, 260.0f, 30.0f); });
+		Snap(1.2f, TEXT("p3_male_front"));
+		Act([=, this]() { Orbit(160.0f, 260.0f, 30.0f); });
+		Snap(0.5f, TEXT("p4_male_back"));
+		Act([=, this]() { Orbit(40.0f, 90.0f, 75.0f); });
+		Snap(0.5f, TEXT("p5_male_face"));
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 1)
 	{
 		// Hold study: every gun in the hands from every side the player sees it.
@@ -330,7 +359,30 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	Snap(0.6f, TEXT("l2_reliquary_opened"));
 	Act([=, this]() { SetViewTarget(GetPawn()); if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD())) { Hud->ToggleInventory(); } });
 	Snap(1.0f, TEXT("l3_inventory"));
-	Act([=, this]() { if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD())) { Hud->ToggleInventory(); } });
+	auto OpenSlot = [this](const TCHAR* SlotKey)
+	{
+		if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()); Hud && Hud->GetInventoryWidget())
+		{
+			Hud->GetInventoryWidget()->OpenSlot(SlotKey);
+		}
+	};
+	Act([=]() { OpenSlot(TEXT("0")); });
+	Snap(0.6f, TEXT("l4_inventory_primary"));
+	Act([=]() { OpenSlot(TEXT("outer")); });
+	Snap(0.6f, TEXT("l5_inventory_coat"));
+	Act([=, this]() { OpenSlot(TEXT("")); if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(TEXT("female")); } });
+	Snap(1.2f, TEXT("l6_inventory_female"));
+	Act([=, this]() { if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD())) { Hud->ToggleInventory(); } View(ESOViewMode::ThirdPerson); Orbit(10.0f, 260.0f, 30.0f); });
+	Snap(1.0f, TEXT("p1_female_front"));
+	Act([=, this]() { Orbit(160.0f, 260.0f, 30.0f); });
+	Snap(0.5f, TEXT("p2_female_back"));
+	Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(TEXT("male")); } Orbit(10.0f, 260.0f, 30.0f); });
+	Snap(1.2f, TEXT("p3_male_front"));
+	Act([=, this]() { Orbit(160.0f, 260.0f, 30.0f); });
+	Snap(0.5f, TEXT("p4_male_back"));
+	Act([=, this]() { Orbit(20.0f, 70.0f, 70.0f); });
+	Snap(0.5f, TEXT("p5_male_face"));
+	Act([=, this]() { SetViewTarget(GetPawn()); View(ESOViewMode::FirstPerson); });
 	Do(1.0f, []() {});
 
 	// Poll often so condition cues (mid-reload) land on the right frame.

@@ -32,6 +32,7 @@ public:
 	/** Opens or closes the inventory screen. */
 	void ToggleInventory();
 	bool IsInventoryOpen() const { return InventoryWidget != nullptr; }
+	USOInventoryWidget* GetInventoryWidget() const { return InventoryWidget; }
 
 private:
 	void OnRoundHit(const FSOProjectile& Round, const FHitResult& Hit, float Damage);

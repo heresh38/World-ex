@@ -14,11 +14,21 @@ OUT="$ROOT/unreal/ShatteredOrbit/SourceArt"
 M="$ROOT/assets/models"
 run() { "$BLENDER" --background --python "$ROOT/tools/blender/export_fbx.py" -- "$@" 2>&1 | grep -E "^\[export_fbx\]|Error|Traceback" || true; }
 
-# Player: male body with the default tactical loadout (players.py defaults; hidden body regions dropped)
-run "$M/player_male.glb" "$OUT/Characters/PlayerMale" --single --finger-rig=male \
-  "--only=B_head,B_eyes,B_brows,B_lashes,C_hair__sidepart,C_top__undersuit,C_vest__vanguard,C_hands__gloves,C_legs__armoured,C_feet__combat"
-# First-person arms: the same body and outfit, cut to what the arm bones carry (same skeleton, so the same IK)
-run "$M/player_male.glb" "$OUT/Characters/PlayerMaleArms" --single --finger-rig=male --arms-only   "--only=C_top__undersuit,C_vest__vanguard,C_hands__gloves"
+# Players: the body (each skin region its own section) and every armour piece as its own skeletal mesh on one
+# skeleton, with finger bones; then the first-person cut of the same (only what the arm bones carry). Pieces: the
+# Orion set (the owner's concept pair, the default), the vanguard / circuit-coat sets and a few casual pieces.
+BODY="B_head,B_eyes,B_brows,B_lashes,B_neck,B_chest,B_midriff,B_pelvis,B_upperarm,B_forearm,B_hand,B_thigh,B_shin,B_foot"
+ORION="C_top__orion,C_outer__orion,C_hands__orion,C_legs__orion,C_feet__orion"
+MALE="$BODY,$ORION,C_hair__swept,C_hair__textured,C_hair__sidepart,C_underbottom__base,C_top__undersuit,C_vest__vanguard,C_hands__gloves,C_legs__armoured,C_feet__combat,C_head__pioneer,C_outer__jacket,C_outer__hoodie,C_legs__cargo"
+FEMALE="$BODY,$ORION,C_hair__ponytail,C_hair__bob,C_undertop__base,C_underbottom__base,C_top__ribbed,C_vest__harness,C_outer__circuit_coat,C_hands__gauntlets,C_legs__leggings,C_feet__tech,C_outer__jacket,C_legs__cargo"
+for sex in male female; do
+  Sex="$(echo "$sex" | sed -E 's/^(.)/\U\1/')"
+  only="$MALE"; [ "$sex" = female ] && only="$FEMALE"
+  run "$M/player_$sex.glb" "$OUT/Characters/Player$Sex" --per-item --finger-rig=$sex "--only=$only"
+  run "$M/player_$sex.glb" "$OUT/Characters/Player${Sex}Arms" --per-item --finger-rig=$sex --arms-only "--only=$only"
+done
+# Inventory icons (guns and armour pieces) rendered from the same models
+"$BLENDER" --background --python "$ROOT/tools/blender/icons.py" -- "$OUT/Icons" 2>&1 | grep -E "^\[icons\]|Error|Traceback" || true
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail

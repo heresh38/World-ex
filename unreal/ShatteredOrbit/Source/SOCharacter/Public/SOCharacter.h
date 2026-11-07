@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "SOCombatCharacter.h"
+#include "SOWardrobe.h"
 #include "SOCharacter.generated.h"
 
 class UAnimSequenceBase;
@@ -277,6 +278,34 @@ protected:
 	/** Replicated so the server aims third-person shots at the crosshair the owner sees. */
 	UPROPERTY(Replicated, Transient, BlueprintReadOnly, Category = "SO|Camera")
 	ESOViewMode ViewMode = ESOViewMode::FirstPerson;
+
+public:
+	/** Dresses the character (server; replicated): the body and one wardrobe piece per slot. */
+	void SetOutfit(const FSOOutfit& NewOutfit);
+	const FSOOutfit& GetOutfit() const { return Outfit; }
+	/** The worn piece of a slot (third-person body or first-person arms), null if none shows. */
+	USkeletalMeshComponent* GetWornPiece(FName Slot, bool bFirstPerson) const;
+	/** Body regions the worn pieces cover (their skin sections are hidden). */
+	const TSet<FName>& GetHiddenRegions() const { return HiddenRegions; }
+
+protected:
+	/** Every piece is a skeletal mesh following the body's pose (leader pose), in both views. */
+	UPROPERTY(ReplicatedUsing = OnRep_Outfit)
+	FSOOutfit Outfit;
+
+	UFUNCTION()
+	void OnRep_Outfit();
+	void ApplyOutfit();
+	void OutfitFromInventory();
+	FDelegateHandle OutfitHandle;
+	FName AppliedBody;
+	TSet<FName> HiddenRegions;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<USkeletalMeshComponent>> WornThirdPerson;
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<USkeletalMeshComponent>> WornFirstPerson;
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetViewMode(ESOViewMode NewMode);

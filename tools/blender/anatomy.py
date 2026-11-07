@@ -6,7 +6,7 @@ resolution; hands and feet too. Each part is cut with an overlap band so the sep
 """
 import numpy as np
 import sdf
-from sdf import smin, smax, sphere, ellipsoid, capsule, round_cone, smoothstep, Loft, length
+from sdf import smin, smax, sphere, ellipsoid, capsule, round_cone, round_box, smoothstep, Loft, length
 
 F32 = np.float32
 
@@ -35,7 +35,7 @@ class Head:
         self.sex = sex
         m = sex == 'male'
         self.m = m
-        s = 1.1 if m else 1.07          # overall head scale (heroic proportions: slightly large heads)
+        s = 1.05 if m else 1.07         # overall head scale (a touch heroic, not cartoon-large)
         self.s = s
         # eye centre (left eye) and radius
         self.eye_r = (.0122 if sex == 'female' else .0118) * s
@@ -65,11 +65,11 @@ class Head:
     PROFILE_F = [
         (-.099, -.060, .006, .010, .010, 2.0),
         (-.093, -.055, .016, .022, .026, 2.0),
-        (-.085, -.045, .026, .034, .040, 2.0),
-        (-.074, -.032, .038, .048, .050, 2.0),
-        (-.055, -.019, .052, .055, .057, 2.05),
-        (-.035, -.010, .063, .059, .061, 2.1),
-        (-.012, -.004, .070, .072, .065, 2.2),
+        (-.085, -.045, .026, .034, .036, 2.0),
+        (-.074, -.032, .038, .048, .045, 2.0),
+        (-.055, -.019, .052, .055, .052, 2.05),
+        (-.035, -.010, .063, .059, .058, 2.1),
+        (-.012, -.004, .070, .072, .0635, 2.2),
         (.010, .002, .072, .081, .067, 2.2),
         (.032, .006, .074, .089, .0695, 2.2),
         (.055, .009, .075, .090, .0695, 2.4),
@@ -81,11 +81,11 @@ class Head:
     PROFILE_M = [
         (-.108, -.058, .008, .012, .012, 2.0),
         (-.101, -.053, .018, .026, .028, 2.0),
-        (-.092, -.044, .026, .040, .044, 2.1),
-        (-.078, -.033, .038, .051, .055, 2.2),
-        (-.058, -.021, .052, .057, .061, 2.25),
-        (-.036, -.011, .063, .061, .064, 2.3),
-        (-.012, -.005, .069, .072, .066, 2.4),
+        (-.092, -.044, .026, .040, .041, 2.1),
+        (-.078, -.033, .038, .051, .051, 2.2),
+        (-.058, -.021, .052, .057, .0565, 2.25),
+        (-.036, -.011, .063, .061, .0605, 2.3),
+        (-.012, -.005, .069, .072, .0645, 2.4),
         (.010, .002, .071, .085, .068, 2.4),
         (.032, .006, .074, .089, .0705, 2.3),
         (.055, .009, .075, .090, .0705, 2.4),
@@ -110,11 +110,10 @@ class Head:
         m, s = self.m, self.s
         S = lambda v: np.asarray(v, F32) * s
         d = self.base()(P)
-        # cheeks: one broad soft volume that stays inside the face outline; male gets a subtle cheekbone
+        # cheeks: a soft volume under the cheekbone (leaner on the male face, which shows the bone structure)
         for sx in (1, -1):
-            d = smin(d, ellipsoid(P, S((sx * .03, -.04, -.016)), S((.028, .028, .03) if not m else (.029, .027, .031))), .034 * s)
-            if m:
-                d = smin(d, ellipsoid(P, S((sx * .044, -.05, -.002)), S((.014, .016, .01))), .02 * s)
+            d = smin(d, ellipsoid(P, S((sx * .03, -.042, -.014)), S((.025, .025, .027) if not m else (.026, .024, .028))), (.03 if not m else .026) * s)
+        d = self.structure(P, d)
         lz = .004 if not m else 0.0
         # chin
         d = smin(d, ellipsoid(P, S((0, -.055, -.088 + lz)), S((.022, .015, .015) if not m else (.026, .015, .015))), .024 * s)
@@ -145,16 +144,53 @@ class Head:
         d = smin(d, mirror(self.ear_sdf)(P), .003 * s)
         return d
 
+    def structure(self, P, d):
+        """The bones under the skin: cheekbones (zygomatic arch), the hollow below them, the jaw angle and jawline,
+        a squared chin, temples and the brow. The male face is built harder and squarer, the female one higher and
+        softer."""
+        m, s = self.m, self.s
+        S = lambda v: np.asarray(v, F32) * s
+        k = 1.0 if m else .6
+        for sx in (1, -1):
+            # cheekbone: from under the outer eye corner back towards the ear
+            d = smin(d, round_cone(P, S((sx * .036, -.054, -.016 + (0 if m else .004))), S((sx * .061, -.022, -.008)),
+                                   (.0068 if m else .0062) * s, .0048 * s), .011 * s)
+            # jaw angle and the jawline to the chin
+            ang = S((sx * (.052 if m else .047), -.008, -.068 if m else -.064))
+            chin = S((sx * (.018 if m else .012), -.056, -.093 if m else -.088))
+            d = smin(d, round_cone(P, ang, chin, (.0095 if m else .007) * s, (.0075 if m else .006) * s), (.014 if m else .016) * s)
+            # masseter: a flat slab of muscle over the jaw angle
+            if m:
+                d = smin(d, ellipsoid(P, S((sx * .048, -.02, -.052)), S((.008, .016, .02))), .014 * s)
+            # temple: slightly flat
+            d = smax(d, -ellipsoid(P, S((sx * .072, -.035, .04)), S((.012, .02, .02))), .02 * s)
+        # chin: squared on the male face (two mental tubercles), rounded and narrower on the female one
+        if m:
+            for sx in (1, -1):
+                d = smin(d, ellipsoid(P, S((sx * .011, -.06, -.091)), S((.011, .009, .01))), .008 * s)
+        else:
+            d = smin(d, ellipsoid(P, S((0, -.058, -.086)), S((.014, .01, .011))), .01 * s)
+        # brow: glabella and the ridge above each eye, the forehead slope above it
+        d = smin(d, ellipsoid(P, S((0, -.07, .034)), S((.011, .007, .01)) * k), .014 * s)
+        for sx in (1, -1):
+            d = smin(d, round_cone(P, S((sx * .008, -.071, .031)), S((sx * .044, -.061, .033)), (.0052 if m else .0038) * s, .0034 * s), (.018 if m else .022) * s)
+        # nasolabial fold: a soft crease from the side of the nose to past the mouth corner
+        for sx in (1, -1):
+            d = smax(d, -capsule(P, S((sx * .017, -.082, -.031)), S((sx * .027, -.074, -.06)), .0008 * s), (.004 if m else .005) * s)
+        return d
+
     def nose(self, P):
         m, s = self.m, self.s
         S = lambda v: np.asarray(v, F32) * s
-        wide = .92 if not m else 1.08
+        wide = .88 if not m else 1.0
         L = .9 if not m else 1.0
-        tip = S((0, -.0875 - .004 * L, -.0175 - .003 * L))
-        n = round_cone(P, S((0, -.068, .012)), tip + S((0, .004, .004)), .0034 * s, .0052 * s)        # bridge
-        n = smin(n, ellipsoid(P, tip, S((.0082 * wide, .0082, .0074))), .005 * s)                     # tip
+        tip = S((0, -.0885 - .004 * L, -.0185 - .003 * L))
+        n = round_cone(P, S((0, -.0705, .014)), tip + S((0, .0055, .006)), .0029 * s, .0042 * s)      # bridge (dorsum)
+        n = smin(n, round_box(P, S((0, -.079, -.004)), S((.0032, .004, .011)), .002 * s), .004 * s)    # nasal bone keel
+        n = smin(n, ellipsoid(P, tip, S((.0068 * wide, .0072, .0064))), .0045 * s)                     # tip
         for sx in (1, -1):
-            n = smin(n, ellipsoid(P, S((sx * .0105 * wide, -.0805, -.0255)), S((.0068, .0075, .0062))), .0045 * s)  # alae
+            n = smin(n, ellipsoid(P, tip + S((sx * .0038, .001, .0)), S((.0042, .0052, .005))), .002 * s)   # tip lobes
+            n = smin(n, ellipsoid(P, S((sx * .0098 * wide, -.0815, -.0262)), S((.0058, .0068, .0055))), .0035 * s)  # alae
         # nostrils, opening downwards
         for sx in (1, -1):
             n = smax(n, -ellipsoid(P, S((sx * .0062 * wide, -.0845, -.0295)), S((.0034, .0052, .0022))), .0012 * s)
@@ -166,8 +202,11 @@ class Head:
         full = .85 if m else 1.15
         lz = .002 if not m else 0.0
         mw = .02 if not m else .022
-        up = ellipsoid(P, S((0, -.0775, -.0455 + lz)), S((mw, .0085, .0058 * full)))
-        lo = ellipsoid(P, S((0, -.0755, -.0545 + lz)), S((mw * .86, .0088, .0068 * full)))
+        up = ellipsoid(P, S((0, -.0778, -.0458 + lz)), S((mw, .0082, .0052 * full)))
+        lo = ellipsoid(P, S((0, -.0758, -.0548 + lz)), S((mw * .82, .0086, .0066 * full)))
+        # philtrum columns from the nose to the cupid's bow
+        for sx in (1, -1):
+            up = smin(up, capsule(P, S((sx * .0035, -.0838, -.031)), S((sx * .0048, -.0808, -.0418 + lz)), .0016 * s), .003 * s)
         # cupid's bow: two small bumps
         for sx in (1, -1):
             up = smin(up, ellipsoid(P, S((sx * .0045, -.0795, -.0445 + lz)), S((.006, .005, .004 * full))), .002 * s)

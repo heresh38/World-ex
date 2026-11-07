@@ -1,0 +1,158 @@
+// The modular player: the body wears one skeletal mesh per slot (following its pose), covered skin is hidden, the
+// first-person arms wear the arm pieces, armour lives in the inventory and the body can be switched.
+
+#include "SOTestWorld.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "SOInventoryComponent.h"
+#include "SOWardrobe.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOWardrobeDressesTest, "ShatteredOrbit.Wardrobe.Dresses", SOTest::Flags)
+bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
+{
+	const USOWardrobeData* Male = USOWardrobeData::Get(TEXT("male"));
+	const USOWardrobeData* Female = USOWardrobeData::Get(TEXT("female"));
+	if (!TestNotNull(TEXT("male wardrobe (run export_unreal.sh + import_assets.py)"), Male) || !TestNotNull(TEXT("female wardrobe"), Female))
+	{
+		return false;
+	}
+	for (const USOWardrobeData* W : { Male, Female })
+	{
+		TestNotNull(*FString::Printf(TEXT("%s body mesh"), *W->Body.ToString()), W->BodyMesh.LoadSynchronous());
+		TestNotNull(*FString::Printf(TEXT("%s first-person arms"), *W->Body.ToString()), W->ArmsMesh.LoadSynchronous());
+		for (const FName Slot : { FName(TEXT("top")), FName(TEXT("outer")), FName(TEXT("hands")), FName(TEXT("legs")), FName(TEXT("feet")) })
+		{
+			const FSOWardrobeItem* Orion = W->Find(Slot, TEXT("orion"));
+			if (TestNotNull(*FString::Printf(TEXT("%s orion %s"), *W->Body.ToString(), *Slot.ToString()), Orion))
+			{
+				TestNotNull(TEXT("piece mesh"), Orion->Mesh.LoadSynchronous());
+				TestTrue(TEXT("piece is armour with a rating"), Orion->bArmour && Orion->Armor > 0);
+				TestNotNull(TEXT("piece icon"), Orion->Icon.LoadSynchronous());
+				TestEqual(TEXT("the orion set is worn by default"), W->Defaults.FindRef(Slot), FName(TEXT("orion")));
+			}
+		}
+		const FSOWardrobeItem* Gloves = W->Find(TEXT("hands"), TEXT("orion"));
+		TestTrue(TEXT("gloves have a first-person cut"), Gloves && !Gloves->ArmsMesh.IsNull());
+		const FSOWardrobeItem* Boots = W->Find(TEXT("feet"), TEXT("orion"));
+		TestTrue(TEXT("boots have no first-person cut"), Boots && Boots->ArmsMesh.IsNull());
+	}
+
+	SOTest::FTestWorld World;
+	World.AddBox(FVector(-2000, -2000, -100), FVector(2000, 2000, 0));
+	ASOCharacter* Player = World.SpawnCharacter(FVector::ZeroVector);
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	World.Run(0.2f);
+	// dressed in the defaults
+	for (const FName Slot : { FName(TEXT("hair")), FName(TEXT("top")), FName(TEXT("outer")), FName(TEXT("hands")), FName(TEXT("legs")), FName(TEXT("feet")) })
+	{
+		USkeletalMeshComponent* Piece = Player->GetWornPiece(Slot, false);
+		if (TestNotNull(*FString::Printf(TEXT("worn %s"), *Slot.ToString()), Piece))
+		{
+			TestTrue(TEXT("piece follows the body's pose"), Piece->LeaderPoseComponent.Get() == Player->GetMesh());
+			TestTrue(TEXT("piece shares the skeleton"), Piece->GetSkeletalMeshAsset() &&
+				Piece->GetSkeletalMeshAsset()->GetSkeleton() == Player->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton());
+		}
+	}
+	TestNotNull(TEXT("first-person gloves"), Player->GetWornPiece(TEXT("hands"), true));
+	TestNull(TEXT("no first-person boots"), Player->GetWornPiece(TEXT("feet"), true));
+	TestTrue(TEXT("the jacket hides the chest skin"), Player->GetHiddenRegions().Contains(TEXT("chest")));
+	TestTrue(TEXT("boots hide the feet"), Player->GetHiddenRegions().Contains(TEXT("foot")));
+	TestFalse(TEXT("the face shows"), Player->GetHiddenRegions().Contains(TEXT("head")));
+	auto SectionShown = [&](const TCHAR* SlotName) -> int32
+	{
+		USkeletalMeshComponent* Body = Player->GetMesh();
+		const TArray<FSkeletalMaterial>& Mats = Body->GetSkeletalMeshAsset()->GetMaterials();
+		for (int32 i = 0; i < Mats.Num(); ++i)
+		{
+			if (Mats[i].MaterialSlotName == FName(SlotName))
+			{
+				return Body->IsMaterialSectionShown(i, 0) ? 1 : 0;
+			}
+		}
+		return -1; // no such slot
+	};
+	{
+		FString Slots;
+		for (const FSkeletalMaterial& M : Player->GetMesh()->GetSkeletalMeshAsset()->GetMaterials())
+		{
+			Slots += M.MaterialSlotName.ToString() + TEXT(" ");
+		}
+		AddInfo(FString::Printf(TEXT("male body slots: %s"), *Slots));
+	}
+	TestEqual(TEXT("head skin shows"), SectionShown(TEXT("skin__head")), 1);
+	TestEqual(TEXT("chest skin hidden"), SectionShown(TEXT("skin__chest")), 0);
+
+	// a different outfit: taking the coat off removes its piece; the female body swaps the meshes and the clips
+	FSOOutfit Outfit = Player->GetOutfit();
+	Outfit.Set(TEXT("outer"), TEXT("none"));
+	Player->SetOutfit(Outfit);
+	TestNull(TEXT("coat off"), Player->GetWornPiece(TEXT("outer"), false));
+	Outfit.Body = TEXT("female");
+	for (const TPair<FName, FName>& D : Female->Defaults)
+	{
+		Outfit.Set(D.Key, D.Value);
+	}
+	Player->SetOutfit(Outfit);
+	World.Run(0.1f);
+	TestTrue(TEXT("female body"), Player->GetMesh()->GetSkeletalMeshAsset() == Female->BodyMesh.LoadSynchronous());
+	TestTrue(TEXT("female arms"), Player->GetFirstPersonArms()->GetSkeletalMeshAsset() == Female->ArmsMesh.LoadSynchronous());
+	TestNotNull(TEXT("female jacket"), Player->GetWornPiece(TEXT("outer"), false));
+	TestFalse(TEXT("the cropped top leaves the midriff"), Player->GetHiddenRegions().Contains(TEXT("midriff")));
+	TestEqual(TEXT("female head skin shows"), SectionShown(TEXT("skin__head")), 1);
+	TestEqual(TEXT("female midriff shows"), SectionShown(TEXT("skin__midriff")), 1);
+	// and back: the male head must show again (section visibility must not leak between bodies)
+	Outfit.Body = TEXT("male");
+	for (const TPair<FName, FName>& D : Male->Defaults)
+	{
+		Outfit.Set(D.Key, D.Value);
+	}
+	Player->SetOutfit(Outfit);
+	World.Run(0.1f);
+	TestEqual(TEXT("male head skin shows after the female body"), SectionShown(TEXT("skin__head")), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOArmorInventoryTest, "ShatteredOrbit.Wardrobe.ArmorInventory", SOTest::Flags)
+bool FSOArmorInventoryTest::RunTest(const FString& Parameters)
+{
+	USOInventoryComponent* Inventory = NewObject<USOInventoryComponent>();
+	Inventory->bPersist = false;
+	Inventory->NewProfile();
+	TestTrue(TEXT("a new profile owns armour"), Inventory->GetArmor().Num() >= 10);
+	const FSOArmorInstance* Coat = Inventory->GetEquippedArmor(TEXT("outer"));
+	if (!TestNotNull(TEXT("the coat is worn"), Coat))
+	{
+		return false;
+	}
+	TestEqual(TEXT("the orion coat"), Coat->Item, FName(TEXT("orion")));
+	const int32 Rating = Inventory->GetArmorRating();
+	TestTrue(TEXT("armour rating"), Rating > 0);
+	FSOOutfit Outfit = Inventory->GetOutfit();
+	TestEqual(TEXT("outfit wears the coat"), Outfit.Get(TEXT("outer")), FName(TEXT("orion")));
+	TestNotEqual(TEXT("outfit keeps the hair"), Outfit.Get(TEXT("hair")), FName(TEXT("none")));
+	// wearing another coat swaps it; taking it off empties the slot
+	const FSOArmorInstance* Other = Inventory->GetArmor().FindByPredicate([](const FSOArmorInstance& A) { return A.Slot == TEXT("outer") && A.Item != TEXT("orion"); });
+	if (TestNotNull(TEXT("another coat owned"), Other))
+	{
+		const FString Uid = Other->Uid;
+		Inventory->EquipArmor(Uid);
+		TestEqual(TEXT("one coat at a time"), Inventory->GetEquippedArmor(TEXT("outer"))->Uid, Uid);
+		Inventory->EquipArmor(Uid);
+		TestNull(TEXT("taken off"), Inventory->GetEquippedArmor(TEXT("outer")));
+		TestEqual(TEXT("outfit without a coat"), Inventory->GetOutfit().Get(TEXT("outer")), FName(TEXT("none")));
+	}
+	// the female body: her pieces are owned too and her defaults fill the slots
+	TestTrue(TEXT("switch body"), Inventory->SetBody(TEXT("female")));
+	TestEqual(TEXT("female"), Inventory->GetBody(), FName(TEXT("female")));
+	const FSOArmorInstance* Top = Inventory->GetEquippedArmor(TEXT("top"));
+	TestTrue(TEXT("female top worn"), Top && USOWardrobeData::Get(TEXT("female"))->Find(Top->Slot, Top->Item) != nullptr);
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
