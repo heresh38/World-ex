@@ -802,6 +802,21 @@ class Kit:
                         target=10000, uv=.07, h=self.res * .6, cover=('armL', 'armR'), hands=True)
         self.add('hands', 'orion', 'Orion fingerless gloves', [gl])
 
+        # armoured gloves: the same bracers, the whole hand and every finger covered, plates on the knuckles and on
+        # the backs of the fingers (the finger rig bends the glove with the fingers)
+        def full_glove(P, c):
+            reg = np.maximum(arms(c), (lw - .012) - c['s'])
+            return np.maximum(c['f'] - .0028, reg)
+
+        def finger_plates(P, c):
+            back = hand_x(c) + .004 - c['ax']
+            rows = np.minimum(np.abs(c['s'] - (lw + .132)) - .012, np.abs(c['s'] - (lw + .165)) - .009)
+            return np.maximum.reduce([c['f'] - .0062, arms(c), rows, back])
+        ag = self.piece('orion_armoured_gloves', [(full_glove, 0), (knuckles, 1), (finger_plates, 1), (bracer, 1), (screen, 2)], lo, hi,
+                        [T('cloth_hands__orion_armoured', 'or_leather', '#ffffff', 0, .45), plate('hands', '#4a5058'), glow],
+                        target=11000, uv=.07, h=self.res * .6, cover=('armL', 'armR'), hands=True)
+        self.add('hands', 'orion_armoured', 'Orion armoured gloves', [ag], hide=['hand'])
+
         # ------------------------------------------------------------ feet: plated boots (both; the female pair taller)
         top_z = .29 if m else .33
         heel = 0.0 if m else .012

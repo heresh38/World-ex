@@ -18,7 +18,7 @@ run() { "$BLENDER" --background --python "$ROOT/tools/blender/export_fbx.py" -- 
 # skeleton, with finger bones; then the first-person cut of the same (only what the arm bones carry). Pieces: the
 # Orion set (the owner's concept pair, the default), the vanguard / circuit-coat sets and a few casual pieces.
 BODY="B_head,B_eyes,B_brows,B_lashes,B_neck,B_chest,B_midriff,B_pelvis,B_upperarm,B_forearm,B_hand,B_thigh,B_shin,B_foot"
-ORION="C_top__orion,C_outer__orion,C_hands__orion,C_legs__orion,C_feet__orion"
+ORION="C_top__orion,C_outer__orion,C_hands__orion,C_hands__orion_armoured,C_legs__orion,C_feet__orion"
 MALE="$BODY,$ORION,C_hair__swept,C_hair__textured,C_hair__sidepart,C_underbottom__base,C_top__undersuit,C_vest__vanguard,C_hands__gloves,C_legs__armoured,C_feet__combat,C_head__pioneer,C_outer__jacket,C_outer__hoodie,C_legs__cargo"
 FEMALE="$BODY,$ORION,C_hair__ponytail,C_hair__bob,C_undertop__base,C_underbottom__base,C_top__ribbed,C_vest__harness,C_outer__circuit_coat,C_hands__gauntlets,C_legs__leggings,C_feet__tech,C_outer__jacket,C_legs__cargo"
 for sex in male female; do

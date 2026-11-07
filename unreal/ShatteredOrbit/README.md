@@ -199,7 +199,7 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
   hands grip the gun: the fingers close round the pistol grip (index on the trigger), the handguard, magazines and
   rounds. The horror guns leave a poison pool for 5 s where they land.
 - **Loadout (inventory):** I / Tab (View on the gamepad). Weapons and the outer layers (coat, rig) on the left,
-  armour (head, chest, arms, legs, feet) on the right, the player in the middle as they stand (drag to turn; the
+  armour (head, chest, hands, legs, feet) on the right, the player in the middle as they stand (drag to turn; the
   body button switches male / female). Click a slot: its grid of everything owned (icons in rarity colours, NEW and
   locked marks) and the hovered item's details (stats against the equipped one, perks, armour). Equip / wear (E, or
   click the selected item again), Lock (L), Dismantle (X twice, +alloy), Esc backs out. Armour pieces are the

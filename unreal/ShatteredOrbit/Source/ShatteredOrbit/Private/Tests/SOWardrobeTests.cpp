@@ -34,6 +34,12 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 				TestEqual(TEXT("the orion set is worn by default"), W->Defaults.FindRef(Slot), FName(TEXT("orion")));
 			}
 		}
+		const FSOWardrobeItem* Armoured = W->Find(TEXT("hands"), TEXT("orion_armoured"));
+		if (TestNotNull(*FString::Printf(TEXT("%s armoured gloves (fingers covered)"), *W->Body.ToString()), Armoured))
+		{
+			TestTrue(TEXT("armoured gloves hide the bare hands"), Armoured->Hide.Contains(TEXT("hand")));
+			TestTrue(TEXT("armoured gloves are armour"), Armoured->bArmour && Armoured->Armor > 0 && !Armoured->ArmsMesh.IsNull());
+		}
 		const FSOWardrobeItem* Gloves = W->Find(TEXT("hands"), TEXT("orion"));
 		TestTrue(TEXT("gloves have a first-person cut"), Gloves && !Gloves->ArmsMesh.IsNull());
 		const FSOWardrobeItem* Boots = W->Find(TEXT("feet"), TEXT("orion"));

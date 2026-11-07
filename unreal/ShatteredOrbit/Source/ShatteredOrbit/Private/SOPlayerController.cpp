@@ -163,6 +163,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.6f, TEXT("l4_inventory_primary"));
 		Act([=]() { OpenSlot(TEXT("outer")); });
 		Snap(0.6f, TEXT("l5_inventory_coat"));
+		Act([=]() { OpenSlot(TEXT("hands")); });
+		Snap(0.6f, TEXT("l5b_inventory_hands"));
 		Act([=, this]() { OpenSlot(TEXT("")); if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(TEXT("female")); } });
 		Snap(1.5f, TEXT("l6_inventory_female"));
 		Act([=, this]() { if (ASOHUD* H = Hud()) { H->ToggleInventory(); } View(ESOViewMode::ThirdPerson); Orbit(10.0f, 260.0f, 30.0f); });

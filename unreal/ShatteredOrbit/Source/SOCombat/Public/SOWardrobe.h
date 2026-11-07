@@ -99,7 +99,7 @@ public:
 	/** Armour slots in inventory order: head, top, vest, outer, hands, legs, feet. */
 	static const TArray<FName>& ArmourSlots();
 
-	/** Head, Chest, Rig, Coat, Arms, Legs, Feet. */
+	/** Head, Chest, Rig, Coat, Hands, Legs, Feet. */
 	static FText SlotLabel(FName Slot);
 };
 

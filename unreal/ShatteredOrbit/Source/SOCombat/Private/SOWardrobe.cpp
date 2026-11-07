@@ -23,7 +23,7 @@ FText USOWardrobeData::SlotLabel(FName Slot)
 	static const TMap<FName, FText> Labels = {
 		{ TEXT("head"), NSLOCTEXT("SO", "SlotHead", "Head") }, { TEXT("top"), NSLOCTEXT("SO", "SlotChest", "Chest") },
 		{ TEXT("vest"), NSLOCTEXT("SO", "SlotRig", "Rig") }, { TEXT("outer"), NSLOCTEXT("SO", "SlotCoat", "Coat") },
-		{ TEXT("hands"), NSLOCTEXT("SO", "SlotArms", "Arms") }, { TEXT("legs"), NSLOCTEXT("SO", "SlotLegs", "Legs") },
+		{ TEXT("hands"), NSLOCTEXT("SO", "SlotHands", "Hands") }, { TEXT("legs"), NSLOCTEXT("SO", "SlotLegs", "Legs") },
 		{ TEXT("feet"), NSLOCTEXT("SO", "SlotFeet", "Feet") } };
 	const FText* L = Labels.Find(Slot);
 	return L ? *L : FText::FromName(Slot);
