@@ -1,0 +1,1314 @@
+{
+ "designs": {
+  "NCB_tower_glass": {
+   "shape": "tower",
+   "style": "glass",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_slab_glass": {
+   "shape": "slab",
+   "style": "glass",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_chamfer_glass": {
+   "shape": "chamfer",
+   "style": "glass",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.25,
+    0.25,
+    -0.25,
+    0.25,
+    1.0
+   ]
+  },
+  "NCB_tower_panel": {
+   "shape": "tower",
+   "style": "panel",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_podium_tower_glass": {
+   "shape": "podium_tower",
+   "style": "glass",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    0.22,
+    0.46,
+    -0.4,
+    0.4,
+    0.2
+   ]
+  },
+  "NCB_chamfer_panel": {
+   "shape": "chamfer",
+   "style": "panel",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.25,
+    0.25,
+    -0.25,
+    0.25,
+    1.0
+   ]
+  },
+  "NCB_tower_office": {
+   "shape": "tower",
+   "style": "office",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_slab_office": {
+   "shape": "slab",
+   "style": "office",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_courtyard_office": {
+   "shape": "courtyard",
+   "style": "office",
+   "tall": false,
+   "min_h": 10,
+   "max_h": 110,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_stepped_office": {
+   "shape": "stepped",
+   "style": "office",
+   "tall": false,
+   "min_h": 12,
+   "max_h": 120,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    0.45
+   ]
+  },
+  "NCB_domelab_panel": {
+   "shape": "domelab",
+   "style": "panel",
+   "tall": false,
+   "min_h": 14,
+   "max_h": 60,
+   "roof": null
+  },
+  "NCB_slab_panel": {
+   "shape": "slab",
+   "style": "panel",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_courtyard_panel": {
+   "shape": "courtyard",
+   "style": "panel",
+   "tall": false,
+   "min_h": 10,
+   "max_h": 110,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_podium_tower_panel": {
+   "shape": "podium_tower",
+   "style": "panel",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    0.22,
+    0.46,
+    -0.4,
+    0.4,
+    0.2
+   ]
+  },
+  "NCB_market_stone": {
+   "shape": "market",
+   "style": "stone",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 26,
+   "roof": [
+    -0.42,
+    0.42,
+    -0.42,
+    0.42,
+    0.85
+   ]
+  },
+  "NCB_courtyard_stone": {
+   "shape": "courtyard",
+   "style": "stone",
+   "tall": false,
+   "min_h": 10,
+   "max_h": 110,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_stepped_stone": {
+   "shape": "stepped",
+   "style": "stone",
+   "tall": false,
+   "min_h": 12,
+   "max_h": 120,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    0.45
+   ]
+  },
+  "NCB_hall_stone": {
+   "shape": "hall",
+   "style": "stone",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 30,
+   "roof": null
+  },
+  "NCB_slab_stone": {
+   "shape": "slab",
+   "style": "stone",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_hall_panel": {
+   "shape": "hall",
+   "style": "panel",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 30,
+   "roof": null
+  },
+  "NCB_market_panel": {
+   "shape": "market",
+   "style": "panel",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 26,
+   "roof": [
+    -0.42,
+    0.42,
+    -0.42,
+    0.42,
+    0.85
+   ]
+  },
+  "NCB_bunker_military": {
+   "shape": "bunker",
+   "style": "military",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 36,
+   "roof": [
+    -0.34,
+    -0.22,
+    -0.34,
+    0.34,
+    0.75
+   ]
+  },
+  "NCB_slab_military": {
+   "shape": "slab",
+   "style": "military",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_hangar_military": {
+   "shape": "hangar",
+   "style": "military",
+   "tall": false,
+   "min_h": 14,
+   "max_h": 40,
+   "roof": null
+  },
+  "NCB_courtyard_military": {
+   "shape": "courtyard",
+   "style": "military",
+   "tall": false,
+   "min_h": 10,
+   "max_h": 110,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_stepped_housing": {
+   "shape": "stepped",
+   "style": "housing",
+   "tall": false,
+   "min_h": 12,
+   "max_h": 120,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    0.45
+   ]
+  },
+  "NCB_slab_housing": {
+   "shape": "slab",
+   "style": "housing",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_courtyard_housing": {
+   "shape": "courtyard",
+   "style": "housing",
+   "tall": false,
+   "min_h": 10,
+   "max_h": 110,
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_tower_housing": {
+   "shape": "tower",
+   "style": "housing",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_shed_industrial": {
+   "shape": "shed",
+   "style": "industrial",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 24,
+   "roof": null
+  },
+  "NCB_tanks_industrial": {
+   "shape": "tanks",
+   "style": "industrial",
+   "tall": false,
+   "min_h": 10,
+   "max_h": 30,
+   "roof": [
+    -0.45,
+    -0.15,
+    -0.45,
+    0.45,
+    0.45
+   ]
+  },
+  "NCB_hall_industrial": {
+   "shape": "hall",
+   "style": "industrial",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 30,
+   "roof": null
+  },
+  "NCB_slab_industrial": {
+   "shape": "slab",
+   "style": "industrial",
+   "tall": true,
+   "min_h": 20,
+   "max_h": 400,
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_hangar_industrial": {
+   "shape": "hangar",
+   "style": "industrial",
+   "tall": false,
+   "min_h": 14,
+   "max_h": 40,
+   "roof": null
+  },
+  "NCB_ruin_stone": {
+   "shape": "ruin",
+   "style": "stone",
+   "tall": false,
+   "min_h": 6,
+   "max_h": 60,
+   "roof": null
+  },
+  "NCB_ruin_office": {
+   "shape": "ruin",
+   "style": "office",
+   "tall": false,
+   "min_h": 6,
+   "max_h": 60,
+   "roof": null
+  },
+  "NCB_ruin_housing": {
+   "shape": "ruin",
+   "style": "housing",
+   "tall": false,
+   "min_h": 6,
+   "max_h": 60,
+   "roof": null
+  },
+  "NCB_bunker_stone": {
+   "shape": "bunker",
+   "style": "stone",
+   "tall": false,
+   "min_h": 8,
+   "max_h": 36,
+   "roof": [
+    -0.34,
+    -0.22,
+    -0.34,
+    0.34,
+    0.75
+   ]
+  }
+ },
+ "kinds": {
+  "spire": [
+   "NCB_tower_glass",
+   "NCB_slab_glass",
+   "NCB_chamfer_glass",
+   "NCB_tower_panel",
+   "NCB_podium_tower_glass",
+   "NCB_chamfer_panel"
+  ],
+  "mixed": [
+   "NCB_tower_office",
+   "NCB_slab_office",
+   "NCB_podium_tower_glass",
+   "NCB_courtyard_office",
+   "NCB_chamfer_panel",
+   "NCB_stepped_office"
+  ],
+  "research": [
+   "NCB_domelab_panel",
+   "NCB_slab_panel",
+   "NCB_chamfer_glass",
+   "NCB_courtyard_panel",
+   "NCB_podium_tower_panel"
+  ],
+  "market": [
+   "NCB_market_stone",
+   "NCB_courtyard_stone",
+   "NCB_stepped_stone",
+   "NCB_hall_stone",
+   "NCB_slab_stone"
+  ],
+  "arena": [
+   "NCB_slab_panel",
+   "NCB_podium_tower_panel",
+   "NCB_hall_panel",
+   "NCB_market_panel"
+  ],
+  "military": [
+   "NCB_bunker_military",
+   "NCB_slab_military",
+   "NCB_hangar_military",
+   "NCB_courtyard_military"
+  ],
+  "housing": [
+   "NCB_stepped_housing",
+   "NCB_slab_housing",
+   "NCB_courtyard_housing",
+   "NCB_tower_housing"
+  ],
+  "industrial": [
+   "NCB_shed_industrial",
+   "NCB_tanks_industrial",
+   "NCB_hall_industrial",
+   "NCB_slab_industrial"
+  ],
+  "dockyard": [
+   "NCB_hangar_industrial",
+   "NCB_shed_industrial",
+   "NCB_tanks_industrial",
+   "NCB_hall_panel"
+  ],
+  "ruins": [
+   "NCB_ruin_stone",
+   "NCB_ruin_office",
+   "NCB_ruin_housing",
+   "NCB_bunker_stone"
+  ]
+ },
+ "props": {
+  "lamp": "NCK_lamp",
+  "station": "NCK_station",
+  "roof": [
+   "NCK_roof_ac",
+   "NCK_roof_tank",
+   "NCK_roof_mast"
+  ]
+ },
+ "version": 1,
+ "tile": 1000.0,
+ "kerb": 0.15,
+ "wall_height": 38.0,
+ "lanes": {
+  "highway": {
+   "n": 4,
+   "w": 3.7,
+   "med": 0.35
+  },
+  "ring": {
+   "n": 3,
+   "w": 3.6,
+   "med": 0.35
+  },
+  "primary": {
+   "n": 2,
+   "w": 3.5,
+   "med": 0.35
+  },
+  "secondary": {
+   "n": 1,
+   "w": 3.6,
+   "med": 0.1
+  },
+  "access": {
+   "n": 1,
+   "w": 3.3,
+   "med": 0.1
+  }
+ },
+ "facade": {
+  "ncf_glass": [
+   3.0,
+   3.6
+  ],
+  "ncf_office": [
+   3.6,
+   3.6
+  ],
+  "ncf_panel": [
+   4.0,
+   3.6
+  ],
+  "ncf_housing": [
+   3.4,
+   3.0
+  ],
+  "ncf_industrial": [
+   6.0,
+   4.5
+  ],
+  "ncf_military": [
+   5.0,
+   4.0
+  ],
+  "ncf_stone": [
+   3.6,
+   4.0
+  ]
+ },
+ "ground": {
+  "nc_asphalt": 8.0,
+  "nc_pavers": 4.0,
+  "nc_plaza": 8.0,
+  "nc_kerb": 2.0,
+  "nc_lot": 9.0,
+  "nc_grass": 4.0,
+  "nc_roof": 8.0,
+  "nc_wall": 12.0,
+  "nc_rock": 40.0
+ },
+ "tiles": [
+  {
+   "name": "NCT_0_1",
+   "centre": [
+    3500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_0_2",
+   "centre": [
+    2500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_0_3",
+   "centre": [
+    1500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_0_4",
+   "centre": [
+    500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_0_5",
+   "centre": [
+    -500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_0_6",
+   "centre": [
+    -1500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_0_7",
+   "centre": [
+    -2500.0,
+    -3500.0
+   ]
+  },
+  {
+   "name": "NCT_1_0",
+   "centre": [
+    4500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_1",
+   "centre": [
+    3500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_2",
+   "centre": [
+    2500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_3",
+   "centre": [
+    1500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_4",
+   "centre": [
+    500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_5",
+   "centre": [
+    -500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_6",
+   "centre": [
+    -1500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_7",
+   "centre": [
+    -2500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_1_8",
+   "centre": [
+    -3500.0,
+    -2500.0
+   ]
+  },
+  {
+   "name": "NCT_2_0",
+   "centre": [
+    4500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_1",
+   "centre": [
+    3500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_2",
+   "centre": [
+    2500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_3",
+   "centre": [
+    1500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_4",
+   "centre": [
+    500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_5",
+   "centre": [
+    -500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_6",
+   "centre": [
+    -1500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_7",
+   "centre": [
+    -2500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_8",
+   "centre": [
+    -3500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_2_9",
+   "centre": [
+    -4500.0,
+    -1500.0
+   ]
+  },
+  {
+   "name": "NCT_3_0",
+   "centre": [
+    4500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_1",
+   "centre": [
+    3500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_2",
+   "centre": [
+    2500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_3",
+   "centre": [
+    1500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_4",
+   "centre": [
+    500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_5",
+   "centre": [
+    -500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_6",
+   "centre": [
+    -1500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_7",
+   "centre": [
+    -2500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_8",
+   "centre": [
+    -3500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_3_9",
+   "centre": [
+    -4500.0,
+    -500.0
+   ]
+  },
+  {
+   "name": "NCT_4_0",
+   "centre": [
+    4500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_1",
+   "centre": [
+    3500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_2",
+   "centre": [
+    2500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_3",
+   "centre": [
+    1500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_4",
+   "centre": [
+    500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_5",
+   "centre": [
+    -500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_6",
+   "centre": [
+    -1500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_7",
+   "centre": [
+    -2500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_4_8",
+   "centre": [
+    -3500.0,
+    500.0
+   ]
+  },
+  {
+   "name": "NCT_5_0",
+   "centre": [
+    4500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_1",
+   "centre": [
+    3500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_2",
+   "centre": [
+    2500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_3",
+   "centre": [
+    1500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_4",
+   "centre": [
+    500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_5",
+   "centre": [
+    -500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_6",
+   "centre": [
+    -1500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_7",
+   "centre": [
+    -2500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_5_8",
+   "centre": [
+    -3500.0,
+    1500.0
+   ]
+  },
+  {
+   "name": "NCT_6_1",
+   "centre": [
+    3500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_2",
+   "centre": [
+    2500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_3",
+   "centre": [
+    1500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_4",
+   "centre": [
+    500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_5",
+   "centre": [
+    -500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_6",
+   "centre": [
+    -1500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_7",
+   "centre": [
+    -2500.0,
+    2500.0
+   ]
+  },
+  {
+   "name": "NCT_6_8",
+   "centre": [
+    -3500.0,
+    2500.0
+   ]
+  }
+ ],
+ "land": "NCL_land",
+ "stations": [
+  {
+   "name": "West Terminal",
+   "pos": [
+    -2622.0,
+    -234.9
+   ],
+   "dir": [
+    0.9998,
+    0.0183
+   ],
+   "h": 9.0,
+   "line": "rail"
+  },
+  {
+   "name": "Spire Central",
+   "pos": [
+    -0.0,
+    0.0
+   ],
+   "dir": [
+    0.9985,
+    0.0544
+   ],
+   "h": 9.0,
+   "line": "rail"
+  },
+  {
+   "name": "Research",
+   "pos": [
+    1938.0,
+    1131.0
+   ],
+   "dir": [
+    0.9056,
+    0.4241
+   ],
+   "h": 9.0,
+   "line": "rail"
+  },
+  {
+   "name": "Industrial",
+   "pos": [
+    1178.0,
+    -1957.5
+   ],
+   "dir": [
+    0.1947,
+    -0.9809
+   ],
+   "h": 9.0,
+   "line": "rail"
+  },
+  {
+   "name": "Outer Reaches",
+   "pos": [
+    3154.0,
+    -2305.5
+   ],
+   "dir": [
+    0.9678,
+    0.2518
+   ],
+   "h": 9.0,
+   "line": "rail"
+  },
+  {
+   "name": "Metro 1",
+   "pos": [
+    1634.0,
+    -43.5
+   ],
+   "dir": [
+    -0.0452,
+    0.999
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 2",
+   "pos": [
+    1155.4,
+    793.1
+   ],
+   "dir": [
+    -0.7912,
+    0.6115
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 3",
+   "pos": [
+    -0.0,
+    1139.7
+   ],
+   "dir": [
+    -0.9997,
+    0.0234
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 4",
+   "pos": [
+    -1155.4,
+    793.1
+   ],
+   "dir": [
+    -0.8271,
+    -0.562
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 5",
+   "pos": [
+    -1634.0,
+    -43.5
+   ],
+   "dir": [
+    0.0452,
+    -0.999
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 6",
+   "pos": [
+    -1155.4,
+    -880.1
+   ],
+   "dir": [
+    0.7912,
+    -0.6115
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 7",
+   "pos": [
+    -0.0,
+    -1226.7
+   ],
+   "dir": [
+    0.9997,
+    -0.0234
+   ],
+   "h": 16.0,
+   "line": "metro"
+  },
+  {
+   "name": "Metro 8",
+   "pos": [
+    1155.4,
+    -880.1
+   ],
+   "dir": [
+    0.8271,
+    0.562
+   ],
+   "h": 16.0,
+   "line": "metro"
+  }
+ ],
+ "portals": [
+  {
+   "pos": [
+    -3985.19,
+    -259.8
+   ],
+   "dir": [
+    -0.9998,
+    -0.0183
+   ],
+   "h": 9.0
+  },
+  {
+   "pos": [
+    3765.24,
+    1413.28
+   ],
+   "dir": [
+    0.9998,
+    0.0215
+   ],
+   "h": 9.0
+  },
+  {
+   "pos": [
+    4247.55,
+    -1769.97
+   ],
+   "dir": [
+    0.9092,
+    0.4163
+   ],
+   "h": 9.0
+  }
+ ],
+ "gates": [
+  {
+   "name": "N",
+   "pos": [
+    -0.0,
+    2201.1
+   ],
+   "out": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "name": "S",
+   "pos": [
+    -0.0,
+    -3105.9
+   ],
+   "out": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "name": "W",
+   "pos": [
+    -3970.62,
+    42.56
+   ],
+   "out": [
+    -0.9988,
+    0.0485
+   ]
+  },
+  {
+   "name": "E",
+   "pos": [
+    4142.1,
+    41.74
+   ],
+   "out": [
+    0.9983,
+    0.0581
+   ]
+  }
+ ]
+}

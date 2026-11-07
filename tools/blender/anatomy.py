@@ -70,7 +70,7 @@ class Head:
         self.s = s
         # Eyes keep their real size and spacing (an eyeball is ~24 mm whatever the head; pupils ~64 mm apart in men,
         # ~62 mm in women), so on the smaller female head they read a little larger, as they do in life.
-        self.eye_r = .0119 if m else .0118
+        self.eye_r = .0119 if m else .0123          # (her eyes a touch larger: youthful)
         self.eye = np.array([.0320 if m else .0310, -.0588 * s, .012 * s])
         # Ears: from brow level to the nose base (centre just under the eye line), on the side of the widened skull.
         # (measured on the MetaHuman head: the ear canal ~8 cm behind the eye centre, the ear's middle ~1.2 cm under
@@ -86,9 +86,9 @@ class Head:
         tilt = .07 if not self.m else .04          # outer corner up
         ca, sa = np.cos(tilt), np.sin(tilt)
         a, b = a * ca + b * sa, -a * sa + b * ca
-        w = (.0152 if not self.m else .0146) * s
-        hu = (.0080 if not self.m else .0068) * s   # upper lid height (fissure ~10-11 mm, as measured on real adults)
-        hd = (.0048 if not self.m else .0044) * s   # lower lid
+        w = (.0160 if not self.m else .0146) * s
+        hu = (.0090 if not self.m else .0068) * s   # upper lid height (fissure ~10-11 mm men, a bigger, brighter eye on her)
+        hd = (.0052 if not self.m else .0044) * s   # lower lid
         R1 = (w * w + hu * hu) / (2 * hu); c1 = hu - R1
         R2 = (w * w + hd * hd) / (2 * hd); c2 = -hd + R2
         sh = .0012 * s                               # peak of the upper lid sits slightly inward
@@ -137,10 +137,10 @@ class Head:
             # face rows: widths at the cheekbones and jaw (the cranium rows above are measured, see CRANIUM)
             z = pr[:, 0]
             # the lower jaw ~9 mm longer (pupil to chin ~11.2 cm, MetaHuman overlay); stretched below the mouth
-            pr[:, 0] = np.where(z < -.04, -.04 + (z + .04) * (1 + .004 / .068), z)
+            pr[:, 0] = np.where(z < -.04, -.04 + (z + .04) * (1 + (.004 if self.m else -.003) / .068), z)
             z = pr[:, 0]
             face = z < .02
-            pr[face, 4] *= np.interp(z[face], [-.09, -.06, -.03, .0], [1.0, WIDTH_JAW, WIDTH_FACE, WIDTH_FACE])
+            pr[face, 4] *= np.interp(z[face], [-.09, -.06, -.03, .0], [1.0 if self.m else 1.03, WIDTH_JAW if self.m else 1.01, WIDTH_FACE, WIDTH_FACE])
             # the back of the head below the crown: a real occiput down to the nape (it used to stop ~4 cm short)
             pr[face, 3] = np.maximum(pr[face, 3], np.interp(z[face], [-.08, -.058, -.036, -.012, .01], [.0, .081, .099, .113, .116]))
             # the face below the eyes sits further forward (the jaw, mouth and chin were ~1 cm too far back)
@@ -162,7 +162,8 @@ class Head:
         d = self.base()(P)
         # cheeks: a soft volume under the cheekbone (leaner on the male face, which shows the bone structure)
         for sx in (1, -1):
-            d = smin(d, ellipsoid(P, S((sx * .03 * WIDTH_FACE, -.047, -.014)), S((.025, .025, .027) if not m else (.026, .024, .028))), (.03 if not m else .026) * s)
+            d = smin(d, ellipsoid(P, S((sx * .03 * WIDTH_FACE, -.049 if not m else -.047, -.009 if not m else -.014)),
+                                  S((.026, .026, .025) if not m else (.026, .024, .028))), (.032 if not m else .026) * s)
         d = self.structure(P, d)
         lz = .004 if not m else 0.0
         # chin
@@ -206,20 +207,18 @@ class Head:
             d = smin(d, round_cone(P, S((sx * .036, -.054, -.016 + (0 if m else .004))), S((sx * .061 * WIDTH_FACE, -.022, -.008)),
                                    (.0068 if m else .0062) * s, .0048 * s), .011 * s)
             # jaw angle and the jawline to the chin
-            ang = S((sx * (.052 if m else .047) * WIDTH_JAW * 1.02, -.008, -.068 if m else -.064))
+            ang = S((sx * (.052 * WIDTH_JAW * 1.02 if m else .047 * .97), -.008, -.068 if m else -.064))   # her jaw softer, narrower
             chin = S((sx * (.018 if m else .012), -.066, -.097 if m else -.092))
             d = smin(d, round_cone(P, ang, chin, (.0095 if m else .007) * s, (.0075 if m else .006) * s), (.014 if m else .016) * s)
             # masseter: a flat slab of muscle over the jaw angle
             if m:
                 d = smin(d, ellipsoid(P, S((sx * .048 * WIDTH_JAW * 1.03, -.02, -.052)), S((.008, .016, .02))), .014 * s)
-            # temple: slightly flat
-            d = smax(d, -ellipsoid(P, S((sx * .082, -.03, .04)), S((.006, .016, .016))), .012 * s)
         # chin: squared on the male face (two mental tubercles), rounded and narrower on the female one
         if m:
             for sx in (1, -1):
                 d = smin(d, ellipsoid(P, S((sx * .011, -.07, -.095)), S((.011, .009, .01))), .008 * s)
         else:
-            d = smin(d, ellipsoid(P, S((0, -.068, -.090)), S((.014, .01, .011))), .01 * s)
+            d = smin(d, ellipsoid(P, S((0, -.066, -.087)), S((.0155, .0095, .0105))), .012 * s)    # small, round chin
         # brow: glabella and the ridge above each eye, the forehead slope above it
         d = smin(d, ellipsoid(P, S((0, -.0775, .034)), S((.011, .007, .01)) * k), .014 * s)
         for sx in (1, -1):
@@ -240,10 +239,13 @@ class Head:
     def nose(self, P):
         m, s = self.m, self.s
         S = lambda v: np.asarray(v, F32) * s
-        wide = .88 if not m else 1.0
-        proj = .92 if not m else 1.0
+        wide = .80 if not m else 1.0
+        proj = .84 if not m else 1.0
         rows = np.array(self.NOSE, float)
         z, front, hw = rows[:, 0], rows[:, 1], rows[:, 2] * wide
+        if not m:     # shorter, the tip turned up a little (cute, not doll-like)
+            z = .024 + (z - .024) * .9
+            front = front + np.where(z < -.015, .0025 * (z + .015) / -.015, 0)
         front = self.NOSE_BACK + (front - self.NOSE_BACK) * proj
         z0, z1 = z[0], z[-1]
         t = (z - z0) / (z1 - z0)
@@ -252,29 +254,30 @@ class Head:
         n = Loft((0, 0, z0 * s), (0, 0, z1 * s), dict(t=t, rv_pos=hw * s, rw_pos=depth * s, rw_neg=depth * s,
                                                      cw=-cy * s, n=np.full(len(t), 2.3), nb=np.full(len(t), 2.0)),
                  v_axis=(1, 0, 0), cap=.5)(P)
+        zk = (lambda zz: .024 + (zz - .024) * .9) if not m else (lambda zz: zz)   # her shorter nose
         # alae: the wings, set back from the tip and blended in wide (no separate lumps)
         for sx in (1, -1):
-            n = smin(n, ellipsoid(P, S((sx * .0118 * wide, -.0915 * proj + self.NOSE_BACK * (1 - proj), -.0262)),
+            n = smin(n, ellipsoid(P, S((sx * .0118 * wide, -.0915 * proj + self.NOSE_BACK * (1 - proj), zk(-.0262))),
                                   S((.0068 * wide, .0080, .0062))), .006 * s)
         # nostrils, opening downward
         for sx in (1, -1):
-            n = smax(n, -ellipsoid(P, S((sx * .0068 * wide, -.0985 * proj + self.NOSE_BACK * (1 - proj), -.0302)), S((.0036 * wide, .0054, .0022))), .0015 * s)
+            n = smax(n, -ellipsoid(P, S((sx * .0068 * wide, -.0985 * proj + self.NOSE_BACK * (1 - proj), zk(-.0302))), S((.0036 * wide, .0054, .0022))), .0015 * s)
         # alar crease: a soft groove where the wing meets the cheek
         for sx in (1, -1):
-            n = smax(n, -capsule(P, S((sx * .0185 * wide, -.0815, -.019)), S((sx * .0175 * wide, -.0845, -.031)), .0009 * s), .003 * s)
+            n = smax(n, -capsule(P, S((sx * .0185 * wide, -.0815, zk(-.019))), S((sx * .0175 * wide, -.0845, zk(-.031))), .0009 * s), .003 * s)
         return n
 
     def lips(self, P, d):
         m, s = self.m, self.s
         S = lambda v: np.asarray(v, F32) * s
-        full = 1.0 if m else 1.2
+        full = 1.0 if m else 1.18
         lz = .002 if not m else 0.0
-        mw = .0245 if not m else .0265       # half mouth width: ~48 / ~52 mm corner to corner
+        mw = .0232 if not m else .0265       # half mouth width: ~46 / ~52 mm corner to corner
         up = ellipsoid(P, S((0, -.0778, -.0458 + lz)), S((mw, .0082, .0052 * full)))
         lo = ellipsoid(P, S((0, -.0758, -.0548 + lz)), S((mw * .82, .0086, .0066 * full)))
         # philtrum columns from the nose to the cupid's bow
         for sx in (1, -1):
-            up = smin(up, capsule(P, S((sx * .0035, -.0838, -.031)), S((sx * .0048, -.0808, -.0418 + lz)), .0016 * s), .003 * s)
+            up = smin(up, capsule(P, S((sx * .0035, -.0798, -.0315 + lz)), S((sx * .0048, -.0808, -.0418 + lz)), .0016 * s), .003 * s)   # on the face, not proud of it
         # cupid's bow: two small bumps
         for sx in (1, -1):
             up = smin(up, ellipsoid(P, S((sx * .0045, -.0795, -.0445 + lz)), S((.006, .005, .004 * full))), .002 * s)
@@ -338,8 +341,9 @@ class Body:
         self.head_o = np.array([0, .004, self.H - .125 * s0 - .115 * (s0 - hs)], F32)    # head-local origin in world
         self.top = self.head_o[2] + CRANIUM_TOP * hs        # crown height (the body's real height)
         if m:
-            self.zsh, self.sx = 1.512, .192
-            self.elbow = np.array([.25, .024, 1.18]); self.wrist = np.array([.292, .004, .922]); self.tip = np.array([.308, -.008, .724])
+            # strong build: shoulder joints 1.2 cm further out (arm length unchanged)
+            self.zsh, self.sx = 1.512, .204
+            self.elbow = np.array([.262, .024, 1.18]); self.wrist = np.array([.304, .004, .922]); self.tip = np.array([.320, -.008, .724])
             self.hip = np.array([.094, 0, .955]); self.knee = np.array([.098, -.012, .52]); self.ankle = np.array([.096, .03, .088])
             self.toe = np.array([.098, -.17, .02])
             self.z = dict(navel=1.09, chest=1.30, neck=1.525, crotch=.86)
@@ -389,6 +393,17 @@ class Body:
                  (1.21, .145, .088, .084, 0, 2.6), (1.27, .149, .082, .088, 0, 2.6), (1.325, .145, .072, .084, -.004, 2.5),
                  (1.36, .118, .058, .068, -.007, 2.3), (1.40, .058, .044, .048, -.005, 2.1)]
         T = np.array(T)
+        zt = T[:, 0]
+        if m:   # stronger: chest, back and shoulders fuller, the waist kept (V-taper)
+            T[:, 1] *= np.interp(zt, [.83, 1.0, 1.14, 1.3, 1.44, 1.535], [1.0, 1.0, 1.03, 1.08, 1.09, 1.12])
+            T[:, 2:4] *= np.interp(zt, [.83, 1.0, 1.14, 1.3, 1.44, 1.535], [1.0, 1.0, 1.03, 1.07, 1.07, 1.06])[:, None]
+            # measured against Manny and athletic anthropometry (chest ~26 cm deep, ~104 cm round): a deeper chest
+            # and back, fuller hips behind (glutes); the waist stays
+            T[:, 2] *= np.interp(zt, [.83, .95, 1.05, 1.14, 1.3, 1.44, 1.535], [1.0, 1.0, 1.02, 1.07, 1.16, 1.12, 1.04])
+            T[:, 3] *= np.interp(zt, [.83, .91, .95, 1.05, 1.14, 1.3, 1.44, 1.535], [1.04, 1.08, 1.06, 1.0, 1.04, 1.1, 1.1, 1.04])
+        else:   # slim: narrower waist and ribs, slimmer hips (still a woman's shape)
+            T[:, 1] *= np.interp(zt, [.75, .83, .87, .98, 1.09, 1.21, 1.40], [.92, .91, .91, .89, .89, .94, .97])
+            T[:, 2:4] *= np.interp(zt, [.75, .87, .98, 1.09, 1.21, 1.40], [.95, .93, .9, .9, .95, .97])[:, None]
         z0, z1 = T[0, 0], T[-1, 0]
         self.torso_z = (z0, z1)
         self.torso = Loft((0, 0, z0), (0, 0, z1), dict(t=(T[:, 0] - z0) / (z1 - z0), rv_pos=T[:, 1], rw_pos=T[:, 2],
@@ -398,8 +413,8 @@ class Body:
         hn = self.head_o
         nz0 = self.z['neck'] - .05
         self.neck = Loft((0, .0, nz0), (0, .012, hn[2] - .005), dict(
-            t=[0, .35, .7, 1], rv_pos=np.array([.052, .043, .041, .042]) * (1.18 if m else 1),
-            rw_pos=np.array([.046, .041, .040, .040]) * (1.12 if m else 1), rw_neg=np.array([.05, .044, .043, .045]) * (1.12 if m else 1),
+            t=[0, .35, .7, 1], rv_pos=np.array([.052, .043, .041, .042]) * (1.28 if m else .94),
+            rw_pos=np.array([.046, .041, .040, .040]) * (1.2 if m else .95), rw_neg=np.array([.05, .044, .043, .045]) * (1.22 if m else .95),
             cw=[0, .002, .004, .006], n=[2.2, 2.1, 2.0, 2.0]), v_axis=(-1, 0, 0), cap=.5)
         # arms (left)
         k = 1.22 if m else 1.0
@@ -411,7 +426,11 @@ class Body:
         fo = prof([(0, .031, .029, .032, .032), (.2, .033, .031, .035, .034), (.45, .029, .027, .031, .030),
                    (.75, .021, .020, .025, .024), (1, .018, .017, .024, .023)], ('t', 'rv_pos', 'rv_neg', 'rw_pos', 'rw_neg'))
         if m:
-            fo = {kk: (v * 1.2 if kk != 't' else v) for kk, v in fo.items()}
+            up = {kk: (v * 1.22 if kk != 't' else v) for kk, v in up.items()}     # stronger arms
+            fo = {kk: (v * 1.3 if kk != 't' else v) for kk, v in fo.items()}
+        else:
+            up = {kk: (v * .9 if kk != 't' else v) for kk, v in up.items()}       # slim arms
+            fo = {kk: (v * .92 if kk != 't' else v) for kk, v in fo.items()}
         sh, el, wr = self.shoulder, self.elbow, self.wrist
         self.upper = Loft(sh + np.array([-.004, 0, .012]), el, up, v_axis=(1, 0, 0), cap=.8)
         self.fore = Loft(el + (el - wr) / np.linalg.norm(el - wr) * .01, wr + (wr - el) / np.linalg.norm(wr - el) * .012, fo,
@@ -424,8 +443,13 @@ class Body:
                    (.6, .039, .037, .032, .044), (.85, .029, .028, .026, .029), (1, .026, .025, .024, .027)],
                   ('t', 'rv_pos', 'rv_neg', 'rw_pos', 'rw_neg'))
         if m:
-            th = {kk: (v * 1.06 if kk != 't' else v) for kk, v in th.items()}
-            sn = {kk: (v * 1.1 if kk != 't' else v) for kk, v in sn.items()}
+            th = {kk: (v * 1.18 if kk != 't' else v) for kk, v in th.items()}
+            sn = {kk: (v * 1.15 if kk != 't' else v) for kk, v in sn.items()}
+            sn['rw_neg'] = sn['rw_neg'] * np.array([1.0, 1.25, 1.3, 1.2, 1.0, 1.0])   # calves (~39 cm round)
+            sn['rv_pos'] = sn['rv_pos'] * np.array([1.0, 1.08, 1.1, 1.06, 1.0, 1.0]); sn['rv_neg'] = sn['rv_neg'] * np.array([1.0, 1.08, 1.1, 1.06, 1.0, 1.0])
+        else:
+            th = {kk: (v * .9 if kk != 't' else v) for kk, v in th.items()}       # slim legs
+            sn = {kk: (v * .93 if kk != 't' else v) for kk, v in sn.items()}
         hp, kn, an = self.hip, self.knee, self.ankle
         self.thigh = Loft(hp + np.array([.006, 0, .05]), kn, th, v_axis=(1, 0, 0), cap=.8)
         self.shin = Loft(kn + (kn - an) / np.linalg.norm(kn - an) * .01, an + np.array([0, 0, -.01]), sn, v_axis=(1, 0, 0), cap=.6)
@@ -439,12 +463,12 @@ class Body:
         front = smoothstep(-.03, -.07, y); back = smoothstep(.03, .07, y)
         if m:
             for sx in (1, -1):   # pectorals: broad plates, fuller at the lower outer edge
-                d = smin(d, ellipsoid(P, (sx * .07, -.074, 1.362), (.086, .036, .06), sdf.rot((0, 1, 0), sx * .2)), .026)
+                d = smin(d, ellipsoid(P, (sx * .076, -.086, 1.36), (.096, .048, .07), sdf.rot((0, 1, 0), sx * .2)), .028)
                 d = smin(d, ellipsoid(P, (sx * .136, -.006, 1.43), (.03, .045, .07)), .03)                 # front of the armpit
-                d = smin(d, ellipsoid(P, (sx * .108, .058, 1.31), (.05, .03, .1), sdf.rot((0, 1, 0), sx * .2)), .04)  # lats
+                d = smin(d, ellipsoid(P, (sx * .116, .06, 1.31), (.058, .035, .11), sdf.rot((0, 1, 0), sx * .2)), .04)  # lats
                 d = smin(d, ellipsoid(P, (sx * .118, -.03, 1.01), (.028, .05, .055)), .03)                  # obliques
                 d = smin(d, ellipsoid(P, (sx * .03, .084, 1.07), (.024, .02, .1)), .03)                     # erectors
-            d = smin(d, ellipsoid(P, (0, .074, 1.42), (.06, .02, .1)), .05)                                  # mid trapezius
+            d = smin(d, ellipsoid(P, (0, .078, 1.42), (.068, .024, .11)), .05)                                 # mid trapezius
             # rectus abdominis: raised plate, linea alba, three tendinous lines, linea semilunaris
             rect = smoothstep(.068, .045, ax) * smoothstep(.97, 1.02, zz) * smoothstep(1.285, 1.24, zz) * front
             d = d - .0042 * rect
@@ -468,11 +492,11 @@ class Body:
         # glutes
         gz = .845 if not m else .925
         for sx in (1, -1):
-            d = smin(d, ellipsoid(P, (sx * .064, .056 if not m else .058, gz), (.078, .05, .08) if not m else (.07, .044, .072)), .05)
+            d = smin(d, ellipsoid(P, (sx * .064, .056 if not m else .064, gz), (.074, .048, .078) if not m else (.076, .054, .078)), .05)
         # shoulder girdle: trapezius, clavicles, scapulae
         for sx in (1, -1):
             d = smin(d, round_cone(P, (sx * .028, .024, z['neck'] + .012), (sx * (self.sx - .03), .014, zsh + .002),
-                                   .041 if m else .024, .028 if m else .017), .04 if m else .035)
+                                   .048 if m else .022, .032 if m else .016), .04 if m else .035)
             d = smin(d, round_cone(P, (sx * .025, -.044 if not m else -.05, zsh + (.022 if not m else .014)), (sx * (self.sx - .025), -.018, zsh + (.026 if not m else .018)),
                                    .007, .006), .025 if not m else .032)
             d = smin(d, ellipsoid(P, (sx * .068, .062 if not m else .074, zsh - .095), (.045, .016, .06)), .04)
@@ -489,7 +513,7 @@ class Body:
         u = self.elbow - self.shoulder; u = u / np.linalg.norm(u)
         R = sdf.frame(u, (0, 0, 1))
         dc = self.shoulder + np.array([.012, 0, -.03])
-        a = smin(a, ellipsoid(P, dc, (.08 if m else .07, .056 if m else .046, .054 if m else .046), R), .025)
+        a = smin(a, ellipsoid(P, dc, (.086 if m else .066, .064 if m else .043, .062 if m else .043), R), .025)
         # elbow point
         a = smin(a, sphere(P, self.elbow + np.array([0, .028 if m else .024, 0]), .012), .015)
         sh, el, wr = self.shoulder, self.elbow, self.wrist

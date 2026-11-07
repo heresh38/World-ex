@@ -16,6 +16,7 @@
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
 #include "SOHUD.h"
+#include "SOTimeOfDaySubsystem.h"
 #include "SOCombatStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "SOInventoryWidget.h"
@@ -153,6 +154,50 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 4)
+	{
+		// Nexus Prime (L_Nexus): the start, street level in three districts, a gate, aerials by day and at night.
+		// Plan metres (E, N) -> world (X = N, Y = E); each view waits for Nanite / Lumen to settle.
+		auto CityView = [this](double E, double N, double Z, float Yaw, float Pitch, float Fov)
+		{
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->SetActorLocationAndRotation(FVector(N * 100.0, E * 100.0, Z * 100.0), FRotator(Pitch, Yaw, 0.0f));
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
+			{
+				Cam->GetCameraComponent()->SetFieldOfView(Fov);
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		auto Hour = [this](float H) { if (USOTimeOfDaySubsystem* T = GetWorld()->GetSubsystem<USOTimeOfDaySubsystem>()) { T->SetHour(H); T->SetPaused(true); } };
+		struct FCityShot { const TCHAR* Name; double E, N, Z; float Yaw, Pitch, Fov, Hour; };
+		static const FCityShot Shots[] = {
+			{ TEXT("n1_spire_plaza"), 0, -330, 1.8, 0, 8, 80, 15.5f },
+			{ TEXT("n2_market_street"), -2394, 0, 1.8, 0, 2, 80, 15.5f },
+			{ TEXT("n3_core_avenue"), 0, -900, 1.8, 0, 6, 80, 15.5f },
+			{ TEXT("n4_research"), 1500, 1100, 1.8, 90, 4, 80, 15.5f },
+			{ TEXT("n5_south_gate"), 0, -2850, 2.0, 180, 6, 80, 15.5f },
+			{ TEXT("n6_aerial_core"), -900, -1400, 420, 35, -22, 70, 15.5f },
+			{ TEXT("n7_aerial_city"), 0, -5200, 1300, 0, -16, 70, 15.5f },
+			{ TEXT("n8_rail_viaduct"), -1200, -250, 1.8, 0, 8, 80, 15.5f },
+			{ TEXT("n11_refuge_park"), 0, -1600, 40, 180, -18, 80, 15.5f },
+			{ TEXT("n9_night_core"), -900, -1400, 420, 35, -22, 70, 21.5f },
+			{ TEXT("n10_night_street"), 0, -900, 1.8, 0, 6, 80, 21.5f },
+		};
+		Do(8.0f, [=, this]() { Look(0.0f); ConsoleCommand(TEXT("DisableAllScreenMessages")); });
+		Snap(0.5f, TEXT("n0_start"));
+		for (const FCityShot& S : Shots)
+		{
+			const FCityShot Copy = S;
+			Do(0.2f, [=]() { Hour(Copy.Hour); CityView(Copy.E, Copy.N, Copy.Z, Copy.Yaw, Copy.Pitch, Copy.Fov); });
+			Snap(6.0f, Copy.Name);
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 3)
 	{
 		// Head study: both bodies, as worn and bald (hair and coat off), from eight angles at 75 cm with a 30 degree
@@ -262,6 +307,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Do(1.0f, [=]() { Aim(true); });
 		Snap(0.8f, TEXT("s3_ads_holo"));
 		Act([=]() { Aim(false); EquipSight(TEXT("rifle"), TEXT("default")); });
+		// reloading in first person: the gun comes up and cants so the mag well is in view
+		Do(1.0f, [=]() { EmptyReload(); });
+		Snap(0.0f, TEXT("r1_fp_reload_mag"), MidMag);
+		Snap(0.0f, TEXT("r2_fp_reload_rack"), MidRack);
 		Snap(4.0f, TEXT("m1_minimap"));                       // the map picture is captured ~1-3.5 s after load
 		Act([=]() { if (ASOHUD* H = Hud()) { H->ToggleMap(); } });
 		Snap(1.0f, TEXT("m2_map_screen"));

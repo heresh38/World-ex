@@ -99,6 +99,14 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float InPitch = (-MantleT * 0.5f + AirK * 0.03f) * Free;
 	const float InRoll = (StrafeK * 0.05f + SlideT * 0.22f + MantleT * 0.35f) * Free;
 
+	// Reloads: the gun comes up and cants toward the view so the magazine well and the hands are in sight
+	// (it used to stay at the hip, the work happening under the camera).
+	ReloadK = FMath::FInterpTo(ReloadK, Weapon && Weapon->IsReloading() ? 1.0f : 0.0f, Dt, 7.0f);
+	const float RlT = ReloadK * ReloadK * (3.0f - 2.0f * ReloadK) * (1.0f - Ads);
+	const float RlX = -ReloadLift.Y * 0.01f * RlT, RlY = ReloadLift.Z * 0.01f * RlT, RlZ = -ReloadLift.X * 0.01f * RlT;
+	const float RlPitch = FMath::DegreesToRadians(ReloadTilt.Y) * RlT, RlRoll = FMath::DegreesToRadians(ReloadTilt.X) * RlT,
+		RlYaw = FMath::DegreesToRadians(ReloadTilt.Z) * RlT;
+
 	// Reload / cycling gun offsets (reload.js view space: x right, y up, z back; pitch, yaw (+left), roll).
 	static const float Zero[6] = { 0, 0, 0, 0, 0, 0 };
 	const float* G = Weapon ? Weapon->GetPose().Gun : Zero;
@@ -119,9 +127,9 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// view-space metres (x right, y up, z back) accumulated like viewmodel.js, then converted
 	// Sprint: the gun is carried across the chest, muzzle up and to the left, canted, still in view (like every
 	// shooter keeps it), and comes back to the hip in the gun's sprint-to-fire time.
-	const float VX = BobX + SwayX * Lift + RunT * 0.01f + G[0] + InX;
-	const float VY = BobY + SwayY * Lift - Lower * 0.35f + RunT * 0.035f + G[1] + InY;
-	const float VZ = KickBack * (1.0f - Ads * 0.5f) + RunT * 0.03f + G[2];
+	const float VX = BobX + SwayX * Lift + RunT * 0.01f + G[0] + InX + RlX;
+	const float VY = BobY + SwayY * Lift - Lower * 0.35f + RunT * 0.035f + G[1] + InY + RlY;
+	const float VZ = KickBack * (1.0f - Ads * 0.5f) + RunT * 0.03f + G[2] + RlZ;
 	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
 	// Bulky guns (launchers, the living guns) sit further out to the right and lower at the hip, so the body of
 	// the gun stays in the corner of the view instead of filling it.
@@ -136,9 +144,9 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
 	// The muzzle flip stays small on the sights so the front post settles back on the target.
-	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch;
-	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.5f) + RunT * 0.55f + G[4];
-	const float EZ = G[5] + RunT * 0.5f + InRoll;
+	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch + RlPitch;
+	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.5f) + RunT * 0.55f + G[4] + RlYaw;
+	const float EZ = G[5] + RunT * 0.5f + InRoll + RlRoll;
 	const FTransform Local(FRotator(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ)), Offset);
 
 	// First person: locked to the kicked eye, exactly what the camera shows.

@@ -49,6 +49,8 @@ def ensure_dir(path):
 
 def base_slot(name):
     name = re.sub(r"[._]\d{3}$", "", str(name))
+    if name == "skin__head":
+        return "skin_face"                                    # the face has its own skin maps (tools/blender/skin.py)
     return "skin" if name.startswith("skin__") else name     # per-region body sections share the skin material
 
 
@@ -230,8 +232,74 @@ def master_material(defaults):
     return mat
 
 
+# Slots that use another parent than M_SOStandard (key -> material), filled in main().
+PARENT_FOR = {}
+
+
+def hair_material(defaults):
+    """/Game/Materials/M_SOHair: the hair cards (hair.py). Unreal's Hair shading model with the strand tangent along
+    the card (the atlas strands run down V), dithered alpha (temporal AA blends the strand edges instead of a hard cut)
+    and the atlas brightness kept under the dark tint so single strands stay visible. Same parameter names as the
+    master (BaseColorTex, BaseColorTint, Roughness)."""
+    path = "/Game/Materials/M_SOHair"
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_SOHair", "/Game/Materials", unreal.Material, unreal.MaterialFactoryNew())
+    for prop, value in (("used_with_skeletal_mesh", True), ("used_with_morph_targets", True), ("two_sided", True),
+                        ("blend_mode", unreal.BlendMode.BLEND_MASKED), ("opacity_mask_clip_value", 0.3333),
+                        ("shading_model", unreal.MaterialShadingModel.MSM_HAIR)):
+        mat.set_editor_property(prop, value)
+    E = lambda cls, x, y: mel.create_material_expression(mat, cls, x, y)
+    tex = E(unreal.MaterialExpressionTextureSampleParameter2D, -900, -200)
+    tex.set_editor_property("parameter_name", "BaseColorTex")
+    tex.set_editor_property("texture", defaults["white"])
+    tint = E(unreal.MaterialExpressionVectorParameter, -900, 40)
+    tint.set_editor_property("parameter_name", "BaseColorTint")
+    tint.set_editor_property("default_value", unreal.LinearColor(0.035, 0.024, 0.018, 1))
+    code = E(unreal.MaterialExpressionCustom, -500, -100)
+    code.set_editor_property("code", "float l = saturate((C.r - 0.55) / 0.45); return T * lerp(0.45, 1.9, l * l);")
+    code.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    ins = []
+    for n in ("C", "T"):
+        ci = unreal.CustomInput(); ci.set_editor_property("input_name", n); ins.append(ci)
+    code.set_editor_property("inputs", ins)
+    mel.connect_material_expressions(tex, "RGB", code, "C")
+    mel.connect_material_expressions(tint, "", code, "T")
+    mel.connect_material_property(code, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    def scalar(name, value, y):
+        e = E(unreal.MaterialExpressionScalarParameter, -500, y)
+        e.set_editor_property("parameter_name", name)
+        e.set_editor_property("default_value", value)
+        return e
+    mel.connect_material_property(scalar("Scatter", 0.35, 120), "", unreal.MaterialProperty.MP_METALLIC)     # Hair: Scatter
+    mel.connect_material_property(scalar("Specular", 0.3, 200), "", unreal.MaterialProperty.MP_SPECULAR)
+    mel.connect_material_property(scalar("Roughness", 0.5, 280), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    tangent = E(unreal.MaterialExpressionConstant3Vector, -500, 440)
+    tangent.set_editor_property("constant", unreal.LinearColor(0, 1, 0, 0))
+    mel.connect_material_property(tangent, "", unreal.MaterialProperty.MP_NORMAL)                            # Hair: Tangent
+    fn = unreal.load_asset("/Engine/Functions/Engine_MaterialFunctions02/Utility/DitherTemporalAA")
+    ok = False
+    if fn:
+        dither = E(unreal.MaterialExpressionMaterialFunctionCall, -500, 560)
+        dither.set_editor_property("material_function", fn)
+        ok = mel.connect_material_expressions(tex, "A", dither, "Alpha Threshold")
+        if ok:
+            mel.connect_material_property(dither, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    if not ok:
+        mel.connect_material_property(tex, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+        log("hair: DitherTemporalAA unavailable, plain alpha")
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    log("hair material ready")
+    return mat
+
+
 def make_instance(master, dest, name, m, tex, extra=None):
     """m: one materials.json entry; tex: {relative file or hx name: texture asset}."""
+    master = PARENT_FOR.get(name, master)
     path = f"{dest}/MI_{name}"
     if eal.does_asset_exist(path):
         mi = eal.load_asset(path)
@@ -485,7 +553,7 @@ HAIR_TONE = (0.035, 0.024, 0.018)     # dark brown (the concept pair); the game 
 
 
 def player_extra(key, m):
-    if key == "skin":
+    if key in ("skin", "skin_face"):
         return {"tint": list(SKIN_TONE)}
     if key in ("hair", "hair__cap", "brow"):
         return {"tint": list(HAIR_TONE)}
@@ -566,7 +634,7 @@ def player_wardrobe(sex, master):
     tex = import_textures_for(src, materials, dest + "/Textures", used)
     instances = {}
     for key in used:
-        m = materials.get(key) or {}
+        m = materials.get(key) or (materials.get("skin") if key == "skin_face" else None) or {}
         instances[key] = make_instance(master, dest, key, m, tex, player_extra(key, m))
 
     # the body: skeleton, physics and clips
@@ -1079,6 +1147,235 @@ def nexus(master):
     log(f"Nexus: {len(manifest['assets'])} pieces")
 
 
+# ---------------------------------------------------------------- Nexus Prime, the big city (tools/blender/nexus_city.py)
+
+GROUND_UV_HLSL = """
+float s = 1.0 / (T * 100.0);
+float3 n = normalize(N);
+if (abs(n.z) > 0.6) { return WP.xy * s; }
+float2 t = normalize(float2(-n.y, n.x) + 1e-5);
+return float2(dot(WP.xy, t), -WP.z) * s;
+"""
+GROUND_N_HLSL = """
+float3 n = normalize(N);
+if (abs(n.z) > 0.6) { return normalize(float3(Nt.x * K, -Nt.y * K, max(Nt.z, 0.2))); }
+return n;
+"""
+FACADE_UV_HLSL = """
+float along = lerp(D, W, U1.x);
+return float2(U0.x * along / Bay, -(1.0 - U0.y) * H / Floor);
+"""
+FACADE_LIT_HLSL = """
+float along = lerp(D, W, U1.x);
+float2 c = floor(float2(U0.x * along / Bay, (1.0 - U0.y) * H / Floor));
+float h = frac(sin(dot(c + float2(Seed * 17.13 + U1.x * 31.0, Seed * 3.71), float2(12.9898, 78.233))) * 43758.5453);
+float lit = step(h, Lit);
+float3 col = lerp(float3(1.0, 0.70, 0.40), float3(0.55, 0.80, 1.0), step(0.72, frac(h * 13.7)));
+return col * lit * M * Glow * Night;
+"""
+
+
+def _material(path, setup):
+    folder, name = path.rsplit("/", 1)
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+    for prop, value in setup.items():
+        mat.set_editor_property(prop, value)
+    return mat
+
+
+def _custom(mat, code, inputs, out_type, x, y):
+    node = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y)
+    node.set_editor_property("code", code)
+    node.set_editor_property("output_type", out_type)
+    ins = []
+    for n in inputs:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        ins.append(ci)
+    node.set_editor_property("inputs", ins)
+    return node
+
+
+def _param(mat, cls, name, value, x, y):
+    e = mel.create_material_expression(mat, cls, x, y)
+    e.set_editor_property("parameter_name", name)
+    if cls is unreal.MaterialExpressionScalarParameter:
+        e.set_editor_property("default_value", value)
+    elif cls is unreal.MaterialExpressionVectorParameter:
+        e.set_editor_property("default_value", unreal.LinearColor(*value))
+    else:
+        e.set_editor_property("texture", value[0])
+        e.set_editor_property("sampler_type", value[1])
+    return e
+
+
+def ground_material(defaults):
+    """/Game/Environments/NexusCity/M_SOGround: city ground, roofs, wall, land. The textures are projected in world
+    metres (TilingM = metres per tile): from above on flat faces, along the face on walls; normal map in world space."""
+    mat = _material("/Game/Environments/NexusCity/M_SOGround", {"tangent_space_normal": False, "used_with_instanced_static_meshes": True})
+    S = unreal.MaterialSamplerType
+    wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -1400, 0)
+    vn = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, -1400, 120)
+    tiling = _param(mat, unreal.MaterialExpressionScalarParameter, "TilingM", 8.0, -1400, 240)
+    uv = _custom(mat, GROUND_UV_HLSL, ("WP", "N", "T"), unreal.CustomMaterialOutputType.CMOT_FLOAT2, -1100, 60)
+    mel.connect_material_expressions(wp, "", uv, "WP")
+    mel.connect_material_expressions(vn, "", uv, "N")
+    mel.connect_material_expressions(tiling, "", uv, "T")
+    col = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "ColorTex", (defaults["white"], S.SAMPLERTYPE_COLOR), -800, -200)
+    nrm = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "NormalTex", (defaults["normal"], S.SAMPLERTYPE_NORMAL), -800, 100)
+    msk = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "MaskTex", (defaults["mask"], S.SAMPLERTYPE_MASKS), -800, 400)
+    for t in (col, nrm, msk):
+        mel.connect_material_expressions(uv, "", t, "UVs")
+    tint = _param(mat, unreal.MaterialExpressionVectorParameter, "Tint", (1, 1, 1, 1), -800, -400)
+    c = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -450, -250)
+    mel.connect_material_expressions(col, "RGB", c, "A")
+    mel.connect_material_expressions(tint, "", c, "B")
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    strength = _param(mat, unreal.MaterialExpressionScalarParameter, "NormalStrength", 1.0, -800, 650)
+    n = _custom(mat, GROUND_N_HLSL, ("Nt", "N", "K"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -450, 100)
+    mel.connect_material_expressions(nrm, "RGB", n, "Nt")
+    mel.connect_material_expressions(vn, "", n, "N")
+    mel.connect_material_expressions(strength, "", n, "K")
+    mel.connect_material_property(n, "", unreal.MaterialProperty.MP_NORMAL)
+    mel.connect_material_property(msk, "G", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(msk, "B", unreal.MaterialProperty.MP_METALLIC)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    return mat
+
+
+def facade_material(defaults):
+    """/Game/Environments/NexusCity/M_SOFacade: building walls. UV0 (unit-footprint facade coordinates) and UV1.x
+    (1: the face runs along the width) become metres with the instance's custom data (0 width, 1 depth, 2 height in
+    m, 3 seed), so bays (Bay m) and floors (Floor m) keep their size on every lot. The mask's R marks glass: a hash
+    per window, building and face lights a share (Lit) of the rooms, scaled by Night (set by ASONexusCity)."""
+    mat = _material("/Game/Environments/NexusCity/M_SOFacade", {"used_with_instanced_static_meshes": True})
+    S = unreal.MaterialSamplerType
+    u0 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1500, -100)
+    u1 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1500, 0)
+    u1.set_editor_property("coordinate_index", 1)
+    cd = {}
+    for i, (n, default) in enumerate((("W", 20.0), ("D", 20.0), ("H", 60.0), ("Seed", 0.0))):
+        e = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, -1500, 120 + i * 90)
+        e.set_editor_property("data_index", i)
+        e.set_editor_property("const_default_value", default)
+        cd[n] = e
+    bay = _param(mat, unreal.MaterialExpressionScalarParameter, "Bay", 3.6, -1500, 500)
+    floor = _param(mat, unreal.MaterialExpressionScalarParameter, "Floor", 3.6, -1500, 580)
+    uv = _custom(mat, FACADE_UV_HLSL, ("U0", "U1", "W", "D", "H", "Bay", "Floor"), unreal.CustomMaterialOutputType.CMOT_FLOAT2, -1150, 0)
+    for n, e in (("U0", u0), ("U1", u1), ("Bay", bay), ("Floor", floor)):
+        mel.connect_material_expressions(e, "", uv, n)
+    for n in ("W", "D", "H"):
+        mel.connect_material_expressions(cd[n], "", uv, n)
+    col = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "ColorTex", (defaults["white"], S.SAMPLERTYPE_COLOR), -850, -250)
+    nrm = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "NormalTex", (defaults["normal"], S.SAMPLERTYPE_NORMAL), -850, 50)
+    msk = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "MaskTex", (defaults["mask"], S.SAMPLERTYPE_MASKS), -850, 350)
+    for t in (col, nrm, msk):
+        mel.connect_material_expressions(uv, "", t, "UVs")
+    tint = _param(mat, unreal.MaterialExpressionVectorParameter, "Tint", (1, 1, 1, 1), -850, -450)
+    c = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -500, -300)
+    mel.connect_material_expressions(col, "RGB", c, "A")
+    mel.connect_material_expressions(tint, "", c, "B")
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(nrm, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    mel.connect_material_property(msk, "G", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(msk, "B", unreal.MaterialProperty.MP_METALLIC)
+    lit = _custom(mat, FACADE_LIT_HLSL, ("U0", "U1", "W", "D", "H", "Seed", "Bay", "Floor", "M", "Lit", "Glow", "Night"),
+                  unreal.CustomMaterialOutputType.CMOT_FLOAT3, -500, 300)
+    for n, e in (("U0", u0), ("U1", u1), ("Bay", bay), ("Floor", floor)):
+        mel.connect_material_expressions(e, "", lit, n)
+    for n in ("W", "D", "H", "Seed"):
+        mel.connect_material_expressions(cd[n], "", lit, n)
+    mel.connect_material_expressions(msk, "R", lit, "M")
+    for i, (n, v) in enumerate((("Lit", 0.22), ("Glow", 1.4), ("Night", 0.0))):
+        mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, n, v, -850, 650 + i * 80), "", lit, n)
+    mel.connect_material_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    return mat
+
+
+def _city_instance(parent, dest, name, params, textures):
+    path = f"{dest}/MI_{name}"
+    mi = eal.load_asset(path) if eal.does_asset_exist(path) else tools.create_asset(
+        f"MI_{name}", dest, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+    mel.set_material_instance_parent(mi, parent)
+    for k, v in params.items():
+        mel.set_material_instance_scalar_parameter_value(mi, k, float(v))
+    for k, t in textures.items():
+        if t:
+            mel.set_material_instance_texture_parameter_value(mi, k, t)
+    mel.update_material_instance(mi)
+    eal.save_loaded_asset(mi, only_if_is_dirty=False)
+    return mi
+
+
+def _nanite(mesh, collide):
+    ns = mesh.get_editor_property("nanite_settings")
+    ns.set_editor_property("enabled", True)
+    mesh.set_editor_property("nanite_settings", ns)
+    if collide:
+        body = mesh.get_editor_property("body_setup")
+        if body:
+            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+
+
+def nexus_city(master, defaults):
+    """tools/blender/nexus_city.py (kit + tiles, through export_fbx.py) -> /Game/Environments/NexusCity: SM_NCB_*
+    buildings, SM_NCK_* street pieces, Tiles/SM_NCT_* plan tiles and SM_NCL_land; ASONexusCity places them from
+    Data/nexus_plan.json + Data/nexus_city.json. Everything is Nanite with complex-as-simple collision."""
+    dest = "/Game/Environments/NexusCity"
+    city = load_json(os.path.join(PROJECT, "Data", "nexus_city.json"))
+    kit_src, tile_src = os.path.join(SOURCE, "NexusCity", "Kit"), os.path.join(SOURCE, "NexusCity", "Tiles")
+    if not os.path.isdir(kit_src) or not os.path.isdir(tile_src):
+        log("NexusCity: skipped (run tools/blender/export_unreal.sh)")
+        return
+    ensure_dir(dest)
+    ensure_dir(dest + "/Textures")
+    ensure_dir(dest + "/Tiles")
+    ground, facade = ground_material(defaults), facade_material(defaults)
+
+    def tex(stem, kind):
+        f = os.path.join(REPO_TEXTURES, stem)
+        if not os.path.exists(f):
+            return None
+        return import_texture(f, dest + "/Textures", "T_" + os.path.splitext(stem)[0], kind)
+
+    inst = {}
+    for name, tiling in city["ground"].items():
+        src = "nx_rock" if name == "nc_rock" else name
+        inst[name] = _city_instance(ground, dest, name, {"TilingM": tiling}, {
+            "ColorTex": tex(src + "_c.jpg", "color"), "NormalTex": tex(src + "_n.png", "normal") or tex(src + "_n.jpg", "normal"),
+            "MaskTex": tex(src + "_m.png", "mask")})
+    for name, (bay, floor) in city["facade"].items():
+        inst[name] = _city_instance(facade, dest, name, {"Bay": bay, "Floor": floor}, {
+            "ColorTex": tex(name + "_c.jpg", "color"), "NormalTex": tex(name + "_n.png", "normal"), "MaskTex": tex(name + "_m.png", "mask")})
+    count = 0
+    for src, folder in ((kit_src, dest), (tile_src, dest + "/Tiles")):
+        manifest = load_json(os.path.join(src, "export_fbx.json"))
+        materials = load_json(os.path.join(src, "materials.json"))
+        for key, m in materials.items():
+            k = base_slot(key)
+            if k not in inst:
+                plain = dict(m, baseColorTex=None, normalTex=None, mrTex=None)
+                inst[k] = make_instance(master, dest, k, plain, {})
+        for a in manifest["assets"]:
+            name = os.path.splitext(a["file"])[0]
+            # a fresh import: re-importing over an existing mesh keeps its old material slots (tiles change content)
+            if eal.does_asset_exist(f"{folder}/SM_{name}"):
+                eal.delete_asset(f"{folder}/SM_{name}")
+            mesh = import_static(src, a["file"], folder, f"SM_{name}", inst)
+            _nanite(mesh, True)
+            count += 1
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"NexusCity: {count} meshes")
+
+
 def ui_materials():
     """/Game/UI/M_UI_Stage: the loadout screen's live character picture. The scene capture stores inverse opacity in
     alpha (1 where it drew nothing), so the material shows the colour with opacity = 1 - alpha."""
@@ -1166,6 +1463,8 @@ def main():
     unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX 0")
     defaults = default_textures()
     master = master_material(defaults)
+    hair = hair_material(defaults)
+    PARENT_FOR.update({"hair": hair, "hair__cap": hair})
     # SO_IMPORT_ONLY=arms,weapons,... re-imports just those steps (default: everything).
     only = {s.strip() for s in os.environ.get("SO_IMPORT_ONLY", "").split(",") if s.strip()}
     want = lambda step: not only or step in only
@@ -1187,6 +1486,8 @@ def main():
         ui_materials()
     if want("nexus"):
         nexus(master)
+    if want("nexuscity"):
+        nexus_city(master, defaults)
     log("done")
 
 

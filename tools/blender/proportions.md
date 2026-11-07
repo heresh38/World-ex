@@ -65,6 +65,38 @@ light and 30° lens, eye lines aligned. Eight views plus a cyan/orange overlay (
 is a mismatch). Scripts: `tools/reference/`. In game, `SOCaptureSeries 1 3` shoots both bodies from
 the same eight angles, as worn and bald.
 
+## Body build (`tools/reference/body_measure.py`, `body_views.py`, `body_sheet.py`)
+
+Ours against Manny (male), Quinn and MetaHuman's archetype body (both female), at true scale on a 10 cm grid. Front,
+side and back views, with overlays. The MetaHuman body is a female form, so the male is compared with Manny.
+
+- **Male (strong, 1.82 m):**
+  - shoulder joints 1.2 cm further out;
+  - chest about 26 cm deep, about 104 cm round (it was 22 / 89);
+  - waist kept at about 80, for a V-taper;
+  - fuller glutes, thighs, calves (about 39 round) and upper arms.
+- **Female (slim, 1.64 m):**
+  - waist about 63 cm, hips about 88–90;
+  - slimmer arms and legs.
+- **Female face (cute):**
+  - slightly larger eyes with brighter openings;
+  - a smaller, shorter, slightly upturned nose;
+  - fuller lips on a smaller mouth;
+  - a small round chin, softer jaw and higher cheeks.
+
+## Skin and hair
+
+- **Face:** `skin.py` gives the head cylindrical UVs and bakes three maps from its 3D surface:
+  - colour: lips, warm cheeks, nose and ears, under-eye tone, lash line, and the male beard shadow with stubble;
+  - normal: pores, lip lines, forehead lines and crow's feet;
+  - roughness.
+
+  They go on the `skin_face` material (Unreal slot `skin__head`).
+- **Body:** a tiling 8 cm detail set (`skin_detail_*`) on box-projected UVs, with pores and the fine cross-hatched
+  creases of body skin.
+- **Brows:** a 1024 × 256 strand atlas per style with about 600 crisp, tapered hairs.
+- **Hair:** a 2048 atlas with strands about 0.05–0.1 mm wide, 1.8× more cards per style, and narrower cards.
+
 ## Morph targets
 
 The face presets are shape keys with default weight 0. `players.py` sets them to 0, because Blender 5 creates new

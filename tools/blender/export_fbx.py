@@ -579,9 +579,9 @@ def export_per_item(src, out_dir, textures, with_clips=True):
     for o in body:
         region = o.name.split(".")[0][2:]
         for i, slot in enumerate(o.material_slots):
-            if slot.material and slot.material.name.split(".")[0] == "skin":
+            if slot.material and slot.material.name.split(".")[0] in ("skin", "skin_face"):
                 m = slot.material.copy()
-                m.name = "skin__" + region
+                m.name = "skin__" + region       # (the head's skin_face too: the game hides regions by these names)
                 o.material_slots[i].material = m
     groups = [("Body", body)] + [(o.name.split(".")[0], [o]) for o in meshes if o.name.split(".")[0].startswith("C_")]
     manifest = {"source": os.path.basename(src), "textures": textures, "materials": "materials.json", "units": "cm",

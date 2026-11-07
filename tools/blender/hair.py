@@ -22,16 +22,18 @@ NCOL = 4                      # 0 dense, 1 layered, 2 wispy, 3 short tufts
 
 
 # ====================================================================== texture
-def strand_texture(size=1024):
+def strand_texture(size=2048):
     W = size // NCOL; Hh = size
     rng = np.random.default_rng(17)
     alpha = np.zeros((Hh, size), F32)
     num = np.zeros((Hh, size), F32); den = np.zeros((Hh, size), F32)
     rows = np.arange(Hh)
-    cfg = [dict(n=560, clumps=15, lmin=.72, wmin=1.3, wmax=2.5, conv=.55, fill=.08),
-           dict(n=400, clumps=11, lmin=.5, wmin=1.1, wmax=2.2, conv=.7, fill=.05),
-           dict(n=150, clumps=8, lmin=.35, wmin=.8, wmax=1.5, conv=.4, fill=.0),
-           dict(n=440, clumps=16, lmin=.45, wmin=1.3, wmax=2.4, conv=.85, fill=.1)]
+    # 2048 atlas (512 px per card column, ~0.05 mm per texel on a player card): strands 1-2 px = 0.05-0.1 mm,
+    # close to real hair (0.07 mm), and ~2.4x as many as the first atlas, so the cards read as hair, not slabs
+    cfg = [dict(n=1350, clumps=24, lmin=.72, wmin=1.0, wmax=2.0, conv=.55, fill=.06),
+           dict(n=960, clumps=18, lmin=.5, wmin=.9, wmax=1.8, conv=.7, fill=.04),
+           dict(n=380, clumps=12, lmin=.35, wmin=.7, wmax=1.3, conv=.4, fill=.0),
+           dict(n=1050, clumps=26, lmin=.45, wmin=1.0, wmax=1.9, conv=.85, fill=.08)]
     for c, k in enumerate(cfg):
         x0 = c * W
         centres = rng.uniform(12, W - 12, k['clumps'])
@@ -146,7 +148,7 @@ class Groom:
     def roots(self, n, mask, off=.002, c0=(0, .012, .02), jitter=.35, band=None):
         """~n points on the scalp (head-local) where mask(L) < 0, at `off` above the skin. band=(lo, hi) keeps only
         lo < mask < hi (e.g. a strip just inside the hairline)."""
-        n = max(8, int(n * (.55 if self.kit.npc else 1.0)))
+        n = max(8, int(n * (.55 if self.kit.npc else 1.8)))      # players: denser grooms of narrower cards
         m = n * 6 if band is None else n * 60
         i = np.arange(m) + .5
         phi = np.arccos(1 - 2 * i / m); th = math.pi * (1 + 5 ** .5) * i
@@ -224,7 +226,7 @@ class Groom:
         n, k, _ = P.shape
         if n == 0:
             return 0
-        wk = 1.3 if self.kit.npc else 1.0          # fewer, wider cards on the crowd LOD
+        wk = 1.3 if self.kit.npc else .75          # fewer, wider cards on the crowd LOD; narrower on the players
         w0 = np.broadcast_to(np.asarray(w0, F32) * wk, (n,)); w1 = np.broadcast_to(np.asarray(w1, F32) * wk, (n,))
         col = np.broadcast_to(np.asarray(col), (n,))
         T = np.zeros_like(P)

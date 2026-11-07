@@ -31,6 +31,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	FVector HandgunHipOffset = FVector(42.0f, 9.0f, -14.0f);
 
+	/** First person, while reloading: the gun comes up (cm: X forward, Y right, Z up) ... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector ReloadLift = FVector(-4.0f, -6.0f, 8.0f);
+
+	/** ... and cants toward the view (degrees: X roll, Y pitch nose up, Z yaw inward) so the mag well is in sight. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector ReloadTilt = FVector(-24.0f, 10.0f, 10.0f);
+
 	/** ADS: the sight sits this far in front of the eye, on the line of sight. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float AdsSightDistance = 30.0f;
@@ -77,4 +85,5 @@ private:
 	float AirK = 0.0f;
 	float SlideK = 0.0f;
 	float MantleK = 0.0f;
+	float ReloadK = 0.0f;
 };

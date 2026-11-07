@@ -31,6 +31,10 @@ done
 "$BLENDER" --background --python "$ROOT/tools/blender/icons.py" -- "$OUT/Icons" 2>&1 | grep -E "^\[icons\]|Error|Traceback" || true
 # Nexus Prime, the city hub (nexus.py kit: one FBX per piece)
 run "$M/nexus.glb" "$OUT/Nexus"
+# Nexus Prime, the big city (nexus_city.py: the building / street kit, and the plan baked into 1 km tiles + the land)
+[ -f "$OUT/NexusCity/src/nexus_city_tiles.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/nexus_city.py" -- --tiles >/dev/null 2>&1
+run "$M/nexus_city_kit.glb" "$OUT/NexusCity/Kit"
+run "$OUT/NexusCity/src/nexus_city_tiles.glb" "$OUT/NexusCity/Tiles"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail

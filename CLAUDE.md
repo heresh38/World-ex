@@ -319,7 +319,7 @@ wardrobe piece as its own skeletal FBX with finger bones added along anatomy.py'
 first-person arms). In Unreal the player is modular (`USOWardrobeData` per body, one follower skeletal mesh per slot,
 armour pieces owned / worn through the inventory, body male / female), both views hold the gun with arm IK onto the
 rig's grips and the fingers close by grip preset (`USOGunRigComponent` grips + `FSOFingerPose`,
-`USOLocomotionAnimInstance` IK); the browser `viewmodel_arms` are not used there. Gun wear: `wear_textures.py` (`wear_mask_c.jpg`) + the guns' `_wear` attribute as vertex colour alpha. Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map screen, quick travel). Inventory icons: `tools/blender/icons.py`
+`USOLocomotionAnimInstance` IK); the browser `viewmodel_arms` are not used there. Gun wear: `wear_textures.py` (`wear_mask_c.jpg`) + the guns' `_wear` attribute as vertex colour alpha. Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`, kit + baked tiles `tools/blender/nexus_city.py` (+ `nexus_city_textures.py`), built at runtime by `ASONexusCity` (see the Unreal README). Inventory icons: `tools/blender/icons.py`
 (Cycles renders of the guns and of each wardrobe piece). Weapon / loot data reaches Unreal through `node tools/unreal/export_game_data.mjs`
 (`unreal/ShatteredOrbit/Data/game_data.json`, read by `import_assets.py`): change numbers in `src/game/data.js`, re-export. Sounds for it: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis). Do not change `src/` for it.
 

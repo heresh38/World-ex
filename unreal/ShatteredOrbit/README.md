@@ -107,6 +107,29 @@ In the editor: Tools > Execute Python Script.
   polymer and wood scuff and gather grime. `SO_IMPORT_ONLY=ui` adds `M_UI_Stage` (the loadout stage picture);
   `nexus` imports the Nexus Prime kit (`tools/blender/nexus.py` + `nexus_textures.py`) as `/Game/Environments/Nexus/SM_NX_*`.
 
+### Nexus Prime, the big city (`L_Nexus`)
+
+8.3 x 5.3 km inside its wall, after the owner's master plan (`art/reference/nexus_prime_plan.png`):
+1. `python tools/city/nexus_plan.py` (shapely) traces the plan into `Data/nexus_plan.json`: wall and gates, the noded
+   road network (highway / ring / primary / secondary / access with widths, 2.4k nodes, 459 km), blocks, ~12.7k lots
+   with a height each, districts, landmarks, the metro loop (16 m) with 8 hubs and two rail lines (9 m) with stations.
+2. `blender --background --python tools/blender/nexus_city_textures.py` paints the ground sets (`nc_*`: asphalt,
+   pavers, plaza, kerb, lot, grass, roof, wall) and the facades (`ncf_*`, one bay x one floor; mask R = glass).
+3. `blender --background --python tools/blender/nexus_city.py` writes the kit `assets/models/nexus_city_kit.glb`
+   (`NCB_<shape>_<style>` buildings on a unit footprint, `NCK_*` lamp, station, roof clutter) and bakes the plan into
+   1 km tiles (`SourceArt/NexusCity/src/nexus_city_tiles.glb`: asphalt, raised blocks with kerbs, landmark grounds,
+   lane paint with crossings and stop lines, rail / metro viaducts on piers outside the roads, the wall with towers,
+   gates and rail portals; `NCL_land` = country and mountains outside), plus `Data/nexus_city.json` (tiles,
+   designs per district, roofs, stations, lane layout per road class, tilings). `export_unreal.sh` exports both.
+4. `SO_IMPORT_ONLY=nexuscity` imports `/Game/Environments/NexusCity` (Nanite, complex collision) with
+   `M_SOGround` (textures projected in world metres) and `M_SOFacade` (UV0 / UV1 facade coordinates x the instance's
+   custom data = real bays and floors on any lot; hashed lit windows scaled by `Night`).
+5. `make_nexus_map.py` makes `/Game/Maps/L_Nexus`: one `ASONexusCity` (it builds tiles, a building per lot sized to the
+   lot's rectangle, roof clutter, kerb lamps, stations and the scaled Nexus landmarks at BeginPlay / in the editor,
+   nothing saved in the level; keeps `RoadNodes`, `RoadEdges` with lanes per direction and `Stations` for the coming
+   traffic, people and trains), sky, haze, the map (gates, districts, Spire, metro hubs, the shuttle back) and the
+   start on the Spire plaza. `SOCaptureSeries 1 4` in `L_Nexus` takes street, gate, aerial and night pictures.
+
 ## Automation tests
 
 ```bash
@@ -199,6 +222,8 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
     - a small tilt into slides and strafes;
     - a wider field of view while sprinting or sliding.
   - The gun trails strafes and landings, tucks into a slide and drops away during a mantle.
+  - First-person reloads lift the gun about 8 cm and cant it about 24° (`ReloadLift`, `ReloadTilt` on the viewmodel), so
+    the magazine well and the hands stay in view.
 - **Camera:** T (D-pad up) toggles third person; RMB / LT zooms (aim) with zoom-matched sensitivity. Third-person
   shots go where the crosshair is (the round flies from the eyes to what the shoulder camera's centre ray hits).
 - **Holding the gun:** the first-person arms are your own body's arms (same sleeves and gloves as in third person),
@@ -269,7 +294,7 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 | `SOCharacter` | `ASOCharacter` (weapon, ADS, recoil, body + clips), `USOCharacterMovementComponent` (sprint, ADS speed, coyote, slide, mantle, saved moves), `USOLookComponent`, `USOViewmodelComponent` (the gun holds: first person locked to the kicked eye, third person kept in front of the body; hip / ADS, sway, bob, kick, sprint, reload offsets), `USOLocomotionAnimInstance` (native blend of the Blender clips, no anim blueprint; stance, head aim and two-bone arm IK onto the gun's grips) |
 | `SOCombat` | GAS: `USOAttributeSet` (health, shield, incoming damage), `USOAbilitySystemComponent` (shield regen), `USOGameplayEffect_Damage`, `USOCombatStatics` (damage, factions, death + noise events); `ASOCombatCharacter` (base for player and creatures), `USOWeaponData`, `ASOWeapon` (server-authoritative trigger / ammo / reload), `USOGunRigComponent` (posable gun, optics, finish / rarity tint; hand grips per anchor for the arm IK), `USOLootLibrary` + `USOLootTables` (rolls, stats, names, drops, reliquary pool), `USOInventoryComponent` (vault, slots, save), `ASOLootPickup`, `ASOReliquary`, `USOLootSubsystem` (kill drops), `ISOInteractable`, `SOReload` (reload.js keyframe port), `USOProjectileSubsystem` (rounds with drop on the SOBullet channel), `USOFxSubsystem` (instanced-card particles, decals, flash lights), `USOSoundLibrary` (named sounds, range presets) |
 | `SOAI` | `ASOEnemy` (stalker), `ASOEnemyAIController` (sight / hearing / chase / melee), `ASOEnemySpawner` |
-| `SOWorld` | `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`), `ASOMapInfo` (area name, map picture by an orthographic top-down capture, `WorldToMap`, the area list), `ASOMapPoint` (map places, fast travel, area gates) |
+| `SOWorld` | `ASONexusCity` (the big city from the plan data: tiles, instanced buildings with per-lot custom data, lamps, stations, landmarks; road graph with lanes), `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`), `ASOMapInfo` (area name, map picture by an orthographic top-down capture, `WorldToMap`, the area list), `ASOMapPoint` (map places, fast travel, area gates) |
 | `SOUI` | `ASOHUD` (canvas combat HUD, damage flash, hit sounds, weapon slots, loot feed, interact prompt, scope picture), `USOInventoryWidget` (the loadout screen, UMG built in C++, with `USOCharacterPreview`: a scene capture of its own mannequin of the player, so it stays while the player is dead), `USOMapWidget` (map screen, quick travel), the mini-map (`ASOHUD::DrawMinimap`), `USOActivatableWidget` (CommonUI base) |
 
 Assets come from Blender: `tools/blender/export_fbx.py -- in.glb out_dir [--single] [--split-parts] [--only=a,b] [--arms-only] [--per-item] [--finger-rig=male|female]`

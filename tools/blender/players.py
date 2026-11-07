@@ -411,36 +411,56 @@ class PlayerBuilder:
     BROW_STYLES = ['natural', 'arched', 'straight', 'bold']
 
     def brow_texture(self):
-        """4 brow styles stacked top-to-bottom (white strands, tinted by hair colour). u: inner->outer, v: up."""
-        W, Hb = 256, 64
+        """4 brow styles stacked top-to-bottom (white strands, tinted by hair colour). u: inner->outer, v: up.
+        Each style is 1024 x 256: ~600 thin hairs (a real brow has ~250 hairs of 6-11 mm), crisp so the game's alpha
+        cut-off shows hairs, not a bar. Inner hairs stand up, the body sweeps outward, the tail lies flat and thins.
+        Style 0 is the default look: slimmer and arched on the female face, fuller and straighter on the male."""
+        W, Hb = 1024, 256
         rng = np.random.default_rng(11)
         img = np.zeros((Hb * 4, W, 4), F32)
-        uu, vv = np.meshgrid((np.arange(W) + .5) / W, (np.arange(Hb) + .5) / Hb)
-        vv = 1 - vv                                    # rows go top-down
-        shapes = {  # centre-line height c(u), thickness t(u)
-            'natural': (lambda u: .42 + .16 * np.sin(np.clip(u, 0, 1) * 2.4) - .1 * u, lambda u: .2 - .1 * u),
-            'arched': (lambda u: .38 + .3 * np.sin(np.clip(u, 0, 1) * 2.7) - .14 * u, lambda u: .14 - .07 * u),
-            'straight': (lambda u: .45 + .05 * u, lambda u: .24 - .08 * u),
-            'bold': (lambda u: .4 + .22 * np.clip(u / .7, 0, 1) - .3 * np.clip((u - .7) / .3, 0, 1), lambda u: .3 - .12 * u),
+        fem = self.sex == 'female'
+        shapes = {  # centre-line height c(u) and half thickness t(u), both in v units
+            'natural': ((lambda u: .40 + .26 * np.sin(np.clip(u, 0, 1) * 2.6) - .16 * u, lambda u: .15 - .1 * u) if fem else
+                        (lambda u: .42 + .13 * np.sin(np.clip(u, 0, 1) * 2.3) - .08 * u, lambda u: .23 - .12 * u)),
+            'arched': (lambda u: .38 + .3 * np.sin(np.clip(u, 0, 1) * 2.7) - .14 * u, lambda u: .14 - .08 * u),
+            'straight': (lambda u: .45 + .05 * u, lambda u: .22 - .1 * u),
+            'bold': (lambda u: .4 + .22 * np.clip(u / .7, 0, 1) - .3 * np.clip((u - .7) / .3, 0, 1), lambda u: .3 - .14 * u),
         }
+        su, sv = 50.0, 25.0        # the brow patch is ~50 x 25 mm: texels are 2x finer in u
         for k, name in enumerate(self.BROW_STYLES):
             cf, tf = shapes[name]
-            a = np.zeros((Hb, W), F32)
-            for _ in range(900):
-                u0 = rng.uniform(.04, .97); c = cf(u0); t = tf(u0)
-                v0 = c + rng.uniform(-t, t) * .9
-                ang = (1.25 - 1.0 * u0) + rng.normal(0, .12)        # inner hairs point up, outer ones sideways
-                L = rng.uniform(.06, .13)
-                for st in np.linspace(0, 1, 7):
-                    pu = u0 + np.cos(ang) * L * st * .45; pv = v0 + np.sin(ang) * L * st
-                    d2 = ((uu - pu) * 4.0) ** 2 + (vv - pv) ** 2
-                    a = np.maximum(a, np.exp(-d2 / (2 * .012 ** 2)) * (1 - st * .5))
-            edge = np.clip(np.minimum(uu, 1 - uu) / .05, 0, 1)
-            img[k * Hb:(k + 1) * Hb, :, 3] = np.clip(a * 1.25, 0, 1) * edge
-            img[k * Hb:(k + 1) * Hb, :, :3] = (.82 + .18 * rng.random((Hb, W)))[..., None]
+            A = np.zeros((Hb, W), F32); Cc = np.full((Hb, W), .85, F32)
+            n_hairs = 520 if name != 'bold' else 700
+            for _ in range(n_hairs):
+                u0 = rng.uniform(.02, .95) ** 1.08
+                c, t = cf(u0), max(tf(u0), .03)
+                v0 = c + rng.uniform(-t, t) * .95
+                # direction (radians from +u): inner hairs up, then outward, the tail down a little; top row lies flatter
+                ang = np.interp(u0, [0, .18, .5, 1], [1.35, .75, .25, -.18]) - .25 * (v0 - c) / t + rng.normal(0, .1)
+                Lmm = rng.uniform(5.5, 9.5) * (1 - .35 * u0)
+                curve = rng.normal(-.25, .12)                       # hairs curve with the brow's flow
+                shade = rng.uniform(.75, 1.0)
+                for st in np.linspace(0, 1, 18):
+                    a2 = ang + curve * st
+                    pu = u0 + np.cos(a2) * Lmm * st / su
+                    pv = v0 + np.sin(a2) * Lmm * st / sv
+                    if pu < 0 or pu > 1 or pv < 0 or pv > 1:
+                        break
+                    cx, cy = pu * W, (1 - pv) * Hb
+                    rad = .9 * (1 - .65 * st)                           # tapered tip
+                    x0, x1 = int(max(cx - 3, 0)), int(min(cx + 4, W)); y0, y1 = int(max(cy - 3, 0)), int(min(cy + 4, Hb))
+                    gx, gy = np.meshgrid(np.arange(x0, x1) + .5, np.arange(y0, y1) + .5)
+                    d2 = (gx - cx) ** 2 + ((gy - cy) * 2.0) ** 2
+                    a = np.clip(1.6 - np.sqrt(d2) / rad, 0, 1) * (1 - .3 * st)
+                    win = A[y0:y1, x0:x1]
+                    upd = a > win
+                    win[upd] = a[upd]; Cc[y0:y1, x0:x1][upd] = shade
+            edge = np.clip(np.minimum(np.arange(W) / W, 1 - np.arange(W) / W)[None, :] / .02, 0, 1)
+            img[k * Hb:(k + 1) * Hb, :, 3] = A * edge
+            img[k * Hb:(k + 1) * Hb, :, :3] = Cc[..., None]
         im = bpy.data.images.new('brows', W, Hb * 4, alpha=True)
         im.pixels = img[::-1].ravel()
-        im.filepath_raw = os.path.join(bl.TEXTURES, 'brows.png'); im.file_format = 'PNG'; im.save()
+        im.filepath_raw = os.path.join(bl.TEXTURES, f'brows_{self.sex}.png'); im.file_format = 'PNG'; im.save()
 
     def lash_texture(self):
         W, Hh = 256, 64
@@ -497,7 +517,7 @@ class PlayerBuilder:
         Vb = Vb + Nb * .0003
         set_verts(o, Vb)
         o.data.normals_split_custom_set_from_vertices([tuple(v) for v in Nb])
-        o.data.materials.append(self.alpha_mat('brow', 'brows.png', '#3a2a22', .8))
+        o.data.materials.append(self.alpha_mat('brow', f'brows_{self.sex}.png', '#3a2a22', .8))
         n2, vi2 = faces(o)
         P = Vb[vi2] - B.head_o
         sx = np.sign(P[:, 0])
@@ -581,9 +601,22 @@ class PlayerBuilder:
         eyes = self.eyes()
         # weights + colours
         for key, o in parts.items():
-            set_colors(o, self.colours(o, key))
+            set_colors(o, self.colours(o, key) if key != 'head' else np.ones((len(o.data.vertices), 3), F32))
             W = self.skinner(verts(o))
             apply_weights(o, W)
+        # the face: its own UVs and baked skin maps (colour, pores / lines normal, roughness), see skin.py
+        import skin
+        face_mat = skin.bake_face(self, parts['head'])
+        # the rest of the body: tiling pore / crease detail on box-projected UVs
+        skin.detail_maps()
+        for key, o in parts.items():
+            if key != 'head':
+                skin.box_uv(o)
+        skin.detail_material(self.skin)
+        hd = parts['head'].data
+        for i, mm in enumerate(hd.materials):
+            if mm and mm.name.split('.')[0] == 'skin':
+                hd.materials[i] = face_mat
         W = {'head': np.ones(len(eyes.data.vertices), F32)}
         apply_weights(eyes, W)
         regions = self.split_body(parts['body'])
