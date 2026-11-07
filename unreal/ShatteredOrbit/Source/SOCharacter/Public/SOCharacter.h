@@ -122,6 +122,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float EyeHeightInterpSpeed = 14.0f;
 
+	// --- First-person camera feel (local player, first person only; the third-person boom has its own lag) ---
+	/** Head bob in step with the footsteps (0 = off). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Camera")
+	float HeadBobScale = 1.0f;
+
+	/** Extra field of view while sprinting / sliding (degrees, eased in and out). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float SprintFovBoost = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float SlideFovBoost = 8.0f;
+
+	/** The view tilts this many degrees into a slide, and a little toward a strafe. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float SlideCameraRoll = 3.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float StrafeCameraRoll = 0.7f;
+
+	/** Current camera dip (cm, negative = down) from landings and jumps; the viewmodel lags it a little. */
+	float GetLandDip() const { return LandDip; }
+	float GetCameraRoll() const { return CameraRoll; }
+
 	/** Aim-down-sights field of view as a fraction of the hip field of view. */
 	/** Aim zoom when no weapon is held (the weapon's AimZoom wins otherwise). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
@@ -247,6 +270,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void Landed(const FHitResult& Hit) override;
+	virtual void OnJumped_Implementation() override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual bool CanJumpInternal_Implementation() const override;
@@ -337,6 +361,20 @@ private:
 
 	/** Eye position relative to the capsule centre (interpolated across crouch changes). */
 	float EyeOffset = 0.0f;
+
+	/** First-person camera feel: step smoothing, landing spring, head bob, roll, field-of-view boost. */
+	void UpdateCameraFeel(float DeltaSeconds);
+	float StepSmooth = 0.0f;      // cm: hides the capsule popping up / down steps
+	double LastFeelZ = 0.0;
+	bool bHaveFeelZ = false;
+	float LandDip = 0.0f;         // cm, spring
+	float LandDipVel = 0.0f;
+	float LastAirVz = 0.0f;
+	float BobPhase = 0.0f;
+	float BobAmp = 0.0f;
+	float CameraRoll = 0.0f;
+	float FovBoost = 0.0f;
+	FVector FeelOffset = FVector::ZeroVector;
 	float CurrentFov = 90.0f;
 
 	float BufferedJumpTime = -1.0f;

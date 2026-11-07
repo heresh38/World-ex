@@ -28,6 +28,35 @@ def lerp(a, b, t):
 
 
 # ====================================================================== head
+# Head and hand scales per sex (1.0 = the design size of the SDF constants below).
+HEAD_SCALE = {'male': .98, 'female': .915}
+# Hand length wrist -> fingertip = 0.108 x body height (anthropometric mean), for both bodies.
+HAND_SCALE = {'male': 1.0, 'female': .92}
+# Head scale the bodies' necks were designed around: the chin stays where it was, the crown comes down.
+_HEAD_DESIGN = {'male': 1.05, 'female': 1.07}
+# Head shape against Epic's MetaHuman archetype head and adult anthropometry (measured side by side, eye lines
+# aligned): the skull was ~19 % too narrow and ~1.5 cm too short above the eyes, which made the eyes read as too far
+# apart. Widths by level (cranium above the cheekbones, face at the cheekbones, jaw) and extra crown height (design m).
+WIDTH_CRANIUM, WIDTH_FACE, WIDTH_JAW = 1.13, 1.11, 1.04
+# Skull from the brow up, measured from Epic's MetaHuman template head (reference only, never shipped): its mid-line
+# front / back outline and width (ears excluded) at each level, anchored at the eyelid surface and put in our design
+# units. Rows: z, centre y, front depth, back depth, half width, front exponent. Gives an upright forehead ~1.7 cm in
+# front of the eyes (deep-set eyes under the brow), the vertex above the ears and a full occiput (no backward cone).
+CRANIUM = [
+    (.032, .006, .0900, .1177, .0810, 2.3),
+    (.055, .009, .0928, .1153, .0829, 2.4),
+    (.076, .012, .0860, .1088, .0809, 2.2),
+    (.094, .015, .0796, .0996, .0753, 2.1),
+    (.108, .017, .0707, .0889, .0664, 2.0),
+    (.119, .019, .0617, .0767, .0568, 2.0),
+    (.128, .020, .0482, .0627, .0457, 2.0),
+    (.134, .021, .0377, .0542, .0365, 2.0),
+    (.1385, .022, .0220, .0300, .0220, 2.0),
+    (.1405, .022, .0100, .0135, .0100, 2.0)]
+CRANIUM_TOP = .1412
+CROWN_EXTRA = {'male': .0153, 'female': .0125}
+
+
 class Head:
     """Head in local coordinates (metres). Front is -Y. Feature dict `f` drives the base shape (sex)."""
 
@@ -35,12 +64,18 @@ class Head:
         self.sex = sex
         m = sex == 'male'
         self.m = m
-        s = 1.05 if m else 1.07         # overall head scale (a touch heroic, not cartoon-large)
+        # Overall head scale. Real adult heads (crown to chin): men ~23.5 cm (H/7.8), women ~21.8 cm (H/7.7); checked
+        # against measured anthropometry and the engine mannequins (tools/blender/proportions.md).
+        s = HEAD_SCALE[sex]
         self.s = s
-        # eye centre (left eye) and radius
-        self.eye_r = (.0122 if sex == 'female' else .0118) * s
-        self.eye = np.array([.0312, -.0588, .012]) * s
-        self.ear = np.array([.066, .006, -.004]) * s
+        # Eyes keep their real size and spacing (an eyeball is ~24 mm whatever the head; pupils ~64 mm apart in men,
+        # ~62 mm in women), so on the smaller female head they read a little larger, as they do in life.
+        self.eye_r = .0119 if m else .0118
+        self.eye = np.array([.0320 if m else .0310, -.0588 * s, .012 * s])
+        # Ears: from brow level to the nose base (centre just under the eye line), on the side of the widened skull.
+        # (measured on the MetaHuman head: the ear canal ~8 cm behind the eye centre, the ear's middle ~1.2 cm under
+        # the eye line, from brow level to the nose base)
+        self.ear = np.array([.066 * WIDTH_FACE, .036, -.001]) * s
 
     def lid_opening(self, P, side_eye):
         """2D almond opening around the eye, in the plane facing -Y. Negative inside the opening."""
@@ -52,8 +87,8 @@ class Head:
         ca, sa = np.cos(tilt), np.sin(tilt)
         a, b = a * ca + b * sa, -a * sa + b * ca
         w = (.0152 if not self.m else .0146) * s
-        hu = (.0072 if not self.m else .0058) * s   # upper lid height
-        hd = (.0043 if not self.m else .0038) * s   # lower lid
+        hu = (.0080 if not self.m else .0068) * s   # upper lid height (fissure ~10-11 mm, as measured on real adults)
+        hd = (.0048 if not self.m else .0044) * s   # lower lid
         R1 = (w * w + hu * hu) / (2 * hu); c1 = hu - R1
         R2 = (w * w + hd * hd) / (2 * hd); c2 = -hd + R2
         sh = .0012 * s                               # peak of the upper lid sits slightly inward
@@ -99,6 +134,21 @@ class Head:
         if getattr(self, '_base', None) is None:
             s = self.s
             pr = np.array(self.PROFILE_M if self.m else self.PROFILE_F)
+            # face rows: widths at the cheekbones and jaw (the cranium rows above are measured, see CRANIUM)
+            z = pr[:, 0]
+            # the lower jaw ~9 mm longer (pupil to chin ~11.2 cm, MetaHuman overlay); stretched below the mouth
+            pr[:, 0] = np.where(z < -.04, -.04 + (z + .04) * (1 + .004 / .068), z)
+            z = pr[:, 0]
+            face = z < .02
+            pr[face, 4] *= np.interp(z[face], [-.09, -.06, -.03, .0], [1.0, WIDTH_JAW, WIDTH_FACE, WIDTH_FACE])
+            # the back of the head below the crown: a real occiput down to the nape (it used to stop ~4 cm short)
+            pr[face, 3] = np.maximum(pr[face, 3], np.interp(z[face], [-.08, -.058, -.036, -.012, .01], [.0, .081, .099, .113, .116]))
+            # the face below the eyes sits further forward (the jaw, mouth and chin were ~1 cm too far back)
+            pr[face, 2] += np.interp(z[face], [-.11, -.09, -.036, -.012, .01], [.004, .009, .009, .005, .0])
+            k = .97 if not self.m else 1.0
+            cr = np.array(CRANIUM, float)
+            cr[:, 2:5] *= [1.0, k, k]     # the female skull a touch narrower and shorter (her head scale does the rest)
+            pr = np.vstack([pr[z < .02], cr])
             z0, z1 = pr[0, 0] * s, pr[-1, 0] * s
             t = (pr[:, 0] * s - z0) / (z1 - z0)
             self._base = Loft((0, 0, z0), (0, 0, z1), dict(t=t, rv_pos=pr[:, 4] * s, rw_pos=pr[:, 2] * s, rw_neg=pr[:, 3] * s,
@@ -112,25 +162,25 @@ class Head:
         d = self.base()(P)
         # cheeks: a soft volume under the cheekbone (leaner on the male face, which shows the bone structure)
         for sx in (1, -1):
-            d = smin(d, ellipsoid(P, S((sx * .03, -.042, -.014)), S((.025, .025, .027) if not m else (.026, .024, .028))), (.03 if not m else .026) * s)
+            d = smin(d, ellipsoid(P, S((sx * .03 * WIDTH_FACE, -.047, -.014)), S((.025, .025, .027) if not m else (.026, .024, .028))), (.03 if not m else .026) * s)
         d = self.structure(P, d)
         lz = .004 if not m else 0.0
         # chin
-        d = smin(d, ellipsoid(P, S((0, -.055, -.088 + lz)), S((.022, .015, .015) if not m else (.026, .015, .015))), .024 * s)
+        d = smin(d, ellipsoid(P, S((0, -.0655, -.092 + lz)), S((.022, .015, .015) if not m else (.026, .015, .015))), .024 * s)
         # brow ridge + forehead
         if m:
             for sx in (1, -1):
                 d = smin(d, round_cone(P, S((sx * .012, -.073, .027)), S((sx * .044, -.063, .029)), .0065 * s, .0045 * s), .02 * s)
         # muzzle (teeth/alveolar mass under the lips)
-        d = smin(d, ellipsoid(P, S((0, -.056, -.046)), S((.029, .026, .026))), .02 * s)
+        d = smin(d, ellipsoid(P, S((0, -.065, -.046)), S((.029, .026, .026))), .02 * s)
         # eye sockets
         for sx in (1, -1):
             E = self.eye * np.array([sx, 1, 1])
             d = smax(d, -ellipsoid(P, E + S((sx * .001, -.012, .005)), S((.015, .007, .009))), .008 * s)
         # nose
-        d = smin(d, self.nose(P), .006 * s)
-        # lips
-        d = self.lips(P, d)
+        d = smin(d, self.nose(P), .008 * s)
+        # lips (9 mm further forward than first built: measured against the MetaHuman head)
+        d = self.lips(P + np.array([0, .013 * s, 0], F32), d)
         # eyelids
         for sx in (1, -1):
             E = (self.eye * np.array([sx, 1, 1])).astype(F32)
@@ -153,55 +203,73 @@ class Head:
         k = 1.0 if m else .6
         for sx in (1, -1):
             # cheekbone: from under the outer eye corner back towards the ear
-            d = smin(d, round_cone(P, S((sx * .036, -.054, -.016 + (0 if m else .004))), S((sx * .061, -.022, -.008)),
+            d = smin(d, round_cone(P, S((sx * .036, -.054, -.016 + (0 if m else .004))), S((sx * .061 * WIDTH_FACE, -.022, -.008)),
                                    (.0068 if m else .0062) * s, .0048 * s), .011 * s)
             # jaw angle and the jawline to the chin
-            ang = S((sx * (.052 if m else .047), -.008, -.068 if m else -.064))
-            chin = S((sx * (.018 if m else .012), -.056, -.093 if m else -.088))
+            ang = S((sx * (.052 if m else .047) * WIDTH_JAW * 1.02, -.008, -.068 if m else -.064))
+            chin = S((sx * (.018 if m else .012), -.066, -.097 if m else -.092))
             d = smin(d, round_cone(P, ang, chin, (.0095 if m else .007) * s, (.0075 if m else .006) * s), (.014 if m else .016) * s)
             # masseter: a flat slab of muscle over the jaw angle
             if m:
-                d = smin(d, ellipsoid(P, S((sx * .048, -.02, -.052)), S((.008, .016, .02))), .014 * s)
+                d = smin(d, ellipsoid(P, S((sx * .048 * WIDTH_JAW * 1.03, -.02, -.052)), S((.008, .016, .02))), .014 * s)
             # temple: slightly flat
-            d = smax(d, -ellipsoid(P, S((sx * .072, -.035, .04)), S((.012, .02, .02))), .02 * s)
+            d = smax(d, -ellipsoid(P, S((sx * .082, -.03, .04)), S((.006, .016, .016))), .012 * s)
         # chin: squared on the male face (two mental tubercles), rounded and narrower on the female one
         if m:
             for sx in (1, -1):
-                d = smin(d, ellipsoid(P, S((sx * .011, -.06, -.091)), S((.011, .009, .01))), .008 * s)
+                d = smin(d, ellipsoid(P, S((sx * .011, -.07, -.095)), S((.011, .009, .01))), .008 * s)
         else:
-            d = smin(d, ellipsoid(P, S((0, -.058, -.086)), S((.014, .01, .011))), .01 * s)
+            d = smin(d, ellipsoid(P, S((0, -.068, -.090)), S((.014, .01, .011))), .01 * s)
         # brow: glabella and the ridge above each eye, the forehead slope above it
-        d = smin(d, ellipsoid(P, S((0, -.07, .034)), S((.011, .007, .01)) * k), .014 * s)
+        d = smin(d, ellipsoid(P, S((0, -.0775, .034)), S((.011, .007, .01)) * k), .014 * s)
         for sx in (1, -1):
-            d = smin(d, round_cone(P, S((sx * .008, -.071, .031)), S((sx * .044, -.061, .033)), (.0052 if m else .0038) * s, .0034 * s), (.018 if m else .022) * s)
+            d = smin(d, round_cone(P, S((sx * .008, -.0785, .031)), S((sx * .044, -.068, .033)), (.0052 if m else .0038) * s, .0034 * s), (.018 if m else .022) * s)
         # nasolabial fold: a soft crease from the side of the nose to past the mouth corner
         for sx in (1, -1):
-            d = smax(d, -capsule(P, S((sx * .017, -.082, -.031)), S((sx * .027, -.074, -.06)), .0008 * s), (.004 if m else .005) * s)
+            d = smax(d, -capsule(P, S((sx * .019, -.089, -.031)), S((sx * .031, -.081, -.06)), .0008 * s), (.004 if m else .005) * s)
         return d
+
+    # Nose, one lofted form (adult anthropometry, Farkas; checked against the MetaHuman head): root ~1 cm above the
+    # eye line, height root-subnasale ~5.5 cm (male), tip ~2 cm proud of the face, dorsum 11-14 mm wide, tip domes
+    # ~17 mm, alae ~35 mm (female ~31), nasofrontal angle ~130 deg, nasolabial ~100 deg.
+    # Rows: z, front y (most forward point), half width (design units, male).
+    NOSE = [(.024, -.0740, .0050), (.012, -.0838, .0056), (.0, -.0928, .0061), (-.010, -.1015, .0067),
+            (-.017, -.1075, .0077), (-.022, -.1112, .0086), (-.027, -.1070, .0076), (-.0315, -.0965, .0048)]
+    NOSE_BACK = -.066        # where the form sinks into the face
 
     def nose(self, P):
         m, s = self.m, self.s
         S = lambda v: np.asarray(v, F32) * s
         wide = .88 if not m else 1.0
-        L = .9 if not m else 1.0
-        tip = S((0, -.0885 - .004 * L, -.0185 - .003 * L))
-        n = round_cone(P, S((0, -.0705, .014)), tip + S((0, .0055, .006)), .0029 * s, .0042 * s)      # bridge (dorsum)
-        n = smin(n, round_box(P, S((0, -.079, -.004)), S((.0032, .004, .011)), .002 * s), .004 * s)    # nasal bone keel
-        n = smin(n, ellipsoid(P, tip, S((.0068 * wide, .0072, .0064))), .0045 * s)                     # tip
+        proj = .92 if not m else 1.0
+        rows = np.array(self.NOSE, float)
+        z, front, hw = rows[:, 0], rows[:, 1], rows[:, 2] * wide
+        front = self.NOSE_BACK + (front - self.NOSE_BACK) * proj
+        z0, z1 = z[0], z[-1]
+        t = (z - z0) / (z1 - z0)
+        cy = (front + self.NOSE_BACK) / 2            # section centre; equal front / back reach
+        depth = (self.NOSE_BACK - front) / 2
+        n = Loft((0, 0, z0 * s), (0, 0, z1 * s), dict(t=t, rv_pos=hw * s, rw_pos=depth * s, rw_neg=depth * s,
+                                                     cw=-cy * s, n=np.full(len(t), 2.3), nb=np.full(len(t), 2.0)),
+                 v_axis=(1, 0, 0), cap=.5)(P)
+        # alae: the wings, set back from the tip and blended in wide (no separate lumps)
         for sx in (1, -1):
-            n = smin(n, ellipsoid(P, tip + S((sx * .0038, .001, .0)), S((.0042, .0052, .005))), .002 * s)   # tip lobes
-            n = smin(n, ellipsoid(P, S((sx * .0098 * wide, -.0815, -.0262)), S((.0058, .0068, .0055))), .0035 * s)  # alae
-        # nostrils, opening downwards
+            n = smin(n, ellipsoid(P, S((sx * .0118 * wide, -.0915 * proj + self.NOSE_BACK * (1 - proj), -.0262)),
+                                  S((.0068 * wide, .0080, .0062))), .006 * s)
+        # nostrils, opening downward
         for sx in (1, -1):
-            n = smax(n, -ellipsoid(P, S((sx * .0062 * wide, -.0845, -.0295)), S((.0034, .0052, .0022))), .0012 * s)
+            n = smax(n, -ellipsoid(P, S((sx * .0068 * wide, -.0985 * proj + self.NOSE_BACK * (1 - proj), -.0302)), S((.0036 * wide, .0054, .0022))), .0015 * s)
+        # alar crease: a soft groove where the wing meets the cheek
+        for sx in (1, -1):
+            n = smax(n, -capsule(P, S((sx * .0185 * wide, -.0815, -.019)), S((sx * .0175 * wide, -.0845, -.031)), .0009 * s), .003 * s)
         return n
 
     def lips(self, P, d):
         m, s = self.m, self.s
         S = lambda v: np.asarray(v, F32) * s
-        full = .85 if m else 1.15
+        full = 1.0 if m else 1.2
         lz = .002 if not m else 0.0
-        mw = .02 if not m else .022
+        mw = .0245 if not m else .0265       # half mouth width: ~48 / ~52 mm corner to corner
         up = ellipsoid(P, S((0, -.0778, -.0458 + lz)), S((mw, .0082, .0052 * full)))
         lo = ellipsoid(P, S((0, -.0758, -.0548 + lz)), S((mw * .82, .0086, .0066 * full)))
         # philtrum columns from the nose to the cupid's bow
@@ -266,7 +334,9 @@ class Body:
         self.H = 1.84 if m else 1.68
         self.head = Head(sex)
         hs = self.head.s
-        self.head_o = np.array([0, .004, self.H - .125 * hs], F32)    # head-local origin in world
+        s0 = _HEAD_DESIGN[sex]                       # keep the chin at its designed height (neck length unchanged)
+        self.head_o = np.array([0, .004, self.H - .125 * s0 - .115 * (s0 - hs)], F32)    # head-local origin in world
+        self.top = self.head_o[2] + CRANIUM_TOP * hs        # crown height (the body's real height)
         if m:
             self.zsh, self.sx = 1.512, .192
             self.elbow = np.array([.25, .024, 1.18]); self.wrist = np.array([.292, .004, .922]); self.tip = np.array([.308, -.008, .724])
@@ -458,7 +528,7 @@ class Body:
         world, palm facing the thigh), z dorsal (outward). Proportions: middle finger (knuckle to tip) ~ palm length,
         index ~ ring, little finger shortest; three phalanges per finger, the thumb springs from the side of the palm."""
         m = self.m
-        sc = 1.1 if m else 1.0
+        sc = HAND_SCALE[self.sex]
         wr, tp = self.wrist, self.tip
         ux = (tp - wr) / np.linalg.norm(tp - wr)
         uz = np.array([1.0, 0, 0]); uz = uz - np.dot(uz, ux) * ux; uz /= np.linalg.norm(uz)

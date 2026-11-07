@@ -35,6 +35,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float AdsSightDistance = 30.0f;
 
+	/** ADS through a rail optic: its eye point (set per optic in gun_attach.glb so the window fills about a quarter of
+	 *  the view) sits this far in front of the eye. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float AdsOpticEyeDistance = 0.0f;
+
+	/** ADS through a gun's built-in optic: its sight point sits this far in front of the eye. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float AdsBuiltInOpticDistance = 4.0f;
+
 	/** Third person: the character's eyes sit this far above the camera's eye height (cheek weld when aiming). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float ThirdPersonEyeLift = 7.0f;
@@ -64,4 +73,8 @@ private:
 	float BobT = 0.0f;
 	float Lower = 1.0f;
 	float RunK = 0.0f;
+	float StrafeK = 0.0f;
+	float AirK = 0.0f;
+	float SlideK = 0.0f;
+	float MantleK = 0.0f;
 };

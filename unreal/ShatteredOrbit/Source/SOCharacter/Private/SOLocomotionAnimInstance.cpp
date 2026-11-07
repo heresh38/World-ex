@@ -3,6 +3,8 @@
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimationPoseData.h"
 #include "AnimationRuntime.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "SOCharacterMovementComponent.h"
 #include "SOCharacter.h"
@@ -42,6 +44,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bInAir = Move && Move->IsFalling();
 		const USOCharacterMovementComponent* SOMove = Cast<USOCharacterMovementComponent>(Move);
 		bSliding = SOMove && SOMove->IsSliding();
+		bMantling = SOMove && SOMove->IsMantling();
 		const ASOCombatCharacter* Combat = Cast<ASOCombatCharacter>(Character);
 		bDead = Combat && Combat->IsDead();
 	}
@@ -72,6 +75,8 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bHold = true;
 	}
 
+	UpdateBodyMotion(Character, DeltaSeconds);
+
 	// Target weights.
 	float Target[Count] = { 0, 0, 0, 0, 0, 0, 0 };
 	const bool bAttacking = AttackTime >= 0.0f && Clips.Attack;
@@ -87,7 +92,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Target[Slide] = 1.0f;
 	}
-	else if (bInAir && Clips.Jump)
+	else if ((bInAir || bMantling) && Clips.Jump)
 	{
 		Target[Jump] = 1.0f;
 	}
@@ -120,8 +125,9 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	const float WalkRate = FMath::Clamp(Speed / FMath::Max(Clips.WalkSpeed, 1.0f), 0.6f, 1.6f);
 	const float RunRate = FMath::Clamp(Speed / FMath::Max(Clips.RunSpeed, 1.0f), 0.7f, 1.4f);
 	Times[Idle] += DeltaSeconds;
-	Times[Walk] += DeltaSeconds * WalkRate;
-	Times[Run] += DeltaSeconds * RunRate;
+	const float Direction = bBackward ? -1.0f : 1.0f; // backpedalling plays the cycle in reverse
+	Times[Walk] += DeltaSeconds * WalkRate * Direction;
+	Times[Run] += DeltaSeconds * RunRate * Direction;
 	Times[Jump] = bInAir ? Times[Jump] + DeltaSeconds : 0.0f;
 	Times[Death] = bDead ? Times[Death] + DeltaSeconds : 0.0f;
 	Times[Slide] = bSliding ? Times[Slide] + DeltaSeconds : 0.0f;
@@ -134,6 +140,107 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			AttackTime = -1.0f;
 		}
 	}
+}
+
+void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, float DeltaSeconds)
+{
+	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
+	const float Dt = FMath::Max(DeltaSeconds, 1e-4f);
+	bBodyMotion = Character && Mesh && !bArmsOnly && !bDead;
+	if (!bBodyMotion)
+	{
+		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = 0.0f;
+		return;
+	}
+	const FTransform ToMesh = Mesh->GetComponentTransform();
+	const FVector VelCS = ToMesh.InverseTransformVectorNoScale(Character->GetVelocity());
+
+	// Orientation warping: component space has +Y forward, +X to the character's left; the angle that turns +Y onto
+	// the velocity about +Z is atan2(-x, y). Past ~100 degrees the move is a backpedal: the cycle runs in reverse and
+	// the legs only turn by what is left over.
+	const float Speed2D = FVector2D(VelCS.X, VelCS.Y).Size();
+	const bool bStriding = Speed2D > 40.0f && !bInAir && !bSliding && !bMantling;
+	if (bStriding)
+	{
+		MoveYaw = FMath::RadiansToDegrees(FMath::Atan2(-VelCS.X, VelCS.Y));
+		const float Abs = FMath::Abs(MoveYaw);
+		bBackward = bBackward ? Abs > 95.0f : Abs > 110.0f;   // hysteresis: no flicker at the boundary
+	}
+	else if (Speed2D <= 40.0f)
+	{
+		bBackward = false;
+	}
+	float WantWarp = 0.0f;
+	if (bStriding)
+	{
+		WantWarp = bBackward ? FRotator::NormalizeAxis(MoveYaw - 180.0f) : MoveYaw;
+		WantWarp = FMath::Clamp(WantWarp, -MaxWarpYaw, MaxWarpYaw);
+	}
+	WarpYaw = FMath::FInterpTo(WarpYaw, WantWarp, Dt, 9.0f);
+
+	// Lean into the acceleration (smoothed), a touch forward with speed.
+	const FVector RawAccel = (VelCS - LastVelocityCS) / Dt;
+	LastVelocityCS = VelCS;
+	AccelCS = FMath::VInterpTo(AccelCS, bInAir ? FVector::ZeroVector : RawAccel, Dt, 7.0f);
+	const float K = LeanPerAccel / 100.0f; // per cm/s2
+	float WantRoll = FMath::Clamp(AccelCS.X * K, -MaxLean, MaxLean);
+	float WantPitch = FMath::Clamp(-AccelCS.Y * K, -MaxLean, MaxLean) - FMath::Min(Speed2D / 860.0f, 1.0f) * 2.0f * (bBackward ? -1.0f : 1.0f);
+	if (bSliding)
+	{
+		WantRoll = 0.0f;
+		WantPitch = 0.0f;
+	}
+
+	// Landing: the hips sink with the impact and spring back.
+	if (bInAir)
+	{
+		LastAirVz = Character->GetVelocity().Z;
+	}
+	else if (bWasInAir && !bMantling)
+	{
+		CompressVel += FMath::Clamp((-LastAirVz - 200.0f) * 0.12f, 0.0f, 160.0f);
+	}
+	bWasInAir = bInAir;
+	const float Stiff = 260.0f, Damp = 2.0f * FMath::Sqrt(Stiff) * 0.75f;
+	CompressVel += (-Stiff * Compress - Damp * CompressVel) * Dt;
+	Compress = FMath::Max(Compress + CompressVel * Dt, 0.0f);
+	WantPitch -= Compress * 0.6f;
+	LeanRoll = FMath::FInterpTo(LeanRoll, WantRoll, Dt, 8.0f);
+	LeanPitch = FMath::FInterpTo(LeanPitch, WantPitch, Dt, 8.0f);
+
+	// Feet on the ground: a short trace under each ankle; the hips drop so the lower foot reaches.
+	const UCharacterMovementComponent* Move = Character->GetCharacterMovement();
+	const bool bGrounded = Move && Move->IsMovingOnGround() && !bSliding && !bMantling;
+	const float WantAlpha = bGrounded ? FMath::Lerp(1.0f, 0.45f, FMath::Clamp(Speed2D / 860.0f, 0.0f, 1.0f)) : 0.0f;
+	FootIKAlpha = FMath::FInterpTo(FootIKAlpha, WantAlpha, Dt, 10.0f);
+	float Want[2] = { 0.0f, 0.0f };
+	if (FootIKAlpha > 0.01f && GetWorld())
+	{
+		static const FName Feet[2] = { TEXT("foot_L"), TEXT("foot_R") };
+		const float FloorZ = ToMesh.GetLocation().Z;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOFootIK), false, Character);
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (Mesh->GetBoneIndex(Feet[i]) == INDEX_NONE)
+			{
+				continue;
+			}
+			const FVector Ankle = Mesh->GetBoneLocation(Feet[i]);
+			const FVector Start(Ankle.X, Ankle.Y, FloorZ + FootReach + 10.0f);
+			const FVector End(Ankle.X, Ankle.Y, FloorZ - FootReach - 10.0f);
+			FHitResult Hit;
+			if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params) && Hit.ImpactNormal.Z > 0.6f)
+			{
+				Want[i] = FMath::Clamp(static_cast<float>(Hit.ImpactPoint.Z - FloorZ), -FootReach, FootReach);
+			}
+		}
+	}
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FootOffset[i] = FMath::FInterpTo(FootOffset[i], FootIKAlpha > 0.01f ? Want[i] : 0.0f, Dt, 14.0f);
+	}
+	PelvisFeet = FMath::FInterpTo(PelvisFeet, FMath::Max(0.0f, -FMath::Min(FootOffset[0], FootOffset[1])), Dt, 14.0f);
+	PelvisDrop = PelvisFeet * FootIKAlpha + Compress;
 }
 
 FAnimInstanceProxy* USOLocomotionAnimInstance::CreateAnimInstanceProxy()
@@ -160,7 +267,8 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 		Layer.bLoop = i != Death && i != Attack && i != Jump;
 		const float Length = Layer.Clip ? Layer.Clip->GetPlayLength() : 0.0f;
 		const float T = Instance->Times[i];
-		Layer.Time = Length <= 0.0f ? 0.0f : (Layer.bLoop ? FMath::Fmod(T, Length) : FMath::Min(T, Length - 1e-3f));
+		// positive modulo: the walk / run cycles run backward when backpedalling
+		Layer.Time = Length <= 0.0f ? 0.0f : (Layer.bLoop ? T - FMath::FloorToFloat(T / Length) * Length : FMath::Min(T, Length - 1e-3f));
 	}
 	bHold = Instance->bHold;
 	bArmsOnly = Instance->bArmsOnly;
@@ -173,6 +281,14 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	RightFingers = Instance->RightFingers;
 	LeftFingers = Instance->LeftFingers;
 	EyeCS = Instance->EyeCS;
+	bBodyMotion = Instance->bBodyMotion;
+	WarpYaw = Instance->WarpYaw;
+	LeanRoll = Instance->LeanRoll;
+	LeanPitch = Instance->LeanPitch;
+	PelvisDrop = Instance->PelvisDrop;
+	FootOffset[0] = Instance->FootOffset[0];
+	FootOffset[1] = Instance->FootOffset[1];
+	FootIKAlpha = Instance->FootIKAlpha;
 }
 
 bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
@@ -202,6 +318,7 @@ bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
 		const FSOLocomotionLayer& Layer = Layers[Active[0]];
 		FAnimationPoseData PoseData(Output);
 		Layer.Clip->GetAnimationPose(PoseData, FAnimExtractContext(static_cast<double>(Layer.Time), false, {}, Layer.bLoop));
+		ApplyBody(Output);
 		ApplyHold(Output);
 		return true;
 	}
@@ -225,8 +342,152 @@ bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
 	}
 	FAnimationPoseData OutData(Output);
 	FAnimationRuntime::BlendPosesTogether(Poses, Curves, Attributes, Weights, OutData);
+	ApplyBody(Output);
 	ApplyHold(Output);
 	return true;
+}
+
+void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
+{
+	if (!bBodyMotion)
+	{
+		return;
+	}
+	FCompactPose& Pose = Output.Pose;
+	const FBoneContainer& Bones = Pose.GetBoneContainer();
+	auto Find = [&Bones](const TCHAR* Name) -> int32
+	{
+		const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(FName(Name));
+		return MeshIndex == INDEX_NONE ? INDEX_NONE : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex)).GetInt();
+	};
+	const int32 Hips = Find(TEXT("hips")), Spine = Find(TEXT("spine")), Chest = Find(TEXT("chest"));
+	const int32 Leg[2][3] = { { Find(TEXT("thigh_L")), Find(TEXT("shin_L")), Find(TEXT("foot_L")) },
+		{ Find(TEXT("thigh_R")), Find(TEXT("shin_R")), Find(TEXT("foot_R")) } };
+	if (Hips == INDEX_NONE)
+	{
+		return;
+	}
+
+	const int32 Num = Pose.GetNumBones();
+	TArray<int32, TInlineAllocator<64>> Parent;
+	TArray<FTransform, TInlineAllocator<64>> Local, CS;
+	Parent.SetNum(Num);
+	Local.SetNum(Num);
+	CS.SetNum(Num);
+	for (FCompactPoseBoneIndex Index : Pose.ForEachBoneIndex())
+	{
+		const int32 I = Index.GetInt();
+		const FCompactPoseBoneIndex P = Bones.GetParentBoneIndex(Index);
+		Parent[I] = P.IsValid() ? P.GetInt() : INDEX_NONE;
+		Local[I] = Pose[Index];
+		CS[I] = Parent[I] == INDEX_NONE ? Local[I] : Local[I] * CS[Parent[I]];
+	}
+	auto Refresh = [&]()
+	{
+		for (int32 I = 0; I < Num; ++I)
+		{
+			CS[I] = Parent[I] == INDEX_NONE ? Local[I] : Local[I] * CS[Parent[I]];
+		}
+	};
+	auto SetCS = [&](int32 I, const FTransform& T)
+	{
+		Local[I] = Parent[I] == INDEX_NONE ? T : T.GetRelativeTransform(CS[Parent[I]]);
+		Refresh();
+	};
+	auto Turn = [&](int32 I, const FQuat& Q)
+	{
+		SetCS(I, FTransform(Q * CS[I].GetRotation(), CS[I].GetLocation(), CS[I].GetScale3D()));
+	};
+
+	// Component space: +Y forward, +Z up, +X the character's left.
+	const FVector Side(1.0f, 0.0f, 0.0f), Fwd(0.0f, 1.0f, 0.0f), Up(0.0f, 0.0f, 1.0f);
+
+	// 1. Orientation warping: the hips (and legs) turn toward the movement, spine and chest turn back so the
+	//    shoulders keep facing the aim.
+	if (FMath::Abs(WarpYaw) > 0.1f)
+	{
+		const float W = FMath::DegreesToRadians(WarpYaw);
+		Turn(Hips, FQuat(Up, W));
+		if (Spine != INDEX_NONE)
+		{
+			Turn(Spine, FQuat(Up, -W * 0.55f));
+		}
+		if (Chest != INDEX_NONE)
+		{
+			Turn(Chest, FQuat(Up, -W * 0.45f));
+		}
+	}
+
+	// 2. Leans: the upper body rolls into sideways acceleration and pitches with forward acceleration / landings.
+	const float Roll = FMath::DegreesToRadians(LeanRoll), PitchL = FMath::DegreesToRadians(LeanPitch);
+	if (FMath::Abs(Roll) + FMath::Abs(PitchL) > 1e-3f)
+	{
+		Turn(Hips, FQuat(Fwd, Roll * 0.25f) * FQuat(Side, PitchL * 0.2f));
+		if (Spine != INDEX_NONE)
+		{
+			Turn(Spine, FQuat(Fwd, Roll * 0.45f) * FQuat(Side, PitchL * 0.45f));
+		}
+		if (Chest != INDEX_NONE)
+		{
+			Turn(Chest, FQuat(Fwd, Roll * 0.3f) * FQuat(Side, PitchL * 0.35f));
+		}
+	}
+
+	// Where the feet should be: as animated (after the warp), raised or lowered onto the ground under them.
+	FTransform FootWanted[2];
+	bool bLeg[2] = { false, false };
+	for (int32 i = 0; i < 2; ++i)
+	{
+		bLeg[i] = Leg[i][0] != INDEX_NONE && Leg[i][1] != INDEX_NONE && Leg[i][2] != INDEX_NONE;
+		if (bLeg[i])
+		{
+			FootWanted[i] = CS[Leg[i][2]];
+			FootWanted[i].AddToTranslation(Up * FootOffset[i] * FootIKAlpha);
+		}
+	}
+
+	// 3. The hips sink (landing, or so the lower foot reaches a step below).
+	if (PelvisDrop > 0.01f)
+	{
+		FTransform H = CS[Hips];
+		H.AddToTranslation(-Up * PelvisDrop);
+		SetCS(Hips, H);
+	}
+
+	// 4. Two-bone leg IK onto the wanted feet; the knee keeps the side the animation bent it to.
+	if (PelvisDrop > 0.01f || FootIKAlpha > 0.01f)
+	{
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (!bLeg[i])
+			{
+				continue;
+			}
+			const int32 Upper = Leg[i][0], Lower = Leg[i][1], Foot = Leg[i][2];
+			const FVector S = CS[Upper].GetLocation();
+			const FVector Knee0 = CS[Lower].GetLocation();
+			const float L1 = FVector::Dist(S, Knee0);
+			const float L2 = FVector::Dist(Knee0, CS[Foot].GetLocation());
+			const FVector ToTarget = FootWanted[i].GetLocation() - S;
+			const FVector Dir = ToTarget.GetSafeNormal(1e-4f, -Up);
+			const float D = FMath::Clamp(static_cast<float>(ToTarget.Size()), FMath::Abs(L1 - L2) + 0.5f, (L1 + L2) * 0.999f);
+			const float Along = (L1 * L1 - L2 * L2 + D * D) / (2.0f * D);
+			const float Height = FMath::Sqrt(FMath::Max(L1 * L1 - Along * Along, 0.0f));
+			FVector Bend = (Knee0 - S) - Dir * FVector::DotProduct(Knee0 - S, Dir);
+			Bend = Bend.GetSafeNormal(1e-4f, Fwd);
+			const FVector Knee = S + Dir * Along + Bend * Height;
+			const FVector Ankle = S + Dir * D;
+			Turn(Upper, FQuat::FindBetweenNormals((CS[Lower].GetLocation() - S).GetSafeNormal(), (Knee - S).GetSafeNormal()));
+			const FVector E = CS[Lower].GetLocation();
+			Turn(Lower, FQuat::FindBetweenNormals((CS[Foot].GetLocation() - E).GetSafeNormal(), (Ankle - E).GetSafeNormal()));
+			SetCS(Foot, FTransform(FootWanted[i].GetRotation(), CS[Foot].GetLocation(), CS[Foot].GetScale3D()));
+		}
+	}
+
+	for (FCompactPoseBoneIndex Index : Pose.ForEachBoneIndex())
+	{
+		Pose[Index] = Local[Index.GetInt()];
+	}
 }
 
 void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
@@ -242,7 +503,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(FName(Name));
 		return MeshIndex == INDEX_NONE ? INDEX_NONE : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex)).GetInt();
 	};
-	const int32 Spine = Find(TEXT("spine")), Chest = Find(TEXT("chest")), Neck = Find(TEXT("neck"));
+	const int32 Spine = Find(TEXT("spine")), Chest = Find(TEXT("chest")), Neck = Find(TEXT("neck")), HeadBone = Find(TEXT("head"));
 	const int32 Arm[2][3] = { { Find(TEXT("upperarm_R")), Find(TEXT("forearm_R")), Find(TEXT("hand_R")) },
 		{ Find(TEXT("upperarm_L")), Find(TEXT("forearm_L")), Find(TEXT("hand_L")) } };
 	for (const int32 (&Chain)[3] : Arm)
@@ -292,7 +553,6 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	const FVector Side(1.0f, 0.0f, 0.0f), Up(0.0f, 0.0f, 1.0f);
 	const float Pitch = FMath::DegreesToRadians(FMath::Clamp(AimPitch, -80.0f, 80.0f));
 	const float BladeRad = FMath::DegreesToRadians(Blade), LeanRad = FMath::DegreesToRadians(Lean);
-	const FQuat NeckBefore = Neck != INDEX_NONE ? CS[Neck].GetRotation() : FQuat::Identity;
 
 	// 1. Stance: the torso follows the aim pitch (70 %), leans into the gun and turns the off shoulder forward.
 	//    First person: the shoulders turn with the whole view about the eye instead, so looking down never shows the
@@ -312,10 +572,15 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			SetCS(Chest, FTransform(View * C.GetRotation(), EyeCS + View.RotateVector(C.GetLocation() - EyeCS), C.GetScale3D()));
 		}
 	}
-	// 2. The head looks along the aim regardless of the stance.
+	// 2. The head looks along the aim regardless of the stance or the clip: neck and head take their rest-pose
+	//    facing (straight ahead) and share the aim pitch.
 	if (Neck != INDEX_NONE && !bArmsOnly)
 	{
-		SetCS(Neck, FTransform(FQuat(Side, Pitch) * NeckBefore, CS[Neck].GetLocation(), CS[Neck].GetScale3D()));
+		SetCS(Neck, FTransform(FQuat(Side, Pitch * 0.4f) * RefCS[Neck].GetRotation(), CS[Neck].GetLocation(), CS[Neck].GetScale3D()));
+		if (HeadBone != INDEX_NONE)
+		{
+			SetCS(HeadBone, FTransform(FQuat(Side, Pitch) * RefCS[HeadBone].GetRotation(), CS[HeadBone].GetLocation(), CS[HeadBone].GetScale3D()));
+		}
 	}
 
 	// 3. Arms: two-bone IK to the wrist targets, elbows down and out, forearm shares the wrist twist, hand on the grip.

@@ -371,9 +371,10 @@ void ASOHUD::DrawHUD()
 		return;
 	}
 
-	// Crosshair: four ticks spread by the current cone, gone when fully aimed.
-	const float Ads = Player->GetAimProgress();
-	if (Ads < 0.95f)
+	// Crosshair: four ticks spread by the current cone; it fades out over the first third of aiming, so looking
+	// through the sights (or an optic's window) shows only the sight's own dot or post.
+	const float Ads = FMath::Clamp(Player->GetAimProgress() * 3.0f, 0.0f, 1.0f);
+	if (Ads < 0.99f)
 	{
 		const float Spread = Weapon ? Weapon->GetStats().Spread * Player->GetSpreadScale() : 1.0f;
 		const float Gap = (6.0f + Spread * 9.0f) * S;

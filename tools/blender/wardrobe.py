@@ -446,7 +446,7 @@ class Kit:
             d = H.base()(L) - .02 * s
             d = smin(d, capsule(L, np.array([0, -.06, .1]) * s, np.array([0, .1, .09]) * s, .012 * s), .01 * s)   # crest
             for sx in (1, -1):
-                d = smin(d, sdf.round_box(L, np.array([sx * .085, .005, .0]) * s, np.array([.012, .03, .035]) * s, .008 * s), .006 * s)
+                d = smin(d, sdf.round_box(L, np.array([sx * .085 * anatomy.WIDTH_CRANIUM, .005, .0]) * s, np.array([.012, .03, .035]) * s, .008 * s), .006 * s)
             return np.maximum(d, -.13 * s - L[:, 2])
 
         def helm_mat(C):

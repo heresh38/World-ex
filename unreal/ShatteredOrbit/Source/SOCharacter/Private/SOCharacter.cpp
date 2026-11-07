@@ -475,7 +475,7 @@ FTransform ASOCharacter::GetEyeTransform(bool bWithRecoil) const
 {
 	FRotator Aim = GetAimRotation();
 	Aim.Pitch = FRotator::NormalizeAxis(Aim.Pitch) + (bWithRecoil ? GetRecoilPitch() : 0.0f);
-	Aim.Roll = 0.0f;
+	Aim.Roll = CameraRoll;   // slide / strafe tilt (the gun rolls with the view; the aim direction does not change)
 	return FTransform(Aim, FirstPersonCamera->GetComponentLocation());
 }
 
@@ -642,18 +642,20 @@ void ASOCharacter::Tick(float DeltaSeconds)
 
 	// Recoil recovers on its own; the camera shows it as an additive pitch.
 	RecoilKick = FMath::Max(0.0f, RecoilKick - DeltaSeconds * RecoilRecovery);
+	UpdateCameraFeel(DeltaSeconds);
 	for (UCameraComponent* Camera : { FirstPersonCamera.Get(), ThirdPersonCamera.Get() })
 	{
 		Camera->ClearAdditiveOffset();
-		if (RecoilKick > 0.0f)
+		const float Roll = Camera == FirstPersonCamera.Get() ? CameraRoll : 0.0f;
+		if (RecoilKick > 0.0f || FMath::Abs(Roll) > 1e-3f)
 		{
-			Camera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch(), 0.0f, 0.0f)), 0.0f);
+			Camera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch(), 0.0f, Roll)), 0.0f);
 		}
 	}
 
-	// Eye height eases across crouch / slide transitions.
+	// Eye height eases across crouch / slide transitions; steps, landings and the head bob ride on top.
 	EyeOffset = FMath::FInterpTo(EyeOffset, GetTargetEyeOffset(), DeltaSeconds, EyeHeightInterpSpeed);
-	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
+	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset) + FeelOffset);
 
 	// Aim down sights: progress at the weapon ADS rate, zoom by the weapon magnification.
 	const USOWeaponData* WeaponData = Weapon ? Weapon->GetData() : nullptr;
@@ -662,10 +664,11 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	const float Ads = AimProgress * AimProgress * (3.0f - 2.0f * AimProgress);
 	const float HipFov = GetHipFov();
 	const float Zoom = WeaponData ? Weapon->GetStats().Zoom : 1.0f / AimFovScale;
-	CurrentFov = HipFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
+	const float MoveFov = HipFov + FovBoost * (1.0f - Ads);     // sprint / slide widen the hip view only
+	CurrentFov = MoveFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
 	FirstPersonCamera->SetFieldOfView(CurrentFov);
 	ThirdPersonCamera->SetFieldOfView(CurrentFov);
-	Look->SetAim(bAiming, HipFov, CurrentFov);
+	Look->SetAim(bAiming, MoveFov, CurrentFov);
 
 	// Magnified optics: fully aimed, the scope picture replaces the gun (viewmodel.js inScope).
 	const bool bScope = IsFirstPersonView() && Weapon && Weapon->IsScoped() && AimProgress > 0.82f && bAiming;
@@ -1213,6 +1216,8 @@ void ASOCharacter::OnWeaponEquipped()
 void ASOCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	// the view dips with the impact (the spring in UpdateCameraFeel brings it back)
+	LandDipVel -= FMath::Clamp((-LastAirVz - 150.0f) * 0.16f, 0.0f, 190.0f);
 
 	const USOCharacterMovementComponent* Move = GetSOMovement();
 	if (BufferedJumpTime >= 0.0f && Move && GetWorld()->GetTimeSeconds() - BufferedJumpTime <= Move->JumpBufferTime)
@@ -1222,9 +1227,83 @@ void ASOCharacter::Landed(const FHitResult& Hit)
 	BufferedJumpTime = -1.0f;
 }
 
+void ASOCharacter::OnJumped_Implementation()
+{
+	Super::OnJumped_Implementation();
+	LandDipVel -= 35.0f;   // a small push off the legs before the view rises
+}
+
+void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
+{
+	const float Dt = FMath::Max(DeltaSeconds, 1e-4f);
+	const USOCharacterMovementComponent* Move = GetSOMovement();
+	const bool bFeel = Move && IsLocallyControlled() && ViewMode == ESOViewMode::FirstPerson && !bDead;
+	const double Z = GetActorLocation().Z;
+	if (!bFeel)
+	{
+		FeelOffset = FVector::ZeroVector;
+		StepSmooth = LandDip = LandDipVel = CameraRoll = FovBoost = BobAmp = 0.0f;
+		LastFeelZ = Z;
+		bHaveFeelZ = true;
+		return;
+	}
+	const FVector Velocity = GetVelocity();
+	const float Speed = Velocity.Size2D();
+	const bool bGrounded = Move->IsMovingOnGround() && !Move->IsSliding();
+
+	// 1. Steps: walking up or down stairs moves the capsule in jumps (MaxStepHeight); the view glides instead.
+	//    A change bigger than any walkable slope explains (46 degrees) is a step.
+	if (bHaveFeelZ && Move->MovementMode == MOVE_Walking)
+	{
+		const float Dz = static_cast<float>(Z - LastFeelZ);
+		if (FMath::Abs(Dz) > 1.5f + Speed * Dt * 1.1f && FMath::Abs(Dz) < 60.0f)
+		{
+			StepSmooth = FMath::Clamp(StepSmooth - Dz, -60.0f, 60.0f);
+		}
+	}
+	LastFeelZ = Z;
+	bHaveFeelZ = true;
+	StepSmooth = FMath::FInterpTo(StepSmooth, 0.0f, Dt, 11.0f);
+
+	// 2. Landing: the view dips with the impact and springs back (stiff, slightly under-damped).
+	if (Move->IsFalling())
+	{
+		LastAirVz = Velocity.Z;
+	}
+	const float Stiff = 190.0f, Damp = 2.0f * FMath::Sqrt(Stiff) * 0.72f;
+	LandDipVel += (-Stiff * LandDip - Damp * LandDipVel) * Dt;
+	LandDip = FMath::Clamp(LandDip + LandDipVel * Dt, -14.0f, 6.0f);
+
+	// 3. Head bob in step with the footsteps (one dip per step, a sway per stride), never while aiming much.
+	const float Stride = Move->IsSprinting() ? 240.0f : (bIsCrouched ? 140.0f : 185.0f);
+	if (bGrounded)
+	{
+		BobPhase += Speed * Dt * PI / Stride;
+	}
+	const float Ads = AimProgress * AimProgress * (3.0f - 2.0f * AimProgress);
+	const float WantAmp = bGrounded ? FMath::Min(Speed / 440.0f, 1.0f) * (Move->IsSprinting() ? 1.25f : 0.55f) * (1.0f - Ads * 0.85f) : 0.0f;
+	BobAmp = FMath::FInterpTo(BobAmp, WantAmp * HeadBobScale, Dt, 6.0f);
+	const float BobZ = -FMath::Abs(FMath::Sin(BobPhase)) * BobAmp + BobAmp * 0.5f;
+	const float BobY = FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.45f;
+
+	// 4. Roll: into a slide, a touch toward a strafe, a whisper with the stride.
+	const FVector Right = GetActorRightVector();
+	const float Strafe = Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(FVector::DotProduct(Velocity, Right)) / 440.0f, -1.0f, 1.0f) : 0.0f;
+	const float WantRoll = (Move->IsSliding() ? -SlideCameraRoll : 0.0f) + Strafe * StrafeCameraRoll * (1.0f - Ads)
+		+ FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.25f;
+	CameraRoll = FMath::FInterpTo(CameraRoll, WantRoll, Dt, 7.0f);
+
+	// 5. Field of view widens with speed.
+	const float WantFov = Move->IsSliding() ? SlideFovBoost : (Move->IsSprinting() ? SprintFovBoost * FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f);
+	FovBoost = FMath::FInterpTo(FovBoost, WantFov, Dt, 5.0f);
+
+	FeelOffset = FVector(0.0f, BobY, StepSmooth + LandDip + BobZ);
+}
+
 void ASOCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	LastFeelZ -= ScaledHalfHeightAdjust;   // the capsule centre moved, not the feet: no step
 	// The capsule centre dropped; keep the eye where it was and let Tick ease it down.
 	EyeOffset += ScaledHalfHeightAdjust;
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
@@ -1233,6 +1312,7 @@ void ASOCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightA
 void ASOCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	LastFeelZ += ScaledHalfHeightAdjust;
 	EyeOffset -= ScaledHalfHeightAdjust;
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
 }

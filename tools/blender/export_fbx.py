@@ -48,7 +48,7 @@ from mathutils import Matrix
 
 LOD_RE = re.compile(r"^(?P<base>.+?)_(?:(?P<mid>mid)|(?:lod|LOD)(?P<n>\d*))$")
 COL_RE = re.compile(r"^(UCX_.+|.+_(?:col|collision)(?:\.\d+)?)$", re.I)
-PARTS = ("mag", "bolt", "charge", "slide", "pump", "crane", "cylinder", "rounds", "hatch", "biomass", "OPTIC")
+PARTS = ("mag", "bolt", "charge", "slide", "pump", "crane", "cylinder", "rounds", "hatch", "biomass", "OPTIC", "irons")
 
 
 def parse_args():
@@ -238,7 +238,9 @@ def add_finger_rig(male):
     if arm is None or "hand.L" not in arm.data.bones:
         print("[export_fbx] finger rig: no hand bones, skipped")
         return
-    sc = 1.1 if male else 1.0
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import anatomy
+    sc = anatomy.HAND_SCALE['male' if male else 'female']    # the scale hand_sdf sculpts with
     chains = finger_chains(male)
     world = arm.matrix_world
     inv = world.inverted()
@@ -632,6 +634,12 @@ def main():
     materials, textures = export_materials(src, out_dir)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=src, merge_vertices=False)
+    # Morph targets start at 0 (some GLBs carry default weights of 1, which would bake every face preset into the
+    # FBX's blend-shape defaults).
+    for ob in bpy.data.objects:
+        keys = ob.data.shape_keys if ob.type == 'MESH' and ob.data else None
+        for kb in (keys.key_blocks[1:] if keys else ()):
+            kb.value = 0.0
     drop_helpers(only)
     if isinstance(flags.get("--finger-rig"), str):
         add_finger_rig(flags["--finger-rig"] != "female")

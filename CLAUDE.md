@@ -1,5 +1,9 @@
 # WORLD EX — notes for Claude Code
 
+**The Unreal project (`unreal/ShatteredOrbit`, see "Unreal port" below) is the main and only version of the game.** The browser
+build described in most of this file is abandoned (owner, 2026-11): do not keep `src/` working or in sync. The Blender
+scripts and their rules still apply; their output now only has to serve Unreal.
+
 Browser looter shooter on Three.js r186 (vendored in `lib/three`, no build step: native ES modules + import map in `index.html`).
 Serve the repo root with any static server (`python3 -m http.server 8765`).
 
@@ -44,7 +48,7 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 
 ## Characters
 Players are built by `players.py` (base body, regions `B_*`, eyes, brows, lashes, face morphs from `face.py`; the head's bone
-structure (cheekbones, jaw, brow, nose, lips) is in `anatomy.Head.structure`, quick look: `python tools/blender/headview.py
+structure (cheekbones, jaw, brow, nose, lips) is in `anatomy.Head.structure`; the skull above the brow (`CRANIUM`), the nose loft (`Head.NOSE`) and the head / hand scales are measured against Epic's MetaHuman head and Manny (measured only, never imported; see `tools/blender/proportions.md`), quick look: `python tools/blender/headview.py
 out.png male`) and
 `wardrobe.py` (hair and clothing as `C_<slot>__<item>`). The anatomy is signed-distance fields in `anatomy.py`,
 meshed by `sdf.py` (Surface Nets + narrow band). Meta (wardrobe items with the regions they hide, defaults, morph groups)

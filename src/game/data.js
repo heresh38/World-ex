@@ -45,8 +45,8 @@ export const archLabel = arch => { const A = ARCHETYPES[arch]; return A ? (WEAPO
 // Optics: 'default' is the gun's own sight; the others are gun_attach.glb nodes that mount on the 'rail' empty.
 export const SIGHTS = {
   default: { name: 'Factory sights' },
-  reflex: { name: 'Reflex sight', zoom: 1.3 },
-  holo: { name: 'Holographic sight', zoom: 1.4 },
+  reflex: { name: 'Reflex sight', zoom: 1.2 },
+  holo: { name: 'Holographic sight', zoom: 1.25 },
   x2: { name: '2× scope', zoom: 2, scope: true },
   x4: { name: '4× scope', zoom: 4, scope: true },
   x8: { name: '8× scope', zoom: 8, scope: true },

@@ -24,6 +24,7 @@ public:
 	FVector SavedMantleTarget = FVector::ZeroVector;
 	float SavedMantleElapsed = 0.0f;
 	float SavedMantleDuration = 0.0f;
+	float SavedMantleEntrySpeed = 0.0f;
 
 	FSOSavedMove()
 		: bSavedWantsToSprint(false)
@@ -45,6 +46,7 @@ public:
 		SavedMantleTarget = FVector::ZeroVector;
 		SavedMantleElapsed = 0.0f;
 		SavedMantleDuration = 0.0f;
+		SavedMantleEntrySpeed = 0.0f;
 	}
 
 	virtual uint8 GetCompressedFlags() const override
@@ -91,6 +93,7 @@ public:
 			SavedMantleTarget = Move->MantleTarget;
 			SavedMantleElapsed = Move->MantleElapsed;
 			SavedMantleDuration = Move->MantleDuration;
+			SavedMantleEntrySpeed = Move->MantleEntrySpeed;
 		}
 	}
 
@@ -106,6 +109,7 @@ public:
 			Move->MantleTarget = SavedMantleTarget;
 			Move->MantleElapsed = SavedMantleElapsed;
 			Move->MantleDuration = SavedMantleDuration;
+			Move->MantleEntrySpeed = SavedMantleEntrySpeed;
 		}
 	}
 };
@@ -387,7 +391,11 @@ void USOCharacterMovementComponent::PhysSlide(float DeltaTime, int32 Iterations)
 		}
 
 		SlideElapsed += TimeTick;
-		if (SlideElapsed >= SlideMaxTime || Velocity.Size() < SlideExitSpeed || !bWantsToCrouch)
+		// Down a slope the slide carries on (gravity keeps feeding it) until it slows or you stand up.
+		const FVector Downhill = FVector(CurrentFloor.HitResult.ImpactNormal.X, CurrentFloor.HitResult.ImpactNormal.Y, 0.0f);
+		const float SlopeDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(static_cast<float>(CurrentFloor.HitResult.ImpactNormal.Z), -1.0f, 1.0f)));
+		const bool bDownhill = SlopeDeg > SlideDownhillAngle && FVector::DotProduct(Downhill.GetSafeNormal(), Velocity.GetSafeNormal2D()) > 0.5f;
+		if ((SlideElapsed >= SlideMaxTime && !bDownhill) || Velocity.Size() < SlideExitSpeed || !bWantsToCrouch)
 		{
 			SetMovementMode(MOVE_Walking);
 			StartNewPhysics(RemainingTime, Iterations);
@@ -481,7 +489,9 @@ bool USOCharacterMovementComponent::TryMantle()
 	MantleStart = Location;
 	MantleTarget = Target;
 	MantleElapsed = 0.0f;
-	MantleDuration = MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f);
+	MantleEntrySpeed = FMath::Max(static_cast<float>(FVector::DotProduct(Velocity, Forward)), 0.0f);
+	const float Fast = FMath::Clamp(MantleEntrySpeed / FMath::Max(SprintSpeed, 1.0f), 0.0f, 1.0f);
+	MantleDuration = (MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f)) * FMath::Lerp(1.0f, MantleFastTimeScale, Fast);
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(ESOCustomMovementMode::Mantle));
 	return true;
@@ -497,10 +507,11 @@ void USOCharacterMovementComponent::PhysMantle(float DeltaTime, int32 Iterations
 	MantleElapsed += DeltaTime;
 	const float Alpha = MantleDuration > 0.0f ? FMath::Clamp(MantleElapsed / MantleDuration, 0.0f, 1.0f) : 1.0f;
 
-	// Up first (eased out), then over the lip (smooth step): this is the path TryMantle validated.
-	const float Rise = FMath::Clamp(Alpha / 0.6f, 0.0f, 1.0f);
-	const float RiseEased = 1.0f - FMath::Square(1.0f - Rise);
-	const float Over = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - 0.6f) / 0.4f, 0.0f, 1.0f));
+	// Up (eased out), and over the lip once the body is nearly up: the two overlap so the move is one arc rather than
+	// a lift and a shove (the path stays inside what TryMantle validated: the lip is cleared before most of the push).
+	const float Rise = FMath::Clamp(Alpha / 0.7f, 0.0f, 1.0f);
+	const float RiseEased = 1.0f - FMath::Pow(1.0f - Rise, 3.0f);
+	const float Over = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - 0.42f) / 0.58f, 0.0f, 1.0f));
 
 	const FVector Desired(
 		FMath::Lerp(MantleStart.X, MantleTarget.X, Over),
@@ -512,7 +523,9 @@ void USOCharacterMovementComponent::PhysMantle(float DeltaTime, int32 Iterations
 
 	if (Alpha >= 1.0f)
 	{
-		Velocity = (MantleTarget - MantleStart).GetSafeNormal2D() * MantleExitSpeed;
+		// Out the far side with the speed you came in with (a sprint vault flows on).
+		const float Exit = FMath::Max(MantleExitSpeed, MantleEntrySpeed * MantleKeepSpeed);
+		Velocity = (MantleTarget - MantleStart).GetSafeNormal2D() * Exit;
 		SetMovementMode(MOVE_Walking);
 	}
 }

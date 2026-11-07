@@ -49,6 +49,13 @@ def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, 
            moving=(), loose=()):
     """moving: [(name, parts, pivot) or (name, parts, pivot, parent_name)] animated parts; loose: [(name, parts, pivot)]
     spare props the game hides and clones (x_shell, x_round, x_casing, x_speedloader...)."""
+    # Iron sights become their own part ('irons') on guns that take rail optics, so a mounted optic can fold them
+    # away (nothing of the gun crowds the optic's window).
+    if rail:
+        irons = [p for p in parts if p is not None and p.name.split('.')[0] in IRON_PARTS]
+        if irons:
+            parts = [p for p in parts if p not in irons]
+            moving = list(moving) + [('irons', irons, (0, 0, 0))]
     g = K.assemble(name, parts, organic, cyl_axis=cyl_axis)
     made = {}
     for spec in moving:
@@ -59,7 +66,11 @@ def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, 
     for nm, pp, pv in loose:
         moving_part(nm, pp, pv, g, (0, 0, 0), organic, cyl_axis)
     if optic:
-        o = K.assemble('OPTIC', list(optic)); o.parent = g
+        if all(p.name.split('.')[0] in IRON_PARTS for p in optic if p is not None):
+            # flip-up / fixed irons standing in for an optic: they are the gun's irons (fold away under a rail optic)
+            moving_part('irons', list(optic), (0, 0, 0), g, (0, 0, 0), organic, cyl_axis)
+        else:
+            o = K.assemble('OPTIC', list(optic)); o.parent = g
     bl.empty('muzzle', muzzle, g); bl.empty('foregrip', fore, g); bl.empty('sight', sight, g)
     if scoped:
         bl.empty('scope', sight, g)
@@ -67,7 +78,41 @@ def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, 
         bl.empty('rail', rail, g)
     if keys:
         keys(g)
+    scale_tree(g, GUN_SCALE.get(name, 1.0))
     K.export(name + '.glb')
+
+
+# Real-world size: these guns were modelled ~1.1-1.2x too large overall (length, height and width alike). Overall
+# lengths after the scale, against the real class: assault rifle 94 cm (AK 88, M16 100), carbine 85 (M4 84),
+# auto rifle 95, scout 102, DMR 110 (M14 112), bolt-action 115 (105-117), anti-materiel sniper 129 (Barrett 145,
+# AWM 120), pump 100 (870 18in 96), hand cannon 33 (6-10in magnum 27-37). Pistols (22-23 cm vs 19-21), revolver
+# (27), SMGs (72-76 vs MP5 70), shotgun (89 vs M4 101), HMG (90), rocket launcher (98 vs RPG-7 95) are already right.
+# The origin (top of the pistol grip) stays put; every part, pivot and socket scales about it.
+# Part names (gunkit.iron_front / iron_rear and the hand-built posts) that make a gun's iron sights.
+IRON_PARTS = {'post', 'postL', 'postR', 'postdot', 'front_base', 'front_ear', 'frontpost', 'rear_ring', 'rear_base',
+              'rear_earL', 'rear_earR', 'rearblock', 'buis_base', 'fbuis_base', 'fbuis_arm'}
+
+GUN_SCALE = {'gun_rifle': .82, 'gun_carbine': .9, 'gun_auto': .9, 'gun_scout': .92, 'gun_dmr': .9, 'gun_bolt': .85,
+             'gun_sniper': .88, 'gun_pump': .86, 'gun_handcannon': .9}
+
+
+def scale_tree(root, s):
+    """Uniform scale of a gun about its origin, baked into the meshes and the children's offsets (no object scale
+    left behind, so pivots, sockets and the reload parts' origins stay exact in every exporter)."""
+    from mathutils import Matrix
+    if abs(s - 1.0) < 1e-6:
+        return
+    done = set()
+
+    def walk(o, is_root):
+        if o.type == 'MESH' and o.data.name not in done:
+            o.data.transform(Matrix.Scale(s, 4))
+            done.add(o.data.name)
+        if not is_root:
+            o.location = o.location * s
+        for c in o.children:
+            walk(c, False)
+    walk(root, True)
 
 
 def mirror_pair(fn):
@@ -546,7 +591,7 @@ def bolt_rifle():
         a = k * math.pi / 3 + math.pi / 6
         fl.append(cbox((.006, .36, .006), (math.cos(a) * .0165, -.45, zb + math.sin(a) * .0165), rot=(0, -a, 0)))
     P += [tube('barrel', .017, .64, -.14, zb, S, 48, r2=.0135, cuts=fl), tube('brake', .021, .085, -.775, zb, S, 48, hollow=.008,
-          cuts=[cbox((.06, .012, .028), (0, -.79 - i * .022, zb)) for i in range(3)] + [cbox((.012, .05, .03), (0, -.815, zb + .02))]),
+          cuts=[cbox((.06, .012, .028), (0, -.79 - i * .022, zb)) for i in range(3)] + [cbox((.0116, .052, .031), (0, -.8155, zb + .0205))]),
           ring('brakering', .021, .0025, (0, -.778, zb), S, maj=48)]
     # bottom metal: trigger guard, magazine, release
     P += K.trigger_group(M, S, S, y=-.034, z=.02, L=.06, drop=.048)
@@ -1018,18 +1063,19 @@ def attachments():
                                    B('rx_glass', (.024, .0015, .02), (0, -.014, h), L, 0, rot=(.12, 0, 0)),
                                    ball('rx_dot', .0012, (0, -.024, h), D, seg=10, rings=6),
                                    cylz('rx_emitter', .003, .004, (0, .008, .016), AL, 12),
-                                   B('rx_btn', (.004, .008, .004), (.016, .004, .014), RB, .001)], (0, .16, h))
-    # holographic: boxy hood, big window, battery cap, buttons
-    h = .03
-    done('ATT_holo', mount(.02) + mount(-.02) + [B('hg_base', (.034, .07, .012), (0, 0, .013), AL, .003),
-                                                ext('hg_hood', [(.03, .018), (.03, .048), (-.036, .048), (-.036, .018)], .04, AL, .003,
-                                                    cuts=[cbox((.03, .1, .024), (0, 0, .032))]),
-                                                B('hg_glass', (.03, .0015, .022), (0, -.03, h), L, 0), B('hg_glass2', (.03, .0015, .022), (0, .024, h), L, 0),
-                                                ring('hg_reticle', .0035, .0004, (0, -.04, h), D, maj=24, mn=4),
-                                                ball('hg_dot', .0009, (0, -.04, h), D, seg=8, rings=6),
-                                                cylx('hg_battery', .007, .016, (.026, .01, .016), AL, 24),
-                                                B('hg_btn', (.006, .01, .004), (0, .03, .02), RB, .001), B('hg_btn2', (.006, .01, .004), (0, .042, .02), RB, .001)],
-         (0, .17, h))
+                                   B('rx_btn', (.004, .008, .004), (.016, .004, .014), RB, .001)], (0, .15, h))
+    # holographic (real class size: ~95 mm long, 46 mm wide, window 32 x 24 mm about 36 mm over the rail): boxy hood,
+    # big window, battery cap, buttons. Eye point: the window fills about a quarter of the view when aimed.
+    h = .036
+    done('ATT_holo', mount(.025) + mount(-.025) + [B('hg_base', (.04, .092, .014), (0, 0, .014), AL, .003),
+                                                  ext('hg_hood', [(.04, .021), (.04, .056), (-.045, .056), (-.045, .021)], .046, AL, .003,
+                                                      cuts=[cbox((.032, .12, .024), (0, 0, h))]),
+                                                  B('hg_glass', (.032, .0015, .024), (0, -.04, h), L, 0), B('hg_glass2', (.032, .0015, .024), (0, .034, h), L, 0),
+                                                  ring('hg_reticle', .0036, .0004, (0, -.05, h), D, maj=24, mn=4),
+                                                  ball('hg_dot', .0009, (0, -.05, h), D, seg=8, rings=6),
+                                                  cylx('hg_battery', .008, .02, (.031, .012, .02), AL, 24),
+                                                  B('hg_btn', (.007, .012, .005), (0, .042, .024), RB, .001), B('hg_btn2', (.007, .012, .005), (0, .056, .024), RB, .001)],
+         (0, .2, h))
 
     def scope(name, L_, r, obj, h, eye_relief, turrets=True, shade=0.0):
         P = mount(.035) + mount(-.035)

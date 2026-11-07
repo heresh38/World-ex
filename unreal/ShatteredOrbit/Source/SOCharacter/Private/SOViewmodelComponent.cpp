@@ -84,23 +84,43 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	RunK = FMath::FInterpConstantTo(RunK, bRunning ? 1.0f : 0.0f, Dt, 1.0f / FMath::Max(Data ? Data->SprintToFireTime : 0.2f, 0.05f));
 	const float RunT = RunK * RunK * (3.0f - 2.0f * RunK);
 
+	// Movement inertia: the gun trails strafes and landings, tucks in for a slide, drops away for a mantle.
+	const FVector Vel = Character->GetVelocity();
+	const float Strafe = FMath::Clamp(static_cast<float>(FVector::DotProduct(Vel, Character->GetActorRightVector())) / 440.0f, -1.2f, 1.2f);
+	StrafeK = FMath::FInterpTo(StrafeK, bGrounded ? Strafe : Strafe * 0.5f, Dt, 6.0f);
+	const float AirLift = Move && Move->IsFalling() ? FMath::Clamp(static_cast<float>(Vel.Z) / 900.0f, -1.0f, 1.0f) : 0.0f;
+	AirK = FMath::FInterpTo(AirK, AirLift, Dt, 8.0f);
+	SlideK = FMath::FInterpConstantTo(SlideK, Move && Move->IsSliding() ? 1.0f : 0.0f, Dt, 5.0f);
+	MantleK = FMath::FInterpConstantTo(MantleK, Move && Move->IsMantling() ? 1.0f : 0.0f, Dt, 7.0f);
+	const float SlideT = SlideK * SlideK * (3.0f - 2.0f * SlideK), MantleT = MantleK * MantleK * (3.0f - 2.0f * MantleK);
+	const float Free = 1.0f - Ads * 0.85f;
+	const float InX = (-StrafeK * 0.006f + SlideT * 0.008f) * Free;
+	const float InY = (Character->GetLandDip() * 0.0025f - AirK * 0.008f - SlideT * 0.012f - MantleT * 0.09f) * Free;
+	const float InPitch = (-MantleT * 0.5f + AirK * 0.03f) * Free;
+	const float InRoll = (StrafeK * 0.05f + SlideT * 0.22f + MantleT * 0.35f) * Free;
+
 	// Reload / cycling gun offsets (reload.js view space: x right, y up, z back; pitch, yaw (+left), roll).
 	static const float Zero[6] = { 0, 0, 0, 0, 0, 0 };
 	const float* G = Weapon ? Weapon->GetPose().Gun : Zero;
 
 	// Hip vs ADS: in ADS the sight (rear sight line) lies on the eye axis, AdsSightDistance ahead.
+	// Irons: the rear sight AdsSightDistance ahead. Optics: their own eye point at the eye, so the window frames the
+	// view (about a quarter of it) with the dot in the middle and only the top of the receiver below.
 	FVector AdsOffset(AdsSightDistance, 0.0f, 0.0f);
 	if (Data)
 	{
+		const USOGunRigComponent* Rig = Weapon->GetFirstPersonRig();
+		const float Distance = Rig && Rig->IsOpticMounted() ? AdsOpticEyeDistance
+			: (Rig && Rig->HasBuiltInOptic() ? AdsBuiltInOpticDistance : AdsSightDistance);
 		const FVector SightRig = USOGunRigComponent::MeshToRig(Weapon->GetSightLocation());
-		AdsOffset = FVector(AdsSightDistance - SightRig.X, -SightRig.Y, -SightRig.Z);
+		AdsOffset = FVector(Distance - SightRig.X, -SightRig.Y, -SightRig.Z);
 	}
 	const float Lift = 1.0f - Ads * 0.8f;
 	// view-space metres (x right, y up, z back) accumulated like viewmodel.js, then converted
 	// Sprint: the gun is carried across the chest, muzzle up and to the left, canted, still in view (like every
 	// shooter keeps it), and comes back to the hip in the gun's sprint-to-fire time.
-	const float VX = BobX + SwayX * Lift + RunT * 0.01f + G[0];
-	const float VY = BobY + SwayY * Lift - Lower * 0.35f + RunT * 0.035f + G[1];
+	const float VX = BobX + SwayX * Lift + RunT * 0.01f + G[0] + InX;
+	const float VY = BobY + SwayY * Lift - Lower * 0.35f + RunT * 0.035f + G[1] + InY;
 	const float VZ = KickBack * (1.0f - Ads * 0.5f) + RunT * 0.03f + G[2];
 	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
 	// Bulky guns (launchers, the living guns) sit further out to the right and lower at the hip, so the body of
@@ -116,9 +136,9 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
 	// The muzzle flip stays small on the sights so the front post settles back on the target.
-	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f;
+	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch;
 	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.5f) + RunT * 0.55f + G[4];
-	const float EZ = G[5] + RunT * 0.5f;
+	const float EZ = G[5] + RunT * 0.5f + InRoll;
 	const FTransform Local(FRotator(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ)), Offset);
 
 	// First person: locked to the kicked eye, exactly what the camera shows.

@@ -17,6 +17,7 @@
 #include "SOLootLibrary.h"
 #include "SOHUD.h"
 #include "SOCombatStatics.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "SOInventoryWidget.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
@@ -152,12 +153,80 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 3)
+	{
+		// Head study: both bodies, as worn and bald (hair and coat off), from eight angles at 75 cm with a 30 degree
+		// lens: the same framing the MetaHuman reference shots use.
+		auto HeadView = [this, Hero](float Yaw, float Pitch)
+		{
+			ASOCharacter* H = Hero();
+			if (!H)
+			{
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Focus = H->GetMesh()->GetBoneLocation(TEXT("head")) + FVector(0, 0, 6.0f);
+			const FRotator Around(Pitch, H->GetActorRotation().Yaw + Yaw, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * 75.0f;
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
+			{
+				Cam->GetCameraComponent()->SetFieldOfView(50.9f);   // 30 degrees vertically at 16:9, as the reference shots
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		struct FView { const TCHAR* Name; float Yaw; float Pitch; };
+		static const FView Views[] = { { TEXT("a_front"), 0, 0 }, { TEXT("b_3q_left"), 45, 0 }, { TEXT("c_profile_left"), 90, 0 },
+			{ TEXT("d_back_3q_left"), 135, 0 }, { TEXT("e_back"), 180, 0 }, { TEXT("f_3q_right"), -45, 0 }, { TEXT("g_profile_right"), -90, 0 },
+			{ TEXT("h_above"), 20, 40 } };
+		Do(4.0f, [=, this]() { Look(0.0f); View(ESOViewMode::ThirdPerson); if (ASOWeapon* W = Weapon()) { W->SetActorHiddenInGame(true); } });
+		for (const TCHAR* Sex : { TEXT("male"), TEXT("female") })
+		{
+			for (int32 Bald = 0; Bald < 2; ++Bald)
+			{
+				const FString SexName(Sex);
+				Act([=, this]()
+				{
+					if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(FName(*SexName)); }
+				});
+				Do(0.8f, [=, this]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						FSOOutfit O = H->GetOutfit();
+						if (Bald)
+						{
+							O.Set(TEXT("hair"), TEXT("none"));
+							O.Set(TEXT("outer"), TEXT("none"));
+							O.Set(TEXT("head"), TEXT("none"));
+						}
+						H->SetOutfit(O);
+						if (ASOWeapon* W = Weapon()) { W->SetActorHiddenInGame(true); }
+					}
+				});
+				for (const FView& V : Views)
+				{
+					const FString Name = FString::Printf(TEXT("head_%s_%s_%s"), Sex, Bald ? TEXT("bald") : TEXT("worn"), V.Name);
+					const float Yaw = V.Yaw, Pitch = V.Pitch;
+					Do(0.6f, [=]() { HeadView(Yaw, Pitch); });
+					Snap(0.3f, Name);
+				}
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 2)
 	{
 		// Loadout screen and both bodies only (files l3..l6, p1..p5).
 		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
 		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
-		Do(4.0f, [=, this]() { Look(0.0f); View(ESOViewMode::FirstPerson); });
+		TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		Do(4.0f, [=, this]() { Look(0.0f); View(ESOViewMode::FirstPerson); if (ASOCharacter* H = Hero()) { *Start = H->GetActorTransform(); } });
 		// first person at the pitch limits, firing, and sprinting (the gun stays in view)
 		Act([=]() { Look(-88.0f); });
 		Snap(0.8f, TEXT("f1_fp_look_down"));
@@ -166,10 +235,33 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Act([=]() { Look(0.0f); Fire(true); });
 		Snap(0.08f, TEXT("f3_fp_fire"));
 		Act([=]() { Fire(false); if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } });
-		Act([this]() { CaptureForward = 1.0f; });
+		Act([this]() { CaptureMove = FVector2D(0.0f, 1.0f); });
 		Snap(1.6f, TEXT("f4_fp_sprint"));
-		Act([this]() { CaptureForward = 0.0f; });
+		Act([this]() { CaptureMove = FVector2D::ZeroVector; });
+		Act([=]() { if (ASOCharacter* H = Hero()) { H->TeleportTo(Start->GetLocation(), Start->Rotator()); H->GetCharacterMovement()->StopMovementImmediately(); } });
 		Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleSprintReleased(); } });
+		// aiming through optics: the window frames the view, irons folded away, no crosshair
+		auto EquipSight = [Hero](const TCHAR* Arch, const TCHAR* Sight)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(Arch));
+				FSOWeaponInstance W = USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng);
+				W.Sight = Sight;
+				H->EquipInstance(W);
+			}
+		};
+		Act([=]() { EquipSight(TEXT("rifle"), TEXT("default")); });
+		Do(1.0f, [=]() { Aim(true); });
+		Snap(0.8f, TEXT("s0_ads_irons"));
+		Act([=]() { Aim(false); EquipSight(TEXT("rifle"), TEXT("reflex")); });
+		Snap(1.0f, TEXT("s1_hip_reflex"));
+		Act([=]() { Aim(true); });
+		Snap(0.8f, TEXT("s2_ads_reflex"));
+		Act([=]() { Aim(false); EquipSight(TEXT("carbine"), TEXT("holo")); });
+		Do(1.0f, [=]() { Aim(true); });
+		Snap(0.8f, TEXT("s3_ads_holo"));
+		Act([=]() { Aim(false); EquipSight(TEXT("rifle"), TEXT("default")); });
 		Snap(4.0f, TEXT("m1_minimap"));                       // the map picture is captured ~1-3.5 s after load
 		Act([=]() { if (ASOHUD* H = Hud()) { H->ToggleMap(); } });
 		Snap(1.0f, TEXT("m2_map_screen"));
@@ -194,6 +286,17 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.5f, TEXT("p4_male_back"));
 		Act([=, this]() { Orbit(40.0f, 90.0f, 75.0f); });
 		Snap(0.5f, TEXT("p5_male_face"));
+		// third person on the move: legs turn toward a strafe, the cycle runs backward for a backpedal
+		Act([=, this]() { View(ESOViewMode::ThirdPerson); CaptureMove = FVector2D(1.0f, 0.0f); });
+		Do(0.9f, [=, this]() { Orbit(35.0f, 320.0f, 60.0f); });
+		Snap(0.0f, TEXT("t1_tp_strafe_right"));
+		Act([=, this]() { CaptureMove = FVector2D(0.0f, -1.0f); });
+		Do(0.9f, [=, this]() { Orbit(70.0f, 320.0f, 60.0f); });
+		Snap(0.0f, TEXT("t2_tp_backpedal"));
+		Act([=, this]() { CaptureMove = FVector2D(-0.7f, 0.7f); });
+		Do(0.9f, [=, this]() { Orbit(20.0f, 320.0f, 60.0f); });
+		Snap(0.0f, TEXT("t3_tp_forward_left"));
+		Act([=, this]() { CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->TeleportTo(Start->GetLocation(), Start->Rotator()); } });
 		// dying: the gun leaves the hands and falls with the body
 		Act([=, this]() { if (ASOCharacter* H = Hero()) { USOCombatStatics::ApplyDamage(nullptr, H, 100000.0f, false); } Orbit(70.0f, 320.0f, 120.0f); });
 		Snap(2.5f, TEXT("d1_death_gun_dropped"));
@@ -448,11 +551,12 @@ void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)
 void ASOPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
-	if (CaptureForward != 0.0f)
+	if (!CaptureMove.IsZero())
 	{
 		if (APawn* P = GetPawn())
 		{
-			P->AddMovementInput(P->GetActorForwardVector(), CaptureForward);
+			P->AddMovementInput(P->GetActorForwardVector(), CaptureMove.Y);
+			P->AddMovementInput(P->GetActorRightVector(), CaptureMove.X);
 		}
 	}
 	if (BenchWarmup < 0.0f && BenchLeft <= 0.0f)

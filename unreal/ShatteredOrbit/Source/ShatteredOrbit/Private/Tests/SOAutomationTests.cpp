@@ -190,6 +190,78 @@ bool FSOMovementMantleTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOMovementMantleMomentumTest, "ShatteredOrbit.Movement.MantleMomentum", SOTest::Flags)
+bool FSOMovementMantleMomentumTest::RunTest(const FString& Parameters)
+{
+	// A sprint into a waist-high block flows over it (most of the speed kept, quicker than a standing mantle);
+	// a standing mantle steps off slowly.
+	float ExitSpeed[2] = { 0.0f, 0.0f };
+	float Duration[2] = { 0.0f, 0.0f };
+	for (int32 Run = 0; Run < 2; ++Run)
+	{
+		const bool bSprint = Run == 0;
+		SOTest::FTestWorld W;
+		W.AddBox(FVector(-3000, -3000, -100), FVector(6000, 3000, 0));
+		const float BlockX = bSprint ? 900.0f : 120.0f;
+		W.AddBox(FVector(BlockX, -300, 0), FVector(BlockX + 600.0f, 300, 100));
+		ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 0));
+		USOCharacterMovementComponent* Move = C->GetSOMovement();
+		W.Run(0.3f);
+		Move->SetWantsToSprint(bSprint);
+		Move->SetWantsToMantle(true);
+		bool bMantled = false, bDone = false;
+		W.Run(3.0f, [&]
+		{
+			if (bDone)
+			{
+				return;
+			}
+			if (Move->IsMantling())
+			{
+				bMantled = true;
+				Duration[Run] += SOTest::Dt;
+			}
+			else if (bMantled)
+			{
+				ExitSpeed[Run] = Move->Velocity.Size2D();
+				bDone = true;
+				return;
+			}
+			if (bSprint || !bMantled)
+			{
+				C->AddMovementInput(FVector::ForwardVector, 1.0f);
+			}
+		});
+		TestTrue(FString::Printf(TEXT("%s mantle happened"), bSprint ? TEXT("sprint") : TEXT("standing")), bMantled && bDone);
+	}
+	TestTrue(FString::Printf(TEXT("sprint mantle keeps its momentum (exit %.0f cm/s)"), ExitSpeed[0]), ExitSpeed[0] > 550.0f);
+	TestTrue(FString::Printf(TEXT("a walking mantle keeps walking pace, slower than the sprint (exit %.0f vs %.0f cm/s)"), ExitSpeed[1], ExitSpeed[0]), ExitSpeed[1] < ExitSpeed[0] - 150.0f && ExitSpeed[1] > 250.0f);
+	TestTrue(FString::Printf(TEXT("sprint mantle is quicker (%.2f s vs %.2f s)"), Duration[0], Duration[1]), Duration[0] < Duration[1]);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOMovementSlideDownhillTest, "ShatteredOrbit.Movement.SlideDownhill", SOTest::Flags)
+bool FSOMovementSlideDownhillTest::RunTest(const FString& Parameters)
+{
+	// A 15 degree slope falling away toward +X: a slide down it outlasts the flat-ground slide time.
+	SOTest::FTestWorld W;
+	AActor* Ramp = W.AddBox(FVector(-2500, -400, -20), FVector(2500, 400, 0));
+	Ramp->SetActorRotation(FRotator(-15.0f, 0.0f, 0.0f));
+	ASOCharacter* C = W.SpawnCharacter(FVector(-1800, 0, 520));
+	USOCharacterMovementComponent* Move = C->GetSOMovement();
+	W.Run(0.6f);
+	TestTrue(TEXT("standing on the slope"), Move->IsMovingOnGround());
+	Move->SetWantsToSprint(true);
+	auto Forward = [C] { C->AddMovementInput(FVector::ForwardVector, 1.0f); };
+	W.Run(0.6f, Forward);
+	C->Crouch();
+	W.Run(4.0f * SOTest::Dt, Forward);
+	TestTrue(TEXT("slides"), Move->IsSliding());
+	W.Run(Move->SlideMaxTime + 0.4f, Forward);
+	TestTrue(FString::Printf(TEXT("still sliding downhill past the flat slide time (speed %.0f)"), Move->Velocity.Size()), Move->IsSliding());
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOViewToggleTest, "ShatteredOrbit.Camera.ViewToggle", SOTest::Flags)
 bool FSOViewToggleTest::RunTest(const FString& Parameters)
 {

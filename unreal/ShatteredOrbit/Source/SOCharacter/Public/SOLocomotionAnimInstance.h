@@ -77,7 +77,20 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	/** Eye position in component space (first person: the shoulders turn with the view about it). */
 	FVector EyeCS = FVector::ZeroVector;
 
+	// Body motion (third-person bodies; see USOLocomotionAnimInstance).
+	float WarpYaw = 0.0f;
+	float LeanRoll = 0.0f;
+	float LeanPitch = 0.0f;
+	float PelvisDrop = 0.0f;
+	float FootOffset[2] = { 0.0f, 0.0f };
+	float FootIKAlpha = 0.0f;
+	bool bBodyMotion = false;
+
 private:
+	/** Orientation warping (legs toward the movement direction, the chest kept on the aim), leans into acceleration,
+	 *  landing compression and foot placement on uneven ground (two-bone leg IK). */
+	void ApplyBody(FPoseContext& Output) const;
+
 	/** Stance (aim pitch through the spine, lean, blade), head on the aim, both arms onto the grips (two-bone IK);
 	 *  first-person copies keep only the arms. */
 	void ApplyHold(FPoseContext& Output) const;
@@ -112,6 +125,35 @@ public:
 	bool bInAir = false;
 	bool bDead = false;
 	bool bSliding = false;
+	bool bMantling = false;
+
+	// --- Body motion (how Unreal's sample characters stay fluid without a clip per direction) ---
+	/** Max yaw the legs turn toward the movement direction (orientation warping); beyond it a backward move plays
+	 *  the cycle in reverse. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float MaxWarpYaw = 80.0f;
+
+	/** Lean into acceleration: degrees per m/s2, and the cap. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float LeanPerAccel = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float MaxLean = 9.0f;
+
+	/** Feet find the ground (stairs, slopes, ledges) within this many cm of the capsule's floor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float FootReach = 40.0f;
+
+	/** Movement yaw relative to the facing (deg, 0 = forward) and whether the cycle runs backward. */
+	float MoveYaw = 0.0f;
+	bool bBackward = false;
+	float WarpYaw = 0.0f;
+	float LeanRoll = 0.0f;
+	float LeanPitch = 0.0f;
+	float PelvisDrop = 0.0f;
+	float FootOffset[2] = { 0.0f, 0.0f };
+	float FootIKAlpha = 0.0f;
+	bool bBodyMotion = false;
 	float AttackTime = -1.0f;
 	float AttackRate = 1.0f;
 
@@ -135,6 +177,15 @@ public:
 
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+	void UpdateBodyMotion(const ACharacter* Character, float DeltaSeconds);
+
+	FVector LastVelocityCS = FVector::ZeroVector;
+	FVector AccelCS = FVector::ZeroVector;
+	float LastAirVz = 0.0f;
+	bool bWasInAir = false;
+	float Compress = 0.0f;       // landing: cm the hips sink (spring)
+	float CompressVel = 0.0f;
+	float PelvisFeet = 0.0f;     // cm the hips drop so the lower foot reaches the ground
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
 	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
 };

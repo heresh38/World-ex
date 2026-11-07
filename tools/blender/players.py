@@ -262,7 +262,7 @@ class PlayerBuilder:
     def body_parts(self):
         B, F = self.B, self.F
         mat = self.skin
-        zN = float(B.head_o[2] - .105 * B.head.s - .01)   # neck seam just under the jaw (head mesh above)
+        zN = float(B.head_o[2] - .114 * B.head.s - .01)   # neck seam just under the jaw (head mesh above)
         zF = float(B.ankle[2] + .045)                     # ankle seam (feet below)
         ov = .006
         objs = {}
@@ -569,6 +569,7 @@ class PlayerBuilder:
                     L2 = L2.copy(); L2[0, 0] += 1e-6          # keep the key so every mesh has the same morph list
                 k = o.shape_key_add(name=name, from_mix=False)
                 k.data.foreach_set('co', (L2 + B.head_o).astype(F32).ravel())
+                k.value = 0.0                                     # rest face (the GLB's default weights)
         return M
 
     def run(self):

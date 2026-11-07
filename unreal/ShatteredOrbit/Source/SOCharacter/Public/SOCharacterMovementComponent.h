@@ -103,6 +103,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "cm/s"))
 	float MantleExitSpeed = 180.0f;
 
+	/** Share of the approach speed a mantle keeps on the far side (a sprint vault flows on instead of stopping). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle")
+	float MantleKeepSpeed = 0.8f;
+
+	/** A mantle at full sprint takes this fraction of the time a standing one does. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle")
+	float MantleFastTimeScale = 0.7f;
+
+	/** Downhill steeper than this (degrees) a slide keeps going past SlideMaxTime while it still has speed. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Slide")
+	float SlideDownhillAngle = 8.0f;
+
+	/** 0..1 through the current mantle (0 when not mantling). */
+	float GetMantleAlpha() const { return IsMantling() && MantleDuration > 0.0f ? FMath::Clamp(MantleElapsed / MantleDuration, 0.0f, 1.0f) : 0.0f; }
+
 	// --- Intents (set by the owning client, replicated via compressed flags) ---
 	UFUNCTION(BlueprintCallable, Category = "SO|Movement")
 	void SetWantsToSprint(bool bWants) { bWantsToSprint = bWants; }
@@ -172,4 +187,5 @@ protected:
 	FVector MantleTarget = FVector::ZeroVector;
 	float MantleElapsed = 0.0f;
 	float MantleDuration = 0.0f;
+	float MantleEntrySpeed = 0.0f;
 };

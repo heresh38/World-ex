@@ -291,7 +291,7 @@ void USOGunRigComponent::SetShown(bool bInShown)
 			continue;
 		}
 		const FString Name = Part->ComponentTags.Num() > 0 ? Part->ComponentTags[0].ToString() : FString();
-		if (Name.StartsWith(TEXT("x_")) || (Name == TEXT("OPTIC") && bOpticMounted))
+		if (Name.StartsWith(TEXT("x_")) || ((Name == TEXT("OPTIC") || Name == TEXT("irons")) && bOpticMounted))
 		{
 			Part->SetVisibility(false);
 		}
@@ -332,6 +332,11 @@ void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
 	if (BuiltIn)
 	{
 		BuiltIn->SetVisibility(bShown && !bOpticMounted);
+	}
+	// A mounted optic folds the iron sights away so nothing of the gun crowds its window.
+	if (UStaticMeshComponent* Irons = GetPart(TEXT("irons")))
+	{
+		Irons->SetVisibility(bShown && !bOpticMounted);
 	}
 
 	// Finish and rarity glow by material name.
@@ -381,6 +386,11 @@ void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
 			}
 		}
 	}
+}
+
+bool USOGunRigComponent::HasBuiltInOptic() const
+{
+	return !bOpticMounted && GetPart(TEXT("OPTIC")) != nullptr;
 }
 
 UStaticMeshComponent* USOGunRigComponent::GetPart(FName Name) const

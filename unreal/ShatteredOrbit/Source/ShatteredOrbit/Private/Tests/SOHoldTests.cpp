@@ -170,8 +170,10 @@ bool FSORackHandTest::RunTest(const FString& Parameters)
 	}
 	USOGunRigComponent* Rig = Rifle->GetFirstPersonRig();
 	const UStaticMeshComponent* Bolt = Rig->GetPart(TEXT("bolt"));
-	// Receiver + dust cover in rig space (cm): x -20..18, half width 2.3, from the mag well up to the cover's top.
-	const FBox Receiver(FVector(-20.0f, -2.3f, 2.0f), FVector(18.0f, 2.3f, 11.2f));
+	// Receiver + dust cover in rig space (cm): x -20..18, half width 2.3, from the mag well up to the cover's top, at the
+	// rifle's real-world scale (weapons.GUN_SCALE 'gun_rifle' .82: the gun was modelled 1.2x too large).
+	const float K = 0.82f;
+	const FBox Receiver(FVector(-20.0f, -2.3f, 2.0f) * K, FVector(18.0f, 2.3f, 11.2f) * K);
 
 	Rifle->SetAmmo(0, 100);
 	Rifle->StartReload();
@@ -191,7 +193,7 @@ bool FSORackHandTest::RunTest(const FString& Parameters)
 		if (Rifle->GetPose().Bolt > 0.06f && Bolt)
 		{
 			++RackFrames;
-			RackOnTop += Palm.Z > 11.2f && FSOHandGrip::PalmNormal(Grip.Basis, true).Z < -0.5f ? 1 : 0;
+			RackOnTop += Palm.Z > Receiver.Max.Z && FSOHandGrip::PalmNormal(Grip.Basis, true).Z < -0.5f ? 1 : 0;
 			RackOnHandle += FMath::Abs(Palm.X - USOGunRigComponent::MeshToRig(Bolt->GetRelativeLocation()).X) < 1.5f ? 1 : 0;
 		}
 	});

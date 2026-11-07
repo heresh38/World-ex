@@ -106,6 +106,12 @@ public:
 	USceneComponent* GetGunSpace() const { return GunSpace; }
 	bool IsBuilt() const { return bBuilt; }
 
+	/** A rail optic is mounted (the gun's irons fold away, aiming looks through the optic). */
+	bool IsOpticMounted() const { return bOpticMounted; }
+
+	/** The gun carries its own optic (the energy line's built-in red dots) and no rail optic replaces it. */
+	bool HasBuiltInOptic() const;
+
 	/** glTF gun space (m, x right / y up / z barrel) -> imported mesh space (cm, gun along +Y). */
 	static FVector GltfToMesh(float X, float Y, float Z) { return FVector(X * 100.0f, Z * 100.0f, Y * 100.0f); }
 	/** glTF Euler XYZ (rad) -> mesh space rotation. */

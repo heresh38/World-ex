@@ -186,6 +186,19 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 - **Mantle:** walk or jump at a ledge while holding jump: the orange blocks (60-240 cm) are climbable, the grey
   300 cm wall is not.
 - **Coyote time / jump buffer:** jump just after running off a ledge, or press jump just before landing.
+- **Fluid movement.** The approach follows Unreal's own sample characters, all native C++ with no anim blueprint.
+  - Orientation warping: a strafe turns the legs toward the movement while the chest stays on the aim; a backpedal
+    plays the cycle in reverse.
+  - Leans into acceleration, landing compression, and two-bone foot IK that plants the feet on steps and slopes.
+  - Mantles keep 80 % of the approach speed (a sprint vault flows on) and run quicker when fast.
+  - Slides keep going down slopes.
+  - First-person camera feel (local player only):
+    - steps up and down stairs glide instead of popping;
+    - the view dips with landings on a spring;
+    - head bob in step with the footsteps (`HeadBobScale`);
+    - a small tilt into slides and strafes;
+    - a wider field of view while sprinting or sliding.
+  - The gun trails strafes and landings, tucks into a slide and drops away during a mantle.
 - **Camera:** T (D-pad up) toggles third person; RMB / LT zooms (aim) with zoom-matched sensitivity. Third-person
   shots go where the crosshair is (the round flies from the eyes to what the shoulder camera's centre ray hits).
 - **Holding the gun:** the first-person arms are your own body's arms (same sleeves and gloves as in third person),
@@ -204,6 +217,11 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
   (reflex, holo, 2x / 4x / 8x scopes; fully aimed through magnified glass the scope picture replaces the gun). Both
   hands grip the gun: the fingers close round the pistol grip (index on the trigger), the handguard, magazines and
   rounds. The horror guns leave a poison pool for 5 s where they land.
+  - Guns are real size (`weapons.GUN_SCALE`; table in `tools/blender/proportions.md`).
+  - With a rail optic mounted, the gun's iron sights (the `irons` part) fold away.
+  - Aiming puts the optic's eye point at the eye. A red dot or holographic window then frames about a quarter of
+    the view, with only a light zoom (1.2× / 1.25×).
+  - The crosshair fades out over the first third of aiming.
 - **Loadout (inventory):** I / Tab (View on the gamepad). Weapons and the outer layers (coat, rig) on the left,
   armour (head, chest, hands, legs, feet) on the right, the player in the middle as they stand (drag to turn; the
   body button switches male / female). Click a slot: its grid of everything owned (icons in rarity colours, NEW and
