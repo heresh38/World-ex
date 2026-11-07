@@ -305,11 +305,10 @@ void USOInventoryComponent::NewProfile()
 	Level = 1;
 	// state.js newSave: the three starters (names as the browser build gives them)...
 	struct FStarter { const TCHAR* Arch; int32 Rarity; const TCHAR* Name; };
-	const FStarter Starters[] = { { TEXT("auto"), 1, TEXT("Ashen Oath") }, { TEXT("handcannon"), 1, TEXT("Last Lantern") }, { TEXT("rocket"), 0, TEXT("Iron Verdict") } };
+	const FStarter Starters[] = { { TEXT("auto"), 1, TEXT("") }, { TEXT("handcannon"), 1, TEXT("") }, { TEXT("rocket"), 0, TEXT("") } };
 	for (const FStarter& S : Starters)
 	{
-		FSOWeaponInstance W = USOLootLibrary::MakeWeapon(S.Arch, S.Rarity, 10, Rng);
-		W.Name = S.Name;
+		FSOWeaponInstance W = USOLootLibrary::MakeWeapon(S.Arch, S.Rarity, 10, Rng); // the gun's own name
 		W.bNew = false;
 		W.Uid = UniqueUid(W.Uid);
 		Items.Add(W);
@@ -352,7 +351,9 @@ bool USOInventoryComponent::LoadProfile()
 	{
 		if (!Tables || Tables->LoadArchetype(W.Archetype)) // archetypes that no longer exist are dropped
 		{
-			Items.Add(W);
+			FSOWeaponInstance& Kept = Items.Add_GetRef(W);
+			FRandomStream Unused(0);
+			Kept.Name = USOLootLibrary::WeaponName(W.Archetype, W.Rarity, Unused); // older saves rolled a name per copy
 		}
 	}
 	Equipped = Save->Equipped;

@@ -26,9 +26,10 @@ public:
 
 	/** Dev: screenshots into Saved/Screenshots/SO_*.png (first person: hip, firing, sights, mag change, rack, looking
 	 *  down; third person: behind, aiming, and side / front / rack views from a free camera), then quits if
-	 *  bQuitWhenDone. Run: -game -RenderOffscreen -ExecCmds="SOCaptureSeries 1". */
+	 *  bQuitWhenDone. Run: -game -RenderOffscreen -ExecCmds="SOCaptureSeries 1".
+	 *  Set 1: the hold study instead (every gun: hip, aimed, mid-reload, third person from both sides; files h<NN>_*). */
 	UFUNCTION(Exec)
-	void SOCaptureSeries(int32 bQuitWhenDone = 0);
+	void SOCaptureSeries(int32 bQuitWhenDone = 0, int32 Set = 0);
 
 	/** Dev: after a warm-up, measures frame / game / render / GPU times for Seconds and logs avg + 95th percentile.
 	 *  e.g. -game -windowed -ResX=2560 -ResY=1440 -ExecCmds="SOBenchmark 15 1" */

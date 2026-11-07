@@ -112,14 +112,16 @@ FString USOLootLibrary::WeaponName(FName Archetype, int32 Rarity, FRandomStream&
 	{
 		return Archetype.ToString();
 	}
-	if (Rarity == 4)
-	{
-		if (const FString* Exotic = Tables->ExoticNames.Find(Archetype))
-		{
-			return *Exotic;
-		}
-	}
+	// One name per gun, whatever the rarity or rolls: the copies differ by their rolls and perks.
 	const USOWeaponData* Data = Tables->LoadArchetype(Archetype);
+	if (Data && !Data->Title.IsEmpty())
+	{
+		return Data->Title.ToString();
+	}
+	if (const FString* Fixed = Tables->ExoticNames.Find(Archetype))
+	{
+		return *Fixed;
+	}
 	const ESOWeaponClass Class = Data ? Data->WeaponClass : ESOWeaponClass::Energy;
 	if (Class == ESOWeaponClass::Kinetic && Tables->Maker.Num() > 0)
 	{
@@ -165,9 +167,10 @@ FSOWeaponInstance USOLootLibrary::MakeWeapon(FName Archetype, int32 Rarity, int3
 	{
 		W.Sight = Data->DefaultSight;
 	}
-	auto Roll = [&Rng]() { return 0.9f + Rng.FRand() * 0.2f; };
-	W.Stats.Damage = Roll();
-	W.Stats.Rpm = 0.95f + Rng.FRand() * 0.1f;
+	// Rolls keep every copy close to the gun it is (a few percent either way); perks are what set copies apart.
+	auto Roll = [&Rng]() { return 0.94f + Rng.FRand() * 0.12f; };
+	W.Stats.Damage = 0.97f + Rng.FRand() * 0.06f;
+	W.Stats.Rpm = 0.98f + Rng.FRand() * 0.04f;
 	W.Stats.Stability = Roll();
 	W.Stats.Range = Roll();
 	W.Stats.Handling = Roll();
@@ -202,7 +205,8 @@ FSOWeaponStats USOLootLibrary::ComputeStatsFor(const USOWeaponData* A, const FSO
 		return S;
 	}
 	const USOLootTables* Tables = GetTables();
-	const float Mult = Tables ? Tables->GetRarity(W.Rarity).Mult : 1.0f;
+	// Rarity brings more perks; its damage bonus is kept small (a fifth of data.js's rarity multiplier).
+	const float Mult = 1.0f + ((Tables ? Tables->GetRarity(W.Rarity).Mult : 1.0f) - 1.0f) * 0.2f;
 	const FSOWeaponRolls& R = W.Stats;
 	S.Damage = A->Damage * Mult * R.Damage * (1.0f + W.Power / 200.0f);
 	S.Rpm = A->RoundsPerMinute * R.Rpm;
@@ -225,8 +229,8 @@ int32 USOLootLibrary::RollQuality(const FSOWeaponInstance& W)
 {
 	auto Norm = [](float V, float Lo, float Span) { return FMath::Clamp((V - Lo) / Span, 0.0f, 1.0f); };
 	const FSOWeaponRolls& R = W.Stats;
-	const float Sum = Norm(R.Damage, 0.9f, 0.2f) + Norm(R.Rpm, 0.95f, 0.1f) + Norm(R.Stability, 0.9f, 0.2f) + Norm(R.Range, 0.9f, 0.2f)
-		+ Norm(R.Handling, 0.9f, 0.2f);
+	const float Sum = Norm(R.Damage, 0.97f, 0.06f) + Norm(R.Rpm, 0.98f, 0.04f) + Norm(R.Stability, 0.94f, 0.12f) + Norm(R.Range, 0.94f, 0.12f)
+		+ Norm(R.Handling, 0.94f, 0.12f);
 	return FMath::RoundToInt(Sum / 5.0f * 100.0f);
 }
 

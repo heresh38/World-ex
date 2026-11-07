@@ -113,6 +113,74 @@ void USOProjectileSubsystem::OnImpact(const FSOProjectile& Round, const FHitResu
 		// each parasite chews ~8 % of the sac's damage per second for 4 s around the burst
 		Swarms.Add({ Instigator, FVector(Hit.ImpactPoint), FMath::Max(Round.Splash, 250.0f), Round.Damage * 0.08f * Round.Swarm, 4.0f, 0.0f });
 	}
+	if (Round.Pool > 0.0f)
+	{
+		// the poison soaks the ground: half the round's acid share per second, every second it lies there
+		const float PerSecond = Round.Damage * FMath::Max(Round.Dot, 0.3f) * 0.5f;
+		AddPool(Instigator, FVector(Hit.ImpactPoint) + FVector(Hit.ImpactNormal) * 5.0f, PoolRadius(Round.Splash), PerSecond, Round.Pool);
+	}
+}
+
+bool USOProjectileSubsystem::FindFloor(const UWorld* World, const FVector& Point, FVector& OutFloor, FVector& OutNormal)
+{
+	if (!World)
+	{
+		return false;
+	}
+	FHitResult Floor;
+	FCollisionObjectQueryParams Objects(ECC_WorldStatic);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOPoolFloor), false);
+	if (!World->LineTraceSingleByObjectType(Floor, Point + FVector(0, 0, 20.0f), Point - FVector(0, 0, 600.0f), Objects, Params) || Floor.ImpactNormal.Z < 0.55f)
+	{
+		return false;
+	}
+	OutFloor = Floor.ImpactPoint;
+	OutNormal = Floor.ImpactNormal;
+	return true;
+}
+
+void USOProjectileSubsystem::AddPool(AActor* Instigator, const FVector& Point, float Radius, float PerSecond, float Duration)
+{
+	FVector Floor, Normal;
+	if (PerSecond <= 0.0f || Duration <= 0.0f || !FindFloor(GetWorld(), Point, Floor, Normal))
+	{
+		return;
+	}
+	for (FPool& P : Pools)
+	{
+		if (P.Instigator == Instigator && FVector::DistSquared(P.Center, Floor) < FMath::Square(P.Radius * 0.6f))
+		{
+			// more goo on the same puddle: it lasts longer and burns harder, up to four rounds' worth
+			P.Left = FMath::Max(P.Left, Duration);
+			P.PerSecond = FMath::Min(P.PerSecond + PerSecond * 0.5f, P.Cap);
+			P.Radius = FMath::Max(P.Radius, Radius);
+			return;
+		}
+	}
+	Pools.Add({ Instigator, Floor, Radius, PerSecond, PerSecond * 4.0f, Duration, 0.0f });
+}
+
+void USOProjectileSubsystem::ApplyGround(AActor* Instigator, const FVector& Center, float Radius, float Damage)
+{
+	UWorld* World = GetWorld();
+	if (!World || Damage <= 0.0f || World->GetNetMode() == NM_Client)
+	{
+		return;
+	}
+	for (TActorIterator<ASOCombatCharacter> It(World); It; ++It)
+	{
+		ASOCombatCharacter* Victim = *It;
+		if (Victim == Instigator || Victim->IsDead())
+		{
+			continue;
+		}
+		const float HalfHeight = Victim->GetSimpleCollisionHalfHeight();
+		const FVector Feet = Victim->GetActorLocation() - FVector(0, 0, HalfHeight);
+		if (FVector::DistSquared2D(Feet, Center) <= FMath::Square(Radius) && FMath::Abs(Feet.Z - Center.Z) < 150.0f)
+		{
+			USOCombatStatics::ApplyDamage(Instigator, Victim, Damage, false);
+		}
+	}
 }
 
 float USOProjectileSubsystem::ApplySplash(AActor* Instigator, const FVector& Center, float Radius, float Damage, AActor* Ignore, TArray<AActor*>* OutVictims)
@@ -196,6 +264,22 @@ void USOProjectileSubsystem::Tick(float DeltaTime)
 		if (S.Left <= 0.0f)
 		{
 			Swarms.RemoveAtSwap(i, 1, EAllowShrinking::No);
+		}
+	}
+	for (int32 i = Pools.Num() - 1; i >= 0; --i)
+	{
+		FPool& P = Pools[i];
+		const float Step = FMath::Min(DeltaTime, P.Left);
+		P.Left -= Step;
+		P.Tick += Step;
+		if (P.Tick >= 0.5f || P.Left <= 0.0f)
+		{
+			ApplyGround(P.Instigator.Get(), P.Center, P.Radius, P.PerSecond * P.Tick);
+			P.Tick = 0.0f;
+		}
+		if (P.Left <= 0.0f)
+		{
+			Pools.RemoveAtSwap(i, 1, EAllowShrinking::No);
 		}
 	}
 

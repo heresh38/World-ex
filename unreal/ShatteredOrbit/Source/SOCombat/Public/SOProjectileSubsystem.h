@@ -60,6 +60,10 @@ struct SOCOMBAT_API FSOProjectile
 	/** Brood: parasites left where it bursts (each chews for a while). */
 	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
 	int32 Swarm = 0;
+
+	/** Horror goo: seconds the poison lies on the ground where it lands (a pool hurting anyone hostile standing in it). */
+	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
+	float Pool = 0.0f;
 };
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FSOOnProjectileHit, const FSOProjectile& /*Round*/, const FHitResult& /*Hit*/, float /*DamageApplied*/);
@@ -87,6 +91,20 @@ public:
 
 	int32 GetNumInFlight() const { return Rounds.Num(); }
 	int32 GetNumBurning() const { return Burns.Num(); }
+	int32 GetNumPools() const { return Pools.Num(); }
+
+	/** Seconds poison stays on the ground. */
+	static constexpr float PoolSeconds = 5.0f;
+
+	/** Pool radius (cm) for a goo round with this splash radius (cm). */
+	static float PoolRadius(float Splash) { return FMath::Clamp(Splash * 0.8f, 120.0f, 600.0f); }
+
+	/** Poison on the ground at Point (projected onto the floor below it, server): PerSecond to everyone hostile within
+	 *  Radius for Duration seconds. A pool landing on a fresh one of the same shooter feeds it instead of stacking. */
+	void AddPool(AActor* Instigator, const FVector& Point, float Radius, float PerSecond, float Duration);
+
+	/** The floor under Point (WorldStatic), or false when there is none within 6 m. */
+	static bool FindFloor(const UWorld* World, const FVector& Point, FVector& OutFloor, FVector& OutNormal);
 
 	/** Damage in a radius around Center (server): linear falloff to 25 % at the edge, blocked by walls. Returns the
 	 *  total applied. Hit actors are added to OutVictims. */
@@ -126,7 +144,22 @@ private:
 		float Tick = 0.0f;
 	};
 
+	struct FPool
+	{
+		TWeakObjectPtr<AActor> Instigator;
+		FVector Center;
+		float Radius = 150.0f;
+		float PerSecond = 0.0f;
+		float Cap = 0.0f;
+		float Left = 0.0f;
+		float Tick = 0.0f;
+	};
+
+	/** Flat damage to every hostile character standing within Radius of Center (feet within 1.5 m of its height). */
+	void ApplyGround(AActor* Instigator, const FVector& Center, float Radius, float Damage);
+
 	TArray<FSOProjectile> Rounds;
 	TArray<FBurn> Burns;
 	TArray<FSwarm> Swarms;
+	TArray<FPool> Pools;
 };

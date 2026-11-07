@@ -61,6 +61,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		const FTransform ToMesh = Mesh->GetComponentTransform();
 		RightTarget = Right.GetRelativeTransform(ToMesh);
 		LeftTarget = Left.GetRelativeTransform(ToMesh);
+		Rig->GetFingerPoses(RightFingers, LeftFingers);
 		const float Ads = Player->GetViewmodel() ? Player->GetViewmodel()->GetAds() : 0.0f;
 		AimPitch = FRotator::NormalizeAxis(Player->GetAimRotation().Pitch);
 		// First person keeps a gentler stance so the off shoulder stays out of the corner of the view.
@@ -168,6 +169,8 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	Lean = Instance->Lean;
 	RightTarget = Instance->RightTarget;
 	LeftTarget = Instance->LeftTarget;
+	RightFingers = Instance->RightFingers;
+	LeftFingers = Instance->LeftFingers;
 }
 
 bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
@@ -340,6 +343,40 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		(Wanted * CS[Hand].GetRotation().Inverse()).ToSwingTwist(ForearmAxis, Swing, Twist);
 		Turn(Lower, FQuat::Slerp(FQuat::Identity, Twist, 0.6f));
 		SetCS(Hand, FTransform(Wanted, CS[Hand].GetLocation(), CS[Hand].GetScale3D()));
+
+		// Fingers close round what the hand holds: each finger turns at its three joints about the axis that brings
+		// it towards the palm (bodies without finger bones skip this).
+		static const TCHAR* FingerNames[5] = { TEXT("index"), TEXT("middle"), TEXT("ring"), TEXT("pinky"), TEXT("thumb") };
+		const FSOFingerPose& Fingers = bLeft ? LeftFingers : RightFingers;
+		const FVector Palm = FSOHandGrip::PalmNormal(Target.GetRotation(), bLeft);
+		for (int32 f = 0; f < 5; ++f)
+		{
+			int32 Chain[3];
+			for (int32 k = 0; k < 3; ++k)
+			{
+				Chain[k] = Find(*FString::Printf(TEXT("%s_0%d_%s"), FingerNames[f], k + 1, bLeft ? TEXT("L") : TEXT("R")));
+			}
+			if (Chain[0] == INDEX_NONE || Chain[1] == INDEX_NONE || Chain[2] == INDEX_NONE)
+			{
+				continue;
+			}
+			FTransform ParentCS = CS[Hand];
+			FVector Axis = FVector::ZeroVector;
+			for (int32 k = 0; k < 3; ++k)
+			{
+				const int32 I = Chain[k];
+				const FTransform Rigid = Local[I] * ParentCS;
+				if (k == 0)
+				{
+					const FVector FingerDir = ((Local[Chain[1]] * Rigid).GetLocation() - Rigid.GetLocation()).GetSafeNormal();
+					Axis = FVector::CrossProduct(FingerDir, Palm).GetSafeNormal();
+				}
+				const FQuat Close(Axis, FMath::DegreesToRadians(Fingers.Curl[f][k]));
+				CS[I] = FTransform(Close * Rigid.GetRotation(), Rigid.GetLocation(), Rigid.GetScale3D());
+				Local[I] = CS[I].GetRelativeTransform(ParentCS);
+				ParentCS = CS[I];
+			}
+		}
 	}
 
 	// 4. First-person copy of the whole body: only the arms remain (everything else shrinks into its bone).
@@ -352,6 +389,10 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			for (const int32 (&Chain)[3] : Arm)
 			{
 				bArm |= I == Chain[0] || I == Chain[1] || I == Chain[2];
+				for (int32 P = Parent[I]; P != INDEX_NONE && !bArm; P = Parent[P])
+				{
+					bArm = P == Chain[2]; // fingers under the hand
+				}
 			}
 			if (!bArm)
 			{

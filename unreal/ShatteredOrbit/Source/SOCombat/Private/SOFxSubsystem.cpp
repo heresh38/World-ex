@@ -389,6 +389,102 @@ void USOFxSubsystem::Impact(const FVector& Point, const FVector& Normal, bool bF
 	USOSoundLibrary::PlayAt(this, TEXT("impact_hard"), Point, 0.8f, 0.1f, ESOSoundRange::Near);
 }
 
+void USOFxSubsystem::Pool(const FVector& Point, const FVector& Normal, float Radius, const FLinearColor& Color, float Delay, float Duration)
+{
+	const UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	PoolMarks.RemoveAll([Now](const FPoolMark& M) { return M.Until < Now; });
+	for (const FPoolMark& M : PoolMarks)
+	{
+		if (FVector::DistSquared(M.Point, Point) < FMath::Square(M.Radius * 0.55f) && Now + Delay - M.Born < 1.5f)
+		{
+			return; // the same puddle (shotgun pellets, rapid fire): it already looks like this
+		}
+	}
+	PoolMarks.Add({ Point, Radius, Now + Delay, Now + Delay + Duration });
+
+	const FVector N = Normal.GetSafeNormal();
+	const FVector T = FVector::CrossProduct(N, FMath::Abs(N.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	const FVector B = FVector::CrossProduct(N, T);
+	auto InDisk = [&](float Spread)
+	{
+		const float A = Random.FRandRange(0.0f, 2.0f * PI);
+		const float R = Radius * Spread * FMath::Sqrt(Random.FRand());
+		return Point + (T * FMath::Cos(A) + B * FMath::Sin(A)) * R;
+	};
+	const FLinearColor Dark = Color * 0.28f;
+	// the puddle: overlapping dark blobs of goo (stacked a hair apart so they never fight the floor)
+	const int32 Blobs = FMath::Clamp(FMath::RoundToInt(Radius / 35.0f), 4, 14);
+	for (int32 i = 0; i < Blobs; ++i)
+	{
+		FSOFxParticle P;
+		P.Kind = ESOFxKind::Smoke;
+		P.bFlat = true;
+		P.bHold = true;
+		P.Axis = N;
+		P.Position = (i == 0 ? Point : InDisk(0.6f)) + N * (1.2f + 0.15f * i);
+		P.Life = Duration + Random.FRandRange(-0.4f, 0.0f);
+		P.Delay = Delay;
+		P.Size0 = Radius * (i == 0 ? 1.7f : Random.FRandRange(0.7f, 1.15f));
+		P.Size1 = P.Size0 * 1.08f;
+		P.Intensity0 = 0.9f;
+		P.Color = Dark;
+		P.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(P);
+	}
+	// glowing acid at the heart of the puddle
+	for (int32 i = 0; i < FMath::Max(2, Blobs / 2); ++i)
+	{
+		FSOFxParticle P;
+		P.Kind = ESOFxKind::Glow;
+		P.bFlat = true;
+		P.bHold = true;
+		P.Axis = N;
+		P.Position = InDisk(0.55f) + N * 3.5f;
+		P.Life = Duration * Random.FRandRange(0.8f, 1.0f);
+		P.Delay = Delay;
+		P.Size0 = Radius * Random.FRandRange(0.5f, 0.9f);
+		P.Size1 = P.Size0 * 0.7f;
+		P.Intensity0 = 1.6f;
+		P.Color = Color;
+		P.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(P);
+	}
+	// bubbles popping and fumes rising off it while it lasts
+	const int32 Fumes = FMath::Clamp(FMath::RoundToInt(Radius / 18.0f), 5, 28);
+	for (int32 i = 0; i < Fumes; ++i)
+	{
+		const float At = Delay + Random.FRandRange(0.1f, FMath::Max(0.2f, Duration - 0.8f));
+		FSOFxParticle Fume;
+		Fume.Kind = ESOFxKind::Smoke;
+		Fume.Position = InDisk(0.8f) + N * 8.0f;
+		Fume.Velocity = N * Random.FRandRange(25.0f, 55.0f) + FMath::VRand() * 8.0f;
+		Fume.Drag = 0.6f;
+		Fume.Life = Random.FRandRange(1.2f, 2.0f);
+		Fume.Delay = At;
+		Fume.Size0 = Random.FRandRange(14.0f, 24.0f);
+		Fume.Size1 = Fume.Size0 * 3.0f;
+		Fume.Intensity0 = 0.32f;
+		Fume.Color = Color * 0.55f;
+		Fume.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(Fume);
+		FSOFxParticle Pop;
+		Pop.Kind = ESOFxKind::Glow;
+		Pop.Position = Fume.Position - N * 4.0f;
+		Pop.Life = 0.22f;
+		Pop.Delay = At;
+		Pop.Size0 = 3.0f;
+		Pop.Size1 = 9.0f;
+		Pop.Intensity0 = 3.0f;
+		Pop.Color = Color;
+		Spawn(Pop);
+	}
+}
+
 void USOFxSubsystem::AddDecal(const FVector& Point, const FVector& Normal)
 {
 	if (!EnsureHost())
@@ -536,7 +632,8 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		}
 		const float A = FMath::Clamp(P.Age / FMath::Max(P.Life, 1e-4f), 0.0f, 1.0f);
 		const float Size = FMath::Lerp(P.Size0, P.Size1, A);
-		const float Intensity = FMath::Lerp(P.Intensity0, P.Intensity1, A);
+		const float Intensity = P.bHold ? P.Intensity0 * FMath::Min(1.0f, A * 14.0f) * FMath::Min(1.0f, (1.0f - A) * 4.0f)
+			: FMath::Lerp(P.Intensity0, P.Intensity1, A);
 		const FVector ToEye = (Eye - P.Position).GetSafeNormal();
 		FTransform T;
 		switch (P.Kind)
@@ -557,6 +654,15 @@ void USOFxSubsystem::Tick(float DeltaTime)
 			break;
 		}
 		default:
+			if (P.bFlat)
+			{
+				// lying on the surface: the card faces along its normal, turned by Spin about it
+				const FVector N = P.Axis.GetSafeNormal();
+				const FVector Side = FVector::CrossProduct(N, FMath::Abs(N.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+				const FVector Turned = FQuat(N, FMath::DegreesToRadians(P.Spin)).RotateVector(Side);
+				T = FTransform(FRotationMatrix::MakeFromYZ(N, Turned).ToQuat(), P.Position, FVector(Size / 100.0f));
+				break;
+			}
 		{
 			const FVector SpunUp = FQuat(ToEye, FMath::DegreesToRadians(P.Spin + A * 40.0f)).RotateVector(Up);
 			T = FTransform(FRotationMatrix::MakeFromYZ(ToEye, SpunUp).ToQuat(), P.Position, FVector(Size / 100.0f));

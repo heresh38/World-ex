@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimInstanceProxy.h"
+#include "SOGunRigComponent.h"
 #include "SOLocomotionAnimInstance.generated.h"
 
 class UAnimSequenceBase;
@@ -71,6 +72,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float Lean = 0.0f;
 	FTransform RightTarget;
 	FTransform LeftTarget;
+	FSOFingerPose RightFingers;
+	FSOFingerPose LeftFingers;
 
 private:
 	/** Stance (aim pitch through the spine, lean, blade), head on the aim, both arms onto the grips (two-bone IK);
@@ -120,6 +123,8 @@ public:
 	float Lean = 0.0f;
 	FTransform RightTarget;
 	FTransform LeftTarget;
+	FSOFingerPose RightFingers;
+	FSOFingerPose LeftFingers;
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide. */
 	float Weights[7] = { 1, 0, 0, 0, 0, 0, 0 };

@@ -101,7 +101,16 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float VY = BobY + SwayY * Lift - Lower * 0.35f - RunT * 0.04f + G[1];
 	const float VZ = KickBack * (1.0f - Ads * 0.5f) + G[2];
 	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
-	const FVector Base = FMath::Lerp(bHandgun ? HandgunHipOffset : HipOffset, AdsOffset, Ads);
+	// Bulky guns (launchers, the living guns) sit further out to the right and lower at the hip, so the body of
+	// the gun stays in the corner of the view instead of filling it.
+	FVector Bulk = FVector::ZeroVector;
+	if (const USOGunRigComponent* Rig = Weapon ? Weapon->GetFirstPersonRig() : nullptr; Rig && Rig->IsBuilt() && !bHandgun)
+	{
+		const FBox B = Rig->GetRigBounds();
+		const float HalfWidth = FMath::Max(-B.Min.Y, B.Max.Y);
+		Bulk = FVector(0.0f, FMath::Max(0.0f, HalfWidth - 3.5f) * 0.9f, -FMath::Max(0.0f, B.Max.Z - 13.0f) * 0.6f);
+	}
+	const FVector Base = FMath::Lerp((bHandgun ? HandgunHipOffset : HipOffset) + Bulk, AdsOffset, Ads);
 	const FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
 	// The muzzle flip stays small on the sights so the front post settles back on the target.

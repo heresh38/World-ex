@@ -12,6 +12,10 @@ Options:
   --only=a,b,c       keep only these mesh objects (e.g. one wardrobe loadout); armatures and empties are kept
   --arms-only        skinned meshes keep only what the arm bones (upperarm / forearm / hand) mostly carry: the
                      first-person arms cut from the very body (and outfit) everyone else sees
+  --finger-rig=male|female
+                     players: adds finger bones under hand.L / hand.R (index, middle, ring, pinky, thumb; three each,
+                     <finger>_01..03.<side>) laid along the fingers anatomy.py sculpts, and moves the finger skin (body
+                     and gloves) onto them, so the hands can close round a grip. The GLB (browser build) is unchanged.
 
 - Units: static files stay in Blender metres with "FBX units scale" (import with "Convert Scene Unit"); files with an
   armature are rewritten in centimetres first (mesh, shape keys, rest bones, location keys; scene unit 1 cm) because
@@ -179,7 +183,7 @@ def keep_arms_only(threshold=0.5):
     for ob in list(bpy.context.scene.objects):
         if ob.type != "MESH" or not ob.vertex_groups:
             continue
-        arm = {g.index for g in ob.vertex_groups if g.name in ARM_BONES}
+        arm = {g.index for g in ob.vertex_groups if g.name in ARM_BONES or FINGER_RE.match(g.name)}
         bm = bmesh.new()
         bm.from_mesh(ob.data)
         deform = bm.verts.layers.deform.active
@@ -192,6 +196,183 @@ def keep_arms_only(threshold=0.5):
             bpy.data.objects.remove(ob, do_unlink=True)
         else:
             print(f"[export_fbx] arms only: {ob.name} keeps {left} vertices")
+
+
+# Finger layout of anatomy.Body.hand_sdf (left hand, hand-local frame: x wrist -> tip, y towards the thumb, z dorsal;
+# metres before the hand scale): (knuckle x, y), phalanx lengths, radius, splay, extra curl.
+FINGERS = (("index", (.093, .0245), (.046, .027, .021), .0087, .045, 0.0),
+           ("middle", (.097, .0078), (.050, .031, .023), .0091, .005, .03),
+           ("ring", (.093, -.009), (.047, .029, .022), .0086, -.035, .06),
+           ("pinky", (.084, -.0245), (.037, .022, .019), .0075, -.08, .1))
+THUMB = ((.014, .028, -.006), (.045, .051, -.017), (.071, .059, -.028), (.092, .059, -.037))
+FINGER_RE = re.compile(r"^(index|middle|ring|pinky|thumb)_0[123]\.[LR]$")
+
+
+def finger_chains(male):
+    """{finger: (points (4, 3) in the hand frame, radius)}, the same geometry hand_sdf sculpts."""
+    import numpy as np
+    w = 1.04 if male else 1.0
+    chains = {}
+    for name, (kx, ky), segs, r, splay, extra in FINGERS:
+        p = np.array([kx, ky, .0015])
+        pts, ang = [p], 0.0
+        for j, length in enumerate(segs):
+            ang += (.16, .3, .2)[j] + extra
+            dv = np.array([np.cos(ang), splay * (1 - .35 * j), -np.sin(ang)])
+            p = p + dv / np.linalg.norm(dv) * length
+            pts.append(p)
+        chains[name] = (np.array(pts), r * w)
+    chains["thumb"] = (np.array(THUMB, dtype=float), .0105 * w)
+    return chains
+
+
+def add_finger_rig(male):
+    """Finger bones under each hand bone and the finger skin weighted onto them (see --finger-rig)."""
+    import numpy as np
+    arm = next((o for o in bpy.context.scene.objects if o.type == "ARMATURE"), None)
+    if arm is None or "hand.L" not in arm.data.bones:
+        print("[export_fbx] finger rig: no hand bones, skipped")
+        return
+    sc = 1.1 if male else 1.0
+    chains = finger_chains(male)
+    world = arm.matrix_world
+    inv = world.inverted()
+    frames = {}
+    for side, sx in (("L", 1.0), ("R", -1.0)):
+        b = arm.data.bones["hand." + side]
+        wr = np.array(world @ b.head_local)
+        tp = np.array(world @ b.tail_local)
+        # hand_sdf works on the left hand; the right hand is its mirror image in x
+        m = np.array([sx, 1.0, 1.0])
+        ux = (tp - wr) * m
+        ux /= np.linalg.norm(ux)
+        uz = np.array([1.0, 0.0, 0.0]) - ux[0] * ux
+        uz /= np.linalg.norm(uz)
+        uy = np.cross(ux, uz)
+        frames[side] = (wr, m, np.array([ux, uy, uz]))
+
+    def to_world(side, q):
+        wr, m, R = frames[side]
+        return wr + (sc * (np.asarray(q) @ R)) * m
+
+    # bones
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = arm.data.edit_bones
+    from mathutils import Vector
+    for side in "LR":
+        _wr, m, R = frames[side]
+        dorsal = Vector((R[2] * m).tolist())
+        for name, (pts, _r) in chains.items():
+            parent = eb["hand." + side]
+            for k in range(3):
+                bone = eb.new(f"{name}_0{k + 1}.{side}")
+                bone.head = inv @ Vector(to_world(side, pts[k]).tolist())
+                bone.tail = inv @ Vector(to_world(side, pts[k + 1]).tolist())
+                bone.align_roll(inv.to_3x3() @ dorsal)
+                bone.parent = parent
+                bone.use_connect = False
+                bone.use_deform = True
+                parent = bone
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # weights: every vertex the hand bone carries is split between the hand and the nearest finger's bones
+    def smooth(a, b, x):
+        t = np.clip((x - a) / max(b - a, 1e-9), 0.0, 1.0)
+        return t * t * (3 - 2 * t)
+
+    counts = {}
+    for ob in bpy.context.scene.objects:
+        if ob.type != "MESH" or not any(g.name.startswith("hand.") for g in ob.vertex_groups):
+            continue
+        mw = ob.matrix_world
+        co = np.empty(len(ob.data.vertices) * 3)
+        ob.data.vertices.foreach_get("co", co)
+        co = co.reshape(-1, 3)
+        co = (np.c_[co, np.ones(len(co))] @ np.array(mw).T)[:, :3]
+        for side in "LR":
+            hg = ob.vertex_groups.get("hand." + side)
+            if hg is None:
+                continue
+            idx, wh = [], []
+            for v in ob.data.vertices:
+                for g in v.groups:
+                    if g.group == hg.index and g.weight > 0.0:
+                        idx.append(v.index)
+                        wh.append(g.weight)
+            if not idx:
+                continue
+            idx = np.array(idx)
+            wh = np.array(wh)
+            wr, m, R = frames[side]
+            q = (((co[idx] * m) - wr * m) @ R.T) / sc       # hand-local frame of the (mirrored) left hand
+            best = np.full(len(q), np.inf)
+            pick = np.full(len(q), -1)
+            along = np.zeros(len(q))
+            names = list(chains)
+            for c, name in enumerate(names):
+                pts, r = chains[name]
+                dist = np.full(len(q), np.inf)
+                s = np.zeros(len(q))
+                start = 0.0
+                for k in range(3):
+                    a, b = pts[k], pts[k + 1]
+                    ab = b - a
+                    L = np.linalg.norm(ab)
+                    t = ((q - a) @ ab) / (L * L)
+                    tc = np.clip(t, 0.0, 1.0)
+                    d = np.linalg.norm(q - (a + np.outer(tc, ab)), axis=1)
+                    sk = start + (t if k == 0 else tc) * L          # before the knuckle: negative
+                    better = d < dist
+                    dist = np.where(better, d, dist)
+                    s = np.where(better, sk, s)
+                    start += L
+                surface = dist - r
+                if name != "thumb":
+                    surface = np.where(s < -.014, np.inf, surface)   # the palm stays on the hand
+                better = surface < best
+                best = np.where(better, surface, best)
+                pick = np.where(better, c, pick)
+                along = np.where(better, s, along)
+            tol = .0075          # skin and glove lie up to this far outside the sculpted finger
+            member = 1.0 - smooth(tol * .6, tol, best)
+            share = {}
+            for c, name in enumerate(names):
+                sel = pick == c
+                if not sel.any():
+                    continue
+                pts, _r = chains[name]
+                L = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+                s = along[sel]
+                if name == "thumb":
+                    j0 = smooth(L[0] * .15, L[0] * .7, s)         # the metacarpal sits in the ball of the thumb
+                    h0 = (.0, .0)
+                else:
+                    j0 = smooth(-.010, .008, s)
+                j1 = smooth(L[0] - .005, L[0] + .005, s)
+                j2 = smooth(L[0] + L[1] - .004, L[0] + L[1] + .004, s)
+                parts = {f"{name}_01.{side}": j0 * (1 - j1), f"{name}_02.{side}": j1 * (1 - j2), f"{name}_03.{side}": j2}
+                for bone, f in parts.items():
+                    share.setdefault(bone, np.zeros(len(q)))[sel] = f
+            total = sum(share.values()) if share else np.zeros(len(q))
+            moved = member * np.clip(total, 0.0, 1.0)
+            for bone, f in share.items():
+                w = wh * member * f
+                keep = w > .004
+                if not keep.any():
+                    continue
+                g = ob.vertex_groups.get(bone) or ob.vertex_groups.new(name=bone)
+                for vi, val in zip(idx[keep].tolist(), w[keep].tolist()):
+                    g.add([vi], float(val), "REPLACE")
+                counts[bone] = counts.get(bone, 0) + int(keep.sum())
+            rest = wh * (1.0 - moved)
+            for vi, val in zip(idx.tolist(), rest.tolist()):
+                if val > .004:
+                    hg.add([vi], float(val), "REPLACE")
+                else:
+                    hg.remove([vi])
+    print(f"[export_fbx] finger rig: {len(chains) * 6} bones, weighted vertices "
+          + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
 
 
 def action_fcurves(action):
@@ -384,6 +565,8 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=src, merge_vertices=False)
     drop_helpers(only)
+    if isinstance(flags.get("--finger-rig"), str):
+        add_finger_rig(flags["--finger-rig"] != "female")
     if "--arms-only" in flags:
         keep_arms_only()
     skeletal_file = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)

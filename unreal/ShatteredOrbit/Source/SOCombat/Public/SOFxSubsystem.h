@@ -36,6 +36,8 @@ struct FSOFxParticle
 	float Intensity0 = 1.0f, Intensity1 = 0.0f;
 	FLinearColor Color = FLinearColor::White;
 	float Spin = 0.0f;
+	bool bFlat = false;  // lies on the surface whose normal is Axis (pools) instead of facing the eye
+	bool bHold = false;  // Intensity0 held over the life with a short fade in / out (instead of Intensity0 -> 1)
 };
 
 /**
@@ -71,6 +73,11 @@ public:
 	/** A round hitting something: sparks + dust + a bullet hole on hard surfaces, a mist of Blood on creatures.
 	 *  Delay = flight time. */
 	void Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay = 0.0f, bool bDecal = true);
+
+	/** Poison lying on the floor at Point for Duration seconds (glowing goo, bubbles, fumes), Delay seconds from now.
+	 *  A splash onto a puddle that is still fresh adds nothing new. */
+	void Pool(const FVector& Point, const FVector& Normal, float Radius, const FLinearColor& Color, float Delay, float Duration);
+	int32 GetNumPools() const { return PoolMarks.Num(); }
 
 	void Spawn(const FSOFxParticle& Particle);
 
@@ -115,6 +122,15 @@ private:
 		FLinearColor Color;
 		float Intensity, Duration, Delay;
 	};
+
+	struct FPoolMark
+	{
+		FVector Point;
+		float Radius;
+		float Born;  // world time it was made
+		float Until; // world time it is gone
+	};
+	TArray<FPoolMark> PoolMarks;
 
 	TArray<FSOFxParticle> Particles;
 	TArray<FPendingImpact> Pending;

@@ -29,7 +29,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.23,
-   "sprintOut": 0.2
+   "sprintOut": 0.2,
+   "title": "Sunforge Litany"
   },
   "pulse": {
    "name": "Pulse Rifle",
@@ -61,7 +62,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.24,
-   "sprintOut": 0.2
+   "sprintOut": 0.2,
+   "title": "Ninefold Choir"
   },
   "scout": {
    "name": "Scout Rifle",
@@ -92,7 +94,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.27,
-   "sprintOut": 0.22
+   "sprintOut": 0.22,
+   "title": "Farsight Herald"
   },
   "handcannon": {
    "name": "Hand Cannon",
@@ -119,7 +122,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.17,
-   "sprintOut": 0.16
+   "sprintOut": 0.16,
+   "title": "The Undertaker"
   },
   "shotgun": {
    "name": "Shotgun",
@@ -146,7 +150,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.22,
-   "sprintOut": 0.2
+   "sprintOut": 0.2,
+   "title": "Gravedigger’s Hymn"
   },
   "sniper": {
    "name": "Sniper Rifle",
@@ -178,7 +183,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.42,
-   "sprintOut": 0.25
+   "sprintOut": 0.25,
+   "title": "Pale Horizon"
   },
   "smg": {
    "name": "Submachine Gun",
@@ -207,7 +213,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.18,
-   "sprintOut": 0.16
+   "sprintOut": 0.16,
+   "title": "Kestrel-X9"
   },
   "sidearm": {
    "name": "Sidearm",
@@ -234,7 +241,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.13,
-   "sprintOut": 0.14
+   "sprintOut": 0.14,
+   "title": "Helios"
   },
   "energy": {
    "name": "Energy Rifle",
@@ -266,7 +274,8 @@
    "tracer": "#5fe8ff",
    "defaultSight": "default",
    "adsTime": 0.26,
-   "sprintOut": 0.22
+   "sprintOut": 0.22,
+   "title": "Eclipse"
   },
   "hmg": {
    "name": "Heavy Machine Gun",
@@ -295,7 +304,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.38,
-   "sprintOut": 0.26
+   "sprintOut": 0.26,
+   "title": "Atlas"
   },
   "rocket": {
    "name": "Rocket Launcher",
@@ -323,7 +333,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.4,
-   "sprintOut": 0.26
+   "sprintOut": 0.26,
+   "title": "Starfall Engine"
   },
   "rifle": {
    "name": "Assault Rifle",
@@ -353,7 +364,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.24,
-   "sprintOut": 0.2
+   "sprintOut": 0.2,
+   "title": "Old Winter"
   },
   "carbine": {
    "name": "Carbine",
@@ -384,7 +396,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.22,
-   "sprintOut": 0.19
+   "sprintOut": 0.19,
+   "title": "Dust Saint"
   },
   "dmr": {
    "name": "Battle Rifle",
@@ -416,7 +429,8 @@
    ],
    "defaultSight": "x4",
    "adsTime": 0.3,
-   "sprintOut": 0.23
+   "sprintOut": 0.23,
+   "title": "Hearthfire"
   },
   "ksmg": {
    "name": "Compact SMG",
@@ -445,7 +459,8 @@
    ],
    "defaultSight": "reflex",
    "adsTime": 0.17,
-   "sprintOut": 0.15
+   "sprintOut": 0.15,
+   "title": "Alley Cat"
   },
   "bolt": {
    "name": "Bolt-Action Rifle",
@@ -477,7 +492,8 @@
    ],
    "defaultSight": "x8",
    "adsTime": 0.42,
-   "sprintOut": 0.25
+   "sprintOut": 0.25,
+   "title": "Long Silence"
   },
   "pistol": {
    "name": "Service Pistol",
@@ -504,7 +520,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.13,
-   "sprintOut": 0.14
+   "sprintOut": 0.14,
+   "title": "Gentleman’s Promise"
   },
   "revolver": {
    "name": "Revolver",
@@ -531,7 +548,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.16,
-   "sprintOut": 0.15
+   "sprintOut": 0.15,
+   "title": "Six Mercies"
   },
   "pump": {
    "name": "Pump Shotgun",
@@ -558,7 +576,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.22,
-   "sprintOut": 0.2
+   "sprintOut": 0.2,
+   "title": "Porch Light"
   },
   "spitter": {
    "name": "Spitter",
@@ -587,7 +606,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.22,
-   "sprintOut": 0.19
+   "sprintOut": 0.19,
+   "title": "The Hungering Maw"
   },
   "bile": {
    "name": "Bile Cannon",
@@ -617,7 +637,8 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.22,
-   "sprintOut": 0.2
+   "sprintOut": 0.2,
+   "title": "Mother of Rot"
   },
   "brood": {
    "name": "Brood Launcher",
@@ -629,15 +650,15 @@
    "mag": 3,
    "reserve": 18,
    "reload": 3,
-   "range": 60,
+   "range": 90,
    "spread": 0,
    "crit": 1,
    "auto": false,
    "zoom": 1.3,
    "slot": 2,
    "goo": "brood",
-   "vel": 28,
-   "splash": 3.2,
+   "vel": 46,
+   "splash": 6,
    "swarm": 5,
    "dot": 0.4,
    "kick": 3,
@@ -647,7 +668,9 @@
    ],
    "defaultSight": "default",
    "adsTime": 0.38,
-   "sprintOut": 0.25
+   "sprintOut": 0.25,
+   "title": "The Gravid Bloom",
+   "gooGrav": 0.16
   }
  },
  "rarity": [

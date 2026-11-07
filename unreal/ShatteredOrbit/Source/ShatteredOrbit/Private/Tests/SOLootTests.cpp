@@ -120,23 +120,18 @@ bool FSOLootRollsTest::RunTest(const FString& Parameters)
 		}
 		TestEqual(TEXT("perks by rarity"), W.Perks.Num(), Tables->GetRarity(W.Rarity).Perks);
 		TestEqual(TEXT("no repeated perk"), TSet<FName>(W.Perks).Num(), W.Perks.Num());
-		TestTrue(TEXT("stat rolls in range"), W.Stats.Damage >= 0.9f && W.Stats.Damage <= 1.1f && W.Stats.Rpm >= 0.95f && W.Stats.Rpm <= 1.05f);
+		TestTrue(TEXT("stat rolls stay close to the gun"), W.Stats.Damage >= 0.97f && W.Stats.Damage <= 1.03f && W.Stats.Rpm >= 0.98f && W.Stats.Rpm <= 1.02f
+			&& W.Stats.Range >= 0.94f && W.Stats.Range <= 1.06f);
 		TestTrue(TEXT("a compatible sight"), Data->Sights.Contains(W.Sight));
-		if (W.Rarity == 4)
-		{
-			TestEqual(TEXT("exotics have their own name"), W.Name, Tables->ExoticNames.FindRef(W.Archetype));
-		}
-		else if (Data->WeaponClass == ESOWeaponClass::Kinetic)
-		{
-			TestTrue(*FString::Printf(TEXT("kinetic name '%s' reads maker + model"), *W.Name), W.Name.Contains(TEXT("-")));
-		}
+		TestEqual(TEXT("every copy carries the gun's one name"), W.Name, Data->Title.ToString());
+		TestFalse(TEXT("the gun has a name"), W.Name.IsEmpty());
 	}
 	// stats: rarity and power, perks
 	FSOWeaponInstance W = USOLootLibrary::MakeWeapon(TEXT("rifle"), 3, 40, Rng);
 	W.Stats = FSOWeaponRolls();
 	W.Perks = { TEXT("overflow"), TEXT("quickdraw"), TEXT("steady") };
 	const FSOWeaponStats S = USOLootLibrary::ComputeStats(W);
-	TestEqual(TEXT("damage = base x rarity x (1 + power / 200)"), S.Damage, 19.0f * 1.2f * 1.2f, 0.01f);
+	TestEqual(TEXT("damage = base x small rarity bonus x (1 + power / 200)"), S.Damage, 19.0f * 1.04f * 1.2f, 0.01f);
 	TestEqual(TEXT("Overflow: magazine +40 %"), S.Mag, 42);
 	TestEqual(TEXT("Quickload: reload 35 % faster"), S.Reload, 2.3f * 0.65f, 0.01f);
 	TestEqual(TEXT("Gyro Stock: spread -40 %"), S.Spread, 0.6f, 0.01f);

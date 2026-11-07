@@ -57,7 +57,7 @@ bool ASOPlayerController::AddDefaultMappingContext()
 	return true;
 }
 
-void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone)
+void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 {
 	bCaptureQuit = bQuitWhenDone != 0;
 	CaptureIndex = 0;
@@ -150,6 +150,53 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 1)
+	{
+		// Hold study: every gun in the hands from every side the player sees it.
+		const TCHAR* Guns[] = { TEXT("rifle"), TEXT("carbine"), TEXT("dmr"), TEXT("ksmg"), TEXT("bolt"), TEXT("pistol"), TEXT("revolver"), TEXT("pump"),
+			TEXT("auto"), TEXT("pulse"), TEXT("scout"), TEXT("handcannon"), TEXT("shotgun"), TEXT("sniper"), TEXT("smg"), TEXT("sidearm"), TEXT("energy"),
+			TEXT("hmg"), TEXT("rocket"), TEXT("spitter"), TEXT("bile"), TEXT("brood") };
+		auto Arm = [Hero](const TCHAR* Arch)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(Arch));
+				FSOWeaponInstance W = USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng);
+				W.Sight = TEXT("default");
+				H->EquipInstance(W);
+			}
+		};
+		auto Reloading = [Weapon](float F) { return [Weapon, F]() { const ASOWeapon* W = Weapon(); return W && W->IsReloading() && W->GetReloadProgress() > F; }; };
+		FString Only;
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), Only, false); // a comma list
+		Do(4.0f, [=, this]() { Look(0.0f); });
+		for (int32 i = 0; i < UE_ARRAY_COUNT(Guns); ++i)
+		{
+			const TCHAR* Arch = Guns[i];
+			if (!Only.IsEmpty() && !Only.Contains(Arch))
+			{
+				continue;
+			}
+			const FString Tag = FString::Printf(TEXT("h%02d_%s"), i, Arch);
+			Act([=, this]() { SetViewTarget(GetPawn()); View(ESOViewMode::FirstPerson); Look(0.0f); Arm(Arch); });
+			Snap(1.0f, Tag + TEXT("_a_hip"));
+			Act([=, this]() { Aim(true); });
+			Snap(0.8f, Tag + TEXT("_b_ads"));
+			Act([=, this]() { Aim(false); });
+			Do(0.5f, [=]() { EmptyReload(); });
+			Snap(0.0f, Tag + TEXT("_c_reload"), Reloading(0.4f));
+			Do(5.0f, []() {});
+			Act([=, this]() { View(ESOViewMode::ThirdPerson); Orbit(80.0f, 150.0f, 15.0f); });
+			Snap(0.8f, Tag + TEXT("_d_tp_right"));
+			Act([=, this]() { Orbit(-55.0f, 150.0f, 25.0f); });
+			Snap(0.4f, Tag + TEXT("_e_tp_left"));
+			Act([=, this]() { Aim(true); Orbit(100.0f, 140.0f, 5.0f); });
+			Snap(0.8f, Tag + TEXT("_f_tp_ads"));
+			Act([=, this]() { Aim(false); });
+		}
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	Do(4.0f, [=, this]() { Look(0.0f); }); // shaders and streaming settle first
 	Snap(1.0f, TEXT("1_hip"));
 	Act([=, this]() { Fire(true); });

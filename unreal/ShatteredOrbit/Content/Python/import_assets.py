@@ -536,14 +536,14 @@ def weapon(master, arch, a, clear):
     kind = projectile_kind(a)
     velocity = a.get("vel") or (60.0 if kind == unreal.SOProjectileKind.ROCKET else 500.0)
     tracer = a.get("tracer") or {"kinetic": "#ffc873", "energy": "#7fe8ff", "horror": "#9cff4a"}[a["cls"]]
-    values = dict(display_name=unreal.Text(a["name"]), archetype=arch, slot=int(a["slot"]), loot_weight=float(a.get("weight", 1.0)),
+    values = dict(display_name=unreal.Text(a["name"]), title=unreal.Text(a.get("title", a["name"])), archetype=arch, slot=int(a["slot"]), loot_weight=float(a.get("weight", 1.0)),
                   weapon_class=cls, sound_prefix=arch, damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]),
                   magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]), reload_time=float(a["reload"]),
                   range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
                   automatic=bool(a.get("auto")), burst=int(a.get("burst", 0)), burst_rpm=float(a.get("burstRpm", 0.0)),
                   pellets=int(a.get("pellets", 1)), projectile=kind, splash=float(a.get("splash", 0.0)), dot=float(a.get("dot", 0.0)),
                   swarm=int(a.get("swarm", 0)), aim_zoom=float(a["zoom"]), muzzle_velocity=float(velocity),
-                  gravity_scale=float(a.get("grav", 0.0)) if kind == unreal.SOProjectileKind.ROUND else (0.35 if kind in (
+                  gravity_scale=float(a.get("grav", 0.0)) if kind == unreal.SOProjectileKind.ROUND else (float(a.get("gooGrav", 0.35)) if kind in (
                       unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
                   kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
                   tracer_color=hex_color(tracer), body_mesh=body, parts=parts,

@@ -680,12 +680,16 @@ namespace SOReload
 		return { S };
 	}
 
-	/** Energy line: the old cell-swap dip (reload.js energy: gun dips and rolls, the cell is swapped). */
+	/** Energy line: the cell swap (reload.js energy dip, held in the hands): the gun rolls its flank up, the off hand
+	 *  pulls the spent cell from under the receiver, fetches a fresh one and pushes it home. */
 	static TArray<FSOReloadSegment> EnergySegments()
 	{
 		FSOReloadSegment S = Seg(1.0f);
-		const F6 Dip{ 0, -0.12f, 0, 0.5f, 0, 0.4f };
-		S.Channels.Add(NGun, { K(0, Zero), K(0.5f, Dip), K(1.0f, Zero) });
+		const F6 Dip{ 0.01f, -0.05f, 0.01f, 0.16f, 0.06f, 0.55f };
+		S.Channels.Add(NGun, { K(0, Zero), K(0.18f, Dip), K(0.8f, Dip), K(0.88f, Dip.Add(1, 0.008f), ESOEase::Out), K(1.0f, Zero) });
+		S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.16f, TEXT("magbase"), { 0, -0.02f, 0, 0, 0, 0 }), H(0.26f, TEXT("magbase"), { 0, -0.03f, 0, 0, 0, 0 }),
+			H(0.48f, TEXT("pouch"), { 0, 0, 0, 0.5f, 0.3f, -0.6f }), H(0.58f, TEXT("pouch"), { 0, 0, 0, 0.5f, 0.3f, -0.6f }),
+			H(0.76f, TEXT("magbase"), { 0, -0.02f, 0, 0, 0, 0 }), H(0.86f, TEXT("magbase"), Zero, ESOEase::Out), H(1.0f, TEXT("fore"), Zero) });
 		Ev(S, 0.22f, TEXT("sfx"), TEXT("cellout"));
 		Ev(S, 0.62f, TEXT("sfx"), TEXT("cellin"));
 		Ev(S, 0.98f, TEXT("seat"));

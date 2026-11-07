@@ -5,6 +5,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Animation/AnimSequenceBase.h"
+#include "Animation/AnimData/IAnimationDataModel.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -520,6 +521,10 @@ bool FSOClipMatchesSkeletonTest::RunTest(const FString& Parameters)
 		for (int32 i = 1; i < Ref.GetNum(); ++i)
 		{
 			const FName Bone = Ref.GetBoneName(i);
+			if (!Clip->GetDataModelInterface()->IsValidBoneTrackName(Bone))
+			{
+				continue; // no track (finger bones): the engine plays the rest pose
+			}
 			FTransform Pose;
 			Clip->GetBoneTransform(Pose, FSkeletonPoseBoneIndex(Clip->GetSkeleton()->GetReferenceSkeleton().FindBoneIndex(Bone)), 0.0, false);
 			const FTransform& Rest = Ref.GetRefBonePose()[i];

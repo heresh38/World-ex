@@ -158,7 +158,11 @@ protected:
 
 	FSOReloadPlayer Reload;
 	bool bTriggerHeld = false;
+	/** A click waiting for the gun to be ready (fire-rate gap, sprint-to-fire), valid until ShotQueuedUntil. A reload
+	 *  drops it (and the held trigger): only a press after the reload fires again. */
 	bool bShotQueued = false;
+	float ShotQueuedUntil = 0.0f;
+	void QueueShot(float Window);
 	bool bReloading = false;
 	float NextShotTime = 0.0f;
 	float LastShotTime = -100.0f;

@@ -84,6 +84,67 @@ namespace
 	}
 }
 
+// --- Finger poses --------------------------------------------------------------------------------
+
+FSOFingerPose FSOFingerPose::Make(const float Index[3], const float Middle[3], const float Ring[3], const float Pinky[3], const float Thumb[3])
+{
+	FSOFingerPose P;
+	const float* Rows[5] = { Index, Middle, Ring, Pinky, Thumb };
+	for (int32 f = 0; f < 5; ++f)
+	{
+		for (int32 j = 0; j < 3; ++j)
+		{
+			P.Curl[f][j] = Rows[f][j];
+		}
+	}
+	return P;
+}
+
+FSOFingerPose FSOFingerPose::Trigger()
+{
+	const float I[3] = { 28, 40, 22 }, M[3] = { 78, 82, 48 }, R[3] = { 82, 84, 50 }, P[3] = { 86, 84, 50 }, T[3] = { 30, 28, 22 };
+	return Make(I, M, R, P, T);
+}
+
+FSOFingerPose FSOFingerPose::Wrap(float Amount)
+{
+	const float a = Amount;
+	const float I[3] = { 50 * a, 58 * a, 34 * a }, M[3] = { 56 * a, 62 * a, 36 * a }, R[3] = { 62 * a, 66 * a, 38 * a }, P[3] = { 68 * a, 70 * a, 40 * a },
+		T[3] = { 18 * a, 16 * a, 12 * a };
+	return Make(I, M, R, P, T);
+}
+
+FSOFingerPose FSOFingerPose::Pinch()
+{
+	const float I[3] = { 42, 50, 28 }, M[3] = { 50, 58, 32 }, R[3] = { 70, 82, 44 }, P[3] = { 76, 86, 46 }, T[3] = { 34, 26, 18 };
+	return Make(I, M, R, P, T);
+}
+
+FSOFingerPose FSOFingerPose::Flat()
+{
+	const float I[3] = { 6, 6, 4 }, M[3] = { 6, 6, 4 }, R[3] = { 8, 8, 4 }, P[3] = { 10, 8, 4 }, T[3] = { 0, 4, 4 };
+	return Make(I, M, R, P, T);
+}
+
+FSOFingerPose FSOFingerPose::Relaxed()
+{
+	const float I[3] = { 18, 22, 14 }, M[3] = { 22, 26, 16 }, R[3] = { 26, 30, 18 }, P[3] = { 30, 32, 20 }, T[3] = { 10, 10, 8 };
+	return Make(I, M, R, P, T);
+}
+
+FSOFingerPose FSOFingerPose::Lerp(const FSOFingerPose& A, const FSOFingerPose& B, float Alpha)
+{
+	FSOFingerPose P;
+	for (int32 f = 0; f < 5; ++f)
+	{
+		for (int32 j = 0; j < 3; ++j)
+		{
+			P.Curl[f][j] = FMath::Lerp(A.Curl[f][j], B.Curl[f][j], Alpha);
+		}
+	}
+	return P;
+}
+
 USOGunRigComponent::USOGunRigComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -174,6 +235,48 @@ void USOGunRigComponent::Build(const USOWeaponData* Data, bool bInFirstPerson)
 	bHandgun = Data->MuzzleLocation.Y < 35.0f; // short barrel, the support hand on the grip
 	RightGrip = RifleGrip();
 	LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
+	RightFingers = FSOFingerPose::Trigger();
+	LeftFingers = FingersForAnchor(NFore);
+}
+
+FBox USOGunRigComponent::GetRigBounds() const
+{
+	const UStaticMesh* Mesh = Body ? Body->GetStaticMesh() : nullptr;
+	if (!Mesh)
+	{
+		return FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
+	}
+	const FBox B = Mesh->GetBoundingBox();
+	FBox Out(ForceInit);
+	Out += MeshToRig(B.Min);
+	Out += MeshToRig(B.Max);
+	return Out;
+}
+
+FSOFingerPose USOGunRigComponent::FingersForAnchor(FName Anchor) const
+{
+	if (Anchor == NFore || Anchor.IsNone() || Anchor == TEXT("pump"))
+	{
+		// handguns: the support hand wraps the firing hand; long guns: round the handguard / forend
+		return bHandgun ? FSOFingerPose::Wrap(1.15f) : FSOFingerPose::Wrap(Anchor == TEXT("pump") ? 1.1f : 1.0f);
+	}
+	if (Anchor == NMagBase || Anchor == TEXT("hatch"))
+	{
+		return FSOFingerPose::Flat();
+	}
+	if (Anchor == NBolt || Anchor == TEXT("charge") || Anchor == TEXT("slide"))
+	{
+		return FSOFingerPose::Wrap(1.2f); // hooked over the handle / gripping the slide serrations
+	}
+	if (Anchor == NMag || Anchor == NSpare || Anchor == TEXT("biomass"))
+	{
+		return FSOFingerPose::Wrap(0.85f);
+	}
+	if (Anchor == TEXT("round") || Anchor == TEXT("shell") || Anchor == TEXT("loader") || Anchor == TEXT("cyl") || Anchor == TEXT("ejector"))
+	{
+		return FSOFingerPose::Pinch();
+	}
+	return FSOFingerPose::Relaxed(); // pouch, free
 }
 
 void USOGunRigComponent::SetShown(bool bInShown)
@@ -328,7 +431,7 @@ FVector USOGunRigComponent::ResolveAnchor(FName Anchor) const
 	{
 		if (!Comp)
 		{
-			return Foregrip;
+			return FVector(0.0f, 9.0f, -5.0f + Up); // no magazine (energy cells): under the receiver ahead of the grip
 		}
 		FVector Local(0.0f, 0.0f, -10.0f + Up);
 		if (const UStaticMesh* Mesh = Comp->GetStaticMesh())
@@ -497,6 +600,7 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 	{
 		LastSegment = Pose.Segment;
 		CurGrip = LeftGrip;
+		CurFingers = LeftFingers;
 	}
 	if (Pose.bHand)
 	{
@@ -517,6 +621,12 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		const FSOHandGrip B = Grip(Pose.HandAnchorB, Pose.HandB);
 		LeftGrip.Wrist = FMath::Lerp(A.Wrist, B.Wrist, Pose.HandAlpha);
 		LeftGrip.Basis = FQuat::Slerp(A.Basis, B.Basis, Pose.HandAlpha);
+		// the fingers open in flight and close on what the hand arrives at
+		auto Fingers = [this](FName Anchor) { return Anchor == TEXT("cur") ? CurFingers : FingersForAnchor(Anchor); };
+		const float Close = FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f);
+		const FSOFingerPose Between = FSOFingerPose::Lerp(Fingers(Pose.HandAnchorA), Fingers(Pose.HandAnchorB), Close);
+		const float Open = Pose.HandAnchorA != Pose.HandAnchorB ? FMath::Sin(PI * Close) * 0.6f : 0.0f;
+		LeftFingers = FSOFingerPose::Lerp(Between, FSOFingerPose::Flat(), Open);
 		if (Pose.HandAnchorA != Pose.HandAnchorB)
 		{
 			// Between two grips the hand arcs out past the gun's left side instead of cutting through it, and comes
@@ -530,5 +640,6 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 	else
 	{
 		LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
+		LeftFingers = FingersForAnchor(NFore);
 	}
 }

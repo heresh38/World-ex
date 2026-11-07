@@ -266,7 +266,7 @@ void ASOWeapon::StartFire()
 		ServerSetTrigger(true);
 	}
 	bTriggerHeld = true;
-	bShotQueued = true;
+	QueueShot(0.25f);
 	// Click on an empty gun with nothing left to load.
 	UWorld* World = GetWorld();
 	if (World && Mag <= 0 && Reserve <= 0 && World->GetTimeSeconds() - LastDryFireTime > 0.2f)
@@ -290,8 +290,20 @@ void ASOWeapon::ServerSetTrigger_Implementation(bool bHeld)
 	bTriggerHeld = bHeld;
 	if (bHeld)
 	{
-		bShotQueued = true;
+		QueueShot(0.25f);
 	}
+}
+
+void ASOWeapon::QueueShot(float Window)
+{
+	const UWorld* World = GetWorld();
+	const float Now = World ? World->GetTimeSeconds() : 0.0f;
+	if (bReloading && !(Mag > 0 && Reload.IsInterruptible()))
+	{
+		return; // a click during a reload is not kept for after it (per-round reloads: it cuts the reload short)
+	}
+	bShotQueued = true;
+	ShotQueuedUntil = Now + Window;
 }
 
 void ASOWeapon::FireShot()
@@ -334,6 +346,8 @@ void ASOWeapon::FireShot()
 		Round.Splash = Data->Splash * 100.0f;
 		Round.Dot = Data->Dot;
 		Round.Swarm = Data->Swarm;
+		const bool bGoo = Data->Projectile == ESOProjectileKind::Spit || Data->Projectile == ESOProjectileKind::Bile || Data->Projectile == ESOProjectileKind::Brood;
+		Round.Pool = bGoo ? USOProjectileSubsystem::PoolSeconds : 0.0f;
 		Round.Life = Data->Projectile == ESOProjectileKind::Round || Data->Projectile == ESOProjectileKind::Bolt ? 3.0f : 8.0f;
 		if (Rounds)
 		{
@@ -491,6 +505,11 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			if (bHit || Flight > 0.0f)
 			{
 				Fx->Blast(End, bHit ? FVector(Hit.ImpactNormal) : FVector::UpVector, FMath::Max(Data->Splash * 100.0f, 40.0f), USOFxSubsystem::EBlast::Acid, Data->TracerColor, Flight);
+				FVector Floor, FloorNormal;
+				if (USOProjectileSubsystem::FindFloor(World, End + (bHit ? FVector(Hit.ImpactNormal) * 5.0f : FVector::ZeroVector), Floor, FloorNormal))
+				{
+					Fx->Pool(Floor, FloorNormal, USOProjectileSubsystem::PoolRadius(Data->Splash * 100.0f), Data->TracerColor, Flight, USOProjectileSubsystem::PoolSeconds);
+				}
 			}
 			if (Pellet == 0)
 			{
@@ -620,6 +639,11 @@ void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds)
 		return;
 	}
 	bReloading = true;
+	// Whatever the trigger did before the reload is done with: no shot comes out of the gun after it unless the
+	// trigger is pressed again.
+	bShotQueued = false;
+	bTriggerHeld = false;
+	BurstLeft = 0;
 	int32 LoopFrom, LoopTo;
 	TArray<FSOReloadSegment> Segments = SOReload::BuildReload(Data->Archetype, Data->WeaponClass == ESOWeaponClass::Energy,
 		Data->WeaponClass == ESOWeaponClass::Horror, bEmpty, Stats.Reload, Rounds, LoopFrom, LoopTo);
@@ -650,6 +674,10 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	if (HasAuthority() && Data && World && Holder && !Holder->IsDead())
 	{
 		const float Now = World->GetTimeSeconds();
+		if (bShotQueued && Now > ShotQueuedUntil)
+		{
+			bShotQueued = false; // a click is a request for now, not for whenever the gun is ready again
+		}
 		const bool bBurstRunning = BurstLeft > 0;
 		if ((bTriggerHeld || bShotQueued || bBurstRunning) && !bReloading && Now >= NextShotTime && Holder->CanFireWeapon())
 		{
@@ -687,6 +715,9 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	if (bReloading && (bTriggerHeld || bShotQueued) && Mag > 0 && Reload.IsInterruptible())
 	{
 		Reload.Interrupt();
+		// the shot that cut the reload short comes right after the closing segment
+		bShotQueued = true;
+		ShotQueuedUntil = (World ? World->GetTimeSeconds() : 0.0f) + FMath::Max(0.0f, Reload.GetDuration() - Reload.GetElapsed()) + 0.2f;
 	}
 	Reload.SetSlideLock(Mag <= 0);
 

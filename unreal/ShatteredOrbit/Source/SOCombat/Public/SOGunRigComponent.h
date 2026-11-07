@@ -29,6 +29,28 @@ struct SOCOMBAT_API FSOHandGrip
 };
 
 /**
+ * How far each finger closes, degrees per joint (knuckle, middle, tip) for index, middle, ring, little finger and
+ * thumb (base, middle, tip). The arm IK turns each finger about the axis that brings it towards the palm.
+ */
+struct SOCOMBAT_API FSOFingerPose
+{
+	float Curl[5][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+
+	static FSOFingerPose Make(const float Index[3], const float Middle[3], const float Ring[3], const float Pinky[3], const float Thumb[3]);
+	/** Firing hand on a pistol grip: three fingers wrapped, the index finger on the trigger, the thumb over the top. */
+	static FSOFingerPose Trigger();
+	/** Round a handguard / forend / vertical grip. */
+	static FSOFingerPose Wrap(float Amount = 1.0f);
+	/** Holding something small between thumb and fingers (rounds, shells, a speedloader, a cell). */
+	static FSOFingerPose Pinch();
+	/** Open palm (slapping a magazine home, pushing a lid). */
+	static FSOFingerPose Flat();
+	/** Relaxed, half closed. */
+	static FSOFingerPose Relaxed();
+	static FSOFingerPose Lerp(const FSOFingerPose& A, const FSOFingerPose& B, float Alpha);
+};
+
+/**
  * A posable gun: body + reload parts (+ spare mag) built from a USOWeaponData.
  * The component's +X is the barrel. Children live under GunSpace, which turns the imported mesh space (gun along +Y)
  * onto +X. ApplyPose() moves the parts and the off hand's grip (reload choreography); GetHandTargets() tells the
@@ -66,6 +88,15 @@ public:
 
 	/** World-space wrist targets with the hand bases as rotations (see FSOHandGrip). False until built. */
 	bool GetHandTargets(FTransform& OutRight, FTransform& OutLeft) const;
+
+	/** How both hands close right now (the off hand's follows what it is holding through the reload). */
+	void GetFingerPoses(FSOFingerPose& OutRight, FSOFingerPose& OutLeft) const { OutRight = RightFingers; OutLeft = LeftFingers; }
+
+	/** Finger pose for the off hand on an anchor (fore, mag, magbase, bolt, round, ...). */
+	FSOFingerPose FingersForAnchor(FName Anchor) const;
+
+	/** The gun body's bounds in rig space (+X barrel, +Y right, +Z up, cm). */
+	FBox GetRigBounds() const;
 
 	/** Rig-space grips (tests / debugging). */
 	const FSOHandGrip& GetRightGrip() const { return RightGrip; }
@@ -109,6 +140,9 @@ private:
 	FVector Foregrip = FVector::ZeroVector;
 	FSOHandGrip RightGrip;
 	FSOHandGrip LeftGrip;
+	FSOFingerPose RightFingers;
+	FSOFingerPose LeftFingers;
+	FSOFingerPose CurFingers;
 	/** Where the off hand was when the current reload segment began (anchor "cur"). */
 	FSOHandGrip CurGrip;
 	int32 LastSegment = -1;

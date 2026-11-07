@@ -53,8 +53,13 @@ class SOCOMBAT_API USOWeaponData : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
+	/** The kind of gun (Auto Rifle, Pump Shotgun, ...). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FText DisplayName;
+
+	/** The gun's one name: every copy of it carries it, whatever its rarity, rolls or perks. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FText Title;
 
 	/** data.js archetype key (rifle, carbine, ...): picks the reload choreography. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")

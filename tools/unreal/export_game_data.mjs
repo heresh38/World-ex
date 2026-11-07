@@ -17,10 +17,21 @@ function privateConst(name) {
   return Function(`"use strict"; return (${m[1]});`)();
 }
 
+// Unreal-only tuning on top of data.js (the browser build keeps its numbers). gooGrav: gravity scale of the goo arc.
+const UNREAL_TUNING = {
+  // the brood launcher is the heavy horror launcher: a long, flat lob and a wide burst
+  brood: { vel: 46, gooGrav: .16, range: 90, splash: 6.0 },
+};
+
+// Every gun has one name, whatever its rarity or rolls (the owner's rule: drops differ by small stat rolls and by
+// perks, never by name). The names come from data.js EXOTIC_NAMES; a few are replaced here.
+const TITLE_OVERRIDES = { smg: 'Kestrel-X9' };
+
 const archetypes = {};
 for (const [id, A] of Object.entries(D.ARCHETYPES)) {
   const h = D.weaponHandling(id);
-  archetypes[id] = { ...A, sights: D.sightOptions(id), defaultSight: A.sight || D.sightOptions(id)[0], adsTime: h.ads, sprintOut: h.sprintOut };
+  archetypes[id] = { ...A, sights: D.sightOptions(id), defaultSight: A.sight || D.sightOptions(id)[0], adsTime: h.ads, sprintOut: h.sprintOut,
+    title: TITLE_OVERRIDES[id] || D.EXOTIC_NAMES[id] || A.name, ...(UNREAL_TUNING[id] || {}) };
 }
 
 const out = {
