@@ -69,10 +69,11 @@ struct SOWORLD_API FSOCityStation
  * the building designs per district kind, stations, lane layout). Everything placed is our own Blender kit under
  * /Game/Environments/NexusCity (and the Nexus landmarks under /Game/Environments/Nexus).
  *
- * Buildings: one instanced component per design; each lot's oriented rectangle sets the instance's width, depth and
- * height (the design is a unit footprint) and its custom data (width, depth, height in m, seed) lets M_SOFacade keep
- * real bay and floor sizes and light a share of the windows at night (the facade materials' "Night", driven from the
- * time of day). Plan metres (E, N) map to world X = N, Y = E (cm), the Spire at the origin.
+ * Everything on the lots and streets comes from Data/nexus_instances.bin (tools/city/nexus_dress.py): one instanced
+ * component per mesh. Buildings are unit-footprint designs scaled to their footprint; their custom data (width,
+ * depth, height in m, seed, wear, boarded, lit share) lets M_SOFacade keep real bay and floor sizes, age and board up
+ * the walls and light a share of the windows at night ("Night", driven from the time of day). Cars carry their paint
+ * colour as custom data (M_SOCarPaint). Plan metres (E, N) map to world X = N, Y = E (cm), the Spire at the origin.
  *
  * Built in the editor on construction (transient, nothing saved into the level) and again at BeginPlay.
  */
@@ -91,23 +92,19 @@ public:
 	UPROPERTY(EditAnywhere, Category = "SO|City")
 	FString CityFile = TEXT("Data/nexus_city.json");
 
+	/** tools/city/nexus_dress.py's placements (buildings, doors, roofs, yards, trees, cars, street life). */
+	UPROPERTY(EditAnywhere, Category = "SO|City")
+	FString InstanceFile = TEXT("Data/nexus_instances.bin");
+
 	UPROPERTY(EditAnywhere, Category = "SO|City")
 	FString MeshFolder = TEXT("/Game/Environments/NexusCity");
 
 	UPROPERTY(EditAnywhere, Category = "SO|City")
 	bool bBuildInEditor = true;
 
-	/** Street lamps on both kerbs of every road but the access lanes, this far apart (m). */
-	UPROPERTY(EditAnywhere, Category = "SO|City")
-	float LampSpacing = 45.0f;
-
 	/** The Spire landmark's scale (the kit piece is ~190 m tall). */
 	UPROPERTY(EditAnywhere, Category = "SO|City")
 	float SpireScale = 2.2f;
-
-	/** Lots narrower than this (m) stay open (plazas between the buildings). */
-	UPROPERTY(EditAnywhere, Category = "SO|City")
-	float MinLotSize = 7.0f;
 
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
 	TArray<FVector> RoadNodes;
@@ -122,7 +119,10 @@ public:
 	int32 NumBuildings = 0;
 
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
-	int32 NumLamps = 0;
+	int32 NumInstances = 0;
+
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
+	int32 MissingMeshes = 0;
 
 	/** Rebuilds everything from the data files. */
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "SO|City")

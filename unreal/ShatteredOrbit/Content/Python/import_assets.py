@@ -1171,7 +1171,27 @@ float2 c = floor(float2(U0.x * along / Bay, (1.0 - U0.y) * H / Floor));
 float h = frac(sin(dot(c + float2(Seed * 17.13 + U1.x * 31.0, Seed * 3.71), float2(12.9898, 78.233))) * 43758.5453);
 float lit = step(h, Lit);
 float3 col = lerp(float3(1.0, 0.70, 0.40), float3(0.55, 0.80, 1.0), step(0.72, frac(h * 13.7)));
-return col * lit * M * Glow * Night;
+return col * lit * M * Glow * Night * (1.0 - Boarded);
+"""
+FACADE_COLOR_HLSL = """
+float along = lerp(D, W, U1.x);
+float um = U0.x * along;
+float zm = (1.0 - U0.y) * H;
+float3 c = C * T;
+// grime: streaks down the walls under the openings, dirt splashed up from the street, all scaled by wear
+float colm = floor(um / (Bay * 0.5));
+float s = frac(sin(colm * 12.9898 + Seed * 3.1) * 43758.5453);
+float streak = saturate(s * 1.6 - 0.5) * (0.55 + 0.45 * frac(-zm / Floor));
+float ground = saturate(1.0 - (zm + Z0) / 3.0);
+float g = saturate(Wear * (streak * 0.55 + ground * 0.5 + 0.15));
+c *= lerp(1.0, 0.5, g);
+// repairs: patches of fresher render where the wall was fixed
+float2 cell = floor(float2(um / (Bay * 2.0), zm / (Floor * 2.0)));
+float r = frac(sin(dot(cell + Seed, float2(27.17, 91.31))) * 15731.743);
+c *= (r < Wear * 0.22) ? float3(1.15, 1.12, 1.06) : float3(1.0, 1.0, 1.0);
+// abandoned: plywood over the glass
+float3 ply = float3(0.30, 0.22, 0.13) * (0.8 + 0.4 * frac(sin(floor(zm * 3.0) * 7.1 + colm) * 913.7));
+return lerp(c, ply, M * Boarded);
 """
 
 
@@ -1251,15 +1271,17 @@ def ground_material(defaults):
 def facade_material(defaults):
     """/Game/Environments/NexusCity/M_SOFacade: building walls. UV0 (unit-footprint facade coordinates) and UV1.x
     (1: the face runs along the width) become metres with the instance's custom data (0 width, 1 depth, 2 height in
-    m, 3 seed), so bays (Bay m) and floors (Floor m) keep their size on every lot. The mask's R marks glass: a hash
-    per window, building and face lights a share (Lit) of the rooms, scaled by Night (set by ASONexusCity)."""
+    m, 3 seed, 4 wear, 5 boarded, 6 lit share, 7 base height above the street), so bays (Bay m) and floors (Floor m) keep their size on every lot.
+    Wear streaks the walls down from the openings, splashes dirt up from the street and leaves patches of repair;
+    boarded puts plywood over the glass (abandoned buildings). The mask's R marks glass: a hash per window, building
+    and face lights the lit share of the rooms, scaled by Night (set by ASONexusCity)."""
     mat = _material("/Game/Environments/NexusCity/M_SOFacade", {"used_with_instanced_static_meshes": True})
     S = unreal.MaterialSamplerType
     u0 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1500, -100)
     u1 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1500, 0)
     u1.set_editor_property("coordinate_index", 1)
     cd = {}
-    for i, (n, default) in enumerate((("W", 20.0), ("D", 20.0), ("H", 60.0), ("Seed", 0.0))):
+    for i, (n, default) in enumerate((("W", 20.0), ("D", 20.0), ("H", 60.0), ("Seed", 0.0), ("Wear", 0.2), ("Boarded", 0.0), ("Lit", 0.25), ("Z0", 0.0))):
         e = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, -1500, 120 + i * 90)
         e.set_editor_property("data_index", i)
         e.set_editor_property("const_default_value", default)
@@ -1277,26 +1299,98 @@ def facade_material(defaults):
     for t in (col, nrm, msk):
         mel.connect_material_expressions(uv, "", t, "UVs")
     tint = _param(mat, unreal.MaterialExpressionVectorParameter, "Tint", (1, 1, 1, 1), -850, -450)
-    c = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -500, -300)
-    mel.connect_material_expressions(col, "RGB", c, "A")
-    mel.connect_material_expressions(tint, "", c, "B")
+    z0 = cd["Z0"]                                                                          # height of this part's base
+    c = _custom(mat, FACADE_COLOR_HLSL, ("C", "T", "M", "U0", "U1", "W", "D", "H", "Seed", "Wear", "Boarded", "Bay", "Floor", "Z0"),
+                unreal.CustomMaterialOutputType.CMOT_FLOAT3, -500, -300)
+    for n, e, pin in (("C", col, "RGB"), ("T", tint, ""), ("M", msk, "R"), ("U0", u0, ""), ("U1", u1, ""), ("Bay", bay, ""), ("Floor", floor, ""), ("Z0", z0, "")):
+        mel.connect_material_expressions(e, pin, c, n)
+    for n in ("W", "D", "H", "Seed", "Wear", "Boarded"):
+        mel.connect_material_expressions(cd[n], "", c, n)
     mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(nrm, "RGB", unreal.MaterialProperty.MP_NORMAL)
     mel.connect_material_property(msk, "G", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.connect_material_property(msk, "B", unreal.MaterialProperty.MP_METALLIC)
-    lit = _custom(mat, FACADE_LIT_HLSL, ("U0", "U1", "W", "D", "H", "Seed", "Bay", "Floor", "M", "Lit", "Glow", "Night"),
+    lit = _custom(mat, FACADE_LIT_HLSL, ("U0", "U1", "W", "D", "H", "Seed", "Bay", "Floor", "M", "Lit", "Glow", "Night", "Boarded"),
                   unreal.CustomMaterialOutputType.CMOT_FLOAT3, -500, 300)
     for n, e in (("U0", u0), ("U1", u1), ("Bay", bay), ("Floor", floor)):
         mel.connect_material_expressions(e, "", lit, n)
-    for n in ("W", "D", "H", "Seed"):
+    for n in ("W", "D", "H", "Seed", "Lit", "Boarded"):
         mel.connect_material_expressions(cd[n], "", lit, n)
     mel.connect_material_expressions(msk, "R", lit, "M")
-    for i, (n, v) in enumerate((("Lit", 0.22), ("Glow", 1.4), ("Night", 0.0))):
+    for i, (n, v) in enumerate((("Glow", 1.4), ("Night", 0.0))):
         mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, n, v, -850, 650 + i * 80), "", lit, n)
     mel.connect_material_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     return mat
+
+
+def car_paint_material():
+    """/Game/Environments/NexusCity/M_SOCarPaint: the city's parked cars, each painted by its instance's custom data
+    (0..2 = linear RGB)."""
+    mat = _material("/Game/Environments/NexusCity/M_SOCarPaint", {"used_with_instanced_static_meshes": True})
+    rgb = []
+    for i, d in enumerate((.5, .5, .5)):
+        e = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, -700, i * 90)
+        e.set_editor_property("data_index", i)
+        e.set_editor_property("const_default_value", d)
+        rgb.append(e)
+    ap = mel.create_material_expression(mat, unreal.MaterialExpressionAppendVector, -450, 40)
+    mel.connect_material_expressions(rgb[0], "", ap, "A")
+    mel.connect_material_expressions(rgb[1], "", ap, "B")
+    ap2 = mel.create_material_expression(mat, unreal.MaterialExpressionAppendVector, -250, 60)
+    mel.connect_material_expressions(ap, "", ap2, "A")
+    mel.connect_material_expressions(rgb[2], "", ap2, "B")
+    mel.connect_material_property(ap2, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(_param(mat, unreal.MaterialExpressionScalarParameter, "Metallic", .55, -450, 300), "", unreal.MaterialProperty.MP_METALLIC)
+    mel.connect_material_property(_param(mat, unreal.MaterialExpressionScalarParameter, "Roughness", .32, -450, 380), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    return mat
+
+
+def vehicles_trees_street(master, dest):
+    """The city's vehicles (tools/blender/city_vehicles.py) and trees / shrubs (tools/blender/city_trees.py): Vehicles/,
+    Trees/. Vehicle paint (cv_paint) is per instance (M_SOCarPaint); glass stays opaque (Nanite)."""
+    paint = car_paint_material()
+    used = set()
+    binf = os.path.join(PROJECT, "Data", "nexus_instances.bin")
+    if os.path.exists(binf):                                 # only what nexus_dress.py places
+        with open(binf, "rb") as f:
+            f.read(4)
+            n = int.from_bytes(f.read(4), "little")
+            used = {m["name"] for m in json.loads(f.read(n).decode())["meshes"]}
+    count = 0
+    for sub in ("Vehicles", "Trees"):
+        src = os.path.join(SOURCE, "NexusCity", sub)
+        if not os.path.isdir(src):
+            log(f"NexusCity: {sub} skipped")
+            continue
+        folder = f"{dest}/{sub}"
+        ensure_dir(folder)
+        manifest = load_json(os.path.join(src, "export_fbx.json"))
+        materials = load_json(os.path.join(src, "materials.json"))
+        tex = import_textures_for(src, materials, folder + "/Textures")
+        inst = {}
+        for key, m in materials.items():
+            k = base_slot(key)
+            if k == "cv_paint":
+                inst[k] = paint
+                continue
+            m = dict(m)
+            if k == "cv_glass":
+                m.update(alphaMode="OPAQUE")
+            inst[k] = make_instance(master, folder, k, m, tex)
+        for a in manifest["assets"]:
+            name = os.path.splitext(a["file"])[0]
+            if used and name not in used:
+                continue
+            if eal.does_asset_exist(f"{folder}/SM_{name}"):
+                eal.delete_asset(f"{folder}/SM_{name}")
+            mesh = import_static(src, a["file"], folder, f"SM_{name}", inst)
+            _nanite(mesh, sub != "Trees")
+            count += 1
+    return count
 
 
 def _city_instance(parent, dest, name, params, textures):
@@ -1355,7 +1449,7 @@ def nexus_city(master, defaults):
     for name, (bay, floor) in city["facade"].items():
         inst[name] = _city_instance(facade, dest, name, {"Bay": bay, "Floor": floor}, {
             "ColorTex": tex(name + "_c.jpg", "color"), "NormalTex": tex(name + "_n.png", "normal"), "MaskTex": tex(name + "_m.png", "mask")})
-    count = 0
+    count = vehicles_trees_street(master, dest)
     for src, folder in ((kit_src, dest), (tile_src, dest + "/Tiles")):
         manifest = load_json(os.path.join(src, "export_fbx.json"))
         materials = load_json(os.path.join(src, "materials.json"))

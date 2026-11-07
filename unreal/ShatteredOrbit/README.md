@@ -109,26 +109,39 @@ In the editor: Tools > Execute Python Script.
 
 ### Nexus Prime, the big city (`L_Nexus`)
 
-8.3 x 5.3 km inside its wall, after the owner's master plan (`art/reference/nexus_prime_plan.png`):
-1. `python tools/city/nexus_plan.py` (shapely) traces the plan into `Data/nexus_plan.json`: wall and gates, the noded
-   road network (highway / ring / primary / secondary / access with widths, 2.4k nodes, 459 km), blocks, ~12.7k lots
-   with a height each, districts, landmarks, the metro loop (16 m) with 8 hubs and two rail lines (9 m) with stations.
-2. `blender --background --python tools/blender/nexus_city_textures.py` paints the ground sets (`nc_*`: asphalt,
-   pavers, plaza, kerb, lot, grass, roof, wall) and the facades (`ncf_*`, one bay x one floor; mask R = glass).
-3. `blender --background --python tools/blender/nexus_city.py` writes the kit `assets/models/nexus_city_kit.glb`
-   (`NCB_<shape>_<style>` buildings on a unit footprint, `NCK_*` lamp, station, roof clutter) and bakes the plan into
-   1 km tiles (`SourceArt/NexusCity/src/nexus_city_tiles.glb`: asphalt, raised blocks with kerbs, landmark grounds,
-   lane paint with crossings and stop lines, rail / metro viaducts on piers outside the roads, the wall with towers,
-   gates and rail portals; `NCL_land` = country and mountains outside), plus `Data/nexus_city.json` (tiles,
-   designs per district, roofs, stations, lane layout per road class, tilings). `export_unreal.sh` exports both.
-4. `SO_IMPORT_ONLY=nexuscity` imports `/Game/Environments/NexusCity` (Nanite, complex collision) with
-   `M_SOGround` (textures projected in world metres) and `M_SOFacade` (UV0 / UV1 facade coordinates x the instance's
-   custom data = real bays and floors on any lot; hashed lit windows scaled by `Night`).
-5. `make_nexus_map.py` makes `/Game/Maps/L_Nexus`: one `ASONexusCity` (it builds tiles, a building per lot sized to the
-   lot's rectangle, roof clutter, kerb lamps, stations and the scaled Nexus landmarks at BeginPlay / in the editor,
-   nothing saved in the level; keeps `RoadNodes`, `RoadEdges` with lanes per direction and `Stations` for the coming
-   traffic, people and trains), sky, haze, the map (gates, districts, Spire, metro hubs, the shuttle back) and the
-   start on the Spire plaza. `SOCaptureSeries 1 4` in `L_Nexus` takes street, gate, aerial and night pictures.
+8.3 x 5.3 km inside its wall, after the owner's master plan (`art/reference/nexus_prime_plan.png`), a city that was
+lived in before the player came: every lot has a use, every building a way in, a way to be supplied and powered, and
+a history.
+1. `python tools/city/nexus_plan.py` (shapely): wall and gates, the noded road network (highway / ring / primary /
+   secondary / access, 459 km), blocks whose edge is the kerb with a 4.5 m sidewalk inside it, 7 m service alleys
+   through deep blocks, perimeter lots cut along the streets with the block's middle as a courtyard, and land use per
+   lot (`city_uses.py`: apartments, row houses, towers, offices, hotels, shops, mixed blocks, market halls,
+   warehouses, factories, workshops, hangars, clinics, schools, security posts, fire stations, barracks, labs,
+   parkades; car parks with painted bays, parks, plazas, building sites, vacant ground, substations) with its street
+   front, alley access, wear, era and abandonment; metro (16 m) and rail (9 m) with stations -> `Data/nexus_plan.json`.
+2. Blender (all our own): `nexus_city_textures.py` (ground sets `nc_*`, facades `ncf_*` incl. brick, shopfront,
+   lobby, service, loading, parkade, warehouse), `nexus_city.py` (kit `assets/models/nexus_city_kit.glb`: body
+   designs `NCB_<shape>_<style>` and ground floors `NCB_gf_<kind>` on a unit footprint, frames for building sites,
+   lamps, stations, and the props of `nexus_props.py`: doors and shopfronts, docks, garage doors, fire escapes,
+   window AC, meters, signs, boarding, graffiti, repairs, roof plant, street furniture, signals, poles and wires,
+   fences, checkpoints, building-site gear, a tower crane; plus the plan baked into 1 km tiles with alleys, car
+   parks and their bays, parks, plazas, dirt, the wall, viaducts and land), and `city_trees.py` (`CT_*` street / park trees, shrubs, hedge).
+3. `python tools/city/nexus_dress.py` places it all (~0.5 M instances) -> `Data/nexus_instances.bin` (+
+   `Data/nexus_buildings.json`: each building's use, footprint, floors and doors, the checkpoints and crew sites, for
+   the people and traffic to come). Per building: ground floor + body sized to whole storeys, lobby / shop doors on
+   the street front, service door, bins and dumpsters at the back, loading docks on the alley or yard, meters and transformers, fire escapes on old walk-ups, window AC, repairs and graffiti by wear, boarded
+   and fenced when abandoned, stair bulkhead and plant on the roof, billboards over the main streets, fenced yards
+   with containers and pallets. Streets: lamps, trees, hydrants, bins, benches, bus stops, signals / stop signs / name signs at the junctions, power lines on the back streets.
+   Checkpoints at the gates and the military wing, crew sites at open manholes. No vehicles and no
+   people yet (`VEHICLES = False` in nexus_dress.py keeps the parked cars, trucks and buses out until the traffic
+   stage).
+4. `SO_IMPORT_ONLY=nexuscity` imports `/Game/Environments/NexusCity` (Nanite, complex collision where it collides):
+   `M_SOGround` (world-projected), `M_SOFacade` (per-instance width / depth / height / seed / wear / boarded / lit
+   share / base height: real bays and floors, grime streaks, repairs, plywood, lit windows by `Night`),
+   `M_SOCarPaint` (per-instance colour).
+5. `make_nexus_map.py` makes `/Game/Maps/L_Nexus`: one `ASONexusCity` (tiles, the instance file, stations, the scaled
+   Nexus landmarks; keeps `RoadNodes`, `RoadEdges` with lanes and `Stations`), sky, haze, map points, the start on
+   the Spire plaza. `SOCaptureSeries 1 4` in `L_Nexus` takes aerial, night and street-level pictures.
 
 ## Automation tests
 

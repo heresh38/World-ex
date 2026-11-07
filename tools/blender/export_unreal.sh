@@ -35,6 +35,9 @@ run "$M/nexus.glb" "$OUT/Nexus"
 [ -f "$OUT/NexusCity/src/nexus_city_tiles.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/nexus_city.py" -- --tiles >/dev/null 2>&1
 run "$M/nexus_city_kit.glb" "$OUT/NexusCity/Kit"
 run "$OUT/NexusCity/src/nexus_city_tiles.glb" "$OUT/NexusCity/Tiles"
+# ...its trees and shrubs (city_trees.py)
+[ -f "$M/city_trees.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/city_trees.py" >/dev/null 2>&1
+run "$M/city_trees.glb" "$OUT/NexusCity/Trees"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail

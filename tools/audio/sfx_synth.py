@@ -1520,6 +1520,78 @@ def ui_deny():
     return finish(out, -12)
 
 
+# ---------------------------------------------------------------------------- weather ambience (loops are seamless)
+
+def seamless(make, total, xfade=1.5):
+    """make(seconds) -> signal; returns `total` seconds whose end runs into its start (crossfaded)"""
+    x = make(total + xfade)
+    n, f = secs(total), secs(xfade)
+    y = x[:n].copy()
+    r = np.linspace(0, 1, f)
+    if y.ndim == 2:
+        r = r[:, None]
+    y[:f] = x[:f] * r + x[n:n + f] * (1 - r)
+    return y
+
+
+def slow_lfo(t, seed, rate=0.15, lo=0.3, hi=1.0):
+    """smoothed random wobble between lo and hi"""
+    k = max(4, int(t * rate * 4))
+    pts = rng(seed).uniform(lo, hi, k + 2)
+    x = np.linspace(0, k, secs(t))
+    i = np.floor(x).astype(int)
+    f = x - i
+    f = f * f * (3 - 2 * f)
+    return pts[i] * (1 - f) + pts[i + 1] * f
+
+
+def amb_wind():
+    def make(t):
+        chans = []
+        for ch in range(2):
+            s = 900 + ch * 37
+            body = filt(noise(t, s, "brown"), "low", 420) * slow_lfo(t, s + 1, .12, .35, 1.0)
+            whistle = sum(filt(noise(t, s + 10 + k, "pink"), "band", (f * .88, f * 1.13)) * slow_lfo(t, s + 20 + k, .2, 0.0, 1.0) ** 2 * g
+                          for k, (f, g) in enumerate(((320, .5), (640, .35), (1250, .18))))
+            hiss = filt(noise(t, s + 30, "pink"), "high", 2500) * slow_lfo(t, s + 31, .25, .05, .3)
+            chans.append(body * 1.0 + whistle + hiss * .25)
+        return np.stack(chans, 1)
+    return finish(seamless(make, 16.0), -6, fade=0.0005)
+
+
+def amb_rain():
+    def make(t):
+        chans = []
+        for ch in range(2):
+            s = 1200 + ch * 53
+            bed = filt(filt(noise(t, s, "pink"), "high", 700), "low", 9000) * .45
+            patter = np.zeros(secs(t))
+            r = rng(s + 1)
+            for at in r.uniform(0, t - .05, int(t * 260)):
+                d = filt(noise(.03, int(at * 1000) + s), "band", ((fc := r.uniform(2200, 6500)) * .8, fc * 1.25)) * env_exp(.03, r.uniform(.003, .01))
+                patter = place(patter, d, at, r.uniform(.15, .6))
+            rumble = filt(noise(t, s + 2, "brown"), "low", 220) * .5
+            chans.append(bed + patter * .35 + rumble)
+        return np.stack(chans, 1)
+    return finish(seamless(make, 12.0), -7, fade=0.0005)
+
+
+def amb_gust():
+    t = 4.0
+    x = svf_sweep(noise(t, 1301, "pink"), "band", 280, 900, q=1.2)
+    env = env_ad(t, 1.1, 0.9, 0.4)
+    return finish(x * env, -8)
+
+
+def amb_thunder():
+    t = 7.5
+    crack = filt(noise(.25, 1401), "high", 900) * env_exp(.25, .05)
+    roll = filt(noise(t, 1402, "brown"), "low", 140) * env_ad(t, .25, 2.2, .3) * slow_lfo(t, 1403, 1.2, .4, 1.0)
+    mid = filt(noise(t, 1404, "pink"), "band", (180, 360)) * env_ad(t, .1, 1.2) * .5
+    out = place(roll * 1.4 + mid, crack, .02, .6)
+    return finish(reverb(out, impulse_response(1.6, 1405), wet=.35), -3)
+
+
 SOUNDS = {
     "rifle_shot_fp": rifle_shot_fp,
     "rifle_shot_world": rifle_shot_world,
@@ -1573,6 +1645,7 @@ SOUNDS.update({
 })
 for _k in range(5):
     SOUNDS[f"loot_pickup_{_k}"] = lambda k=_k: loot_pickup(k)
+SOUNDS.update({"amb_wind": amb_wind, "amb_rain": amb_rain, "amb_gust": amb_gust, "amb_thunder": amb_thunder})
 
 
 def main():

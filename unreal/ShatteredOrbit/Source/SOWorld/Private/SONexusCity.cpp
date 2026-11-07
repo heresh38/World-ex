@@ -130,6 +130,7 @@ namespace
 		TArray<float> Custom;
 		int32 Floats = 0;
 		bool bCollide = true;
+		float CullCm = 0.0f;
 	};
 }
 
@@ -245,7 +246,7 @@ void ASONexusCity::Clear()
 	RoadNodes.Reset();
 	RoadEdges.Reset();
 	Stations.Reset();
-	NumBuildings = NumLamps = 0;
+	NumBuildings = NumInstances = MissingMeshes = 0;
 	NightApplied = -1.0f;
 }
 
@@ -290,15 +291,14 @@ void ASONexusCity::Build()
 		P.bCollide = bCollide;
 	};
 
-	// ---- the baked plan: tiles and the land
+	// ---- the baked plan: tiles (world coordinates) and the land
 	for (const TSharedPtr<FJsonValue>& V : City->GetArrayField(TEXT("tiles")))
 	{
-		const TSharedPtr<FJsonObject> T = V->AsObject();
-		AddMesh(LoadMesh(T->GetStringField(TEXT("name")), true), FTransform::Identity);    // tiles keep world coordinates
+		AddMesh(LoadMesh(V->AsObject()->GetStringField(TEXT("name")), true), FTransform::Identity);
 	}
 	AddMesh(LoadMesh(City->GetStringField(TEXT("land")), true), FTransform::Identity);
 
-	// ---- road graph (for traffic and people later; also the lamps)
+	// ---- road graph (for traffic and people)
 	const TSharedPtr<FJsonObject> Roads = Plan->GetObjectField(TEXT("roads"));
 	const TSharedPtr<FJsonObject> Lanes = City->GetObjectField(TEXT("lanes"));
 	for (const TSharedPtr<FJsonValue>& V : Roads->GetArrayField(TEXT("nodes")))
@@ -306,10 +306,6 @@ void ASONexusCity::Build()
 		const FVector2D P = Pt(V);
 		RoadNodes.Add(PlanToWorld(P.X, P.Y));
 	}
-	TArray<int32> Degree;
-	TArray<double> WidthAt;
-	Degree.SetNumZeroed(RoadNodes.Num());
-	WidthAt.SetNumZeroed(RoadNodes.Num());
 	for (const TSharedPtr<FJsonValue>& V : Roads->GetArrayField(TEXT("edges")))
 	{
 		const TSharedPtr<FJsonObject> E = V->AsObject();
@@ -330,170 +326,62 @@ void ASONexusCity::Build()
 			const FVector2D P = Pt(Q);
 			R.Points.Add(PlanToWorld(P.X, P.Y));
 		}
-		for (int32 N : { R.A, R.B })
-		{
-			if (RoadNodes.IsValidIndex(N))
-			{
-				Degree[N]++;
-				WidthAt[N] = FMath::Max(WidthAt[N], (double)R.Width);
-			}
-		}
 		RoadEdges.Add(MoveTemp(R));
 	}
 
-	// ---- street lamps on both kerbs (not on the access lanes), clear of the junctions
-	UStaticMesh* Lamp = LoadMesh(TEXT("NCK_lamp"));
-	for (const FSORoadEdge& R : RoadEdges)
+	// ---- everything placed by tools/city/nexus_dress.py: buildings, doors, roofs, yards, trees, cars, street life
+	TArray<uint8> Bytes;
+	if (FFileHelper::LoadFileToArray(Bytes, *(FPaths::ProjectDir() / InstanceFile)) && Bytes.Num() > 8 && FMemory::Memcmp(Bytes.GetData(), "NXI1", 4) == 0)
 	{
-		if (R.Class == TEXT("access") || R.Points.Num() < 2)
+		uint32 HeadLen = 0;
+		FMemory::Memcpy(&HeadLen, Bytes.GetData() + 4, 4);
+		const FString Head = FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Bytes.GetData() + 8), HeadLen).Length(), FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(Bytes.GetData() + 8), HeadLen).Get());
+		TSharedPtr<FJsonObject> Header;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Head);
+		if (FJsonSerializer::Deserialize(Reader, Header) && Header)
 		{
-			continue;
-		}
-		auto Gap = [&](int32 N) { return RoadNodes.IsValidIndex(N) && Degree[N] >= 3 ? WidthAt[N] * 0.5 + 900.0 : 300.0; };
-		double S = 0.0;
-		const double Start = Gap(R.A);
-		double Total = 0.0;
-		for (int32 i = 1; i < R.Points.Num(); ++i)
-		{
-			Total += FVector::Dist2D(R.Points[i - 1], R.Points[i]);
-		}
-		const double End = Total - Gap(R.B);
-		double Next = Start;
-		for (int32 i = 1; i < R.Points.Num() && Next <= End; ++i)
-		{
-			const FVector A = R.Points[i - 1], B = R.Points[i];
-			const double L = FVector::Dist2D(A, B);
-			const FVector Dir = (B - A).GetSafeNormal2D();
-			const FVector Left(-Dir.Y, Dir.X, 0.0);       // world: X = N, Y = E (left-handed); either side works
-			while (Next <= S + L && Next <= End)
+			int64 Offset = 8 + HeadLen;
+			for (const TSharedPtr<FJsonValue>& V : Header->GetArrayField(TEXT("meshes")))
 			{
-				const FVector P = A + Dir * (Next - S);
-				for (int32 Side : { -1, 1 })
+				const TSharedPtr<FJsonObject> M = V->AsObject();
+				const int32 Count = M->GetIntegerField(TEXT("count"));
+				const int32 Custom = M->GetIntegerField(TEXT("custom"));
+				const int32 Stride = 7 + Custom;
+				const float* Rec = reinterpret_cast<const float*>(Bytes.GetData() + Offset);
+				Offset += int64(Count) * Stride * sizeof(float);
+				if (Offset > Bytes.Num())
 				{
-					const FVector At = P + Left * Side * (R.Width * 0.5 + 120.0) + FVector(0, 0, Kerb * 100.0);
-					const FVector Toward = -Left * Side;      // the lamp's arm reaches along its local +Y (Blender -y)
-					const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(-Toward.X, Toward.Y));
-					Queue(Lamp, FTransform(FRotator(0.0, Yaw, 0.0), At), {}, true);
-					NumLamps++;
+					UE_LOG(LogTemp, Warning, TEXT("ASONexusCity: %s is truncated"), *InstanceFile);
+					break;
 				}
-				Next += LampSpacing * 100.0;
-			}
-			S += L;
-		}
-	}
-
-	// ---- buildings on the lots
-	const TSharedPtr<FJsonObject> Designs = City->GetObjectField(TEXT("designs"));
-	const TSharedPtr<FJsonObject> Kinds = City->GetObjectField(TEXT("kinds"));
-	const TSharedPtr<FJsonObject> Props = City->GetObjectField(TEXT("props"));
-	TArray<UStaticMesh*> RoofProps;
-	for (const TSharedPtr<FJsonValue>& V : Props->GetArrayField(TEXT("roof")))
-	{
-		RoofProps.Add(LoadMesh(V->AsString()));
-	}
-	struct FDesign { UStaticMesh* Mesh = nullptr; double MinH = 0, MaxH = 1e9; bool bTall = false; bool bRoof = false; double Roof[5] = {}; };
-	TMap<FString, FDesign> DesignInfo;
-	for (const auto& Pair : Designs->Values)
-	{
-		const TSharedPtr<FJsonObject> D = Pair.Value->AsObject();
-		FDesign Info;
-		Info.Mesh = LoadMesh(FString(Pair.Key));
-		Info.MinH = D->GetNumberField(TEXT("min_h"));
-		Info.MaxH = D->GetNumberField(TEXT("max_h"));
-		Info.bTall = D->GetBoolField(TEXT("tall"));
-		const FJsonArray* Roof = nullptr;
-		if (D->TryGetArrayField(TEXT("roof"), Roof) && Roof->Num() == 5)
-		{
-			Info.bRoof = true;
-			for (int32 k = 0; k < 5; ++k)
-			{
-				Info.Roof[k] = (*Roof)[k]->AsNumber();
-			}
-		}
-		DesignInfo.Add(FString(Pair.Key), Info);
-	}
-	const FJsonArray& Lots = Plan->GetArrayField(TEXT("lots"));
-	for (int32 Li = 0; Li < Lots.Num(); ++Li)
-	{
-		const TSharedPtr<FJsonObject> Lot = Lots[Li]->AsObject();
-		const TArray<FVector2D> P = Poly(Lot->GetArrayField(TEXT("poly")));
-		if (P.Num() < 3)
-		{
-			continue;
-		}
-		FRect R = MinRect(P);
-		// shrink until the rectangle sits inside the lot (clipped lots at the block edges)
-		const FVector2D N(-R.A.Y, R.A.X);
-		bool bFits = false;
-		for (int32 Try = 0; Try < 7 && !bFits; ++Try)
-		{
-			bFits = true;
-			for (int32 sa : { -1, 1 })
-			{
-				for (int32 sn : { -1, 1 })
+				const FString Path = M->GetStringField(TEXT("path"));
+				UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("%s.%s"), *Path, *FPaths::GetBaseFilename(Path)), nullptr, LOAD_Quiet | LOAD_NoWarn);
+				if (!Mesh)
 				{
-					const FVector2D Corner = R.C + R.A * (sa * (R.W * 0.5 - 0.3)) + N * (sn * (R.D * 0.5 - 0.3));
-					bFits &= Inside(Corner, P);
+					MissingMeshes++;
+					continue;
+				}
+				FPending& P = Pending.FindOrAdd(Mesh);
+				P.Floats = Custom;
+				P.bCollide = M->GetBoolField(TEXT("collide"));
+				P.CullCm = float(M->GetNumberField(TEXT("cull"))) * 100.0f;
+				P.Xf.Reserve(P.Xf.Num() + Count);
+				for (int32 i = 0; i < Count; ++i, Rec += Stride)
+				{
+					P.Xf.Add(FTransform(FRotator(0.0, Rec[3], 0.0), FVector(Rec[0], Rec[1], Rec[2]), FVector(Rec[4], Rec[5], Rec[6])));
+					P.Custom.Append(Rec + 7, Custom);
+				}
+				NumInstances += Count;
+				if (FPaths::GetBaseFilename(Path).StartsWith(TEXT("SM_NCB_")) && !FPaths::GetBaseFilename(Path).StartsWith(TEXT("SM_NCB_gf_")))
+				{
+					NumBuildings += Count;
 				}
 			}
-			if (!bFits)
-			{
-				R.W *= 0.9;
-				R.D *= 0.9;
-			}
 		}
-		if (!bFits || R.W < MinLotSize || R.D < MinLotSize)
-		{
-			continue;
-		}
-		const FString Kind = Lot->GetStringField(TEXT("kind"));
-		const FJsonArray* List = nullptr;
-		if (!Kinds->TryGetArrayField(Kind, List) || List->Num() == 0)
-		{
-			continue;
-		}
-		const double H0 = Lot->GetNumberField(TEXT("h"));
-		const uint32 Seed = Hash(Li * 2654435761U + 17U);
-		const FDesign* Pick = nullptr;
-		for (int32 k = 0; k < List->Num() && !Pick; ++k)
-		{
-			const FDesign* D = DesignInfo.Find((*List)[(Seed + k) % List->Num()]->AsString());
-			if (D && D->Mesh && H0 >= D->MinH && (!D->bTall || (H0 >= 30.0 && FMath::Min(R.W, R.D) >= 14.0)))
-			{
-				Pick = D;
-			}
-		}
-		if (!Pick)
-		{
-			continue;
-		}
-		const double H = FMath::Min(H0, Pick->MaxH);
-		const FVector Centre = PlanToWorld(R.C.X, R.C.Y, Kerb);
-		const FRotator Rot(0.0, YawAlong(R.A), 0.0);
-		const FTransform Xf(Rot, Centre, FVector(R.W, R.D, H));
-		const float S = Rand01(Seed ^ 0x5bd1e995U) * 100.0f;
-		Queue(Pick->Mesh, Xf, { (float)R.W, (float)R.D, (float)H, S }, true);
-		NumBuildings++;
-		// roof clutter (real size) on the flat roof
-		if (Pick->bRoof && RoofProps.Num())
-		{
-			const double* Rf = Pick->Roof;
-			const double Area = (Rf[1] - Rf[0]) * R.W * (Rf[3] - Rf[2]) * R.D;
-			const int32 Count = FMath::Min(3, (int32)(Area / 180.0 * Rand01(Seed + 3)));
-			for (int32 k = 0; k < Count; ++k)
-			{
-				const double bx = FMath::Lerp(Rf[0], Rf[1], 0.15 + 0.7 * Rand01(Seed + 11 * k + 5));
-				const double by = FMath::Lerp(Rf[2], Rf[3], 0.15 + 0.7 * Rand01(Seed + 13 * k + 7));
-				const FVector Local(bx * 100.0, -by * 100.0, Rf[4] * 100.0);     // Blender unit (x, y, z) -> mesh cm
-				const FVector At = Xf.TransformPosition(Local);
-				int32 Which = (int32)(Rand01(Seed + 17 * k) * RoofProps.Num()) % RoofProps.Num();
-				if (Which == RoofProps.Num() - 1 && H < 60.0)
-				{
-					Which = 0;                                            // masts only on the tall ones
-				}
-				Queue(RoofProps[Which], FTransform(FRotator(0.0, Rot.Yaw + 90.0 * (int32)(Rand01(Seed + k) * 4), 0.0), At), {}, false);
-			}
-		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ASONexusCity: no instance file %s (run tools/city/nexus_dress.py)"), *InstanceFile);
 	}
 
 	// ---- stations on the viaducts
@@ -567,6 +455,10 @@ void ASONexusCity::Build()
 	for (auto& Pair : Pending)
 	{
 		UInstancedStaticMeshComponent* C = Instancer(Pair.Key, Pair.Value.Floats, Pair.Value.bCollide);
+		if (Pair.Value.CullCm > 0.0f)
+		{
+			C->SetCullDistances(int32(Pair.Value.CullCm * 0.8f), int32(Pair.Value.CullCm));
+		}
 		C->AddInstances(Pair.Value.Xf, false, true);
 		if (Pair.Value.Floats > 0)
 		{
@@ -579,6 +471,6 @@ void ASONexusCity::Build()
 	}
 	NightApplied = -1.0f;
 	Tick(0.0f);                                   // the windows match the time of day from the first frame
-	UE_LOG(LogTemp, Log, TEXT("ASONexusCity: %d buildings, %d lamps, %d roads, %d stations, %d components"),
-		NumBuildings, NumLamps, RoadEdges.Num(), Stations.Num(), Built.Num());
+	UE_LOG(LogTemp, Log, TEXT("ASONexusCity: %d instances (%d buildings) of %d meshes (%d missing), %d roads, %d stations, %d components"),
+		NumInstances, NumBuildings, Pending.Num(), MissingMeshes, RoadEdges.Num(), Stations.Num(), Built.Num());
 }

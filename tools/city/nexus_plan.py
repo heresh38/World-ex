@@ -11,7 +11,10 @@ Writes:
   metro       elevated loop polyline + hubs (stations)
   rail        express lines (polylines) + stations
   districts   {name: {poly, kind, label}}; landmarks (dock pads, arena bowl, refuge park, spire plaza)
-  blocks      polygons between the roads, per district; lots inside them (building footprints)
+  blocks      polygons between the roads (edge = kerb), per district; a 4.5 m sidewalk inside the kerb
+  alleys      7 m service lanes through deep blocks (centre lines), reaching the kerb at both ends
+  lots        the developable land, each with a use (apartments, office, warehouse, parking, park, ...), its street
+              front edge (or alley front), alley access, wear, era, abandoned, seed
 """
 import json, math, os, sys
 import numpy as np
@@ -199,29 +202,23 @@ def build():
         cls = best[1]
         pts = [list(map(lambda v: round(v, 1), q)) for q in seg.coords]
         edges.append(dict(a=nid(pts[0]), b=nid(pts[-1]), cls=cls, w=WIDTH[cls], len=round(seg.length, 1), pts=pts))
-    # blocks: the city minus the road corridors, per district; lots inside
-    corridors = unary_union([l.buffer(WIDTH[c] / 2 + 4.0, cap_style=2, join_style=2) for c, l in lines])
+    # blocks: the city minus the road corridors (the block edge is the kerb), per district; sidewalks, alleys and
+    # lots with their use inside (landuse)
+    corridors = unary_union([l.buffer(WIDTH[c] / 2, cap_style=2, join_style=2) for c, l in lines])
     free = inside.difference(corridors).difference(lm_union.buffer(10))
     rng = np.random.default_rng(7)
-    blocks, lots = [], []
     dpolys = {k: Polygon(d["poly"]) for k, d in DISTRICTS.items()}
     dpolys["spire"] = Polygon(SPIRE["poly"])
     dkind = {k: d["kind"] for k, d in DISTRICTS.items()}; dkind["spire"] = "spire"
+    blocks_geo = []
     for b in getattr(free, "geoms", [free]):
         if b.area < 400:
             continue
         c = b.representative_point()
         dist = next((k for k in ("spire",) + tuple(DISTRICTS) if dpolys[k].contains(c)), "north_quarter")
-        blocks.append(dict(district=dist, poly=[[round(x, 1), round(y, 1)] for x, y in b.exterior.coords]))
-        st = STYLE[dkind[dist]]
-        for lot in subdivide(b, st["lot"], rng):
-            h = float(rng.uniform(*st["h"]))
-            # taller toward the Spire
-            r = math.hypot(lot.centroid.x, lot.centroid.y)
-            h *= 1.0 + 1.2 * max(0.0, 1 - r / 2600)
-            lots.append(dict(district=dist, kind=dkind[dist], h=round(h, 1),
-                             poly=[[round(x, 1), round(y, 1)] for x, y in lot.exterior.coords]))
-    plan = dict(version=1, units="m", axes="E,N (Unreal X = N, Y = E)", size=[round(wall.bounds[2] - wall.bounds[0]), round(wall.bounds[3] - wall.bounds[1])],
+        blocks_geo.append((dist, b))
+    blocks, lots, alleys = landuse(blocks_geo, lambda d: dkind[d], rng)
+    plan = dict(version=2, units="m", axes="E,N (Unreal X = N, Y = E)", size=[round(wall.bounds[2] - wall.bounds[0]), round(wall.bounds[3] - wall.bounds[1])],
                 wall=[list(p) for p in WALL], gates={k: list(v) for k, v in GATES.items()},
                 roads=dict(widths=WIDTH, nodes=nodes, edges=edges),
                 metro=dict(loop=[list(p) for p in METRO], hubs=[list(h) for h in HUBS], height=16.0),
@@ -230,8 +227,198 @@ def build():
                            "spire": dict(label=SPIRE["label"], kind="spire", poly=[list(p) for p in SPIRE["poly"]])},
                 landmarks={k: dict(kind=L["kind"], centre=list(L["centre"]), radius=L["radius"]) for k, L in LANDMARKS.items()},
                 key_locations={k: list(v) for k, v in KEY_LOCATIONS.items()},
-                blocks=blocks, lots=lots)
+                sidewalk=SIDEWALK, blocks=blocks, lots=lots, alleys=alleys)
     return plan, lines, wall
+
+# ---------------------------------------------------------------- land use
+SIDEWALK = 4.5          # kerb to property line (m)
+ALLEY_W = 7.0           # service lane through deep blocks
+# What each lot is for, per district kind (weights). Building uses get a body in nexus_dress.py; open uses are
+# surfaces the tiles draw (parking, park, plaza) or sites (construction, vacant, substation yard).
+MIX = {
+    "spire": dict(office=40, tower_res=15, hotel=10, mixed=10, plaza=8, parkade=5, park=3, construction=3, clinic=2),
+    "mixed": dict(apartments=25, mixed=25, office=12, shops=8, parking=6, park=5, school=3, clinic=3, construction=3,
+                  parkade=3, vacant=2, fire_station=1, security=1),
+    "research": dict(lab=50, office=15, parking=10, park=8, apartments=8, construction=3, substation=3),
+    "market": dict(shops=30, mixed=25, market_hall=8, apartments=15, rowhouses=8, plaza=6, parking=5, vacant=2),
+    "arena": dict(hotel=10, mixed=20, shops=15, parkade=12, parking=15, plaza=10, office=10, fire_station=2),
+    "military": dict(barracks=30, security=15, warehouse=20, hangar=10, parking=15, vacant=5, substation=5),
+    "housing": dict(apartments=35, rowhouses=20, tower_res=10, shops=5, school=5, park=8, parking=6, clinic=3,
+                    construction=3, vacant=3, fire_station=2),
+    "industrial": dict(warehouse=30, factory=25, workshop=15, parking=10, substation=5, vacant=8, construction=3),
+    "dockyard": dict(hangar=25, warehouse=30, factory=10, parking=15, substation=5, vacant=5, construction=5),
+    "ruins": dict(apartments=25, workshop=10, warehouse=10, vacant=25, shops=10, rowhouses=10, construction=5),
+}
+OPEN_USES = {"parking", "park", "plaza", "construction", "vacant", "substation"}
+# wear (0 new .. 1 decayed) and the share of abandoned buildings per district
+CONDITION = dict(spire=(.08, .0), research=(.15, .01), arena=(.2, .01), mixed=(.3, .02), housing=(.35, .03),
+                 market=(.4, .03), military=(.35, .01), industrial=(.45, .06), dockyard=(.45, .05), ruins=(.75, .4))
+
+
+def frontage(lot, street_line, alley_line):
+    """The lot's street front: the longest edge along the block's kerb-side (within the sidewalk band) or, failing
+    that, along an alley. Returns (front edge (p, q), on_street, has_alley_access)."""
+    pts = list(lot.exterior.coords)[:-1]
+    best, best_alley, alley_touch = None, None, False
+    for i in range(len(pts)):
+        p, q = pts[i], pts[(i + 1) % len(pts)]
+        L = math.dist(p, q)
+        if L < 3:
+            continue
+        m = Point((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+        if street_line.distance(m) < SIDEWALK + 1.5 and (best is None or L > best[2]):
+            best = (p, q, L)
+        if alley_line is not None and alley_line.distance(m) < ALLEY_W / 2 + 1.5:
+            alley_touch = True
+            if best_alley is None or L > best_alley[2]:
+                best_alley = (p, q, L)
+    if best:
+        return (best[0], best[1]), True, alley_touch
+    if best_alley:
+        return (best_alley[0], best_alley[1]), False, True
+    return None, False, False
+
+
+def cut_alleys(dev, block):
+    """Service lanes along the long axis of deep blocks (and across very long ones), reaching the kerb at both ends."""
+    mrr = dev.minimum_rotated_rectangle
+    xs, ys = mrr.exterior.coords.xy
+    e1 = (xs[1] - xs[0], ys[1] - ys[0]); e2 = (xs[2] - xs[1], ys[2] - ys[1])
+    l1, l2 = math.hypot(*e1), math.hypot(*e2)
+    long_v, long_l, short_l = (e1, l1, l2) if l1 >= l2 else (e2, l2, l1)
+    u = (long_v[0] / long_l, long_v[1] / long_l)
+    c = dev.centroid
+    lines = []
+    if short_l > 95:
+        lines.append(LineString([(c.x - u[0] * long_l, c.y - u[1] * long_l), (c.x + u[0] * long_l, c.y + u[1] * long_l)]))
+    if long_l > 260:
+        lines.append(LineString([(c.x + u[1] * short_l, c.y - u[0] * short_l), (c.x - u[1] * short_l, c.y + u[0] * short_l)]))
+    alleys = []
+    for ln in lines:
+        seg = ln.intersection(block)
+        for part in getattr(seg, "geoms", [seg]):
+            if part.geom_type == "LineString" and part.length > 40:
+                alleys.append(part)
+    return alleys
+
+
+DEPTH = dict(market=22, mixed=30, housing=28, spire=40, research=45, arena=40, industrial=60, dockyard=70,
+             military=55, ruins=30)
+
+
+def strip_lots(piece, depth, front, rng):
+    """Perimeter lots: the band within `depth` of the piece's edge cut across every `front` metres (perpendicular to
+    each edge); what is left in the middle is one courtyard lot (returned separately)."""
+    core = piece.buffer(-depth, join_style=2)
+    band = piece.difference(core) if not core.is_empty else piece
+    cuts = []
+    ring = piece.exterior.simplify(1.0)
+    pts = list(ring.coords)[:-1]
+    for i in range(len(pts)):
+        p, q = pts[i], pts[(i + 1) % len(pts)]
+        L = math.dist(p, q)
+        if L < 4:
+            continue
+        u = ((q[0] - p[0]) / L, (q[1] - p[1]) / L)
+        n = (-u[1], u[0])
+        s = float(rng.uniform(*front)) * .6
+        while s < L - front[0] * .5:
+            c = (p[0] + u[0] * s, p[1] + u[1] * s)
+            cuts.append(LineString([(c[0] - n[0] * depth * 1.6, c[1] - n[1] * depth * 1.6), (c[0] + n[0] * depth * 1.6, c[1] + n[1] * depth * 1.6)]))
+            s += float(rng.uniform(*front))
+    pieces = split(band, MultiLineString(cuts)) if cuts else band
+    lots = [g for g in getattr(pieces, "geoms", [pieces]) if g.geom_type == "Polygon" and g.area > 60]
+    cores = [g for g in getattr(core, "geoms", [core]) if g.geom_type == "Polygon" and g.area > 250] if not core.is_empty else []
+    return lots, cores
+
+
+def parking_bays(lot, edge):
+    """Car-park bays: rows parallel to the entrance edge (aisle 6 m, two 5 m bay rows back to back, aisle, ...),
+    2.6 m wide, kept where the whole bay fits. Returns [[e, n, s]] centre + facing (+1: nose away from the edge)
+    and the row axes (a along the edge, n into the lot)."""
+    (p, q) = edge
+    L = math.dist(p, q)
+    a = ((q[0] - p[0]) / L, (q[1] - p[1]) / L)
+    n = (-a[1], a[0])
+    c = lot.centroid
+    if (c.x - p[0]) * n[0] + (c.y - p[1]) * n[1] < 0:
+        n = (-n[0], -n[1])
+    us = [(x - p[0]) * a[0] + (y - p[1]) * a[1] for x, y in lot.exterior.coords]
+    vs = [(x - p[0]) * n[0] + (y - p[1]) * n[1] for x, y in lot.exterior.coords]
+    bays, v = [], 6.5
+    pattern = [(+1, 5.0), (-1, 5.0), (0, 6.0)]                    # bay row, bay row (facing back), aisle
+    k = 0
+    inner = lot.buffer(-.4)
+    while v < max(vs) - 4.5:
+        s, depth = pattern[k % 3]
+        if s:
+            u = min(us) + 1.6
+            while u < max(us) - 1.6:
+                cu, cv = u, v + depth / 2
+                ce = (p[0] + a[0] * cu + n[0] * cv, p[1] + a[1] * cu + n[1] * cv)
+                corners = [(ce[0] + a[0] * du + n[0] * dv, ce[1] + a[1] * du + n[1] * dv) for du in (-1.3, 1.3) for dv in (-2.5, 2.5)]
+                if all(inner.contains(Point(x)) for x in corners):
+                    bays.append([round(ce[0], 2), round(ce[1], 2), s])
+                u += 2.6
+        v += depth
+        k += 1
+    return bays, [round(a[0], 4), round(a[1], 4)], [round(n[0], 4), round(n[1], 4)]
+
+
+def landuse(blocks_geo, dkind_of, rng):
+    """blocks_geo: [(district, block polygon)] -> blocks, lots (with use, frontage, condition), alleys."""
+    blocks, lots, alleys_out = [], [], []
+    for dist, b in blocks_geo:
+        kind = dkind_of(dist)
+        st = STYLE[kind]
+        blocks.append(dict(district=dist, poly=[[round(x, 1), round(y, 1)] for x, y in b.exterior.coords]))
+        dev = b.buffer(-SIDEWALK, join_style=2)
+        if dev.is_empty:
+            continue
+        alleys = cut_alleys(dev, b) if kind != "spire" else []
+        alley_union = unary_union([a.buffer(ALLEY_W / 2, cap_style=2) for a in alleys]) if alleys else None
+        if alley_union is not None:
+            dev = dev.difference(alley_union.buffer(1.0, cap_style=2))
+            for a in alleys:
+                alleys_out.append(dict(district=dist, w=ALLEY_W, pts=[[round(x, 1), round(y, 1)] for x, y in a.coords]))
+        alley_line = unary_union(alleys) if alleys else None
+        street_line = b.exterior
+        wear0, aband = CONDITION[kind]
+        mix = MIX[kind]
+        names, weights = list(mix), np.array(list(mix.values()), float)
+        weights /= weights.sum()
+        for piece in getattr(dev, "geoms", [dev]):
+            if piece.geom_type != "Polygon" or piece.area < 120:
+                continue
+            strips, cores = strip_lots(piece, DEPTH[kind], (st["lot"][0], st["lot"][1]), rng)
+            for lot in strips + cores:
+                front, on_street, alley_access = frontage(lot, street_line, alley_line)
+                use = str(rng.choice(names, p=weights))
+                if lot in cores or (front is None and use not in ("parking", "park", "vacant")):
+                    use = "park" if rng.random() < .55 else "parking"         # the block's courtyard: a garden or car park
+                if lot.area < 220 and use not in OPEN_USES:
+                    use = "plaza" if kind in ("spire", "market", "arena") else "vacant" if kind in ("industrial", "dockyard", "ruins", "military") else "park"
+                h = float(rng.uniform(*st["h"]))
+                r = math.hypot(lot.centroid.x, lot.centroid.y)
+                h *= 1.0 + 1.2 * max(0.0, 1 - r / 2600)
+                wear = float(np.clip(wear0 + rng.normal(0, .15), 0, 1))
+                rec = dict(district=dist, kind=kind, use=use, h=round(h, 1), wear=round(wear, 2),
+                           abandoned=bool(use not in OPEN_USES and rng.random() < aband),
+                           era=("old" if wear > .55 else "mid" if wear > .25 else "new"),
+                           seed=int(rng.integers(0, 2 ** 31)), alley=alley_access,
+                           poly=[[round(x, 1), round(y, 1)] for x, y in lot.exterior.coords])
+                if front:
+                    rec["front"] = [[round(front[0][0], 2), round(front[0][1], 2)], [round(front[1][0], 2), round(front[1][1], 2)]]
+                    rec["street"] = on_street
+                if use == "parking":
+                    edge = front
+                    if edge is None:                                              # a courtyard car park: its longest side
+                        pts = list(lot.exterior.coords)[:-1]
+                        i = max(range(len(pts)), key=lambda i: math.dist(pts[i], pts[(i + 1) % len(pts)]))
+                        edge = (pts[i], pts[(i + 1) % len(pts)])
+                    rec["bays"], rec["bay_a"], rec["bay_n"] = parking_bays(lot, edge)
+                lots.append(rec)
+    return blocks, lots, alleys_out
 
 
 def subdivide(poly, size, rng, depth=0):
@@ -243,8 +430,7 @@ def subdivide(poly, size, rng, depth=0):
     e1 = math.hypot(xs[1] - xs[0], ys[1] - ys[0]); e2 = math.hypot(xs[2] - xs[1], ys[2] - ys[1])
     long_ = max(e1, e2)
     if long_ <= size[1] or depth > 9:
-        inset = poly.buffer(-3.0, join_style=2)
-        return [g for g in getattr(inset, "geoms", [inset]) if g.geom_type == "Polygon" and g.area > 150]
+        return [poly] if poly.area > 60 else []
     if e1 >= e2:
         a, b = (xs[0], ys[0]), (xs[1], ys[1]); d = (xs[3] - xs[0], ys[3] - ys[0])
     else:

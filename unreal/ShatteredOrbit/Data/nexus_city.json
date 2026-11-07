@@ -1,287 +1,85 @@
 {
  "designs": {
-  "NCB_tower_glass": {
-   "shape": "tower",
-   "style": "glass",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_block_brick": {
+   "shape": "block",
+   "style": "brick",
    "roof": [
-    -0.21,
-    0.21,
-    -0.21,
-    0.21,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
    ]
   },
-  "NCB_slab_glass": {
-   "shape": "slab",
-   "style": "glass",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_block_housing": {
+   "shape": "block",
+   "style": "housing",
    "roof": [
-    -0.45,
-    0.45,
-    -0.45,
-    0.45,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
    ]
   },
-  "NCB_chamfer_glass": {
-   "shape": "chamfer",
-   "style": "glass",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_block_industrial": {
+   "shape": "block",
+   "style": "industrial",
    "roof": [
-    -0.25,
-    0.25,
-    -0.25,
-    0.25,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
    ]
   },
-  "NCB_tower_panel": {
-   "shape": "tower",
-   "style": "panel",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_block_military": {
+   "shape": "block",
+   "style": "military",
    "roof": [
-    -0.21,
-    0.21,
-    -0.21,
-    0.21,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
    ]
   },
-  "NCB_podium_tower_glass": {
-   "shape": "podium_tower",
-   "style": "glass",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
-   "roof": [
-    0.22,
-    0.46,
-    -0.4,
-    0.4,
-    0.2
-   ]
-  },
-  "NCB_chamfer_panel": {
-   "shape": "chamfer",
-   "style": "panel",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
-   "roof": [
-    -0.25,
-    0.25,
-    -0.25,
-    0.25,
-    1.0
-   ]
-  },
-  "NCB_tower_office": {
-   "shape": "tower",
+  "NCB_block_office": {
+   "shape": "block",
    "style": "office",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
    "roof": [
-    -0.21,
-    0.21,
-    -0.21,
-    0.21,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
    ]
   },
-  "NCB_slab_office": {
-   "shape": "slab",
-   "style": "office",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_block_parkade": {
+   "shape": "block",
+   "style": "parkade",
    "roof": [
-    -0.45,
-    0.45,
-    -0.45,
-    0.45,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
    ]
   },
-  "NCB_courtyard_office": {
-   "shape": "courtyard",
-   "style": "office",
-   "tall": false,
-   "min_h": 10,
-   "max_h": 110,
-   "roof": [
-    -0.45,
-    0.45,
-    0.25,
-    0.45,
-    1.0
-   ]
-  },
-  "NCB_stepped_office": {
-   "shape": "stepped",
-   "style": "office",
-   "tall": false,
-   "min_h": 12,
-   "max_h": 120,
-   "roof": [
-    -0.45,
-    0.45,
-    0.25,
-    0.45,
-    0.45
-   ]
-  },
-  "NCB_domelab_panel": {
-   "shape": "domelab",
-   "style": "panel",
-   "tall": false,
-   "min_h": 14,
-   "max_h": 60,
-   "roof": null
-  },
-  "NCB_slab_panel": {
-   "shape": "slab",
-   "style": "panel",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
-   "roof": [
-    -0.45,
-    0.45,
-    -0.45,
-    0.45,
-    1.0
-   ]
-  },
-  "NCB_courtyard_panel": {
-   "shape": "courtyard",
-   "style": "panel",
-   "tall": false,
-   "min_h": 10,
-   "max_h": 110,
-   "roof": [
-    -0.45,
-    0.45,
-    0.25,
-    0.45,
-    1.0
-   ]
-  },
-  "NCB_podium_tower_panel": {
-   "shape": "podium_tower",
-   "style": "panel",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
-   "roof": [
-    0.22,
-    0.46,
-    -0.4,
-    0.4,
-    0.2
-   ]
-  },
-  "NCB_market_stone": {
-   "shape": "market",
+  "NCB_block_stone": {
+   "shape": "block",
    "style": "stone",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 26,
    "roof": [
-    -0.42,
-    0.42,
-    -0.42,
-    0.42,
-    0.85
-   ]
-  },
-  "NCB_courtyard_stone": {
-   "shape": "courtyard",
-   "style": "stone",
-   "tall": false,
-   "min_h": 10,
-   "max_h": 110,
-   "roof": [
-    -0.45,
-    0.45,
-    0.25,
-    0.45,
+    -0.44,
+    0.44,
+    -0.44,
+    0.44,
     1.0
-   ]
-  },
-  "NCB_stepped_stone": {
-   "shape": "stepped",
-   "style": "stone",
-   "tall": false,
-   "min_h": 12,
-   "max_h": 120,
-   "roof": [
-    -0.45,
-    0.45,
-    0.25,
-    0.45,
-    0.45
-   ]
-  },
-  "NCB_hall_stone": {
-   "shape": "hall",
-   "style": "stone",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 30,
-   "roof": null
-  },
-  "NCB_slab_stone": {
-   "shape": "slab",
-   "style": "stone",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
-   "roof": [
-    -0.45,
-    0.45,
-    -0.45,
-    0.45,
-    1.0
-   ]
-  },
-  "NCB_hall_panel": {
-   "shape": "hall",
-   "style": "panel",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 30,
-   "roof": null
-  },
-  "NCB_market_panel": {
-   "shape": "market",
-   "style": "panel",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 26,
-   "roof": [
-    -0.42,
-    0.42,
-    -0.42,
-    0.42,
-    0.85
    ]
   },
   "NCB_bunker_military": {
    "shape": "bunker",
    "style": "military",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 36,
    "roof": [
     -0.34,
     -0.22,
@@ -290,66 +88,35 @@
     0.75
    ]
   },
-  "NCB_slab_military": {
-   "shape": "slab",
-   "style": "military",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_chamfer_glass": {
+   "shape": "chamfer",
+   "style": "glass",
    "roof": [
-    -0.45,
-    0.45,
-    -0.45,
-    0.45,
+    -0.25,
+    0.25,
+    -0.25,
+    0.25,
     1.0
    ]
   },
-  "NCB_hangar_military": {
-   "shape": "hangar",
-   "style": "military",
-   "tall": false,
-   "min_h": 14,
-   "max_h": 40,
-   "roof": null
+  "NCB_chamfer_panel": {
+   "shape": "chamfer",
+   "style": "panel",
+   "roof": [
+    -0.25,
+    0.25,
+    -0.25,
+    0.25,
+    1.0
+   ]
   },
-  "NCB_courtyard_military": {
+  "NCB_courtyard_brick": {
    "shape": "courtyard",
-   "style": "military",
-   "tall": false,
-   "min_h": 10,
-   "max_h": 110,
+   "style": "brick",
    "roof": [
     -0.45,
     0.45,
     0.25,
-    0.45,
-    1.0
-   ]
-  },
-  "NCB_stepped_housing": {
-   "shape": "stepped",
-   "style": "housing",
-   "tall": false,
-   "min_h": 12,
-   "max_h": 120,
-   "roof": [
-    -0.45,
-    0.45,
-    0.25,
-    0.45,
-    0.45
-   ]
-  },
-  "NCB_slab_housing": {
-   "shape": "slab",
-   "style": "housing",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
-   "roof": [
-    -0.45,
-    0.45,
-    -0.45,
     0.45,
     1.0
    ]
@@ -357,9 +124,6 @@
   "NCB_courtyard_housing": {
    "shape": "courtyard",
    "style": "housing",
-   "tall": false,
-   "min_h": 10,
-   "max_h": 110,
    "roof": [
     -0.45,
     0.45,
@@ -368,56 +132,171 @@
     1.0
    ]
   },
-  "NCB_tower_housing": {
-   "shape": "tower",
-   "style": "housing",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+  "NCB_courtyard_panel": {
+   "shape": "courtyard",
+   "style": "panel",
    "roof": [
-    -0.21,
-    0.21,
-    -0.21,
-    0.21,
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
     1.0
+   ]
+  },
+  "NCB_domelab_panel": {
+   "shape": "domelab",
+   "style": "panel",
+   "roof": null
+  },
+  "NCB_frame_housing": {
+   "shape": "frame",
+   "style": "housing",
+   "roof": null
+  },
+  "NCB_frame_office": {
+   "shape": "frame",
+   "style": "office",
+   "roof": null
+  },
+  "NCB_gable_brick": {
+   "shape": "gable",
+   "style": "brick",
+   "roof": null
+  },
+  "NCB_gable_housing": {
+   "shape": "gable",
+   "style": "housing",
+   "roof": null
+  },
+  "NCB_gable_industrial": {
+   "shape": "gable",
+   "style": "industrial",
+   "roof": null
+  },
+  "NCB_gable_stone": {
+   "shape": "gable",
+   "style": "stone",
+   "roof": null
+  },
+  "NCB_gf_garage": {
+   "shape": "gf",
+   "style": "service",
+   "roof": null
+  },
+  "NCB_gf_loading": {
+   "shape": "gf",
+   "style": "loading",
+   "roof": null
+  },
+  "NCB_gf_lobby": {
+   "shape": "gf",
+   "style": "lobby",
+   "roof": null
+  },
+  "NCB_gf_service": {
+   "shape": "gf",
+   "style": "service",
+   "roof": null
+  },
+  "NCB_gf_shop": {
+   "shape": "gf",
+   "style": "shop",
+   "roof": null
+  },
+  "NCB_hall_industrial": {
+   "shape": "hall",
+   "style": "industrial",
+   "roof": null
+  },
+  "NCB_hall_stone": {
+   "shape": "hall",
+   "style": "stone",
+   "roof": null
+  },
+  "NCB_hangar_industrial": {
+   "shape": "hangar",
+   "style": "industrial",
+   "roof": null
+  },
+  "NCB_hangar_military": {
+   "shape": "hangar",
+   "style": "military",
+   "roof": null
+  },
+  "NCB_lshape_brick": {
+   "shape": "lshape",
+   "style": "brick",
+   "roof": [
+    -0.42,
+    0.42,
+    -0.45,
+    -0.12,
+    1.0
+   ]
+  },
+  "NCB_lshape_housing": {
+   "shape": "lshape",
+   "style": "housing",
+   "roof": [
+    -0.42,
+    0.42,
+    -0.45,
+    -0.12,
+    1.0
+   ]
+  },
+  "NCB_lshape_panel": {
+   "shape": "lshape",
+   "style": "panel",
+   "roof": [
+    -0.42,
+    0.42,
+    -0.45,
+    -0.12,
+    1.0
+   ]
+  },
+  "NCB_market_stone": {
+   "shape": "market",
+   "style": "stone",
+   "roof": [
+    -0.42,
+    0.42,
+    -0.42,
+    0.42,
+    0.85
+   ]
+  },
+  "NCB_podium_tower_glass": {
+   "shape": "podium_tower",
+   "style": "glass",
+   "roof": [
+    0.22,
+    0.46,
+    -0.4,
+    0.4,
+    0.2
+   ]
+  },
+  "NCB_podium_tower_panel": {
+   "shape": "podium_tower",
+   "style": "panel",
+   "roof": [
+    0.22,
+    0.46,
+    -0.4,
+    0.4,
+    0.2
    ]
   },
   "NCB_shed_industrial": {
    "shape": "shed",
    "style": "industrial",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 24,
    "roof": null
   },
-  "NCB_tanks_industrial": {
-   "shape": "tanks",
-   "style": "industrial",
-   "tall": false,
-   "min_h": 10,
-   "max_h": 30,
-   "roof": [
-    -0.45,
-    -0.15,
-    -0.45,
-    0.45,
-    0.45
-   ]
-  },
-  "NCB_hall_industrial": {
-   "shape": "hall",
-   "style": "industrial",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 30,
-   "roof": null
-  },
-  "NCB_slab_industrial": {
+  "NCB_slab_glass": {
    "shape": "slab",
-   "style": "industrial",
-   "tall": true,
-   "min_h": 20,
-   "max_h": 400,
+   "style": "glass",
    "roof": [
     -0.45,
     0.45,
@@ -426,120 +305,110 @@
     1.0
    ]
   },
-  "NCB_hangar_industrial": {
-   "shape": "hangar",
-   "style": "industrial",
-   "tall": false,
-   "min_h": 14,
-   "max_h": 40,
-   "roof": null
-  },
-  "NCB_ruin_stone": {
-   "shape": "ruin",
-   "style": "stone",
-   "tall": false,
-   "min_h": 6,
-   "max_h": 60,
-   "roof": null
-  },
-  "NCB_ruin_office": {
-   "shape": "ruin",
-   "style": "office",
-   "tall": false,
-   "min_h": 6,
-   "max_h": 60,
-   "roof": null
-  },
-  "NCB_ruin_housing": {
-   "shape": "ruin",
+  "NCB_slab_housing": {
+   "shape": "slab",
    "style": "housing",
-   "tall": false,
-   "min_h": 6,
-   "max_h": 60,
-   "roof": null
-  },
-  "NCB_bunker_stone": {
-   "shape": "bunker",
-   "style": "stone",
-   "tall": false,
-   "min_h": 8,
-   "max_h": 36,
    "roof": [
-    -0.34,
-    -0.22,
-    -0.34,
-    0.34,
-    0.75
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
    ]
+  },
+  "NCB_slab_military": {
+   "shape": "slab",
+   "style": "military",
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_slab_office": {
+   "shape": "slab",
+   "style": "office",
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_slab_panel": {
+   "shape": "slab",
+   "style": "panel",
+   "roof": [
+    -0.45,
+    0.45,
+    -0.45,
+    0.45,
+    1.0
+   ]
+  },
+  "NCB_stepped_housing": {
+   "shape": "stepped",
+   "style": "housing",
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    0.45
+   ]
+  },
+  "NCB_stepped_office": {
+   "shape": "stepped",
+   "style": "office",
+   "roof": [
+    -0.45,
+    0.45,
+    0.25,
+    0.45,
+    0.45
+   ]
+  },
+  "NCB_tower_glass": {
+   "shape": "tower",
+   "style": "glass",
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_tower_housing": {
+   "shape": "tower",
+   "style": "housing",
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_tower_office": {
+   "shape": "tower",
+   "style": "office",
+   "roof": [
+    -0.21,
+    0.21,
+    -0.21,
+    0.21,
+    1.0
+   ]
+  },
+  "NCB_warehouse_warehouse": {
+   "shape": "warehouse",
+   "style": "warehouse",
+   "roof": null
   }
- },
- "kinds": {
-  "spire": [
-   "NCB_tower_glass",
-   "NCB_slab_glass",
-   "NCB_chamfer_glass",
-   "NCB_tower_panel",
-   "NCB_podium_tower_glass",
-   "NCB_chamfer_panel"
-  ],
-  "mixed": [
-   "NCB_tower_office",
-   "NCB_slab_office",
-   "NCB_podium_tower_glass",
-   "NCB_courtyard_office",
-   "NCB_chamfer_panel",
-   "NCB_stepped_office"
-  ],
-  "research": [
-   "NCB_domelab_panel",
-   "NCB_slab_panel",
-   "NCB_chamfer_glass",
-   "NCB_courtyard_panel",
-   "NCB_podium_tower_panel"
-  ],
-  "market": [
-   "NCB_market_stone",
-   "NCB_courtyard_stone",
-   "NCB_stepped_stone",
-   "NCB_hall_stone",
-   "NCB_slab_stone"
-  ],
-  "arena": [
-   "NCB_slab_panel",
-   "NCB_podium_tower_panel",
-   "NCB_hall_panel",
-   "NCB_market_panel"
-  ],
-  "military": [
-   "NCB_bunker_military",
-   "NCB_slab_military",
-   "NCB_hangar_military",
-   "NCB_courtyard_military"
-  ],
-  "housing": [
-   "NCB_stepped_housing",
-   "NCB_slab_housing",
-   "NCB_courtyard_housing",
-   "NCB_tower_housing"
-  ],
-  "industrial": [
-   "NCB_shed_industrial",
-   "NCB_tanks_industrial",
-   "NCB_hall_industrial",
-   "NCB_slab_industrial"
-  ],
-  "dockyard": [
-   "NCB_hangar_industrial",
-   "NCB_shed_industrial",
-   "NCB_tanks_industrial",
-   "NCB_hall_panel"
-  ],
-  "ruins": [
-   "NCB_ruin_stone",
-   "NCB_ruin_office",
-   "NCB_ruin_housing",
-   "NCB_bunker_stone"
-  ]
  },
  "props": {
   "lamp": "NCK_lamp",
@@ -609,6 +478,34 @@
   "ncf_stone": [
    3.6,
    4.0
+  ],
+  "ncf_brick": [
+   3.2,
+   3.1
+  ],
+  "ncf_parkade": [
+   6.0,
+   3.0
+  ],
+  "ncf_warehouse": [
+   8.0,
+   9.0
+  ],
+  "ncf_shop": [
+   4.2,
+   4.5
+  ],
+  "ncf_lobby": [
+   6.0,
+   4.5
+  ],
+  "ncf_service": [
+   5.0,
+   4.5
+  ],
+  "ncf_loading": [
+   6.0,
+   4.5
   ]
  },
  "ground": {
@@ -620,6 +517,7 @@
   "nc_grass": 4.0,
   "nc_roof": 8.0,
   "nc_wall": 12.0,
+  "nc_dirt": 6.0,
   "nc_rock": 40.0
  },
  "tiles": [
@@ -1310,5 +1208,1281 @@
     0.0581
    ]
   }
- ]
+ ],
+ "props_info": {
+  "NCK_door_lobby": {
+   "size": [
+    5.04,
+    2.22,
+    5.2
+   ],
+   "min": [
+    -2.52,
+    -2.22,
+    0.0
+   ],
+   "max": [
+    2.52,
+    0.0,
+    5.2
+   ],
+   "anchor": "wall",
+   "tris": 342,
+   "kind": "entrance",
+   "opening": [
+    3.0,
+    2.7
+   ]
+  },
+  "NCK_door_shop_a": {
+   "size": [
+    3.2,
+    1.307,
+    3.9
+   ],
+   "min": [
+    -1.6,
+    -1.307,
+    0.0
+   ],
+   "max": [
+    1.6,
+    0.0,
+    3.9
+   ],
+   "anchor": "wall",
+   "tris": 394,
+   "kind": "entrance",
+   "opening": [
+    1.1,
+    2.3
+   ]
+  },
+  "NCK_door_shop_b": {
+   "size": [
+    3.2,
+    1.307,
+    3.9
+   ],
+   "min": [
+    -1.6,
+    -1.307,
+    0.0
+   ],
+   "max": [
+    1.6,
+    0.0,
+    3.9
+   ],
+   "anchor": "wall",
+   "tris": 310,
+   "kind": "entrance",
+   "opening": [
+    1.1,
+    2.3
+   ]
+  },
+  "NCK_door_shop_c": {
+   "size": [
+    3.2,
+    1.307,
+    3.9
+   ],
+   "min": [
+    -1.6,
+    -1.307,
+    0.0
+   ],
+   "max": [
+    1.6,
+    0.0,
+    3.9
+   ],
+   "anchor": "wall",
+   "tris": 394,
+   "kind": "entrance",
+   "opening": [
+    1.1,
+    2.3
+   ]
+  },
+  "NCK_door_shop_d": {
+   "size": [
+    3.2,
+    1.307,
+    3.9
+   ],
+   "min": [
+    -1.6,
+    -1.307,
+    0.0
+   ],
+   "max": [
+    1.6,
+    0.0,
+    3.9
+   ],
+   "anchor": "wall",
+   "tris": 310,
+   "kind": "entrance",
+   "opening": [
+    1.1,
+    2.3
+   ]
+  },
+  "NCK_door_service": {
+   "size": [
+    1.6,
+    0.55,
+    2.72
+   ],
+   "min": [
+    -0.8,
+    -0.55,
+    0.0
+   ],
+   "max": [
+    0.8,
+    0.0,
+    2.72
+   ],
+   "anchor": "wall",
+   "tris": 184,
+   "kind": "entrance",
+   "opening": [
+    1.0,
+    2.2
+   ]
+  },
+  "NCK_door_garage": {
+   "size": [
+    6.166,
+    0.85,
+    3.25
+   ],
+   "min": [
+    -3.116,
+    -0.85,
+    0.0
+   ],
+   "max": [
+    3.05,
+    0.0,
+    3.25
+   ],
+   "anchor": "wall",
+   "tris": 438,
+   "kind": "entrance",
+   "opening": [
+    5.5,
+    2.6
+   ]
+  },
+  "NCK_loading_dock": {
+   "size": [
+    5.15,
+    3.66,
+    5.75
+   ],
+   "min": [
+    -2.2,
+    -3.66,
+    0.0
+   ],
+   "max": [
+    2.95,
+    0.0,
+    5.75
+   ],
+   "anchor": "wall",
+   "tris": 390,
+   "kind": "entrance",
+   "opening": [
+    3.6,
+    4.0
+   ],
+   "sill": 1.2
+  },
+  "NCK_fire_escape": {
+   "size": [
+    4.04,
+    1.32,
+    4.385
+   ],
+   "min": [
+    -2.02,
+    -1.32,
+    -0.168
+   ],
+   "max": [
+    2.02,
+    0.0,
+    4.217
+   ],
+   "anchor": "wall",
+   "tris": 446,
+   "stack": 3.2,
+   "note": "one storey: landing at z 3.2, flight down to z 0; stack identical modules every 3.2 m (base module at ground)"
+  },
+  "NCK_wall_ac": {
+   "size": [
+    0.7,
+    0.465,
+    0.93
+   ],
+   "min": [
+    -0.35,
+    -0.465,
+    -0.42
+   ],
+   "max": [
+    0.35,
+    0.0,
+    0.51
+   ],
+   "anchor": "wall",
+   "tris": 190,
+   "note": "origin at the unit base (z 0 = bottom of the unit), mount at window sill height"
+  },
+  "NCK_meter_box": {
+   "size": [
+    0.94,
+    0.38,
+    4.0
+   ],
+   "min": [
+    -0.47,
+    -0.38,
+    0.0
+   ],
+   "max": [
+    0.47,
+    0.0,
+    4.0
+   ],
+   "anchor": "wall",
+   "tris": 160
+  },
+  "NCK_sign_blade_a": {
+   "size": [
+    0.62,
+    1.43,
+    4.05
+   ],
+   "min": [
+    -0.31,
+    -1.43,
+    4.0
+   ],
+   "max": [
+    0.31,
+    0.0,
+    8.05
+   ],
+   "anchor": "wall",
+   "tris": 106,
+   "note": "base at z 4"
+  },
+  "NCK_sign_blade_b": {
+   "size": [
+    0.62,
+    1.43,
+    4.05
+   ],
+   "min": [
+    -0.31,
+    -1.43,
+    4.0
+   ],
+   "max": [
+    0.31,
+    0.0,
+    8.05
+   ],
+   "anchor": "wall",
+   "tris": 106,
+   "note": "base at z 4"
+  },
+  "NCK_boarded": {
+   "size": [
+    2.52,
+    0.058,
+    2.6
+   ],
+   "min": [
+    -1.26,
+    -0.058,
+    0.0
+   ],
+   "max": [
+    1.26,
+    0.0,
+    2.6
+   ],
+   "anchor": "wall",
+   "tris": 212,
+   "opening": [
+    2.4,
+    2.6
+   ]
+  },
+  "NCK_graffiti_patch": {
+   "size": [
+    2.912,
+    0.022,
+    1.832
+   ],
+   "min": [
+    -1.457,
+    -0.022,
+    0.112
+   ],
+   "max": [
+    1.456,
+    0.0,
+    1.944
+   ],
+   "anchor": "wall",
+   "tris": 580,
+   "note": "patch spans z 0..2; lift it as wanted"
+  },
+  "NCK_repair_patch": {
+   "size": [
+    3.0,
+    0.016,
+    2.0
+   ],
+   "min": [
+    -1.5,
+    -0.016,
+    0.0
+   ],
+   "max": [
+    1.5,
+    0.0,
+    2.0
+   ],
+   "anchor": "wall",
+   "tris": 112,
+   "note": "patch spans z 0..2; lift it as wanted"
+  },
+  "NCK_roof_stair": {
+   "size": [
+    4.7,
+    4.0,
+    4.1
+   ],
+   "min": [
+    -2.35,
+    -2.3,
+    0.0
+   ],
+   "max": [
+    2.35,
+    1.7,
+    4.1
+   ],
+   "anchor": "ground",
+   "tris": 210,
+   "place": "roof"
+  },
+  "NCK_roof_hvac": {
+   "size": [
+    6.6,
+    2.26,
+    2.22
+   ],
+   "min": [
+    -3.4,
+    -1.16,
+    0.0
+   ],
+   "max": [
+    3.2,
+    1.1,
+    2.22
+   ],
+   "anchor": "ground",
+   "tris": 380,
+   "place": "roof"
+  },
+  "NCK_roof_vents": {
+   "size": [
+    4.36,
+    1.37,
+    1.32
+   ],
+   "min": [
+    -2.28,
+    -0.52,
+    0.0
+   ],
+   "max": [
+    2.08,
+    0.85,
+    1.32
+   ],
+   "anchor": "ground",
+   "tris": 512,
+   "place": "roof"
+  },
+  "NCK_roof_solar": {
+   "size": [
+    7.1,
+    2.221,
+    1.394
+   ],
+   "min": [
+    -3.55,
+    -1.111,
+    0.0
+   ],
+   "max": [
+    3.55,
+    1.111,
+    1.394
+   ],
+   "anchor": "ground",
+   "tris": 252,
+   "place": "roof",
+   "note": "panels face -y, tilt 25 deg"
+  },
+  "NCK_billboard": {
+   "size": [
+    12.04,
+    3.014,
+    7.0
+   ],
+   "min": [
+    -6.02,
+    -2.094,
+    0.0
+   ],
+   "max": [
+    6.02,
+    0.92,
+    7.0
+   ],
+   "anchor": "ground",
+   "tris": 450,
+   "place": "roof",
+   "note": "lit face toward -y"
+  },
+  "NCK_exhaust_stack": {
+   "size": [
+    3.44,
+    3.378,
+    9.0
+   ],
+   "min": [
+    -1.52,
+    -1.955,
+    0.0
+   ],
+   "max": [
+    1.92,
+    1.423,
+    9.0
+   ],
+   "anchor": "ground",
+   "tris": 348,
+   "place": "roof"
+  },
+  "NCK_bench": {
+   "size": [
+    1.8,
+    0.594,
+    0.886
+   ],
+   "min": [
+    -0.9,
+    -0.3,
+    -0.001
+   ],
+   "max": [
+    0.9,
+    0.294,
+    0.885
+   ],
+   "anchor": "ground",
+   "tris": 208
+  },
+  "NCK_bin": {
+   "size": [
+    0.58,
+    0.566,
+    0.95
+   ],
+   "min": [
+    -0.29,
+    -0.283,
+    0.0
+   ],
+   "max": [
+    0.29,
+    0.283,
+    0.95
+   ],
+   "anchor": "ground",
+   "tris": 186
+  },
+  "NCK_bus_stop": {
+   "size": [
+    4.85,
+    1.7,
+    3.0
+   ],
+   "min": [
+    -2.8,
+    -0.85,
+    0.0
+   ],
+   "max": [
+    2.05,
+    0.85,
+    3.0
+   ],
+   "anchor": "ground",
+   "tris": 226,
+   "note": "open side and pole sign toward -y (the kerb)"
+  },
+  "NCK_traffic_light": {
+   "size": [
+    0.611,
+    6.252,
+    6.5
+   ],
+   "min": [
+    -0.251,
+    -6.001,
+    0.0
+   ],
+   "max": [
+    0.36,
+    0.251,
+    6.5
+   ],
+   "anchor": "ground",
+   "tris": 506,
+   "note": "pole at the origin, arm over the road along -y; vehicle heads face +x, pedestrian head faces -y"
+  },
+  "NCK_stop_sign": {
+   "size": [
+    0.75,
+    0.077,
+    2.4
+   ],
+   "min": [
+    -0.375,
+    -0.049,
+    0.0
+   ],
+   "max": [
+    0.375,
+    0.028,
+    2.4
+   ],
+   "anchor": "ground",
+   "tris": 102
+  },
+  "NCK_street_sign": {
+   "size": [
+    0.92,
+    0.92,
+    3.06
+   ],
+   "min": [
+    -0.46,
+    -0.46,
+    0.0
+   ],
+   "max": [
+    0.46,
+    0.46,
+    3.06
+   ],
+   "anchor": "ground",
+   "tris": 76
+  },
+  "NCK_hydrant": {
+   "size": [
+    0.45,
+    0.414,
+    0.8
+   ],
+   "min": [
+    -0.225,
+    -0.25,
+    0.0
+   ],
+   "max": [
+    0.225,
+    0.164,
+    0.8
+   ],
+   "anchor": "ground",
+   "tris": 385
+  },
+  "NCK_bollard": {
+   "size": [
+    0.27,
+    0.27,
+    1.0
+   ],
+   "min": [
+    -0.135,
+    -0.135,
+    0.0
+   ],
+   "max": [
+    0.135,
+    0.135,
+    1.0
+   ],
+   "anchor": "ground",
+   "tris": 116
+  },
+  "NCK_planter": {
+   "size": [
+    2.4,
+    1.2,
+    1.22
+   ],
+   "min": [
+    -1.2,
+    -0.6,
+    0.0
+   ],
+   "max": [
+    1.2,
+    0.6,
+    1.22
+   ],
+   "anchor": "ground",
+   "tris": 86
+  },
+  "NCK_ad_column": {
+   "size": [
+    1.412,
+    1.412,
+    3.2
+   ],
+   "min": [
+    -0.706,
+    -0.706,
+    0.0
+   ],
+   "max": [
+    0.706,
+    0.706,
+    3.2
+   ],
+   "anchor": "ground",
+   "tris": 202
+  },
+  "NCK_power_pole": {
+   "size": [
+    2.4,
+    0.434,
+    11.04
+   ],
+   "min": [
+    -1.2,
+    -0.287,
+    0.0
+   ],
+   "max": [
+    1.2,
+    0.148,
+    11.04
+   ],
+   "anchor": "ground",
+   "tris": 548,
+   "attach": [
+    [
+     -0.9,
+     -0.22,
+     10.3
+    ],
+    [
+     0.0,
+     -0.22,
+     10.3
+    ],
+    [
+     0.9,
+     -0.22,
+     10.3
+    ]
+   ]
+  },
+  "NCK_power_pole_tx": {
+   "size": [
+    2.4,
+    1.115,
+    11.04
+   ],
+   "min": [
+    -1.2,
+    -0.287,
+    0.0
+   ],
+   "max": [
+    1.2,
+    0.828,
+    11.04
+   ],
+   "anchor": "ground",
+   "tris": 708,
+   "attach": [
+    [
+     -0.9,
+     -0.22,
+     10.3
+    ],
+    [
+     0.0,
+     -0.22,
+     10.3
+    ],
+    [
+     0.9,
+     -0.22,
+     10.3
+    ]
+   ]
+  },
+  "NCK_wire": {
+   "size": [
+    1.0,
+    0.025,
+    0.025
+   ],
+   "min": [
+    0.0,
+    -0.013,
+    -0.013
+   ],
+   "max": [
+    1.0,
+    0.013,
+    0.013
+   ],
+   "anchor": "ground",
+   "tris": 8,
+   "unit": true,
+   "note": "unit span 0..1 along +x, centred on y = z = 0: scale x to the span, place at the attach point"
+  },
+  "NCK_wire_set": {
+   "size": [
+    1.0,
+    1.825,
+    0.025
+   ],
+   "min": [
+    0.0,
+    -0.913,
+    -0.013
+   ],
+   "max": [
+    1.0,
+    0.913,
+    0.013
+   ],
+   "anchor": "ground",
+   "tris": 24,
+   "unit": true,
+   "spacing": 0.9,
+   "note": "three unit spans 0.9 m apart along y (matches the power pole insulators along its x)"
+  },
+  "NCK_transformer": {
+   "size": [
+    1.9,
+    1.7,
+    1.55
+   ],
+   "min": [
+    -0.95,
+    -0.85,
+    0.0
+   ],
+   "max": [
+    0.95,
+    0.85,
+    1.55
+   ],
+   "anchor": "ground",
+   "tris": 224
+  },
+  "NCK_manhole_open": {
+   "size": [
+    2.223,
+    1.5,
+    1.25
+   ],
+   "min": [
+    -0.75,
+    -0.75,
+    -0.25
+   ],
+   "max": [
+    1.473,
+    0.75,
+    1.0
+   ],
+   "anchor": "ground",
+   "tris": 380
+  },
+  "NCK_cone": {
+   "size": [
+    0.38,
+    0.38,
+    0.7
+   ],
+   "min": [
+    -0.19,
+    -0.19,
+    0.0
+   ],
+   "max": [
+    0.19,
+    0.19,
+    0.7
+   ],
+   "anchor": "ground",
+   "tris": 140
+  },
+  "NCK_barrier_jersey": {
+   "size": [
+    3.0,
+    0.602,
+    0.805
+   ],
+   "min": [
+    -1.5,
+    -0.302,
+    0.0
+   ],
+   "max": [
+    1.5,
+    0.3,
+    0.805
+   ],
+   "anchor": "ground",
+   "tris": 58,
+   "repeat": 3.0
+  },
+  "NCK_fence": {
+   "size": [
+    3.185,
+    0.185,
+    2.2
+   ],
+   "min": [
+    -1.592,
+    -0.092,
+    0.0
+   ],
+   "max": [
+    1.592,
+    0.092,
+    2.2
+   ],
+   "anchor": "ground",
+   "tris": 116,
+   "repeat": 3.0,
+   "note": "posts at x +-1.5: repeat every 3.0 m along x"
+  },
+  "NCK_fence_site": {
+   "size": [
+    3.3,
+    1.466,
+    2.4
+   ],
+   "min": [
+    -1.65,
+    -0.016,
+    0.0
+   ],
+   "max": [
+    1.65,
+    1.45,
+    2.4
+   ],
+   "anchor": "ground",
+   "tris": 110,
+   "repeat": 3.0,
+   "note": "hoarding face toward -y, braces behind (+y)"
+  },
+  "NCK_barrier_arm": {
+   "size": [
+    6.82,
+    0.48,
+    1.3
+   ],
+   "min": [
+    -0.6,
+    -0.24,
+    0.0
+   ],
+   "max": [
+    6.22,
+    0.24,
+    1.3
+   ],
+   "anchor": "ground",
+   "tris": 212,
+   "note": "post at the origin, arm along +x"
+  },
+  "NCK_guard_booth": {
+   "size": [
+    2.7,
+    2.24,
+    2.86
+   ],
+   "min": [
+    -1.38,
+    -1.12,
+    0.0
+   ],
+   "max": [
+    1.32,
+    1.12,
+    2.86
+   ],
+   "anchor": "ground",
+   "tris": 208
+  },
+  "NCK_container": {
+   "size": [
+    6.1,
+    2.44,
+    2.59
+   ],
+   "min": [
+    -3.05,
+    -1.22,
+    0.0
+   ],
+   "max": [
+    3.05,
+    1.22,
+    2.59
+   ],
+   "anchor": "ground",
+   "tris": 720,
+   "door_end": "+x"
+  },
+  "NCK_site_office": {
+   "size": [
+    6.1,
+    3.466,
+    2.828
+   ],
+   "min": [
+    -3.05,
+    -2.246,
+    -0.038
+   ],
+   "max": [
+    3.05,
+    1.22,
+    2.79
+   ],
+   "anchor": "ground",
+   "tris": 640,
+   "door": "-y"
+  },
+  "NCK_pallets": {
+   "size": [
+    1.2,
+    1.0,
+    1.402
+   ],
+   "min": [
+    -0.6,
+    -0.5,
+    0.0
+   ],
+   "max": [
+    0.6,
+    0.5,
+    1.402
+   ],
+   "anchor": "ground",
+   "tris": 622
+  },
+  "NCK_dumpster": {
+   "size": [
+    1.94,
+    1.17,
+    1.2
+   ],
+   "min": [
+    -0.97,
+    -0.57,
+    0.0
+   ],
+   "max": [
+    0.97,
+    0.6,
+    1.2
+   ],
+   "anchor": "ground",
+   "tris": 118
+  },
+  "NCK_debris": {
+   "size": [
+    3.0,
+    2.75,
+    1.515
+   ],
+   "min": [
+    -1.5,
+    -1.375,
+    0.0
+   ],
+   "max": [
+    1.5,
+    1.375,
+    1.515
+   ],
+   "anchor": "ground",
+   "tris": 438
+  },
+  "NCK_scaffold": {
+   "size": [
+    3.08,
+    1.191,
+    3.21
+   ],
+   "min": [
+    -1.54,
+    -1.301,
+    -0.01
+   ],
+   "max": [
+    1.54,
+    -0.11,
+    3.2
+   ],
+   "anchor": "wall",
+   "tris": 348,
+   "stack": 3.2,
+   "repeat": 3.0,
+   "note": "deck at z 0 with guard rails; stack every 3.2 m, repeat every 3.0 m along x (shared standards)"
+  },
+  "NCK_tool_cart": {
+   "size": [
+    1.457,
+    1.02,
+    1.08
+   ],
+   "min": [
+    -0.64,
+    -0.51,
+    0.0
+   ],
+   "max": [
+    0.817,
+    0.51,
+    1.08
+   ],
+   "anchor": "ground",
+   "tris": 464
+  },
+  "NCK_crane": {
+   "size": [
+    65.1,
+    6.1,
+    69.85
+   ],
+   "min": [
+    -15.0,
+    -3.1,
+    0.0
+   ],
+   "max": [
+    50.1,
+    3.0,
+    69.85
+   ],
+   "anchor": "ground",
+   "tris": 2580,
+   "hook": [
+    30.0,
+    0.0,
+    28.0
+   ],
+   "jib": [
+    1.3,
+    50.0
+   ],
+   "counter_jib": [
+    -15.0,
+    -1.3
+   ],
+   "slew_z": 60.0
+  },
+  "NCK_cafe_set": {
+   "size": [
+    2.4,
+    2.4,
+    2.58
+   ],
+   "min": [
+    -1.2,
+    -1.2,
+    0.0
+   ],
+   "max": [
+    1.2,
+    1.2,
+    2.58
+   ],
+   "anchor": "ground",
+   "tris": 444,
+   "note": "table at the origin, three chairs round it, parasol through the table"
+  },
+  "NCK_kiosk": {
+   "size": [
+    2.84,
+    2.94,
+    2.8
+   ],
+   "min": [
+    -1.42,
+    -1.82,
+    0.0
+   ],
+   "max": [
+    1.42,
+    1.12,
+    2.8
+   ],
+   "anchor": "ground",
+   "tris": 618,
+   "note": "serving hatch and awning toward -y"
+  },
+  "NCK_bike_rack": {
+   "size": [
+    3.2,
+    1.718,
+    0.975
+   ],
+   "min": [
+    -1.6,
+    -0.864,
+    0.0
+   ],
+   "max": [
+    1.6,
+    0.854,
+    0.975
+   ],
+   "anchor": "ground",
+   "tris": 1860,
+   "note": "four hoops along x, two parked bikes (fronts toward -y)"
+  },
+  "NCK_sculpture": {
+   "size": [
+    3.01,
+    3.01,
+    6.23
+   ],
+   "min": [
+    -1.505,
+    -1.505,
+    0.0
+   ],
+   "max": [
+    1.505,
+    1.505,
+    6.23
+   ],
+   "anchor": "ground",
+   "tris": 954,
+   "place": "plaza"
+  },
+  "NCK_leaf_dry": {
+   "size": [
+    0.09,
+    0.044,
+    0.004
+   ],
+   "min": [
+    -0.045,
+    -0.022,
+    0.0
+   ],
+   "max": [
+    0.045,
+    0.022,
+    0.004
+   ],
+   "anchor": "ground",
+   "tris": 24,
+   "place": "air"
+  },
+  "NCK_leaf_red": {
+   "size": [
+    0.09,
+    0.044,
+    0.004
+   ],
+   "min": [
+    -0.045,
+    -0.022,
+    0.0
+   ],
+   "max": [
+    0.045,
+    0.022,
+    0.004
+   ],
+   "anchor": "ground",
+   "tris": 24,
+   "place": "air"
+  },
+  "NCK_paper": {
+   "size": [
+    0.21,
+    0.28,
+    0.013
+   ],
+   "min": [
+    -0.105,
+    -0.14,
+    0.0
+   ],
+   "max": [
+    0.105,
+    0.14,
+    0.013
+   ],
+   "anchor": "ground",
+   "tris": 24,
+   "place": "air"
+  },
+  "NCK_wrapper": {
+   "size": [
+    0.11,
+    0.065,
+    0.055
+   ],
+   "min": [
+    -0.05,
+    -0.035,
+    0.0
+   ],
+   "max": [
+    0.06,
+    0.03,
+    0.055
+   ],
+   "anchor": "ground",
+   "tris": 24,
+   "place": "air"
+  }
+ }
 }

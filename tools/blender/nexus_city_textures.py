@@ -25,9 +25,13 @@ import bl
 
 F32 = np.float32
 GROUND = {"nc_asphalt": 8.0, "nc_pavers": 4.0, "nc_plaza": 8.0, "nc_kerb": 2.0, "nc_lot": 9.0, "nc_grass": 4.0,
-          "nc_roof": 8.0, "nc_wall": 12.0}
+          "nc_roof": 8.0, "nc_wall": 12.0, "nc_dirt": 6.0}
 FACADE = {"ncf_glass": (3.0, 3.6), "ncf_office": (3.6, 3.6), "ncf_panel": (4.0, 3.6), "ncf_housing": (3.4, 3.0),
-          "ncf_industrial": (6.0, 4.5), "ncf_military": (5.0, 4.0), "ncf_stone": (3.6, 4.0)}
+          "ncf_industrial": (6.0, 4.5), "ncf_military": (5.0, 4.0), "ncf_stone": (3.6, 4.0),
+          # older / special uses
+          "ncf_brick": (3.2, 3.1), "ncf_parkade": (6.0, 3.0), "ncf_warehouse": (8.0, 9.0),
+          # ground floors (one row: Floor = the ground floor's height)
+          "ncf_shop": (4.2, 4.5), "ncf_lobby": (6.0, 4.5), "ncf_service": (5.0, 4.5), "ncf_loading": (6.0, 4.5)}
 
 
 # ------------------------------------------------------------------ helpers
@@ -210,6 +214,16 @@ def roof():
     write("nc_roof", c, gravel * .4 + (1 - j) * .4 - drain, 3.0, .85)
 
 
+def dirt():
+    n = 1024
+    v = fbm(n, 5, 70); g = rng(71).random((n, n)).astype(F32)
+    stones = blur(speck(n, .02, 72), 1) * 2
+    weeds = np.clip((fbm(n, 7, 73) - .58) * 5, 0, 1)
+    c = ramp(v * .6 + g * .3, '#4a4036', '#6e6253') + (stones.clip(0, 1) * .06)[..., None]
+    c = c * (1 - weeds[..., None] * .6) + col('#3d4a26') * weeds[..., None] * .6
+    write("nc_dirt", c, g * .4 + stones * .5 + v * .2, 3.0, .92)
+
+
 def wall():
     n = 1024
     j, ix, iy = grid_lines(n, 2, 3, 2.5)
@@ -284,7 +298,7 @@ def lines_v(n, xs, w=3):
 
 def main():
     want = set(sys.argv[sys.argv.index('--') + 1:]) if '--' in sys.argv else set()
-    jobs = dict(nc_asphalt=asphalt, nc_pavers=pavers, nc_plaza=plaza, nc_kerb=kerb, nc_lot=lot, nc_grass=grass,
+    jobs = dict(nc_dirt=dirt, nc_asphalt=asphalt, nc_pavers=pavers, nc_plaza=plaza, nc_kerb=kerb, nc_lot=lot, nc_grass=grass,
                 nc_roof=roof, nc_wall=wall)
 
     def glass_extra(n, c, h, r, m, mask):
@@ -327,7 +341,51 @@ def main():
         c = c * (1 - j[..., None] * .4)
         return c, h - j * .4, r, m
 
+    def brick_extra(n, c, h, r, m, mask):
+        j, ix, iy = grid_lines(n, 15, 48, 1.2, offset_rows=.5)
+        tone = cell_rand(ix, iy, 81)
+        wall_ = (1 - mask)
+        c = c * (1 - (j * wall_)[..., None] * .45) * (.88 + tone[..., None] * .2 * wall_[..., None] + mask[..., None] * (.12 - tone[..., None] * .2) * 0)
+        lintel = rect(n, .2, .8, .86, .92) + rect(n, .18, .82, .22, .26)
+        c = c * (1 - lintel[..., None]) + col('#b8b0a0') * lintel[..., None]
+        return c, h - j * wall_ * .5 + lintel * .3, r, m
+
+    def shop_extra(n, c, h, r, m, mask):
+        mull = np.maximum(lines_v(n, [.5], 3), lines_h(n, [.72], 3)) * mask
+        band = rect(n, 0, 1, .78, .97)
+        base = rect(n, 0, 1, 0, .06)
+        c = c * (1 - mull[..., None]) + col('#1f2226') * mull[..., None]
+        c = c * (1 - band[..., None]) + col('#2c2f35') * band[..., None]
+        c = c * (1 - base[..., None]) + col('#3a3632') * base[..., None]
+        return c, h + band * .4 + base * .4, r, m * (1 - mull) + mull * .9
+
+    def lobby_extra(n, c, h, r, m, mask):
+        mull = lines_v(n, [.33, .66], 3) * mask
+        c = c * (1 - mull[..., None]) + col('#2a2d33') * mull[..., None]
+        return c, h + mull * .4, r, m
+
+    def parkade_extra(n, c, h, r, m, mask):
+        gap = rect(n, 0, 1, .36, .96)           # the open deck: dark, no glass
+        c = c * (1 - gap[..., None]) + col('#0b0c0e') * gap[..., None]
+        col_ = lines_v(n, [0.0, 1.0], 18)
+        c = c * (1 - col_[..., None]) + col('#8a8984') * col_[..., None]
+        return c, h - gap * .6 + col_ * .4, r, m
+
+    def warehouse_extra(n, c, h, r, m, mask):
+        x = (np.arange(n) + .5)[None, :] / n
+        ribs = (.5 + .5 * np.cos(x * 2 * np.pi * 26)).astype(F32) * (1 - mask)
+        dirt_ = np.clip(1 - (np.arange(n)[:, None] / n) * 1.0, 0, 1) ** 6 * (1 - mask)
+        c = c * (.86 + ribs[..., None] * .14) * (1 - np.broadcast_to(dirt_, (n, n))[..., None] * .35)
+        return c, h + np.broadcast_to(ribs, (n, n)) * .5, r, m
+
     facades = dict(
+        ncf_brick=lambda: facade("ncf_brick", '#7a3f2c', '#9a5a40', [(.25, .75, .26, .86)], '#14161a', '#4c5a66', .85, .0, brick_extra, 8),
+        ncf_shop=lambda: facade("ncf_shop", '#2c2f35', '#3c4048', [(.06, .94, .07, .76)], '#11171c', '#56707f', .5, .5, shop_extra, 9),
+        ncf_lobby=lambda: facade("ncf_lobby", '#8d877c', '#a49e92', [(.12, .88, .02, .9)], '#0e141a', '#46606f', .7, .0, lobby_extra, 10),
+        ncf_service=lambda: facade("ncf_service", '#7d7c78', '#96948e', [(.1, .3, .7, .85), (.7, .9, .7, .85)], '#15191c', '#4a5a64', .85, .0, None, 11),
+        ncf_loading=lambda: facade("ncf_loading", '#5f646a', '#767b80', [(.4, .6, .84, .9)], '#15191c', '#4a5a64', .6, .5, industrial_extra, 12),
+        ncf_parkade=lambda: facade("ncf_parkade", '#8a8984', '#a3a19b', [], '#000000', '#000000', .85, .0, parkade_extra, 13),
+        ncf_warehouse=lambda: facade("ncf_warehouse", '#6d737a', '#868c92', [(.05, .95, .88, .95)], '#1a2026', '#56636e', .6, .55, warehouse_extra, 14),
         ncf_glass=lambda: facade("ncf_glass", '#2b3038', '#3a404a', [(.02, .98, .14, .98)], '#0d1622', '#3d5f7a', .35, .9, glass_extra, 1),
         ncf_office=lambda: facade("ncf_office", '#8a8984', '#a5a39d', [(.06, .94, .30, .88)], '#101820', '#4b6a80', .8, .0, None, 2),
         ncf_panel=lambda: facade("ncf_panel", '#2e3238', '#454a52', [(.15, .45, .3, .85), (.55, .85, .3, .85)], '#0c141c', '#365066', .45, .75, panel_extra, 3),

@@ -183,6 +183,17 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{ TEXT("n7_aerial_city"), 0, -5200, 1300, 0, -16, 70, 15.5f },
 			{ TEXT("n8_rail_viaduct"), -1200, -250, 1.8, 0, 8, 80, 15.5f },
 			{ TEXT("n11_refuge_park"), 0, -1600, 40, 180, -18, 80, 15.5f },
+			// street level at the places the dressing made (tools/city/nexus_dress.py, data of 2026-11-07)
+			{ TEXT("v1_shop_street"), -2042.2, 314.2, 1.7, -160.7, 4.0, 80, 14.5f },
+			{ TEXT("v2_apartments"), 1514.5, -708.4, 1.7, 57.1, 8.0, 80, 14.5f },
+			{ TEXT("v3_loading_docks"), -2534.9, -2328.8, 2.5, 48.4, -2.0, 80, 14.5f },
+			{ TEXT("v4_office_lobby"), -398.1, 1081.3, 1.7, 131.2, 12.0, 80, 14.5f },
+			{ TEXT("v5_abandoned"), 3779.8, -2275.9, 1.7, 168.0, 2.0, 80, 14.5f },
+			{ TEXT("v6_fire_station"), -548.9, -2774.7, 1.7, 131.2, 3.0, 80, 14.5f },
+			{ TEXT("v7_building_site"), -3941.4, 500.3, 1.7, 118.4, 14.0, 80, 14.5f },
+			{ TEXT("v8_car_park"), -50.7, 2026.4, 2.5, -63.4, -4.0, 80, 14.5f },
+			{ TEXT("v9_checkpoint"), 0.0, 2096.1, 1.8, 180.0, 2.0, 80, 14.5f },
+			{ TEXT("v10_crew_site"), -1850.3, -996.9, 1.8, -11.8, -3.0, 80, 14.5f },
 			{ TEXT("n9_night_core"), -900, -1400, 420, 35, -22, 70, 21.5f },
 			{ TEXT("n10_night_street"), 0, -900, 1.8, 0, 6, 80, 21.5f },
 		};

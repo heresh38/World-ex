@@ -413,6 +413,38 @@ def design(shape, style):
             h = rnd.uniform(.62, 1.0)
             k.box(sx * .5 - (.3 if sx > 0 else 0), sx * .5 + (.3 if sx < 0 else 0), sy * .5 - (.3 if sy > 0 else 0), sy * .5 + (.3 if sy < 0 else 0), .5, h)
         k.box(-.2, .2, -.5, -.3, .5, .7)
+    elif shape == 'gf':
+        # a ground floor under a body: the shopfront / lobby / service / loading wall (one storey, Floor = its height)
+        k.box(-.5, .5, -.5, .5, 0, 1.0)
+    elif shape == 'block':
+        k.box(-.5, .5, -.5, .5, 0, .97)
+        k.box(-.5, .5, -.5, .5, .97, 1.0, 'nc_kerb', roof='nc_roof')                  # parapet / cornice
+        k.box(-.508, .508, -.508, .508, .955, .975, 'nc_kerb', top=False)
+        roof = [-.44, .44, -.44, .44, 1.0]
+    elif shape == 'lshape':
+        k.box(-.5, .5, -.5, -.05, 0, 1.0)
+        k.box(-.5, -.05, -.05, .5, 0, 1.0)
+        k.band(-.5, .5, -.5, -.05, 1.0, .004, .003, 'nc_glow_warm')
+        roof = [-.42, .42, -.45, -.12, 1.0]
+    elif shape == 'gable':
+        k.box(-.5, .5, -.5, .5, 0, .62, top=False)
+        for sy in (-1, 1):                                                            # the two roof slopes
+            k.quad([(-.52, sy * .52, .6), (.52, sy * .52, .6), (.52, 0, 1.0), (-.52, 0, 1.0)], 'nc_steel', want=(0, sy, 1))
+        for sx in (-.5, .5):                                                          # gable ends (facade)
+            k.quad([(sx, -.5, .62), (sx, .5, .62), (sx, 0, .99)], want=(sx, 0, 0))
+        k.box(-.06, .06, -.18, -.06, .7, 1.08, 'nc_kerb', roof='nc_kerb')              # chimney
+    elif shape == 'warehouse':
+        k.box(-.5, .5, -.5, .5, 0, .88, top=False)
+        k.vault('x', .88, .12, 'nc_steel', segs=6)
+    elif shape == 'frame':
+        # the structure of a building going up: slabs every sixth of the height, columns, the top floors still open
+        for i in range(1, 6):
+            z = i / 6
+            k.box(-.5, .5, -.5, .5, z - .012, z, 'nc_kerb', roof='nc_kerb')
+        for x in (-.48, -.16, .16, .48):
+            for y in (-.48, 0, .48):
+                k.box(x - .012, x + .012, y - .012, y + .012, 0, .9 if (x, y) != (.48, .48) else 1.0, 'nc_kerb', roof='nc_kerb')
+        k.box(-.5, .5, -.5, .5, 0, .17)                                                # the finished first floors
     elif shape == 'domelab':
         k.box(-.5, .5, -.5, .5, 0, .5)
         k.band(-.5, .5, -.5, .5, .5, .006, .004)
@@ -495,19 +527,23 @@ def street_kit(M):
 
 
 def build_kit(M):
+    """every design city_uses lists (bodies, ground floors, frames), the street kit and nexus_props' props"""
+    sys.path.insert(0, os.path.join(ROOT, 'tools', 'city'))
+    import city_uses
     designs = {}
-    for kind, lst in KIND_DESIGNS.items():
-        for shape, style in lst:
-            name = f"NCB_{shape}_{style}"
-            if name in designs:
-                continue
-            acc, roof = design(shape, style)
-            acc.object(name, M, two_uv=True)
-            lo, hi = HEIGHTS.get(shape, (20, 400))
-            designs[name] = dict(shape=shape, style=style, tall=shape in SHAPES_TALL, min_h=lo, max_h=hi, roof=roof)
+    for name, (shape, style) in sorted(city_uses.designs().items()):
+        acc, roof = design(shape, style)
+        acc.object(name, M, two_uv=True)
+        designs[name] = dict(shape=shape, style=style, roof=roof)
     street_kit(M)
+    props = {}
+    try:
+        import nexus_props
+        props = nexus_props.build_props(M)
+    except ImportError:
+        log("nexus_props.py missing: no props")
     bl.export('nexus_city_kit.glb')
-    return designs
+    return designs, props
 
 
 # ------------------------------------------------------------------ tiles
@@ -552,6 +588,36 @@ def build_tiles(M, plan):
         top(a, pts, KERB, mat)
         sides(a, pts, -.05, KERB, 'nc_kerb')
         stats['blocks'] += 1
+    # what the lots are: car parks (asphalt, painted bays), parks (grass), plazas, dirt for vacant ground and
+    # building sites, gravel for substations; alleys are asphalt lanes through the blocks
+    lot_mat = dict(parking='nc_asphalt', park='nc_grass', plaza='nc_plaza', vacant='nc_dirt', construction='nc_dirt', substation='nc_lot')
+    for lot in plan.get("lots", []):
+        m = lot_mat.get(lot.get("use"))
+        if not m:
+            continue
+        pts = clean([B(q) for q in lot["poly"]])
+        if len(pts) < 3:
+            continue
+        a = T.at(pts)
+        top(a, pts, KERB + .008, m)
+        stats['open lots'] += 1
+        if lot["use"] == "parking" and lot.get("bays"):
+            ax = B(lot["bay_a"]); nx = B(lot["bay_n"])
+            for e, n, s in lot["bays"]:
+                c = B((e, n))
+                for du in (-1.3, 1.3):
+                    p0 = (c[0] + ax[0] * du - nx[0] * 2.5, c[1] + ax[1] * du - nx[1] * 2.5)
+                    p1 = (c[0] + ax[0] * du + nx[0] * 2.5, c[1] + ax[1] * du + nx[1] * 2.5)
+                    strip(a, [p0, p1], 0, .06, KERB + .016, 'nc_paint_white')
+                stats['bays'] += 1
+    for al in plan.get("alleys", []):
+        pts = [B(q) for q in al["pts"]]
+        S = cum(pts); d = 0.0
+        while d < S[-1] - .5:
+            seg = sub(pts, S, d, min(S[-1], d + 60))
+            strip(T.at(seg), seg, 0, al["w"] / 2, KERB + .012, 'nc_asphalt')
+            d += 60
+        stats['alleys'] += 1
     # landmark grounds
     lm_mat = {"dock_ring": 'nc_lot', "arena": 'nc_plaza', "park": 'nc_grass', "plaza": 'nc_plaza', "dome": 'nc_plaza'}
     for name, L in plan["landmarks"].items():
@@ -949,8 +1015,8 @@ def main():
     city = json.load(open(CITY)) if os.path.exists(CITY) else {}
     if do_kit:
         bl.reset(); M = materials()
-        city["designs"] = build_kit(M)
-        city["kinds"] = {k: [f"NCB_{s}_{t}" for s, t in v] for k, v in KIND_DESIGNS.items()}
+        city["designs"], city["props_info"] = build_kit(M)
+        city.pop("kinds", None)
         city["props"] = dict(lamp="NCK_lamp", station="NCK_station", roof=["NCK_roof_ac", "NCK_roof_tank", "NCK_roof_mast"])
     if do_tiles:
         bl.reset(); M = materials()
@@ -961,4 +1027,5 @@ def main():
     log("wrote", CITY)
 
 
-main()
+if __name__ == '__main__':
+    main()
