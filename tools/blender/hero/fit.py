@@ -120,21 +120,24 @@ def place_features(V, loops, body, T):
             sx = 1 if c[0] > 0 else -1
             cx, cz = ec.x * sx, ec.z
             ang = np.arctan2(P[:, 2] - c[2], (P[:, 0] - c[0]) * sx)   # 0 = outward (lateral), toward the temple
-            w = T["eye_w"] / 2
-            hu, hl = .0052 * g["hs"], .0040 * g["hs"]
+            fc = T.get("face", {})
+            es, tilt = fc.get("eye_size", 1.0), fc.get("eye_tilt", 1.0)
+            w = T["eye_w"] / 2 * es
+            hu, hl = .0060 * g["hs"] * es, .0046 * g["hs"] * es
             for k, i in enumerate(loop):
                 a = ang[k]
                 ca, sa = math.cos(a), math.sin(a)
                 # almond: the upper lid's peak a little inward of centre, the lower lid's low point a little outward
                 u = w * ca
-                lift = .0012 * (u / w)                                  # positive canthal tilt
+                lift = .0008 * tilt * (u / w)                                  # positive canthal tilt
                 if sa >= 0:
-                    v = hu * sa * (1 - .18 * ca) + lift
+                    v = hu * sa * (1 - .10 * ca) + lift
                 else:
                     v = hl * sa * (1 + .12 * ca) + lift
                 x = cx + u * sx
                 z = cz + v
-                du, dv = x - ec.x * sx, z - ec.z
+                # the fissure is wider than the globe: laid on it compressed across (the canthi wrap round it)
+                du, dv = (x - ec.x * sx) * (.76 * er / w), z - ec.z
                 y = ec.y - math.sqrt(max((er + .0004) ** 2 - du * du - dv * dv, 1e-8))
                 V[i] = (x, y, z)
             pinned += loop
@@ -229,6 +232,51 @@ def fit(o, body, T, relax=6, log=print, per_part=True, hold=None):
     for p in o.data.polygons:
         p.use_smooth = True
     return V
+
+
+def morph(o, V0, body, T, relax=4):
+    """the fitted head re-fitted to a varied face (T["face"]): the base positions V0 move onto the new head, the eye
+    and mouth openings are re-laid, the head relaxed; only the head's vertices move. Returns the new positions."""
+    V, E, label = arrays(o)
+    n = len(V)
+    V = V0.copy()
+    head = label == "head"
+    pair = mirror_pairs(V)
+    V[head] = sdf.project(body, V[head], iters=6, max_step=.006)
+    V = symmetrize(V, pair)
+    mask = ~head
+    mask[place_features(V, boundary_loops(o), body, T)] = True
+    nb, start, deg = neighbours(n, E)
+    for it in range(relax):
+        L = laplacian(V, nb, start, deg)
+        Nn = sdf.normals(body, V)
+        d = L - V
+        d -= Nn * (d * Nn).sum(1)[:, None]
+        Vn = sdf.project(body, V + d * .5, iters=2, max_step=.004)
+        V = np.where(mask[:, None], V, Vn)
+        V = symmetrize(V, pair)
+    return V
+
+
+def face_keys(o, body_cls, T, log=print):
+    """one shape key per face customisation (headshape.FACE_KEYS) on the fitted mesh"""
+    import copy
+    import headshape
+    me = o.data
+    V0 = np.zeros(len(me.vertices) * 3, F32)
+    me.vertices.foreach_get("co", V0)
+    V0 = V0.reshape(-1, 3)
+    if not me.shape_keys:
+        o.shape_key_add(name="Basis", from_mix=False)
+    Vb = morph(o, V0, body_cls(T), T)                    # the same re-fit of the unchanged face: its drift cancels
+    for name, fac in headshape.FACE_KEYS.items():
+        Tv = copy.deepcopy(T)
+        Tv["face"] = dict(fac)
+        D = morph(o, V0, body_cls(Tv), Tv) - Vb
+        D[np.linalg.norm(D, axis=1) < 5e-5] = 0
+        kb = o.shape_key_add(name="face_" + name, from_mix=False)
+        kb.data.foreach_set("co", (V0 + D).astype(F32).ravel())
+        log(f"shape key face_{name}: max move {np.abs(D).max() * 1000:.1f} mm, {int((np.abs(D).sum(1) > 0).sum())} verts")
 
 
 def eyeballs(body, T, name):

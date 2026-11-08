@@ -56,6 +56,15 @@ shape, noses, hair and hair colour). Clothing and armour come back later, fitted
 bodies are imported, tests that need the player body skip with a warning (SOTest::PlayerBodyMissing).
 `characters.py` still makes the enemies.
 
+New base meshes: `tools/blender/hero/` (`blender -b -P tools/blender/hero/build.py -- male|female [--save=x.blend]
+[--sheet=x.png] [--cage] [--nofine] [--nokeys]`). `targets.py` (anthropometric targets), `skeleton.py` (joints,
+finger / toe chains), `cage.py` + `head.py` (all-quad cage; only the left half is authored, `build.mirror_topology`
+rebuilds the right as its exact mirror), `shape.py` + `headshape.py` (the anatomical target as a signed distance
+field, the head from adult norms), `headfit.py` (lays the head cage on the face's landmarks: eye / mouth loops,
+nose cap, neck opening), `fit.py` (Catmull-Clark x2, projection, tangential relaxation, the face customisation
+shape keys `face_*` from `headshape.FACE_KEYS`). Output: ~38.6k quads, symmetric, open only at eyes and mouth,
+plus two eyeball meshes. Not yet rigged / exported to Unreal.
+
 ## Earth (free roam)
 The city follows the owner's river-city art (`art/reference/city_river.jpg`). A river (`RIVER_Z`, `riverZ()` in
 `layout.js`, carved below sea level) runs through block row -3 with a bridge (`BLD_bridge`) on every north-south street

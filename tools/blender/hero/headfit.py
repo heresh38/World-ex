@@ -155,14 +155,14 @@ def place_head(cage, body, T, log=print):
                 placed[v] = True
         return R
 
-    hu, hl, wf = .0052 * hs, .0040 * hs, T["eye_w"] / 2
+    hu, hl, wf = .0060 * hs, .0046 * hs, T["eye_w"] / 2
     for side, sx in (("eye_L", 1), ("eye_R", -1)):
         def eye_pt(u, top, W, Hh, Lh, sx=sx):
             ue = u * sx * .94                                   # + = lateral (toward the temple)
             s = math.sqrt(max(0.0, 1 - ue * ue))
-            lift = .0012 * hs * ue
+            lift = .0008 * hs * ue
             if top:
-                v = Hh * s * (1 - .18 * ue) + lift
+                v = Hh * s * (1 - .10 * ue) + lift
             else:
                 v = -Lh * s * (1 + .12 * ue) + lift
             return (ec.x * sx + ue * W * sx, ec.z + v)
@@ -170,11 +170,11 @@ def place_head(cage, body, T, log=print):
         def eye_surface(k, pts):
             if k == 0:                                          # the fissure on the eyeball (the canthi wrap
                 # round it: the fissure is wider than the globe, so it is laid on the globe compressed across)
-                du = (pts[:, 0] - ec.x * np.sign(pts[:, 0])) * (.90 * er / wf)
+                du = (pts[:, 0] - ec.x * np.sign(pts[:, 0])) * (.76 * er / wf)
                 dv = pts[:, 1] - ec.z
                 return ec.y - np.sqrt(np.maximum((er + .0004) ** 2 - du * du - dv * dv, 1e-8))
             return front_y(body, pts[:, 0], pts[:, 1], np.full(len(pts), ec.y, F32))
-        lay(feat[side], 3, [(wf, hu, hl), (wf * 1.10, hu * 1.40, hl * 1.65), (wf * 1.22, hu * 1.85, hl * 2.5)], eye_pt, eye_surface)
+        lay(feat[side], 3, [(wf, hu, hl), (wf * 1.10, hu * 1.55, hl * 1.70), (wf * 1.22, hu * 2.20, hl * 2.6)], eye_pt, eye_surface)
 
     st, mw = g["stomion"], g["mouth_w"]
 

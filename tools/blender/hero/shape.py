@@ -131,11 +131,13 @@ class Body(HeadShape):
         else:
             d = smin(d, ellipsoid(P, (.064, -C["d"] * .36, C["z"] + .045), (.06, .028, .04)), .03)     # pectoral under the breast
             R = frame_rows((0, -1, -.12), (.25, 0, 1))
-            d = smin(d, ellipsoid(P, (.082, -C["d"] * .43, C["z"] - .004), (.058, .052, .062), None), .03)   # breast
+            # breast: a teardrop, the upper pole sloping down from the pectoral, the fuller lower pole
+            d = smin(d, ellipsoid(P, (.074, -C["d"] * .38, C["z"] + .030), (.062, .030, .050)), .05)          # upper pole
+            d = smin(d, ellipsoid(P, (.078, -C["d"] * .40, C["z"] - .012), (.054, .042, .046)), .045)         # lower pole
         # glutes, scapulae, lats
         Hh = T["hips"]
         d = smin(d, ellipsoid(P, (.066, Hh["d"] * .34, Hh["z"] - .012), (.078 if m else .088, .058, .092)), .035)
-        d = smin(d, ellipsoid(P, (.090, C["d"] * .405, T["shoulder_z"] - .115), (.048, .030, .068)), .04)     # scapula
+        d = smin(d, ellipsoid(P, (.090, C["d"] * .405, T["shoulder_z"] - .115), (.048 if m else .042, .030 if m else .026, .068 if m else .060)), .04)     # scapula
         # trapezius: neck to acromion
         d = smin(d, round_cone(P, (.030, .040, T["neck_base_z"] + .020), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
                                .040 if m else .032, .024), .045)

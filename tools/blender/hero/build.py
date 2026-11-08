@@ -156,7 +156,9 @@ def main():
     fit_mod.fit(o, body, T, relax=3, log=lambda *a: log("cage", *a), hold=hold)   # the rest of the cage onto the body
     if "--nofine" not in flags:                                              # --nofine: keep the fitted cage
         fit_mod.subdivide(o, levels)
-        fit_mod.fit(o, body, T, log=log, per_part=False)                         # then the fine mesh (small moves)
+        fit_mod.fit(o, body, T, relax=16, log=log, per_part=False)                         # then the fine mesh (small moves)
+    if "--nofine" not in flags and "--nokeys" not in flags:
+        fit_mod.face_keys(o, shape_mod.Body, T, log=log)                    # face customisation shape keys
     eyes = fit_mod.eyeballs(body, T, f"hero_{sex}")
     bm = bmesh.new(); bm.from_mesh(o.data)
     check(bm, f"{sex} mesh"); bm.free()

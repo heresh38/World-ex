@@ -49,6 +49,15 @@ FACE = [
 ]
 
 
+# face customisation shape keys: name -> the factor set that defines the key's full (weight 1) shape
+FACE_KEYS = {
+    "nose_width": dict(nose_width=1.25), "nose_length": dict(nose_length=1.15), "lips_full": dict(lips_full=1.4),
+    "mouth_width": dict(mouth_width=1.12), "eye_size": dict(eye_size=1.15), "eye_tilt": dict(eye_tilt=2.5),
+    "jaw_width": dict(jaw_width=1.12), "chin": dict(chin=1.35), "cheekbones": dict(cheekbones=1.35),
+    "brow": dict(brow=1.7), "ear_size": dict(ear_size=1.15), "ear_out": dict(ear_out=1.5),
+}
+
+
 class HeadShape:
     """mixin for shape.Body: head_geometry(), head_part(P, ear=True), ear()"""
 
@@ -56,6 +65,7 @@ class HeadShape:
         if hasattr(self, "_g"):
             return self._g
         T, m = self.T, self.m
+        F = self.face
         h = T["head_h"]
         hs = h / .23
         chin = T["chin_z"]
@@ -67,23 +77,29 @@ class HeadShape:
             eye_c=Vector((T["interpupil"] / 2, Y0 + (-.0822 + .0122) * hs, ez)), eye_r=.0122,
             nasion=X(0, -.0905, ezr + .003),
             glabella=X(0, -.0965 if m else -.0935, ezr + .015),
-            pronasale=X(0, -.1195 if m else -.1150, .088),
+            pronasale=X(0, -.080 + ((-.1195 if m else -.1150) + .080) * F("nose_length"), .088),
             subnasale=X(0, -.0965, .071),
             stomion=X(0, -.1000 if m else -.0995, .050),
-            mouth_w=(.052 if m else .048) * hs,
-            pogonion=X(0, -.0935 if m else -.0915, .016),
+            mouth_w=(.052 if m else .048) * hs * F("mouth_width"),
+            pogonion=X(0, (-.0935 if m else -.0915) - .006 * (F("chin") - 1), .016),
             menton=X(0, -.070, 0),
-            gonion=X(.049 if m else .045, -.004, .040),
+            gonion=X((.049 if m else .045) * F("jaw_width"), -.004, .040),
             tragion=X(.0715, .004, .100),
             vertex_z=chin + h,
             centre=Vector((0, Y0, ez)),
         )
         return g
 
+    @property
+    def face(self):
+        """face customisation factors (1 = the base face): T["face"] overrides; see FACE_KEYS"""
+        f = self.T.get("face", {})
+        return lambda k: f.get(k, 1.0)
+
     def _head_build(self):
         g = self.head_geometry()
         m, hs, chin = self.m, g["hs"], g["chin"]
-        T = self.T
+        T, F = self.T, self.face
         rows = []
         for z, yf, hw, yb, cw, nf in FACE:
             if not m:
@@ -91,6 +107,8 @@ class HeadShape:
                 hw *= k
                 if .125 < z < .165:
                     yf += .003                                      # less glabella
+            if z < .06:
+                hw *= 1 + (F("jaw_width") - 1) * min(1.0, (.06 - z) / .03)
             rows.append((z, yf, hw, yb, cw, nf))
         zs = np.array([r[0] for r in rows])
         z0, z1 = zs[0], zs[-1]
@@ -103,10 +121,10 @@ class HeadShape:
             nb=[r[5] for r in rows], n=[2.0] * len(rows)), v_axis=(1, 0, 0), cap=.5)
         # nose: a pyramid lofted up the dorsum (sections: z, dorsum front y, half width at the face, front exponent
         # < 2 for the triangular section); the tip's lobule and the alae are added in head_part
-        nk = 1.0 if m else .86
-        nf = .96 if m else .92                                   # her nose a little less projecting
-        NOSE = [(.074, -.1040, .0115, 1.6), (.082, -.1160, .0110, 1.8), (.088, -.1195, .0115, 2.0),
-                (.094, -.1135, .0135, 1.6), (.103, -.1060, .0140, 1.35), (.113, -.0990, .0125, 1.3),
+        nk = (1.0 if m else .86) * F("nose_width")
+        nf = (.96 if m else .92) * F("nose_length")              # her nose a little less projecting
+        NOSE = [(.073, -.1020, .0150, 2.0), (.080, -.1155, .0160, 2.2), (.087, -.1195, .0150, 2.3),
+                (.094, -.1140, .0140, 1.8), (.103, -.1060, .0140, 1.4), (.113, -.0990, .0125, 1.3),
                 (.124, -.0915, .0105, 1.3)]
         cwn = -.080
         nz = np.array([r[0] for r in NOSE])
@@ -117,25 +135,25 @@ class HeadShape:
             v_axis=(1, 0, 0), cap=.3)
         # lips: an upper and a lower roll across the mouth (fuller on her); the stomion is their front
         st, mw = g["stomion"], g["mouth_w"]
-        full = 1.0 if m else 1.2
+        full = (1.0 if m else 1.2) * F("lips_full")
         tt = [0, .1, .25, .42, .5, .58, .75, .9, 1]
-        yo = .0058 * .8
+        yo = .0050
         self._lips = (
             Loft(V(st + Vector((-mw / 2, yo, .0006))), V(st + Vector((mw / 2, yo, .0006))), dict(
                 t=tt, rv_pos=[.0008, .0028, .0050, .0058, .0052, .0058, .0050, .0028, .0008],
                 rv_neg=[.0006, .0012, .0018, .0020, .0020, .0020, .0018, .0012, .0006],
-                rw_pos=[f * full * .8 for f in (.0010, .0026, .0046, .0056, .0058, .0056, .0046, .0026, .0010)],
+                rw_pos=[f * full for f in (.0010, .0026, .0046, .0056, .0058, .0056, .0046, .0026, .0010)],
                 rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9),
             Loft(V(st + Vector((-mw * .46, yo + .001, -.0008))), V(st + Vector((mw * .46, yo + .001, -.0008))), dict(
                 t=tt, rv_pos=[.0006, .0012, .0016, .0018, .0018, .0018, .0016, .0012, .0006],
                 rv_neg=[f * full for f in (.0008, .0030, .0052, .0062, .0064, .0062, .0052, .0030, .0008)],
-                rw_pos=[f * full * .8 for f in (.0010, .0028, .0048, .0056, .0058, .0056, .0048, .0028, .0010)],
+                rw_pos=[f * full for f in (.0010, .0028, .0048, .0056, .0058, .0056, .0048, .0028, .0010)],
                 rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9))
 
     def head_part(self, P, ear=True):
         if not hasattr(self, "_face"):
             self._head_build()
-        T, m = self.T, self.m
+        T, m, F = self.T, self.m, self.face
         g = self.head_geometry()
         hs, chin, X = g["hs"], g["chin"], g["X"]
         # cranium: length g-op and breadth eu-eu from the targets, the vertex at the head height
@@ -145,11 +163,12 @@ class HeadShape:
         d = smin(d, ellipsoid(P, V(X(0, .050, .140)), (.058 * hs, .045 * hs, .062 * hs)), .02)
         d = smin(d, self._face(P), .018)
         # brow ridges (his stronger) over each orbit, the glabella between them
-        k = 1.0 if m else .45
+        k = (1.0 if m else .45) * F("brow")
         d = smin(d, round_cone(P, V(X(.003, -.0945, .136)), V(X(.047, -.0795, .1335)), .0058 * hs * (.55 + .45 * k),
                                .0046 * hs * (.6 + .4 * k)), .012)
         # cheekbones (malar eminence) and the zygomatic arch back to the ear
-        d = smin(d, ellipsoid(P, V(X(.047, -.0680, .102)), (.018 * hs, .007 * hs, .013 * hs)), .022)
+        cb = F("cheekbones")
+        d = smin(d, ellipsoid(P, V(X(.047, -.0680 - .004 * (cb - 1), .102)), (.018 * hs * cb, .007 * hs * cb, .013 * hs * cb)), .022)
         d = smin(d, round_cone(P, V(X(.050, -.060, .101)), V(X(.063, -.010, .103)), .0050 * hs, .0045 * hs), .020)
         # the cheek's soft fullness over the masseter and buccal pad (keeps the face from looking gaunt)
         d = smin(d, ellipsoid(P, V(X(.043, -.046, .064)), (.015 * hs, .026 * hs, .026 * hs)), .03)
@@ -158,7 +177,7 @@ class HeadShape:
         d = smin(d, round_cone(P, V(X(.004, -.084, .013)), V(g["gonion"]), .0070 * hs * jw, .0090 * hs * jw), .020)
         d = smin(d, round_cone(P, V(g["gonion"]), V(X(.060, .000, .085)), .0100 * hs * jw, .0080 * hs), .018)
         d = smin(d, ellipsoid(P, V(g["pogonion"] + Vector((0, .009, -.002))),
-                              ((.019 if m else .015) * hs, .0065 * hs, (.010 if m else .009) * hs)), .014)
+                              ((.019 if m else .015) * hs * F("chin"), .0065 * hs, (.010 if m else .009) * hs * F("chin"))), .014)
         # lips
         Q = P.copy()
         Q[:, 1] -= ARCH / hs * Q[:, 0] ** 2                         # the lips follow the dental arch
@@ -166,14 +185,14 @@ class HeadShape:
         d = smin(d, self._lips[1](Q), .004)
         # orbits hollowed round the eyeball, the lids a thin shell over it
         ec, er = g["eye_c"], g["eye_r"]
-        d = smax(d, -ellipsoid(P, V(ec + Vector((.0005, -.0105, .0012))), (.0150 * hs, .0058 * hs, .0100 * hs)), .006)
+        d = smax(d, -ellipsoid(P, V(ec + Vector((.0005, -.0095, .0012))), (.0145 * hs, .0048 * hs, .0095 * hs)), .006)
         d = smin(d, sphere(P, V(ec), er + .0014), .006)
         # nose: dorsum from the root to the tip, the tip's lobule, the alae; nostrils hollowed
         tip, sub = g["pronasale"], g["subnasale"]
-        nk = 1.0 if m else .86
+        nk = (1.0 if m else .86) * F("nose_width")
         d = smin(d, self._nose(P), .008)
-        d = smin(d, ellipsoid(P, V(tip + Vector((0, .0066, -.0015))), (.0062 * nk, .0055, .0062)), .006)
-        d = smin(d, ellipsoid(P, V(sub + Vector((.0122 * nk, .0062, .0066))), (.0062 * nk, .0070, .0058)), .006)
+        d = smin(d, ellipsoid(P, V(tip + Vector((0, .0075, -.0025))), (.0070 * nk, .0050, .0058)), .008)
+        d = smin(d, ellipsoid(P, V(sub + Vector((.0140 * nk, .0068, .0062))), (.0052 * nk, .0072, .0060)), .004)
         d = smax(d, -ellipsoid(P, V(sub + Vector((.0060 * nk, .0068, .0008))), (.0034 * nk, .0048, .0020)), .0018)
         if ear:
             d = smin(d, self.ear(P, g), .006)
@@ -181,10 +200,10 @@ class HeadShape:
 
     def ear(self, P, g=None):
         g = g or self.head_geometry()
-        hs = g["hs"]
-        c = g["tragion"] + Vector((.006 * hs, .012 * hs, .005 * hs))
+        es = g["hs"] * self.face("ear_size")
+        c = g["tragion"] + Vector((.006 * es + .006 * (self.face("ear_out") - 1), .012 * es, .005 * es))
         tilt = math.radians(14)
         R = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]], F32)
-        outer = ellipsoid(P, V(c), (.0085 * hs, .0170 * hs, .0305 * hs), R)
-        bowl = ellipsoid(P, V(c + Vector((.008 * hs, -.002 * hs, -.004 * hs))), (.006 * hs, .010 * hs, .013 * hs), R)
+        outer = ellipsoid(P, V(c), (.0085 * es, .0170 * es, .0305 * es), R)
+        bowl = ellipsoid(P, V(c + Vector((.008 * es, -.002 * es, -.004 * es))), (.006 * es, .010 * es, .013 * es), R)
         return smax(outer, -bowl, .003)
