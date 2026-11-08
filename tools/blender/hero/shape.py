@@ -60,7 +60,7 @@ class Body(HeadShape):
             (T["crotch_z"] + .02, H["w"] * .47, H["d"] * .45, H["d"] * .50, .014),
             (H["z"], H["w"] / 2, H["d"] * .47, H["d"] * .53, .015),
             (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .6) / 2, lerp(H["d"], Wst["d"], .5) * .5, lerp(H["d"], Wst["d"], .6) * .48, .008),
-            (Wst["z"], Wst["w"] / 2, Wst["d"] * .5, Wst["d"] * .48, .0),
+            (Wst["z"], Wst["w"] / 2, Wst["d"] * .5, Wst["d"] * .44, .0),         # the lumbar curve: the back comes in
             (lerp(Wst["z"], U["z"], .5), lerp(Wst["w"], U["w"], .5) / 2, lerp(Wst["d"], U["d"], .5) * .5, lerp(Wst["d"], U["d"], .5) * .5, -.002),
             (U["z"], U["w"] / 2, U["d"] * .5, U["d"] * .52, -.003),
             (C["z"], chest_hw, rd * (.47 if m else .48), rd * .5, .0),
@@ -76,12 +76,14 @@ class Body(HeadShape):
         self.torso_loft = Loft((0, 0, z0), (0, 0, z1), dict(t=tt, rv_pos=[s[1] for s in st], rw_neg=[s[2] for s in st],
                                                            rw_pos=[s[3] for s in st], cw=[s[4] for s in st],
                                                            n=BACK_N, nb=np.full(len(st), 2.4)), v_axis=(1, 0, 0), cap=.6)
-        # neck: tilted slightly forward going up; its top tucks in under the jaw (narrower than the jaw's angles) and
-        # ends below the ears, so the head sits on the neck instead of sinking into it
-        nb, nt = Vector((0, .028, T["neck_base_z"] - .03)), Vector((0, .012, T["chin_z"] + .050))
+        # neck: a thick column tilted slightly forward going up, straight-sided from the trapezius into the base of the
+        # skull (full width at the back and sides up to the occiput, as a real neck: no pinch under the skull); only
+        # its front (the throat) is set back under the chin
+        nb, nt = Vector((0, .028, T["neck_base_z"] - .03)), Vector((0, .012, T["chin_z"] + .090))
         nw, nd = T["neck_w"] / 2, T["neck_d"] / 2
-        self.neck_loft = Loft(V(nb), V(nt), dict(t=[0, .5, 1], rv_pos=[nw * 1.12, nw * .97, nw * .78], rw_neg=[nd * .95, nd * .88, nd * .80],
-                                                  rw_pos=[nd * 1.05, nd * 1.02, nd * .98]), v_axis=(1, 0, 0), cap=.8)
+        self.neck_loft = Loft(V(nb), V(nt), dict(t=[0, .5, 1], rv_pos=[nw * 1.0, nw * .92, nw * .84], rw_neg=[nd * .95, nd * .90, nd * .86],
+                                                  rw_pos=[nd * 1.02, nd * .86, nd * .66], cw=[0, nd * .06, nd * .20]),
+                                  v_axis=(1, 0, 0), cap=.5)      # (its top a D: widest toward the back, under the skull)
         self.arm = skeleton.arm(T)
         self.hand = skeleton.hand(T)
         self.leg = skeleton.leg(T)
@@ -106,15 +108,17 @@ class Body(HeadShape):
         th, ca = T["thigh"], T["calf"]
         kn = L["K"]
         self.thigh = Loft(V(L["H"] + Vector((-.006, 0, -.005))), V(kn), dict(
-            t=[0, .15, .45, .75, 1], rv_pos=[th["w"] * .50, th["w"] * .50, th["w"] * .46, th["w"] * .37, th["w"] * .30],
-            rv_neg=[th["w"] * .44, th["w"] * .46, th["w"] * .40, th["w"] * .32, th["w"] * .29],
+            # outer sweep high on the thigh (rv_pos = lateral), the inner thigh full at the top and slim above the knee
+            t=[0, .15, .45, .75, 1], rv_pos=[th["w"] * .50, th["w"] * .54, th["w"] * .48, th["w"] * .36, th["w"] * .30],
+            rv_neg=[th["w"] * .46, th["w"] * .46, th["w"] * .36, th["w"] * .28, th["w"] * .27],
             rw_neg=[th["d"] * .46, th["d"] * .49, th["d"] * .47, th["d"] * .37, th["d"] * .29],
             # (rw_pos is the front, as on the calf: the thigh's top front stays under the pelvis, no step at the hip)
             rw_pos=[th["d"] * .42, th["d"] * .47, th["d"] * .45, th["d"] * .36, th["d"] * .31]), v_axis=(1, 0, 0), cap=.8)
         ank = L["A"]
         self.calf = Loft(V(kn + Vector((0, 0, .015))), V(ank + Vector((0, 0, .02))), dict(
-            t=[0, .2, .38, .6, .85, 1], rv_pos=[ca["w"] * .46, ca["w"] * .50, ca["w"] * .47, ca["w"] * .37, ca["w"] * .29, ca["w"] * .30],
-            rv_neg=[ca["w"] * .46, ca["w"] * .52, ca["w"] * .49, ca["w"] * .37, ca["w"] * .29, ca["w"] * .30],
+            # the calf's inner head fuller and lower than the outer; a slim ankle
+            t=[0, .2, .38, .6, .85, 1], rv_pos=[ca["w"] * .46, ca["w"] * .51, ca["w"] * .44, ca["w"] * .33, ca["w"] * .26, ca["w"] * .27],
+            rv_neg=[ca["w"] * .46, ca["w"] * .55, ca["w"] * .53, ca["w"] * .38, ca["w"] * .26, ca["w"] * .27],
             # (frame: u runs down the leg, so w = u x v points forward: rw_pos is the shin, rw_neg the calf muscle)
             rw_pos=[ca["d"] * .40, ca["d"] * .38, ca["d"] * .36, ca["d"] * .30, ca["d"] * .25, ca["d"] * .26],
             rw_neg=[ca["d"] * .44, ca["d"] * .62, ca["d"] * .58, ca["d"] * .40, ca["d"] * .27, ca["d"] * .27]), v_axis=(1, 0, 0), cap=.8)
@@ -141,18 +145,19 @@ class Body(HeadShape):
             d = smin(d, ellipsoid(P, (.064, -C["d"] * .36, C["z"] + .045), (.06, .028, .04)), .03)     # pectoral under the breast
             R = frame_rows((0, -1, -.12), (.25, 0, 1))
             # breast: a teardrop, the upper pole sloping down from the pectoral, the fuller lower pole
-            d = smin(d, ellipsoid(P, (.074, -C["d"] * .37, C["z"] + .028), (.064, .026, .052)), .055)         # upper pole
-            d = smin(d, ellipsoid(P, (.081, -C["d"] * .41, C["z"] - .016), (.057, .038, .044)), .05)          # lower pole
+            d = smin(d, ellipsoid(P, (.070, -C["d"] * .36, C["z"] + .034), (.056, .022, .046)), .05)          # upper pole
+            d = smin(d, ellipsoid(P, (.076, -C["d"] * .38, C["z"] - .004), (.050, .034, .040)), .045)         # lower pole
         # glutes, scapulae, lats
         Hh = T["hips"]
-        d = smin(d, ellipsoid(P, (.066, Hh["d"] * .34, Hh["z"] - .012), (.078 if m else .088, .058, .092)), .035)
+        # glutes: low and behind the hips (with the lumbar curve above them, the side view's S)
+        d = smin(d, ellipsoid(P, (.064, Hh["d"] * .37, Hh["z"] - .035), (.076 if m else .084, .060, .086)), .035)
         # latissimus dorsi: the broad back from under the arm down toward the waist (the back tapers, no shelf)
         U = T["underbust"]
         d = smin(d, ellipsoid(P, (U["w"] * .36, self.rib_d * .28, U["z"] + .02), (.045 if m else .036, .036 if m else .028, .12 if m else .10)), .05)
         d = smin(d, ellipsoid(P, (.090, self.rib_d * .405, T["shoulder_z"] - .115), (.048 if m else .040, .030 if m else .018, .068 if m else .058)), .045)     # scapula
         # trapezius: neck to acromion
-        d = smin(d, round_cone(P, (.030, .040, T["neck_base_z"] + .020), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
-                               .040 if m else .032, .024), .045)
+        d = smin(d, round_cone(P, (.032, .040, T["neck_base_z"] + .002), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
+                               .034 if m else .022, .024 if m else .020), .04)
         # clavicles
         d = smin(d, capsule(P, (.018, -T["neck_d"] * .40, T["neck_base_z"] - .030), (.16 * T["biacromial"] / .41, -.025, T["shoulder_z"] - .010), .012), .035)
         return d
@@ -162,7 +167,7 @@ class Body(HeadShape):
         if self.m:
             T = self.T
             d = smin(d, capsule(P, (.050, .020, T["chin_z"] + .07), (.018, -T["neck_d"] * .40, T["neck_base_z"] - .01), .0095), .03)
-            d = smin(d, ellipsoid(P, (0, -T["neck_d"] * .30, T["chin_z"] - .032), (.008, .006, .011)), .010)   # thyroid cartilage
+            d = smin(d, ellipsoid(P, (0, -T["neck_d"] * .27, T["chin_z"] - .036), (.007, .0045, .010)), .010)  # thyroid cartilage
         return d
 
     def arm_part(self, P):
@@ -264,7 +269,7 @@ class Body(HeadShape):
         P[:, 0] = np.abs(P[:, 0])
         d = self.torso(P)
         d = smin(d, self.neck(P), .045)
-        d = smin(d, self.head_part(P), .03)
+        d = smin(d, self.head_part(P), .022)                 # tight enough to keep the jawline edge
         d = smin(d, self.arm_part(P), .045)
         d = smin(d, self.hand_part(P), .015)
         d = smin(d, self.leg_part(P), .05)
