@@ -1,10 +1,8 @@
 """Inventory icons rendered from our own models with Cycles (transparent background, studio lighting).
 
   guns:   assets/models/gun_<x>.glb -> <out>/guns/icon_gun_<x>.png    side view, muzzle to the right (768 x 384)
-  armour: assets/models/player_<sex>.glb, every wardrobe piece C_<slot>__<item> on its own
-          -> <out>/armour/icon_<sex>_<slot>_<item>.png                 three-quarter front view (384 x 384)
 
-blender --background --python tools/blender/icons.py -- <out dir> [guns] [armour] [--only=a,b]
+blender --background --python tools/blender/icons.py -- <out dir> [guns] [--only=a,b]
 """
 import bpy, sys, os, math, json, glob
 from mathutils import Vector, Euler
@@ -13,8 +11,7 @@ import bl
 
 args = sys.argv[sys.argv.index('--') + 1:]
 OUT = os.path.abspath(args[0])
-DO_GUNS = 'guns' in args or not any(a in args for a in ('guns', 'armour'))
-DO_ARMOUR = 'armour' in args or not any(a in args for a in ('guns', 'armour'))
+DO_GUNS = True
 ONLY = next((a.split('=', 1)[1].split(',') for a in args if a.startswith('--only=')), None)
 SAMPLES = int(os.environ.get('ICON_SAMPLES', '48'))
 
@@ -107,36 +104,5 @@ def guns():
         render(os.path.join(OUT, 'guns', 'icon_' + stem + '.png'))
 
 
-def armour():
-    os.makedirs(os.path.join(OUT, 'armour'), exist_ok=True)
-    for sex in ('male', 'female'):
-        path = os.path.join(bl.MODELS, 'player_%s.glb' % sex)
-        bl.reset()
-        sc = bpy.context.scene
-        sc.render.resolution_x, sc.render.resolution_y = 384, 384
-        studio(sc)
-        bpy.ops.import_scene.gltf(filepath=path)
-        arm = next(o for o in sc.objects if o.type == 'ARMATURE')
-        if arm.animation_data:
-            arm.animation_data.action = None
-        for pb in arm.pose.bones:
-            pb.matrix_basis.identity()
-        meshes = [o for o in sc.objects if o.type == 'MESH']
-        cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
-        for o in meshes:
-            n = o.name.split('.')[0]
-            if not n.startswith('C_') or n.startswith(('C_hair', 'C_undertop', 'C_underbottom')):
-                continue
-            slot, item = n[2:].split('__', 1)
-            if ONLY and n not in ONLY:
-                continue
-            for p in meshes:
-                p.hide_render = p is not o
-            frame(cam, [o], (-.55, 1, -.18), margin=1.12, left_only=slot == 'hands')
-            render(os.path.join(OUT, 'armour', 'icon_%s_%s_%s.png' % (sex, slot, item)))
-
-
 if DO_GUNS:
     guns()
-if DO_ARMOUR:
-    armour()

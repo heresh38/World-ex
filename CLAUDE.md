@@ -47,33 +47,14 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
 
 ## Characters
-Players are built by `players.py` (base body, regions `B_*`, eyes, brows, lashes, face morphs from `face.py`; the head's bone
-structure (cheekbones, jaw, brow, nose, lips) is in `anatomy.Head.structure`; the skull above the brow (`CRANIUM`), the nose loft (`Head.NOSE`) and the head / hand scales are measured against Epic's MetaHuman head and Manny (measured only, never imported; see `tools/blender/proportions.md`), quick look: `python tools/blender/headview.py
-out.png male`) and
-`wardrobe.py` (hair and clothing as `C_<slot>__<item>`). The anatomy is signed-distance fields in `anatomy.py`,
-meshed by `sdf.py` (Surface Nets + narrow band). Meta (wardrobe items with the regions they hide, defaults, morph groups)
-lives in the armature's `worldex` extra. `Avatar.applyCharacter(save.character)` applies the look, using character v3:
-skin, eyes, hairColor, brow, face presets, sliders, wear per slot and tints per slot. The underwear slots (`undertop`,
-`underbottom`) are `locked` (never removable) and use `coveredBy` to hide under clothing, so the body is never shown naked. Material names are an API for runtime
-tints: `skin`, `eye_iris`, `hair`, `brow`, `cloth_<slot>`, `armor_primary__<slot>`, `glow`. Run with `-- female|male --fast`
-for quick checks; `sdfview.py` previews a field without Blender. `refs.py` cuts fabric swatches from `art/reference`
-(owner's art, allowed). `civilians.py` builds the pedestrians with `npc_kit.py` (tinted by prefix skin/hair/shirt/pants/shoes).
-`characters.py` still makes the enemies. The player rig uses the IK pole angle of 90 degrees, which keeps the elbows down
-and the upper-arm twist small for skinned shoulders.
-The default outfit for both bodies is the Orion set from the owner's concept sheet (`art/reference/orion_pair.jpg`;
-`wardrobe.Kit.orion`, built from named SDF components with `Kit.piece`; textures `orion_textures.py` -> `or_*`): male
-quilted jacket + harness + gaiter, long storm coat, fingerless gloves with lit bracers, cargo trousers with knee
-armour, plated boots; female bodice with a lit V, cropped white shell jacket, the gloves, plated leggings with a
-holster, tall boots. Preview a player with `blender --background --python tools/blender/render_player.py -- out.png
-player_male.glb [slot=item ...]` (EEVEE sheet, runtime skin / hair tints applied).
-Hair is grown by `hair.py` (scalp cap + alpha-tested strand cards on the `hair_strands.png` atlas; materials `hair` and
-`hair__cap`, both tinted by hairColor). Player clips add Slide; Walk, Run, Jump and the Relaxed clips are gendered per GLB
-(`characters.animate(style=)`), enemies keep the neutral set. `players.py` also writes `player_<sex>_npc.glb` (crowd version:
-one body mesh, everyday wardrobe `NPC_KEEP`/`NPC_HAIR`, smaller atlas `hair_strands_s.png`) used by `population.js` with
-`randomCharacter`. Wardrobe meta per item: `hide` (regions), `coveredBy` (locked underwear), `replaces` (a dress hides
-top/legs), `cover` (bit in the per-vertex `_covermask`; `avatar.js` pulls masked skin 6 mm inwards while that garment is
-worn). Garment weights are copied from the body under them, restricted to the parts they cover. Player exports go through
-`bl.quantize_glb()` (8-bit normals/weights, 16-bit UVs; three reads it natively).
+The old player bodies, heads, clothing, hair, first-person arms and the scripts that built them (players.py, anatomy.py,
+face.py, wardrobe.py, hair.py, skin.py, the browser civilians / NPC kits) were deleted on 2026-11-07: the players are
+being rebuilt from zero as two separate professional base meshes (male, female): clean quad topology with edge
+loops at the eyes, mouth, nose, ears and every joint, real anatomy and proportions (Epic's Manny / MetaHuman may be
+measured side by side, never imported), and face customisation (eyes, ears, mouth shape and colour, eye colour and
+shape, noses, hair and hair colour). Clothing and armour come back later, fitted to the new bodies. Until the new
+bodies are imported, tests that need the player body skip with a warning (SOTest::PlayerBodyMissing).
+`characters.py` still makes the enemies.
 
 ## Earth (free roam)
 The city follows the owner's river-city art (`art/reference/city_river.jpg`). A river (`RIVER_Z`, `riverZ()` in

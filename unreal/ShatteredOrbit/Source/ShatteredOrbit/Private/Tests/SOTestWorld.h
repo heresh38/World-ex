@@ -13,12 +13,25 @@
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/WorldSettings.h"
+#include "Misc/PackageName.h"
 #include "SOCharacter.h"
 
 namespace SOTest
 {
 	inline constexpr EAutomationTestFlags Flags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter;
 	inline constexpr float Dt = 1.0f / 60.0f;
+
+	/** The player bodies are being rebuilt from scratch (2026-11): tests of the body, its clips, wardrobe and holds skip
+	 *  (with a warning) until the new bodies are imported. */
+	inline bool PlayerBodyMissing(FAutomationTestBase& Test)
+	{
+		if (FPackageName::DoesPackageExist(TEXT("/Game/Characters/PlayerMale/SK_PlayerMale")))
+		{
+			return false;
+		}
+		Test.AddWarning(TEXT("player body not imported (being rebuilt from scratch): skipped"));
+		return true;
+	}
 
 	/** A transient game world with a floor, ticked by hand. */
 	struct FTestWorld

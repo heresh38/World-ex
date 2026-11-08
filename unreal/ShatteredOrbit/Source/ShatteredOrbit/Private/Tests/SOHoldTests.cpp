@@ -35,6 +35,10 @@ namespace SOTest
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOHandsOnGripsTest, "ShatteredOrbit.Hold.HandsOnGrips", SOTest::Flags)
 bool FSOHandsOnGripsTest::RunTest(const FString& Parameters)
 {
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
 	SOTest::FTestWorld W;
 	ASOCharacter* Player = SOTest::SpawnArmedPlayer(W);
 	ASOWeapon* Rifle = Player ? Player->GetWeapon() : nullptr;

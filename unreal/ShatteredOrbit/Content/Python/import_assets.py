@@ -879,8 +879,8 @@ def weapon(master, arch, a, clear):
         data.set_editor_property("icon", import_ui_texture(icon, dest, f"T_Icon_{folder}"))
     if arch == "rifle":
         arms = rifle_arms(master)
-        data.set_editor_property("arm_left_mesh", arms["Left"])
-        data.set_editor_property("arm_right_mesh", arms["Right"])
+        data.set_editor_property("arm_left_mesh", arms["Left"] if arms else None)
+        data.set_editor_property("arm_right_mesh", arms["Right"] if arms else None)
     eal.save_loaded_asset(data, only_if_is_dirty=False)
     eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
     log(f"DA_{folder}: {arch}, {len(parts)} parts, sockets {sorted(sockets)}")
@@ -890,6 +890,8 @@ def weapon(master, arch, a, clear):
 def rifle_arms(master):
     arms_src = os.path.join(SOURCE, "Weapons", "Arms")
     arms_dest = "/Game/Weapons/Arms"
+    if not os.path.isdir(arms_src):                # the old static first-person arms are gone (players rebuilt)
+        return None
     ensure_dir(arms_dest)
     arm_mats = load_json(os.path.join(arms_src, "materials.json"))
     arm_instances = {base_slot(k): make_instance(master, arms_dest, base_slot(k), v, {}) for k, v in arm_mats.items()}
@@ -1233,6 +1235,95 @@ def _param(mat, cls, name, value, x, y):
     return e
 
 
+WET_COLOR_HLSL = """
+float flat = saturate((N.z - 0.7) * 3.3);
+float puddle = saturate((sin(WP.x * 0.0021) * sin(WP.y * 0.0017) + sin(WP.x * 0.0007 + 1.3) * 0.6 - 0.75 + W * 0.9) * 3.0);
+float wet = W * flat;
+return C * lerp(1.0, 0.55, wet) * lerp(1.0, 0.8, puddle * wet);
+"""
+WET_ROUGH_HLSL = """
+float flat = saturate((N.z - 0.7) * 3.3);
+float puddle = saturate((sin(WP.x * 0.0021) * sin(WP.y * 0.0017) + sin(WP.x * 0.0007 + 1.3) * 0.6 - 0.75 + W * 0.9) * 3.0);
+float wet = W * flat;
+return lerp(lerp(R, 0.22, wet), 0.04, puddle * wet);
+"""
+# foliage: the tree bends with the wind more the higher above its base, leaves flutter (cm, world)
+FOLIAGE_WPO_HLSL = """
+float h = max(LP.z, 0.0) / 100.0;
+float ws = max(WS, 0.1);
+float2 dir = float2(WX, WY) / ws;
+float bend = pow(h / 10.0, 1.6) * (0.35 + 0.65 * min(ws, 14.0) / 10.0);
+float sway = 0.5 + 0.5 * sin(T * (0.8 + 0.3 * R) + R * 6.28) + G * 0.7;
+float3 off = float3(dir * bend * sway * 22.0, -bend * bend * 2.0);
+float fl = sin(T * 7.3 + dot(WP.xy, float2(0.05, 0.07)) + R * 9.0) * min(ws, 12.0) * 0.22 * saturate(h / 3.0);
+return off + float3(fl, fl * 0.7, fl * 0.5);
+"""
+
+
+def weather_params():
+    """/Game/Environments/MPC_SOWeather: what USOWeatherSubsystem drives every 0.2 s (wind in m/s, gust, wetness,
+    rain); read by M_SOGround (wet streets) and M_SOFoliage (trees in the wind). Kept when it exists so the
+    materials' references stay valid."""
+    ensure_dir("/Game/Environments")
+    path = "/Game/Environments/MPC_SOWeather"
+    if eal.does_asset_exist(path):
+        mpc = eal.load_asset(path)
+    else:
+        mpc = tools.create_asset("MPC_SOWeather", "/Game/Environments", unreal.MaterialParameterCollection, unreal.MaterialParameterCollectionFactoryNew())
+    have = {str(p.get_editor_property("parameter_name")) for p in mpc.get_editor_property("scalar_parameters")}
+    want = (("WindX", 2.0), ("WindY", 1.0), ("Wind", 3.0), ("Gust", 0.0), ("Wetness", 0.0), ("Rain", 0.0))
+    if not all(n in have for n, _ in want):
+        params = list(mpc.get_editor_property("scalar_parameters"))
+        for n, v in want:
+            if n not in have:
+                sp = unreal.CollectionScalarParameter()
+                sp.set_editor_property("parameter_name", n)
+                sp.set_editor_property("default_value", v)
+                params.append(sp)
+        mpc.set_editor_property("scalar_parameters", params)
+    eal.save_loaded_asset(mpc, only_if_is_dirty=False)
+    return mpc
+
+
+def _weather(mat, mpc, name, x, y):
+    e = mel.create_material_expression(mat, unreal.MaterialExpressionCollectionParameter, x, y)
+    e.set_editor_property("collection", mpc)
+    e.set_editor_property("parameter_name", name)
+    return e
+
+
+def foliage_material(defaults, mpc):
+    """/Game/Environments/NexusCity/M_SOFoliage: the city's trees and shrubs (city_trees.py): bark and leaf cards
+    (alpha mask), the same parameters as the master (BaseColorTex, BaseColorTint, NormalTex, Roughness), swaying on
+    MPC_SOWeather's wind by the height above the trunk base, leaves fluttering, a per-tree phase."""
+    mat = _material("/Game/Environments/NexusCity/M_SOFoliage", {"used_with_instanced_static_meshes": True, "two_sided": True,
+                                                                "blend_mode": unreal.BlendMode.BLEND_MASKED})
+    S = unreal.MaterialSamplerType
+    col = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "BaseColorTex", (defaults["white"], S.SAMPLERTYPE_COLOR), -800, -200)
+    tint = _param(mat, unreal.MaterialExpressionVectorParameter, "BaseColorTint", (1, 1, 1, 1), -800, -420)
+    c = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -450, -250)
+    mel.connect_material_expressions(col, "RGB", c, "A")
+    mel.connect_material_expressions(tint, "", c, "B")
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(col, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    nrm = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "NormalTex", (defaults["normal"], S.SAMPLERTYPE_NORMAL), -800, 100)
+    mel.connect_material_property(nrm, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    mel.connect_material_property(_param(mat, unreal.MaterialExpressionScalarParameter, "Roughness", .7, -800, 380), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    wpo = _custom(mat, FOLIAGE_WPO_HLSL, ("LP", "WP", "WX", "WY", "WS", "G", "T", "R"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -450, 500)
+    lp = mel.create_material_expression(mat, unreal.MaterialExpressionLocalPosition, -800, 500)
+    wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -800, 580)
+    tm = mel.create_material_expression(mat, unreal.MaterialExpressionTime, -800, 660)
+    rnd = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceRandom, -800, 740)
+    for n, e in (("LP", lp), ("WP", wp), ("T", tm), ("R", rnd)):
+        mel.connect_material_expressions(e, "", wpo, n)
+    for i, (n, pn) in enumerate((("WX", "WindX"), ("WY", "WindY"), ("WS", "Wind"), ("G", "Gust"))):
+        mel.connect_material_expressions(_weather(mat, mpc, pn, -800, 820 + i * 70), "", wpo, n)
+    mel.connect_material_property(wpo, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    return mat
+
+
 def ground_material(defaults):
     """/Game/Environments/NexusCity/M_SOGround: city ground, roofs, wall, land. The textures are projected in world
     metres (TilingM = metres per tile): from above on flat faces, along the face on walls; normal map in world space."""
@@ -1254,14 +1345,25 @@ def ground_material(defaults):
     c = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -450, -250)
     mel.connect_material_expressions(col, "RGB", c, "A")
     mel.connect_material_expressions(tint, "", c, "B")
-    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    # wet when it rains (MPC_SOWeather.Wetness): darker, glossier, puddles on the flat
+    mpc = weather_params()
+    wet = _weather(mat, mpc, "Wetness", -800, 900)
+    wc = _custom(mat, WET_COLOR_HLSL, ("C", "N", "WP", "W"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -250, -250)
+    wr = _custom(mat, WET_ROUGH_HLSL, ("R", "N", "WP", "W"), unreal.CustomMaterialOutputType.CMOT_FLOAT1, -250, 450)
+    for node in (wc, wr):
+        mel.connect_material_expressions(vn, "", node, "N")
+        mel.connect_material_expressions(wp, "", node, "WP")
+        mel.connect_material_expressions(wet, "", node, "W")
+    mel.connect_material_expressions(c, "", wc, "C")
+    mel.connect_material_expressions(msk, "G", wr, "R")
+    mel.connect_material_property(wc, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(wr, "", unreal.MaterialProperty.MP_ROUGHNESS)
     strength = _param(mat, unreal.MaterialExpressionScalarParameter, "NormalStrength", 1.0, -800, 650)
     n = _custom(mat, GROUND_N_HLSL, ("Nt", "N", "K"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -450, 100)
     mel.connect_material_expressions(nrm, "RGB", n, "Nt")
     mel.connect_material_expressions(vn, "", n, "N")
     mel.connect_material_expressions(strength, "", n, "K")
     mel.connect_material_property(n, "", unreal.MaterialProperty.MP_NORMAL)
-    mel.connect_material_property(msk, "G", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.connect_material_property(msk, "B", unreal.MaterialProperty.MP_METALLIC)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
@@ -1350,9 +1452,11 @@ def car_paint_material():
 
 
 def vehicles_trees_street(master, dest):
-    """The city's vehicles (tools/blender/city_vehicles.py) and trees / shrubs (tools/blender/city_trees.py): Vehicles/,
-    Trees/. Vehicle paint (cv_paint) is per instance (M_SOCarPaint); glass stays opaque (Nanite)."""
+    """The city's trees / shrubs (tools/blender/city_trees.py, on M_SOFoliage: they sway in the weather's wind) and,
+    once the traffic stage brings them, its vehicles (Vehicles/; paint cv_paint per instance on M_SOCarPaint, glass
+    opaque for Nanite)."""
     paint = car_paint_material()
+    foliage = foliage_material(default_textures(), weather_params())
     used = set()
     binf = os.path.join(PROJECT, "Data", "nexus_instances.bin")
     if os.path.exists(binf):                                 # only what nexus_dress.py places
@@ -1380,7 +1484,7 @@ def vehicles_trees_street(master, dest):
             m = dict(m)
             if k == "cv_glass":
                 m.update(alphaMode="OPAQUE")
-            inst[k] = make_instance(master, folder, k, m, tex)
+            inst[k] = make_instance(foliage if sub == "Trees" else master, folder, k, m, tex)
         for a in manifest["assets"]:
             name = os.path.splitext(a["file"])[0]
             if used and name not in used:

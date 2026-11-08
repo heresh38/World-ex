@@ -13,6 +13,10 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOWardrobeDressesTest, "ShatteredOrbit.Wardrobe.Dresses", SOTest::Flags)
 bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 {
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
 	const USOWardrobeData* Male = USOWardrobeData::Get(TEXT("male"));
 	const USOWardrobeData* Female = USOWardrobeData::Get(TEXT("female"));
 	if (!TestNotNull(TEXT("male wardrobe (run export_unreal.sh + import_assets.py)"), Male) || !TestNotNull(TEXT("female wardrobe"), Female))
@@ -127,6 +131,10 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOArmorInventoryTest, "ShatteredOrbit.Wardrobe.ArmorInventory", SOTest::Flags)
 bool FSOArmorInventoryTest::RunTest(const FString& Parameters)
 {
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
 	USOInventoryComponent* Inventory = NewObject<USOInventoryComponent>();
 	Inventory->bPersist = false;
 	Inventory->NewProfile();

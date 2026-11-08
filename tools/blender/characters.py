@@ -1,4 +1,4 @@
-"""Rigged characters: player_female, player_male, enemy_trooper, enemy_brute, npc_vendor.
+"""Rigged enemy characters: enemy_trooper, enemy_brute (the players are being rebuilt from scratch elsewhere).
 
 One shared 20-bone skeleton. Armour is built from bevelled segments, each rigidly skinned to one bone
 (segmented sci-fi plate armour, so no visible skinning artefacts). Arm poses for the "armed" clips are
@@ -478,16 +478,10 @@ def build(kind, fname, colors):
 
 
 SETS = {
-    'female': ('player_female.glb', dict(primary='#e8e2d4', secondary='#3a3f47', under='#22262c', trim='#c79a45',
-                                         visor='#10161c', visor_e='#1ad8ff', glow='#1ad8ff')),
-    'male': ('player_male.glb', dict(primary='#e8e2d4', secondary='#3a3f47', under='#22262c', trim='#c79a45',
-                                     visor='#10161c', visor_e='#ffae2f', glow='#ffae2f')),
     'trooper': ('enemy_trooper.glb', dict(primary='#2c2f36', secondary='#5d1c1c', under='#15161a', trim='#8a8f99',
                                           visor='#000000', visor_e='#ff3326', glow='#ff3326', pm=.6, pr=.4)),
     'brute': ('enemy_brute.glb', dict(primary='#3b2a22', secondary='#1d1f24', under='#121316', trim='#c79a45',
                                       visor='#000000', visor_e='#ff7a1a', glow='#ff7a1a', pm=.7, pr=.35)),
-    'vendor': ('npc_vendor.glb', dict(primary='#2a4a6a', secondary='#c79a45', under='#1d2128', trim='#e8e2d4',
-                                      visor='#0c1418', visor_e='#7dffb0', glow='#7dffb0')),
 }
 
 if __name__ == '__main__':
@@ -495,4 +489,4 @@ if __name__ == '__main__':
     for kind, (fname, cols) in SETS.items():
         if only and kind not in only:
             continue
-        build('male' if kind == 'vendor' else kind, fname, cols)
+        build(kind, fname, cols)

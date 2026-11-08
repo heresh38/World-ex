@@ -348,6 +348,10 @@ bool FSOSpawnerTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLocomotionAnimTest, "ShatteredOrbit.Anim.Locomotion", SOTest::Flags)
 bool FSOLocomotionAnimTest::RunTest(const FString& Parameters)
 {
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
 	SOTest::FTestWorld W;
 	W.AddBox(FVector(-8000, -8000, -100), FVector(8000, 8000, 0));
 	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
@@ -394,11 +398,11 @@ bool FSOCombatContentTest::RunTest(const FString& Parameters)
 		TestNotNull(TEXT("rifle mag part"), Rifle->FindPart(TEXT("mag")));
 		TestNotNull(TEXT("rifle bolt part"), Rifle->FindPart(TEXT("bolt")));
 		TestTrue(TEXT("muzzle in front (+Y in mesh space)"), Rifle->MuzzleLocation.Y > 50.0f);
-		TestNotNull(TEXT("arms"), Rifle->ArmLeftMesh.LoadSynchronous());
 	}
 	const USkeletalMesh* Player = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/PlayerMale/SK_PlayerMale.SK_PlayerMale"));
 	const USkeletalMesh* Stalker = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/Stalker/SK_Stalker.SK_Stalker"));
-	if (TestNotNull(TEXT("player body"), Player))
+	const bool bNoBody = SOTest::PlayerBodyMissing(*this);
+	if (!bNoBody && TestNotNull(TEXT("player body"), Player))
 	{
 		TestNotNull(TEXT("player physics asset"), Player->GetPhysicsAsset());
 		const FBox Box = Player->GetBounds().GetBox();
@@ -419,6 +423,10 @@ bool FSOCombatContentTest::RunTest(const FString& Parameters)
 	for (const TCHAR* Clip : { TEXT("/Game/Characters/PlayerMale/Anims/A_PlayerMale_Run.A_PlayerMale_Run"),
 		TEXT("/Game/Characters/Stalker/Anims/A_Stalker_Attack.A_Stalker_Attack") })
 	{
+		if (bNoBody && FString(Clip).Contains(TEXT("/PlayerMale/")))
+		{
+			continue;
+		}
 		TestNotNull(Clip, LoadObject<UAnimSequenceBase>(nullptr, Clip));
 	}
 	return true;
@@ -510,6 +518,10 @@ bool FSOClipMatchesSkeletonTest::RunTest(const FString& Parameters)
 		{ TEXT("/Game/Characters/Stalker/SK_Stalker.SK_Stalker"), TEXT("/Game/Characters/Stalker/Anims/A_Stalker_Idle.A_Stalker_Idle") } };
 	for (const TPair<const TCHAR*, const TCHAR*>& Case : Cases)
 	{
+		if (FString(Case.Key).Contains(TEXT("/PlayerMale/")) && SOTest::PlayerBodyMissing(*this))
+		{
+			continue;
+		}
 		const USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, Case.Key);
 		const UAnimSequence* Clip = LoadObject<UAnimSequence>(nullptr, Case.Value);
 		if (!TestNotNull(Case.Key, Mesh) || !TestNotNull(Case.Value, Clip))
