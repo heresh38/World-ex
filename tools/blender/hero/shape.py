@@ -10,8 +10,8 @@ Parts (each also callable on its own, so fit.py can project a vertex onto the pa
   hand    palm block, three phalanges per finger, the thumb with its thenar pad
   leg     thigh loft (quadriceps, hamstrings, adductors), patella and knee, calf loft, ankle bones
   foot    heel-to-ball loft with a flat sole and the arch, five toes
-  head    cranium, brow, eye sockets with eyelid shells over the eyeballs, cheekbones, maxilla, nose (dorsum, tip,
-          alae, nostrils), lips, jaw and chin, ears
+  head    headshape.py: cranium, face loft, brow, orbits with eyelid shells over the eyeballs, cheekbones, jaw and
+          chin, nose (dorsum, tip, alae, nostrils), lips, ears
 """
 import math
 import numpy as np
@@ -19,6 +19,7 @@ from mathutils import Vector
 import sdf
 from sdf import smin, smax, ellipsoid, capsule, round_cone, round_box, Loft, sphere
 import skeleton
+from headshape import HeadShape
 
 F32 = np.float32
 
@@ -35,7 +36,7 @@ def frame_rows(a, up):
     return np.array([a, v, w], F32)
 
 
-class Body:
+class Body(HeadShape):
     def __init__(self, T):
         self.T = T
         self.m = T["sex"] == "male"
@@ -111,11 +112,11 @@ class Body:
         Fo = self.foot
         heel, ball = Fo["heel"], Fo["ball"]
         fw = Fo["width"]
-        self.foot_loft = Loft(V(heel + Vector((0, .010, .0))), V(ball + Vector((-.004, -.035, 0))), dict(
+        self.foot_loft = Loft(V(heel + Vector((0, .010, .0))), V(ball + Vector((-.004, -.022, 0))), dict(
             t=[0, .15, .4, .7, 1], rv_pos=[fw * .30, fw * .36, fw * .40, fw * .46, fw * .44],
             rv_neg=[fw * .30, fw * .34, fw * .36, fw * .46, fw * .48],
-            rw_pos=[.040, .052, .052, .030, .020], rw_neg=[.030, .030, .028, .024, .018],
-            cw=[.004, .016, .016, .006, .002]), v_axis=(1, 0, 0), cap=.7)
+            rw_pos=[.040, .052, .048, .024, .012], rw_neg=[.030, .030, .028, .024, .020],
+            cw=[.004, .016, .014, .000, -.006]), v_axis=(1, 0, 0), cap=.7)
 
     # ------------------------------------------------------------------ parts (left side; P already mirrored)
     def torso(self, P):
@@ -124,7 +125,9 @@ class Body:
         C = T["chest"]
         if m:
             # pectorals: broad, flat plates high on the chest
-            d = smin(d, ellipsoid(P, (.070, -C["d"] * .39, C["z"] + .036), (.085, .026, .060)), .04)
+            # a broad, flat plate from the sternum out under the deltoid; its lower border is the pectoral line
+            R = frame_rows((1, .28, .15), (0, 0, 1))
+            d = smin(d, ellipsoid(P, (.074, -C["d"] * .36, C["z"] + .030), (.088, .066, .040), np.array([R[0], R[1], -R[2]], F32)), .045)
         else:
             d = smin(d, ellipsoid(P, (.064, -C["d"] * .36, C["z"] + .045), (.06, .028, .04)), .03)     # pectoral under the breast
             R = frame_rows((0, -1, -.12), (.25, 0, 1))
@@ -132,10 +135,10 @@ class Body:
         # glutes, scapulae, lats
         Hh = T["hips"]
         d = smin(d, ellipsoid(P, (.066, Hh["d"] * .34, Hh["z"] - .012), (.078 if m else .088, .058, .092)), .035)
-        d = smin(d, ellipsoid(P, (.095, C["d"] * .40, T["shoulder_z"] - .110), (.042, .014, .058)), .025)    # scapula
+        d = smin(d, ellipsoid(P, (.090, C["d"] * .405, T["shoulder_z"] - .115), (.048, .030, .068)), .04)     # scapula
         # trapezius: neck to acromion
-        d = smin(d, round_cone(P, (.035, .036, T["neck_base_z"] + .035), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .008),
-                               .048 if m else .036, .026), .045)
+        d = smin(d, round_cone(P, (.030, .040, T["neck_base_z"] + .020), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
+                               .040 if m else .032, .024), .045)
         # clavicles
         d = smin(d, capsule(P, (.018, -T["neck_d"] * .40, T["neck_base_z"] - .030), (.16 * T["biacromial"] / .41, -.025, T["shoulder_z"] - .010), .012), .035)
         return d
@@ -144,7 +147,7 @@ class Body:
         d = self.neck_loft(P)
         if self.m:
             T = self.T
-            d = smin(d, capsule(P, (.050, .020, T["chin_z"] + .07), (.016, -T["neck_d"] * .42, T["neck_base_z"] - .01), .011), .015)
+            d = smin(d, capsule(P, (.050, .020, T["chin_z"] + .07), (.018, -T["neck_d"] * .40, T["neck_base_z"] - .01), .0095), .03)
             d = smin(d, ellipsoid(P, (0, -T["neck_d"] * .30, T["chin_z"] - .032), (.008, .006, .011)), .010)   # thyroid cartilage
         return d
 
@@ -152,7 +155,7 @@ class Body:
         T, A = self.T, self.arm
         a, dor = A["a"], A["dorsal"]
         ur = T["upper_arm_r"]
-        d = smin(self.uarm(P), self.farm(P), .02)
+        d = smin(self.uarm(P), self.farm(P), .035)
         # deltoid: wraps the shoulder from the clavicle to a third down the arm
         c = A["S"] + a * .035 + dor * .012
         d = smin(d, ellipsoid(P, V(c), (.085, ur * 1.08, ur * 1.12), self.arm_rows), .03)
@@ -211,173 +214,21 @@ class Body:
         d = self.foot_loft(P)
         d = smin(d, sphere(P, V(F["heel"] + Vector((0, .006, .012))), .034), .02)            # heel
         d = smin(d, ellipsoid(P, V(F["ankle"] + Vector((0, -.012, -.030))), (.034, .045, .035)), .025)
-        for t in F["toes"]:
-            b = t["base"] + Vector((0, .012, 0))
-            tip = t["base"] + t["dir"] * t["len"]
-            r = t["width"] / 2
-            d = smin(d, round_cone(P, V(b + Vector((0, 0, r * .9))), V(tip + Vector((0, 0, r * .75))), r * .95, r * .78), .005)
+        d = smin(d, self.toes(P, sole=False), .003)
         # flat sole: cut everything below the floor
         d = np.maximum(d, -P[:, 2] + .0)
         return d
 
-    # ------------------------------------------------------------------ head
-    # landmark heights above the menton in head heights: ours (adult norms, Farkas) and the measured reference's
-    LM_OURS = dict(pog=.075, sto=.217, sn=.313, prn=.372, n=.552, g=.595)
-    LM_REF = dict(pog=.091, sto=.273, sn=.343, prn=.392, n=.574, g=.649)
-
-    def _load_head(self):
-        import json, os
-        hm = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "head_measure.json")))
-        G = np.array([[np.nan if v is None else v for v in row] for row in hm["r"]], float)
-        th, ph = np.array(hm["theta"], float), np.array(hm["phi"], float)
-        # below the jaw the reference rays reach its neck / shoulders: our body has its own neck, so those rows take
-        # the jaw-line row's radius (the head is cut along the jaw line anyway)
-        for i, p in enumerate(ph):
-            if p <= -40:
-                for j in range(len(th)):
-                    if np.isnan(G[i, j]) or G[i, j] > .75 or th[j] >= 60:
-                        G[i, j] = np.nan
-        # fill the gaps (ears, neck) across each row, then down the columns
-        for i in range(len(ph)):
-            row = G[i]
-            ok = ~np.isnan(row)
-            if ok.sum() >= 2:
-                G[i] = np.interp(th, th[ok], row[ok])
-        for j in range(len(th)):
-            col = G[:, j]
-            ok = ~np.isnan(col)
-            G[:, j] = np.interp(ph, ph[ok], col[ok])
-        self._hm, self._G, self._th, self._ph = hm, G, th, ph
-
-    @staticmethod
-    def _cr(t):
-        """Catmull-Rom weights for the 4 samples around t"""
-        t2, t3 = t * t, t * t * t
-        return (-.5 * t3 + t2 - .5 * t, 1.5 * t3 - 2.5 * t2 + 1, -1.5 * t3 + 2 * t2 + .5 * t, .5 * t3 - .5 * t2)
-
-    def _radius(self, th, ph):
-        G, gt, gp = self._G, self._th, self._ph
-        ft = np.clip((th - gt[0]) / (gt[1] - gt[0]), 0, len(gt) - 1.0001)
-        fp = np.clip((ph - gp[0]) / (gp[1] - gp[0]), 0, len(gp) - 1.0001)
-        i, j = np.floor(fp).astype(int), np.floor(ft).astype(int)
-        wp, wt = self._cr(fp - i), self._cr(ft - j)
-        out = np.zeros(len(th))
-        for a in range(4):
-            ii = np.clip(i + a - 1, 0, len(gp) - 1)
-            row = np.zeros(len(th))
-            for b in range(4):
-                jj = np.abs(j + b - 1)                       # mirror across theta = 0 (the midline)
-                jj = np.where(jj > len(gt) - 1, 2 * (len(gt) - 1) - jj, jj)
-                row += wt[b] * G[ii, jj]
-            out += wp[a] * row
-        return out
-
-    def head_base(self, P):
-        """the head's overall shape from the measured radial map, scaled to our breadth / length / height and warped
-        to our landmark heights; signed distance (approx.), negative inside"""
-        T = self.T
-        if not hasattr(self, "_G"):
-            self._load_head()
-        hm = self._hm
-        h, chin = T["head_h"], T["chin_z"]
-        sx = (T["head_breadth"] / h) / hm["breadth"]
-        sy = (T["head_length"] / h) / hm["length"]
-        zf = (P[:, 2] - chin) / h
-        lo = [-.5, 0.0] + [self.LM_OURS[k] for k in ("pog", "sto", "sn", "prn", "n", "g")] + [1.0, 1.5]
-        lr = [-.5, 0.0] + [self.LM_REF[k] for k in ("pog", "sto", "sn", "prn", "n", "g")] + [1.0, 1.5]
-        zr = np.interp(zf, lo, lr) - hm["centre_above_menton"]
-        cy = .008 * h / .23 - .006 * h / .242
-        qx = np.abs(P[:, 0]) / h / sx
-        qy = (P[:, 1] - cy) / h / sy
-        rho = np.sqrt(qx * qx + qy * qy + zr * zr) + 1e-9
-        th = np.degrees(np.arctan2(qx, -qy))
-        ph = np.degrees(np.arcsin(np.clip(zr / rho, -1, 1)))
-        return ((rho - self._radius(th, ph)) * h).astype(F32)
-
-    def head_geometry(self):
-        T, m = self.T, self.m
-        h = T["head_h"]
-        hs = h / .23
-        chin = T["chin_z"]
-        L = {k: chin + v * h for k, v in self.LM_OURS.items()}
-
-        def front(z, x=0.0):
-            """the base head's front surface y at height z, |x| = x (bisection along -y)"""
-            lo_, hi_ = -.25, .05
-            for _ in range(40):
-                mid = (lo_ + hi_) / 2
-                inside = self.head_base(np.array([[x, mid, z]], F32))[0] < 0
-                if inside:
-                    hi_ = mid
-                else:
-                    lo_ = mid
-            return (lo_ + hi_) / 2
-        if not hasattr(self, "_g"):
-            ez = T["eye_z"]
-            ex = T["interpupil"] / 2
-            self._g = dict(
-                hs=hs, ez=ez, h=h, chin=chin,
-                eye_c=Vector((ex, front(ez, ex) + .0118, ez)), eye_r=.0122,
-                nasion=Vector((0, front(L["n"]), L["n"])),
-                subnasale=Vector((0, front(L["sn"] - .004), L["sn"])),
-                pronasale=Vector((0, front(L["prn"]) - .006, L["prn"])),
-                stomion=Vector((0, front(L["sto"]), L["sto"])),
-                mouth_w=(.052 if m else .048) * hs,
-                pogonion=Vector((0, front(L["pog"]), L["pog"])),
-                tragion=Vector((.072 * hs, .008 * hs, chin + .51 * h)),
-                vertex_z=chin + h,
-            )
-        return self._g
-
-    def head_part(self, P):
-        T, m = self.T, self.m
-        g = self.head_geometry()
-        hs, h, chin = g["hs"], g["h"], g["chin"]
-        d = self.head_base(P)
-        # cut under the jaw: a line rising from just under the chin toward the back of the jaw
-        jaw = (chin + .004 + np.maximum(0, P[:, 1] - (g["pogonion"].y + .03)) * .40 - P[:, 2]).astype(F32)
-        d = smax(d, jaw, .012)
-        # lips (fuller on her), on the mouth
-        st, mw = g["stomion"], g["mouth_w"]
-        if not hasattr(self, "_lips"):
-            full = 1.0 if m else 1.2
-            tt = [0, .1, .25, .42, .5, .58, .75, .9, 1]
-            yo = .0040
-            up = Loft(V(st + Vector((-mw / 2, yo, .0006))), V(st + Vector((mw / 2, yo, .0006))), dict(
-                t=tt, rv_pos=[.0008, .0028, .0050, .0058, .0052, .0058, .0050, .0028, .0008],
-                rv_neg=[.0006, .0012, .0018, .0020, .0020, .0020, .0018, .0012, .0006],
-                rw_pos=[f * full * 1.25 for f in (.0010, .0026, .0046, .0056, .0058, .0056, .0046, .0026, .0010)],
-                rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9)
-            lo = Loft(V(st + Vector((-mw * .46, yo + .001, -.0008))), V(st + Vector((mw * .46, yo + .001, -.0008))), dict(
-                t=tt, rv_pos=[.0006, .0012, .0016, .0018, .0018, .0018, .0016, .0012, .0006],
-                rv_neg=[f * full for f in (.0008, .0030, .0052, .0062, .0064, .0062, .0052, .0030, .0008)],
-                rw_pos=[f * full * 1.25 for f in (.0010, .0028, .0048, .0056, .0058, .0056, .0048, .0028, .0010)],
-                rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9)
-            self._lips = (up, lo)
-        d = smin(d, self._lips[0](P), .003)
-        d = smin(d, self._lips[1](P), .003)
-        # the eye: lids as a thin shell over the eyeball
-        ec, er = g["eye_c"], g["eye_r"]
-        d = smin(d, sphere(P, V(ec), er + .0014), .005)
-        # nose: dorsum, tip, wings on the measured nose; nostrils hollowed
-        tip, sub = g["pronasale"], g["subnasale"]
-        nk = 1.0 if m else .86
-        d = smin(d, round_cone(P, V(g["nasion"] + Vector((0, .005, 0))), V(tip + Vector((0, .008, .005))), .0060 * nk, .0076 * nk), .010)
-        d = smin(d, ellipsoid(P, V(tip + Vector((0, .0050, -.001))), (.0095 * nk, .0078, .0082)), .006)
-        d = smin(d, ellipsoid(P, V(sub + Vector((.0138 * nk, .0060, .0062))), (.0070 * nk, .0080, .0062)), .006)
-        d = smax(d, -ellipsoid(P, V(sub + Vector((.0066 * nk, .0045, -.0004))), (.0036 * nk, .0050, .0020)), .0016)
-        # ears
-        d = smin(d, self.ear(P, g), .006)
-        return d
-
-    def ear(self, P, g):
-        hs = g["hs"]
-        c = g["tragion"] + Vector((.006 * hs, .010 * hs, .006 * hs))
-        tilt = math.radians(14)
-        R = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]], F32)
-        outer = ellipsoid(P, V(c), (.0085 * hs, .0175 * hs, .0305 * hs), R)
-        bowl = ellipsoid(P, V(c + Vector((.008 * hs, -.002 * hs, -.005 * hs))), (.006 * hs, .010 * hs, .013 * hs), R)
-        return smax(outer, -bowl, .003)
+    def toes(self, P, sole=True):
+        """the five toes alone (fit.py projects the toes' own vertices onto these, not onto the foot's front)"""
+        d = None
+        for t in self.foot["toes"]:
+            r = t["width"] / 2
+            b = t["base"] + Vector((0, .012, r * .9 - t["base"].z))          # resting on the floor
+            tip = t["base"] + t["dir"] * t["len"] + Vector((0, 0, r * .75 - t["base"].z))
+            e = round_cone(P, V(b), V(tip), r * .90, r * .76)
+            d = e if d is None else np.minimum(d, e)
+        return np.maximum(d, -P[:, 2]) if sole else d
 
     # ------------------------------------------------------------------ whole body
     PARTS = ("torso", "neck", "arm", "hand", "leg", "foot", "head")
@@ -386,7 +237,8 @@ class Body:
         P = np.asarray(P, F32).copy()
         P[:, 0] = np.abs(P[:, 0])
         return {"torso": self.torso, "neck": self.neck, "arm": self.arm_part, "hand": self.hand_part, "leg": self.leg_part,
-                "foot": self.foot_part, "head": self.head_part}[name](P)
+                "foot": self.foot_part, "toe": self.toes, "head": self.head_part, "ear": self.ear,
+                "skull": lambda Q: self.head_part(Q, ear=False)}[name](P)
 
     def __call__(self, P):
         P = np.asarray(P, F32).copy()
@@ -394,7 +246,7 @@ class Body:
         d = self.torso(P)
         d = smin(d, self.neck(P), .045)
         d = smin(d, self.head_part(P), .03)
-        d = smin(d, self.arm_part(P), .025)
+        d = smin(d, self.arm_part(P), .045)
         d = smin(d, self.hand_part(P), .015)
         d = smin(d, self.leg_part(P), .04)
         d = smin(d, self.foot_part(P), .02)

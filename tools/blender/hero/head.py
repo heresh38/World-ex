@@ -74,21 +74,32 @@ def build_head(cage, T):
             bmesh.ops.inset_region(bm, faces=inner, thickness=t, depth=0.0, use_even_offset=True, use_boundary=True)
         vs = {v for f in inner for v in f.verts}
         bmesh.ops.delete(bm, geom=inner, context='FACES')
-        return hole_loop(list(vs))
+        loop = hole_loop(list(vs))
+        for v in bm.verts:                                      # the inset's new vertices belong to the head too
+            if v not in cage.part_of:
+                cage.part_of[v] = "head"
+        return loop
+
+    by_pos = {}
+    for gk, v in verts.items():
+        by_pos[tuple(round(c, 7) for c in v.co)] = gk
+    caps = {}
 
     def extrude(faces, move, part):
         r = bmesh.ops.extrude_face_region(bm, geom=faces)
         nv = [e for e in r["geom"] if isinstance(e, bmesh.types.BMVert)]
         bmesh.ops.delete(bm, geom=faces, context='FACES')
         for v in nv:
+            caps[v] = (part, by_pos[tuple(round(c, 7) for c in v.co)])      # the cap vertex's grid cell corner
             move(v)
             cage.part_of[v] = part
         return nv
 
     feat = {}
-    feat["eye_L"] = inset_hole(block(FRONT, 1, 3, -1, -1), (.0028, .0036, .0046))
-    feat["eye_R"] = inset_hole(block(FRONT, -4, -2, -1, -1), (.0028, .0036, .0046))
-    feat["mouth"] = inset_hole(block(FRONT, -2, 1, -6, -6), (.0020, .0028, .0036))
+    # three insets each (thin: the rows are ~2 cm, the loops are laid out properly by headfit.py)
+    feat["eye_L"] = inset_hole(block(FRONT, 1, 3, -1, -1), (.002, .002, .002))
+    feat["eye_R"] = inset_hole(block(FRONT, -4, -2, -1, -1), (.002, .002, .002))
+    feat["mouth"] = inset_hole(block(FRONT, -2, 1, -6, -6), (.0016, .0016, .0016))
     eye_z, base_z = T["eye_z"], T["chin_z"] + hh * .313
 
     def nose_move(v):
@@ -106,4 +117,5 @@ def build_head(cage, T):
     bmesh.ops.delete(bm, geom=nb, context='FACES')
     feat["neck"] = hole_loop(list(vs))
     cage.head_features = feat
+    cage.head = dict(centre=centre, radii=(rx, ry, rz), verts=verts, caps=caps, feat=feat)
     return feat

@@ -18,7 +18,7 @@ import sdf
 F32 = np.float32
 PART_OF = {"torso": "torso", "neck": "neck", "head": "head", "nose": "head", "ear_L": "head", "ear_R": "head",
            "arm_L": "arm", "arm_R": "arm", "hand_L": "hand", "hand_R": "hand", "finger": "hand", "thumb": "hand",
-           "leg_L": "leg", "leg_R": "leg", "foot_L": "foot", "foot_R": "foot", "toe": "foot"}
+           "leg_L": "leg", "leg_R": "leg", "foot_L": "foot", "foot_R": "foot", "toe": "toe"}
 
 
 def cage_object(cage, name):
@@ -175,8 +175,9 @@ def mirror_pairs(V):
 
 def symmetrize(V, pair):
     """the right side (x < 0) copies the left; the midline sits on x = 0"""
-    left = V[:, 0] > 1e-6
-    mid = pair == np.arange(len(V))
+    ok = pair[pair] == np.arange(len(V))                      # only true mirror pairs (a vertex claimed twice is left)
+    left = (V[:, 0] > 1e-6) & ok
+    mid = (pair == np.arange(len(V))) & ok
     R = V.copy()
     src = np.where(left)[0]
     R[pair[src]] = V[src] * np.array([-1, 1, 1], F32)
@@ -184,23 +185,31 @@ def symmetrize(V, pair):
     return R
 
 
-def fit(o, body, T, relax=6, log=print, per_part=True):
+def fit(o, body, T, relax=6, log=print, per_part=True, hold=None):
+    """hold: vertex indices already placed (the head at the cage level): neither projected nor relaxed"""
     V, E, label = arrays(o)
     n = len(V)
     pair = mirror_pairs(V)
+    held = np.zeros(n, bool)
+    if hold is not None:
+        held[np.asarray(list(hold), np.int64)] = True
     # 1. each part onto its own shape, then everything onto the blended body
     if per_part:
         for part in np.unique(label):
-            idx = np.where(label == part)[0]
+            idx = np.where((label == part) & ~held)[0]
             V[idx] = sdf.project(lambda P, p=part: body.part(p, P), V[idx], iters=8, max_step=.03)
-    V = sdf.project(body, V, iters=4, max_step=.01)
+    free = ~held
+    toe = free & (label == "toe")                              # toes onto the toes alone
+    V[toe] = sdf.project(lambda P: body.part("toe", P), V[toe], iters=6, max_step=.006)
+    free &= ~toe
+    V[free] = sdf.project(body, V[free], iters=4, max_step=.01)
     V = symmetrize(V, pair)
     log(f"projected {n} vertices; max |f| {np.abs(body(V)).max():.4f}")
     # 2. the features
-    loops = boundary_loops(o)
-    pinned = place_features(V, loops, body, T)
-    mask = np.zeros(n, bool)
-    mask[pinned] = True
+    mask = held.copy()
+    if hold is None:
+        loops = boundary_loops(o)
+        mask[place_features(V, loops, body, T)] = True
     # 3. tangential relaxation
     nb, start, deg = neighbours(n, E)
     for it in range(relax):
@@ -209,7 +218,9 @@ def fit(o, body, T, relax=6, log=print, per_part=True):
         d = L - V
         d -= Nn * (d * Nn).sum(1)[:, None]
         Vn = V + d * .5
-        Vn = sdf.project(body, Vn, iters=2, max_step=.004)
+        tv = label == "toe"
+        Vn[~tv] = sdf.project(body, Vn[~tv], iters=2, max_step=.004)
+        Vn[tv] = sdf.project(lambda P: body.part("toe", P), Vn[tv], iters=2, max_step=.004)
         V = np.where(mask[:, None], V, Vn)
         V = symmetrize(V, pair)
     log(f"relaxed; max |f| {np.abs(body(V[~mask])).max():.4f}")

@@ -71,9 +71,9 @@ def leg(T):
 
 
 TOES = ("big", "second", "third", "fourth", "little")
-T_LEN = (.040, .032, .028, .024, .020)
-T_WID = (.026, .018, .017, .016, .015)
-T_OFFSET = (.80, .40, .02, -.36, -.70)        # across the ball of the foot, from medial (+) to lateral (-)
+T_LEN = (.042, .033, .029, .025, .020)
+T_WID = (.029, .018, .017, .0155, .0145)
+T_OFFSET = (.82, .38, .00, -.36, -.70)        # across the ball of the foot, from medial (+) to lateral (-)
 
 
 def foot(T):

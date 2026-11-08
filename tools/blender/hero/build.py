@@ -11,7 +11,7 @@ from mathutils import Vector
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
-import targets, cage as cage_mod, head as head_mod, shape as shape_mod, fit as fit_mod
+import targets, cage as cage_mod, head as head_mod, shape as shape_mod, fit as fit_mod, headfit
 
 
 def log(*a):
@@ -25,8 +25,38 @@ def build_cage(T):
     c.bridge(c.neck_top, neck)
     bm = c.bm
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    loose = [v for v in bm.verts if not v.link_faces]           # the cells inside the arm openings leave these
+    bmesh.ops.delete(bm, geom=loose, context='VERTS')
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     return c
+
+
+def mirror_topology(c, placed):
+    """the right half rebuilt as the mirror of the left (positions AND connectivity): the limbs' rings are matched to
+    their openings separately per side, so only an exact mirror guarantees the same edge flow on both sides"""
+    from mathutils import kdtree
+    bm = c.bm
+    for v in bm.verts:
+        if abs(v.co.x) < 1e-4:
+            v.co.x = 0.0
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.calc_center_median().x < -1e-6], context='FACES')
+    left = list(bm.verts)
+    kd = kdtree.KDTree(len(left))
+    for i, v in enumerate(left):
+        kd.insert(v.co, i)
+    kd.balance()
+    res = bmesh.ops.mirror(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), axis='X', merge_dist=1e-5)
+    swap = lambda p: p[:-1] + {"L": "R", "R": "L"}[p[-1]] if p and p[-2:] in ("_L", "_R") else p
+    placed = {v for v in placed if v.is_valid}
+    for v in [g for g in res["geom"] if isinstance(g, bmesh.types.BMVert)]:
+        co, i, d = kd.find(Vector((-v.co.x, v.co.y, v.co.z)))
+        src = left[i]
+        if src in c.part_of:
+            c.part_of[v] = swap(c.part_of[src])
+        if src in placed:
+            placed.add(v)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return placed
 
 
 def check(bm, label):
@@ -113,11 +143,20 @@ def main():
             sheet([o], flags["--sheet"])
         return
     body = shape_mod.Body(T)
+    placed = headfit.place_head(c, body, T, log=log)                     # the head laid on its landmarks
+    placed = mirror_topology(c, placed)
+    check(c.bm, f"{sex} cage (mirrored)")
+    c.bm.verts.index_update()
+    # the head is laid on its landmarks; fingers, thumbs and toes are built along their bones at their own widths
+    # (a coarse 4-sided digit collapses if projected): neither moves until the subdivided mesh is fitted
+    hold = [v.index for v in placed if v.is_valid] + [v.index for v in c.bm.verts
+                                                      if c.part_of.get(v) in ("finger", "thumb", "toe") and v not in placed]
     o = fit_mod.cage_object(c, f"hero_{sex}")
     levels = int(flags.get("--levels", 2)) if isinstance(flags.get("--levels"), str) else 2
-    fit_mod.fit(o, body, T, relax=3, log=lambda *a: log("cage", *a))     # the cage onto the anatomy first
-    fit_mod.subdivide(o, levels)
-    fit_mod.fit(o, body, T, log=log, per_part=False)                         # then the fine mesh (small moves)
+    fit_mod.fit(o, body, T, relax=3, log=lambda *a: log("cage", *a), hold=hold)   # the rest of the cage onto the body
+    if "--nofine" not in flags:                                              # --nofine: keep the fitted cage
+        fit_mod.subdivide(o, levels)
+        fit_mod.fit(o, body, T, log=log, per_part=False)                         # then the fine mesh (small moves)
     eyes = fit_mod.eyeballs(body, T, f"hero_{sex}")
     bm = bmesh.new(); bm.from_mesh(o.data)
     check(bm, f"{sex} mesh"); bm.free()

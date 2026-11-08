@@ -104,12 +104,13 @@ class Cage:
             rings.append(self.ring(Vector((0, yc, z)), Vector((0, -1, 0)), Vector((1, 0, 0)), TORSO_N, d / 2, w / 2, "torso",
                                    power=2.3 if i < 9 else 2.0))
         self.torso = rings
-        # arm openings: rows between rings 7-8 and 8-9, columns 4..6 (left, verts 4..7) and 14..16 (right, verts 14..17)
-        cols = {4, 5, 6, 14, 15, 16}
+        # arm openings: rows between rings 7-8 and 8-9, columns 4..6 (left, verts 4..7) and their mirror 13..15
+        # (right, verts 13..16: vertex k mirrors to 20 - k)
+        cols = {4, 5, 6, 13, 14, 15}
         for r in range(len(rings) - 1):
             self.bridge(rings[r], rings[r + 1], skip=(lambda i: i in cols) if r in (7, 8) else None)
         self.arm_holes = {}
-        for side, k0 in (("L", 4), ("R", 14)):
+        for side, k0 in (("L", 4), ("R", 13)):
             R7, R8, R9 = rings[7], rings[8], rings[9]
             loop = [R7[k0], R7[k0 + 1], R7[k0 + 2], R7[k0 + 3], R8[k0 + 3], R9[k0 + 3], R9[k0 + 2], R9[k0 + 1], R9[k0], R8[k0]]
             self.arm_holes[side] = loop
@@ -161,6 +162,7 @@ class Cage:
             for t, w, d in ((.10, th["w"] * 1.05, th["d"] * 1.02), (.32, th["w"], th["d"]), (.58, th["w"] * .86, th["d"] * .9),
                             (.80, th["w"] * .70, th["d"] * .76)):
                 c = at(hip, knee, t) + Vector((-.012 * sx * (1 - t), 0, 0))
+                w = min(w, 2 * (abs(c.x) - .008))                  # each thigh stays on its own side of the midline
                 st.append((c, knee - hip, front, w / 2, d / 2, 2.0))
             kw = th["w"] / .18
             for t, w, d in ((.96, .105, .110), (1.04, .100, .104)):       # knee loops
@@ -228,12 +230,14 @@ class Cage:
         self.bridge(last, r)
         toes = []
         for t in F["toes"]:
-            tb = mx(t["base"], sx)
+            r_ = t["width"] / 2                                     # on the target's toe axis (shape.foot_part)
+            tb = mx(t["base"], sx) + Vector((0, 0, r_ * .9 - t["base"].z))
             d = mx(t["dir"], sx)
-            J = [tb, tb + d * (t["len"] * .55), tb + d * t["len"]]
+            tip = tb + d * t["len"] + Vector((0, 0, -r_ * .15))
+            J = [tb, tb + (tip - tb) * .55, tip]
             toes.append(dict(base=tb, joints=J, width=t["width"], up=up, flat=.8))
         self.digits(r[0:6], [r[11 - i] for i in range(6)], toes, "toe",
-                    ((.30, 1.0), (.50, .95), (.58, .93), (.80, .85), (.97, .7)))
+                    ((.42, .92), (.56, .90), (.64, .88), (.82, .82), (.96, .72), (1.03, .42)))
 
     def build_arms(self):
         T = self.T
@@ -279,7 +283,7 @@ class Cage:
         for f, ch in Hd["fingers"].items():
             chains.append(dict(base=mx(ch["base"], sx), joints=[mx(j, sx) for j in ch["joints"]], width=ch["width"], up=d))
         self.digits(kn[0:5], [kn[9 - i] for i in range(5)], chains, "finger",
-                    ((.06, 1.0), (.36, .96), (.43, .97), (.50, .96), (.70, .90), (.76, .90), (.82, .88), (.97, .78)))
+                    ((.06, 1.0), (.36, .96), (.43, .97), (.50, .96), (.70, .90), (.76, .90), (.82, .88), (.96, .80), (1.03, .48)))
         # thumb from the radial side quad between the two palm rings (the side toward the thumb)
         k0, k1 = (0, ARM_N - 1) if u.dot(th) > 0 else (4, 5)
         quad_v = [palm0[k1], palm0[k0], palm1[k0], palm1[k1]]
@@ -291,7 +295,7 @@ class Cage:
         chain = dict(base=mx(tc["base"], sx), joints=[mx(j, sx) for j in tc["joints"]], width=tc["width"], up=d, flat=1.0)
         # a single tube: reuse digits with a one-quad "cap"
         self.digits([quad_v[0], quad_v[1]], [quad_v[3], quad_v[2]], [chain], "thumb",
-                    ((.10, 1.25), (.36, 1.08), (.44, 1.0), (.52, .98), (.78, .9), (.97, .78)))
+                    ((.10, 1.25), (.36, 1.08), (.44, 1.0), (.52, .98), (.78, .9), (.96, .80), (1.03, .48)))
 
     # ------------------------------------------------------------- neck
     def build_neck(self):
