@@ -48,7 +48,7 @@ class Body(HeadShape):
         lerp = lambda a, b, t: a + (b - a) * t
         H, Wst, U, C = T["hips"], T["waist"], T["underbust"], T["chest"]
         bz = T["biacromial"]
-        z0, z1 = T["crotch_z"] - .035, T["neck_base_z"] + .012
+        z0, z1 = T["crotch_z"] - .012, T["neck_base_z"] + .012
         chest_hw = C["w"] / 2 if m else U["w"] / 2 * 1.04
         # the ribcage's depth: his chest measurement; hers is taken over the bust, so her ribcage follows the underbust
         # (the breasts are added in torso())
@@ -59,7 +59,7 @@ class Body(HeadShape):
             (z0, H["w"] * .41, H["d"] * .40, H["d"] * .42, .012),
             (T["crotch_z"] + .02, H["w"] * .47, H["d"] * .45, H["d"] * .50, .014),
             (H["z"], H["w"] / 2, H["d"] * .47, H["d"] * .53, .015),
-            (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .6) / 2, lerp(H["d"], Wst["d"], .5) * .5, lerp(H["d"], Wst["d"], .6) * .48, .008),
+            (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .45) / 2, lerp(H["d"], Wst["d"], .5) * .5, lerp(H["d"], Wst["d"], .6) * .48, .008),
             (Wst["z"], Wst["w"] / 2, Wst["d"] * .5, Wst["d"] * .44, .0),         # the lumbar curve: the back comes in
             (lerp(Wst["z"], U["z"], .5), lerp(Wst["w"], U["w"], .5) / 2, lerp(Wst["d"], U["d"], .5) * .5, lerp(Wst["d"], U["d"], .5) * .5, -.002),
             (U["z"], U["w"] / 2, U["d"] * .5, U["d"] * .52, -.003),
@@ -108,10 +108,10 @@ class Body(HeadShape):
         L = self.leg
         th, ca = T["thigh"], T["calf"]
         kn = L["K"]
-        self.thigh = Loft(V(L["H"] + Vector((-.006, 0, -.005))), V(kn), dict(
+        self.thigh = Loft(V(L["H"] + Vector((-.006, 0, .030))), V(kn), dict(
             # outer sweep high on the thigh (rv_pos = lateral), the inner thigh full at the top and slim above the knee
-            t=[0, .15, .45, .75, 1], rv_pos=[th["w"] * (.50 if m else .56), th["w"] * (.54 if m else .57), th["w"] * .47, th["w"] * .33, th["w"] * .28],
-            rv_neg=[th["w"] * .46, th["w"] * .45, th["w"] * .34, th["w"] * .26, th["w"] * .26],
+            t=[0, .15, .45, .75, 1], rv_pos=[th["w"] * (.43 if m else .47), th["w"] * (.50 if m else .53), th["w"] * .47, th["w"] * .33, th["w"] * .28],
+            rv_neg=[th["w"] * .38, th["w"] * .41, th["w"] * .34, th["w"] * .26, th["w"] * .26],   # (a gap at the crotch)
             rw_neg=[th["d"] * .46, th["d"] * .49, th["d"] * .47, th["d"] * .37, th["d"] * .29],
             # (rw_pos is the front, as on the calf: the thigh's top front stays under the pelvis, no step at the hip)
             rw_pos=[th["d"] * .42, th["d"] * .47, th["d"] * .45, th["d"] * .36, th["d"] * .31]), v_axis=(1, 0, 0), cap=.8)
@@ -151,11 +151,15 @@ class Body(HeadShape):
         # glutes, scapulae, lats
         Hh = T["hips"]
         # glutes: low and behind the hips (with the lumbar curve above them, the side view's S)
-        d = smin(d, ellipsoid(P, (.064, Hh["d"] * .37, Hh["z"] - .035), (.076 if m else .084, .060, .086)), .035)
+        d = smin(d, ellipsoid(P, (.070, Hh["d"] * .37, Hh["z"] - .030), (.068 if m else .076, .060, .082)), .035)
         # latissimus dorsi: the broad back from under the arm down toward the waist (the back tapers, no shelf)
         U = T["underbust"]
         if m:                                                          # (her back stays smooth)
             d = smin(d, ellipsoid(P, (U["w"] * .36, self.rib_d * .28, U["z"] + .02), (.045, .036, .12)), .05)
+            # the flanks: external obliques over the hip bones (the V's lower end) and serratus under the pecs
+            Ws = T["waist"]
+            d = smin(d, ellipsoid(P, (Ws["w"] * .40, -Ws["d"] * .12, Ws["z"] - .045), (.034, .045, .060)), .035)
+            d = smin(d, ellipsoid(P, (U["w"] * .44, -U["d"] * .18, U["z"] + .015), (.026, .040, .055)), .03)
         d = smin(d, ellipsoid(P, (.090 if m else .085, self.rib_d * (.405 if m else .38), T["shoulder_z"] - .115), (.048 if m else .036, .030 if m else .022, .068 if m else .052)), .045 if m else .05)     # scapula
         # trapezius: neck to acromion
         d = smin(d, round_cone(P, (.032, .040, T["neck_base_z"] + .002), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
@@ -180,7 +184,7 @@ class Body(HeadShape):
         # deltoid: wraps the shoulder from the clavicle to a third down the arm
         # (a long teardrop over the shoulder, not a ball: its centre a little down the arm, blended wide)
         c = A["S"] + a * .055 + dor * .010
-        d = smin(d, ellipsoid(P, V(c), (.095, ur * .98, ur * 1.02), self.arm_rows), .04)
+        d = smin(d, ellipsoid(P, V(c), (.095, ur * (1.10 if self.m else .98), ur * (1.06 if self.m else 1.02)), self.arm_rows), .04)
         # biceps / triceps bellies
         fwd = (A["thumb"] - a * A["thumb"].dot(a)).normalized()
         d = smin(d, ellipsoid(P, V(A["S"] + a * .16 + fwd * ur * .45), (.075, ur * .55, ur * .6), self.arm_rows), .025)

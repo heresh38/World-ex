@@ -17,8 +17,8 @@ MALE = dict(
     shoulder_joint=(0.182, 0.0, 1.465),           # glenohumeral centre
     biacromial=0.410, shoulder_z=1.505,           # acromion breadth / height
     chest=dict(z=1.33, w=0.355, d=0.265),         # at the nipples
-    underbust=dict(z=1.25, w=0.322, d=0.235),
-    waist=dict(z=1.09, w=0.272, d=0.200),
+    underbust=dict(z=1.25, w=0.312, d=0.235),
+    waist=dict(z=1.09, w=0.266, d=0.198),
     hips=dict(z=0.95, w=0.345, d=0.240),
     crotch_z=0.880,
     hip_joint=(0.096, 0.005, 0.935),
