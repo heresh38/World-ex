@@ -231,9 +231,9 @@ class Cage:
         toes = []
         for t in F["toes"]:
             r_ = t["width"] / 2                                     # on the target's toe axis (shape.foot_part)
-            tb = mx(t["base"], sx) + Vector((0, 0, r_ * .9 - t["base"].z))
+            tb = mx(t["base"], sx) + Vector((0, .012, skeleton.TOE_ROOT_Z - t["base"].z))
             d = mx(t["dir"], sx)
-            tip = tb + d * t["len"] + Vector((0, 0, -r_ * .15))
+            tip = mx(t["base"], sx) + d * t["len"] + Vector((0, 0, r_ * .80 - t["base"].z))
             J = [tb, tb + (tip - tb) * .55, tip]
             toes.append(dict(base=tb, joints=J, width=t["width"], up=up, flat=.8))
         self.digits(r[0:6], [r[11 - i] for i in range(6)], toes, "toe",

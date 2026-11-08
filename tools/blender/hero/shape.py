@@ -50,6 +50,10 @@ class Body(HeadShape):
         bz = T["biacromial"]
         z0, z1 = T["crotch_z"] - .035, T["neck_base_z"] + .012
         chest_hw = C["w"] / 2 if m else U["w"] / 2 * 1.04
+        # the ribcage's depth: his chest measurement; hers is taken over the bust, so her ribcage follows the underbust
+        # (the breasts are added in torso())
+        rd = C["d"] if m else U["d"] * 1.06
+        self.rib_d = rd
         # (z, half width, front, back, centre y (+ back))
         st = [
             (z0, H["w"] * .41, H["d"] * .40, H["d"] * .42, .012),
@@ -58,18 +62,20 @@ class Body(HeadShape):
             (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .6) / 2, lerp(H["d"], Wst["d"], .5) * .5, lerp(H["d"], Wst["d"], .6) * .48, .008),
             (Wst["z"], Wst["w"] / 2, Wst["d"] * .5, Wst["d"] * .48, .0),
             (lerp(Wst["z"], U["z"], .5), lerp(Wst["w"], U["w"], .5) / 2, lerp(Wst["d"], U["d"], .5) * .5, lerp(Wst["d"], U["d"], .5) * .5, -.002),
-            (U["z"], U["w"] / 2, U["d"] * .5, U["d"] * .5, -.003),
-            (C["z"], chest_hw, C["d"] * (.47 if m else .45), C["d"] * .5, .0),
-            (T["shoulder_z"] - .105, bz * .43, C["d"] * .44, C["d"] * .5, .006),
-            (T["shoulder_z"] - .055, bz * .42, C["d"] * .36, C["d"] * .46, .014),
-            (T["shoulder_z"] - .015, bz * .37, C["d"] * .34, C["d"] * .40, .022),
+            (U["z"], U["w"] / 2, U["d"] * .5, U["d"] * .52, -.003),
+            (C["z"], chest_hw, rd * (.47 if m else .48), rd * .5, .0),
+            (T["shoulder_z"] - .105, bz * .43, rd * .44, rd * (.5 if m else .47), .006),
+            (T["shoulder_z"] - .055, bz * .42, rd * .36, rd * .46, .014),
+            (T["shoulder_z"] - .015, bz * .37, rd * .34, rd * .40, .022),
             (z1, T["neck_w"] * .66, T["neck_d"] * .52, T["neck_d"] * .58, .026),
         ]
+        # back sections: rounder at the hips, flatter and fuller across the ribcage (the back is broad, not a tube)
+        BACK_N = [2.25, 2.25, 2.25, 2.3, 2.4, 2.6, 2.8, 2.8, 2.7, 2.5, 2.3, 2.0]
         zs = np.array([s[0] for s in st])
         tt = (zs - z0) / (z1 - z0)
         self.torso_loft = Loft((0, 0, z0), (0, 0, z1), dict(t=tt, rv_pos=[s[1] for s in st], rw_neg=[s[2] for s in st],
                                                            rw_pos=[s[3] for s in st], cw=[s[4] for s in st],
-                                                           n=np.full(len(st), 2.25), nb=np.full(len(st), 2.4)), v_axis=(1, 0, 0), cap=.6)
+                                                           n=BACK_N, nb=np.full(len(st), 2.4)), v_axis=(1, 0, 0), cap=.6)
         # neck: tilted slightly forward going up
         nb, nt = Vector((0, .028, T["neck_base_z"] - .03)), Vector((0, .010, T["chin_z"] + .085))
         nw, nd = T["neck_w"] / 2, T["neck_d"] / 2
@@ -132,12 +138,15 @@ class Body(HeadShape):
             d = smin(d, ellipsoid(P, (.064, -C["d"] * .36, C["z"] + .045), (.06, .028, .04)), .03)     # pectoral under the breast
             R = frame_rows((0, -1, -.12), (.25, 0, 1))
             # breast: a teardrop, the upper pole sloping down from the pectoral, the fuller lower pole
-            d = smin(d, ellipsoid(P, (.074, -C["d"] * .38, C["z"] + .030), (.062, .030, .050)), .05)          # upper pole
-            d = smin(d, ellipsoid(P, (.078, -C["d"] * .40, C["z"] - .012), (.054, .042, .046)), .045)         # lower pole
+            d = smin(d, ellipsoid(P, (.074, -C["d"] * .37, C["z"] + .028), (.064, .026, .052)), .055)         # upper pole
+            d = smin(d, ellipsoid(P, (.081, -C["d"] * .41, C["z"] - .016), (.057, .038, .044)), .05)          # lower pole
         # glutes, scapulae, lats
         Hh = T["hips"]
         d = smin(d, ellipsoid(P, (.066, Hh["d"] * .34, Hh["z"] - .012), (.078 if m else .088, .058, .092)), .035)
-        d = smin(d, ellipsoid(P, (.090, C["d"] * .405, T["shoulder_z"] - .115), (.048 if m else .042, .030 if m else .026, .068 if m else .060)), .04)     # scapula
+        # latissimus dorsi: the broad back from under the arm down toward the waist (the back tapers, no shelf)
+        U = T["underbust"]
+        d = smin(d, ellipsoid(P, (U["w"] * .36, self.rib_d * .28, U["z"] + .02), (.045 if m else .036, .036 if m else .028, .12 if m else .10)), .05)
+        d = smin(d, ellipsoid(P, (.090, self.rib_d * .405, T["shoulder_z"] - .115), (.048 if m else .040, .030 if m else .018, .068 if m else .058)), .045)     # scapula
         # trapezius: neck to acromion
         d = smin(d, round_cone(P, (.030, .040, T["neck_base_z"] + .020), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
                                .040 if m else .032, .024), .045)
@@ -226,8 +235,9 @@ class Body(HeadShape):
         d = None
         for t in self.foot["toes"]:
             r = t["width"] / 2
-            b = t["base"] + Vector((0, .012, r * .9 - t["base"].z))          # resting on the floor
-            tip = t["base"] + t["dir"] * t["len"] + Vector((0, 0, r * .75 - t["base"].z))
+            # from the ball of the foot (the joint sits up in the forefoot) sloping down to the tip on the floor
+            b = t["base"] + Vector((0, .012, skeleton.TOE_ROOT_Z - t["base"].z))
+            tip = t["base"] + t["dir"] * t["len"] + Vector((0, 0, r * .80 - t["base"].z))
             e = round_cone(P, V(b), V(tip), r * .90, r * .76)
             d = e if d is None else np.minimum(d, e)
         return np.maximum(d, -P[:, 2]) if sole else d

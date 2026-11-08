@@ -4,8 +4,8 @@ column i = x, row j = z, both -6..5), so everything is deterministic and mirror-
 
   eyes    3 x 1 cells (columns 1..3 / -4..-2, row -1) inset three times: concentric loops (lid margin, lids, orbit),
           the middle removed -> each eye opening is an 8-vertex loop
-  mouth   4 x 1 cells (columns -2..1, the bottom front row) inset three times (lip line, lips, the ring round the
-          mouth), the middle removed -> the lips' 10-vertex slit
+  mouth   6 x 1 cells (columns -3..2, the bottom front row) inset three times (lip line, lips, the ring round the
+          mouth), the middle removed -> the lips' 14-vertex slit
   nose    the 2-wide strip between the eyes down to the mouth ring (columns -1..0, rows -5..-1), extruded forward
   ears    2 x 3 cells on each side face, extruded out and back
   neck    4 x 6 cells underneath removed -> the 20-vertex neck opening the body's neck rings meet
@@ -99,7 +99,7 @@ def build_head(cage, T):
     # three insets each (thin: the rows are ~2 cm, the loops are laid out properly by headfit.py)
     feat["eye_L"] = inset_hole(block(FRONT, 1, 3, -1, -1), (.002, .002, .002))
     feat["eye_R"] = inset_hole(block(FRONT, -4, -2, -1, -1), (.002, .002, .002))
-    feat["mouth"] = inset_hole(block(FRONT, -2, 1, -6, -6), (.0016, .0016, .0016))
+    feat["mouth"] = inset_hole(block(FRONT, -3, 2, -6, -6), (.0016, .0016, .0016))   # 6 cells: room at the corners
     eye_z, base_z = T["eye_z"], T["chin_z"] + hh * .313
 
     def nose_move(v):

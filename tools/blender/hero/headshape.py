@@ -137,17 +137,17 @@ class HeadShape:
         st, mw = g["stomion"], g["mouth_w"]
         full = (1.0 if m else 1.2) * F("lips_full")
         tt = [0, .1, .25, .42, .5, .58, .75, .9, 1]
-        yo = .0050
+        yo = .0042
         self._lips = (
             Loft(V(st + Vector((-mw / 2, yo, .0006))), V(st + Vector((mw / 2, yo, .0006))), dict(
                 t=tt, rv_pos=[.0008, .0028, .0050, .0058, .0052, .0058, .0050, .0028, .0008],
                 rv_neg=[.0006, .0012, .0018, .0020, .0020, .0020, .0018, .0012, .0006],
-                rw_pos=[f * full for f in (.0010, .0026, .0046, .0056, .0058, .0056, .0046, .0026, .0010)],
+                rw_pos=[f * full * 1.2 for f in (.0010, .0026, .0046, .0056, .0058, .0056, .0046, .0026, .0010)],
                 rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9),
             Loft(V(st + Vector((-mw * .46, yo + .001, -.0008))), V(st + Vector((mw * .46, yo + .001, -.0008))), dict(
                 t=tt, rv_pos=[.0006, .0012, .0016, .0018, .0018, .0018, .0016, .0012, .0006],
                 rv_neg=[f * full for f in (.0008, .0030, .0052, .0062, .0064, .0062, .0052, .0030, .0008)],
-                rw_pos=[f * full for f in (.0010, .0028, .0048, .0056, .0058, .0056, .0048, .0028, .0010)],
+                rw_pos=[f * full * 1.2 for f in (.0010, .0028, .0048, .0056, .0058, .0056, .0048, .0028, .0010)],
                 rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9))
 
     def head_part(self, P, ear=True):
@@ -164,7 +164,7 @@ class HeadShape:
         d = smin(d, self._face(P), .018)
         # brow ridges (his stronger) over each orbit, the glabella between them
         k = (1.0 if m else .45) * F("brow")
-        d = smin(d, round_cone(P, V(X(.003, -.0945, .136)), V(X(.047, -.0795, .1335)), .0058 * hs * (.55 + .45 * k),
+        d = smin(d, round_cone(P, V(X(.003, -.0935, .139)), V(X(.047, -.0790, .1385)), .0054 * hs * (.55 + .45 * k),
                                .0046 * hs * (.6 + .4 * k)), .012)
         # cheekbones (malar eminence) and the zygomatic arch back to the ear
         cb = F("cheekbones")
@@ -205,5 +205,5 @@ class HeadShape:
         tilt = math.radians(14)
         R = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]], F32)
         outer = ellipsoid(P, V(c), (.0085 * es, .0170 * es, .0305 * es), R)
-        bowl = ellipsoid(P, V(c + Vector((.008 * es, -.002 * es, -.004 * es))), (.006 * es, .010 * es, .013 * es), R)
+        bowl = ellipsoid(P, V(c + Vector((.0085 * es, -.002 * es, -.004 * es))), (.0055 * es, .0095 * es, .0125 * es), R)
         return smax(outer, -bowl, .003)

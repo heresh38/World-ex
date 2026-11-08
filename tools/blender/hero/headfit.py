@@ -165,6 +165,8 @@ def place_head(cage, body, T, log=print):
                 v = Hh * s * (1 - .10 * ue) + lift
             else:
                 v = -Lh * s * (1 + .12 * ue) + lift
+            if ue > 0:                                          # the outer rings fan out more toward the temple
+                W = wf + (W - wf) * 1.7
             return (ec.x * sx + ue * W * sx, ec.z + v)
 
         def eye_surface(k, pts):
@@ -185,8 +187,8 @@ def place_head(cage, body, T, log=print):
 
     def mouth_surface(k, pts):
         return front_y(body, pts[:, 0], pts[:, 1], np.full(len(pts), st.y + .025, F32))
-    lay(feat["mouth"], 3, [(mw / 2, .0004 * hs, .0004 * hs), (mw / 2 * 1.02, .0045 * hs, .0055 * hs),
-                           (mw / 2 * 1.07, .0095 * hs, .0110 * hs)], mouth_pt, mouth_surface)
+    lay(feat["mouth"], 3, [(mw / 2, .0004 * hs, .0004 * hs), (mw / 2 * 1.08, .0050 * hs, .0060 * hs),
+                           (mw / 2 * 1.20, .0100 * hs, .0115 * hs)], mouth_pt, mouth_surface)
 
     # ---------------------------------------------------------------- 3. the nose's cap and the ears' caps
     nasion, tip, sub = g["nasion"], g["pronasale"], g["subnasale"]

@@ -70,6 +70,7 @@ def leg(T):
     return dict(H=Vector(T["hip_joint"]), K=Vector(T["knee"]), A=Vector(T["ankle"]))
 
 
+TOE_ROOT_Z = .021     # the toes' roots sit up in the forefoot at the ball; each toe slopes down to its tip on the floor
 TOES = ("big", "second", "third", "fourth", "little")
 T_LEN = (.042, .033, .029, .025, .020)
 T_WID = (.029, .018, .017, .0155, .0145)
