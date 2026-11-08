@@ -27,7 +27,7 @@ MALE = dict(
     thigh=dict(w=0.198, d=0.200), calf=dict(w=0.124, d=0.134),
     upper_arm=0.305, forearm=0.265, hand=0.195,   # joint to joint; hand = wrist to middle fingertip
     arm_drop=45.0, arm_fwd=8.0,                   # A-pose: degrees below horizontal, degrees forward
-    upper_arm_r=0.064, forearm_r=0.050, wrist=dict(w=0.064, d=0.043),
+    upper_arm_r=0.068, forearm_r=0.050, wrist=dict(w=0.064, d=0.043),
     palm=dict(l=0.108, w=0.088, t=0.030),
     foot=dict(l=0.270, w=0.102), heel_back=0.060,
 )

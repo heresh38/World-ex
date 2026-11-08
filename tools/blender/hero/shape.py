@@ -59,14 +59,14 @@ class Body(HeadShape):
             (z0, H["w"] * .41, H["d"] * .40, H["d"] * .42, .012),
             (T["crotch_z"] + .02, H["w"] * .47, H["d"] * .45, H["d"] * .50, .014),
             (H["z"], H["w"] / 2, H["d"] * .47, H["d"] * .53, .015),
-            (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .45) / 2, lerp(H["d"], Wst["d"], .5) * .5, lerp(H["d"], Wst["d"], .6) * .48, .008),
-            (Wst["z"], Wst["w"] / 2, Wst["d"] * .5, Wst["d"] * .44, .0),         # the lumbar curve: the back comes in
-            (lerp(Wst["z"], U["z"], .5), lerp(Wst["w"], U["w"], .5) / 2, lerp(Wst["d"], U["d"], .5) * .5, lerp(Wst["d"], U["d"], .5) * .5, -.002),
+            (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .45) / 2, lerp(H["d"], Wst["d"], .5) * (.55 if m else .5), lerp(H["d"], Wst["d"], .6) * .48, .008),
+            (Wst["z"], Wst["w"] / 2, Wst["d"] * (.56 if m else .5), Wst["d"] * .44, .0),         # the lumbar curve: the back comes in
+            (lerp(Wst["z"], U["z"], .5), lerp(Wst["w"], U["w"], .5) / 2, lerp(Wst["d"], U["d"], .5) * (.54 if m else .5), lerp(Wst["d"], U["d"], .5) * .5, -.002),
             (U["z"], U["w"] / 2, U["d"] * .5, U["d"] * .52, -.003),
-            (C["z"], chest_hw, rd * (.47 if m else .48), rd * .5, .0),
-            (T["shoulder_z"] - .105, bz * .43, rd * .44, rd * (.5 if m else .47), .006),
-            (T["shoulder_z"] - .055, bz * .42, rd * .36, rd * .46, .014),
-            (T["shoulder_z"] - .015, bz * .37, rd * .34, rd * .40, .022),
+            (C["z"], chest_hw, rd * (.52 if m else .48), rd * .5, .0),            # (his chest deep: a barrel ribcage)
+            (T["shoulder_z"] - .105, bz * .43, rd * (.52 if m else .44), rd * (.5 if m else .47), .006),
+            (T["shoulder_z"] - .055, bz * .42, rd * (.50 if m else .36), rd * .46, .014),      # full upper chest under the clavicles
+            (T["shoulder_z"] - .015, bz * .37, rd * (.45 if m else .34), rd * .40, .022),
             (z1, T["neck_w"] * .66, T["neck_d"] * .52, T["neck_d"] * .58, .026),
         ]
         # back sections: rounder at the hips, flatter and fuller across the ribcage (the back is broad, not a tube)
