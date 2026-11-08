@@ -37,10 +37,10 @@ FACE = [
     (.006, -.086, .030, -.032, -.050, 2.2),
     (.016, -.0930, .037, -.022, -.044, 2.4),     # pogonion: the chin's front
     (.030, -.0915, .044, -.010, -.030, 2.4),     # labiomental fold
-    (.045, -.0950, .0495, .030, -.016, 2.6),     # lower lip, gonion level (the back reaches into the neck)
-    (.058, -.0970, .0545, .036, -.016, 2.6),     # upper lip
-    (.072, -.0955, .0595, .045, -.018, 2.7),     # subnasale
-    (.090, -.0935, .0650, .045, -.020, 2.7),
+    (.045, -.0950, .0475, .030, -.016, 2.6),     # lower lip, gonion level (the back reaches into the neck)
+    (.058, -.0970, .0530, .036, -.016, 2.6),     # upper lip
+    (.072, -.0955, .0585, .045, -.018, 2.7),     # subnasale
+    (.090, -.0935, .0645, .045, -.020, 2.7),
     (.104, -.0925, .0680, .060, -.022, 2.4),     # zygion: the cheekbones' breadth
     (.121, -.0905, .0680, .070, -.026, 2.0),     # the eyes (the orbits recede from the nose root)
     (.136, -.0965, .0655, .070, -.028, 2.5),     # glabella
@@ -83,7 +83,7 @@ class HeadShape:
             mouth_w=(.052 if m else .048) * hs * F("mouth_width"),
             pogonion=X(0, (-.0935 if m else -.0915) - .006 * (F("chin") - 1), .016),
             menton=X(0, -.070, 0),
-            gonion=X((.049 if m else .045) * F("jaw_width"), -.004, .040),
+            gonion=X((.047 if m else .043) * F("jaw_width"), -.002, .040),
             tragion=X(.0715, .004, .100),
             vertex_z=chin + h,
             centre=Vector((0, Y0, ez)),
@@ -103,7 +103,7 @@ class HeadShape:
         rows = []
         for z, yf, hw, yb, cw, nf in FACE:
             if not m:
-                k = .90 if z < .05 else (.95 if z < .09 else 1.0)    # her jaw and chin narrower
+                k = .94 if z < .05 else (.97 if z < .09 else 1.0)    # her jaw and chin narrower
                 hw *= k
                 if .125 < z < .165:
                     yf += .003                                      # less glabella
@@ -172,10 +172,12 @@ class HeadShape:
         d = smin(d, round_cone(P, V(X(.050, -.060, .101)), V(X(.063, -.010, .103)), .0050 * hs, .0045 * hs), .020)
         # the cheek's soft fullness over the masseter and buccal pad (keeps the face from looking gaunt)
         d = smin(d, ellipsoid(P, V(X(.043, -.046, .064)), (.015 * hs, .026 * hs, .026 * hs)), .03)
+        # behind and below the ear: the mastoid and the upper neck muscles fill the skull's underside (no dent)
+        d = smin(d, ellipsoid(P, V(X(.046, .032, .074)), (.022 * hs, .034 * hs, .040 * hs)), .025)
         # mandible: the lower border chin -> angle, the ramus up toward the ear; the chin's mound (squarer on him)
         jw = 1.0 if m else .8
         d = smin(d, round_cone(P, V(X(.004, -.084, .013)), V(g["gonion"]), .0070 * hs * jw, .0090 * hs * jw), .020)
-        d = smin(d, round_cone(P, V(g["gonion"]), V(X(.060, .000, .085)), .0100 * hs * jw, .0080 * hs), .018)
+        d = smin(d, round_cone(P, V(g["gonion"]), V(X(.058, .004, .088)), .0075 * hs * jw, .0065 * hs), .018)
         d = smin(d, ellipsoid(P, V(g["pogonion"] + Vector((0, .009, -.002))),
                               ((.019 if m else .015) * hs * F("chin"), .0065 * hs, (.010 if m else .009) * hs * F("chin"))), .014)
         # lips
@@ -206,4 +208,5 @@ class HeadShape:
         R = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]], F32)
         outer = ellipsoid(P, V(c), (.0085 * es, .0170 * es, .0305 * es), R)
         bowl = ellipsoid(P, V(c + Vector((.0085 * es, -.002 * es, -.004 * es))), (.0055 * es, .0095 * es, .0125 * es), R)
-        return smax(outer, -bowl, .003)
+        # the bowl only a shallow dish: a deep concha folds a base mesh's few ear quads (detail comes from the normal map)
+        return smax(outer, -bowl + .0025 * es, .003)

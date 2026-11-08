@@ -76,11 +76,12 @@ class Body(HeadShape):
         self.torso_loft = Loft((0, 0, z0), (0, 0, z1), dict(t=tt, rv_pos=[s[1] for s in st], rw_neg=[s[2] for s in st],
                                                            rw_pos=[s[3] for s in st], cw=[s[4] for s in st],
                                                            n=BACK_N, nb=np.full(len(st), 2.4)), v_axis=(1, 0, 0), cap=.6)
-        # neck: tilted slightly forward going up
-        nb, nt = Vector((0, .028, T["neck_base_z"] - .03)), Vector((0, .010, T["chin_z"] + .085))
+        # neck: tilted slightly forward going up; its top tucks in under the jaw (narrower than the jaw's angles) and
+        # ends below the ears, so the head sits on the neck instead of sinking into it
+        nb, nt = Vector((0, .028, T["neck_base_z"] - .03)), Vector((0, .012, T["chin_z"] + .050))
         nw, nd = T["neck_w"] / 2, T["neck_d"] / 2
-        self.neck_loft = Loft(V(nb), V(nt), dict(t=[0, .5, 1], rv_pos=[nw * 1.12, nw, nw * .98], rw_neg=[nd * .95, nd * .9, nd * .85],
-                                                  rw_pos=[nd * 1.05, nd * 1.02, nd]), v_axis=(1, 0, 0), cap=.8)
+        self.neck_loft = Loft(V(nb), V(nt), dict(t=[0, .5, 1], rv_pos=[nw * 1.12, nw * .97, nw * .78], rw_neg=[nd * .95, nd * .88, nd * .80],
+                                                  rw_pos=[nd * 1.05, nd * 1.02, nd * .98]), v_axis=(1, 0, 0), cap=.8)
         self.arm = skeleton.arm(T)
         self.hand = skeleton.hand(T)
         self.leg = skeleton.leg(T)
@@ -104,17 +105,19 @@ class Body(HeadShape):
         L = self.leg
         th, ca = T["thigh"], T["calf"]
         kn = L["K"]
-        self.thigh = Loft(V(L["H"] + Vector((-.006, 0, .02))), V(kn), dict(
+        self.thigh = Loft(V(L["H"] + Vector((-.006, 0, -.005))), V(kn), dict(
             t=[0, .15, .45, .75, 1], rv_pos=[th["w"] * .50, th["w"] * .50, th["w"] * .46, th["w"] * .37, th["w"] * .30],
             rv_neg=[th["w"] * .44, th["w"] * .46, th["w"] * .40, th["w"] * .32, th["w"] * .29],
             rw_neg=[th["d"] * .46, th["d"] * .49, th["d"] * .47, th["d"] * .37, th["d"] * .29],
-            rw_pos=[th["d"] * .50, th["d"] * .50, th["d"] * .45, th["d"] * .36, th["d"] * .31]), v_axis=(1, 0, 0), cap=.8)
+            # (rw_pos is the front, as on the calf: the thigh's top front stays under the pelvis, no step at the hip)
+            rw_pos=[th["d"] * .42, th["d"] * .47, th["d"] * .45, th["d"] * .36, th["d"] * .31]), v_axis=(1, 0, 0), cap=.8)
         ank = L["A"]
         self.calf = Loft(V(kn + Vector((0, 0, .015))), V(ank + Vector((0, 0, .02))), dict(
             t=[0, .2, .38, .6, .85, 1], rv_pos=[ca["w"] * .46, ca["w"] * .50, ca["w"] * .47, ca["w"] * .37, ca["w"] * .29, ca["w"] * .30],
             rv_neg=[ca["w"] * .46, ca["w"] * .52, ca["w"] * .49, ca["w"] * .37, ca["w"] * .29, ca["w"] * .30],
-            rw_neg=[ca["d"] * .40, ca["d"] * .38, ca["d"] * .36, ca["d"] * .30, ca["d"] * .25, ca["d"] * .26],
-            rw_pos=[ca["d"] * .44, ca["d"] * .62, ca["d"] * .58, ca["d"] * .40, ca["d"] * .27, ca["d"] * .27]), v_axis=(1, 0, 0), cap=.8)
+            # (frame: u runs down the leg, so w = u x v points forward: rw_pos is the shin, rw_neg the calf muscle)
+            rw_pos=[ca["d"] * .40, ca["d"] * .38, ca["d"] * .36, ca["d"] * .30, ca["d"] * .25, ca["d"] * .26],
+            rw_neg=[ca["d"] * .44, ca["d"] * .62, ca["d"] * .58, ca["d"] * .40, ca["d"] * .27, ca["d"] * .27]), v_axis=(1, 0, 0), cap=.8)
         Fo = self.foot
         heel, ball = Fo["heel"], Fo["ball"]
         fw = Fo["width"]
@@ -168,14 +171,18 @@ class Body(HeadShape):
         ur = T["upper_arm_r"]
         d = smin(self.uarm(P), self.farm(P), .035)
         # deltoid: wraps the shoulder from the clavicle to a third down the arm
-        c = A["S"] + a * .035 + dor * .012
-        d = smin(d, ellipsoid(P, V(c), (.085, ur * 1.08, ur * 1.12), self.arm_rows), .03)
+        # (a long teardrop over the shoulder, not a ball: its centre a little down the arm, blended wide)
+        c = A["S"] + a * .055 + dor * .010
+        d = smin(d, ellipsoid(P, V(c), (.095, ur * .98, ur * 1.02), self.arm_rows), .04)
         # biceps / triceps bellies
         fwd = (A["thumb"] - a * A["thumb"].dot(a)).normalized()
         d = smin(d, ellipsoid(P, V(A["S"] + a * .16 + fwd * ur * .45), (.075, ur * .55, ur * .6), self.arm_rows), .025)
         d = smin(d, ellipsoid(P, V(A["S"] + a * .14 - fwd * ur * .55), (.085, ur * .6, ur * .6), self.arm_rows), .025)
         # elbow (olecranon) and the forearm extensors
-        d = smin(d, sphere(P, V(A["E"] - fwd * ur * .55), .022), .02)
+        d = smin(d, sphere(P, V(A["E"] - fwd * ur * .50), .016), .02)
+        # the forearm's muscle mass just below the elbow (flexors / extensors / brachioradialis): no doll joint
+        fr = T["forearm_r"]
+        d = smin(d, ellipsoid(P, V(A["E"] + a * .060), (.070, fr * .98, fr * .92), self.arm_rows), .03)
         return d
 
     def hand_part(self, P):
@@ -260,6 +267,6 @@ class Body(HeadShape):
         d = smin(d, self.head_part(P), .03)
         d = smin(d, self.arm_part(P), .045)
         d = smin(d, self.hand_part(P), .015)
-        d = smin(d, self.leg_part(P), .04)
+        d = smin(d, self.leg_part(P), .05)
         d = smin(d, self.foot_part(P), .02)
         return d
