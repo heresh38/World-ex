@@ -40,7 +40,7 @@ struct SOCOMBAT_API FSOWardrobeItem
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	bool bLocked = false;
 
-	/** Helmets hide the hair. */
+	/** Helmets hide the hair (bald under a sealed helmet; the hair is back when it comes off). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	bool bHideHair = false;
 

@@ -496,6 +496,12 @@ def character(src, dest, mesh_name, clip_prefix, master, extra_for=None, flesh=F
         if eal.rename_asset(path, target):
             renamed.append(clip)
             fix_clip_units(eal.load_asset(target))
+    # clips the model no longer has (an older clip set) are deleted, so nothing stale is left to load
+    for path in eal.list_assets(dest + "/Anims", recursive=False, include_folder=False):
+        name = path.split(".")[-1]
+        if name.startswith(clip_prefix) and name[len(clip_prefix):] not in actions:
+            eal.delete_asset(path.split(".")[0])
+            log(f"{mesh_name}: removed old clip {name}")
     for path in eal.list_assets(dest + "/Anims", recursive=False, include_folder=False):
         eal.save_asset(path, only_if_is_dirty=False)
     eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
@@ -576,6 +582,15 @@ def player_extra(key, m):
 
 # ---------------------------------------------------------------- modular players (wardrobe pieces)
 
+# Outfit wear per material: (EdgeWear, Scratches, Grime, WearMetal, WearTiling). Plates rub through to metal at the
+# edges and carry scratches; cloth only takes grime; glow, visor, skin and hair none.
+ARMOUR_WEAR = {
+    "orion_plate": (1.0, .45, .35, 1.0, .35), "orion_plate_white": (1.0, .40, .40, 1.0, .35),
+    "orion_steel": (.8, .50, .30, 1.0, .40),
+    "orion_coat": (0.0, .10, .45, 0.0, .30), "orion_white": (0.0, .10, .50, 0.0, .30), "orion_cloth": (0.0, .08, .45, 0.0, .30),
+    "orion_black": (0.0, .05, .40, 0.0, .30), "orion_strap": (0.0, .20, .45, 0.0, .30),
+    "orion_leather": (0.0, .35, .50, 0.0, .30), "orion_sole": (0.0, .10, .60, 0.0, .30),
+}
 ARMOR_SLOT = {"head": 10, "top": 4, "vest": 20, "outer": 14, "dress": 4, "hands": 6, "legs": 10, "feet": 6}
 HEAVY = re.compile(r"plate|armou?r|guard|helmet|vest|harness|pauldron|greave|gauntlet|tactical|carrier|kevlar|combat", re.I)
 ICONS = os.path.join(SOURCE, "Icons")
@@ -622,6 +637,18 @@ def import_piece(fbx, dest, name, skeleton):
     raise RuntimeError(f"wardrobe piece import failed: {fbx}")
 
 
+def make_lods(mesh, count=4):
+    """the third-person body and pieces get an automatic LOD chain (Unreal's skeletal reduction: each LOD about half
+    the triangles of the one before); the first-person cuts are always close and keep their one LOD"""
+    try:
+        sub = unreal.get_editor_subsystem(unreal.SkeletalMeshEditorSubsystem)
+        sub.regenerate_lod(mesh, new_lod_count=count, regenerate_even_if_imported=True, generate_base_lod=False)
+        lods = [sub.get_num_verts(mesh, i) for i in range(sub.get_lod_count(mesh))]
+        log(f"{mesh.get_name()}: LOD vertices {lods}")
+    except Exception as e:                       # (the reduction plugin missing: the mesh keeps LOD0 only)
+        log(f"{mesh.get_name()}: no LODs ({e})")
+
+
 def player_wardrobe(sex, master):
     """export_fbx.py --per-item output of player_<sex>.glb (body + every piece, and their first-person cuts) ->
     SK_Player<Sex> (body, clips, physics), SK_Player<Sex>Arms, Wardrobe/SK_<Sex>_<slot>_<item>,
@@ -647,15 +674,27 @@ def player_wardrobe(sex, master):
     used = {base_slot(n) for a in manifest["assets"] for n in a["materials"]}
     tex = import_textures_for(src, materials, dest + "/Textures", used)
     instances = {}
+    worn = wear_texture()
     for key in used:
         m = materials.get(key) or (materials.get("skin") if key == "skin_face" else None) or {}
         instances[key] = make_instance(master, dest, key, m, tex, player_extra(key, m))
+        amounts = ARMOUR_WEAR.get(key)
+        if amounts and worn:
+            # the outfit's wear (hero/finish.py writes the per-vertex edge wear and the paint): how far the edges
+            # rub bare, scratches and grime from the shared mask, at a scale that suits world-sized cloth UVs
+            mi = instances[key]
+            mel.set_material_instance_texture_parameter_value(mi, "WearTex", worn)
+            for name, value in zip(("EdgeWear", "Scratches", "Grime", "WearMetal", "WearTiling"), amounts):
+                mel.set_material_instance_scalar_parameter_value(mi, name, float(value))
+            mel.update_material_instance(mi)
+            eal.save_loaded_asset(mi, only_if_is_dirty=False)
 
     # the body: skeleton, physics and clips
     body_entry = next(a for a in manifest["assets"] if a["name"] == "Body")
     objs = import_fbx(os.path.join(src, body_entry["file"]), dest, f"SK_Player{Sex}", True)
     body = next(o for o in objs if isinstance(o, unreal.SkeletalMesh))
     assign_materials(body, instances)
+    make_lods(body)
     skeleton = body.get_editor_property("skeleton")
     ensure_dir(dest + "/Anims")
     actions = sorted(body_entry.get("actions", []), key=len, reverse=True)
@@ -680,6 +719,7 @@ def player_wardrobe(sex, master):
             continue
         mesh = import_piece(os.path.join(src, a["file"]), dest + "/Wardrobe", f"SK_{Sex}_{a['slot']}_{a['item']}", skeleton)
         assign_materials(mesh, instances)
+        make_lods(mesh)
         pieces[(a["slot"], a["item"])] = {"mesh": mesh}
     arms_body = None
     if os.path.isdir(arms_src):

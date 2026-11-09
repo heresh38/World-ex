@@ -8,7 +8,8 @@
 
 class UAnimSequenceBase;
 
-/** Clips the native locomotion graph uses (our shared Blender clip set: Idle, Walk, Run, Jump, Death, Attack, Slide). */
+/** Clips the native locomotion graph uses (each body's own Blender set: Idle, Walk, Run, Jump, Death, Attack, Slide,
+ *  and the idle variations it slips in while standing). */
 USTRUCT(BlueprintType)
 struct SOCHARACTER_API FSOLocomotionClips
 {
@@ -35,6 +36,11 @@ struct SOCHARACTER_API FSOLocomotionClips
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> Slide;
 
+	/** Idle variations (Fidget1..n): one plays now and then while standing still and not aiming; each starts and ends
+	 *  on the idle pose. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TArray<TObjectPtr<UAnimSequenceBase>> Fidgets;
+
 	/** Ground speeds (cm/s) the walk and run clips were authored at; playback rate follows the real speed. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	float WalkSpeed = 440.0f;
@@ -60,8 +66,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	virtual void PreUpdate(UAnimInstance* InAnimInstance, float DeltaSeconds) override;
 	virtual bool Evaluate(FPoseContext& Output) override;
 
-	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide */
-	FSOLocomotionLayer Layers[7];
+	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget */
+	FSOLocomotionLayer Layers[8];
 
 	// Held gun (players): copied from the instance each update.
 	bool bHold = false;
@@ -173,9 +179,24 @@ public:
 	FSOFingerPose LeftFingers;
 	FVector EyeCS = FVector::ZeroVector;
 
-	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide. */
-	float Weights[7] = { 1, 0, 0, 0, 0, 0, 0 };
-	float Times[7] = { 0, 0, 0, 0, 0, 0, 0 };
+	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget. */
+	float Weights[8] = { 1, 0, 0, 0, 0, 0, 0, 0 };
+	float Times[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+	/** Seconds of standing still before an idle variation, picked between these (random each time). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	FVector2D FidgetDelay = FVector2D(7.0f, 15.0f);
+
+	/** Starts the wait for the next idle variation over (a new random delay from FidgetDelay). */
+	void ResetFidgetTimer() { NextFidget = -1.0f; StillTime = 0.0f; }
+
+	/** The idle variation playing (index into Clips.Fidgets), or -1. */
+	int32 ActiveFidget = -1;
+	/** The clip the fidget layer shows (kept while it blends out). */
+	const UAnimSequenceBase* FidgetClip = nullptr;
+	/** Shared walk / run cycle phase (0..1 per cycle): both clips start on the left foot, so blending never crosses
+	 *  the legs. */
+	float CyclePhase = 0.0f;
 
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
@@ -188,6 +209,9 @@ protected:
 	float Compress = 0.0f;       // landing: cm the hips sink (spring)
 	float CompressVel = 0.0f;
 	float PelvisFeet = 0.0f;     // cm the hips drop so the lower foot reaches the ground
+	float StillTime = 0.0f;      // seconds standing still (idle variations)
+	float NextFidget = -1.0f;    // (picked from FidgetDelay)
+	int32 LastFidget = -1;
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
 	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
 };

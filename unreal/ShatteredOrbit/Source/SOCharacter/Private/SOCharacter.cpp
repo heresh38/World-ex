@@ -1,5 +1,7 @@
 #include "SOCharacter.h"
 
+#include "Misc/PackageName.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -278,7 +280,13 @@ void ASOCharacter::ApplyOutfit()
 	TMap<FName, const FSOWardrobeItem*> Worn;
 	for (int32 i = 0; i < Outfit.Slots.Num(); ++i)
 	{
-		if (const FSOWardrobeItem* Item = Outfit.Items.IsValidIndex(i) ? Wardrobe->Find(Outfit.Slots[i], Outfit.Items[i]) : nullptr)
+		const FSOWardrobeItem* Item = Outfit.Items.IsValidIndex(i) ? Wardrobe->Find(Outfit.Slots[i], Outfit.Items[i]) : nullptr;
+		if (!Item && !USOWardrobeData::ArmourSlots().Contains(Outfit.Slots[i]))
+		{
+			// a slot that is never empty (hair, underwear) naming the other body's item: this body's own default
+			Item = Wardrobe->Find(Outfit.Slots[i], Wardrobe->Defaults.FindRef(Outfit.Slots[i]));
+		}
+		if (Item)
 		{
 			Worn.Add(Outfit.Slots[i], Item);
 		}
@@ -418,6 +426,20 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 		Anim->Clips.Jump = Clip(TEXT("Jump"));
 		Anim->Clips.Death = Clip(TEXT("Death"));
 		Anim->Clips.Slide = Clip(TEXT("Slide"));
+		Anim->Clips.Fidgets.Reset();
+		for (int32 i = 1; i <= 8; ++i)                       // this body's idle variations (Fidget1..n)
+		{
+			const FString Name = FString::Printf(TEXT("Fidget%d"), i);
+			const FString Path = ClipPathPrefix + Name + TEXT(".") + FPaths::GetBaseFilename(ClipPathPrefix) + Name;
+			if (!FPackageName::DoesPackageExist(FSoftObjectPath(Path).GetLongPackageName()))
+			{
+				break;
+			}
+			if (UAnimSequenceBase* F = Clip(*Name))
+			{
+				Anim->Clips.Fidgets.Add(F);
+			}
+		}
 		Anim->Clips.WalkSpeed = 440.0f;
 		Anim->Clips.RunSpeed = 860.0f;
 	}

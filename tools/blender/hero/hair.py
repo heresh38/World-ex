@@ -169,6 +169,12 @@ def card(bm, uv, pts, width, col, tip_width=.55, twist=0.0):
             loop[uv].uv = (u, 1 - v)
 
 
+def ponytail_tie(T):
+    """where her ponytail is tied (the back of the crown)"""
+    from mathutils import Vector as V
+    return V((0, .085, T["height"] - .045))
+
+
 def build(info, T, tex_dir, log=print):
     """the hair object for this body (C_hair__short / C_hair__ponytail) with its cap"""
     from wardrobe import from_faces, join
@@ -266,7 +272,7 @@ def build(info, T, tex_dir, log=print):
                 twist=rnd.uniform(-.2, .2), tip=.9, steps=4)
         name = "C_hair__short"
     else:
-        tie = Vector((0, .085, top - .045))
+        tie = ponytail_tie(T)
 
         def direction(p):
             return tie - p

@@ -41,8 +41,8 @@ Serve the repo root with any static server (`python3 -m http.server 8765`).
   blowback, pistol slide locks back on empty. Sounds: `audio.reloadSfx(kind)`, `audio.dropSfx`. Test: `tools/test/reload.js`.
 - Material **names are an API**: the game recolours by name (`armor_primary`, `armor_secondary`, `glow`, `visor`,
   `gun_body`, `gun_glow`, `car_paint`, `hover_glow`, `facade`, `ribbon`, `rock`, `core_glow`, `ammo_glow`, glass names).
-- Bone names lose dots in three (`hand.R` → `handR`). Characters share one rig and 9 clips
-  (Idle, Walk, Run, Jump, IdleRelaxed, WalkRelaxed, RunRelaxed, Sit, Death); arm poses are IK-solved then baked.
+- Bone names lose dots in three (`hand.R` → `handR`). The enemies (`characters.py`) share one rig and its 9 clips
+  (Idle, Walk, Run, Jump, IdleRelaxed, WalkRelaxed, RunRelaxed, Sit, Death); the players have their own (below).
 - `ship_interior.py` also writes `ship_interior.json`: AABB colliders, station points and light anchors (already in three space).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
 
@@ -64,7 +64,8 @@ field, the head from adult norms), `headfit.py` (lays the head cage on the face'
 nose cap, neck opening), `fit.py` (Catmull-Clark x2, projection, tangential relaxation, the face customisation
 shape keys `face_*` from `headshape.FACE_KEYS`). Output: ~38.6k quads, symmetric, open only at eyes and mouth,
 plus two eyeball meshes. `--rig` / `--glb=x.glb` rig it (`rig.py`: our joints on the shared player skeleton incl.
-fingers, heat weights, the player clips with the A-pose arms lowered, `B_body` one `skin__<region>` slot per region,
+fingers and clavicles (`clavicle.X` between the chest and the upper arm: the game's arm IK turns it forward / up as
+the arm reaches, so the shoulder keeps its volume), heat weights, the body's own clips, `B_body` one `skin__<region>` slot per region,
 `B_eyes`, `B_brows` = eyebrows + lashes as strand cards), then dress it unless `--naked` (`wardrobe.py`: the Orion
 outfit per slot `C_<slot>__<item>` from the concept sheet, skinned by data transfer, metadata in the armature's
 `worldex`). Every piece is cut and sewn, not a pushed-out body shell: `coat.py` (his long field coat / her cropped
@@ -91,6 +92,29 @@ high ponytail with volume and a side-swept fringe; Unreal material `M_SOHair` fo
 openings (`eye_hu/eye_hl` in `headshape.head_geometry`), `fit.eye_sockets` closes the opening behind the lids (skin
 walls round the eyeball; the lid margins are kept in the body's `eye_margins`), eyeballs `eye_white`/`eye_iris`/
 `eye_pupil`; the body's vertex colour `Col` tints the lips and shades the lid crease and rims (Unreal multiplies it).
+Head armour (`headgear.py`, the optional `head` slot, nothing worn by default): the Orion Vanguard Helmet, a full
+sealed helmet over the head, face and neck (hides the hair and the head / neck skin: bald under it, the hair back when
+it comes off): a base surface from signed distances on this body's measured head (cranium ellipsoid fit, face volume,
+ribbed neck seal), plates cut from a relaxed smooth copy of it (`cut_plate`: base faces inside the plate's region, the
+open edge slid onto the region's outline along the surface, lifted along the field normal, solidified without even
+offset or clamp, chamfered), the visor (a dark mirrored lens in a raised frame, centre seam, light line, temple
+sensors), turned ear discs with light rings, faceplate vent slats; his steel-grey and square with a heavy crest and a
+faceplate ridge, hers white, a V visor, a pointed chin plate. Plus the Orion Comms Headset (oval cups, band clear of
+the hair, boom mic; the hair stays). Finish (`finish.py`, every piece but hair): the corner colour `Col` = paint scheme
+x per-plate tone x grime / dust / ground dirt in RGB (the plate materials are a light neutral, the paint lives here:
+his gunmetal + desert tan + signal-orange marking, hers off-white + lining blue), edge wear in A (a rubbed band
+diffused in from convex edges, chips only near edges, more on upper / front faces); Unreal `ARMOUR_WEAR` sets each
+material's EdgeWear / Scratches / Grime / WearMetal / WearTiling with the shared wear mask.
+Motion: each body has its own clip set in its own folder, nothing shared: `hero/male/motion.py` (masculine: wide
+track, heel strike, shoulder drive, loose fists, a squared idle; idle variations neck stretch / scan / shoulder roll) and
+`hero/female/motion.py` (feminine: crossover line, hip roll and sway, quick light steps, arms close, contrapposto
+idle; variations weight shift / look back / neck stretch). Clips: Idle, Walk (the game's 4.4 m/s jog), Run (8.6 m/s
+sprint), Jump, Slide, Death, Fidget1-3. `hero/gait.py` is the engine only (no style): feet planned so a planted foot
+moves back at exactly the clip's speed (rolling heel -> ball about real pivots: no sliding at Clips.WalkSpeed /
+RunSpeed), leg IK + foot orientation baked to FK, the hips lowered (smoothed over the clip) wherever a leg would
+over-reach, arm bends about the elbow hinge (`Body.elbow`), finger curls (`Pose.curl`). Unreal: walk and run share one
+cycle phase (both start on the left foot); a Fidget layer plays an idle variation after 7-15 s standing still and not
+aiming (`USOLocomotionAnimInstance::FidgetDelay`). Test: `ShatteredOrbit.Anim.OwnClipsPerBody`.
 Male and female heads differ on purpose (his heavy brow ridge, square wide jaw, big chin, broad nose; her narrow face
 tapering to a small chin, high round cheekbones, small nose, full lips, bigger eyes). Face keys `face_*` are created
 at 0 (Blender 5 adds new keys at 1.0). Heat weights are solved on a cleaned copy of the body (`rig.heat_weights`).

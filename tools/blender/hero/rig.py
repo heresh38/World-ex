@@ -1,12 +1,14 @@
 """Rigs a fitted hero base mesh for the game and writes the GLB that export_fbx.py turns into Unreal FBX.
 
 The game's player contract (unreal/ShatteredOrbit: SOLocomotionAnimInstance, SOCharacter, import_assets.py):
-  bones   root (not deforming) > hips > spine > chest > neck > head; chest > upperarm.X > forearm.X > hand.X;
+  bones   root (not deforming) > hips > spine > chest > neck > head; chest > clavicle.X > upperarm.X > forearm.X >
+          hand.X (the clavicle runs from the sternum to the shoulder joint and stays at rest in every clip: the game's
+          arm IK turns it forward / up as the arm reaches, so the shoulder keeps its volume instead of caving in);
           hips > thigh.X > shin.X > foot.X; hand.X > <index|middle|ring|pinky|thumb>_01..03.X (Unreal: _L / _R)
           - the shared layout of characters.make_armature, here with the joints of our own skeleton (skeleton.py)
-  clips   characters.animate's player set (Idle, Walk, Run, Jump, IdleRelaxed, WalkRelaxed, RunRelaxed, Sit, Death,
-          Slide; gendered gait). Those poses assume arms hanging at the sides, so every clip first lowers our A-pose
-          arms to the sides
+  clips   the body's own set from <sex>/motion.py (Idle, Walk, Run, Jump, Slide, Death, Fidget1-3), baked by gait.py;
+          nothing is shared between the two bodies' motion. Written against arms hanging at the sides: every clip
+          first lowers our A-pose arms
   mesh    B_body: one mesh, one material section per body region (skin__head, skin__neck, skin__chest,
           skin__midriff, skin__pelvis, skin__upperarm, skin__forearm, skin__hand, skin__thigh, skin__shin,
           skin__foot), so worn pieces can hide the regions they cover; the face_* shape keys become morph targets.
@@ -51,6 +53,28 @@ def joints(T):
         J["shin." + side] = (mx(L["K"], sx), mx(L["A"], sx))
         J["foot." + side] = (mx(F["ankle"], sx), mx(F["ball"], sx))
     return J
+
+
+def add_clavicles(arm, T):
+    """clavicle.X: from the sternoclavicular joint (beside the sternal notch, in front) to the shoulder joint; the
+    upper arm hangs from it. No clip moves it (pose = rest), so the clips play exactly as before."""
+    A = skeleton.arm(T)
+    S = A["S"]
+    sc = T["height"] / 1.84
+    head = Vector((.024 * sc, S.y - .040 * sc, T["neck_base_z"] - .022 * sc))
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='EDIT')
+    eb = arm.data.edit_bones
+    for side, sx in (("L", 1), ("R", -1)):
+        e = eb.new("clavicle." + side)
+        e.head, e.tail = mx(head, sx), mx(S, sx)
+        e.align_roll(Vector((0, 0, 1)))
+        e.parent = eb["chest"]
+        e.use_connect = False
+        up = eb["upperarm." + side]
+        up.use_connect = False
+        up.parent = e
+    bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def add_fingers(arm, T):
@@ -216,24 +240,19 @@ def lower_arms(T):
     return math.degrees(math.atan2(-a.z, a.x)) - 84.0      # the shared rig's arms hang ~84 degrees below horizontal
 
 
-def patch_clips(deg):
-    """wraps characters.pose_fn so every clip first lowers the A-pose arms (IK clips solve from targets anyway)"""
-    import characters
-    base = characters.pose_fn
-
-    def pose_fn(clip, style=None):
-        f = base(clip, style)
-
-        def g(p):
-            d, ik, loc = f(p)
-            d = dict(d)
-            for side, sx in (("L", 1), ("R", -1)):
-                k = "upperarm." + side
-                d[k] = [((0, 1, 0), sx * -deg)] + list(d.get(k, []))
-            return d, ik, loc
-        return g
-    characters.pose_fn = pose_fn
-    return base
+def animate(arm, T, sex, log=print):
+    """bakes the body's own clips: tools/blender/hero/<sex>/motion.py (its style lives there and nowhere else) through
+    the motion engine (gait.py: planted feet at the game's speeds, leg IK baked to FK)"""
+    import importlib.util
+    import os
+    import gait
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), sex, "motion.py")
+    spec = importlib.util.spec_from_file_location(f"motion_{sex}", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    body = gait.Body(arm, T, lower_arms(T))
+    clips, _ = mod.clips(body)
+    return gait.bake(arm, body, clips, log)
 
 
 def heat_weights(o, arm, log=print):
@@ -297,6 +316,7 @@ def rig(o, eyes, T, sex, log=print):
     arm = characters.make_armature(b, pole_angle=90)
     arm.name = "Armature"
     add_fingers(arm, T)
+    add_clavicles(arm, T)
     for bn in arm.data.bones:
         if bn.name == "root" or bn.name.startswith(("ik_", "pole")):
             bn.use_deform = False
@@ -312,14 +332,12 @@ def rig(o, eyes, T, sex, log=print):
     mod.object = arm
     import hair
     hair.face_hair(o, eo, arm, T, log=log)                 # B_brows: eyebrows and eyelashes (strand cards)
-    # clips (the player set, gendered gait), arms lowered from the A-pose first
-    deg = lower_arms(T)
-    base = patch_clips(deg)
-    try:
-        characters.animate(arm, b.s, style=sex, clips=characters.PLAYER_CLIPS)
-    finally:
-        characters.pose_fn = base
-    log(f"rig: clips {', '.join(a.name for a in bpy.data.actions)} (arms lowered {deg:.0f} degrees)")
+    # clips: this body's own set (<sex>/motion.py), arms lowered from the A-pose first
+    animate(arm, T, sex, log)
+    for side in "LR":                                      # the shared armature's arm IK helpers (unused here)
+        pb = arm.pose.bones["forearm." + side]
+        if "IK" in pb.constraints:
+            pb.constraints.remove(pb.constraints["IK"])
     arm["worldex"] = json.dumps({"wardrobe": {}, "defaults": {}, "regions": list(REGIONS)})
     # the rest pose stays the A-pose; frame 1 of Idle is what a static preview shows
     return arm

@@ -77,6 +77,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float ThirdPersonMinAimDistance = 400.0f;
 
+	/** Third person, sprinting: the grip from the shoulders' middle (cm, actor axes: forward, right, up) and the gun's
+	 *  turn (pitch, yaw, roll) against the facing: carried low across the chest, muzzle down and to the left. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector CarryOffset = FVector(24.0f, 7.0f, -22.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FRotator CarryRot = FRotator(-30.0f, -42.0f, -18.0f);
+
+	/** Handguns while sprinting: low by the chest, muzzle down. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector HandgunCarryOffset = FVector(26.0f, 6.0f, -20.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FRotator HandgunCarryRot = FRotator(-40.0f, -10.0f, 0.0f);
+
+	/** Third person, reloading: the gun down in front of the chest, muzzle a little up and in, canted toward the body. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector ReloadOffset = FVector(30.0f, 8.0f, -14.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FRotator ReloadRot = FRotator(12.0f, -18.0f, -28.0f);
+
 	/** Without a body pose yet: the pocket in actor space (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	FVector DefaultPocket = FVector(1.0f, 12.0f, 48.5f);

@@ -136,7 +136,10 @@ def last_sdf(M, sole_top):
     return lambda P: sdf.smin(foot(P), shaft(P), .022)
 
 
-def outsole_sdf(M, sole_top, welt=.0025):
+HEEL_F = .030          # her boots' stacked heel (m below the flat sole); hero/female/motion.py stands her on it
+
+
+def outsole_sdf(M, sole_top, welt=.0025, heel=0.0):
     """the outsole on the boot's own footprint: the last's outline where it meets the sole (traced round its centre)
     plus an even welt all round, so sole and upper read as one boot (flush at the heel, no ledge); a flat heel block,
     a barely lifted waist under the arch, a little toe spring, chevron lugs cut into the bottom"""
@@ -171,6 +174,8 @@ def outsole_sdf(M, sole_top, welt=.0025):
         u = np.clip((y_heel - P[:, 1]) / L, 0, 1)            # 0 at the heel, 1 at the toe
         waist = sdf.smoothstep(.30, .36, u) * (1 - sdf.smoothstep(.52, .62, u))
         bot = -.003 + .0025 * waist + toe_spring * np.clip((u - .82) / .18, 0, 1) ** 2
+        if heel:                                             # a stacked heel: a block under the heel, its breast at u ~ .27
+            bot = bot - heel * (1 - sdf.smoothstep(.255, .285, u))
         slab = np.maximum(z - (sole_top + .002), bot - z)
         d = sdf.smax(out, slab, .0025)
         xs = np.abs(P[:, 0] - c.x)
@@ -258,8 +263,9 @@ def build_left(info, m=True, log=print):
     parts += collar(M, surf)
     parts += closure(M, surf, z_throat, throat_w, y_front, m)
     # the outsole and its midsole band
-    sole_fn = outsole_sdf(M, sole_top)
-    sb = mesh_from(sole_fn, (M.cx - .09, M.toe_y - .05, -.012), (M.cx + .09, M.heel_y + .05, sole_top + .01), .0018,
+    heel = 0.0 if m else HEEL_F
+    sole_fn = outsole_sdf(M, sole_top, heel=heel)
+    sb = mesh_from(sole_fn, (M.cx - .09, M.toe_y - .05, -.012 - heel), (M.cx + .09, M.heel_y + .05, sole_top + .01), .0018,
                    "sole", SOLE)
     so = to_object(sb, "sole", SOLE)
     decimate(so, .12)

@@ -286,6 +286,7 @@ TEXTURED = {                       # material name -> (cloth, alpha clip)
     "orion_cloth": ("ripstop", None),
     "orion_black": ("knit", None),
     "orion_plate": ("polymer", None),
+    "orion_plate_white": ("polymer", None),
 }
 
 

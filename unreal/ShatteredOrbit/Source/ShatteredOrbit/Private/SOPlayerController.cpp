@@ -1,5 +1,7 @@
 #include "SOPlayerController.h"
 
+#include "SOLocomotionAnimInstance.h"
+
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
@@ -289,6 +291,135 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 					Snap(0.3f, Name);
 				}
 			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 8)
+	{
+		// In motion, both bodies in their outfits (files c_<body>_*): jog, sprint, slide, jump from the side and behind,
+		// a third-person reload, a weapon swap, an idle variation.
+		TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		auto Reset = [=, this]()
+		{
+			CaptureMove = FVector2D::ZeroVector;
+			if (ASOCharacter* H = Hero())
+			{
+				H->HandleSprintReleased();
+				H->HandleCrouchReleased();
+				H->TeleportTo(Start->GetLocation(), Start->Rotator());
+				H->GetCharacterMovement()->StopMovementImmediately();
+				SetControlRotation(Start->Rotator());
+				SetViewTarget(H);
+			}
+		};
+		Do(4.0f, [=, this]()
+		{
+			View(ESOViewMode::ThirdPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				SetControlRotation(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f));   // the open side of the range
+				*Start = FTransform(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f), H->GetActorLocation());
+			}
+		});
+		for (const TCHAR* Body : { TEXT("male"), TEXT("female") })
+		{
+			const FString B = Body;
+			Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(*B); } Reset(); });
+			Do(1.5f, [=, this]() { CaptureMove = FVector2D(0.0f, 1.0f); });
+			Do(1.2f, [=]() { Orbit(90.0f, 380.0f, 40.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_1_jog_side"), Body));
+			Do(0.35f, [=]() { Orbit(90.0f, 380.0f, 40.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_2_jog_side"), Body));
+			Do(0.1f, [=]() { Orbit(200.0f, 360.0f, 60.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_3_jog_behind"), Body));
+			Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } });
+			Do(1.0f, [=]() { Orbit(90.0f, 420.0f, 40.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_4_sprint_side"), Body));
+			Do(0.15f, [=]() { Orbit(90.0f, 420.0f, 40.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_5_sprint_side"), Body));
+			Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleCrouchPressed(); } });
+			Do(0.25f, [=]() { Orbit(90.0f, 380.0f, 30.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_6_slide"), Body));
+			Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleCrouchReleased(); H->HandleJumpPressed(); } });
+			Do(0.3f, [=]() { Orbit(90.0f, 380.0f, 40.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_7_jump"), Body));
+			Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleJumpReleased(); } });
+			Do(0.8f, [=]() { Reset(); });
+			Do(0.8f, [=]() { EmptyReload(); });
+			Do(1.1f, [=]() { Orbit(60.0f, 260.0f, 30.0f); });        // (timed: about mid-swap on the rifle)
+			Snap(0.0f, FString::Printf(TEXT("c_%s_8_reload"), Body));
+			Do(2.5f, [=]() { if (ASOCharacter* H = Hero()) { H->HandleWeapon2(); } });
+			Do(0.35f, [=]() { Orbit(40.0f, 260.0f, 30.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_9_swap"), Body));
+			Do(1.0f, [=, this]()
+			{
+				if (ASOCharacter* H = Hero())
+				{
+					H->HandleWeapon1();
+					if (USOLocomotionAnimInstance* A = Cast<USOLocomotionAnimInstance>(H->GetMesh()->GetAnimInstance()))
+					{
+						A->FidgetDelay = FVector2D(0.5f, 0.5f);
+						A->ResetFidgetTimer();
+					}
+				}
+			});
+			Do(2.2f, [=]() { Orbit(30.0f, 260.0f, 30.0f); });
+			Snap(0.0f, FString::Printf(TEXT("c_%s_10_idle_variation"), Body));
+			// the sealed helmet, worn through the inventory, then off again (the hair comes back)
+			auto Helmet = [=, this](bool bOn)
+			{
+				if (USOInventoryComponent* Inv = SOFindInventory(this))
+				{
+					const FSOArmorInstance* H = Inv->GetArmor().FindByPredicate([](const FSOArmorInstance& A) { return A.Slot == TEXT("head") && A.Item == TEXT("orion_helmet"); });
+					if (H && H->bEquipped != bOn)
+					{
+						Inv->EquipArmor(H->Uid);
+					}
+				}
+			};
+			Act([=]() { Helmet(true); Orbit(10.0f, 150.0f, 55.0f); });
+			Snap(1.0f, FString::Printf(TEXT("c_%s_11_helmet_front"), Body));
+			Act([=]() { Orbit(45.0f, 150.0f, 55.0f); });
+			Snap(0.4f, FString::Printf(TEXT("c_%s_12_helmet_q34"), Body));
+			Act([=]() { Orbit(170.0f, 160.0f, 55.0f); });
+			Snap(0.4f, FString::Printf(TEXT("c_%s_13_helmet_back"), Body));
+			Act([=]() { Helmet(false); Orbit(30.0f, 150.0f, 55.0f); });
+			Snap(0.8f, FString::Printf(TEXT("c_%s_14_helmet_off"), Body));
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 7)
+	{
+		// Shoulders while aiming (files b*): pistol and rifle aimed, close orbits round the upper body.
+		auto Equip = [Hero](const TCHAR* Arch)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(Arch));
+				H->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
+			}
+		};
+		auto Own = [this, Hero]() { if (ASOCharacter* H = Hero()) { SetViewTarget(H); } };
+		Do(4.0f, [=]() { Look(0.0f); View(ESOViewMode::ThirdPerson); Equip(TEXT("sidearm")); });
+		for (const TCHAR* Arch : { TEXT("sidearm"), TEXT("rifle") })
+		{
+			const FString A = Arch;
+			Act([=]() { Own(); Equip(*A); });
+			Do(1.2f, [=]() { Aim(true); });
+			Snap(0.8f, FString::Printf(TEXT("b_%s_0_camera"), Arch));
+			const float Yaws[] = { 180.0f, 225.0f, 270.0f, 315.0f, 20.0f, 90.0f };
+			for (int32 i = 0; i < 6; ++i)
+			{
+				const float Yaw = Yaws[i];
+				Act([=]() { Orbit(Yaw, 115.0f, 25.0f); });
+				Snap(0.3f, FString::Printf(TEXT("b_%s_%d_yaw%d"), Arch, i + 1, (int32)Yaw));
+			}
+			Act([=]() { Aim(false); });
+			Snap(0.6f, FString::Printf(TEXT("b_%s_7_hip_behind_left"), Arch));
 		}
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);

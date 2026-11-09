@@ -8,6 +8,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "SOInventoryComponent.h"
+#include "SOLocomotionAnimInstance.h"
 #include "SOWardrobe.h"
 
 namespace
@@ -250,6 +251,116 @@ bool FSOArmorInventoryTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("female"), Inventory->GetBody(), FName(TEXT("female")));
 	const FSOArmorInstance* Top = Inventory->GetEquippedArmor(TEXT("top"));
 	TestTrue(TEXT("female top worn"), Top && USOWardrobeData::Get(TEXT("female"))->Find(Top->Slot, Top->Item) != nullptr);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOBodyClipsTest, "ShatteredOrbit.Anim.OwnClipsPerBody", SOTest::Flags)
+bool FSOBodyClipsTest::RunTest(const FString& Parameters)
+{
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld World;
+	World.AddBox(FVector(-2000, -2000, -100), FVector(2000, 2000, 0));
+	ASOCharacter* Player = World.SpawnCharacter(FVector::ZeroVector);
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	World.Run(0.2f);
+	TMap<FName, TArray<const UAnimSequenceBase*>> Seen;
+	for (const FName Body : { FName(TEXT("male")), FName(TEXT("female")) })
+	{
+		FSOOutfit Outfit = Player->GetOutfit();
+		Outfit.Body = Body;
+		Player->SetOutfit(Outfit);
+		World.Run(0.1f);
+		USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Player->GetMesh()->GetAnimInstance());
+		if (!TestNotNull(TEXT("locomotion anim"), Anim))
+		{
+			return false;
+		}
+		const FSOLocomotionClips& C = Anim->Clips;
+		const FString Folder = Body == TEXT("male") ? TEXT("/Game/Characters/PlayerMale/") : TEXT("/Game/Characters/PlayerFemale/");
+		TArray<const UAnimSequenceBase*>& Mine = Seen.Add(Body);
+		for (const UAnimSequenceBase* Clip : { C.Idle.Get(), C.Walk.Get(), C.Run.Get(), C.Jump.Get(), C.Slide.Get(), C.Death.Get() })
+		{
+			if (TestNotNull(FString::Printf(TEXT("%s clip"), *Body.ToString()), Clip))
+			{
+				TestTrue(FString::Printf(TEXT("%s plays its own %s"), *Body.ToString(), *Clip->GetName()), Clip->GetPathName().StartsWith(Folder));
+				Mine.Add(Clip);
+			}
+		}
+		TestEqual(FString::Printf(TEXT("%s has three idle variations"), *Body.ToString()), C.Fidgets.Num(), 3);
+		for (const UAnimSequenceBase* F : C.Fidgets)
+		{
+			TestTrue(TEXT("idle variation from its own folder"), F && F->GetPathName().StartsWith(Folder));
+		}
+		// an idle variation plays while standing, and moving ends it
+		Anim->FidgetDelay = FVector2D(0.3f, 0.3f);
+		Anim->ResetFidgetTimer();
+		float Peak = 0.0f;
+		World.Run(1.5f, [&]() { Peak = FMath::Max(Peak, Anim->Weights[7]); });
+		TestTrue(FString::Printf(TEXT("%s: an idle variation plays (weight %.2f)"), *Body.ToString(), Peak), Peak > 0.9f);
+	}
+	for (const UAnimSequenceBase* Clip : Seen.FindRef(TEXT("male")))
+	{
+		TestFalse(TEXT("no clip is shared between the bodies"), Seen.FindRef(TEXT("female")).Contains(Clip));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOHeadGearTest, "ShatteredOrbit.Wardrobe.HeadGear", SOTest::Flags)
+bool FSOHeadGearTest::RunTest(const FString& Parameters)
+{
+	if (SOTest::PlayerBodyMissing(*this) || ClothingMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld World;
+	World.AddBox(FVector(-2000, -2000, -100), FVector(2000, 2000, 0));
+	ASOCharacter* Player = World.SpawnCharacter(FVector::ZeroVector);
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	World.Run(0.2f);
+	for (const FName Body : { FName(TEXT("male")), FName(TEXT("female")) })
+	{
+		const USOWardrobeData* W = USOWardrobeData::Get(Body);
+		if (!TestNotNull(TEXT("wardrobe"), W))
+		{
+			continue;
+		}
+		const FSOWardrobeItem* Helmet = W->Find(TEXT("head"), TEXT("orion_helmet"));
+		TestNotNull(FString::Printf(TEXT("%s owns a helmet"), *Body.ToString()), Helmet);
+		TestNotNull(FString::Printf(TEXT("%s owns a headset"), *Body.ToString()), W->Find(TEXT("head"), TEXT("orion_headset")));
+		TestTrue(TEXT("nothing on the head by default"), W->Defaults.FindRef(TEXT("head")).IsNone());
+		if (!Helmet)
+		{
+			continue;
+		}
+		TestTrue(TEXT("the sealed helmet hides the hair"), Helmet->bHideHair);
+		TestTrue(TEXT("and the head"), Helmet->Hide.Contains(TEXT("head")) && Helmet->Hide.Contains(TEXT("neck")));
+		FSOOutfit Outfit = Player->GetOutfit();
+		Outfit.Body = Body;
+		Outfit.Set(TEXT("head"), TEXT("orion_helmet"));
+		Player->SetOutfit(Outfit);
+		World.Run(0.1f);
+		TestNotNull(FString::Printf(TEXT("%s: helmet worn"), *Body.ToString()), Player->GetWornPiece(TEXT("head"), false));
+		TestNull(FString::Printf(TEXT("%s: bald under the helmet"), *Body.ToString()), Player->GetWornPiece(TEXT("hair"), false));
+		Outfit.Set(TEXT("head"), TEXT("orion_headset"));
+		Player->SetOutfit(Outfit);
+		World.Run(0.1f);
+		TestNotNull(FString::Printf(TEXT("%s: the hair is back with the headset"), *Body.ToString()), Player->GetWornPiece(TEXT("hair"), false));
+		Outfit.Set(TEXT("head"), TEXT("none"));
+		Player->SetOutfit(Outfit);
+		World.Run(0.1f);
+		TestNull(TEXT("bare head"), Player->GetWornPiece(TEXT("head"), false));
+		TestNotNull(TEXT("hair without the helmet"), Player->GetWornPiece(TEXT("hair"), false));
+	}
 	return true;
 }
 

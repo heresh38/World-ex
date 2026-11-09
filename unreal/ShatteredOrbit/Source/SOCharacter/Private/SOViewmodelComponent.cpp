@@ -162,13 +162,32 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// raise, sprint carry and mantle offsets ride on top; the bob and sway stay out (the body animates).
 	if (USceneComponent* ThirdPerson = Character->GetThirdPersonHold())
 	{
-		const float TX = RunT * 0.01f + G[0] + InX, TY = -Lower * 0.35f + RunT * 0.035f + G[1] + InY;
-		const float TZ = KickBack * (1.0f - Ads * 0.5f) + RunT * 0.03f + G[2];
-		const float PX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch;
-		const float PY = RunT * 0.55f + G[4], PZ = G[5] + RunT * 0.5f + InRoll;
+		const float TX = G[0] + InX, TY = -Lower * 0.35f + G[1] + InY;
+		const float TZ = KickBack * (1.0f - Ads * 0.5f) + G[2];
+		const float PX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + InPitch;
+		const float PY = G[4], PZ = G[5] + InRoll;
 		const FTransform Ride(FRotator(FMath::RadiansToDegrees(PX), FMath::RadiansToDegrees(-PY), FMath::RadiansToDegrees(-PZ)),
 			FVector(-TZ * 100.0f, TX * 100.0f, TY * 100.0f));
-		ThirdPerson->SetWorldTransform(Ride * ThirdPersonHoldTransform(Character, bHandgun, Dt));
+		FTransform Hold = ThirdPersonHoldTransform(Character, bHandgun, Dt);
+		// Off the shoulder: a sprint carries the gun low across the chest (muzzle down and to the left); a reload
+		// brings it down in front of the chest, canted so the support hand works the mag well in front of the body.
+		const float TPReload = ReloadK * ReloadK * (3.0f - 2.0f * ReloadK) * (1.0f - Ads);
+		if (RunT > 1e-3f || TPReload > 1e-3f)
+		{
+			FVector Pocket, Chest;
+			GetShoulderPoints(Character, Pocket, Chest);
+			const FTransform Actor = Character->GetActorTransform();
+			const FQuat Facing = FRotator(0.0f, Character->GetAimRotation().Yaw, 0.0f).Quaternion();
+			const FTransform Carry((Facing * (bHandgun ? HandgunCarryRot : CarryRot).Quaternion()),
+				Actor.TransformPosition(Chest + (bHandgun ? HandgunCarryOffset : CarryOffset)));
+			const FTransform Reload((Facing * ReloadRot.Quaternion()), Actor.TransformPosition(Chest + ReloadOffset));
+			FTransform Blended;
+			Blended.Blend(Hold, Carry, RunT);
+			Hold = Blended;
+			Blended.Blend(Hold, Reload, bHandgun ? TPReload * 0.5f : TPReload);
+			Hold = Blended;
+		}
+		ThirdPerson->SetWorldTransform(Ride * Hold);
 	}
 }
 
@@ -260,13 +279,14 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	{
 		const FVector LeftInHold = HoldComp->GetComponentTransform().InverseTransformPosition(HandL.GetLocation());
 		const FVector Shoulder = Body->GetBoneLocation(Body->GetBoneName(Sh));
-		const float Reach = 0.97f * (FVector::Dist(Shoulder, Body->GetBoneLocation(Body->GetBoneName(El)))
+		// (a margin under full reach: the clavicle and the stance move the shoulder a little after this is measured)
+		const float Reach = 0.92f * (FVector::Dist(Shoulder, Body->GetBoneLocation(Body->GetBoneName(El)))
 			+ FVector::Dist(Body->GetBoneLocation(Body->GetBoneName(El)), Body->GetBoneLocation(Body->GetBoneName(Wr))));
 		const FVector Left = Hold.TransformPosition(LeftInHold);
 		const float Over = FVector::Dist(Left, Shoulder) - Reach;
 		if (Over > 0.0f)
 		{
-			Hold.AddToTranslation((Shoulder - Left).GetSafeNormal() * FMath::Min(Over, 15.0f));
+			Hold.AddToTranslation((Shoulder - Left).GetSafeNormal() * FMath::Min(Over, 20.0f));
 		}
 	}
 	return Hold;

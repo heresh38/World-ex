@@ -39,7 +39,10 @@ PALETTE = {
     "orion_leather": ((.022, .020, .019), .55, 0.0),       # the boots' oiled leather
     "orion_midsole": ((.060, .060, .062), .80, 0.0),       # the sole's lighter rubber band
     "orion_lace": ((.012, .012, .013), .70, 0.0),          # braided boot lace
-    "orion_plate": ((.160, .165, .175), .40, .6),
+    # the plates are a light neutral: their paint scheme (finish.py) is in the vertex colour that multiplies it
+    "orion_plate": ((.62, .63, .65), .40, .45),
+    "orion_plate_white": ((.60, .61, .62), .38, .08),     # her armour's white (the jacket's), as moulded polymer
+    "orion_visor": ((.010, .012, .016), .06, .75),        # the helmet's dark mirrored visor
     "orion_steel": ((.050, .052, .056), .35, .8),
     "orion_strap": ((.015, .014, .013), .65, 0.0),
     "orion_white": ((.62, .63, .65), .65, 0.0),
@@ -746,13 +749,22 @@ def dress(body, arm, T, log=print):
     # body shape keys must be off while sampling (the basis is what the pieces fit)
     import hair as hair_mod
     tex_dir = hair_mod.tex_dir(T)
+    import headgear
+    import finish
     pieces = [top(info), legs(info), feet(info), hands(info), hands(info, armoured=True), vest(info), outer(info),
               hair_mod.build(info, T, tex_dir, log=log)]
+    pieces += headgear.build(info, log=log)
     info.free()
     import fabric
     fabric.apply(T, tex_dir)                                # the cloth textures (fabric.py), this body's own files
     for p in pieces:
         skin_like_body(p, body, arm)
+        if p.name.startswith("C_head__"):                   # head armour is rigid: the head bone carries all of it
+            for g in list(p.vertex_groups):
+                p.vertex_groups.remove(g)
+            p.vertex_groups.new(name="head").add(list(range(len(p.data.vertices))), 1.0, 'REPLACE')
+        if not p.name.startswith("C_hair__"):
+            finish.apply(p, T, log=log)                     # paint scheme, wear, grime (finish.py)
         log(f"wardrobe: {p.name} {len(p.data.polygons)} faces")
     hair_item = "short" if m else "ponytail"
     wardrobe = {
@@ -767,6 +779,10 @@ def dress(body, arm, T, log=print):
         "legs": {"orion": {"label": "Orion Cargo Trousers" if m else "Orion Plated Trousers", "hide": ["pelvis", "thigh", "shin"]}},
         "feet": {"orion": {"label": "Orion Combat Boots", "hide": ["foot"]}},
         "hair": {hair_item: {"label": "Short Swept" if m else "High Ponytail", "hide": []}},
+        # head armour (optional slot, nothing worn by default): the sealed helmet hides the hair and the head
+        # (bald under it, the hair back when it comes off); the headset keeps the hair
+        "head": {"orion_helmet": {"label": "Orion Vanguard Helmet", "hide": ["head", "neck"], "hideHair": True},
+                 "orion_headset": {"label": "Orion Comms Headset", "hide": []}},
     }
     defaults = {"top": "orion", "vest": "orion", "outer": "orion", "hands": "orion", "legs": "orion", "feet": "orion",
                 "hair": hair_item}

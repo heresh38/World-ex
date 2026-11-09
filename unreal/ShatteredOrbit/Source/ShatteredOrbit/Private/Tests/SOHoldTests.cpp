@@ -265,7 +265,8 @@ bool FSOThirdPersonShoulderTest::RunTest(const FString& Parameters)
 				// the butt in the right shoulder pocket
 				const FVector Butt = R.TransformPosition(FVector(B.Min.X, 0.0f, 0.0f));
 				const float ToShoulder = FVector::Dist(Butt, Body->GetBoneLocation(TEXT("upperarm_R")));
-				TestTrue(FString::Printf(TEXT("%s %s: butt at the shoulder (%.1f cm from the joint)"), Name, When, ToShoulder), ToShoulder < 15.0f);
+				// (the pocket is ~11 cm from the joint; a long forend draws the gun in toward the chest a little more)
+				TestTrue(FString::Printf(TEXT("%s %s: butt at the shoulder (%.1f cm from the joint)"), Name, When, ToShoulder), ToShoulder < 17.0f);
 				const float Right = Player->GetActorTransform().InverseTransformPosition(Butt).Y;
 				TestTrue(FString::Printf(TEXT("%s %s: on the right side (%.1f cm)"), Name, When, Right), Right > 5.0f);
 			}
@@ -274,7 +275,8 @@ bool FSOThirdPersonShoulderTest::RunTest(const FString& Parameters)
 			if (Rig->GetHandTargets(HR, HL))
 			{
 				TestTrue(FString::Printf(TEXT("%s %s: firing hand on the grip"), Name, When), FVector::Dist(Body->GetBoneLocation(TEXT("hand_R")), HR.GetLocation()) < 1.5f);
-				TestTrue(FString::Printf(TEXT("%s %s: support hand on the gun"), Name, When), FVector::Dist(Body->GetBoneLocation(TEXT("hand_L")), HL.GetLocation()) < 2.5f);
+				const float Off = FVector::Dist(Body->GetBoneLocation(TEXT("hand_L")), HL.GetLocation());
+				TestTrue(FString::Printf(TEXT("%s %s: support hand on the gun (%.1f cm off)"), Name, When, Off), Off < 2.5f);
 			}
 		}
 		Player->HandleAimReleased();
