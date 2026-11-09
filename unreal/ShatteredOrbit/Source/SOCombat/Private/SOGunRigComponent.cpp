@@ -152,7 +152,7 @@ USOGunRigComponent::USOGunRigComponent()
 
 FQuat USOGunRigComponent::GltfEulerToMesh(float RX, float RY, float RZ)
 {
-	// three.js Euler 'XYZ': q = qx * qy * qz (right-handed, glTF axes). The axis swap (y <-> z) is a mirror,
+	// glTF Euler 'XYZ': q = qx * qy * qz (right-handed, glTF axes). The axis swap (y <-> z) is a mirror,
 	// so the quaternion maps (w, x, y, z) -> (w, -x, -z, -y).
 	const FQuat Q = FQuat(FVector(1, 0, 0), RX) * FQuat(FVector(0, 1, 0), RY) * FQuat(FVector(0, 0, 1), RZ);
 	return FQuat(-Q.X, -Q.Z, -Q.Y, Q.W);

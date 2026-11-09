@@ -14,7 +14,7 @@ optional 'scope' (magnified optic: the HUD scope view takes over when aiming), o
 where gun_attach.glb sights mount). A gun's built-in sight that a mounted optic replaces is a child node 'OPTIC'.
 Every gun mesh carries the `_wear` vertex attribute (gunkit.wear_attr).
 
-Material names are an API (src/game/weapons.js styleMesh):
+Material names are an API (Unreal: USOGunRigComponent::Dress, import_assets.py GUN_WEAR):
   energy: gun_body, gun_metal, gun_dark, gun_trim, gun_glow, gun_grip, gun_lens, gun_dot, gun_tritium
   kinetic: gun_steel, gun_parkerized, gun_polymer, gun_polymer_od, gun_wood, gun_rubber, gun_brass, gun_sightpaint,
            gun_sightorange, gun_shell, gun_lens, gun_dot, gun_optic

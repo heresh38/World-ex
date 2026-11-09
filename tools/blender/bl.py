@@ -1,7 +1,8 @@
 """Shared helpers for the headless Blender asset scripts.
 
 Every script in this folder is run as:  blender --background --python tools/blender/<script>.py
-Blender is Z-up with -Y forward; the glTF exporter converts to Y-up so models face +Z in three.js.
+Blender is Z-up with -Y forward; the glTF exporter converts to Y-up (glTF +Z forward); export_fbx.py turns the GLBs
+into the FBX files the Unreal import reads.
 """
 import bpy, bmesh, math, os, sys
 from mathutils import Vector, Matrix, Euler
@@ -312,7 +313,7 @@ def rng(seed):
 def quantize_glb(path):
     """Shrink an exported GLB in place: NORMAL -> int8 (KHR_mesh_quantization), WEIGHTS_0 -> uint8 and COLOR_0 -> uint8
     normalized, TEXCOORD_0 in [0,1] -> uint16 normalized. Positions, indices, morph targets and images stay as they are.
-    three.js reads KHR_mesh_quantization natively (no decoder)."""
+    (KHR_mesh_quantization: Blender's glTF importer reads it back for export_fbx.py)."""
     import json, struct
     import numpy as np
     raw = open(path, 'rb').read()

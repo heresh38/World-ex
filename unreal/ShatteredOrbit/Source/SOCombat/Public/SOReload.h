@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 
 /**
- * Keyframed reloads, ported from the browser build's src/game/reload.js.
+ * Keyframed reloads.
  * A reload is a list of segments; each segment has channels sampled over its normalised time:
  *   gun    holder offset in view space [x right, y up, z back (m), pitch (+muzzle up), yaw (+muzzle left), roll (rad)]
  *   mag / spare / bio  part offsets from the rest pose in glTF gun space [dx, dy, dz (m), rx, ry, rz (rad, XYZ order)]

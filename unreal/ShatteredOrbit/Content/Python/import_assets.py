@@ -30,7 +30,7 @@ tools = unreal.AssetToolsHelpers.get_asset_tools()
 eal = unreal.EditorAssetLibrary
 mel = unreal.MaterialEditingLibrary
 
-# Weapon numbers come from Data/game_data.json (node tools/unreal/export_game_data.mjs, from src/game/data.js).
+# Weapon and loot numbers come from Data/game_data.json: that file is their source (edit it, then re-import).
 
 # Creature flesh: the GLBs ship without images; enemies.js applies these hx_* sets by material name.
 FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac"}
@@ -976,6 +976,9 @@ def optics(master, clear):
     return out
 
 
+LOOT_WEAR = {"loot_metal": (.8, .35, .35, 1.0), "loot_dark": (.6, .3, .4, 1.0), "ammo_case": (.7, .35, .45, 1.0)}
+
+
 def loot_props(master):
     out = {}
     for folder, files in (("Loot", ("PR_core", "PR_ammo")), ("Reliquary", ("VX_reliquary",))):
@@ -989,6 +992,15 @@ def loot_props(master):
         used = {base_slot(n) for a in manifest["assets"] if a["file"][:-4] in files for n in a["materials"]}
         tex = import_textures_for(src, materials, dest + "/Textures", used)
         instances = {k: make_instance(master, dest, k, m, tex) for k, m in ((base_slot(k), m) for k, m in materials.items()) if k in used}
+        worn = wear_texture()
+        for k, mi in instances.items():                    # the pickups' wear (edge wear from loot_props.py's _wear)
+            amounts = LOOT_WEAR.get(k)
+            if amounts and worn:
+                mel.set_material_instance_texture_parameter_value(mi, "WearTex", worn)
+                for name, value in zip(("EdgeWear", "Scratches", "Grime", "WearMetal"), amounts):
+                    mel.set_material_instance_scalar_parameter_value(mi, name, float(value))
+                mel.update_material_instance(mi)
+                eal.save_loaded_asset(mi, only_if_is_dirty=False)
         for f in files:
             out[f] = import_static(src, f + ".fbx", dest, f"SM_{f}", instances)
         eal.save_directory(dest, only_if_is_dirty=False, recursive=True)

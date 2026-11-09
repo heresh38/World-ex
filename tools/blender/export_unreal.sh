@@ -47,7 +47,7 @@ for f in "$M"/gun_*.glb; do
 done
 run "$M/gun_attach.glb" "$OUT/Weapons/Attach" --split-parts
 # Loot: the loot core and ammo pickups, and the VANTHOS reliquary (its lid is a child part)
-run "$M/props_world.glb" "$OUT/Props/Loot" "--only=PR_core_mesh,PR_ammo_mesh"
+run "$M/loot_props.glb" "$OUT/Props/Loot"
 run "$M/vanthos.glb" "$OUT/Props/Reliquary" "--only=VX_reliquary_mesh,reliquary_lid_mesh"
 # Effect cards (tracers, sparks, smoke, muzzle flash) from tools/blender/fx_kit.py
 [ -f "$M/fx_kit.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/fx_kit.py" >/dev/null 2>&1

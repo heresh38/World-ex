@@ -57,7 +57,7 @@ bool FSOLootTablesTest::RunTest(const FString& Parameters)
 {
 	const USOLootTables* Tables = USOLootLibrary::GetTables();
 	const TSharedPtr<FJsonObject> Data = SOTest::GameData();
-	if (!TestNotNull(TEXT("DA_LootTables (run import_assets.py)"), Tables) || !TestTrue(TEXT("Data/game_data.json (node tools/unreal/export_game_data.mjs)"), Data.IsValid()))
+	if (!TestNotNull(TEXT("DA_LootTables (run import_assets.py)"), Tables) || !TestTrue(TEXT("Data/game_data.json (the weapon / loot data)"), Data.IsValid()))
 	{
 		return false;
 	}
