@@ -219,7 +219,7 @@ def place_head(cage, body, T, log=print):
     gc = np.array([G[v] for v in loop], float)
     cyg = (gc[:, 1].min() + gc[:, 1].max()) / 2
     ang = np.arctan2(gc[:, 0], -(gc[:, 1] - cyg))           # 0 = front
-    zf, zb = chin - .016 * hs, chin + .004 * hs
+    zf, zb = chin + g["zf"](-.016) * hs, chin + .004 * hs     # (under the chin: follows her shorter lower face)
     zl = zf + (zb - zf) * (1 - np.cos(ang)) / 2
     Dh = np.stack([np.sin(ang), -np.cos(ang), np.zeros_like(ang)], 1).astype(F32)
     ny = Y0 + .006 * hs

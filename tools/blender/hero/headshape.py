@@ -71,10 +71,12 @@ class HeadShape:
         hs = h / .23
         chin = T["chin_z"]
         ez = T["eye_z"]
-        X = lambda x, y, z: Vector((x * hs, Y0 + y * hs, chin + z * hs))
+        # her lower face is shorter: below the mouth (z .05) the heights are drawn up by a quarter, the chin ~13 mm higher
+        zf = (lambda z: z) if m else (lambda z: z if z >= .05 else .05 - (.05 - z) * .74)
+        X = lambda x, y, z: Vector((x * hs, Y0 + y * hs, chin + zf(z) * hs))
         ezr = (ez - chin) / hs                                   # eye height in the male frame
         self._g = g = dict(
-            hs=hs, h=h, chin=chin, ez=ez, X=X,
+            hs=hs, h=h, chin=chin, ez=ez, X=X, zf=zf,
             eye_c=Vector((T["interpupil"] / 2, Y0 + (-.0822 + .0122) * hs, ez)), eye_r=.0122,
             # the lid opening above / below the eye centre: big, open, rounded eyes (hers a little bigger)
             eye_hu=(.0066 if m else .0080) * hs, eye_hl=(.0050 if m else .0059) * hs,
@@ -86,7 +88,7 @@ class HeadShape:
             mouth_w=(.052 if m else .045) * hs * F("mouth_width"),
             pogonion=X(0, (-.0935 if m else -.0935) - .006 * (F("chin") - 1), .016),
             menton=X(0, -.070, 0),
-            gonion=X((.054 if m else .043) * F("jaw_width"), .007 if m else .002, .031 if m else .041),   # hers higher, softer
+            gonion=X((.050 if m else .043) * F("jaw_width"), .004 if m else .002, .033 if m else .041),   # hers higher, softer
             tragion=X(.0715, .004, .100),
             vertex_z=chin + h,
             centre=Vector((0, Y0, ez)),
@@ -109,14 +111,14 @@ class HeadShape:
                 t = min(1.0, max(0.0, (z - .015) / .10))
                 k = .78 + .18 * t * t * (3 - 2 * t)                 # a smooth taper to a small chin (no step), and
                 hw *= k                                             # a narrower face under the cranium overall
+                if .125 < z < .165:
+                    yf += .003                                      # less glabella
             else:
                 t = min(1.0, max(0.0, (.075 - z) / .05))
                 hw *= 1 + .03 * t * t * (3 - 2 * t)                 # his broad, square lower jaw
-                if .125 < z < .165:
-                    yf += .003                                      # less glabella
             if z < .06:
                 hw *= 1 + (F("jaw_width") - 1) * min(1.0, (.06 - z) / .03)
-            rows.append((z, yf, hw, yb, cw, nf))
+            rows.append((g["zf"](z), yf, hw, yb, cw, nf))
         zs = np.array([r[0] for r in rows])
         z0, z1 = zs[0], zs[-1]
         self._face = Loft(V((0, Y0, chin + z0 * hs)), V((0, Y0, chin + z1 * hs)), dict(
@@ -189,8 +191,9 @@ class HeadShape:
         d = smin(d, ellipsoid(P, V(X(.040, .036, .080)), (.018 * hs, .030 * hs, .034 * hs)), .035)
         # mandible: the lower border chin -> angle, the ramus up toward the ear; the chin's mound (squarer on him)
         jw = 1.08 if m else .62                                     # her jaw slight, no hard angle
-        d = smin(d, round_cone(P, V(X(.004, -.084, .013)), V(g["gonion"]), .0072 * hs * jw, .0092 * hs * jw), .016 if m else .026)   # the jawline
-        d = smin(d, round_cone(P, V(g["gonion"]), V(X(.060, .004, .088)), .0090 * hs * jw, .0075 * hs), .022 if m else .03)
+        # (the angle stays inside the face's outline: a fat end cap there shows as a knob under the ear)
+        d = smin(d, round_cone(P, V(X(.004, -.084, .013)), V(g["gonion"]), .0072 * hs * jw, .0076 * hs * jw), .020 if m else .026)   # the jawline
+        d = smin(d, round_cone(P, V(g["gonion"]), V(X(.060, .004, .088)), .0074 * hs * jw, .0070 * hs), .026 if m else .03)
         d = smin(d, ellipsoid(P, V(g["pogonion"] + Vector((0, .009, -.002))),
                               ((.024 if m else .012) * hs * F("chin"), (.0078 if m else .0065) * hs, (.012 if m else .008) * hs * F("chin"))), .014 if m else .02)
         # lips
