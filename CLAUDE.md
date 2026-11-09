@@ -67,7 +67,23 @@ plus two eyeball meshes. `--rig` / `--glb=x.glb` rig it (`rig.py`: our joints on
 fingers, heat weights, the player clips with the A-pose arms lowered, `B_body` one `skin__<region>` slot per region,
 `B_eyes`, `B_brows` = eyebrows + lashes as strand cards), then dress it unless `--naked` (`wardrobe.py`: the Orion
 outfit per slot `C_<slot>__<item>` from the concept sheet, skinned by data transfer, metadata in the armature's
-`worldex`; `garment.py` = cuts, seams, hems, straps and hardware for the AAA pass). `hair.py`: hair as strand cards
+`worldex`). Every piece is cut and sewn, not a pushed-out body shell: `coat.py` (his long field coat / her cropped
+white jacket: shell from the body eased + draped, then cut clean (waist, cuffs, neckline, open front), a skirt carried
+down the hips' envelope with drape folds and a back vent, a stand collar, pressed seams with double stitching, thickness
+with the blue lining inside) + `coat_details.py` (`Surface.on/toward/frame` lays parts on the cloth; `panel` (rounded
+patch with lift, thickness, stitched border), `zip_line`, `tube`, studs, rings; zip halves, collar tab, folded hood,
+pockets, patches, cuff straps, half belt), `shirt.py` (his knit combat shirt with ripstop raglan sleeves and a quarter zip
+/ her sleeveless high-neck crop top), `trousers.py` (cargo / plated; tucked into the boots: tight inside the shaft and
+bloused above it; seams, waistband, belt loops, knee plates, cargo pockets), `boots.py` (combat boots on their own last:
+foot loft + a straight tapered shaft (widest section, straight heel-to-calf back: no bulb or ledge), Surface Nets
+mesh, throat with a padded tongue, eyelets / speed hooks / laces, toe cap and heel counter overlays, an outsole traced
+from the upper's footprint (flush, lug tread, midsole band)), `gloves.py` (fingerless / armoured: clean finger cuts,
+suede palm, one knuckle guard, wrist strap, the wrist-tech housing), `belt.py` (belt with buckle and keepers; his
+pouches, her drop-leg holster), `garment.py` (cuts, strips, straps, hardware). `fabric.py` writes our cloth textures
+(twill, ripstop, knit, coated canvas, polymer, leather, rubber, braid, zip tape, stitch thread; colour / OpenGL normal
+/ metal-rough, per sex in `src/tex/<sex>`) and `world_uvs` gives every shell world-scale UVs. Hidden regions cover
+everything a piece covers (no skin through clothes in any pose). Rules: no lumps / ledges / bulbs on any surface
+(check silhouettes front, back, sides, 3/4); surface rays only search near the part (a long ray finds the far side). `hair.py`: hair as strand cards
 (own numpy atlas `hero_hair_strands.png`: clumps of separate strands with ragged roots and pointed tips; a cap with a
 soft, strand-broken edge from `hero_hair_scalp.png`; hairline wisps on a density gradient), male short swept, female
 high ponytail with volume and a side-swept fringe; Unreal material `M_SOHair` for `hair`, `hair__cap`, `hair__brow`,

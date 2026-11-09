@@ -34,6 +34,11 @@ PALETTE = {
     "orion_cloth": ((.020, .021, .024), .80, 0.0),
     "orion_coat": ((.055, .057, .062), .75, 0.0),
     "orion_lining": ((.010, .060, .220), .60, 0.0),
+    "orion_stitch": ((.115, .115, .120), .70, 0.0),        # tonal thread, a shade lighter than the coat
+    "orion_zip": ((.016, .016, .018), .75, 0.0),           # woven zip tape
+    "orion_leather": ((.022, .020, .019), .55, 0.0),       # the boots' oiled leather
+    "orion_midsole": ((.060, .060, .062), .80, 0.0),       # the sole's lighter rubber band
+    "orion_lace": ((.012, .012, .013), .70, 0.0),          # braided boot lace
     "orion_plate": ((.160, .165, .175), .40, .6),
     "orion_steel": ((.050, .052, .056), .35, .8),
     "orion_strap": ((.015, .014, .013), .65, 0.0),
@@ -342,6 +347,9 @@ def plate_on(info, name, centre, normal_hint, size, mat, lift=.006):
 
 def top(info):
     T, m = info.T, info.m
+    if True:                                                # the base layer, cut and sewn (shirt.py)
+        import shirt
+        return join(shirt.build(info), "C_top__orion")
     ub, hz = T["underbust"]["z"], T["hips"]["z"]
     if m:
         def keep(c, r):
@@ -380,6 +388,9 @@ def top(info):
 
 def legs(info):
     T, m = info.T, info.m
+    if True:                                                # cut and sewn, tucked into the boots (trousers.py)
+        import trousers
+        return join(trousers.build(info), "C_legs__orion")
     wz = T["hips"]["z"] + (.06 if m else .075)
     ank = info.L["A"].z
 
@@ -413,6 +424,9 @@ def legs(info):
 
 def feet(info):
     T, m = info.T, info.m
+    if True:                                                # combat boots on their own last (boots.py)
+        import boots
+        return join(boots.build(info), "C_feet__orion")
     ank = info.L["A"].z
     top_z = ank + (.11 if m else .16)
 
@@ -442,6 +456,9 @@ def feet(info):
 
 def hands(info, armoured=False):
     T = info.T
+    if True:                                                # built on the hand (gloves.py)
+        import gloves
+        return join(gloves.build(info, armoured), "C_hands__orion_armoured" if armoured else "C_hands__orion")
     Hd = info.H
     A = info.A
     W, kn, a = A["W"], Hd["knuckle"], A["a"]
@@ -475,6 +492,9 @@ def hands(info, armoured=False):
 
 def vest(info):
     T, m = info.T, info.m
+    if True:                                                # the belt rig (belt.py)
+        import belt
+        return join(belt.build(info), "C_vest__orion")
     hz = T["hips"]["z"]
     z0, z1 = hz + .045, hz + .085
     belt = ring_band(info, "belt", z0, z1, .016 if m else .010, "orion_strap", keep=lambda c, r: r in ("pelvis", "midriff"))
@@ -639,6 +659,9 @@ def sole(info, sx):
 
 def outer(info):
     T, m = info.T, info.m
+    if True:                                                # his field coat / her cropped jacket (coat.py)
+        import coat
+        return join(coat.build(info), "C_outer__orion")
     ub = T["underbust"]["z"]
     hz = T["hips"]["z"]
     nb = T["neck_base_z"]
@@ -726,6 +749,8 @@ def dress(body, arm, T, log=print):
     pieces = [top(info), legs(info), feet(info), hands(info), hands(info, armoured=True), vest(info), outer(info),
               hair_mod.build(info, T, tex_dir, log=log)]
     info.free()
+    import fabric
+    fabric.apply(T, tex_dir)                                # the cloth textures (fabric.py), this body's own files
     for p in pieces:
         skin_like_body(p, body, arm)
         log(f"wardrobe: {p.name} {len(p.data.polygons)} faces")
@@ -735,10 +760,11 @@ def dress(body, arm, T, log=print):
                           "hide": ["chest", "midriff", "upperarm", "forearm"] if m else ["chest"]}},
         "vest": {"orion": {"label": "Orion Utility Rig", "hide": []}},
         "outer": {"orion": {"label": "Orion Field Coat" if m else "Orion Cropped Jacket",
-                            "hide": ["upperarm", "chest"] if m else ["upperarm", "chest"]}},
+                            # (every region it covers is hidden: no skin can show through it in any pose)
+                            "hide": ["upperarm", "forearm", "chest", "midriff"] if m else ["upperarm", "forearm", "chest"]}},
         "hands": {"orion": {"label": "Orion Fingerless Gloves", "hide": []},
                   "orion_armoured": {"label": "Orion Armoured Gloves", "hide": ["hand"]}},
-        "legs": {"orion": {"label": "Orion Cargo Trousers" if m else "Orion Plated Trousers", "hide": ["pelvis", "thigh"]}},
+        "legs": {"orion": {"label": "Orion Cargo Trousers" if m else "Orion Plated Trousers", "hide": ["pelvis", "thigh", "shin"]}},
         "feet": {"orion": {"label": "Orion Combat Boots", "hide": ["foot"]}},
         "hair": {hair_item: {"label": "Short Swept" if m else "High Ponytail", "hide": []}},
     }
