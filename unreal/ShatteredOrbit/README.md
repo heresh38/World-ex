@@ -83,12 +83,13 @@ In the editor: Tools > Execute Python Script.
   `/Game/Weapons/Rifle/SM_Rifle` + `SM_Rifle_mag` + `SM_Rifle_bolt` and `DA_Rifle` (USOWeaponData with the data.js
   numbers and the part pivots / muzzle / sight / foregrip from `gun_rifle.parts.json`) and `/Game/Weapons/Arms/*`.
   `SO_IMPORT_ONLY=player,weapons,...` re-imports just those steps (player, stalker, weapons, fx, audio).
-  Players (modular, both bodies): `export_fbx.py --per-item --finger-rig` writes the body (every skin region its own
-  `skin__<region>` section) and every wardrobe piece as its own skeletal FBX on one skeleton (with finger bones), plus
+  Players (modular, both bodies, built by `tools/blender/hero/build.py --glb`): `export_fbx.py --per-item` writes the
+  body (every skin region its own `skin__<region>` section, plus the eyes and the brow / lash strand cards) and every wardrobe piece as its own skeletal FBX on one skeleton (with finger bones), plus
   the first-person cut of each (`--arms-only`). They become `/Game/Characters/Player<Male|Female>/SK_Player<Sex>` (body,
   clips as `Anims/A_Player<Sex>_*`, physics), `SK_Player<Sex>Arms`, `Wardrobe/SK_<Sex>_<slot>_<item>`,
   `Arms/SK_<Sex>Arms_<slot>_<item>`, `Icons/T_Icon_<slot>_<item>` and `DA_Wardrobe` (USOWardrobeData: labels, the
-  regions each piece hides, locked underwear, armour ratings from data.js `armorStats`, defaults). Gun icons
+  regions each piece hides, locked underwear, armour ratings from data.js `armorStats`, defaults). Hair, brows and
+  lashes are strand cards on `M_SOHair` (Hair shading model, dithered mask, tinted dark brown). Gun icons
   (`tools/blender/icons.py`, Cycles renders of our models) land as `/Game/Weapons/<Gun>/T_Icon_<Gun>`.
   Stage 5: every gun of `Data/game_data.json` becomes `/Game/Weapons/<Gun>/DA_<Gun>` (stats, slot, projectile kind,
   sockets, rail, optics it takes) with `SM_<Gun>` + its reload parts (shared textures in `/Game/Weapons/Textures`), the

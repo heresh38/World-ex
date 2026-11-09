@@ -63,7 +63,16 @@ rebuilds the right as its exact mirror), `shape.py` + `headshape.py` (the anatom
 field, the head from adult norms), `headfit.py` (lays the head cage on the face's landmarks: eye / mouth loops,
 nose cap, neck opening), `fit.py` (Catmull-Clark x2, projection, tangential relaxation, the face customisation
 shape keys `face_*` from `headshape.FACE_KEYS`). Output: ~38.6k quads, symmetric, open only at eyes and mouth,
-plus two eyeball meshes. Not yet rigged / exported to Unreal.
+plus two eyeball meshes. `--rig` / `--glb=x.glb` rig it (`rig.py`: our joints on the shared player skeleton incl.
+fingers, heat weights, the player clips with the A-pose arms lowered, `B_body` one `skin__<region>` slot per region,
+`B_eyes`, `B_brows` = eyebrows + lashes as strand cards), then dress it unless `--naked` (`wardrobe.py`: the Orion
+outfit per slot `C_<slot>__<item>` from the concept sheet, skinned by data transfer, metadata in the armature's
+`worldex`; `garment.py` = cuts, seams, hems, straps and hardware for the AAA pass). `hair.py`: hair as strand cards
+(own numpy atlas `hero_hair_strands.png`: clumps of separate strands with ragged roots and pointed tips; a cap with a
+soft, strand-broken edge from `hero_hair_scalp.png`; hairline wisps on a density gradient), male short swept, female
+high ponytail with volume and a side-swept fringe; Unreal material `M_SOHair` for `hair`, `hair__cap`, `hair__brow`,
+`hair__lash`. `export_unreal.sh` builds `SourceArt/Characters/src/hero_<sex>.glb` (delete it, and the cached
+`src/tex/hero_hair_*.png`, to rebuild) and exports `--per-item` + `--arms-only`.
 
 ## Earth (free roam)
 The city follows the owner's river-city art (`art/reference/city_river.jpg`). A river (`RIVER_Z`, `riverZ()` in

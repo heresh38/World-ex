@@ -1,8 +1,10 @@
 """Inventory icons rendered from our own models with Cycles (transparent background, studio lighting).
 
   guns:   assets/models/gun_<x>.glb -> <out>/guns/icon_gun_<x>.png    side view, muzzle to the right (768 x 384)
+  armour: <out>/../Characters/src/hero_<sex>.glb (hero/build.py) -> <out>/armour/icon_<sex>_<slot>_<item>.png, each
+          wardrobe piece C_<slot>__<item> alone, three-quarter front view (512 x 512; gloves: the left one)
 
-blender --background --python tools/blender/icons.py -- <out dir> [guns] [--only=a,b]
+blender --background --python tools/blender/icons.py -- <out dir> [guns] [armour] [--only=a,b]
 """
 import bpy, sys, os, math, json, glob
 from mathutils import Vector, Euler
@@ -11,7 +13,8 @@ import bl
 
 args = sys.argv[sys.argv.index('--') + 1:]
 OUT = os.path.abspath(args[0])
-DO_GUNS = True
+KINDS = [a for a in args[1:] if not a.startswith('--')] or ['guns', 'armour']
+DO_GUNS = 'guns' in KINDS
 ONLY = next((a.split('=', 1)[1].split(',') for a in args if a.startswith('--only=')), None)
 SAMPLES = int(os.environ.get('ICON_SAMPLES', '48'))
 
@@ -104,5 +107,42 @@ def guns():
         render(os.path.join(OUT, 'guns', 'icon_' + stem + '.png'))
 
 
+def armour():
+    """each armour piece of the hero GLBs on its own (the rest pose; the body, hair and other pieces hidden)"""
+    os.makedirs(os.path.join(OUT, 'armour'), exist_ok=True)
+    src_dir = os.path.join(os.path.dirname(OUT), 'Characters', 'src')
+    for sex in ('male', 'female'):
+        path = os.path.join(src_dir, f'hero_{sex}.glb')
+        if not os.path.exists(path):
+            print(f'[icons] armour: {path} missing (build it with hero/build.py --glb)')
+            continue
+        bl.reset()
+        sc = bpy.context.scene
+        sc.render.resolution_x, sc.render.resolution_y = 512, 512
+        studio(sc)
+        sc.view_settings.exposure = -1.6           # the studio is set for guns; cloth reads true-to-albedo this way
+        bpy.ops.import_scene.gltf(filepath=path)
+        for o in sc.objects:                       # the rest pose, not a clip's first frame
+            if o.type == 'ARMATURE' and o.animation_data:
+                o.animation_data.action = None
+                for pb in o.pose.bones:
+                    pb.matrix_basis.identity()
+        pieces = [o for o in sc.objects if o.type == 'MESH' and o.name.startswith('C_') and not o.name.startswith('C_hair')]
+        cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
+        for o in sc.objects:
+            if o.type == 'MESH':
+                o.hide_render = True
+        for p in pieces:
+            slot, item = p.name.split('.')[0][2:].split('__', 1)
+            if ONLY and f'{slot}_{item}' not in ONLY:
+                continue
+            p.hide_render = False
+            frame(cam, [p], (-.55, .8, -.25), margin=1.22, left_only=slot == 'hands')
+            render(os.path.join(OUT, 'armour', f'icon_{sex}_{slot}_{item}.png'))
+            p.hide_render = True
+
+
 if DO_GUNS:
     guns()
+if 'armour' in KINDS:
+    armour()

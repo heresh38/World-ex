@@ -4,6 +4,7 @@ blender --background --python tools/blender/hero/build.py -- male|female [--cage
 
   --cage     stop after the cage (no subdivision / fitting) - for checking the topology
   --sheet    render an orthographic front / side / back sheet with the wireframe over a clay shade
+  --rig      rig it for the game (rig.py: skeleton, weights, clips, skin__<region> sections); --glb=path writes it
 """
 import bpy, bmesh, math, os, sys
 from mathutils import Vector
@@ -160,6 +161,22 @@ def main():
     if "--nofine" not in flags and "--nokeys" not in flags:
         fit_mod.face_keys(o, shape_mod.Body, T, log=log)                    # face customisation shape keys
     eyes = fit_mod.eyeballs(body, T, f"hero_{sex}")
+    if "--rig" in flags or isinstance(flags.get("--glb"), str):           # rigged, with clips, for the game
+        import rig as rig_mod
+        rig_mod.rig(o, eyes, T, sex, log=log)
+        eyes = []
+        if "--naked" not in flags:                                         # the Orion outfit (wardrobe.py)
+            import wardrobe
+            arm = bpy.data.objects["Armature"]
+            arm.animation_data.action = None
+            for pb in arm.pose.bones:
+                pb.rotation_quaternion = (1, 0, 0, 0)
+                pb.location = (0, 0, 0)
+            wardrobe.dress(o, arm, T, log=log)
+            arm.animation_data.action = bpy.data.actions["Idle"]
+        if isinstance(flags.get("--glb"), str):
+            rig_mod.write_glb(flags["--glb"])
+            log(f"wrote {flags['--glb']}")
     bm = bmesh.new(); bm.from_mesh(o.data)
     check(bm, f"{sex} mesh"); bm.free()
     if isinstance(flags.get("--save"), str):

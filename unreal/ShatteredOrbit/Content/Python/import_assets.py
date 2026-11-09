@@ -555,7 +555,7 @@ HAIR_TONE = (0.035, 0.024, 0.018)     # dark brown (the concept pair); the game 
 def player_extra(key, m):
     if key in ("skin", "skin_face"):
         return {"tint": list(SKIN_TONE)}
-    if key in ("hair", "hair__cap", "brow"):
+    if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
     return None
 
@@ -1669,7 +1669,7 @@ def main():
     defaults = default_textures()
     master = master_material(defaults)
     hair = hair_material(defaults)
-    PARENT_FOR.update({"hair": hair, "hair__cap": hair})
+    PARENT_FOR.update({k: hair for k in ("hair", "hair__cap", "hair__brow", "hair__lash")})   # head hair, brows, lashes
     # SO_IMPORT_ONLY=arms,weapons,... re-imports just those steps (default: everything).
     only = {s.strip() for s in os.environ.get("SO_IMPORT_ONLY", "").split(",") if s.strip()}
     want = lambda step: not only or step in only

@@ -14,7 +14,17 @@ OUT="$ROOT/unreal/ShatteredOrbit/SourceArt"
 M="$ROOT/assets/models"
 run() { "$BLENDER" --background --python "$ROOT/tools/blender/export_fbx.py" -- "$@" 2>&1 | grep -E "^\[export_fbx\]|Error|Traceback" || true; }
 
-# Players: being rebuilt from scratch (new base meshes, 2026-11); nothing to export yet.
+# Players: the hero base meshes (tools/blender/hero: rigged, the player clips, face_* morphs), built once into
+# SourceArt/Characters/src (delete the GLB to rebuild), then the body (one skin__<region> section per region) and
+# its first-person arms cut; the Orion outfit, hair (strand cards), brows and lashes come with it.
+mkdir -p "$OUT/Characters/src"
+for sex in male female; do
+  Sex="$(echo "${sex:0:1}" | tr a-z A-Z)${sex:1}"
+  glb="$OUT/Characters/src/hero_$sex.glb"
+  [ -f "$glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/hero/build.py" -- "$sex" "--glb=$glb" 2>&1 | grep -E "^\[hero\]|Error|Traceback" || true
+  run "$glb" "$OUT/Characters/Player$Sex" --per-item
+  run "$glb" "$OUT/Characters/Player${Sex}Arms" --per-item --arms-only
+done
 # Inventory icons (guns and armour pieces) rendered from the same models
 "$BLENDER" --background --python "$ROOT/tools/blender/icons.py" -- "$OUT/Icons" 2>&1 | grep -E "^\[icons\]|Error|Traceback" || true
 # Nexus Prime, the city hub (nexus.py kit: one FBX per piece)
