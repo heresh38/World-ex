@@ -71,6 +71,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 
 	// Held gun (players): copied from the instance each update.
 	bool bHold = false;
+	/** Only the right arm reaches for the gun (the left is busy: a shield). */
+	bool bOneHand = false;
 	bool bArmsOnly = false;
 	bool bCollapseBody = false;
 	float AimPitch = 0.0f;
@@ -176,6 +178,8 @@ public:
 
 	/** Held gun (players): component-space wrist targets with hand bases (FSOHandGrip) for the arm IK. */
 	bool bHold = false;
+	/** Only the right arm reaches for the gun (the left is busy: a shield). */
+	bool bOneHand = false;
 	/** First-person copy of the body: everything but the arms collapses. */
 	bool bArmsOnly = false;
 	bool bCollapseBody = false;

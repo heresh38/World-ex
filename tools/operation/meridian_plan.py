@@ -91,16 +91,16 @@ STAGES = [
     dict(id="approach", title="Meridian Approach", objective="Reach the city gate", kind="travel",
          goal=goal(0.0, WALL["n"] - 4.0), radius=1800,
          checkpoint=checkpoint(ENTRY[0], ENTRY[1] + 4.0, 0.0, (0.0, 0.0)),
-         waves=[dict(spawn=[["remnant", 4, "approach_rubble"]])]),
+         waves=[dict(hunt=False, spawn=[["remnant", 3, "approach_rubble"], ["stalker", 2, "approach_rubble"]])]),
     dict(id="gate", title="Meridian Gate", objective="Break the hold on the gate", kind="clear",
          goal=goal(0.0, -168.0),
          checkpoint=checkpoint(0.0, WALL["n"] + 6.0, 0.0, (0.0, 0.0)),
-         waves=[dict(spawn=[["remnant", 6, "court_north"], ["stalker", 2, "court_flanks"]]),
+         waves=[dict(hunt=False, spawn=[["remnant", 4, "court_north"], ["stalker", 2, "court_flanks"], ["veilborn", 1, "court_north"]]),
                 dict(delay=2.0, maxAlive=3, spawn=[["remnant", 6, "court_north"], ["veilborn", 2, "court_flanks"]]),
                 dict(delay=2.0, maxAlive=2, spawn=[["bulwark", 1, "court_north"], ["remnant", 4, "court_flanks"]])]),
     dict(id="boulevard", title="The Boulevard", objective="Push into the central district", kind="travel",
          goal=goal(0.0, -42.0), radius=1500,
-         waves=[dict(spawn=[["stalker", 2, "boulevard_mid"], ["remnant", 4, "boulevard_mid"]])]),
+         waves=[dict(hunt=False, spawn=[["stalker", 2, "boulevard_mid"], ["remnant", 3, "boulevard_mid"]])]),
     dict(id="ring", title="Concord Ring", objective="Hold the ring until the terrace barrier falls", kind="hold", hold=90,
          goal=goal(0.0, 0.0),
          checkpoint=checkpoint(0.0, -40.0, 0.0, (0.0, 0.0)),
@@ -114,7 +114,7 @@ STAGES = [
     dict(id="terraces", title="High Terraces", objective="Clear the terraces", kind="clear",
          goal=goal(TERRACE["east_e"], 60.0, TZ),
          checkpoint=checkpoint(TERRACE["east_e"], 4.0, TZ, (TERRACE["east_e"], 60.0)),
-         waves=[dict(spawn=[["veilborn", 3, "terrace_north"], ["remnant", 6, "terrace_east"]]),
+         waves=[dict(hunt=False, spawn=[["veilborn", 2, "terrace_north"], ["remnant", 4, "terrace_east"], ["stalker", 2, "terrace_east"]]),
                 dict(delay=2.0, maxAlive=3, spawn=[["bulwark", 2, "terrace_north"], ["stalker", 3, "terrace_east"]]),
                 dict(delay=2.0, maxAlive=2, spawn=[["veilborn", 2, "terrace_north"], ["remnant", 6, "terrace_east"]])]),
     dict(id="bridge", title="Crown Bridge", objective="Cross to the Crown", kind="travel",
@@ -127,6 +127,9 @@ STAGES = [
                 dict(bossHealth=0.5, spawn=[["veilborn", 3, "crown_ring"], ["remnant", 4, "crown_ring"]]),
                 dict(bossHealth=0.25, spawn=[["bulwark", 2, "crown_ring"], ["stalker", 3, "crown_ring"]])]),
 ]
+
+# Waves: the first of a stage is a garrison (hunt=False): unaware at its post until it sees, hears or is hurt by
+# someone, so it can be crept up on; later waves are reinforcements that know where the players are.
 
 # Energy barriers that keep the route linear: closed until their stage begins.
 BARRIERS = [

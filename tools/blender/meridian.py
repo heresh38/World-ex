@@ -511,6 +511,82 @@ def zone_crown(G):
         rk.heap(g, (cx + math.cos(a) * (r + 9), cy + math.sin(a) * (r + 9), 0), rnd.uniform(5, 9), rnd.uniform(2, 5), 670 + i)
 
 
+AMBIENCE = []
+
+
+def ambience(kind, p, radius, volume=1.0, spores=False):
+    AMBIENCE.append(dict(kind=kind, at=[round(p[1] * 100, 1), round(p[0] * 100, 1), round(p[2] * 100 + 80, 1)], radius=radius * 100.0,
+                         volume=volume, spores=spores))
+
+
+def zone_hive(G):
+    """the Altered have made the city their base: grown barricades round every post they hold (cover for both sides),
+    growth over the walls and floors with egg pods, the Choir's spires humming, cables of light slung over the streets"""
+    PI = math.pi
+    T = P.TERRACE
+    z = T["z"]
+
+    def growth(zone, c, r, seed, wall=None):
+        rk.hive_growth(G[zone][0], G[zone][1], c, r, seed, wall)
+        ambience("hive", c, 14, 0.8, spores=True)
+        light("void", c, 700 + r * 120)
+
+    def spire(zone, c, h, seed):
+        rk.alien_spire(G[zone][0], G[zone][1], c, h, seed)
+        ambience("hum", c, 30, 1.0)
+        light("void", (c[0], c[1], c[2] + h * .9), 1600)
+
+    # the approach: a forward post behind barricades, growth up the side ruins, a spire before the wall
+    for i, (e, n, yaw) in enumerate(((-12, -249, PI), (11, -252, PI), (0, -262, PI + .1), (-21, -236, PI - .2))):
+        rk.alien_barricade(G["approach"][0], (e, n, 0), yaw, 900 + i)
+    growth("approach", (-25, -262, 0), 4.5, 910, wall=(1, 0))
+    growth("approach", (26, -226, 0), 4.0, 911, wall=(-1, 0))
+    spire("approach", (-19, -214, 0), 12.0, 912)
+    for n in (-290, -270, -240):
+        rk.cable(G["approach"][1], (-30, n, 11), (30, n + 6, 13), 2.5)
+    # the gate court: the garrison's line
+    for i, (e, n, yaw) in enumerate(((-14, -152, PI), (0, -150, PI), (15, -153, PI), (-27, -172, PI), (27, -170, PI), (-6, -182, PI + .3))):
+        rk.alien_barricade(G["gate"][0], (e, n, 0), yaw, 920 + i)
+    growth("gate", (-15, -194.5, 0), 4.0, 930, wall=(0, 1))
+    growth("gate", (16, -194.5, 0), 3.5, 931, wall=(0, 1))
+    spire("gate", (9, -141, 0), 13.0, 932)
+    # the boulevard
+    for i, (e, n, yaw) in enumerate(((-8, -88, PI), (8, -91, PI), (-6, -112, PI + .2), (7, -64, PI - .2))):
+        rk.alien_barricade(G["boulevard"][0], (e, n, 0), yaw, 940 + i)
+    growth("boulevard", (-16.5, -120, .18), 3.5, 950, wall=(1, 0))
+    growth("boulevard", (16.5, -76, .18), 3.5, 951, wall=(-1, 0))
+    for n in (-132, -116, -80, -62, -50):
+        rk.cable(G["boulevard"][1], (-19, n, 14 + (n % 3)), (19, n + 4, 16), 3.0)
+    # the ring: barricades round the plaza facing in, spires at the breaches, the monument overgrown
+    for i, a in enumerate((20, 70, 110, 160, 200, 330)):
+        ar = math.radians(a)
+        rk.alien_barricade(G["ring"][0], (math.cos(ar) * 31, math.sin(ar) * 31, .04), ar + PI / 2, 960 + i)
+    spire("ring", (-6.9, 39.4, 0), 15.0, 970)
+    spire("ring", (-40.0, 0.0, 0), 13.0, 971)
+    growth("ring", (0, 0, -P.PLAZA["sunk"]), 7.0, 972)
+    growth("ring", (24, 26, 0), 3.0, 973)
+    # the terraces
+    for i, (e, n, yaw) in enumerate(((77, 30, PI), (83, 48, PI), (78, 70, PI), (82, 90, PI))):
+        rk.alien_barricade(G["terraces"][0], (e, n, z), yaw, 980 + i)
+    for i, (e, n) in enumerate(((60, 111), (42, 117), (25, 112))):
+        rk.alien_barricade(G["terraces"][0], (e, n, z), -PI / 2, 990 + i)
+    growth("terraces", (85.5, 60, z), 3.0, 995, wall=(-1, 0))
+    growth("terraces", (50, 120.5, z), 3.0, 996, wall=(0, -1))
+    spire("terraces", (84, 117, z), 10.0, 997)
+    for n in (20, 55, 90):
+        rk.cable(G["terraces"][1], (73, n, z + 9), (100, n + 5, z + 14), 2.0)
+    # the crown: growth over the platform's rim and up its pedestal, two spires at the rim
+    growth("crown", (25, 215, z), 3.0, 1000)
+    growth("crown", (-28, 190, z), 3.0, 1001)
+    growth("crown", (45, 200, 0), 6.0, 1002, wall=(1, 0))
+    growth("crown", (-45, 205, 0), 6.0, 1003, wall=(-1, 0))
+    spire("crown", (34.0, 213.0, z), 9.0, 1004)
+    spire("crown", (-34.0, 214.0, z), 9.0, 1005)
+    # the hive's voices far off, everywhere
+    for p in ((0, -230, 0), (0, -100, 0), (0, 0, 0), (60, 80, 10), (0, 190, 10)):
+        ambience("chorus", p, 160, 0.55)
+
+
 def zone_backdrop(G):
     """the skyline round the route, the far spire and its broken orbital ring"""
     g = G["backdrop"][0]
@@ -674,7 +750,7 @@ def kit_barrier():
 
 # ------------------------------------------------------------------ main
 ZONES = dict(ground=zone_ground, approach=zone_approach, gate=zone_gate, boulevard=zone_boulevard, ring=zone_ring,
-             terraces=zone_terraces, crown=zone_crown, backdrop=zone_backdrop, blockers=zone_blockers)
+             terraces=zone_terraces, crown=zone_crown, backdrop=zone_backdrop, blockers=zone_blockers, hive=zone_hive)
 
 
 def main():
@@ -697,7 +773,7 @@ def main():
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(flags['--save']))
     if not isinstance(flags.get('--zones'), str):
         with open(ART, 'w', encoding='utf-8') as f:
-            json.dump(dict(lights=LIGHTS), f, indent=1)
+            json.dump(dict(lights=LIGHTS, ambience=AMBIENCE), f, indent=1)
         log("wrote", ART, len(LIGHTS), "lights")
     if '--noexport' not in flags:
         bl.export("meridian.glb")

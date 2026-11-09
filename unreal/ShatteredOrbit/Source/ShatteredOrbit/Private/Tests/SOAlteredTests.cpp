@@ -98,6 +98,7 @@ bool FSOBulwarkTest::RunTest(const FString& Parameters)
 		return false;
 	}
 	B->GetController()->SetActorTickEnabled(false);
+	B->SetAlert(true); // the shield alone (no ambush bonus)
 	const float FromFront = USOCombatStatics::ApplyDamage(Front, B, 100.0f, false);
 	const float FromBehind = USOCombatStatics::ApplyDamage(Back, B, 100.0f, false);
 	TestTrue(TEXT("the shield turns most of a shot from the front"), FromFront <= 30.0f);
@@ -131,6 +132,13 @@ bool FSOColossusTest::RunTest(const FString& Parameters)
 		}
 	}
 	W.Run(0.5f);
+	{
+		const ASOEnemyAIController* AI = Cast<ASOEnemyAIController>(C->GetController());
+		int32 Alive = 0;
+		for (const TWeakObjectPtr<ASOConduit>& K : C->GetConduits()) { Alive += K.IsValid() && !K->IsDead(); }
+		AddInfo(FString::Printf(TEXT("ai %d combat %d state %d target %d conduits %d alive %d"), AI != nullptr, AI && AI->IsInCombat(),
+			AI ? (int32)AI->GetState() : -1, AI && AI->GetTarget() != nullptr, C->GetConduits().Num(), Alive));
+	}
 	TestFalse(TEXT("the shield breaks with its conduits"), C->IsShielded() || C->IsImmune());
 	TestTrue(TEXT("it staggers"), C->IsStaggered());
 	const float Hurt = USOCombatStatics::ApplyDamage(Player, C, 100.0f, false);

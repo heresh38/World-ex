@@ -155,8 +155,22 @@ def main():
         tp.set_editor_property("tags", ["SOConduit"])
     first = plan["stages"][0]["checkpoint"]
     spawn(unreal.PlayerStart, (first[0], first[1], first[2]), (0, first[3], 0), "PlayerStart", "Gameplay")
-    nav = spawn(unreal.NavMeshBoundsVolume, (-4000, 2500, 1500), label="NavBounds", folder="Gameplay")
-    nav.set_actor_scale3d(unreal.Vector(300.0, 90.0, 20.0))          # the brush is 200 cm: 600 x 180 x 40 m
+    # the nav mesh only where the route is walked (plan metres: N0, N1, E0, E1, Z0, Z1): one box over the whole
+    # route would take in every floor of every ruined tower and run out of tiles
+    for i, (n0, n1, e0, e1, z0, z1) in enumerate((
+            (-322, -196, -32, 32, -2, 9), (-200, -136, -37, 37, -2, 6), (-138, -38, -19, 19, -2, 9),
+            (-46, 46, -46, 46, -3, 5), (-8, 8, 40, 80, -2, 13), (-10, 123, 72, 88, 7, 14), (106, 123, -10, 88, 7, 14),
+            (118, 242, -42, 42, 7, 16))):
+        nav = spawn(unreal.NavMeshBoundsVolume, ((n0 + n1) * 50.0, (e0 + e1) * 50.0, (z0 + z1) * 50.0), label=f"NavBounds_{i}", folder="Gameplay/Nav")
+        nav.set_actor_scale3d(unreal.Vector((n1 - n0) / 2.0, (e1 - e0) / 2.0, (z1 - z0) / 2.0))   # the brush is 200 cm
+    # the base breathing: loops (machinery, growth, the far chorus) and spores
+    sounds = {"hum": "amb_alien_hum", "hive": "amb_hive", "chorus": "amb_alien_chorus"}
+    for i, a in enumerate(art.get("ambience", [])):
+        amb = spawn(unreal.SOAmbience, tuple(a["at"]), label=f"Ambience_{a['kind']}_{i}", folder="Ambience")
+        amb.set_editor_property("sound", sounds[a["kind"]])
+        amb.set_editor_property("volume", float(a["volume"]))
+        amb.set_editor_property("radius", float(a["radius"]))
+        amb.set_editor_property("spores", bool(a["spores"]))
 
     # the area map
     info = spawn(unreal.SOMapInfo, (-4000, 2500, 0), label="MapInfo", folder="Map")

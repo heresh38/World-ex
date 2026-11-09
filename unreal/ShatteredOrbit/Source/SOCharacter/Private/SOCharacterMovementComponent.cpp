@@ -437,7 +437,8 @@ bool USOCharacterMovementComponent::TryMantle()
 	// 1. A wall in front, somewhere between just above step height and the max ledge height.
 	FHitResult WallHit;
 	bool bFoundWall = false;
-	for (float Height = MaxStepHeight - 10.0f; Height <= MantleMaxHeight; Height += 15.0f)
+	const float MaxLedge = FMath::Max(MantleMaxHeight, ClamberMaxHeight);
+	for (float Height = MaxStepHeight - 10.0f; Height <= MaxLedge; Height += 15.0f)
 	{
 		const FVector Start(Location.X, Location.Y, FeetZ + Height);
 		const FVector End = Start + Forward * (Radius + MantleReach);
@@ -456,7 +457,7 @@ bool USOCharacterMovementComponent::TryMantle()
 	// 2. The top of the ledge: a sphere swept down just beyond the wall face.
 	const FVector WallNormal2D = WallHit.ImpactNormal.GetSafeNormal2D();
 	const FVector TopXY = WallHit.ImpactPoint - WallNormal2D * (Radius + 6.0f);
-	const FVector DownStart(TopXY.X, TopXY.Y, FeetZ + MantleMaxHeight + Radius + 2.0f);
+	const FVector DownStart(TopXY.X, TopXY.Y, FeetZ + MaxLedge + Radius + 2.0f);
 	const FVector DownEnd(TopXY.X, TopXY.Y, FeetZ + MantleMinHeight - 2.0f);
 	FHitResult TopHit;
 	if (!World->SweepSingleByChannel(TopHit, DownStart, DownEnd, FQuat::Identity, Channel, FCollisionShape::MakeSphere(Radius * 0.6f), Params, Response)
@@ -466,10 +467,11 @@ bool USOCharacterMovementComponent::TryMantle()
 	}
 	const float LedgeZ = TopHit.ImpactPoint.Z;
 	const float LedgeHeight = LedgeZ - FeetZ;
-	if (LedgeHeight < MantleMinHeight || LedgeHeight > MantleMaxHeight)
+	if (LedgeHeight < MantleMinHeight || LedgeHeight > MaxLedge)
 	{
 		return false;
 	}
+	bClamber = LedgeHeight > MantleMaxHeight;
 
 	// 3. The standing capsule fits on top, and the path (straight up, then over) is clear.
 	const FVector Target(TopXY.X, TopXY.Y, LedgeZ + HalfHeight + 2.0f);
@@ -491,7 +493,9 @@ bool USOCharacterMovementComponent::TryMantle()
 	MantleElapsed = 0.0f;
 	MantleEntrySpeed = FMath::Max(static_cast<float>(FVector::DotProduct(Velocity, Forward)), 0.0f);
 	const float Fast = FMath::Clamp(MantleEntrySpeed / FMath::Max(SprintSpeed, 1.0f), 0.0f, 1.0f);
-	MantleDuration = (MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f)) * FMath::Lerp(1.0f, MantleFastTimeScale, Fast);
+	MantleDuration = bClamber
+		? ClamberBaseTime + ClamberTimePerMeter * (LedgeHeight / 100.0f)   // a climb: no speed carried into it
+		: (MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f)) * FMath::Lerp(1.0f, MantleFastTimeScale, Fast);
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(ESOCustomMovementMode::Mantle));
 	return true;
@@ -509,9 +513,13 @@ void USOCharacterMovementComponent::PhysMantle(float DeltaTime, int32 Iterations
 
 	// Up (eased out), and over the lip once the body is nearly up: the two overlap so the move is one arc rather than
 	// a lift and a shove (the path stays inside what TryMantle validated: the lip is cleared before most of the push).
-	const float Rise = FMath::Clamp(Alpha / 0.7f, 0.0f, 1.0f);
-	const float RiseEased = 1.0f - FMath::Pow(1.0f - Rise, 3.0f);
-	const float Over = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - 0.42f) / 0.58f, 0.0f, 1.0f));
+	// A clamber hangs a moment, pulls up hard, then rolls over the lip (the rise ends before the push).
+	const float RiseEnd = bClamber ? 0.78f : 0.7f;
+	const float Rise = bClamber ? FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - 0.08f) / (RiseEnd - 0.08f), 0.0f, 1.0f))
+		: FMath::Clamp(Alpha / RiseEnd, 0.0f, 1.0f);
+	const float RiseEased = bClamber ? Rise : 1.0f - FMath::Pow(1.0f - Rise, 3.0f);
+	const float OverStart = bClamber ? 0.62f : 0.42f;
+	const float Over = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - OverStart) / (1.0f - OverStart), 0.0f, 1.0f));
 
 	const FVector Desired(
 		FMath::Lerp(MantleStart.X, MantleTarget.X, Over),
@@ -524,7 +532,7 @@ void USOCharacterMovementComponent::PhysMantle(float DeltaTime, int32 Iterations
 	if (Alpha >= 1.0f)
 	{
 		// Out the far side with the speed you came in with (a sprint vault flows on).
-		const float Exit = FMath::Max(MantleExitSpeed, MantleEntrySpeed * MantleKeepSpeed);
+		const float Exit = bClamber ? MantleExitSpeed : FMath::Max(MantleExitSpeed, MantleEntrySpeed * MantleKeepSpeed);
 		Velocity = (MantleTarget - MantleStart).GetSafeNormal2D() * Exit;
 		SetMovementMode(MOVE_Walking);
 	}

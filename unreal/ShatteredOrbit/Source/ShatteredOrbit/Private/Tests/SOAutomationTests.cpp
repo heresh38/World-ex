@@ -151,7 +151,7 @@ bool FSOMovementCoyoteTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOMovementMantleTest, "ShatteredOrbit.Movement.Mantle", SOTest::Flags)
 bool FSOMovementMantleTest::RunTest(const FString& Parameters)
 {
-	for (const float Height : { 60.0f, 120.0f, 200.0f, 240.0f, 300.0f })
+	for (const float Height : { 60.0f, 120.0f, 200.0f, 240.0f, 300.0f, 360.0f, 420.0f })
 	{
 		SOTest::FTestWorld W;
 		W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
@@ -175,7 +175,7 @@ bool FSOMovementMantleTest::RunTest(const FString& Parameters)
 		W.Run(0.3f);
 
 		const float FeetZ = C->GetActorLocation().Z - C->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-		if (Height <= Move->MantleMaxHeight)
+		if (Height <= Move->ClamberMaxHeight)
 		{
 			TestTrue(FString::Printf(TEXT("mantles a %.0f cm ledge"), Height), bMantled);
 			TestEqual(FString::Printf(TEXT("stands on the %.0f cm ledge"), Height), FeetZ, Height, 4.0f);

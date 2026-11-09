@@ -42,7 +42,7 @@ enum class ESOPickupKind : uint8
 
 /**
  * A pickup on the ground (combat.js spawnPickup): a loot core glowing in its rarity colour (a light shaft for Rare and
- * up) or an ammo canister. Walking over it collects it (server): a core rolls a weapon of its rarity around the
+ * up) or an ammo canister, lying on the ground. Walking over it collects it (server): a core rolls a weapon of its rarity around the
  * player's power into the inventory, ammo tops up the equipped weapons. Gone after 90 s.
  */
 UCLASS()
@@ -90,6 +90,10 @@ protected:
 
 	float Age = 0.0f;
 	float BeamTimer = 0.0f;
+	/** A core lies on the ground at this height (its middle), turning slowly. */
+	static constexpr float CoreRest = 17.0f;
+	/** How far it falls into place when it appears (cm). */
+	float DropHeight = 110.0f;
 	FVector Base = FVector::ZeroVector;
 	bool bCollected = false;
 };

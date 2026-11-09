@@ -39,6 +39,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
 	FLinearColor BloodColor = FLinearColor(0.32f, 0.015f, 0.012f);
 
+	/** Killing it can leave loot (pickups); off for things that are not creatures (the Colossus's conduits). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
+	bool bDropsLoot = true;
+
 	/** Seconds the body stays after death (0 = until removed by someone else). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Combat")
 	float CorpseLifeSpan = 0.0f;
@@ -63,6 +67,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SO|Combat")
 	float GetDeathTime() const { return DeathTime; }
+
+	/** Scale on the damage of the rounds this character's gun fires (creatures hit softer than players). */
+	virtual float GetOutgoingDamageScale() const { return 1.0f; }
+
+	/** Holds its gun in the right hand only (the left arm is busy: a shield). */
+	virtual bool HoldsWithOneHand() const { return false; }
 
 	/** Takes no damage at all right now (a boss behind its shield). */
 	virtual bool IsImmune() const { return false; }

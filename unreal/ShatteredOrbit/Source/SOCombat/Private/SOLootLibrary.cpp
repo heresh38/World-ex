@@ -83,7 +83,7 @@ FName USOLootLibrary::RandomArchetype(FRandomStream& Rng, int32 Slot)
 	for (const FSOArchetypeEntry& Entry : Tables->Archetypes)
 	{
 		const USOWeaponData* Data = Entry.Data.LoadSynchronous();
-		if (Data && (Slot < 0 || Data->Slot == Slot))
+		if (Data && Data->LootWeight > 0.0f && (Slot < 0 || Data->Slot == Slot))
 		{
 			Pool.Emplace(Entry.Id, Data->LootWeight);
 			Total += Data->LootWeight;
@@ -149,6 +149,10 @@ FSOWeaponInstance USOLootLibrary::MakeWeapon(FName Archetype, int32 Rarity, int3
 	W.Archetype = Archetype;
 	W.Rarity = FMath::Clamp(Rarity, 0, 4);
 	W.Power = FMath::Max(1, Power);
+	if (const USOWeaponData* Data = Tables ? Tables->LoadArchetype(Archetype) : nullptr; Data && !Data->DefaultShader.IsNone())
+	{
+		W.Shader = Data->DefaultShader;
+	}
 	if (Tables)
 	{
 		const int32 Count = FMath::Min(Tables->GetRarity(W.Rarity).Perks, Tables->Perks.Num());

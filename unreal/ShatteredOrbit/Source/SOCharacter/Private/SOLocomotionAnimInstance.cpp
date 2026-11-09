@@ -62,7 +62,9 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bArmsOnly = Player && Mesh && Mesh == Player->GetFirstPersonArms();
 	// The arms mesh is already only arms; the whole body standing in for it gets everything else collapsed.
 	bCollapseBody = bArmsOnly && Mesh->GetSkeletalMeshAsset() == Player->GetMesh()->GetSkeletalMeshAsset();
-	const ASOWeapon* Held = Player ? Player->GetWeapon() : nullptr;
+	// anyone who fights holds their gun this way: the player, and the creatures that carry guns
+	const ASOCombatCharacter* Holder = Cast<ASOCombatCharacter>(Character);
+	const ASOWeapon* Held = Holder ? Holder->GetWeapon() : nullptr;
 	const USOGunRigComponent* Rig = Held ? (bArmsOnly ? Held->GetFirstPersonRig() : Held->GetThirdPersonRig()) : nullptr;
 	FTransform Right, Left;
 	if (!bDead && Mesh && Rig && Rig->GetAttachParent() && Rig->GetHandTargets(Right, Left))
@@ -71,9 +73,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		RightTarget = Right.GetRelativeTransform(ToMesh);
 		LeftTarget = Left.GetRelativeTransform(ToMesh);
 		Rig->GetFingerPoses(RightFingers, LeftFingers);
-		const float Ads = Player->GetViewmodel() ? Player->GetViewmodel()->GetAds() : 0.0f;
-		AimPitch = FRotator::NormalizeAxis(Player->GetAimRotation().Pitch);
-		EyeCS = ToMesh.InverseTransformPosition(Player->GetEyeTransform(false).GetLocation());
+		const float Ads = Player ? (Player->GetViewmodel() ? Player->GetViewmodel()->GetAds() : 0.0f) : (Holder->IsAimingDownSights() ? 1.0f : 0.0f);
+		AimPitch = FRotator::NormalizeAxis(Player ? Player->GetAimRotation().Pitch : Holder->GetBaseAimRotation().Pitch);
+		EyeCS = ToMesh.InverseTransformPosition(Player ? Player->GetEyeTransform(false).GetLocation() : Holder->GetPawnViewLocation());
+		bOneHand = Holder->HoldsWithOneHand();
 		// First person keeps a gentler stance so the off shoulder stays out of the corner of the view.
 		const float Stance = bArmsOnly ? 0.5f : 1.0f;
 		// long guns blade the body to the gun; handguns square up (both arms out, an isosceles stance)
@@ -335,6 +338,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 		Layer.Time = Length <= 0.0f ? 0.0f : (Layer.bLoop ? T - FMath::FloorToFloat(T / Length) * Length : FMath::Min(T, Length - 1e-3f));
 	}
 	bHold = Instance->bHold;
+	bOneHand = Instance->bOneHand;
 	bArmsOnly = Instance->bArmsOnly;
 	bCollapseBody = Instance->bCollapseBody;
 	AimPitch = Instance->AimPitch;
@@ -653,7 +657,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	}
 
 	// 3. Arms: two-bone IK to the wrist targets, elbows down and out, forearm shares the wrist twist, hand on the grip.
-	for (int32 SideIndex = 0; SideIndex < 2; ++SideIndex)
+	for (int32 SideIndex = 0; SideIndex < (bOneHand ? 1 : 2); ++SideIndex)
 	{
 		const bool bLeft = SideIndex == 1;
 		const int32 Upper = Arm[SideIndex][0], Lower = Arm[SideIndex][1], Hand = Arm[SideIndex][2];

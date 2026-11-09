@@ -9,6 +9,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Net/UnrealNetwork.h"
+#include "NavigationSystem.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "SOCombatCharacter.h"
@@ -57,7 +58,7 @@ ASOOperation::ASOOperation()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("Root")));
-	EnemyClasses.Add(TEXT("stalker"), ASOEnemy::StaticClass());
+	EnemyClasses.Add(TEXT("stalker"), ASOArmedStalker::StaticClass());
 	EnemyClasses.Add(TEXT("remnant"), ASORemnant::StaticClass());
 	EnemyClasses.Add(TEXT("veilborn"), ASOVeilborn::StaticClass());
 	EnemyClasses.Add(TEXT("bulwark"), ASOBulwark::StaticClass());
@@ -142,6 +143,7 @@ bool ASOOperation::LoadPlan(const FString& JsonText)
 				WO->TryGetNumberField(TEXT("delay"), Wave.Delay);
 				WO->TryGetNumberField(TEXT("maxAlive"), Wave.MaxAlive);
 				WO->TryGetNumberField(TEXT("bossHealth"), Wave.BossHealth);
+				WO->TryGetBoolField(TEXT("hunt"), Wave.bHunt);
 				for (const TSharedPtr<FJsonValue>& EV : WO->GetArrayField(TEXT("spawn")))
 				{
 					const TArray<TSharedPtr<FJsonValue>>& E = EV->AsArray();
@@ -465,7 +467,7 @@ void ASOOperation::SpawnWave(const FSOWave& Wave)
 	{
 		for (int32 i = 0; i < E.Count; ++i)
 		{
-			if (ASOEnemy* Enemy = SpawnEnemy(E.Enemy, E.Group, i))
+			if (ASOEnemy* Enemy = SpawnEnemy(E.Enemy, E.Group, i, Wave.bHunt))
 			{
 				Alive.Add(Enemy);
 			}
@@ -473,7 +475,7 @@ void ASOOperation::SpawnWave(const FSOWave& Wave)
 	}
 }
 
-ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index)
+ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index, bool bHunt)
 {
 	const TSubclassOf<ASOEnemy>* Class = EnemyClasses.Find(Kind);
 	const FSOSpawnGroup* G = Groups.Find(Group);
@@ -482,30 +484,49 @@ ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index)
 		UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: no enemy '%s' or spawn group '%s'"), *Kind.ToString(), *Group.ToString());
 		return nullptr;
 	}
+	UWorld* World = GetWorld();
 	const ASOEnemy* Cdo = Class->GetDefaultObject();
 	const float Half = Cdo->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 	const float Radius = Cdo->GetCapsuleComponent()->GetScaledCapsuleRadius();
-	// round the group's points; a second lap steps out so a crowd does not stack
+	UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	const bool bNav = Nav && Nav->GetDefaultNavDataInstance(FNavigationSystem::DontCreate);
+	// round the group's points; a second lap steps out so a crowd does not stack. Each try lands on the nav mesh (a
+	// floor it can walk from, never inside a wall or a heap) and only where its capsule fits.
 	const int32 Lap = Index / G->Points.Num();
-	const float A = Index * 2.39996f;
-	const FVector Spread = Lap > 0 ? FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * Radius * 2.6f * Lap : FVector::ZeroVector;
-	const FVector Point = G->Points[Index % G->Points.Num()] + Spread + FVector(0, 0, Half + 5.0f);
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	ASOEnemy* Enemy = GetWorld()->SpawnActor<ASOEnemy>(*Class, Point, FRotator(0.0f, G->Yaw, 0.0f), Params);
-	if (!Enemy)
+	const FVector Base = G->Points[Index % G->Points.Num()];
+	for (int32 Try = 0; Try < 10; ++Try)
 	{
-		return nullptr;
+		const float A = Index * 2.39996f + Try * 1.1f;
+		const float Out = (Lap > 0 ? Radius * 2.6f * Lap : 0.0f) + Try * Radius * 2.2f;
+		FVector Feet = Base + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * Out;
+		if (bNav)
+		{
+			FNavLocation OnNav;
+			if (!Nav->ProjectPointToNavigation(Feet, OnNav, FVector(300.0f, 300.0f, 500.0f)))
+			{
+				continue;
+			}
+			Feet = OnNav.Location;
+		}
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding;
+		ASOEnemy* Enemy = World->SpawnActor<ASOEnemy>(*Class, Feet + FVector(0, 0, Half + 5.0f), FRotator(0.0f, G->Yaw, 0.0f), Params);
+		if (!Enemy)
+		{
+			continue;
+		}
+		if (!Enemy->GetController())
+		{
+			Enemy->SpawnDefaultController();
+		}
+		if (ASOEnemyAIController* AI = Cast<ASOEnemyAIController>(Enemy->GetController()))
+		{
+			AI->bHunter = bHunt; // reinforcements know where the players are; a garrison has to find out
+		}
+		return Enemy;
 	}
-	if (!Enemy->GetController())
-	{
-		Enemy->SpawnDefaultController();
-	}
-	if (ASOEnemyAIController* AI = Cast<ASOEnemyAIController>(Enemy->GetController()))
-	{
-		AI->bHunter = true; // an operation's enemies know where the players are
-	}
-	return Enemy;
+	UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: no free floor for a %s at group '%s'"), *Kind.ToString(), *Group.ToString());
+	return nullptr;
 }
 
 void ASOOperation::OnCharacterDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)

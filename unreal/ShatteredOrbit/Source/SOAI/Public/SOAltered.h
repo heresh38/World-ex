@@ -55,7 +55,17 @@ protected:
 	bool bSpent = false;
 };
 
-/** The Remnant: a husk. Fast, frail, melee; comes in numbers. */
+/** The operation's stalker: the hunting animal, now carrying an auto rifle and fighting from cover. */
+UCLASS()
+class SOAI_API ASOArmedStalker : public ASOEnemy
+{
+	GENERATED_BODY()
+
+public:
+	ASOArmedStalker(const FObjectInitializer& ObjectInitializer);
+};
+
+/** The Remnant: a husk. Fast, frail; an SMG and its claws; pushes in, comes in numbers. */
 UCLASS()
 class SOAI_API ASORemnant : public ASOEnemy
 {
@@ -65,7 +75,8 @@ public:
 	ASORemnant(const FObjectInitializer& ObjectInitializer);
 };
 
-/** The Veilborn: keeps 9-17 m away and hurls void bolts; blinks aside when you close in or hurt it badly. */
+/** The Veilborn: a scout rifle from cover at long range; now and then a void bolt; blinks aside when you close in
+ *  or hurt it badly. */
 UCLASS()
 class SOAI_API ASOVeilborn : public ASOEnemy
 {
@@ -73,9 +84,6 @@ class SOAI_API ASOVeilborn : public ASOEnemy
 
 public:
 	ASOVeilborn(const FObjectInitializer& ObjectInitializer);
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	float PreferredRange = 1700.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float MinRange = 800.0f;
@@ -107,7 +115,8 @@ protected:
 	int32 Blinks = 0;
 };
 
-/** The Bulwark: slow and huge; its shield arm turns three quarters of what hits it from the front; slams the ground. */
+/** The Bulwark: slow and huge; its shield arm turns three quarters of what hits it from the front; a one-handed
+ *  shotgun; slams the ground up close. */
 UCLASS()
 class SOAI_API ASOBulwark : public ASOEnemy
 {
@@ -132,6 +141,8 @@ public:
 	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
 	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target) override;
 	virtual void Tick(float DeltaSeconds) override;
+	/** The left arm is the shield: the gun is held in the right hand. */
+	virtual bool HoldsWithOneHand() const override { return true; }
 
 protected:
 	float NextSlam = 0.0f;

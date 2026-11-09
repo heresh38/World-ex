@@ -133,9 +133,26 @@ city from it with `ruinkit.py` (ruined towers: slab cells, columns, cores, cladd
 blast holes, rebar, hanging slabs, rubble heaps; wall + gate, viaducts, the Concord Ring, the High Terraces, the
 Crown Bridge, the Crown with its beam, the far spire and broken orbital ring, invisible blockers) into `MR_<zone>`
 chunks + `Data/op_meridian_art.json` (lights); `make_operation_map.py` assembles the level (storm night).
-Enemies, the Altered (`altered.py` + `SOAltered.h`): Remnant (husk swarm), Veilborn (void bolts, blinks), Bulwark
-(frontal shield, ground slam), the Hollow Colossus (boss: slam, sweep, barrage; shields at 2/3 and 1/3 until its three
-conduits die, then staggers). Tests `ShatteredOrbit.Altered.*`; pictures `SOCaptureSeries 1 9` on L_Meridian.
+Enemies, the Altered (`altered.py` + `SOAltered.h`), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
+by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as
+they track): Remnant (SMG, pushes in), armed Stalker (auto rifle, cover), Veilborn (scout rifle from cover, the odd void
+bolt, blinks), Bulwark (frontal shield, shotgun, ground slam), the Hollow Colossus (boss, ~2.6 m: heavy machine gun,
+slam, sweep, barrage; shields at 2/3 and 1/3 until its three conduits die, then staggers). Every creature uses the
+player's capsule (34 x 90; Bulwark 44 x 108, Colossus 50 x 128) and step rules.
+Brain (`ASOEnemyAIController`): sight cone + peripheral band, awareness that fills over time (crouching slows it,
+sprinting and a lit flashlight speed it; a light is seen from any side), hearing (gunshots, running feet), states
+unaware / suspicious / combat / search; squad alerts; armed cover-users score nav points that hide them from the
+target but have a peek or a line over the top (flankers swing wide, claims kept apart), peek-shoot-duck, move on
+when flanked; stuck detection steps them back onto free nav. Shots on an unaware creature hit harder (ambush). Voices
+per creature from `sfx_synth.py` (`<set>_idle/query/alert/hurt/death_N`). Operation waves: the first of a stage is an
+unaware garrison (`hunt: false`), later ones hunt. Spawns land on the nav mesh where the capsule fits; L_Meridian's nav
+mesh is bounded to the walkable route per zone (one big volume ran out of tiles in the towers).
+The base is alive: grown chitin barricades round every post (`ruinkit.alien_barricade`, real cover), hive growths with
+egg pods (`hive_growth`, `pod`, texture `ru_hive`), the Choir's spires (`alien_spire`), cables of light; the violet glow
+breathes (`M_SOGlowPulse`); `ASOAmbience` loops (`amb_alien_hum`, `amb_hive`, `amb_alien_chorus`) and drifting spores.
+Player: flashlight (F / right stick; `ASOCharacter::SetFlashlight`), clamber (ledges 2.45-3.8 m: a hang and pull up,
+`ClamberMaxHeight`), footsteps the creatures hear. Loot lands on the ground (traced on the world only) and drops in.
+Tests `ShatteredOrbit.Altered.*`, `ShatteredOrbit.AI.*`; pictures `SOCaptureSeries 1 9` on L_Meridian (logs the nav path).
 Reward sets still to model: the owner's concept sheets in `art/reference/operation/` (Void Sentinel armour, Void
 Requiem guns, plan ids `void_sentinel` / `vr_*`); until they exist the reward falls back to a legendary gun.
 

@@ -328,10 +328,16 @@
    ],
    "waves": [
     {
+     "hunt": false,
      "spawn": [
       [
        "remnant",
-       4,
+       3,
+       "approach_rubble"
+      ],
+      [
+       "stalker",
+       2,
        "approach_rubble"
       ]
      ]
@@ -356,16 +362,22 @@
    ],
    "waves": [
     {
+     "hunt": false,
      "spawn": [
       [
        "remnant",
-       6,
+       4,
        "court_north"
       ],
       [
        "stalker",
        2,
        "court_flanks"
+      ],
+      [
+       "veilborn",
+       1,
+       "court_north"
       ]
      ]
     },
@@ -416,6 +428,7 @@
    "radius": 1500,
    "waves": [
     {
+     "hunt": false,
      "spawn": [
       [
        "stalker",
@@ -424,7 +437,7 @@
       ],
       [
        "remnant",
-       4,
+       3,
        "boulevard_mid"
       ]
      ]
@@ -544,15 +557,21 @@
    ],
    "waves": [
     {
+     "hunt": false,
      "spawn": [
       [
        "veilborn",
-       3,
+       2,
        "terrace_north"
       ],
       [
        "remnant",
-       6,
+       4,
+       "terrace_east"
+      ],
+      [
+       "stalker",
+       2,
        "terrace_east"
       ]
      ]

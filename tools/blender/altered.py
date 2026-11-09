@@ -9,7 +9,7 @@ shared hx_* texture sets.
              from the shoulders, three long fingers that gather light (keeps its distance, hurls void bolts)
   bulwark    a hulk: a great slab of crystal-plated bone grown over the left forearm as a shield, a spiked club fist,
              a crystal ridge down the back, the head sunk between the shoulders (slow; the shield turns shots)
-  colossus   the Hollow Colossus, the operation's boss (~8 m): stone-hard plates fused over the body with light in every
+  colossus   the Hollow Colossus, the operation's boss (~2.6 m, a head over a soldier): stone-hard plates fused over the body with light in every
              crack, a hollow ribcage round a burning crystal heart (its weak point), a crown of shards, long arms and
              great clawed hands, crystal masses on the shoulders and back
 
@@ -31,7 +31,7 @@ PI = math.pi
 ASH = '#aaa59f'; ASH_D = '#7a7470'; HIDE = '#8a8482'; PLATE = '#3c3744'; PLATE_L = '#5a5662'; BONE = '#d6cfc2'
 CAV = '#1c0a22'; RAG = '#4a4440'; CRYSTAL = '#9a5cff'; GLOW = '#c08cff'
 
-KINDS = {'remnant': .98, 'veilborn': 1.18, 'bulwark': 1.5, 'colossus': 4.6}
+KINDS = {'remnant': .98, 'veilborn': 1.18, 'bulwark': 1.5, 'colossus': 1.45}
 
 
 def mats():
@@ -335,7 +335,7 @@ def colossus(s):
         shard(sc, (f0 + f1) / 2 + V(sx * .06, .02, 0) * s, (sx, .4, .3), .16 * s, .028 * s, 'forearm.' + side)
         hands(sc, J, s, 1.5, side, sx, 4, 1.15, 1.2)
     legs(sc, J, s, 1.5, toes=3, plate=True)
-    return sc, J, dict(hunch=12, loll=0, both=True, drag=False, twitch=.15, lean=14, height=4.6)
+    return sc, J, dict(hunch=12, loll=0, both=True, drag=False, twitch=.15, lean=14, height=1.45)
 
 
 # ------------------------------------------------------------------ extra clips
@@ -409,8 +409,8 @@ def build(kind):
     bl.reset()
     s = KINDS[kind]
     sc, J, st = BUILD[kind](s)
-    res = {'colossus': .0062}.get(kind, .0085)
-    target = {'remnant': 9000, 'veilborn': 11000, 'bulwark': 14000, 'colossus': 40000}[kind]
+    res = .0085
+    target = {'remnant': 9000, 'veilborn': 11000, 'bulwark': 14000, 'colossus': 26000}[kind]
     o = fk.build_mesh(sc, 'Body_' + kind, np.array([-.75, -.7, -.03]) * s, np.array([.75, .7, 2.2]) * s, res * s, target, mats(),
                       uv_scale=.45 * s, ao_dist=.06 * s, seed=sum(map(ord, kind)) % 97, bruise=('#4a3a50', .35, 4.0), veins=('#2a1a34', .4, 5.0))
     arm_ = fk.make_rig(J)

@@ -180,9 +180,17 @@ void ASOVoidBolt::Burst(const FVector& At, const FVector& Normal)
 ASORemnant::ASORemnant(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	Configure(this, TEXT("Remnant"), 34.0f, 88.0f);
+	Configure(this, TEXT("Remnant"), 34.0f, 90.0f);
 	DisplayName = NSLOCTEXT("SO", "Remnant", "Remnant");
-	StartMaxHealth = 70.0f;
+	VoicePrefix = TEXT("remnant");
+	WeaponArchetype = TEXT("smg");
+	WeaponDamageScale = 0.3f;
+	AimError = 95.0f;
+	PreferredRange = 800.0f;
+	bUsesCover = false;
+	BurstTime = FVector2D(0.4f, 0.9f);
+	BurstPause = FVector2D(0.5f, 1.1f);
+	StartMaxHealth = 80.0f;
 	WalkSpeed = 230.0f;
 	RunSpeed = 650.0f;
 	MeleeDamage = 11.0f;
@@ -197,7 +205,15 @@ ASORemnant::ASORemnant(const FObjectInitializer& ObjectInitializer)
 ASOVeilborn::ASOVeilborn(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	Configure(this, TEXT("Veilborn"), 36.0f, 106.0f);
+	Configure(this, TEXT("Veilborn"), 34.0f, 90.0f);
+	VoicePrefix = TEXT("veilborn");
+	WeaponArchetype = TEXT("scout");
+	WeaponDamageScale = 0.4f;
+	AimError = 40.0f;
+	PreferredRange = 2200.0f;
+	BurstTime = FVector2D(0.2f, 0.5f);
+	BurstPause = FVector2D(1.0f, 2.0f);
+	CastCooldown = 9.0f;
 	DisplayName = NSLOCTEXT("SO", "Veilborn", "Veilborn");
 	StartMaxHealth = 130.0f;
 	WalkSpeed = 180.0f;
@@ -264,25 +280,23 @@ bool ASOVeilborn::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Targ
 			return true;
 		}
 	}
-	const bool bSee = AI->LineOfSightTo(Target);
 	if (PendingCast >= 0.0f)
 	{
-		return true; // mid-cast: stand
+		SetWantsFire(false);
+		return true; // mid-cast: stands
 	}
-	if (Dist > PreferredRange + 500.0f || !bSee)
+	// now and then, with a clear line, a void bolt instead of the rifle
+	if (T >= NextCast && HasLineOfFire(Target) && Dist < PreferredRange * 1.5f)
 	{
-		AI->Chase();
-		return true;
-	}
-	AI->StopMovement();
-	if (T >= NextCast)
-	{
+		AI->StopMovement();
+		SetWantsFire(false);
 		CastTarget = Target;
 		PlayAction(TEXT("Cast"), 1.0f);
 		PendingCast = T + 0.55f;
 		NextCast = T + CastCooldown * FMath::FRandRange(0.85f, 1.2f);
+		return true;
 	}
-	return true;
+	return false; // otherwise it fights like the rest: cover, peek, rifle
 }
 
 void ASOVeilborn::Tick(float DeltaSeconds)
@@ -312,7 +326,15 @@ void ASOVeilborn::Tick(float DeltaSeconds)
 ASOBulwark::ASOBulwark(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	Configure(this, TEXT("Bulwark"), 62.0f, 125.0f);
+	Configure(this, TEXT("Bulwark"), 44.0f, 108.0f);
+	VoicePrefix = TEXT("bulwark");
+	WeaponArchetype = TEXT("shotgun");
+	WeaponDamageScale = 0.2f;
+	AimError = 70.0f;
+	PreferredRange = 650.0f;
+	bUsesCover = false;
+	BurstTime = FVector2D(0.1f, 0.2f);
+	BurstPause = FVector2D(0.9f, 1.4f);
 	DisplayName = NSLOCTEXT("SO", "Bulwark", "Bulwark");
 	StartMaxHealth = 620.0f;
 	WalkSpeed = 150.0f;
@@ -333,7 +355,7 @@ float ASOBulwark::ScaleIncomingDamage(float Amount, const AActor* Source, bool b
 	}
 	const FVector To = (Source->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 	const bool bFront = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.4f;
-	return bFront ? Amount * (bCrit ? FrontDamageScale * 2.0f : FrontDamageScale) : Amount;
+	return Super::ScaleIncomingDamage(bFront ? Amount * (bCrit ? FrontDamageScale * 2.0f : FrontDamageScale) : Amount, Source, bCrit);
 }
 
 bool ASOBulwark::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target)
@@ -380,6 +402,7 @@ ASOConduit::ASOConduit(const FObjectInitializer& ObjectInitializer)
 	BodyMesh.Reset();
 	ClipPathPrefix.Reset();
 	DisplayName = NSLOCTEXT("SO", "Conduit", "Conduit");
+	bDropsLoot = false;
 	StartMaxHealth = 900.0f;
 	CorpseLifeSpan = 2.5f;
 	AIControllerClass = nullptr;
@@ -462,9 +485,17 @@ void ASOConduit::HandleDeath()
 ASOColossus::ASOColossus(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	Configure(this, TEXT("Colossus"), 150.0f, 410.0f);
+	Configure(this, TEXT("Colossus"), 50.0f, 128.0f);
 	DisplayName = NSLOCTEXT("SO", "Colossus", "The Hollow Colossus");
-	StartMaxHealth = 18000.0f;
+	VoicePrefix = TEXT("colossus");
+	WeaponArchetype = TEXT("hmg");
+	WeaponDamageScale = 0.22f;
+	AimError = 70.0f;
+	PreferredRange = 1800.0f;
+	bUsesCover = false;
+	BurstTime = FVector2D(0.8f, 1.6f);
+	BurstPause = FVector2D(0.8f, 1.6f);
+	StartMaxHealth = 12000.0f;
 	WalkSpeed = 170.0f;
 	RunSpeed = 240.0f;
 	MeleeDamage = 0.0f;
@@ -491,7 +522,7 @@ FVector ASOColossus::Heart() const
 
 float ASOColossus::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const
 {
-	return IsStaggered() ? Amount * 1.5f : Amount;
+	return Super::ScaleIncomingDamage(IsStaggered() ? Amount * 1.5f : Amount, Source, bCrit);
 }
 
 void ASOColossus::StartShield()
@@ -587,18 +618,21 @@ bool ASOColossus::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Targ
 	if (IsStaggered() || Pending != EMove::None || ShotsLeft > 0)
 	{
 		bApproach = false;
+		SetWantsFire(false);
 		return true;
 	}
 	const float Dist = DistanceTo(Target);
-	bApproach = Dist > 900.0f;
+	bApproach = Dist > 700.0f;
+	SetWantsFire(Dist > 450.0f && HasLineOfFire(Target)); // the heavy gun between its moves
 	if (T < NextMove)
 	{
 		return true;
 	}
 	const FVector To = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 	const bool bFront = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.35f;
-	if (Dist < 1100.0f)
+	if (Dist < 450.0f)
 	{
+		SetWantsFire(false);
 		if (bFront && FMath::FRand() < 0.55f)
 		{
 			Begin(EMove::Sweep, TEXT("Sweep"), 0.78f);
@@ -609,8 +643,9 @@ bool ASOColossus::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Targ
 		}
 		NextMove = T + FMath::FRandRange(3.0f, 4.2f);
 	}
-	else if (Dist < 4200.0f && AI->LineOfSightTo(Target))
+	else if (Dist < 4200.0f && AI->LineOfSightTo(Target) && FMath::FRand() < 0.45f)
 	{
+		SetWantsFire(false);
 		Begin(EMove::Barrage, TEXT("Barrage"), 0.55f);
 		NextMove = T + FMath::FRandRange(4.0f, 5.5f);
 	}
@@ -646,12 +681,12 @@ void ASOColossus::Tick(float DeltaSeconds)
 		USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>();
 		if (Move == EMove::Slam)
 		{
-			const FVector Impact = Feet + GetActorForwardVector() * 450.0f;
-			DamageAround(Impact, 950.0f, 45.0f, 1300.0f);
+			const FVector Impact = Feet + GetActorForwardVector() * 160.0f;
+			DamageAround(Impact, 520.0f, 40.0f, 1100.0f);
 			if (Fx)
 			{
-				Fx->Blast(Impact, FVector::UpVector, 650.0f, USOFxSubsystem::EBlast::Zap, VoidColor);
-				Fx->Blast(Impact, FVector::UpVector, 380.0f, USOFxSubsystem::EBlast::Fire, FLinearColor(0.5f, 0.45f, 0.5f), 0.08f);
+				Fx->Blast(Impact, FVector::UpVector, 360.0f, USOFxSubsystem::EBlast::Zap, VoidColor);
+				Fx->Blast(Impact, FVector::UpVector, 220.0f, USOFxSubsystem::EBlast::Fire, FLinearColor(0.5f, 0.45f, 0.5f), 0.08f);
 			}
 			USOSoundLibrary::PlayAt(this, TEXT("rocket_explode"), Impact, 1.0f, 0.05f, ESOSoundRange::Far);
 		}
@@ -663,18 +698,18 @@ void ASOColossus::Tick(float DeltaSeconds)
 			{
 				ASOCombatCharacter* Other = *It;
 				const FVector D = Other->GetActorLocation() - GetActorLocation();
-				if (Other == this || Other->IsDead() || !USOCombatStatics::AreHostile(this, Other) || D.Size2D() > 1250.0f
+				if (Other == this || Other->IsDead() || !USOCombatStatics::AreHostile(this, Other) || D.Size2D() > 480.0f
 					|| FVector::DotProduct(Fwd, D.GetSafeNormal2D()) < 0.0f || D.Z > 500.0f)
 				{
 					continue;
 				}
 				USOCombatStatics::ApplyDamage(this, Other, 40.0f, false);
 				const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd);
-				Other->LaunchCharacter(-Side * 1100.0f + Fwd * 400.0f + FVector(0, 0, 450.0f), true, true);
+				Other->LaunchCharacter(-Side * 900.0f + Fwd * 300.0f + FVector(0, 0, 380.0f), true, true);
 			}
 			if (Fx)
 			{
-				Fx->Blast(GetActorLocation() + Fwd * 700.0f, Fwd, 300.0f, USOFxSubsystem::EBlast::Zap, VoidColor);
+				Fx->Blast(GetActorLocation() + Fwd * 280.0f, Fwd, 200.0f, USOFxSubsystem::EBlast::Zap, VoidColor);
 			}
 			USOSoundLibrary::PlayAt(this, TEXT("stalker_attack"), GetActorLocation(), 1.0f, 0.0f, ESOSoundRange::Far);
 		}
@@ -709,4 +744,18 @@ void ASOColossus::HandleDeath()
 	{
 		Fx->Blast(Heart(), FVector::UpVector, 700.0f, USOFxSubsystem::EBlast::Zap, VoidColor);
 	}
+}
+
+// ------------------------------------------------------------------ armed stalker
+ASOArmedStalker::ASOArmedStalker(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	DisplayName = NSLOCTEXT("SO", "StalkerArmed", "Stalker");
+	VoicePrefix = TEXT("stalker");
+	WeaponArchetype = TEXT("auto");
+	WeaponDamageScale = 0.3f;
+	AimError = 60.0f;
+	PreferredRange = 1500.0f;
+	bUsesCover = true;
+	BloodColor = FLinearColor(0.32f, 0.1f, 0.55f);
 }

@@ -94,6 +94,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "cm"))
 	float MantleReach = 55.0f;
 
+	/** Higher ledges than a vault, up to this, are climbed: a hang and a pull up (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "cm"))
+	float ClamberMaxHeight = 380.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "s"))
+	float ClamberBaseTime = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "s"))
+	float ClamberTimePerMeter = 0.2f;
+
+	/** True while the current mantle is a clamber (a ledge above MantleMaxHeight). */
+	bool IsClambering() const { return IsMantling() && bClamber; }
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "s"))
 	float MantleBaseTime = 0.22f;
 
@@ -188,4 +201,5 @@ protected:
 	float MantleElapsed = 0.0f;
 	float MantleDuration = 0.0f;
 	float MantleEntrySpeed = 0.0f;
+	bool bClamber = false;
 };

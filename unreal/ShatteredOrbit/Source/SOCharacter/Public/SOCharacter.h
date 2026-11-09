@@ -5,6 +5,8 @@
 #include "SOWardrobe.h"
 #include "SOCharacter.generated.h"
 
+class USpotLightComponent;
+
 class UAnimSequenceBase;
 class UCameraComponent;
 class USOViewmodelComponent;
@@ -220,6 +222,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> MapAction;
 
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> FlashlightAction;
+
+	/** The flashlight (F): on or off at any time. Creatures see a lit light from farther and from any side. */
+	UFUNCTION(BlueprintCallable, Category = "SO|Flashlight")
+	void SetFlashlight(bool bOn);
+
+	UFUNCTION(BlueprintPure, Category = "SO|Flashlight")
+	bool IsFlashlightOn() const { return bFlashlightOn; }
+
+	USpotLightComponent* GetFlashlight() const { return Flashlight; }
+
 	UCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
 	UCameraComponent* GetThirdPersonCamera() const { return ThirdPersonCamera; }
 	USpringArmComponent* GetThirdPersonBoom() const { return ThirdPersonBoom; }
@@ -250,6 +264,7 @@ public:
 	void HandlePrevWeapon();
 	void HandleInventory();
 	void HandleMap();
+	void HandleFlashlight();
 
 	/** Quick travel to a map point (an actor tagged SOFastTravel; the server moves the pawn beside it). */
 	void FastTravel(AActor* Point);
@@ -322,6 +337,23 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
+
+	/** A lamp on the chest, pointing where the player looks (placed every frame). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Flashlight")
+	TObjectPtr<USpotLightComponent> Flashlight;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Flashlight)
+	bool bFlashlightOn = false;
+
+	UFUNCTION()
+	void OnRep_Flashlight();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetFlashlight(bool bOn);
+
+	/** Feet on the ground make noise the creatures hear: running loud, walking soft, crouching none. */
+	void TickFootstepNoise(float DeltaSeconds);
+	float FootstepTimer = 0.0f;
 
 	/** First person: a copy of the body seen only by its owner, posed like the body but with everything except the
 	 *  arms collapsed (first-person rendering: own FOV, never clips into walls, no shadow). */

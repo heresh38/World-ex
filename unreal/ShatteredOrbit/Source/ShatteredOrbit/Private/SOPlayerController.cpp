@@ -13,6 +13,8 @@
 #include "SOViewmodelComponent.h"
 #include "SOEnemy.h"
 #include "SOAltered.h"
+#include "NavigationSystem.h"
+#include "NavigationPath.h"
 #include "Components/CapsuleComponent.h"
 #include "SOOperation.h"
 #include "SOEnemyAIController.h"
@@ -230,6 +232,31 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(2.5f, TEXT("m12_altered"));
 		Act([=]() { Cam(FVector(24, 186, 12.0), FVector(6, 225, 15)); });
 		Snap(1.5f, TEXT("m13_colossus"));
+		// the nav mesh: a walkable path from the entry to the crown, and how much of the route has nav under it
+		Act([this]()
+		{
+			UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+			if (!Nav || !Nav->GetDefaultNavDataInstance(FNavigationSystem::DontCreate))
+			{
+				UE_LOG(LogShatteredOrbit, Warning, TEXT("Nav: no nav mesh"));
+				return;
+			}
+			const FVector From(-30600.0f, 200.0f, 50.0f), To(15000.0f, 0.0f, 1050.0f);
+			const UNavigationPath* Path = Nav->FindPathToLocationSynchronously(GetWorld(), From, To);
+			UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: entry -> crown %s (%d points, %.0f m%s)"), Path && Path->IsValid() ? TEXT("found") : TEXT("NOT FOUND"),
+				Path ? Path->PathPoints.Num() : 0, Path ? Path->GetPathLength() / 100.0f : 0.0f, Path && Path->IsPartial() ? TEXT(", partial") : TEXT(""));
+			int32 On = 0, Total = 0;
+			for (float N = -30000.0f; N <= 22000.0f; N += 1000.0f)
+			{
+				for (const float E : { -1000.0f, 0.0f, 1000.0f, 8000.0f })
+				{
+					FNavLocation L;
+					++Total;
+					On += Nav->ProjectPointToNavigation(FVector(N, E, 500.0f), L, FVector(200.0f, 200.0f, 1200.0f)) ? 1 : 0;
+				}
+			}
+			UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: %d of %d probes along the route have nav"), On, Total);
+		});
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;

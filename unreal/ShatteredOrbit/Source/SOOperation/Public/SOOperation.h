@@ -66,6 +66,11 @@ struct SOOPERATION_API FSOWave
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
 	int32 MaxAlive = 0;
 
+	/** Hunters know where the players are (reinforcements); a garrison (false) stands its ground unaware until it
+	 *  sees, hears or is hurt by someone, so it can be crept up on. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
+	bool bHunt = true;
+
 	/** Boss stages: comes when the boss's health fraction is at or below this (negative = not keyed to the boss). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
 	float BossHealth = -1.0f;
@@ -271,7 +276,7 @@ protected:
 	void StartStage(int32 Index);
 	void TickStage();
 	void SpawnWave(const FSOWave& Wave);
-	ASOEnemy* SpawnEnemy(FName Kind, FName Group, int32 Index);
+	ASOEnemy* SpawnEnemy(FName Kind, FName Group, int32 Index, bool bHunt = true);
 	void Complete();
 	void OnCharacterDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World);
 	TArray<ASOCombatCharacter*> Players() const;

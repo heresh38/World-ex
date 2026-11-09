@@ -909,7 +909,7 @@ def weapon(master, arch, a, clear):
     kind = projectile_kind(a)
     velocity = a.get("vel") or (60.0 if kind == unreal.SOProjectileKind.ROCKET else 500.0)
     tracer = a.get("tracer") or {"kinetic": "#ffc873", "energy": "#7fe8ff", "horror": "#9cff4a"}[a["cls"]]
-    values = dict(display_name=unreal.Text(a["name"]), title=unreal.Text(a.get("title", a["name"])), archetype=arch, slot=int(a["slot"]), loot_weight=float(a.get("weight", 1.0)),
+    values = dict(display_name=unreal.Text(a["name"]), title=unreal.Text(a.get("title", a["name"])), archetype=arch, slot=int(a["slot"]), loot_weight=float(a.get("weight", 1.0)), default_shader=a.get("shader", "None"), set_id=a.get("set", "None"),
                   weapon_class=cls, sound_prefix=arch, damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]),
                   magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]), reload_time=float(a["reload"]),
                   range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
@@ -1660,6 +1660,13 @@ return C * I * pulse * (0.35 + 0.45 * band + 0.6 * edge);
 """
 
 
+GLOW_PULSE_HLSL = """
+// the violet light of the Altered breathes: a slow swell, out of step from place to place
+float ph = dot(WP, float3(0.0011, 0.0013, 0.0007));
+return C * I * (0.55 + 0.45 * sin(T * 1.7 + ph * 6.2831) * sin(T * 0.53 + ph * 3.1));
+"""
+
+
 def energy_materials():
     """/Game/Environments/Meridian/M_SOEnergy: unlit additive light (the barriers, the crown's beam): Color x Intensity
     in drifting bands, brighter at the edges. MI_SOEnergy_Barrier for ASOOperationBarrier's panel; MI_ru_beam (the
@@ -1692,6 +1699,30 @@ def energy_materials():
         mel.update_material_instance(mi)
         eal.save_loaded_asset(mi, only_if_is_dirty=False)
     inst(dest + "/MI_SOEnergy_Barrier", (0.5, 0.28, 1.0, 1.0), 1.6)
+    # the glow on every growth, crystal and seam: opaque, lit, its light breathing
+    glow = _material(dest + "/M_SOGlowPulse", {"used_with_nanite": True, "used_with_skeletal_mesh": True, "used_with_instanced_static_meshes": True})
+    gwp = mel.create_material_expression(glow, unreal.MaterialExpressionWorldPosition, -800, 0)
+    gt = mel.create_material_expression(glow, unreal.MaterialExpressionTime, -800, 120)
+    gc = _param(glow, unreal.MaterialExpressionVectorParameter, "Color", (0.6, 0.36, 1.0, 1.0), -800, 240)
+    gi = _param(glow, unreal.MaterialExpressionScalarParameter, "Intensity", 18.0, -800, 360)
+    gn = _custom(glow, GLOW_PULSE_HLSL, ("WP", "T", "C", "I"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -400, 120)
+    for src, pin in ((gwp, "WP"), (gt, "T"), (gc, "C"), (gi, "I")):
+        mel.connect_material_expressions(src, "", gn, pin)
+    mel.connect_material_property(gn, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    base = _param(glow, unreal.MaterialExpressionVectorParameter, "Base", (0.18, 0.06, 0.35, 1.0), -400, -120)
+    mel.connect_material_property(base, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = mel.create_material_expression(glow, unreal.MaterialExpressionConstant, -400, 350)
+    rough.set_editor_property("r", 0.3)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.recompile_material(glow)
+    eal.save_loaded_asset(glow, only_if_is_dirty=False)
+    if eal.does_asset_exist(dest + "/MI_ru_glow"):
+        mi = eal.load_asset(dest + "/MI_ru_glow")
+        mel.set_material_instance_parent(mi, glow)
+        mel.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(0.6, 0.36, 1.0, 1.0))
+        mel.set_material_instance_scalar_parameter_value(mi, "Intensity", 18.0)
+        mel.update_material_instance(mi)
+        eal.save_loaded_asset(mi, only_if_is_dirty=False)
     inst(dest + "/MI_ru_beam", (0.75, 0.6, 1.0, 1.0), 12.0)
     log("energy materials ready")
 

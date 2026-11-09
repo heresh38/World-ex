@@ -1648,6 +1648,166 @@ for _k in range(5):
 SOUNDS.update({"amb_wind": amb_wind, "amb_rain": amb_rain, "amb_gust": amb_gust, "amb_thunder": amb_thunder})
 
 
+# ---------------------------------------------------------------------------- the Altered's voices and the alien base
+# Five voice sets (remnant, veilborn, bulwark, stalker, colossus), each: idle_1..4 (mutters and chitters it makes on
+# its own: the player hears it before seeing it), query_1..2 (it heard something), alert_1..3 (it saw you), hurt_1..3,
+# death_1..2. Built from the creature voice (glottal source through swept formants), wet clicks, throat gurgles,
+# ring modulation for the stranger ones.
+
+VOICE_SETS = {
+    #            f0 range        formant scale  rough  breath  ring (Hz)  clicks  reverb  seed
+    "remnant": dict(f=(170, 430), fs=1.0, rough=0.65, ring=0.0, click=0.6, verb=0.28, seed=4100),
+    "veilborn": dict(f=(480, 940), fs=1.35, rough=0.15, ring=37.0, click=0.25, verb=0.42, seed=4200),
+    "bulwark": dict(f=(70, 170), fs=0.62, rough=0.9, ring=0.0, click=0.2, verb=0.32, seed=4300),
+    "stalker": dict(f=(220, 520), fs=0.95, rough=0.5, ring=0.0, click=0.8, verb=0.28, seed=4400),
+    "colossus": dict(f=(48, 120), fs=0.5, rough=0.95, ring=11.0, click=0.15, verb=0.5, seed=4500),
+}
+
+
+def _form(scale, open_=1.0):
+    return [(650 * scale * open_, 850 * scale, 4, 1.0), (1250 * scale, 1750 * scale * open_, 6, 0.75),
+            (2600 * scale, 3100 * scale, 8, 0.45), (3900 * scale, 4300 * scale, 10, 0.2)]
+
+
+def _chitter(t, seed, rate, f_lo, f_hi, gain=1.0):
+    """wet mandible clicks: short resonant ticks in uneven bursts"""
+    r = rng(seed)
+    out = silence(t)
+    at = r.uniform(0, 0.05)
+    while at < t - 0.03:
+        f = r.uniform(f_lo, f_hi)
+        tick = filt(noise(0.02, int(at * 997) + seed), "band", (f * 0.85, f * 1.2)) * env_exp(0.02, r.uniform(0.002, 0.006))
+        out = place(out, tick, at, r.uniform(0.4, 1.0) * gain)
+        at += r.exponential(1.0 / rate) if r.random() > 0.25 else r.uniform(0.006, 0.02)
+    return out
+
+
+def _ring(x, f):
+    return x if f <= 0 else x * (0.55 + 0.45 * np.sin(2 * np.pi * f * np.arange(len(x)) / SR))
+
+
+def _finish_voice(x, P, seed, t_verb=1.0, db=-3):
+    x = _ring(x, P["ring"])
+    x = saturate(x, 1.4 + P["rough"])
+    return finish(reverb(x, impulse_response(t_verb * (1.6 if P["fs"] < 0.7 else 1.0), seed, decay=0.3, damping=4200), P["verb"]), db)
+
+
+def alien_voice(set_name, kind, k):
+    P = VOICE_SETS[set_name]
+    lo, hi = P["f"]
+    s = P["seed"] + {"idle": 0, "query": 100, "alert": 200, "hurt": 300, "death": 400}[kind] + k * 17
+    r = rng(s)
+    fs = P["fs"]
+    if kind == "idle":
+        # a mutter: two to four short warbling syllables with chitters between, quiet
+        t = r.uniform(1.0, 1.8)
+        out = silence(t)
+        at = 0.05
+        for i in range(r.integers(2, 5)):
+            d = r.uniform(0.12, 0.3)
+            if at + d > t - 0.05:
+                break
+            a, b = r.uniform(lo, (lo + hi) / 2), r.uniform(lo, hi * 0.8)
+            syl = voice(d, a, b, a * r.uniform(0.8, 1.0), s + i, _form(fs, r.uniform(0.8, 1.2)), rough=P["rough"] * 0.7, peak_at=0.4)
+            out = place(out, syl * env_ad(d, 0.02, d * 0.4, d * 0.3), at, r.uniform(0.5, 0.9))
+            at += d + r.uniform(0.05, 0.22)
+        out = out + _chitter(t, s + 50, 22, 1800 * fs, 4200 * fs, P["click"] * 0.5)
+        return _finish_voice(out, P, s, 1.0, -9)
+    if kind == "query":
+        # a questioning rise, then clicks: it is listening
+        t = r.uniform(0.7, 1.0)
+        v = voice(t * 0.6, lo * 1.1, hi * 0.9, hi, s, _form(fs, 1.1), rough=P["rough"] * 0.5, peak_at=0.85) * env_ad(t * 0.6, 0.04, 0.18, 0.2)
+        out = place(silence(t), v, 0.0)
+        out = out + _chitter(t, s + 50, 30, 2200 * fs, 5000 * fs, P["click"]) * np.clip(np.linspace(-1, 2, secs(t)), 0, 1)
+        return _finish_voice(out, P, s, 1.0, -6)
+    if kind == "alert":
+        # a cry to the others: loud, harsh, pitch thrown up and dragged down
+        t = r.uniform(0.8, 1.2)
+        v = voice(t, lo * 1.3, hi * 1.15, lo * 0.9, s, _form(fs, 1.3), rough=min(1.0, P["rough"] + 0.25), peak_at=0.22)
+        v = v * env_ad(t, 0.03, t * 0.35, t * 0.25)
+        hiss = filt(noise(t, s + 9), "band", (2500 * fs, 9000)) * env_ad(t, 0.01, 0.15) * 0.3
+        return _finish_voice(v + hiss, P, s, 1.3, -2)
+    if kind == "hurt":
+        t = r.uniform(0.25, 0.4)
+        v = voice(t, hi * 0.8, hi, lo * 1.2, s, _form(fs, 0.9), rough=min(1.0, P["rough"] + 0.3), peak_at=0.12)
+        return _finish_voice(v * env_ad(t, 0.008, 0.07, 0.05), P, s, 0.8, -3)
+    # death: a long falling cry that breaks into a gurgle
+    t = r.uniform(1.3, 1.9) * (1.5 if fs < 0.6 else 1.0)
+    v = voice(t, hi * 0.9, hi, lo * 0.4, s, _form(fs, 0.8), rough=min(1.0, P["rough"] + 0.2), peak_at=0.12) * env_ad(t, 0.03, t * 0.3, t * 0.15)
+    gurgle = silence(t)
+    for _ in range(16):
+        f = r.uniform(150, 480) * (fs ** 0.5)
+        gurgle = place(gurgle, osc(sweep(f, f * 0.6, 0.06)) * env_exp(0.06, 0.015), r.uniform(0.35, t - 0.1), 0.22)
+    return _finish_voice(v + gurgle, P, s, 1.4, -2)
+
+
+def torch(on):
+    """the flashlight's switch: a firm plastic click (on) or a softer one (off)"""
+    t = 0.12
+    f = 3200 if on else 2400
+    click = filt(noise(t, 4601 if on else 4602), "band", (f * 0.7, f * 1.5)) * env_exp(t, 0.006)
+    body = tone(900 if on else 700, 600, t, 0.01) * 0.3
+    return finish(reverb(click + body, impulse_response(0.3, 4603, decay=0.1, damping=6000), 0.08), -8)
+
+
+def amb_alien_hum():
+    """the base's machinery: a low drone with slow beating, a pulsing throb and a high whine that comes and goes"""
+    def make(t):
+        chans = []
+        for ch in range(2):
+            s = 4700 + ch * 31
+            n = secs(t)
+            x = np.arange(n) / SR
+            drone = sum(np.sin(2 * np.pi * f * x + ch * 0.7) * g for f, g in ((41.0, 1.0), (41.6 + ch * 0.15, 0.8), (82.3, 0.35), (123.7, 0.18)))
+            throb = 0.6 + 0.4 * np.sin(2 * np.pi * 0.5 * x) ** 2
+            whine = np.sin(2 * np.pi * (1870 + 12 * np.sin(2 * np.pi * 0.07 * x)) * x) * slow_lfo(t, s + 3, 0.2, 0.0, 1.0) ** 3 * 0.08
+            air = filt(noise(t, s + 4, "pink"), "band", (90, 600)) * 0.25 * slow_lfo(t, s + 5, 0.1, 0.4, 1.0)
+            chans.append(drone * throb * 0.5 + whine + air)
+        return np.stack(chans, 1)
+    return finish(seamless(make, 14.0), -9, fade=0.0005)
+
+
+def amb_alien_chorus():
+    """far off voices of the hive: slow eerie swells, overlapping, never quite a word"""
+    def make(t):
+        r = rng(4800)
+        chans = [silence(t), silence(t)]
+        at = 0.0
+        while at < t:
+            d = r.uniform(2.0, 4.5)
+            f0 = r.uniform(140, 420)
+            v = voice(d, f0, f0 * r.uniform(1.1, 1.5), f0 * r.uniform(0.6, 0.9), int(at * 100) + 4801, _form(r.uniform(0.7, 1.3), 1.0), rough=0.2, peak_at=0.5)
+            v = filt(v * env_ad(d, d * 0.35, d * 0.3, d * 0.2), "low", 2400)
+            pan = r.uniform(0.2, 0.8)
+            chans[0] = place(chans[0], v, at, (1 - pan) * 0.6)
+            chans[1] = place(chans[1], v, at, pan * 0.6)
+            at += r.uniform(0.8, 2.2)
+        ir = impulse_response(3.0, 4802, decay=0.6, damping=2500)
+        return np.stack([reverb(c, ir, 0.7) for c in chans], 1)
+    return finish(seamless(make, 20.0, xfade=3.0), -12, fade=0.0005)
+
+
+def amb_hive():
+    """close to a growth: wet clicks, creaks and a slow pulse, like something breathing in the walls"""
+    def make(t):
+        chans = []
+        for ch in range(2):
+            s = 4900 + ch * 13
+            clicks = _chitter(t, s, 6, 900, 3800, 0.6)
+            pulse = filt(noise(t, s + 1, "brown"), "low", 160) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.42 * np.arange(secs(t)) / SR) ** 4)
+            chans.append(clicks * 0.6 + pulse * 1.2)
+        return np.stack(chans, 1)
+    return finish(seamless(make, 10.0), -11, fade=0.0005)
+
+
+for _s in VOICE_SETS:
+    for _kind, _n in (("idle", 4), ("query", 2), ("alert", 3), ("hurt", 3), ("death", 2)):
+        for _k in range(1, _n + 1):
+            SOUNDS[f"{_s}_{_kind}_{_k}"] = (lambda s=_s, kind=_kind, k=_k: alien_voice(s, kind, k))
+SOUNDS.update({"torch_on": lambda: torch(True), "torch_off": lambda: torch(False), "amb_alien_hum": amb_alien_hum,
+               "amb_alien_chorus": amb_alien_chorus, "amb_hive": amb_hive})
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unreal", "ShatteredOrbit", "SourceArt", "Audio")
     only = set(sys.argv[2:])  # optional: build just these names

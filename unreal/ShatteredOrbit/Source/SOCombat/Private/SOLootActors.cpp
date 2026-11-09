@@ -117,18 +117,22 @@ void ASOLootPickup::ApplyLook()
 	TintSlots(Mesh, bCore ? TEXT("core_glow") : TEXT("ammo_glow"), Color, bCore ? 9.0f : 4.0f);
 	Light->SetLightColor(Color);
 	Light->SetIntensity(bCore ? 14.0f + Rarity * 8.0f : 6.0f);
-	Mesh->SetRelativeLocation(FVector(0, 0, bCore ? 80.0f : 5.0f));
+	Mesh->SetRelativeLocation(FVector(0, 0, bCore ? CoreRest : 0.0f));
 }
 
 void ASOLootPickup::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	Age += DeltaSeconds;
+	// it drops in from where the creature fell and settles with one small bounce, then lies on the ground
+	const float Rest = Kind == ESOPickupKind::Core ? CoreRest : 0.0f;
+	const float T = Age / 0.42f;
+	const float Drop = T < 1.0f ? DropHeight * (1.0f - T * T) : (T < 1.5f ? 9.0f * FMath::Sin((T - 1.0f) * 2.0f * UE_PI) : 0.0f);
+	Mesh->SetRelativeLocation(FVector(0, 0, Rest + FMath::Max(Drop, 0.0f)));
 	UWorld* World = GetWorld();
 	if (Kind == ESOPickupKind::Core)
 	{
-		Mesh->SetRelativeRotation(FRotator(0.0f, Age * 103.0f, 0.0f));
-		Mesh->SetRelativeLocation(FVector(0, 0, 80.0f + FMath::Sin(Age * 2.5f) * 12.0f));
+		Mesh->SetRelativeRotation(FRotator(0.0f, Age * 40.0f, 0.0f));
 		// light shaft for Rare and up (VFX: rising streaks in the rarity colour)
 		BeamTimer -= DeltaSeconds;
 		if (Rarity >= 2 && BeamTimer <= 0.0f && World && World->GetNetMode() != NM_DedicatedServer)
@@ -338,10 +342,15 @@ ASOLootPickup* USOLootSubsystem::SpawnPickup(const FVector& Location, ESOPickupK
 	{
 		return nullptr;
 	}
-	// on the ground under the spot, scattered a little
+	// on the ground under the spot, scattered a little: the world only (bodies, the dead included, and pickups are
+	// not ground), traced far enough down from any height a creature can die at
 	FVector At = Location + FVector(Rng.FRandRange(-50.0f, 50.0f), Rng.FRandRange(-50.0f, 50.0f), 0.0f);
 	FHitResult Ground;
-	if (World->LineTraceSingleByChannel(Ground, At + FVector(0, 0, 50.0f), At - FVector(0, 0, 400.0f), ECC_Visibility))
+	FCollisionObjectQueryParams World3D;
+	World3D.AddObjectTypesToQuery(ECC_WorldStatic);
+	World3D.AddObjectTypesToQuery(ECC_WorldDynamic);
+	const FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(SOLootGround), true);
+	if (World->LineTraceSingleByObjectType(Ground, At + FVector(0, 0, 60.0f), At - FVector(0, 0, 6000.0f), World3D, GroundParams))
 	{
 		At = Ground.ImpactPoint;
 	}
@@ -359,7 +368,7 @@ ASOLootPickup* USOLootSubsystem::SpawnPickup(const FVector& Location, ESOPickupK
 
 void USOLootSubsystem::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)
 {
-	if (World != GetWorld() || !Victim || Victim->Faction == ESOFaction::Player || World->GetNetMode() == NM_Client)
+	if (World != GetWorld() || !Victim || Victim->Faction == ESOFaction::Player || !Victim->bDropsLoot || World->GetNetMode() == NM_Client)
 	{
 		return;
 	}

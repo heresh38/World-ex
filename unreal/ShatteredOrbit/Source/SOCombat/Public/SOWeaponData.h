@@ -70,9 +70,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	int32 Slot = 0;
 
-	/** Relative chance in random loot (horror guns are rarer finds). */
+	/** Relative chance in random loot (horror guns are rarer finds; 0 = never: a raid set's gun, earned only). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	float LootWeight = 1.0f;
+
+	/** The finish every copy wears (a raid set's own: requiem); None = the default. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName DefaultShader;
+
+	/** The set it belongs to (void_requiem), or None. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName SetId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	ESOWeaponClass WeaponClass = ESOWeaponClass::Kinetic;

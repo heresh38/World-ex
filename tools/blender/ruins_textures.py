@@ -8,6 +8,7 @@ tile covers are in TILE (meridian.py lays world-scale UVs with them).
   ru_metal      painted structural steel: chipped paint to bare metal at the scratches, rust blooms and runs
   ru_panel      facade cladding: dark panels with seams and fixings, sun-bleached and streaked, burn marks
   ru_rubble     ground debris: ash, gravel, concrete crumbs
+  ru_hive       the Altered's growth: a wet dark membrane over cells, raised veins, a sheen
   ru_banner     the Choir's banner cloth: a deep red weave with their sigil (a broken ring pierced by a spike)
 
 Each set: <name>_c.jpg colour, <name>_n.png tangent normal (OpenGL), <name>_m.png (R unused, G roughness, B metal).
@@ -21,7 +22,7 @@ import bl
 from nexus_city_textures import F32, rng, noise, fbm, speck, blur, grid_lines, cell_rand, col, ramp, normal_from, save
 
 TILE = {"ru_concrete": 2.5, "ru_fracture": 1.5, "ru_asphalt": 6.0, "ru_stone": 4.0, "ru_metal": 2.0, "ru_panel": 3.0,
-        "ru_rubble": 4.0, "ru_banner": 1.0}
+        "ru_rubble": 4.0, "ru_banner": 1.0, "ru_hive": 2.0}
 N = 1024
 
 
@@ -246,7 +247,33 @@ def banner():
     print("[ruins_textures] ru_banner")
 
 
-JOBS = dict(ru_concrete=concrete, ru_fracture=fracture, ru_asphalt=asphalt, ru_stone=stone, ru_metal=metal,
+def hive():
+    """wet dark membrane stretched over cells, raised veins between them, glossy"""
+    n = N
+    rr = rng(81)
+    yy, xx = np.mgrid[0:n, 0:n].astype(F32)
+    # cells: distance to the nearest of scattered seeds (tiled), the edges between cells raised
+    pts = rr.random((90, 2)) * n
+    d1 = np.full((n, n), 1e9, F32); d2 = np.full((n, n), 1e9, F32)
+    for px, py in pts:
+        for ox in (-n, 0, n):
+            for oy in (-n, 0, n):
+                d = np.hypot(xx - px - ox, yy - py - oy)
+                closer = d < d1
+                d2 = np.where(closer, d1, np.minimum(d2, d))
+                d1 = np.where(closer, d, d1)
+    edge = np.clip(1 - (d2 - d1) / 9.0, 0, 1)
+    dome = np.clip(d1 / 60.0, 0, 1)
+    v = fbm(n, 9, 82)
+    veins = cracks(n, 7, 83, 1.8)
+    c = ramp(v * .5 + (1 - dome) * .3, '#16101b', '#3a2742')
+    c = c * (1 - edge[..., None] * .5) + col('#4c2a5a') * edge[..., None] * .35
+    c = c * (1 - veins[..., None] * .3) + col('#6a3a8a') * veins[..., None] * .5
+    h = (1 - dome) * .6 + edge * .5 + veins * .4 + v * .2
+    write("ru_hive", c, h, 5.0, .28 + edge * .25 + v * .1)
+
+
+JOBS = dict(ru_hive=hive, ru_concrete=concrete, ru_fracture=fracture, ru_asphalt=asphalt, ru_stone=stone, ru_metal=metal,
             ru_panel=panel, ru_rubble=rubble, ru_banner=banner)
 
 

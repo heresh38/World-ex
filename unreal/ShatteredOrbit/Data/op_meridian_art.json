@@ -339,6 +339,504 @@
    ],
    "radius": 1650.0,
    "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -26200,
+    -2500,
+    60
+   ],
+   "radius": 1240.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -22600,
+    2600,
+    60
+   ],
+   "radius": 1180.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -21400,
+    -1900,
+    1140.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -19450.0,
+    -1500,
+    60
+   ],
+   "radius": 1180.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -19450.0,
+    1600,
+    60
+   ],
+   "radius": 1120.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -14100,
+    900,
+    1230.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -12000,
+    -1650.0,
+    78.0
+   ],
+   "radius": 1120.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -7600,
+    1650.0,
+    78.0
+   ],
+   "radius": 1120.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    3940.0,
+    -690.0,
+    1410.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    0.0,
+    -4000.0,
+    1230.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    0,
+    0,
+    -30.0
+   ],
+   "radius": 1540.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    2600,
+    2400,
+    60
+   ],
+   "radius": 1060.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    6000,
+    8550.0,
+    1060.0
+   ],
+   "radius": 1060.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    12050.0,
+    5000,
+    1060.0
+   ],
+   "radius": 1060.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    11700,
+    8400,
+    1960.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    21500,
+    2500,
+    1060.0
+   ],
+   "radius": 1060.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    19000,
+    -2800,
+    1060.0
+   ],
+   "radius": 1060.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    20000,
+    4500,
+    60
+   ],
+   "radius": 1420.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    20500,
+    -4500,
+    60
+   ],
+   "radius": 1420.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    21300.0,
+    3400.0,
+    1870.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    21400.0,
+    -3400.0,
+    1870.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  }
+ ],
+ "ambience": [
+  {
+   "kind": "hive",
+   "at": [
+    -26200,
+    -2500,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -22600,
+    2600,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    -21400,
+    -1900,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -19450.0,
+    -1500,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -19450.0,
+    1600,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    -14100,
+    900,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -12000,
+    -1650.0,
+    98.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -7600,
+    1650.0,
+    98.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    3940.0,
+    -690.0,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hum",
+   "at": [
+    0.0,
+    -4000.0,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    0,
+    0,
+    -10.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    2600,
+    2400,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    6000,
+    8550.0,
+    1080.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    12050.0,
+    5000,
+    1080.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    11700,
+    8400,
+    1080.0
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    21500,
+    2500,
+    1080.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    19000,
+    -2800,
+    1080.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    20000,
+    4500,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    20500,
+    -4500,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    21300.0,
+    3400.0,
+    1080.0
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hum",
+   "at": [
+    21400.0,
+    -3400.0,
+    1080.0
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    -23000,
+    0,
+    80
+   ],
+   "radius": 16000.0,
+   "volume": 0.55,
+   "spores": false
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    -10000,
+    0,
+    80
+   ],
+   "radius": 16000.0,
+   "volume": 0.55,
+   "spores": false
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    0,
+    0,
+    80
+   ],
+   "radius": 16000.0,
+   "volume": 0.55,
+   "spores": false
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    8000,
+    6000,
+    1080
+   ],
+   "radius": 16000.0,
+   "volume": 0.55,
+   "spores": false
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    19000,
+    0,
+    1080
+   ],
+   "radius": 16000.0,
+   "volume": 0.55,
+   "spores": false
   }
  ]
 }

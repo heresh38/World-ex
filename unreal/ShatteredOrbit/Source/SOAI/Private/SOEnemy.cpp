@@ -12,6 +12,11 @@
 #include "SOEnemyAIController.h"
 #include "SOLocomotionAnimInstance.h"
 #include "SOSound.h"
+#include "SOGunRigComponent.h"
+#include "SOLootLibrary.h"
+#include "SOLootTypes.h"
+#include "SOWeapon.h"
+#include "SOWeaponData.h"
 
 ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -24,9 +29,14 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	CorpseLifeSpan = 6.0f;
 	BloodColor = FLinearColor::FromSRGBColor(FColor(0x5a, 0x2a, 0x8a)); // enemies.js stalker blood
 
-	GetCapsuleComponent()->InitCapsuleSize(38.0f, 92.0f);
+	// the player's capsule and step rules: it fits and walks wherever a player does
+	GetCapsuleComponent()->InitCapsuleSize(34.0f, 90.0f);
+	GunHold = CreateDefaultSubobject<USceneComponent>(TEXT("GunHold"));
+	GunHold->SetupAttachment(GetCapsuleComponent());
+	GunHold->SetUsingAbsoluteLocation(true);
+	GunHold->SetUsingAbsoluteRotation(true);
 	USkeletalMeshComponent* Body = GetMesh();
-	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -92.0f));
+	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
 	Body->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f)); // Blender -Y forward -> UE +X
 	Body->SetRelativeScale3D(FVector(1.05f));
 	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
@@ -38,7 +48,11 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	Move->MaxWalkSpeed = WalkSpeed;
 	Move->MaxAcceleration = 2400.0f;
 	Move->BrakingDecelerationWalking = 2400.0f;
-	Move->bUseRVOAvoidance = false;
+	Move->bUseRVOAvoidance = true;
+	Move->AvoidanceConsiderationRadius = 300.0f;
+	Move->MaxStepHeight = 45.0f;
+	Move->SetWalkableFloorAngle(46.0f);
+	Move->bCanWalkOffLedges = true;
 
 	AIControllerClass = ASOEnemyAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
@@ -215,13 +229,21 @@ void ASOEnemy::MulticastAttack_Implementation()
 void ASOEnemy::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateGunHold(DeltaSeconds);
+	TickTrigger(DeltaSeconds);
+	if (HasAuthority() && !IsDead() && !VoicePrefix.IsEmpty() && GetWorld()->GetTimeSeconds() >= NextIdleVoice)
+	{
+		// it mutters to itself: the player hears where it is before seeing it
+		NextIdleVoice = GetWorld()->GetTimeSeconds() + (bAlert ? FMath::FRandRange(5.0f, 10.0f) : FMath::FRandRange(4.0f, 9.0f));
+		Voice(bAlert ? FName(TEXT("alert")) : FName(TEXT("idle")), bAlert ? 0.9f : 0.75f);
+	}
 	if (UWorld* W = GetWorld(); W && !bDead)
 	{
 		const float Health = GetHealth();
 		if (LastHealthSeen >= 0.0f && Health < LastHealthSeen - 0.5f && W->GetTimeSeconds() - LastHurtSound > 0.35f)
 		{
 			LastHurtSound = W->GetTimeSeconds();
-			USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_hurt")), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid);
+			if (VoicePrefix.IsEmpty()) { USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_hurt")), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid); } else { Voice(TEXT("hurt"), 0.9f); }
 		}
 		LastHealthSeen = Health;
 	}
@@ -251,11 +273,217 @@ void ASOEnemy::Tick(float DeltaSeconds)
 void ASOEnemy::HandleDeath()
 {
 	Super::HandleDeath();
-	USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_death")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
+	if (VoicePrefix.IsEmpty())
+	{
+		USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_death")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
+	}
+	else
+	{
+		Voice(TEXT("death"), 1.0f);
+	}
 	PendingStrikeTime = -1.0f;
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	if (AController* AI = GetController())
 	{
 		AI->StopMovement();
+	}
+}
+
+// ------------------------------------------------------------------ arms
+
+void ASOEnemy::BeginPlay()
+{
+	Super::BeginPlay();
+	if (HasAuthority() && !WeaponArchetype.IsNone())
+	{
+		if (const USOLootTables* Tables = USOLootLibrary::GetTables())
+		{
+			if (ASOWeapon* W = EquipWeapon(Tables->LoadArchetype(WeaponArchetype)))
+			{
+				W->SetAmmo(W->GetMag() > 0 ? W->GetMag() : 30, 9999);
+			}
+		}
+	}
+	NextIdleVoice = GetWorld()->GetTimeSeconds() + FMath::FRandRange(1.0f, 8.0f);
+}
+
+USceneComponent* ASOEnemy::GetThirdPersonWeaponParent() const
+{
+	return GunHold;
+}
+
+void ASOEnemy::SetAimTarget(AActor* InTarget)
+{
+	if (AimTarget.Get() == InTarget)
+	{
+		return;
+	}
+	AimTarget = InTarget;
+	AimSince = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	// facing: toward the target while it aims (strafing between covers), along its path otherwise
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	Move->bOrientRotationToMovement = InTarget == nullptr;
+	Move->bUseControllerDesiredRotation = InTarget != nullptr;
+	if (!InTarget)
+	{
+		bWantsFire = false;
+	}
+}
+
+FVector ASOEnemy::GetAimOrigin() const
+{
+	return GetPawnViewLocation();
+}
+
+FVector ASOEnemy::GetAimDirection() const
+{
+	const AActor* T = AimTarget.Get();
+	if (!T)
+	{
+		return Super::GetAimDirection();
+	}
+	// at the chest, off by an error that grows with range and a moving target and shrinks while it tracks
+	const FVector Origin = GetAimOrigin();
+	const FVector Chest = T->GetActorLocation() + FVector(0, 0, 25.0f);
+	const float Dist = FVector::Dist(Origin, Chest);
+	const float Tracked = FMath::Clamp((GetWorld()->GetTimeSeconds() - AimSince) / 2.5f, 0.0f, 1.0f);
+	const float Err = AimError * (Dist / 1000.0f) * (1.0f + T->GetVelocity().Size2D() / 450.0f) * FMath::Lerp(1.7f, 0.65f, Tracked);
+	const FVector Off = FMath::VRand() * Err * FMath::Sqrt(FMath::FRand());
+	return (Chest + Off - Origin).GetSafeNormal();
+}
+
+bool ASOEnemy::HasLineOfFire(const AActor* Other) const
+{
+	if (!Other)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOLineOfFire), false, this);
+	Params.AddIgnoredActor(Other);
+	if (const AActor* W = GetWeapon())
+	{
+		Params.AddIgnoredActor(W);
+	}
+	return !GetWorld()->LineTraceTestByChannel(GetAimOrigin(), Other->GetActorLocation() + FVector(0, 0, 25.0f), ECC_Visibility, Params);
+}
+
+float ASOEnemy::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const
+{
+	return bAlert ? Amount : Amount * AmbushDamageScale;
+}
+
+void ASOEnemy::Voice(FName Kind, float Volume)
+{
+	if (VoicePrefix.IsEmpty())
+	{
+		return;
+	}
+	static const TMap<FName, int32> Variants = { { TEXT("idle"), 4 }, { TEXT("query"), 2 }, { TEXT("alert"), 3 }, { TEXT("hurt"), 3 }, { TEXT("death"), 2 } };
+	const int32 N = Variants.FindRef(Kind);
+	const FString Name = N > 1 ? FString::Printf(TEXT("%s_%s_%d"), *VoicePrefix, *Kind.ToString(), FMath::RandRange(1, N))
+		: FString::Printf(TEXT("%s_%s"), *VoicePrefix, *Kind.ToString());
+	USOSoundLibrary::PlayAt(this, FName(Name), GetActorLocation() + FVector(0, 0, 60.0f), Volume, 0.08f, ESOSoundRange::Mid);
+}
+
+void ASOEnemy::UpdateGunHold(float DeltaSeconds)
+{
+	const ASOWeapon* W = GetWeapon();
+	const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr;
+	if (!Rig)
+	{
+		return;
+	}
+	const AActor* T = AimTarget.Get();
+	Raise = FMath::FInterpTo(Raise, T && !IsDead() ? 1.0f : 0.0f, DeltaSeconds, 5.0f);
+	const FRotator Facing(0.0f, GetActorRotation().Yaw, 0.0f);
+	FVector Shoulder = GetActorLocation() + Facing.RotateVector(FVector(8.0f, 20.0f, 48.0f));
+	if (GetMesh()->GetBoneIndex(TEXT("upperarm_R")) != INDEX_NONE)
+	{
+		Shoulder = GetMesh()->GetBoneLocation(TEXT("upperarm_R"));
+	}
+	// aimed at the target's chest, or carried low across the body
+	const FQuat Low = FRotator(-32.0f, Facing.Yaw - 25.0f, 0.0f).Quaternion();
+	const FQuat Aimed = T ? (T->GetActorLocation() + FVector(0, 0, 25.0f) - Shoulder).Rotation().Quaternion() : Low;
+	const FQuat Q = FQuat::Slerp(Low, Aimed, Raise);
+	FTransform Hold;
+	if (Rig->IsHandgun())
+	{
+		// both arms out in front of the chest
+		Hold = FTransform(Q, Shoulder + Q.RotateVector(FVector(42.0f, -14.0f, -8.0f)));
+	}
+	else
+	{
+		const FBox B = Rig->IsBuilt() ? Rig->GetRigBounds() : FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
+		const FVector Butt(B.Min.X + 1.0f, 0.0f, FMath::Clamp(1.5f, B.Min.Z + 4.0f, B.Max.Z - 4.0f));
+		const FVector Pocket = Shoulder + Q.RotateVector(FVector(4.0f, -5.0f, -5.0f));
+		Hold = FTransform(Q, Pocket - Q.RotateVector(Butt));
+	}
+	GunHold->SetWorldTransform(Hold);
+}
+
+void ASOEnemy::TickTrigger(float DeltaSeconds)
+{
+	ASOWeapon* W = GetWeapon();
+	UWorld* World = GetWorld();
+	if (!W || !World || !HasAuthority())
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	auto Release = [&]()
+	{
+		if (bFiring)
+		{
+			W->StopFire();
+			bFiring = false;
+			NextBurst = Now + FMath::FRandRange(BurstPause.X, BurstPause.Y);
+		}
+	};
+	if (IsDead())
+	{
+		Release();
+		return;
+	}
+	if (W->GetReserve() < 200)
+	{
+		W->SetAmmo(W->GetMag(), 9999);
+	}
+	if (LastMag >= 0 && W->GetMag() < LastMag)
+	{
+		ShotsFired += LastMag - W->GetMag();
+	}
+	LastMag = W->GetMag();
+	if (W->GetMag() <= 0)
+	{
+		Release();
+		if (!W->IsReloading())
+		{
+			W->StartReload();
+		}
+		return;
+	}
+	const AActor* T = AimTarget.Get();
+	bool bCan = bWantsFire && T && Raise > 0.8f && !IsAttacking() && !W->IsReloading();
+	if (bCan)
+	{
+		const FVector To = (T->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+		bCan = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.9f && HasLineOfFire(T);
+	}
+	if (bFiring)
+	{
+		if (!bCan || Now >= TriggerUntil)
+		{
+			Release();
+		}
+		else
+		{
+			W->StartFire(); // semi-automatic guns fire again as soon as they can
+		}
+	}
+	else if (bCan && Now >= NextBurst)
+	{
+		W->StartFire();
+		bFiring = true;
+		TriggerUntil = Now + FMath::FRandRange(BurstTime.X, BurstTime.Y);
 	}
 }

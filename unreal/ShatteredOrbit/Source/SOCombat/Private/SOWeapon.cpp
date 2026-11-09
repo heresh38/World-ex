@@ -328,7 +328,7 @@ void ASOWeapon::FireShot()
 		ShotDirections(Aim, Seed, HalfAngle, Tmp);
 		Dirs.Append(Tmp);
 	}
-	const float Rampage = 1.0f + 0.15f * GetRampageStacks();
+	const float Rampage = (1.0f + 0.15f * GetRampageStacks()) * Holder->GetOutgoingDamageScale();
 	USOProjectileSubsystem* Rounds = World->GetSubsystem<USOProjectileSubsystem>();
 	for (const FVector& Dir : Dirs)
 	{

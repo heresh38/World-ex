@@ -1,4 +1,6 @@
 #include "SOCharacter.h"
+#include "SOCombatStatics.h"
+#include "Components/SpotLightComponent.h"
 
 #include "Misc/PackageName.h"
 
@@ -53,6 +55,7 @@ namespace SOInputPaths
 	static const TCHAR* PrevWeapon = TEXT("/Game/Input/IA_PrevWeapon.IA_PrevWeapon");
 	static const TCHAR* Inventory = TEXT("/Game/Input/IA_Inventory.IA_Inventory");
 	static const TCHAR* Map = TEXT("/Game/Input/IA_Map.IA_Map");
+	static const TCHAR* Flashlight = TEXT("/Game/Input/IA_Flashlight.IA_Flashlight");
 }
 
 ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
@@ -152,6 +155,20 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	PrevWeaponAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PrevWeapon));
 	InventoryAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Inventory));
 	MapAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Map));
+	FlashlightAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Flashlight));
+	Flashlight = CreateDefaultSubobject<USpotLightComponent>(TEXT("Flashlight"));
+	Flashlight->SetupAttachment(GetCapsuleComponent());
+	Flashlight->SetUsingAbsoluteLocation(true);
+	Flashlight->SetUsingAbsoluteRotation(true);
+	Flashlight->SetIntensityUnits(ELightUnits::Candelas);
+	Flashlight->SetIntensity(1400.0f);
+	Flashlight->SetAttenuationRadius(4000.0f);
+	Flashlight->SetInnerConeAngle(12.0f);
+	Flashlight->SetOuterConeAngle(27.0f);
+	Flashlight->SetLightColor(FLinearColor(1.0f, 0.95f, 0.86f));
+	Flashlight->SetCastShadows(true);
+	Flashlight->SetVolumetricScatteringIntensity(0.5f);
+	Flashlight->SetVisibility(false);
 }
 
 USOCharacterMovementComponent* ASOCharacter::GetSOMovement() const
@@ -673,6 +690,16 @@ float ASOCharacter::GetTargetEyeOffset() const
 
 void ASOCharacter::Tick(float DeltaSeconds)
 {
+	TickFootstepNoise(DeltaSeconds);
+	if (bFlashlightOn)
+	{
+		// from the chest (third person) or just below the eye (first person), along the aim
+		const FRotator Aim = GetControlRotation();
+		const FVector Eye = FirstPersonCamera->GetComponentLocation();
+		const FVector From = IsFirstPersonView() ? Eye + Aim.RotateVector(FVector(10.0f, 14.0f, -16.0f))
+			: GetActorLocation() + GetActorRotation().RotateVector(FVector(22.0f, -14.0f, 42.0f));
+		Flashlight->SetWorldLocationAndRotation(From, Aim);
+	}
 	Super::Tick(DeltaSeconds);
 
 	UpdateFeedbackSounds(DeltaSeconds);
@@ -811,6 +838,7 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (UInputAction* A = Load(PrevWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePrevWeapon); }
 	if (UInputAction* A = Load(InventoryAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInventory); }
 	if (UInputAction* A = Load(MapAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleMap); }
+	if (UInputAction* A = Load(FlashlightAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleFlashlight); }
 
 	if (Missing > 0)
 	{
@@ -1053,6 +1081,52 @@ void ASOCharacter::HandleWeapon2() { SelectSlot(1); }
 void ASOCharacter::HandleWeapon3() { SelectSlot(2); }
 void ASOCharacter::HandleNextWeapon() { CycleSlot(1); }
 void ASOCharacter::HandlePrevWeapon() { CycleSlot(-1); }
+
+void ASOCharacter::HandleFlashlight()
+{
+	SetFlashlight(!bFlashlightOn);
+}
+
+void ASOCharacter::SetFlashlight(bool bOn)
+{
+	if (!HasAuthority())
+	{
+		ServerSetFlashlight(bOn);
+	}
+	bFlashlightOn = bOn;
+	OnRep_Flashlight();
+}
+
+void ASOCharacter::ServerSetFlashlight_Implementation(bool bOn)
+{
+	bFlashlightOn = bOn;
+	OnRep_Flashlight();
+}
+
+void ASOCharacter::OnRep_Flashlight()
+{
+	Flashlight->SetVisibility(bFlashlightOn && !IsDead());
+	USOSoundLibrary::PlayAt(this, bFlashlightOn ? TEXT("torch_on") : TEXT("torch_off"), GetActorLocation() + FVector(0, 0, 50.0f), 0.6f, 0.05f, ESOSoundRange::Near);
+}
+
+void ASOCharacter::TickFootstepNoise(float DeltaSeconds)
+{
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const float Speed = GetVelocity().Size2D();
+	if (!HasAuthority() || IsDead() || !Move->IsMovingOnGround() || bIsCrouched || Speed < 180.0f)
+	{
+		FootstepTimer = 0.0f;
+		return;
+	}
+	FootstepTimer -= DeltaSeconds;
+	if (FootstepTimer > 0.0f)
+	{
+		return;
+	}
+	const bool bRunning = Speed > 650.0f;
+	FootstepTimer = bRunning ? 0.35f : 0.5f;
+	USOCombatStatics::ReportNoise(this, GetActorLocation(), this, bRunning ? 1400.0f : 500.0f);
+}
 
 void ASOCharacter::HandleMap()
 {
@@ -1397,6 +1471,7 @@ void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(ASOCharacter, ViewMode, COND_SkipOwner);
 	DOREPLIFETIME(ASOCharacter, Outfit);
+	DOREPLIFETIME(ASOCharacter, bFlashlightOn);
 }
 
 void ASOCharacter::ToggleViewMode()

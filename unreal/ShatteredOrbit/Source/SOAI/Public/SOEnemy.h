@@ -93,6 +93,71 @@ public:
 
 	void SetRunning(bool bRun);
 
+	// --- Arms: the Altered carry our guns ---------------------------------------------------------------------
+
+	/** The gun it carries (an archetype of Data/game_data.json); None = claws only. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	FName WeaponArchetype;
+
+	/** Its rounds hit this much softer than a player's. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	float WeaponDamageScale = 0.35f;
+
+	/** How far its shots stray at 10 m (cm); grows with range and a moving target, shrinks the longer it tracks. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	float AimError = 70.0f;
+
+	/** The range it likes to fight at (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	float PreferredRange = 1500.0f;
+
+	/** Fights from cover (peeks, shoots, ducks back, moves on when flanked); false = pushes in. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	bool bUsesCover = true;
+
+	/** Bursts: how long it holds the trigger and how long it waits between (s). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	FVector2D BurstTime = FVector2D(0.35f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	FVector2D BurstPause = FVector2D(0.6f, 1.5f);
+
+	/** Shots on an enemy that has not noticed anyone hit this much harder (a clean ambush). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float AmbushDamageScale = 2.0f;
+
+	bool IsArmed() const { return GetWeapon() != nullptr; }
+
+	/** Server: what it aims at (null = nothing: the gun comes down). */
+	void SetAimTarget(AActor* InTarget);
+	AActor* GetAimTarget() const { return AimTarget.Get(); }
+
+	/** Server: wants to shoot its aim target (the burst rhythm, line of fire and reloads are its own). */
+	void SetWantsFire(bool bWants) { bWantsFire = bWants; }
+	bool WantsFire() const { return bWantsFire; }
+	int32 GetShotsFired() const { return ShotsFired; }
+
+	/** A clear line from its eyes to Other's body (the world only: bodies do not block). */
+	bool HasLineOfFire(const AActor* Other) const;
+
+	/** It knows someone is there (set by its brain): until then it is unaware and ambushes hit harder. */
+	void SetAlert(bool bOn) { bAlert = bOn; }
+	bool IsAlert() const { return bAlert; }
+
+	/** A cry in its own voice: idle, query (it heard something), alert (it saw you), hurt, death. */
+	void Voice(FName Kind, float Volume = 1.0f);
+
+	/** Its voice set (sounds <VoicePrefix>_<kind>[_N]). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FString VoicePrefix;
+
+	virtual FVector GetAimOrigin() const override;
+	virtual FVector GetAimDirection() const override;
+	virtual USceneComponent* GetThirdPersonWeaponParent() const override;
+	virtual float GetOutgoingDamageScale() const override { return WeaponDamageScale; }
+	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
+	virtual void BeginPlay() override;
+
 	/** Server: on / off immunity (with the reason shown to players). */
 	void SetImmune(bool bOn, const FText& Reason = FText());
 	virtual bool IsImmune() const override { return bImmune; }
@@ -118,6 +183,25 @@ protected:
 
 	UPROPERTY(Replicated)
 	bool bImmune = false;
+
+	/** Places the held gun: at the right shoulder aimed at the target, or carried low. */
+	void UpdateGunHold(float DeltaSeconds);
+	void TickTrigger(float DeltaSeconds);
+
+	UPROPERTY(VisibleAnywhere, Category = "SO|Enemy|Arms")
+	TObjectPtr<USceneComponent> GunHold;
+
+	TWeakObjectPtr<AActor> AimTarget;
+	float AimSince = 0.0f;
+	float Raise = 0.0f;
+	bool bWantsFire = false;
+	bool bFiring = false;
+	float TriggerUntil = 0.0f;
+	float NextBurst = 0.0f;
+	int32 ShotsFired = 0;
+	int32 LastMag = -1;
+	bool bAlert = false;
+	float NextIdleVoice = 0.0f;
 
 	float LastAttackTime = -100.0f;
 	float PendingStrikeTime = -1.0f;

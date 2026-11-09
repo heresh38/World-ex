@@ -23,7 +23,7 @@ import sdf
 from ruins_textures import TILE
 
 TAU = 2 * math.pi
-TEXTURED = ("ru_concrete", "ru_fracture", "ru_asphalt", "ru_stone", "ru_metal", "ru_panel", "ru_rubble", "ru_banner")
+TEXTURED = ("ru_concrete", "ru_fracture", "ru_asphalt", "ru_stone", "ru_metal", "ru_panel", "ru_rubble", "ru_banner", "ru_hive")
 _MATS = {}
 
 
@@ -394,6 +394,170 @@ def banner(g, top_c, width, length, yaw, seed, sway=.25):
     # the pole it hangs from
     p0 = T(-width / 2 - .3, 0); p1 = T(width / 2 + .3, 0)
     tube(g, "ru_metal", [(top_c[0] + p0[0], top_c[1] + p0[1], top_c[2] + .05), (top_c[0] + p1[0], top_c[1] + p1[1], top_c[2] + .05)], .06, 8)
+
+
+# ------------------------------------------------------------------ the Altered's base: growth, pods, spires, barricades, cables
+def hive_growth(g, gd, c, r, seed, wall=None, res=.13):
+    """a growth spreading over the ground from c (x, y, z): thick roots branching out, swollen nodes, a skin of membrane
+    near the middle, glowing veins along the roots, egg pods. wall: (nx, ny) the outward normal of a wall behind it the
+    roots climb. The mass and pods are solid (g); the veins are detail (gd)."""
+    rnd = random.Random(seed)
+    cx, cy, cz = c
+    caps = []
+    for b in range(rnd.randint(6, 9)):
+        a = rnd.uniform(0, TAU)
+        L = r * rnd.uniform(.55, 1.0)
+        pts = [Vector((cx, cy, cz))]
+        for k in range(1, 6):
+            a += rnd.uniform(-.35, .35)
+            pts.append(pts[-1] + Vector((math.cos(a), math.sin(a), 0)) * L / 5)
+        rad = [.5 * (1 - k / 6) ** .8 + .08 for k in range(6)]
+        caps.append((pts, rad))
+        if rnd.random() < .5:                                     # a side branch
+            j = rnd.randint(1, 3)
+            a2 = a + rnd.choice((-1, 1)) * rnd.uniform(.6, 1.2)
+            q = [pts[j]] + [pts[j] + Vector((math.cos(a2), math.sin(a2), 0)) * L * .12 * k for k in range(1, 4)]
+            caps.append((q, [rad[j] * .8 * (1 - k / 4) + .04 for k in range(4)]))
+    if wall:                                                     # roots climbing the wall behind
+        wn = Vector((wall[0], wall[1], 0)).normalized()
+        side = Vector((-wn.y, wn.x, 0))
+        for k in range(rnd.randint(3, 5)):
+            base = Vector((cx, cy, cz)) - wn * r * .35 + side * rnd.uniform(-r * .5, r * .5)
+            h = rnd.uniform(2.5, 6.0)
+            pts = [base + side * math.sin(t * 2 + k) * .4 + Vector((0, 0, h * t)) - wn * .1 for t in (0, .2, .4, .6, .8, 1.0)]
+            caps.append((pts, [.42, .36, .3, .22, .14, .06]))
+    nodes = [(Vector((cx, cy, cz)) + Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), 0)) * r * .4, rnd.uniform(.6, 1.15)) for _ in range(5)]
+    P = [(np.array([tuple(p) for p in pts], np.float32), np.array(rad, np.float32)) for pts, rad in caps]
+    ph = rnd.random() * 10
+
+    def fn(X):
+        d = np.full(len(X), 1e9, np.float32)
+        for pts, rad in P:
+            for i in range(len(pts) - 1):
+                d = sdf.smin(d, sdf.round_cone(X, pts[i], pts[i + 1], rad[i], rad[i + 1]), .12)
+        for nc, nr in nodes:
+            d = sdf.smin(d, sdf.ellipsoid(X, tuple(nc), (nr, nr, nr * .8)), .25)
+        # a membrane skin round the heart, sagging between the roots
+        skin = sdf.ellipsoid(X, (cx, cy, cz), (r * .5, r * .5, .5))
+        d = sdf.smin(d, skin, .25)
+        d += .05 * np.sin(X[:, 0] * 5 + ph) * np.sin(X[:, 1] * 4.3 - ph) + .02 * np.sin(X[:, 2] * 11 + X[:, 0] * 3)
+        return np.maximum(d, -(X[:, 2] - cz + .08))
+    lo = (cx - r - 1.5, cy - r - 1.5, cz - .2)
+    hi = (cx + r + 1.5, cy + r + 1.5, cz + (7.0 if wall else 2.2))
+    V, Q = sdf.mesh(fn, lo, hi, res, project_iters=1)
+    if len(Q):
+        g.add(V.tolist(), Q.tolist(), "ru_hive", smooth=True)
+    # veins of light along the roots, pods
+    for pts, rad in caps[:6]:
+        tube(gd, "ru_glow", [tuple(Vector(tuple(p)) + Vector((0, 0, float(rr) * .92))) for p, rr in zip(pts, rad)][:4], .045, 5)
+    for k in range(rnd.randint(3, 6)):
+        a = rnd.uniform(0, TAU); dd = r * rnd.uniform(.25, .7)
+        pc = (cx + math.cos(a) * dd, cy + math.sin(a) * dd, cz)
+        pod(g, gd, pc, rnd.uniform(.55, .95), seed * 31 + k)
+
+
+def pod(g, gd, c, s, seed):
+    """an egg pod: a ribbed leathery sac with a light inside, on a stalk"""
+    rnd = random.Random(seed)
+    n, m = 14, 10
+    tilt = Matrix.Rotation(rnd.uniform(-.25, .25), 3, 'X') @ Matrix.Rotation(rnd.uniform(-.25, .25), 3, 'Y')
+    base = Vector(c)
+    vs = []
+    for j in range(m + 1):
+        v = j / m
+        z = s * 1.5 * v
+        rad = s * .55 * math.sin(math.pi * min(1.0, v * 1.08)) ** .8 + .02
+        for i in range(n):
+            a = TAU * i / n
+            rib = 1 + .07 * math.cos(a * 7)
+            vs.append(tuple(base + tilt @ Vector((math.cos(a) * rad * rib, math.sin(a) * rad * rib, z))))
+    faces = [(j * n + i, j * n + (i + 1) % n, (j + 1) * n + (i + 1) % n, (j + 1) * n + i) for j in range(m) for i in range(n)]
+    g.add(vs, faces, "ru_hive", smooth=True)
+    g.add([vs[m * n + i] for i in range(n)], [tuple(range(n))], "ru_hive")
+    crystal_cluster(gd, tuple(base + tilt @ Vector((0, 0, s * .5))), s * .7, seed + 1)
+
+
+def alien_spire(g, gd, c, h, seed):
+    """a spire of the Choir: a twisted spiked obelisk of dark plate on a hive foot, a crown of shards, two broken rings
+    of light hanging round it, shards floating"""
+    rnd = random.Random(seed)
+    cx, cy, cz = c
+    n = 6
+    rings = []
+    for k in range(13):
+        t = k / 12
+        rad = (1.4 * (1 - t) ** 1.3 + .12) * (1 + .15 * math.sin(t * 9 + seed))
+        tw = t * 1.6 + seed
+        rings.append([(cx + math.cos(TAU * i / n + tw) * rad, cy + math.sin(TAU * i / n + tw) * rad, cz + h * t) for i in range(n)])
+    vs = [p for ring in rings for p in ring]
+    faces = [(k * n + i, k * n + (i + 1) % n, (k + 1) * n + (i + 1) % n, (k + 1) * n + i) for k in range(len(rings) - 1) for i in range(n)]
+    g.add(vs, faces, "ru_metal")
+    g.add(rings[-1], [tuple(range(n))], "ru_metal")
+    for k in range(1, 12, 2):                                    # glowing seams up the spire
+        ring = rings[k]
+        tube(gd, "ru_glow", [(p[0] + (p[0] - cx) * .04, p[1] + (p[1] - cy) * .04, p[2]) for p in ring + ring[:1]], .03, 4)
+    for k in range(5):                                           # spikes down the flanks
+        t = rnd.uniform(.15, .7)
+        a = rnd.uniform(0, TAU)
+        rad = 1.4 * (1 - t) ** 1.3 + .12
+        b = Vector((cx + math.cos(a) * rad * .9, cy + math.sin(a) * rad * .9, cz + h * t))
+        tube(g, "ru_metal", [tuple(b), tuple(b + Vector((math.cos(a), math.sin(a), .5)) * h * .12)], .16, 5, r_end=.01)
+    crystal_cluster(gd, (cx, cy, cz + h * .97), h * .18, seed + 5)
+    for k, (z, R) in enumerate(((.55, 2.6), (.78, 1.9))):        # hanging rings of light, broken
+        a0 = rnd.uniform(0, TAU)
+        arc = [(cx + math.cos(a0 + a) * R, cy + math.sin(a0 + a) * R, cz + h * z + .3 * math.sin(a * 2)) for a in [i * TAU * .8 / 30 for i in range(31)]]
+        tube(gd, "ru_metal", arc, .09, 6)
+        tube(gd, "ru_glow", [(p[0], p[1], p[2] + .1) for p in arc], .035, 4)
+    for k in range(6):                                           # shards drifting round it
+        a = rnd.uniform(0, TAU); R = rnd.uniform(2.2, 3.4)
+        crystal_cluster(gd, (cx + math.cos(a) * R, cy + math.sin(a) * R, cz + h * rnd.uniform(.3, .8)), rnd.uniform(.4, .8), seed * 7 + k)
+    hive_growth(g, gd, (cx, cy, cz), 2.6, seed + 9, res=.15)
+
+
+def alien_barricade(g, c, yaw, seed, w=3.4, h=1.35):
+    """a curved barricade of grown chitin: a crescent wall (cover at chest height, bowed toward the enemy), ribbed,
+    spiked along its top"""
+    rnd = random.Random(seed)
+    T = _rz(yaw)
+    cx, cy, cz = c
+    n, m = 14, 6
+    R = w * .9                                                   # bowed: the middle stands proud
+    vs = []
+    for j in range(m + 1):
+        v = j / m
+        for side in (0, 1):
+            for i in range(n + 1):
+                u = i / n - .5
+                bow = (1 - (u * 2) ** 2) * .35
+                thick = .28 * (1 - .45 * v) * (1 - .3 * abs(u * 2))
+                y = bow + (thick if side else -thick) + .05 * math.sin(v * 7 + i)
+                z = h * v * (1 - .25 * (u * 2) ** 2) + (.08 * math.sin(i * 1.7 + seed) if j == m else 0)
+                dx, dy = T(u * w, y)
+                vs.append((cx + dx, cy + dy, cz + z))
+    row = n + 1
+    lay = lambda j, s, i: (j * 2 + s) * row + i
+    faces = []
+    for j in range(m):
+        for i in range(n):
+            faces.append((lay(j, 0, i), lay(j, 0, i + 1), lay(j + 1, 0, i + 1), lay(j + 1, 0, i)))      # front
+            faces.append((lay(j, 1, i + 1), lay(j, 1, i), lay(j + 1, 1, i), lay(j + 1, 1, i + 1)))      # back
+    for i in range(n):
+        faces.append((lay(m, 0, i), lay(m, 0, i + 1), lay(m, 1, i + 1), lay(m, 1, i)))                  # top
+    for j in range(m):
+        faces.append((lay(j, 1, 0), lay(j, 0, 0), lay(j + 1, 0, 0), lay(j + 1, 1, 0)))                  # ends
+        faces.append((lay(j, 0, n), lay(j, 1, n), lay(j + 1, 1, n), lay(j + 1, 0, n)))
+    g.add(vs, faces, "ru_hive", smooth=True)
+    for i in range(1, n, 2):                                     # spikes along the top
+        p = Vector(vs[lay(m, 0, i)]) * .5 + Vector(vs[lay(m, 1, i)]) * .5
+        tube(g, "ru_hive", [tuple(p - Vector((0, 0, .1))), tuple(p + Vector((0, 0, rnd.uniform(.25, .5))))], .07, 5, r_end=.005)
+
+
+def cable(gd, a, b, sag, seed=0):
+    """a cable slung between two points, a line of light along it"""
+    a, b = Vector(a), Vector(b)
+    pts = [a.lerp(b, t) - Vector((0, 0, sag * 4 * t * (1 - t))) for t in [i / 24 for i in range(25)]]
+    tube(gd, "ru_metal", [tuple(p) for p in pts], .07, 6)
+    tube(gd, "ru_glow", [tuple(p + Vector((0, 0, -.06))) for p in pts[2:-2]], .025, 4)
 
 
 # ------------------------------------------------------------------ the ruined tower

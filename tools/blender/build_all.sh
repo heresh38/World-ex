@@ -20,6 +20,7 @@ for s in textures weapon_textures wear_textures horror_textures nexus_textures n
   run "$s"
 done
 run weapons                       # every gun (gun_<archetype>.glb, with its reload parts) and the optics (gun_attach.glb)
+run requiem_guns                  # the Void Requiem raid set (gun_vr_*.glb), the first operation's reward guns
 run aliens stalker                # the stalker (fleshkit SDF sculpt, skinned, 5 clips)
 run altered                       # the Altered: remnant, veilborn, bulwark and the Hollow Colossus (the operation)
 run nexus                         # Nexus Prime's hub kit
