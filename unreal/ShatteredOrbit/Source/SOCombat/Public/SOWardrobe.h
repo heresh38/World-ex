@@ -52,6 +52,10 @@ struct SOCOMBAT_API FSOWardrobeItem
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	int32 Armor = 0;
 
+	/** A reward set's piece (void_sentinel): earned (an operation's reward), never handed out with the wardrobe. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
+	FName Set;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	TSoftObjectPtr<USkeletalMesh> Mesh;
 

@@ -28,9 +28,17 @@ float USOCombatStatics::ApplyDamage(AActor* Source, AActor* Target, float Amount
 	{
 		return 0.0f;
 	}
-	if (const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Target); Victim && Victim->IsDead())
+	if (const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Target))
 	{
-		return 0.0f;
+		if (Victim->IsDead() || Victim->IsImmune())
+		{
+			return 0.0f;
+		}
+		Amount = Victim->ScaleIncomingDamage(Amount, Source, bCrit);
+		if (Amount <= 0.0f)
+		{
+			return 0.0f;
+		}
 	}
 	if (Source && Source != Target && !AreHostile(Source, Target))
 	{

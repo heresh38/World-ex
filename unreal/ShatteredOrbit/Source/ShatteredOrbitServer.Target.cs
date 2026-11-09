@@ -8,6 +8,6 @@ public class ShatteredOrbitServerTarget : TargetRules
 		Type = TargetType.Server;
 		DefaultBuildSettings = BuildSettingsVersion.Latest;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
-		ExtraModuleNames.AddRange(new string[] { "ShatteredOrbit", "SOCore", "SOCharacter", "SOCombat", "SOWorld", "SOUI", "SOAI" });
+		ExtraModuleNames.AddRange(new string[] { "ShatteredOrbit", "SOCore", "SOCharacter", "SOCombat", "SOWorld", "SOUI", "SOAI", "SOOperation" });
 	}
 }

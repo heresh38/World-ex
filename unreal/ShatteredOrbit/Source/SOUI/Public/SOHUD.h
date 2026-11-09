@@ -11,7 +11,7 @@ class USOInventoryWidget;
 /**
  * The combat HUD drawn on the canvas (the CommonUI HUD replaces it later): spread-sized crosshair, hit markers,
  * ammo, health + shield, reload progress, bars over hurt creatures, the downed / respawn message, the three weapon
- * slots, the loot feed, the interact prompt and the scope picture. Opens the inventory screen (USOInventoryWidget).
+ * slots, the loot feed, the interact prompt, the scope picture and an operation's objective / boss / end screen. Opens the inventory screen (USOInventoryWidget).
  */
 UCLASS()
 class SOUI_API ASOHUD : public AHUD
@@ -59,6 +59,10 @@ private:
 
 	/** The mini-map (top left): the area's map picture round the player, north up, the important places, you. */
 	void DrawMinimap(float S);
+
+	/** An operation (ASOOperation): the objective under the mini-map, the stage's title as it begins, a marker on
+	 *  the goal, the boss's health across the top, and the end screen with what every player earned. */
+	void DrawOperation(float W, float H, float S);
 
 	TWeakObjectPtr<USOInventoryComponent> FeedInventory;
 	FDelegateHandle FeedHandle;

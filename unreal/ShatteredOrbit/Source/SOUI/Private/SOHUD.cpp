@@ -12,6 +12,9 @@
 #include "SOInventoryWidget.h"
 #include "SOMapWidget.h"
 #include "SOMap.h"
+#include "SOEnemy.h"
+#include "SOOperation.h"
+#include "GameFramework/PlayerState.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
@@ -211,6 +214,111 @@ void ASOHUD::DrawMinimap(float S)
 	DrawText(Info->AreaName.ToString().ToUpper(), FLinearColor(0.88f, 0.92f, 0.97f, 0.9f), Origin.X, Origin.Y + Side + 8 * S, Small, 1.0f * S);
 }
 
+void ASOHUD::DrawOperation(float W, float H, float S)
+{
+	const ASOOperation* Op = ASOOperation::Get(this);
+	const APawn* Pawn = GetOwningPawn();
+	if (!Op || !Pawn)
+	{
+		return;
+	}
+	UFont* Small = GEngine ? GEngine->GetSmallFont() : nullptr;
+	UFont* Font = GEngine ? GEngine->GetMediumFont() : nullptr;
+	UFont* Big = GEngine ? GEngine->GetLargeFont() : nullptr;
+	const FLinearColor Void(0.66f, 0.42f, 1.0f, 0.95f);
+	const FLinearColor Dim(0.78f, 0.82f, 0.9f, 0.85f);
+	const FSOStage* Stage = Op->GetStage();
+	const float Age = Op->GetStageAge();
+	auto Centred = [&](const FString& Text, float Y, UFont* F, float Scale, FLinearColor C)
+	{
+		float TW = 0.0f, TH = 0.0f;
+		GetTextSize(Text, TW, TH, F, Scale);
+		DrawText(Text, C, W * 0.5f - TW * 0.5f, Y, F, Scale);
+		return TW;
+	};
+
+	// the end screen: what every player earned
+	if (Op->GetState() == ESOOperationState::Complete)
+	{
+		const float A = FMath::Clamp(Age * 1.5f, 0.0f, 1.0f) * FMath::Clamp(14.0f - Age, 0.0f, 1.0f);
+		if (A > 0.0f)
+		{
+			DrawRect(FLinearColor(0.02f, 0.0f, 0.05f, 0.55f * A), 0.0f, H * 0.24f, W, 230.0f * S);
+			DrawRect(FLinearColor(Void.R, Void.G, Void.B, 0.8f * A), 0.0f, H * 0.24f, W, 2.0f * S);
+			DrawRect(FLinearColor(Void.R, Void.G, Void.B, 0.8f * A), 0.0f, H * 0.24f + 228.0f * S, W, 2.0f * S);
+			Centred(Op->OperationName.ToString().ToUpper(), H * 0.24f + 22.0f * S, Font, 1.1f * S, FLinearColor(Void.R, Void.G, Void.B, A));
+			Centred(TEXT("OPERATION COMPLETE"), H * 0.24f + 52.0f * S, Big, 2.0f * S, FLinearColor(1, 1, 1, A));
+			float Y = H * 0.24f + 130.0f * S;
+			const APlayerState* Mine = GetOwningPlayerController() ? GetOwningPlayerController()->PlayerState : nullptr;
+			for (const FSOOperationReward& R : Op->GetRewards())
+			{
+				const USOLootTables* Tables = USOLootLibrary::GetTables();
+				FLinearColor C = Tables ? Tables->GetRarity(R.Rarity).Color : Void;
+				C.A = A;
+				const FString Who = R.Player == Mine ? TEXT("You earned") : (R.Player ? R.Player->GetPlayerName() : FString(TEXT("?")));
+				Centred(FString::Printf(TEXT("%s   %s"), *Who, *R.Label), Y, Font, (R.Player == Mine ? 1.35f : 1.0f) * S, C);
+				Y += (R.Player == Mine ? 34.0f : 26.0f) * S;
+			}
+		}
+		return;
+	}
+	if (!Stage || Op->GetState() != ESOOperationState::Active)
+	{
+		return;
+	}
+
+	// the objective, under the mini-map
+	const float X = 28.0f * S, Y0 = 300.0f * S;
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), X - 6.0f * S, Y0 - 6.0f * S, 330.0f * S, 72.0f * S);
+	DrawRect(Void, X - 6.0f * S, Y0 - 6.0f * S, 2.5f * S, 72.0f * S);
+	DrawText(Op->OperationName.ToString().ToUpper(), Void, X + 4.0f * S, Y0, Small, 0.95f * S);
+	DrawText(Stage->Title.ToString(), FLinearColor(1, 1, 1, 0.95f), X + 4.0f * S, Y0 + 16.0f * S, Font, 1.0f * S);
+	DrawText(Op->GetObjectiveLine(), Dim, X + 4.0f * S, Y0 + 40.0f * S, Font, 0.85f * S);
+
+	// the stage's title as it begins
+	if (Age < 5.0f)
+	{
+		const float A = FMath::Clamp(Age * 2.0f, 0.0f, 1.0f) * FMath::Clamp(5.0f - Age, 0.0f, 1.0f);
+		const float TW = Centred(Stage->Title.ToString().ToUpper(), H * 0.16f, Big, 1.7f * S, FLinearColor(1, 1, 1, A));
+		DrawRect(FLinearColor(Void.R, Void.G, Void.B, A * 0.9f), W * 0.5f - TW * 0.35f, H * 0.16f + 50.0f * S, TW * 0.7f, 2.0f * S);
+		Centred(Stage->Objective.ToString(), H * 0.16f + 60.0f * S, Font, 1.1f * S, FLinearColor(Dim.R, Dim.G, Dim.B, A));
+	}
+
+	// a marker on the goal (where to go), with the distance
+	if (Stage->Kind == ESOStageKind::Travel || Stage->Kind == ESOStageKind::Hold)
+	{
+		const FVector Screen = Project(Stage->Goal + FVector(0, 0, 150.0f), true);
+		if (Screen.Z > 0.0f)
+		{
+			const FVector2D P(FMath::Clamp<float>(Screen.X, 40.0f * S, W - 40.0f * S), FMath::Clamp<float>(Screen.Y, 60.0f * S, H - 60.0f * S));
+			const float R = 9.0f * S;
+			DrawLine(P.X, P.Y - R, P.X + R, P.Y, Void, 2.0f * S);
+			DrawLine(P.X + R, P.Y, P.X, P.Y + R, Void, 2.0f * S);
+			DrawLine(P.X, P.Y + R, P.X - R, P.Y, Void, 2.0f * S);
+			DrawLine(P.X - R, P.Y, P.X, P.Y - R, Void, 2.0f * S);
+			const int32 Metres = FMath::RoundToInt(FVector::Dist(Pawn->GetActorLocation(), Stage->Goal) / 100.0f);
+			DrawText(FString::Printf(TEXT("%d m"), Metres), Dim, P.X - 12.0f * S, P.Y + R + 4.0f * S, Small, 0.95f * S);
+		}
+	}
+
+	// the boss across the top
+	if (const ASOEnemy* Boss = Op->GetBoss(); Boss && !Boss->IsDead())
+	{
+		const float BW = 640.0f * S, BX = W * 0.5f - BW * 0.5f, BY = 62.0f * S;
+		Centred(Boss->DisplayName.ToString().ToUpper(), BY - 26.0f * S, Font, 1.05f * S, FLinearColor(1, 1, 1, 0.95f));
+		DrawRect(FLinearColor(0, 0, 0, 0.55f), BX - 3.0f * S, BY - 3.0f * S, BW + 6.0f * S, 18.0f * S);
+		DrawBar(BX, BY, BW, 12.0f * S, Boss->GetHealth() / FMath::Max(Boss->GetMaxHealth(), 1.0f), Void);
+		if (Boss->GetMaxShield() > 0.0f && Boss->GetShield() > 0.0f)
+		{
+			DrawRect(Shield, BX, BY + 13.0f * S, BW * Boss->GetShield() / Boss->GetMaxShield(), 3.0f * S);
+		}
+		if (Boss->IsImmune())
+		{
+			Centred(Boss->ImmuneReason.ToString(), BY + 22.0f * S, Small, 1.0f * S, FLinearColor(1.0f, 0.75f, 0.35f, 0.95f));
+		}
+	}
+}
+
 void ASOHUD::DrawScope(float W, float H)
 {
 	// magnified glass: black outside a circle, a fine reticle inside
@@ -326,6 +434,10 @@ void ASOHUD::DrawHUD()
 	if (Player->IsScopeView())
 	{
 		DrawScope(W, H);
+	}
+	if (!InventoryWidget && !MapWidget)
+	{
+		DrawOperation(W, H, S);
 	}
 
 	// Damage flash: red when health drops, blue when only the shield takes it.

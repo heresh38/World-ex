@@ -64,6 +64,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SO|Combat")
 	float GetDeathTime() const { return DeathTime; }
 
+	/** Takes no damage at all right now (a boss behind its shield). */
+	virtual bool IsImmune() const { return false; }
+
+	/** The damage this body actually takes from Source (armour plates facing the shot, weak points); server. */
+	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const { return Amount; }
+
 	/** Server: restores health up to the maximum (Siphon). */
 	void Heal(float Amount);
 

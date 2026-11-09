@@ -5,6 +5,7 @@
 #include "SOCharacter.h"
 #include "SOCombatStatics.h"
 #include "SOHUD.h"
+#include "SOOperation.h"
 #include "SOLog.h"
 #include "SOPlayerController.h"
 #include "SOPlayerState.h"
@@ -63,6 +64,12 @@ void ASOGameMode::RespawnPlayer(AController* Controller)
 	{
 		Old->DetachFromControllerPendingDestroy();
 		Old->SetLifeSpan(BodyLifeSpan);
+	}
+	FTransform Checkpoint;
+	if (const ASOOperation* Operation = ASOOperation::Get(this); Operation && Operation->GetCheckpoint(Checkpoint))
+	{
+		RestartPlayerAtTransform(Controller, Checkpoint);
+		return;
 	}
 	RestartPlayer(Controller);
 }

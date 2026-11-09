@@ -141,6 +141,27 @@ void ASOEnemyAIController::Think()
 		LastKnownLocation = Seen->GetActorLocation();
 		LastSeenTime = Now;
 	}
+	else if (bHunter)
+	{
+		// out of sight: still hunted (the nearest player, wherever they are)
+		if (!Target.IsValid())
+		{
+			float Best = BIG_NUMBER;
+			for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
+			{
+				const float D = FVector::DistSquared(It->GetActorLocation(), Me->GetActorLocation());
+				if (*It != Me && !It->IsDead() && It->IsPlayerControlled() && USOCombatStatics::AreHostile(Me, *It) && D < Best)
+				{
+					Best = D;
+					Target = *It;
+				}
+			}
+		}
+		if (Target.IsValid())
+		{
+			LastKnownLocation = Target->GetActorLocation();
+		}
+	}
 	else if (Target.IsValid() && Now - LastSeenTime > LoseTargetTime)
 	{
 		Target = nullptr;

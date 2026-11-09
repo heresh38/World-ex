@@ -47,6 +47,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|AI")
 	float WanderRadius = 700.0f;
 
+	/** An operation's enemy: with nothing in sight it goes for the nearest player anyway, and never gives up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|AI")
+	bool bHunter = false;
+
 	UFUNCTION(BlueprintPure, Category = "SO|AI")
 	ESOEnemyState GetState() const { return State; }
 

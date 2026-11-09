@@ -18,6 +18,14 @@ class SOAI_API ASOEnemy : public ASOCombatCharacter
 public:
 	ASOEnemy(const FObjectInitializer& ObjectInitializer);
 
+	/** What the player sees (the boss bar). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	FText DisplayName;
+
+	/** Why it takes no damage right now (shown under the boss bar). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SO|Enemy")
+	FText ImmuneReason;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float WalkSpeed = 220.0f;
 
@@ -63,7 +71,12 @@ public:
 
 	void SetRunning(bool bRun);
 
+	/** Server: on / off immunity (with the reason shown to players). */
+	void SetImmune(bool bOn, const FText& Reason = FText());
+	virtual bool IsImmune() const override { return bImmune; }
+
 	//~ AActor
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -74,6 +87,9 @@ protected:
 	void MulticastAttack();
 
 	void LoadContent();
+
+	UPROPERTY(Replicated)
+	bool bImmune = false;
 
 	float LastAttackTime = -100.0f;
 	float PendingStrikeTime = -1.0f;

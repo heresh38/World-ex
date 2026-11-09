@@ -205,7 +205,7 @@ void USOInventoryComponent::GrantWardrobe(bool bWearDefaults)
 	}
 	for (const FSOWardrobeItem& Item : Wardrobe->Items)
 	{
-		if (!Item.bArmour || Armor.ContainsByPredicate([&](const FSOArmorInstance& A) { return A.Slot == Item.Slot && A.Item == Item.Item; }))
+		if (!Item.bArmour || !Item.Set.IsNone() || Armor.ContainsByPredicate([&](const FSOArmorInstance& A) { return A.Slot == Item.Slot && A.Item == Item.Item; }))
 		{
 			continue;
 		}
@@ -218,6 +218,40 @@ void USOInventoryComponent::GrantWardrobe(bool bWearDefaults)
 		A.bEquipped = bWearDefaults && Wardrobe->Defaults.FindRef(Item.Slot) == Item.Item;
 		Armor.Add(A);
 	}
+}
+
+FSOArmorInstance USOInventoryComponent::AddArmorPiece(FName Slot, FName Item, int32 InRarity, int32 InPower, bool bAnnounce)
+{
+	FSOArmorInstance* Have = Armor.FindByPredicate([&](const FSOArmorInstance& A) { return A.Slot == Slot && A.Item == Item; });
+	if (Have)
+	{
+		// one copy of a piece: a second drop raises it
+		Have->Rarity = FMath::Max(Have->Rarity, InRarity);
+		Have->Power = FMath::Max(Have->Power, InPower);
+		Have->bNew = true;
+	}
+	else
+	{
+		FSOArmorInstance A;
+		A.Uid = FString::Printf(TEXT("ar_%s_%s_%08x"), *Slot.ToString(), *Item.ToString(), Rng.RandHelper(0x7fffffff));
+		A.Slot = Slot;
+		A.Item = Item;
+		A.Rarity = InRarity;
+		A.Power = InPower;
+		A.bNew = true;
+		Have = &Armor.Add_GetRef(A);
+	}
+	const FSOArmorInstance Out = *Have;
+	if (bAnnounce)
+	{
+		const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+		const FSOWardrobeItem* Info = Wardrobe ? Wardrobe->Find(Slot, Item) : nullptr;
+		const USOLootTables* Tables = USOLootLibrary::GetTables();
+		Feed(FString::Printf(TEXT("%s  ·  %s  ·  %d"), Info ? *Info->Label.ToString() : *Item.ToString(), *USOWardrobeData::SlotLabel(Slot).ToString(), Out.Power),
+			Tables ? Tables->GetRarity(Out.Rarity).Color : FLinearColor::White);
+	}
+	Changed(false, false);
+	return Out;
 }
 
 const FSOWeaponInstance* USOInventoryComponent::GetEquipped(int32 Slot) const

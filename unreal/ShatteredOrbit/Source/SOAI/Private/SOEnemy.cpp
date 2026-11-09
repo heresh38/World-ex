@@ -6,6 +6,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "SOCombatStatics.h"
 #include "SOEnemyAIController.h"
 #include "SOLocomotionAnimInstance.h"
@@ -16,6 +17,7 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = true;
 	Faction = ESOFaction::Alien;
+	DisplayName = NSLOCTEXT("SO", "Stalker", "Stalker");
 	StartMaxHealth = 140.0f;
 	StartMaxShield = 0.0f;
 	CorpseLifeSpan = 6.0f;
@@ -41,6 +43,19 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
 	BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/Stalker/SK_Stalker.SK_Stalker")));
+}
+
+void ASOEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ASOEnemy, bImmune);
+	DOREPLIFETIME(ASOEnemy, ImmuneReason);
+}
+
+void ASOEnemy::SetImmune(bool bOn, const FText& Reason)
+{
+	bImmune = bOn;
+	ImmuneReason = bOn ? Reason : FText();
 }
 
 void ASOEnemy::PostInitializeComponents()

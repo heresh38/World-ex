@@ -96,6 +96,9 @@ public:
 	bool EquipArmor(const FString& Uid);
 	/** Switches the body (male / female): the pieces that body has are owned for it too (server). */
 	bool SetBody(FName NewBody);
+	/** Server: an earned armour piece (an operation's reward); a piece already owned is raised to the better rarity /
+	 *  power instead of a second copy. */
+	FSOArmorInstance AddArmorPiece(FName Slot, FName Item, int32 Rarity, int32 Power, bool bAnnounce = true);
 	/** Owns one of every armour piece of the body's wardrobe (missing ones only) and wears its defaults. */
 	void GrantWardrobe(bool bWearDefaults);
 	/** Drops armour that no longer exists in either body's wardrobe (old saves) and puts the body's default on
