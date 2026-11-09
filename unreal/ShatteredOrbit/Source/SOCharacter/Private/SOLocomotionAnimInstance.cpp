@@ -72,6 +72,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		const float Stance = bArmsOnly ? 0.5f : 1.0f;
 		Blade = FMath::Lerp(12.0f, 24.0f, Ads) * Stance;
 		Lean = FMath::Lerp(4.0f, 9.0f, Ads) * Stance;
+		HeadCant = bArmsOnly || Rig->IsHandgun() ? 0.0f : Ads * 14.0f;
 		bHold = true;
 	}
 
@@ -276,6 +277,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	AimPitch = Instance->AimPitch;
 	Blade = Instance->Blade;
 	Lean = Instance->Lean;
+	HeadCant = Instance->HeadCant;
 	RightTarget = Instance->RightTarget;
 	LeftTarget = Instance->LeftTarget;
 	RightFingers = Instance->RightFingers;
@@ -579,7 +581,10 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		SetCS(Neck, FTransform(FQuat(Side, Pitch * 0.4f) * RefCS[Neck].GetRotation(), CS[Neck].GetLocation(), CS[Neck].GetScale3D()));
 		if (HeadBone != INDEX_NONE)
 		{
-			SetCS(HeadBone, FTransform(FQuat(Side, Pitch) * RefCS[HeadBone].GetRotation(), CS[HeadBone].GetLocation(), CS[HeadBone].GetScale3D()));
+			// aiming a long gun: the head cants toward the right shoulder and dips onto the stock (cheek weld)
+			const float Cant = FMath::DegreesToRadians(HeadCant);
+			const FQuat Weld = FQuat(FVector(0.0f, 1.0f, 0.0f), -Cant) * FQuat(Side, -Cant * 0.7f);
+			SetCS(HeadBone, FTransform(Weld * FQuat(Side, Pitch) * RefCS[HeadBone].GetRotation(), CS[HeadBone].GetLocation(), CS[HeadBone].GetScale3D()));
 		}
 	}
 

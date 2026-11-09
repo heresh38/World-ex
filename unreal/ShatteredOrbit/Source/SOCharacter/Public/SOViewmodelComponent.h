@@ -10,8 +10,8 @@ class ASOCharacter;
  * Where the gun is held. Ticks before the body meshes animate (after movement and look), and places:
  *  - itself: the first-person hold, locked to the (recoil-kicked) eye so the sights line up with the crosshair;
  *    hip / aim-down-sights blend, sway from look, bob from movement, recoil kick, sprint pose, raise, reload offsets;
- *  - the character's third-person hold: the same pose seen from outside, kept in front of the body when looking
- *    down and raised to the cheek when aiming.
+ *  - the character's third-person hold: the body's own (butt in the right shoulder pocket, bore on the crosshair's
+ *    point; handguns out in both hands), shouldered higher when aiming, never through the head.
  * The weapon's rigs attach to these, and the bodies' arm IK (USOLocomotionAnimInstance) reaches for the rigs' grips.
  * Eye space: +X forward, +Y right, +Z up (cm).
  */
@@ -52,13 +52,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float AdsBuiltInOpticDistance = 4.0f;
 
-	/** Third person: the character's eyes sit this far above the camera's eye height (cheek weld when aiming). */
+	/** Third person: the shoulder pocket (where the butt sits) from the right shoulder joint, actor axes at rest (cm:
+	 *  X forward, Y right, Z up): in front of the joint, toward the chest, a little below it. Turns with the chest. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float ThirdPersonEyeLift = 7.0f;
+	FVector PocketFromShoulder = FVector(9.0f, -4.5f, -4.0f);
 
-	/** Third person: when looking down the hip hold moves forward this far (cm at straight down) to stay clear of the body. */
+	/** Third person, aiming: the butt rides this much higher and nearer the cheek in the pocket (shoulder raised), so
+	 *  the comb meets the cheek of the canted head. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float ThirdPersonDownReach = 26.0f;
+	FVector PocketAimShift = FVector(1.5f, -2.5f, 7.0f);
+
+	/** Third person: height of the butt's middle in rig space (cm above the top of the pistol grip). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float ButtHeight = 1.5f;
+
+	/** Third person, handguns: the grip from the shoulders' middle along the aim (cm: forward, right, up), hip / aimed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector HandgunHold = FVector(38.0f, 7.0f, -6.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector HandgunAimHold = FVector(44.0f, 5.0f, 2.0f);
+
+	/** Third person: the gun points at the crosshair's point, but never at one nearer than this (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float ThirdPersonMinAimDistance = 400.0f;
+
+	/** Without a body pose yet: the pocket in actor space (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector DefaultPocket = FVector(1.0f, 12.0f, 48.5f);
+
+	/** The shoulder pocket and the shoulders' middle (actor space, cm) from the body's last pose; false = defaults. */
+	bool GetShoulderPoints(const ASOCharacter* Character, FVector& OutPocket, FVector& OutChest) const;
 
 	void Kick(float Strength);
 	void Raise() { Lower = 1.0f; }
@@ -86,4 +110,8 @@ private:
 	float SlideK = 0.0f;
 	float MantleK = 0.0f;
 	float ReloadK = 0.0f;
+	FVector HoldDir = FVector::ForwardVector;
+	bool bHoldDirValid = false;
+
+	FTransform ThirdPersonHoldTransform(const ASOCharacter* Character, bool bHandgun, float Dt);
 };

@@ -371,20 +371,23 @@ void ASOHUD::DrawHUD()
 		return;
 	}
 
-	// Crosshair: four ticks spread by the current cone; it fades out over the first third of aiming, so looking
-	// through the sights (or an optic's window) shows only the sight's own dot or post.
-	const float Ads = FMath::Clamp(Player->GetAimProgress() * 3.0f, 0.0f, 1.0f);
+	// Crosshair: four ticks spread by the current cone. First person it fades out over the first third of aiming, so
+	// looking through the sights (or an optic's window) shows only the sight's own dot or post, and comes back as the
+	// gun comes down. Third person nothing lines up with the eye, so it stays while aiming over the shoulder; only the
+	// scope view (a magnified optic, either view) takes it away for the scope's own reticle.
+	const float Ads = Player->IsScopeView() ? 1.0f
+		: (Player->UsesShoulderCrosshair() ? 0.0f : FMath::Clamp(Player->GetAimProgress() * 3.0f, 0.0f, 1.0f));
 	if (Ads < 0.99f)
 	{
 		const float Spread = Weapon ? Weapon->GetStats().Spread * Player->GetSpreadScale() : 1.0f;
 		const float Gap = (6.0f + Spread * 9.0f) * S;
-		const float Len = 7.0f * S;
+		const float Len = FMath::Max(7.0f * S, 5.0f);
 		const FLinearColor C(Ink.R, Ink.G, Ink.B, Ink.A * (1.0f - Ads));
-		const float CX = W * 0.5f, CY = H * 0.5f;
-		DrawLine(CX - Gap - Len, CY, CX - Gap, CY, C, 2.0f * S);
-		DrawLine(CX + Gap, CY, CX + Gap + Len, CY, C, 2.0f * S);
-		DrawLine(CX, CY - Gap - Len, CX, CY - Gap, C, 2.0f * S);
-		DrawLine(CX, CY + Gap, CX, CY + Gap + Len, C, 2.0f * S);
+		const float CX = W * 0.5f, CY = H * 0.5f, T = FMath::Max(2.0f * S, 1.5f); // never thinner than a pixel and a half
+		DrawLine(CX - Gap - Len, CY, CX - Gap, CY, C, T);
+		DrawLine(CX + Gap, CY, CX + Gap + Len, CY, C, T);
+		DrawLine(CX, CY - Gap - Len, CX, CY - Gap, C, T);
+		DrawLine(CX, CY + Gap, CX, CY + Gap + Len, C, T);
 	}
 
 	// Interact prompt.

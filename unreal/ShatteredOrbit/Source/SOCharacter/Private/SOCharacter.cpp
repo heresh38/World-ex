@@ -105,8 +105,8 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
 	ThirdPersonBoom->SetupAttachment(Capsule);
 	ThirdPersonBoom->SetRelativeLocation(FVector(0.0f, 0.0f, 55.0f));
-	ThirdPersonBoom->TargetArmLength = 320.0f;
-	ThirdPersonBoom->SocketOffset = FVector(0.0f, 55.0f, 15.0f);
+	ThirdPersonBoom->TargetArmLength = HipArmLength;
+	ThirdPersonBoom->SocketOffset = HipSocketOffset;
 	ThirdPersonBoom->bUsePawnControlRotation = true;
 	ThirdPersonBoom->bDoCollisionTest = true;
 	ThirdPersonBoom->ProbeSize = 14.0f;
@@ -479,20 +479,25 @@ FTransform ASOCharacter::GetEyeTransform(bool bWithRecoil) const
 	return FTransform(Aim, FirstPersonCamera->GetComponentLocation());
 }
 
-FVector ASOCharacter::GetAimDirection() const
+bool ASOCharacter::UsesShoulderCrosshair() const
 {
-	// Rounds follow the kicked view (the kick recovers by itself).
-	const FVector Forward = GetEyeTransform(true).GetRotation().GetForwardVector();
-	if (ViewMode != ESOViewMode::ThirdPerson || !ThirdPersonCamera || bDead)
+	return ViewMode == ESOViewMode::ThirdPerson && ThirdPersonCamera && !bDead && !bScopeView;
+}
+
+FVector ASOCharacter::GetAimTarget() const
+{
+	const FTransform Eye = GetEyeTransform(true);
+	const FVector Forward = Eye.GetRotation().GetForwardVector();
+	const FVector Origin = Eye.GetLocation();
+	if (!UsesShoulderCrosshair())
 	{
-		return Forward;
+		return Origin + Forward * 30000.0f;
 	}
-	// Third person: the crosshair is the middle of the shoulder camera, which sits beside the head. Find what the
-	// camera's centre ray hits and send the round from the eye to that point.
+	// Third person: the crosshair is the middle of the shoulder camera, which sits beside the head: what the
+	// camera's centre ray hits (starting level with the eye, so nothing behind the character counts).
 	UWorld* World = GetWorld();
-	const FVector Origin = GetAimOrigin();
 	const FVector Camera = ThirdPersonCamera->GetComponentLocation();
-	const FVector Start = Camera + Forward * FMath::Max(0.0f, FVector::DotProduct(Origin - Camera, Forward)); // skip what is behind the character
+	const FVector Start = Camera + Forward * FMath::Max(0.0f, FVector::DotProduct(Origin - Camera, Forward));
 	const FVector End = Start + Forward * 30000.0f;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOThirdPersonAim), true, this);
 	if (Weapon)
@@ -500,8 +505,18 @@ FVector ASOCharacter::GetAimDirection() const
 		Params.AddIgnoredActor(Weapon);
 	}
 	FHitResult Hit;
-	const FVector Target = World && World->LineTraceSingleByChannel(Hit, Start, End, SO_TRACE_BULLET, Params) ? FVector(Hit.ImpactPoint) : End;
-	const FVector Dir = (Target - Origin).GetSafeNormal();
+	return World && World->LineTraceSingleByChannel(Hit, Start, End, SO_TRACE_BULLET, Params) ? FVector(Hit.ImpactPoint) : End;
+}
+
+FVector ASOCharacter::GetAimDirection() const
+{
+	// Rounds follow the kicked view (the kick recovers by itself); third person, from the eye to the crosshair's point.
+	const FVector Forward = GetEyeTransform(true).GetRotation().GetForwardVector();
+	if (!UsesShoulderCrosshair())
+	{
+		return Forward;
+	}
+	const FVector Dir = (GetAimTarget() - GetAimOrigin()).GetSafeNormal();
 	return FVector::DotProduct(Dir, Forward) > 0.5f ? Dir : Forward;
 }
 
@@ -665,22 +680,26 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	const float HipFov = GetHipFov();
 	const float Zoom = WeaponData ? Weapon->GetStats().Zoom : 1.0f / AimFovScale;
 	const float MoveFov = HipFov + FovBoost * (1.0f - Ads);     // sprint / slide widen the hip view only
-	CurrentFov = MoveFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
-	FirstPersonCamera->SetFieldOfView(CurrentFov);
-	ThirdPersonCamera->SetFieldOfView(CurrentFov);
-	Look->SetAim(bAiming, MoveFov, CurrentFov);
+	// The eye zooms by the full magnification; the shoulder camera only a little (it comes in closer instead), so a
+	// scoped gun never zooms onto the character's back before the view cuts to the scope.
+	const float EyeFov = MoveFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
+	const float ShoulderFov = MoveFov / FMath::Lerp(1.0f, FMath::Clamp(Zoom, 1.0f, ThirdPersonMaxZoom), Ads);
+	FirstPersonCamera->SetFieldOfView(EyeFov);
+	ThirdPersonCamera->SetFieldOfView(ShoulderFov);
+	ThirdPersonBoom->TargetArmLength = FMath::Lerp(HipArmLength, AimArmLength, Ads);
+	ThirdPersonBoom->SocketOffset = FMath::Lerp(HipSocketOffset, AimSocketOffset, Ads);
 
-	// Magnified optics: fully aimed, the scope picture replaces the gun (viewmodel.js inScope).
-	const bool bScope = IsFirstPersonView() && Weapon && Weapon->IsScoped() && AimProgress > 0.82f && bAiming;
+	// Magnified optics: fully aimed, the scope picture replaces the gun (viewmodel.js inScope); third person cuts to
+	// the eye for it, like the shoulder shooters do.
+	const bool bScope = IsLocallyControlled() && IsPlayerControlled() && !bDead && Weapon && Weapon->IsScoped()
+		&& AimProgress > 0.82f && bAiming;
 	if (bScope != bScopeView)
 	{
 		bScopeView = bScope;
-		FirstPersonArms->SetVisibility(!bScope && ViewMode == ESOViewMode::FirstPerson, true);
-		if (Weapon->GetFirstPersonRig())
-		{
-			Weapon->GetFirstPersonRig()->SetShown(!bScope && ViewMode == ESOViewMode::FirstPerson);
-		}
+		ApplyViewMode();
 	}
+	CurrentFov = UsesShoulderCrosshair() ? ShoulderFov : EyeFov;
+	Look->SetAim(bAiming, MoveFov, CurrentFov);
 
 	// A latched (tapped) sprint ends once you stop pushing forward; a latched crouch follows the movement state.
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
@@ -1366,20 +1385,25 @@ void ASOCharacter::ToggleViewMode()
 void ASOCharacter::ApplyViewMode()
 {
 	const bool bFirst = ViewMode == ESOViewMode::FirstPerson;
-	FirstPersonCamera->SetActive(bFirst);
-	ThirdPersonCamera->SetActive(!bFirst);
-	FirstPersonArms->SetVisibility(bFirst, true);
+	const bool bEye = bFirst || bScopeView; // looking through a scope is always from the eye
+	FirstPersonCamera->SetActive(bEye);
+	ThirdPersonCamera->SetActive(!bEye);
+	FirstPersonArms->SetVisibility(bFirst && !bScopeView, true);
 	FirstPersonArms->SetComponentTickEnabled(bFirst);
-	GetMesh()->SetOwnerNoSee(bFirst);
+	GetMesh()->SetOwnerNoSee(bEye);
 	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& Piece : WornThirdPerson)
 	{
 		if (Piece.Value)
 		{
-			Piece.Value->SetOwnerNoSee(bFirst);
+			Piece.Value->SetOwnerNoSee(bEye);
 		}
 	}
 	if (Weapon)
 	{
-		Weapon->SetFirstPersonView(bFirst);
+		Weapon->SetFirstPersonView(bEye);
+		if (Weapon->GetFirstPersonRig())
+		{
+			Weapon->GetFirstPersonRig()->SetShown(bFirst && !bScopeView);
+		}
 	}
 }

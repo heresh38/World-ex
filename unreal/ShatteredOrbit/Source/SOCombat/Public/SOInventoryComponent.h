@@ -98,6 +98,13 @@ public:
 	bool SetBody(FName NewBody);
 	/** Owns one of every armour piece of the body's wardrobe (missing ones only) and wears its defaults. */
 	void GrantWardrobe(bool bWearDefaults);
+	/** Drops armour that no longer exists in either body's wardrobe (old saves) and puts the body's default on
+	 *  every required slot that has nothing worn, and on any slot whose worn piece was dropped (an old coat is
+	 *  replaced by the new one, not left empty). */
+	void Dress();
+
+	/** Takes a save's armour: grants the wardrobe (wearing its defaults when the save had none) and dresses. */
+	void RestoreArmor(const TArray<FSOArmorInstance>& Saved);
 
 	// --- Server ---
 	/** Adds a copy (unique uid, NEW tag); equips it if its slot is empty; keeps the vault under the cap. */

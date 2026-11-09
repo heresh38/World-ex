@@ -105,6 +105,8 @@ public:
 	FSOHandGrip GripForAnchor(FName Anchor) const;
 	USceneComponent* GetGunSpace() const { return GunSpace; }
 	bool IsBuilt() const { return bBuilt; }
+	/** A handgun (short barrel, held out in both hands). */
+	bool IsHandgun() const { return bHandgun; }
 
 	/** A rail optic is mounted (the gun's irons fold away, aiming looks through the optic). */
 	bool IsOpticMounted() const { return bOpticMounted; }

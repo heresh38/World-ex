@@ -2,6 +2,7 @@
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -16,7 +17,8 @@ ASOMapPoint::ASOMapPoint()
 	RootComponent = Root;
 	Beacon = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Beacon"));
 	Beacon->SetupAttachment(Root);
-	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// a solid monument: the player can't walk through it and the shoulder camera stops at it
+	Beacon->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
 }
 
 void ASOMapPoint::PostInitializeComponents()

@@ -194,20 +194,24 @@ ticked by hand):
 | `Hold.HandsOnGrips` | first-person arms (the arms mesh on the body skeleton) and the third-person body: both hands on the grips at the hip, aiming and in third person |
 | `Hold.SightsOnCrosshair` | aimed, the sight line lies on the eye axis and the barrel is parallel; while firing, recoil kicks the view, the rounds and the sights together |
 | `Aim.ThirdPersonHitsCrosshair` | third person: the round lands where the shoulder camera's centre ray hits; first person: rounds go along the view |
+| `Hold.ThirdPersonShouldered` | third person, rifle / bolt / DMR / sniper / pistol, hip and aimed: the gun clear of the head, below the eyes, long guns' butt in the right shoulder pocket, both hands on the gun |
+| `Aim.ScopesZoom` | sniper, bolt (8x), DMR (4x) in both views: the eye zooms by the full magnification, the shoulder camera at most 1.35x, back to the hip view when released |
 | `Loot.TablesMatchDataJs` | every archetype's data asset matches `Data/game_data.json` (damage, rpm, magazine, slot, pellets), models and optics exist |
 | `Loot.Rolls` | rarity odds (38 / 30 / 22 / 8.5 / 1.5 %), perks by rarity without repeats, stat roll ranges, compatible sights, names, stats with rarity / power / perks, the reliquary pool |
 | `Loot.Inventory` | new profile (starters + armoury, rifle in hand), possession equips, slot switching keeps each copy's ammo, NEW tags, lock / dismantle rules, equip swaps the gun, the 200 vault cap |
 | `Loot.PickupsAndReliquary` | loot cores become weapons of their rarity, ammo tops up the reserve, walking over pickups, the reliquary pays out once and reseals |
 | `Weapon.EveryArchetypeFiresAndReloads` | all 22 guns: both rigs build, one trigger pull = one shot with all its pellets / a full burst, an empty reload of each choreography ends with a full magazine |
 | `Wardrobe.Dresses` | both wardrobes import (body, arms, the Orion set with icons and armour, first-person cuts only where the arms reach); the player wears one follower mesh per slot, covered skin is hidden, the coat comes off, the female body swaps meshes and clips |
-| `Wardrobe.ArmorInventory` | a new profile owns and wears armour, the rating adds up, one piece per slot, taking off empties the slot, the female body gets her own pieces |
+| `Wardrobe.ArmorInventory` | a new profile owns and wears armour, the rating adds up, one piece per slot, required slots can be swapped but never emptied, the coat (outer) comes off, an old save's outfit is deleted and the new one worn (coat included), the female body gets her own pieces |
 | `Weapon.ReloadHandStaysOutsideTheGun` | through a whole empty reload the off hand never enters the receiver; on the rack it is palm-down on top and rides the charging handle |
 
 Screenshots for a visual check (needs a GPU; writes `Saved/Screenshots/SO_*.png`: first person hip, firing, impacts,
 sights, sights while firing, mid mag change, mid rack, looking down; third person from behind (hip, firing, aiming)
 and from a free camera: both sides, the front, looking down / up, mid mag change, mid rack; stage 5: every gun in hand,
 the reload families mid-way, pellets / energy / rocket / goo firing, a 4x scope and a holo sight, loot cores, the
-reliquary and the inventory screen; the series never writes the save):
+reliquary and the inventory screen; the series never writes the save). `SOCaptureSeries 1 6` takes the aiming set
+(`SO_a*`: third-person rifle / pistol / sniper holds from behind, the side and the front, hip and aimed, looking down /
+up, the scope view from third and first person, the crosshair coming back):
 
 ```bash
 "/c/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe" "C:/Dev/World-ex/unreal/ShatteredOrbit/ShatteredOrbit.uproject" -game -RenderOffscreen -windowed -ResX=1600 -ResY=900 -nosound -ExecCmds="SOCaptureSeries 1"
@@ -251,11 +255,17 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
     the magazine well and the hands stay in view.
 - **Camera:** T (D-pad up) toggles third person; RMB / LT zooms (aim) with zoom-matched sensitivity. Third-person
   shots go where the crosshair is (the round flies from the eyes to what the shoulder camera's centre ray hits).
+  Aiming in third person brings the shoulder camera in (3.2 m -> 1.75 m, `AimArmLength`) with at most 1.35x zoom; a
+  magnified optic (2x/4x/8x, the sniper's built-in scope) cuts to the scope view at the eye in either view.
 - **Holding the gun:** the first-person arms are your own body's arms (same sleeves and gloves as in third person),
   and both bodies reach for the gun with arm IK: firing hand on the grip, support hand under the handguard. In first
   person aiming puts the iron sights on the crosshair (the rounds land on the front post, also while firing: the
-  recoil kicks the view and the gun together). In third person the torso follows your pitch, blades and leans in, and
-  aiming raises the rifle to the cheek.
+  recoil kicks the view and the gun together). In third person the body has its own hold (`USOViewmodelComponent::
+  ThirdPersonHoldTransform`): long guns sit with the butt in the right shoulder pocket (from the body's animated
+  `upperarm_R` + `PocketFromShoulder`, turned with the chest) and the bore on the crosshair's point; aiming raises the
+  butt in the pocket (`PocketAimShift`) and the head cants onto the stock (`HeadCant` in the anim instance); a forend
+  past the support arm's reach brings the gun in toward the chest. Handguns are held out in both hands
+  (`HandgunHold` / `HandgunAimHold`). The torso follows your pitch, blades and leans in.
 - **Look:** mouse = 0.07 degrees per count at sensitivity 1 (`SOGameUserSettings.MouseSensitivity` scales it).
 - **Shoot:** LMB / RT fires the rifle (600 rpm, real rounds with drop, 19 damage, x1.6 on the head). RMB / LT aims
   down the sights (1.35x zoom, 58 % move speed, tighter cone). Firing or aiming stops a sprint; after a sprint the
@@ -271,13 +281,16 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
   - With a rail optic mounted, the gun's iron sights (the `irons` part) fold away.
   - Aiming puts the optic's eye point at the eye. A red dot or holographic window then frames about a quarter of
     the view, with only a light zoom (1.2× / 1.25×).
-  - The crosshair fades out over the first third of aiming.
+  - First person the crosshair fades out over the first third of aiming (the sights take over) and comes back as the
+    gun comes down; third person it stays while aiming; the scope view replaces it with the scope's reticle.
 - **Loadout (inventory):** I / Tab (View on the gamepad). Weapons and the outer layers (coat, rig) on the left,
   armour (head, chest, hands, legs, feet) on the right, the player in the middle as they stand (drag to turn; the
   body button switches male / female). Click a slot: its grid of everything owned (icons in rarity colours, NEW and
   locked marks) and the hovered item's details (stats against the equipped one, perks, armour). Equip / wear (E, or
   click the selected item again), Lock (L), Dismantle (X twice, +alloy), Esc backs out. Armour pieces are the
-  players' wardrobe pieces (the Orion set from the owner's concept sheet is worn by default). Saved in
+  players' wardrobe pieces (the Orion set from the owner's concept sheet is worn by default). Every armour slot but
+  head gear and the outer layer (coat) always has a piece on: pieces swap, never come off (the worn one reads WORN).
+  Pieces from older outfits are deleted when a save loads, and the new default goes on in their place. Saved in
   `Saved/SaveGames/ShatteredOrbit.sav` (delete it for a fresh profile).
 - **Loot:** kills pay credits and xp; 35 % leave ammo, 15 % a loot core glowing in its rarity colour (a light shaft
   from Rare up). Walk over it: the core becomes a rolled weapon around your power, announced in the feed on the right.
@@ -316,7 +329,7 @@ Open `ShatteredOrbit.uproject` (L_TestRange opens), press Play.
 |---|---|
 | `ShatteredOrbit` (primary) | `ASOGameMode` (HUD, respawn after 4 s), `ASOPlayerController` (adds `IMC_Default`, `SOCaptureSeries`), `ASOPlayerState`, `USOGameInstance`, tests |
 | `SOCore` | `LogShatteredOrbit`, `USOGameUserSettings` (look + graphics settings, `ApplyGraphics()`) |
-| `SOCharacter` | `ASOCharacter` (weapon, ADS, recoil, body + clips), `USOCharacterMovementComponent` (sprint, ADS speed, coyote, slide, mantle, saved moves), `USOLookComponent`, `USOViewmodelComponent` (the gun holds: first person locked to the kicked eye, third person kept in front of the body; hip / ADS, sway, bob, kick, sprint, reload offsets), `USOLocomotionAnimInstance` (native blend of the Blender clips, no anim blueprint; stance, head aim and two-bone arm IK onto the gun's grips) |
+| `SOCharacter` | `ASOCharacter` (weapon, ADS, recoil, body + clips), `USOCharacterMovementComponent` (sprint, ADS speed, coyote, slide, mantle, saved moves), `USOLookComponent`, `USOViewmodelComponent` (the gun holds: first person locked to the kicked eye, third person the body's own shouldered hold; hip / ADS, sway, bob, kick, sprint, reload offsets), `USOLocomotionAnimInstance` (native blend of the Blender clips, no anim blueprint; stance, head aim and two-bone arm IK onto the gun's grips) |
 | `SOCombat` | GAS: `USOAttributeSet` (health, shield, incoming damage), `USOAbilitySystemComponent` (shield regen), `USOGameplayEffect_Damage`, `USOCombatStatics` (damage, factions, death + noise events); `ASOCombatCharacter` (base for player and creatures), `USOWeaponData`, `ASOWeapon` (server-authoritative trigger / ammo / reload), `USOGunRigComponent` (posable gun, optics, finish / rarity tint; hand grips per anchor for the arm IK), `USOLootLibrary` + `USOLootTables` (rolls, stats, names, drops, reliquary pool), `USOInventoryComponent` (vault, slots, save), `ASOLootPickup`, `ASOReliquary`, `USOLootSubsystem` (kill drops), `ISOInteractable`, `SOReload` (reload.js keyframe port), `USOProjectileSubsystem` (rounds with drop on the SOBullet channel), `USOFxSubsystem` (instanced-card particles, decals, flash lights), `USOSoundLibrary` (named sounds, range presets) |
 | `SOAI` | `ASOEnemy` (stalker), `ASOEnemyAIController` (sight / hearing / chase / melee), `ASOEnemySpawner` |
 | `SOWorld` | `ASONexusCity` (the big city from the plan data: tiles, instanced buildings with per-lot custom data, lamps, stations, landmarks; road graph with lanes), `USOTimeOfDaySubsystem` skeleton (rotates a directional light tagged `Sun`), `ASOMapInfo` (area name, map picture by an orthographic top-down capture, `WorldToMap`, the area list), `ASOMapPoint` (map places, fast travel, area gates) |

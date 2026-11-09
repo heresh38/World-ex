@@ -18,6 +18,11 @@ const TArray<FName>& USOWardrobeData::ArmourSlots()
 	return Slots;
 }
 
+bool USOWardrobeData::IsOptionalSlot(FName Slot)
+{
+	return Slot == TEXT("head") || Slot == TEXT("outer");
+}
+
 FText USOWardrobeData::SlotLabel(FName Slot)
 {
 	static const TMap<FName, FText> Labels = {

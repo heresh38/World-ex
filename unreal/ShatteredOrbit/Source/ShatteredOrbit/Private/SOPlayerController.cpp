@@ -294,6 +294,58 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 6)
+	{
+		// Aiming (files a1..a17): the third-person holds (rifle, pistol, sniper) from the shoulder camera, the side
+		// and the front, hip and aimed; the scope view in both views; the crosshair rules.
+		auto Equip = [Hero](const TCHAR* Arch, const TCHAR* Sight)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(Arch));
+				FSOWeaponInstance W = USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng);
+				W.Sight = Sight;
+				H->EquipInstance(W);
+			}
+		};
+		auto Own = [this, Hero]() { if (ASOCharacter* H = Hero()) { SetViewTarget(H); } };
+		Do(4.0f, [=]() { Look(0.0f); View(ESOViewMode::ThirdPerson); Equip(TEXT("rifle"), TEXT("default")); });
+		Snap(1.2f, TEXT("a1_tp_rifle_hip"));
+		Act([=]() { Aim(true); });
+		Snap(0.8f, TEXT("a2_tp_rifle_ads"));
+		Act([=]() { Orbit(90.0f, 170.0f, 15.0f); });
+		Snap(0.4f, TEXT("a3_tp_rifle_ads_side"));
+		Act([=]() { Orbit(35.0f, 190.0f, 25.0f); });
+		Snap(0.4f, TEXT("a4_tp_rifle_ads_front"));
+		Act([=]() { Aim(false); });
+		Snap(0.8f, TEXT("a5_tp_rifle_hip_front"));
+		Act([=]() { Orbit(90.0f, 170.0f, 15.0f); });
+		Snap(0.4f, TEXT("a6_tp_rifle_hip_side"));
+		Act([=]() { Own(); Look(-35.0f); });
+		Snap(0.8f, TEXT("a7_tp_rifle_look_down"));
+		Act([=]() { Look(30.0f); });
+		Snap(0.8f, TEXT("a8_tp_rifle_look_up"));
+		Act([=]() { Look(0.0f); Equip(TEXT("pistol"), TEXT("default")); });
+		Snap(1.2f, TEXT("a9_tp_pistol_hip"));
+		Act([=]() { Aim(true); });
+		Snap(0.8f, TEXT("a10_tp_pistol_ads"));
+		Act([=]() { Orbit(90.0f, 170.0f, 15.0f); });
+		Snap(0.4f, TEXT("a11_tp_pistol_ads_side"));
+		Act([=]() { Aim(false); Own(); Equip(TEXT("bolt"), TEXT("x8")); });
+		Snap(1.2f, TEXT("a12_tp_sniper_hip"));
+		Act([=]() { Aim(true); });
+		Snap(0.15f, TEXT("a13_tp_sniper_shouldering"));
+		Snap(0.8f, TEXT("a14_tp_sniper_scope"));
+		Act([=]() { Aim(false); View(ESOViewMode::FirstPerson); });
+		Snap(0.8f, TEXT("a15_fp_sniper_hip"));
+		Act([=]() { Aim(true); });
+		Snap(0.9f, TEXT("a16_fp_sniper_scope"));
+		Act([=]() { Aim(false); });
+		Snap(0.6f, TEXT("a17_fp_unscoped_crosshair_back"));
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 2)
 	{
 		// Loadout screen and both bodies only (files l3..l6, p1..p5).

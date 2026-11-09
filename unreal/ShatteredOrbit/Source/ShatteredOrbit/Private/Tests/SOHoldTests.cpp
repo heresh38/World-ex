@@ -209,4 +209,118 @@ bool FSORackHandTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace SOTest
+{
+	USOWeaponData* LoadGun(const TCHAR* Name)
+	{
+		return LoadObject<USOWeaponData>(nullptr, *FString::Printf(TEXT("/Game/Weapons/%s/DA_%s.DA_%s"), Name, Name, Name));
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOThirdPersonShoulderTest, "ShatteredOrbit.Hold.ThirdPersonShouldered", SOTest::Flags)
+bool FSOThirdPersonShoulderTest::RunTest(const FString& Parameters)
+{
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	ASOCharacter* Player = SOTest::SpawnArmedPlayer(W);
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	Player->SetViewMode(ESOViewMode::ThirdPerson);
+	USkeletalMeshComponent* Body = Player->GetMesh();
+	for (const TCHAR* Name : { TEXT("Rifle"), TEXT("Bolt"), TEXT("Dmr"), TEXT("Sniper"), TEXT("Pistol") })
+	{
+		USOWeaponData* Data = SOTest::LoadGun(Name);
+		if (!TestNotNull(FString::Printf(TEXT("%s data"), Name), Data))
+		{
+			continue;
+		}
+		ASOWeapon* Gun = Player->EquipWeapon(Data);
+		W.Run(0.7f);
+		const bool bHandgun = Gun->GetThirdPersonRig()->IsHandgun();
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			if (Pass == 1)
+			{
+				Player->HandleAimPressed();
+				W.Run(0.8f);
+			}
+			const TCHAR* When = Pass ? TEXT("aimed") : TEXT("hip");
+			const USOGunRigComponent* Rig = Gun->GetThirdPersonRig();
+			const FTransform R = Rig->GetComponentTransform();
+			const FBox B = Rig->GetRigBounds();
+			// the head (a 9 cm ball round the skull's middle) never meets the gun
+			const FVector Head = Body->GetBoneLocation(TEXT("head")) + FVector(0.0f, 0.0f, 9.0f);
+			const float Clear = FMath::Sqrt(B.ComputeSquaredDistanceToPoint(R.InverseTransformPosition(Head)));
+			TestTrue(FString::Printf(TEXT("%s %s: the gun stays clear of the head (%.1f cm)"), Name, When, Clear), Clear > 9.0f);
+			// below the eyes, never at head height
+			const float Below = Player->GetEyeTransform(false).GetLocation().Z - R.GetLocation().Z;
+			TestTrue(FString::Printf(TEXT("%s %s: held below the eyes (%.1f cm)"), Name, When, Below), Below > 10.0f);
+			if (!bHandgun)
+			{
+				// the butt in the right shoulder pocket
+				const FVector Butt = R.TransformPosition(FVector(B.Min.X, 0.0f, 0.0f));
+				const float ToShoulder = FVector::Dist(Butt, Body->GetBoneLocation(TEXT("upperarm_R")));
+				TestTrue(FString::Printf(TEXT("%s %s: butt at the shoulder (%.1f cm from the joint)"), Name, When, ToShoulder), ToShoulder < 15.0f);
+				const float Right = Player->GetActorTransform().InverseTransformPosition(Butt).Y;
+				TestTrue(FString::Printf(TEXT("%s %s: on the right side (%.1f cm)"), Name, When, Right), Right > 5.0f);
+			}
+			// both hands still on the gun
+			FTransform HR, HL;
+			if (Rig->GetHandTargets(HR, HL))
+			{
+				TestTrue(FString::Printf(TEXT("%s %s: firing hand on the grip"), Name, When), FVector::Dist(Body->GetBoneLocation(TEXT("hand_R")), HR.GetLocation()) < 1.5f);
+				TestTrue(FString::Printf(TEXT("%s %s: support hand on the gun"), Name, When), FVector::Dist(Body->GetBoneLocation(TEXT("hand_L")), HL.GetLocation()) < 2.5f);
+			}
+		}
+		Player->HandleAimReleased();
+		W.Run(0.4f);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOScopeZoomTest, "ShatteredOrbit.Aim.ScopesZoom", SOTest::Flags)
+bool FSOScopeZoomTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	ASOCharacter* Player = SOTest::SpawnArmedPlayer(W);
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	const float Hip = Player->GetHipFov();
+	for (const TCHAR* Name : { TEXT("Sniper"), TEXT("Bolt"), TEXT("Dmr") })
+	{
+		USOWeaponData* Data = SOTest::LoadGun(Name);
+		if (!TestNotNull(FString::Printf(TEXT("%s data"), Name), Data))
+		{
+			continue;
+		}
+		ASOWeapon* Gun = Player->EquipWeapon(Data);
+		W.Run(0.6f);
+		TestTrue(FString::Printf(TEXT("%s is scoped"), Name), Gun->IsScoped());
+		const float Zoom = Gun->GetStats().Zoom;
+		TestTrue(FString::Printf(TEXT("%s magnifies (%.1fx)"), Name, Zoom), Zoom >= 4.0f);
+		for (const ESOViewMode Mode : { ESOViewMode::FirstPerson, ESOViewMode::ThirdPerson })
+		{
+			Player->SetViewMode(Mode);
+			Player->HandleAimPressed();
+			W.Run(0.9f);
+			const TCHAR* View = Mode == ESOViewMode::FirstPerson ? TEXT("first person") : TEXT("third person");
+			TestEqual(FString::Printf(TEXT("%s, %s: the eye zooms by the magnification"), Name, View),
+				Player->GetFirstPersonCamera()->FieldOfView, Hip / Zoom, 0.2f);
+			TestTrue(FString::Printf(TEXT("%s, %s: the shoulder camera never zooms onto the back"), Name, View),
+				Player->GetThirdPersonCamera()->FieldOfView >= Hip / Player->ThirdPersonMaxZoom - 0.2f);
+			Player->HandleAimReleased();
+			W.Run(0.5f);
+			TestEqual(FString::Printf(TEXT("%s, %s: unscoped back to the hip view"), Name, View), Player->GetFirstPersonCamera()->FieldOfView, Hip, 0.5f);
+		}
+	}
+	return true;
+}
+
 #endif

@@ -108,6 +108,10 @@ bool USOInventoryComponent::EquipArmor(const FString& Uid)
 	{
 		return false;
 	}
+	if (Piece->bEquipped && !USOWardrobeData::IsOptionalSlot(Piece->Slot))
+	{
+		return false; // a required slot is never emptied: wearing another piece swaps it instead
+	}
 	const bool bWear = !Piece->bEquipped;
 	for (FSOArmorInstance& A : Armor)
 	{
@@ -130,23 +134,66 @@ bool USOInventoryComponent::SetBody(FName NewBody)
 	}
 	Body = NewBody;
 	GrantWardrobe(false);
-	// keep wearing what the new body has; anything else falls back to its default
-	if (const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body))
-	{
-		for (const FName Slot : USOWardrobeData::ArmourSlots())
-		{
-			if (!GetEquippedArmor(Slot))
-			{
-				const FName Want = Wardrobe->Defaults.FindRef(Slot);
-				if (FSOArmorInstance* A = Armor.FindByPredicate([&](const FSOArmorInstance& X) { return X.Slot == Slot && X.Item == Want; }))
-				{
-					A->bEquipped = true;
-				}
-			}
-		}
-	}
+	Dress(); // keep wearing what the new body has; every required slot that is empty gets its default
 	Changed(false, true);
 	return true;
+}
+
+void USOInventoryComponent::RestoreArmor(const TArray<FSOArmorInstance>& Saved)
+{
+	Armor = Saved;
+	GrantWardrobe(Armor.Num() == 0); // version 1 saves had no armour: the wardrobe, wearing its defaults
+	Dress();                         // older outfits are gone; every required slot is worn
+}
+
+void USOInventoryComponent::Dress()
+{
+	const USOWardrobeData* Male = USOWardrobeData::Get(TEXT("male"));
+	const USOWardrobeData* Female = USOWardrobeData::Get(TEXT("female"));
+	TSet<FName> Replaced; // slots whose worn piece was an old one: the new default goes on, optional slots included
+	if (Male || Female)
+	{
+		// pieces that exist in neither body's wardrobe any more (an older outfit) are gone from the game
+		Armor.RemoveAll([&](const FSOArmorInstance& A)
+		{
+			const bool bGone = !(Male && Male->Find(A.Slot, A.Item)) && !(Female && Female->Find(A.Slot, A.Item));
+			if (bGone && A.bEquipped)
+			{
+				Replaced.Add(A.Slot);
+			}
+			return bGone;
+		});
+	}
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	if (!Wardrobe)
+	{
+		return;
+	}
+	for (const FName Slot : USOWardrobeData::ArmourSlots())
+	{
+		const bool bOptional = USOWardrobeData::IsOptionalSlot(Slot);
+		if ((bOptional && !Replaced.Contains(Slot)) || GetEquippedArmor(Slot))
+		{
+			continue;
+		}
+		const FName Want = Wardrobe->Defaults.FindRef(Slot);
+		FSOArmorInstance* Pick = Armor.FindByPredicate([&](const FSOArmorInstance& X) { return X.Slot == Slot && X.Item == Want; });
+		if (!Pick && !bOptional) // no default for this slot: any piece this body can wear
+		{
+			Pick = Armor.FindByPredicate([&](const FSOArmorInstance& X) { return X.Slot == Slot && Wardrobe->Find(X.Slot, X.Item); });
+		}
+		if (Pick)
+		{
+			for (FSOArmorInstance& A : Armor)
+			{
+				if (A.Slot == Slot)
+				{
+					A.bEquipped = false;
+				}
+			}
+			Pick->bEquipped = true;
+		}
+	}
 }
 
 void USOInventoryComponent::GrantWardrobe(bool bWearDefaults)
@@ -426,6 +473,7 @@ void USOInventoryComponent::NewProfile()
 	Armor.Reset();
 	Body = TEXT("male");
 	GrantWardrobe(true);
+	Dress();
 	// state.js newSave: the three starters (names as the browser build gives them)...
 	struct FStarter { const TCHAR* Arch; int32 Rarity; const TCHAR* Name; };
 	const FStarter Starters[] = { { TEXT("auto"), 1, TEXT("") }, { TEXT("handcannon"), 1, TEXT("") }, { TEXT("rocket"), 0, TEXT("") } };
@@ -487,8 +535,13 @@ bool USOInventoryComponent::LoadProfile()
 	Xp = Save->Xp;
 	Level = FMath::Max(1, Save->Level);
 	Body = USOWardrobeData::Get(Save->Body) ? Save->Body : FName(TEXT("male"));
-	Armor = Save->Armor;
-	GrantWardrobe(Armor.Num() == 0); // version 1 saves had no armour: the wardrobe, wearing its defaults
+	RestoreArmor(Save->Armor);
+	FString Worn;
+	for (const FSOArmorInstance& A : Armor)
+	{
+		Worn += FString::Printf(TEXT(" %s=%s%s"), *A.Slot.ToString(), *A.Item.ToString(), A.bEquipped ? TEXT("*") : TEXT(""));
+	}
+	UE_LOG(LogSOCombat, Log, TEXT("Profile loaded: %s body, %d saved armour pieces -> %d (* worn):%s"), *Body.ToString(), Save->Armor.Num(), Armor.Num(), *Worn);
 	if (!GetEquipped(ActiveSlot))
 	{
 		for (int32 Slot = 0; Slot < NumSlots; ++Slot)

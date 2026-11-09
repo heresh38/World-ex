@@ -201,16 +201,49 @@ bool FSOArmorInventoryTest::RunTest(const FString& Parameters)
 	FSOOutfit Outfit = Inventory->GetOutfit();
 	TestEqual(TEXT("outfit wears the coat"), Outfit.Get(TEXT("outer")), FName(TEXT("orion")));
 	TestNotEqual(TEXT("outfit keeps the hair"), Outfit.Get(TEXT("hair")), FName(TEXT("none")));
-	// wearing the other gloves swaps them; taking them off empties the slot
+	// wearing the other gloves swaps them; a required slot can't be emptied (no undressing)
 	const FSOArmorInstance* Other = Inventory->GetArmor().FindByPredicate([](const FSOArmorInstance& A) { return A.Slot == TEXT("hands") && A.Item != TEXT("orion"); });
 	if (TestNotNull(TEXT("the armoured gloves are owned"), Other))
 	{
 		const FString Uid = Other->Uid;
 		Inventory->EquipArmor(Uid);
 		TestEqual(TEXT("one pair of gloves at a time"), Inventory->GetEquippedArmor(TEXT("hands"))->Uid, Uid);
+		TestFalse(TEXT("the worn gloves can't be taken off"), Inventory->EquipArmor(Uid));
+		TestNotNull(TEXT("still wearing gloves"), Inventory->GetEquippedArmor(TEXT("hands")));
+	}
+	// the outer layer is optional: it comes off
+	if (const FSOArmorInstance* Worn = Inventory->GetEquippedArmor(TEXT("outer")))
+	{
+		const FString Uid = Worn->Uid;
+		TestTrue(TEXT("the coat comes off"), Inventory->EquipArmor(Uid));
+		TestEqual(TEXT("outfit without a coat"), Inventory->GetOutfit().Get(TEXT("outer")), FName(TEXT("none")));
 		Inventory->EquipArmor(Uid);
-		TestNull(TEXT("taken off"), Inventory->GetEquippedArmor(TEXT("hands")));
-		TestEqual(TEXT("outfit without gloves"), Inventory->GetOutfit().Get(TEXT("hands")), FName(TEXT("none")));
+	}
+	// an old save: the previous outfit's pieces (worn) are gone and the new ones go on, the coat included
+	{
+		TArray<FSOArmorInstance> Old;
+		for (const TCHAR* Slot : { TEXT("top"), TEXT("outer"), TEXT("feet") })
+		{
+			FSOArmorInstance& A = Old.AddDefaulted_GetRef();
+			A.Uid = FString::Printf(TEXT("old-%s"), Slot);
+			A.Slot = Slot;
+			A.Item = TEXT("old_outfit_piece");
+			A.bEquipped = true;
+		}
+		USOInventoryComponent* Loaded = NewObject<USOInventoryComponent>();
+		Loaded->bPersist = false;
+		Loaded->NewProfile();
+		Loaded->RestoreArmor(Old);
+		TestFalse(TEXT("old pieces are deleted"), Loaded->GetArmor().ContainsByPredicate([](const FSOArmorInstance& A) { return A.Item == TEXT("old_outfit_piece"); }));
+		const FSOOutfit Fresh = Loaded->GetOutfit();
+		for (const FName Slot : USOWardrobeData::ArmourSlots())
+		{
+			const FName Default = USOWardrobeData::Get(TEXT("male"))->Defaults.FindRef(Slot);
+			if (!Default.IsNone() && Slot != TEXT("head"))
+			{
+				TestEqual(FString::Printf(TEXT("old save spawns in the new %s"), *Slot.ToString()), Fresh.Get(Slot), Default);
+			}
+		}
 	}
 	// the female body: her pieces are owned too and her defaults fill the slots
 	TestTrue(TEXT("switch body"), Inventory->SetBody(TEXT("female")));

@@ -98,6 +98,9 @@ public:
 
 	/** Armour slots in inventory order: head, top, vest, outer, hands, legs, feet. */
 	static const TArray<FName>& ArmourSlots();
+	/** Slots that may be left empty (head gear, the outer layer); every other armour slot always has a piece on,
+	 *  so a player can swap pieces but never be undressed. */
+	static bool IsOptionalSlot(FName Slot);
 
 	/** Head, Chest, Rig, Coat, Hands, Legs, Feet. */
 	static FText SlotLabel(FName Slot);

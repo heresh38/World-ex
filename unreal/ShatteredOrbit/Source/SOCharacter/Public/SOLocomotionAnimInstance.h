@@ -70,6 +70,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
 	float Lean = 0.0f;
+	float HeadCant = 0.0f;   // degrees: aiming a long gun in third person, the head leans onto the stock
 	FTransform RightTarget;
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;
@@ -165,6 +166,7 @@ public:
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
 	float Lean = 0.0f;
+	float HeadCant = 0.0f;   // degrees: aiming a long gun in third person, the head leans onto the stock
 	FTransform RightTarget;
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;

@@ -1,6 +1,8 @@
 #include "SOViewmodelComponent.h"
 
+#include "AnimationRuntime.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "SOCharacter.h"
 #include "SOCharacterMovementComponent.h"
 #include "SOGunRigComponent.h"
@@ -153,17 +155,119 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const FTransform Eye = Character->GetEyeTransform(true);
 	SetWorldTransform(Local * Eye);
 
-	// Third person: the same hold at the character's own eyes; looking down pushes the hip hold forward so the gun
-	// stays in front of the chest instead of sinking into it.
+	// Third person: the body's own hold (the first-person one is built round the camera's eye and would put the gun
+	// at head height, or through the head when aiming). Long guns: the butt in the right shoulder pocket, the bore on
+	// the crosshair's point; aiming shoulders it a little higher and nearer the cheek (the head cants onto the stock,
+	// USOLocomotionAnimInstance). Handguns: out in both hands in front of the chest. The reload choreography, kick,
+	// raise, sprint carry and mantle offsets ride on top; the bob and sway stay out (the body animates).
 	if (USceneComponent* ThirdPerson = Character->GetThirdPersonHold())
 	{
-		FTransform EyeTP = Eye;
-		EyeTP.AddToTranslation(FVector(0.0f, 0.0f, ThirdPersonEyeLift));
-		FTransform World = Local * EyeTP;
-		const float Pitch = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
-		const float Down = FMath::Max(0.0f, -FMath::Sin(FMath::DegreesToRadians(Pitch)));
-		const FVector Flat = FRotator(0.0f, Eye.Rotator().Yaw, 0.0f).Vector();
-		World.AddToTranslation(Flat * ThirdPersonDownReach * Down * (1.0f - Ads));
-		ThirdPerson->SetWorldTransform(World);
+		const float TX = RunT * 0.01f + G[0] + InX, TY = -Lower * 0.35f + RunT * 0.035f + G[1] + InY;
+		const float TZ = KickBack * (1.0f - Ads * 0.5f) + RunT * 0.03f + G[2];
+		const float PX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch;
+		const float PY = RunT * 0.55f + G[4], PZ = G[5] + RunT * 0.5f + InRoll;
+		const FTransform Ride(FRotator(FMath::RadiansToDegrees(PX), FMath::RadiansToDegrees(-PY), FMath::RadiansToDegrees(-PZ)),
+			FVector(-TZ * 100.0f, TX * 100.0f, TY * 100.0f));
+		ThirdPerson->SetWorldTransform(Ride * ThirdPersonHoldTransform(Character, bHandgun, Dt));
 	}
+}
+
+bool USOViewmodelComponent::GetShoulderPoints(const ASOCharacter* Character, FVector& OutPocket, FVector& OutChest) const
+{
+	// Actor space (X forward, Y right, Z up). From the body's last animated pose, so the stance (aim pitch, blade,
+	// lean, the clip) carries the shoulder; the pocket's offset turns with the chest.
+	OutPocket = DefaultPocket;
+	OutChest = FVector(DefaultPocket.X, 0.0f, DefaultPocket.Z + 4.0f);
+	const USkeletalMeshComponent* Body = Character->GetMesh();
+	const USkeletalMesh* Mesh = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+	if (!Mesh)
+	{
+		return false;
+	}
+	const int32 ArmR = Body->GetBoneIndex(TEXT("upperarm_R")), ArmL = Body->GetBoneIndex(TEXT("upperarm_L"));
+	const int32 Chest = Body->GetBoneIndex(TEXT("chest"));
+	const TArray<FTransform>& CS = Body->GetComponentSpaceTransforms();
+	if (ArmR == INDEX_NONE || ArmL == INDEX_NONE || Chest == INDEX_NONE || !CS.IsValidIndex(FMath::Max3(ArmR, ArmL, Chest)))
+	{
+		return false;
+	}
+	const FTransform ToActor = Body->GetRelativeTransform(); // the body hangs off the capsule (the actor's root)
+	const FTransform RefChest = FAnimationRuntime::GetComponentSpaceTransformRefPose(Mesh->GetRefSkeleton(), Chest);
+	const FQuat ChestTurn = CS[Chest].GetRotation() * RefChest.GetRotation().Inverse();
+	const FVector OffsetCS = ToActor.InverseTransformVectorNoScale(PocketFromShoulder);
+	OutPocket = ToActor.TransformPosition(CS[ArmR].GetLocation() + ChestTurn.RotateVector(OffsetCS / ToActor.GetScale3D()));
+	OutChest = ToActor.TransformPosition((CS[ArmR].GetLocation() + CS[ArmL].GetLocation()) * 0.5f);
+	return true;
+}
+
+FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* Character, bool bHandgun, float Dt)
+{
+	const FTransform Actor = Character->GetActorTransform();
+	FVector Pocket, Chest;
+	GetShoulderPoints(Character, Pocket, Chest);
+	const ASOWeapon* Weapon = Character->GetWeapon();
+	const USOGunRigComponent* Rig = Weapon ? Weapon->GetThirdPersonRig() : nullptr;
+
+	// Where the gun points: the crosshair's point, never nearer than a few metres (a wall at arm's length would
+	// swing the muzzle sideways), eased so a trace flicking between near and far things never snaps the gun.
+	const FVector Eye = Character->GetEyeTransform(true).GetLocation();
+	FVector Target = Character->GetAimTarget();
+	const FVector ToTarget = Target - Eye;
+	if (ToTarget.SizeSquared() < FMath::Square(ThirdPersonMinAimDistance))
+	{
+		Target = Eye + Character->GetEyeTransform(true).GetRotation().GetForwardVector() * ThirdPersonMinAimDistance;
+	}
+	FVector Start;
+	const FBox B = Rig && Rig->IsBuilt() ? Rig->GetRigBounds() : FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
+	const FVector Butt(B.Min.X + 1.0f, 0.0f, FMath::Clamp(ButtHeight, B.Min.Z + 4.0f, B.Max.Z - 4.0f));
+	if (bHandgun)
+	{
+		Start = Actor.TransformPosition(Chest);
+	}
+	else
+	{
+		Start = Actor.TransformPosition(Pocket + FMath::Lerp(FVector::ZeroVector, PocketAimShift, Ads));
+	}
+	const FVector WantDir = (Target - Start).GetSafeNormal(1e-4f, Character->GetEyeTransform(true).GetRotation().GetForwardVector());
+	if (!bHoldDirValid || Dt > 0.2f)
+	{
+		HoldDir = WantDir;
+		bHoldDirValid = true;
+	}
+	else
+	{
+		HoldDir = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(HoldDir, WantDir), FMath::Min(1.0f, Dt * 30.0f)).RotateVector(HoldDir).GetSafeNormal();
+	}
+	const FQuat Aim = HoldDir.Rotation().Quaternion(); // level roll
+	if (bHandgun)
+	{
+		// both arms out, the gun a little right of the middle, rising toward the eye line when aiming
+		const FVector Out = FMath::Lerp(HandgunHold, HandgunAimHold, Ads);
+		return FTransform(Aim, Start + Aim.RotateVector(Out));
+	}
+	FTransform Hold(Aim, Start - Aim.RotateVector(Butt));
+
+	// A long forend can sit past the support arm's reach from the left shoulder: the gun then comes in toward the
+	// chest (the butt rides inward from the pocket) just enough for the hand to stay on it. Not while reloading (the
+	// off hand is away at the mag or the bolt).
+	const USkeletalMeshComponent* Body = Character->GetMesh();
+	const USceneComponent* HoldComp = Character->GetThirdPersonHold();
+	FTransform HandR, HandL;
+	const int32 Sh = Body ? Body->GetBoneIndex(TEXT("upperarm_L")) : INDEX_NONE;
+	const int32 El = Body ? Body->GetBoneIndex(TEXT("forearm_L")) : INDEX_NONE;
+	const int32 Wr = Body ? Body->GetBoneIndex(TEXT("hand_L")) : INDEX_NONE;
+	if (Rig && HoldComp && Sh != INDEX_NONE && El != INDEX_NONE && Wr != INDEX_NONE && !Weapon->IsReloading() && Rig->GetHandTargets(HandR, HandL))
+	{
+		const FVector LeftInHold = HoldComp->GetComponentTransform().InverseTransformPosition(HandL.GetLocation());
+		const FVector Shoulder = Body->GetBoneLocation(Body->GetBoneName(Sh));
+		const float Reach = 0.97f * (FVector::Dist(Shoulder, Body->GetBoneLocation(Body->GetBoneName(El)))
+			+ FVector::Dist(Body->GetBoneLocation(Body->GetBoneName(El)), Body->GetBoneLocation(Body->GetBoneName(Wr))));
+		const FVector Left = Hold.TransformPosition(LeftInHold);
+		const float Over = FVector::Dist(Left, Shoulder) - Reach;
+		if (Over > 0.0f)
+		{
+			Hold.AddToTranslation((Shoulder - Left).GetSafeNormal() * FMath::Min(Over, 15.0f));
+		}
+	}
+	return Hold;
 }

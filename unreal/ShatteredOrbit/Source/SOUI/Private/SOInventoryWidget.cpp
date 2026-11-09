@@ -1027,8 +1027,10 @@ void USOInventoryWidget::FillArmorDetails(const FSOArmorInstance& A)
 	UTextBlock* Note = Text(T, TEXT("Armour perks come with the world's later chapters: for now every piece is its look and its armour."), 11, Dim);
 	Note->SetAutoWrapText(true);
 	Details->AddChildToVerticalBox(Note);
-	EquipButton->SetIsEnabled(true);
-	EquipLabel->SetText(FText::FromString(A.bEquipped ? TEXT("TAKE OFF  [E]") : TEXT("WEAR  [E]")));
+	// a required slot can be swapped but never emptied: what is worn there shows as WORN
+	const bool bRequired = !USOWardrobeData::IsOptionalSlot(A.Slot);
+	EquipButton->SetIsEnabled(!(A.bEquipped && bRequired));
+	EquipLabel->SetText(FText::FromString(A.bEquipped ? (bRequired ? TEXT("WORN") : TEXT("TAKE OFF  [E]")) : TEXT("WEAR  [E]")));
 	LockButton->SetIsEnabled(false);
 	DismantleButton->SetIsEnabled(false);
 	LockLabel->SetText(FText::FromString(TEXT("LOCK  [L]")));

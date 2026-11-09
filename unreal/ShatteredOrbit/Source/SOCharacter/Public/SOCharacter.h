@@ -100,6 +100,10 @@ public:
 	/** Where the player looks, without recoil: the control rotation (or the replicated view for others). */
 	FRotator GetAimRotation() const;
 
+	/** The point the crosshair is on: third person, what the shoulder camera's centre ray hits; first person (and
+	 *  looking through a scope), straight along the kicked view. */
+	FVector GetAimTarget() const;
+
 	//~ ASOCombatCharacter
 	virtual FVector GetAimOrigin() const override;
 	virtual FVector GetAimDirection() const override;
@@ -152,6 +156,23 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float FovInterpSpeed = 16.0f;
+
+	/** Third person, fully aimed: the shoulder camera comes in to this arm length and offset (hip: 320 / 0,55,15). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float HipArmLength = 320.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	FVector HipSocketOffset = FVector(0.0f, 55.0f, 15.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float AimArmLength = 175.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	FVector AimSocketOffset = FVector(0.0f, 52.0f, 8.0f);
+
+	/** Third person zooms at most this much while aiming (a magnified optic zooms at the eye, in the scope view). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float ThirdPersonMaxZoom = 1.35f;
 
 	/** Field of view of the first-person arms / gun (independent of the world FOV). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
@@ -253,8 +274,15 @@ public:
 	/** Server: hold the copy the inventory has in the active slot (stores the current one's ammo first). */
 	void EquipFromInventory();
 
-	/** Fully aimed through magnified glass: the scope picture replaces the gun (HUD draws it). */
+	/** Fully aimed through magnified glass (either view; third person cuts to the eye): the scope picture replaces
+	 *  the gun (HUD draws it). */
 	bool IsScopeView() const { return bScopeView; }
+
+	/** The crosshair is the shoulder camera's centre (third person, not looking through a scope). */
+	bool UsesShoulderCrosshair() const;
+
+	/** The hip field of view (the player's setting, degrees). */
+	float GetHipFov() const;
 
 	/** The interactable in reach that Interact would use (nearest one in front), or null. */
 	AActor* FindInteractable() const;
@@ -356,7 +384,6 @@ protected:
 
 private:
 	void ApplyViewMode();
-	float GetHipFov() const;
 	float GetTargetEyeOffset() const;
 
 	/** Eye position relative to the capsule centre (interpolated across crouch changes). */
