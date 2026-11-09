@@ -155,16 +155,16 @@ def place_head(cage, body, T, log=print):
                 placed[v] = True
         return R
 
-    hu, hl, wf = .0060 * hs, .0046 * hs, T["eye_w"] / 2
+    hu, hl, wf = g["eye_hu"], g["eye_hl"], T["eye_w"] / 2
     for side, sx in (("eye_L", 1), ("eye_R", -1)):
         def eye_pt(u, top, W, Hh, Lh, sx=sx):
             ue = u * sx * .94                                   # + = lateral (toward the temple)
             s = math.sqrt(max(0.0, 1 - ue * ue))
             lift = .0008 * hs * ue
-            if top:
-                v = Hh * s * (1 - .10 * ue) + lift
+            if top:                                             # (the same rounded arc as fit.place_features)
+                v = Hh * s ** .8 * (1 - .08 * ue) + lift
             else:
-                v = -Lh * s * (1 + .12 * ue) + lift
+                v = -Lh * s ** .85 * (1 + .10 * ue) + lift
             if ue > 0:                                          # the outer rings fan out more toward the temple
                 W = wf + (W - wf) * 1.7
             return (ec.x * sx + ue * W * sx, ec.z + v)
@@ -176,7 +176,7 @@ def place_head(cage, body, T, log=print):
                 dv = pts[:, 1] - ec.z
                 return ec.y - np.sqrt(np.maximum((er + .0004) ** 2 - du * du - dv * dv, 1e-8))
             return front_y(body, pts[:, 0], pts[:, 1], np.full(len(pts), ec.y, F32))
-        lay(feat[side], 3, [(wf, hu, hl), (wf * 1.10, hu * 1.55, hl * 1.70), (wf * 1.22, hu * 2.20, hl * 2.6)], eye_pt, eye_surface)
+        lay(feat[side], 3, [(wf, hu, hl), (wf * 1.10, hu * 1.40, hl * 1.55), (wf * 1.22, hu * 1.85, hl * 2.2)], eye_pt, eye_surface)
 
     st, mw = g["stomion"], g["mouth_w"]
 

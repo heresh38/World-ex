@@ -123,17 +123,17 @@ def place_features(V, loops, body, T):
             fc = T.get("face", {})
             es, tilt = fc.get("eye_size", 1.0), fc.get("eye_tilt", 1.0)
             w = T["eye_w"] / 2 * es
-            hu, hl = .0060 * g["hs"] * es, .0046 * g["hs"] * es
+            hu, hl = g["eye_hu"] * es, g["eye_hl"] * es
             for k, i in enumerate(loop):
                 a = ang[k]
                 ca, sa = math.cos(a), math.sin(a)
                 # almond: the upper lid's peak a little inward of centre, the lower lid's low point a little outward
                 u = w * ca
                 lift = .0008 * tilt * (u / w)                                  # positive canthal tilt
-                if sa >= 0:
-                    v = hu * sa * (1 - .10 * ca) + lift
+                if sa >= 0:                                                    # rounded: a fuller arc than an almond
+                    v = hu * math.copysign(abs(sa) ** .8, sa) * (1 - .08 * ca) + lift
                 else:
-                    v = hl * sa * (1 + .12 * ca) + lift
+                    v = hl * -abs(sa) ** .85 * (1 + .10 * ca) + lift
                 x = cx + u * sx
                 z = cz + v
                 # the fissure is wider than the globe: laid on it compressed across (the canthi wrap round it)
@@ -275,6 +275,7 @@ def face_keys(o, body_cls, T, log=print):
         D = morph(o, V0, body_cls(Tv), Tv) - Vb
         D[np.linalg.norm(D, axis=1) < 5e-5] = 0
         kb = o.shape_key_add(name="face_" + name, from_mix=False)
+        kb.value = 0.0                                   # off by default (Blender 5 adds new keys at 1.0)
         kb.data.foreach_set("co", (V0 + D).astype(F32).ravel())
         log(f"shape key face_{name}: max move {np.abs(D).max() * 1000:.1f} mm, {int((np.abs(D).sum(1) > 0).sum())} verts")
 
@@ -293,3 +294,52 @@ def eyeballs(body, T, name):
             p.use_smooth = True
         out.append(e)
     return out
+
+
+def eye_sockets(o, eyes, log=print):
+    """closes each eye opening behind the lids: the lid margin is extruded twice, first tucked onto the eyeball (the
+    lids rest on it), then back round it past its widest point, so the corners show skin instead of the inside of
+    the head. Face shape keys move the new rings with their margin vertex (same offset in every key)."""
+    import bmesh
+    me = o.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+    shapes = list(bm.verts.layers.shape.values())
+    basis = bm.verts.layers.shape.get("Basis")
+    added = 0
+    margins = []
+    for e in eyes:
+        c = e.matrix_world.translation.copy()
+        r = max(e.dimensions) / 2
+        edges = [ed for ed in bm.edges if ed.is_boundary and all((v.co - c).length < r * 1.8 for v in ed.verts)]
+        if not edges:
+            continue
+        loop = {v for ed in edges for v in ed.verts}
+        margins.append([list(v.co) for v in loop])
+        prev = loop
+        for k, (shrink, back) in enumerate(((.97, .15), (.90, .55))):
+            res = bmesh.ops.extrude_edge_only(bm, edges=edges)
+            new_v = [g for g in res["geom"] if isinstance(g, bmesh.types.BMVert)]
+            for v in new_v:
+                src = next(ed.other_vert(v) for ed in v.link_edges if ed.other_vert(v) in prev)
+                d = src.co - c
+                # onto the eyeball (k = 0) then behind it: direction toward the back, length a bit under r
+                d.y = d.y + back * r * (1.0 if k else .3)
+                p = c + d.normalized() * r * shrink
+                delta = p - src.co
+                v.co = p
+                for lay in shapes:
+                    v[lay] = src[lay] + delta
+            edges = [g for g in res["geom"] if isinstance(g, bmesh.types.BMEdge) and g.is_boundary]
+            prev = set(new_v)
+            added += len(new_v)
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    for p in me.polygons:
+        p.use_smooth = True
+    import json
+    o["eye_margins"] = json.dumps(margins)                # the lid margins (no longer open edges): the lashes root here
+    o["socket_verts"] = added                             # (the last vertices: rig.py weights the body without them)
+    log(f"eye sockets: {added} vertices behind the lids")

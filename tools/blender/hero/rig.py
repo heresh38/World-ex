@@ -10,7 +10,7 @@ The game's player contract (unreal/ShatteredOrbit: SOLocomotionAnimInstance, SOC
   mesh    B_body: one mesh, one material section per body region (skin__head, skin__neck, skin__chest,
           skin__midriff, skin__pelvis, skin__upperarm, skin__forearm, skin__hand, skin__thigh, skin__shin,
           skin__foot), so worn pieces can hide the regions they cover; the face_* shape keys become morph targets.
-          B_eyes: both eyeballs (eye_white, eye_iris), on the head bone
+          B_eyes: both eyeballs (eye_white, eye_iris, eye_pupil), on the head bone
           B_brows: eyebrows and eyelashes as strand cards (hair__brow, hair__lash; hair.face_hair), on the head bone
   meta    the armature's `worldex` (wardrobe, defaults, regions) for wardrobe.json; no clothing yet
 """
@@ -19,6 +19,7 @@ import math
 import types
 import numpy as np
 import bpy
+import bmesh
 from mathutils import Vector
 import skeleton
 
@@ -130,25 +131,74 @@ def section_body(o, T):
         rs = [reg[v] for v in p.vertices]
         best = max(set(rs), key=rs.count)
         p.material_index = idx[best]
+    lip_tint(o, T)
     # the fit's part groups ("head", "neck", ...) would collide with bone names: drop them before skinning
     for g in list(o.vertex_groups):
         o.vertex_groups.remove(g)
     return reg
 
 
+def lip_tint(o, T):
+    """vertex colour (white = the skin as is): the lips a little rosier and darker round the mouth opening, so the
+    mouth reads at a distance (Unreal's skin multiplies by it)"""
+    from wardrobe import boundary_loops
+    me = o.data
+    P = np.array([v.co for v in me.vertices], np.float32)
+    mouth = None
+    for L in boundary_loops(o):
+        c = P[L].mean(0)
+        if abs(c[0]) < .01 and c[2] < T["eye_z"] - .03:
+            mouth = P[L]
+    col = np.ones((len(P), 4), np.float32)
+    if mouth is not None:
+        c = mouth.mean(0)
+        hw = (mouth[:, 0].max() - mouth[:, 0].min()) / 2 + .002
+        dx = (P[:, 0] - c[0]) / hw
+        dz = P[:, 2] - c[2]
+        dz = np.where(dz > 0, dz / (.0085 if T["sex"] == "male" else .0095), -dz / (.0105 if T["sex"] == "male" else .0115))
+        r = np.sqrt(dx * dx + dz * dz)
+        w = np.clip((1.15 - r) / .35, 0, 1) * (P[:, 1] < c[1] + .008)
+        w = w * w * (3 - 2 * w)
+        lip = np.array((.86, .62, .60) if T["sex"] == "male" else (.82, .52, .52), np.float32)
+        col[:, :3] = 1 - w[:, None] * (1 - lip)
+    # the eyelids drawn in shade: the upper lid's crease (an arc above the opening, higher on her), the lid rims and
+    # a soft shadow in the inner corner
+    if "eye_margins" in o.keys():
+        import json
+        for M in json.loads(o["eye_margins"]):
+            M = np.array(M, np.float32)
+            c = M.mean(0)
+            hw = (M[:, 0].max() - M[:, 0].min()) / 2
+            top = M[:, 2].max() - c[2]
+            dx = (P[:, 0] - c[0]) / (hw * 1.08)
+            front = P[:, 1] < c[1] + .004
+            arc = c[2] + (top + (.0042 if T["sex"] == "male" else .0055)) * np.sqrt(np.clip(1 - dx * dx, 0, 1))
+            crease = np.exp(-((P[:, 2] - arc) / .0012) ** 2) * (np.abs(dx) < 1.05) * front
+            # distance to the lid margin: the rims
+            d = np.min(np.linalg.norm(P[:, None, :] - M[None, ::2, :], axis=2), axis=1)
+            rim = np.exp(-(d / .0016) ** 2) * front
+            shade = np.clip(.30 * crease + .22 * rim, 0, .45)
+            tone = np.array((.62, .46, .44), np.float32)          # a warm shadow, not grey
+            col[:, :3] = col[:, :3] * (1 - shade[:, None] * (1 - tone))
+    attr = me.color_attributes.get("Col") or me.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
+    attr.data.foreach_set("color", col.ravel())
+    me.color_attributes.active_color = attr
+    me.color_attributes.render_color_index = list(me.color_attributes).index(attr)
+
+
 def dress_eyes(eyes, T):
     """eye_white / eye_iris (the cornea's front cap), joined into B_eyes"""
-    white = skin_material("eye_white", (.92, .91, .88))
-    iris = skin_material("eye_iris", (.30, .38, .45))
+    white = skin_material("eye_white", (.86, .84, .80))
+    iris = skin_material("eye_iris", (.20, .12, .06) if T["sex"] == "male" else (.22, .24, .12))   # brown / hazel
+    pupil = skin_material("eye_pupil", (.008, .008, .008))
     for e in eyes:
         e.data.materials.clear()
-        e.data.materials.append(white)
-        e.data.materials.append(iris)
+        for m in (white, iris, pupil):
+            e.data.materials.append(m)
         mw = e.matrix_world
-        c = mw.translation
         for p in e.data.polygons:
-            n = (mw.to_3x3() @ p.normal).normalized()
-            p.material_index = 1 if n.y < -.80 else 0
+            n = (mw.to_3x3() @ p.normal).normalized()     # the pole looks forward: iris ~12 mm across, pupil ~4 mm
+            p.material_index = 2 if n.y < -.985 else (1 if n.y < -.88 else 0)
     bpy.ops.object.select_all(action='DESELECT')
     for e in eyes:
         e.select_set(True)
@@ -186,6 +236,58 @@ def patch_clips(deg):
     return base
 
 
+def heat_weights(o, arm, log=print):
+    """heat (automatic) weights computed on a copy of the body without the eye-socket walls (fit.eye_sockets: closed
+    surfaces tucked behind the lids make the heat solver fail for the whole mesh), then copied back: same vertices
+    one to one, the socket walls and anything left without weights from their nearest weighted vertex"""
+    from mathutils import kdtree
+    n_sock = int(o.get("socket_verts", 0))
+    tmp = o.copy()
+    tmp.data = o.data.copy()
+    bpy.context.scene.collection.objects.link(tmp)
+    if tmp.data.shape_keys:
+        tmp.shape_key_clear()
+    bm = bmesh.new()
+    bm.from_mesh(tmp.data)
+    bm.verts.ensure_lookup_table()
+    if n_sock:
+        bmesh.ops.delete(bm, geom=bm.verts[len(bm.verts) - n_sock:], context='VERTS')
+    # near-coincident vertices and sliver faces (lid corners, lip corners) stall the heat solver
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=.00015)
+    bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=.00005)
+    bm.to_mesh(tmp.data)
+    bm.free()
+    bpy.ops.object.select_all(action='DESELECT')
+    tmp.select_set(True)
+    arm.select_set(True)
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+    names = [g.name for g in tmp.vertex_groups]
+    W = [{names[g.group]: g.weight for g in v.groups if g.weight > 1e-4} for v in tmp.data.vertices]
+    P = [v.co.copy() for v in tmp.data.vertices]
+    bpy.data.objects.remove(tmp)
+    for g in list(o.vertex_groups):
+        o.vertex_groups.remove(g)
+    groups = {nm: o.vertex_groups.new(name=nm) for nm in names}
+    have = [i for i in range(len(W)) if W[i]]
+    if not have:
+        raise RuntimeError("heat weighting failed for the whole body")
+    kd = kdtree.KDTree(len(have))
+    for i in have:
+        kd.insert(P[i], i)
+    kd.balance()
+    filled = 0
+    for v in o.data.vertices:                             # (the copy's vertices moved: matched by position)
+        _, i, dist = kd.find(v.co)
+        filled += dist > 1e-6
+        for nm, x in W[i].items():
+            groups[nm].add([v.index], x, 'REPLACE')
+    o.parent = arm
+    mod = o.modifiers.new("Armature", 'ARMATURE')
+    mod.object = arm
+    log(f"rig: heat weights on {len(W)} vertices, {filled} filled from neighbours")
+
+
 def rig(o, eyes, T, sex, log=print):
     import characters
     o.name = o.data.name = "B_body"
@@ -198,12 +300,8 @@ def rig(o, eyes, T, sex, log=print):
     for bn in arm.data.bones:
         if bn.name == "root" or bn.name.startswith(("ik_", "pole")):
             bn.use_deform = False
-    # skin: automatic (heat) weights on the body; the eyes ride the head
-    bpy.ops.object.select_all(action='DESELECT')
-    o.select_set(True)
-    arm.select_set(True)
-    bpy.context.view_layer.objects.active = arm
-    bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+    # skin: automatic (heat) weights; the eyes ride the head
+    heat_weights(o, arm, log)
     unweighted = sum(1 for v in o.data.vertices if not any(g.weight > 1e-4 for g in v.groups))
     log(f"rig: {len(arm.data.bones)} bones, {unweighted} body vertices without weights")
     eo = dress_eyes(eyes, T)
@@ -230,4 +328,5 @@ def rig(o, eyes, T, sex, log=print):
 def write_glb(path):
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_animations=True, export_morph=True,
                               export_skins=True, export_yup=True, export_apply=False, use_selection=False,
-                              export_extras=True)          # (the armature's `worldex` wardrobe metadata)
+                              export_extras=True,          # (the armature's `worldex` wardrobe metadata)
+                              export_vertex_color='ACTIVE')   # (the body's lip tint)

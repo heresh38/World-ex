@@ -161,6 +161,7 @@ def main():
     if "--nofine" not in flags and "--nokeys" not in flags:
         fit_mod.face_keys(o, shape_mod.Body, T, log=log)                    # face customisation shape keys
     eyes = fit_mod.eyeballs(body, T, f"hero_{sex}")
+    fit_mod.eye_sockets(o, eyes, log=log)                                  # skin behind the lids, round the eyeballs
     if "--rig" in flags or isinstance(flags.get("--glb"), str):           # rigged, with clips, for the game
         import rig as rig_mod
         rig_mod.rig(o, eyes, T, sex, log=log)

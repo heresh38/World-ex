@@ -89,6 +89,13 @@ def import_texture(file_path, dest, name, kind):
     elif kind == "mask":
         tex.set_editor_property("srgb", False)
         tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
+    if "hair" in name.lower():
+        # strand cards: smaller mips keep the strands' alpha coverage (plain averaging thins hair out with distance)
+        try:
+            tex.set_editor_property("do_scale_mips_for_alpha_coverage", True)
+            tex.set_editor_property("alpha_coverage_thresholds", unreal.Vector4(0, 0, 0, 0.5))
+        except Exception as e:  # (older engines)
+            log(f"hair texture {name}: no alpha coverage mips ({e})")
     eal.save_loaded_asset(tex, only_if_is_dirty=False)
     return tex
 
@@ -257,7 +264,7 @@ def hair_material(defaults):
     tex.set_editor_property("texture", defaults["white"])
     tint = E(unreal.MaterialExpressionVectorParameter, -900, 40)
     tint.set_editor_property("parameter_name", "BaseColorTint")
-    tint.set_editor_property("default_value", unreal.LinearColor(0.035, 0.024, 0.018, 1))
+    tint.set_editor_property("default_value", unreal.LinearColor(*HAIR_TONE, 1))
     code = E(unreal.MaterialExpressionCustom, -500, -100)
     code.set_editor_property("code", "float l = saturate((C.r - 0.55) / 0.45); return T * lerp(0.45, 1.9, l * l);")
     code.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
@@ -274,7 +281,7 @@ def hair_material(defaults):
         e.set_editor_property("parameter_name", name)
         e.set_editor_property("default_value", value)
         return e
-    mel.connect_material_property(scalar("Scatter", 0.35, 120), "", unreal.MaterialProperty.MP_METALLIC)     # Hair: Scatter
+    mel.connect_material_property(scalar("Scatter", 0.2, 120), "", unreal.MaterialProperty.MP_METALLIC)      # Hair: Scatter
     mel.connect_material_property(scalar("Specular", 0.3, 200), "", unreal.MaterialProperty.MP_SPECULAR)
     mel.connect_material_property(scalar("Roughness", 0.5, 280), "", unreal.MaterialProperty.MP_ROUGHNESS)
     tangent = E(unreal.MaterialExpressionConstant3Vector, -500, 440)
@@ -285,7 +292,14 @@ def hair_material(defaults):
     if fn:
         dither = E(unreal.MaterialExpressionMaterialFunctionCall, -500, 560)
         dither.set_editor_property("material_function", fn)
-        ok = mel.connect_material_expressions(tex, "A", dither, "Alpha Threshold")
+        # alpha x AlphaGain (clamped) into the dither: strands are thinner than a pixel at a distance, so the raw alpha
+        # alone dithers the hair see-through
+        gain = E(unreal.MaterialExpressionMultiply, -700, 600)
+        mel.connect_material_expressions(tex, "A", gain, "A")
+        mel.connect_material_expressions(scalar("AlphaGain", 1.8, 680), "", gain, "B")
+        sat = E(unreal.MaterialExpressionSaturate, -600, 600)
+        mel.connect_material_expressions(gain, "", sat, "")
+        ok = mel.connect_material_expressions(sat, "", dither, "Alpha Threshold")
         if ok:
             mel.connect_material_property(dither, "", unreal.MaterialProperty.MP_OPACITY_MASK)
     if not ok:
@@ -549,7 +563,7 @@ def stalker_extra(key, m):
     return None
 
 
-HAIR_TONE = (0.035, 0.024, 0.018)     # dark brown (the concept pair); the game may recolour it later
+HAIR_TONE = (0.020, 0.014, 0.010)     # dark brown, near black (the concept pair); the game may recolour it later
 
 
 def player_extra(key, m):

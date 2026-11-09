@@ -61,7 +61,7 @@ def atlas(path, size=1024, seed=3):
                 col[rows, X[rows]] = (shade * (.5 + .5 * t[rows]))[:, None]    # roots darker
     col = np.clip(col, 0, 1)
     img = np.dstack([col, alpha])[::-1]                      # Blender's pixel rows start at the bottom
-    im = bpy.data.images.new("hero_hair_strands", W, H, alpha=True)
+    im = bpy.data.images.new(os.path.splitext(os.path.basename(path))[0], W, H, alpha=True)
     im.pixels.foreach_set(img.astype(np.float32).ravel())
     im.filepath_raw = path
     im.file_format = 'PNG'
@@ -115,7 +115,7 @@ def hairline_band(info, keep, line_z, rnd):
     out = []
     for r, n in pts:
         h = r.z - line_z(r)
-        if h > .016:
+        if h > .016 or (r.y > .02 and h < -.002):       # (no baby hairs down the nape)
             continue
         if rnd.random() < min(1.0, max(.08, (h + .007) / .012)):
             out.append((r, n))
@@ -139,7 +139,7 @@ def grow(scalp, root, nrm, direction, length, lift0, lift1, steps=6, gravity=0.0
         p = p + d * step
         f = k / steps
         if bulge:                                        # full in the middle, pulled tight at the far end (a tie)
-            f = math.sin(math.pi * min(1.0, f) * .9) / math.sin(math.pi * .45)
+            f = math.sin(math.pi * min(1.0, f) ** 1.3)    # zero again at the tie: no ring of lifted tips round it
         lift = lift0 + (lift1 - lift0) * f
         p, n = scalp.surface(p, 0.0)
         pts.append((p + n * lift, n))
@@ -177,9 +177,9 @@ def build(info, T, tex_dir, log=print):
     ez, top = T["eye_z"], T["height"]
     rnd = random.Random(7 if m else 11)
     os.makedirs(tex_dir, exist_ok=True)
-    tex = atlas(os.path.join(tex_dir, "hero_hair_strands.png"))
+    tex = atlas(tex_path(T, "hair_strands"))
     mat_cards = hair_material("hair", tex)
-    mat_cap = hair_material("hair__cap", scalp_texture(os.path.join(tex_dir, "hero_hair_scalp.png")))
+    mat_cap = hair_material("hair__cap", scalp_texture(tex_path(T, "hair_scalp")))
 
     shrink = 0.0
 
@@ -216,16 +216,23 @@ def build(info, T, tex_dir, log=print):
             side = Vector((math.copysign(1, p.x), 0, 0))
             front = max(0.0, -(p.y + .02) / .08)                         # the hairline sweeps back and up
             sides = max(0.0, (abs(p.x) - .045) / .03)
-            return back * 1.0 + up * (.6 * front) - up * (.8 * sides) + side * (.15 * sides)
+            nape = max(0.0, min(1.0, (p.y - .015) / .05))             # behind the ears: straight down the back
+            d = back * 1.0 + up * (.6 * front) - up * (.8 * sides) + side * (.15 * sides)
+            return d * (1 - nape) - up * nape          # (no side component: it would part the back down the middle)
         def put(root, nrm, L, lift0, lift1, w, col, guide_dir=None, steps=6, twist=0.0, tip=.55):
-            pts = grow(scalp, root, nrm, guide_dir or direction, L, lift0, lift1, steps=steps)
+            if root.y > .02 and root.z < ez + .03:          # the nape is cut close: it lies on the neck
+                k = max(0.0, min(1.0, (ez + .03 - root.z) / .04))
+                lift0, lift1 = lift0 * (1 - .6 * k), (lift0 + (lift1 - lift0) * (1 - k)) * (1 - .6 * k)
+            # behind the ears the cut ends at the hairline: nothing hangs down the neck
+            pts = grow(scalp, root, nrm, guide_dir or direction, L, lift0, lift1, steps=steps,
+                       stop=lambda p: p.y > .0 and p.z < line_z(p) - .003)
             if len(pts) > 2:
                 card(bm, uv, pts, w, col, tip_width=tip, twist=twist)
 
         def length_at(p):
             front = max(0.0, -(p.y + .02) / .08)
             low = max(0.0, (ez + .07 - p.z) / .06)               # the sides and nape are cut shorter
-            return (.068 + .030 * front) * (1 - .55 * min(1.0, low))
+            return (.068 + .030 * front) * (1 - .70 * min(1.0, low))
         # primary clumps: several cards from neighbouring roots sharing a guide; their tips gather
         for _ in range(170):
             root, nrm = rnd.choice(scalp.pts)
@@ -268,7 +275,7 @@ def build(info, T, tex_dir, log=print):
             for _ in range(n_cards):
                 root, nrm = rnd.choice(scalp.pts)
                 L = (root - tie).length * 1.05
-                pts = grow(scalp, root, nrm, direction, L, lift0, lift1, steps=10, stop=lambda p: (p - tie).length < .024, bulge=True)
+                pts = grow(scalp, root, nrm, direction, L, lift0, lift1, steps=10, stop=lambda p: (p - tie).length < .010, bulge=True)
                 if len(pts) > 2:
                     card(bm, uv, pts, w * rnd.uniform(.8, 1.2), rnd.randrange(3), twist=rnd.uniform(-.2, .2), tip_width=.9)
         band = hairline_band(info, area_low, line_z, rnd)
@@ -283,16 +290,17 @@ def build(info, T, tex_dir, log=print):
 
         def sweep(p):
             k = max(0.0, min(1.0, (p.x - .030) / .035))          # past the temple: turns back toward the tie
-            across = Vector((1, .15, -.10 if p.z > ez + .045 else .25))   # never down over the brows
+            across = Vector((1, .15, -.12))
             return across * (1 - k) + (tie - p).normalized() * k * 1.6
-        fr = [(r, n) for r, n in scalp.pts if r.y < -.035 and part_x < r.x < .045 and r.z < line_z(r) + .040]
-        for _ in range(360):
+        fr = [(r, n) for r, n in scalp.pts if r.y < -.035 and part_x < r.x < .045 and line_z(r) + .006 < r.z < line_z(r) + .045]
+        for _ in range(240):
             root, nrm = rnd.choice(fr)
-            L = rnd.uniform(.09, .15)
+            L = rnd.uniform(.06, .15)                    # piecey: the tips end at different places
+            low = ez + rnd.uniform(.034, .050)          # each piece ends at its own height (clear of the brows)
             pts = grow(scalp, root, nrm, sweep, L, .0015, rnd.uniform(.004, .009), steps=10,
-                       stop=lambda p: (p - tie).length < .03)
+                       stop=lambda p, low=low: (p - tie).length < .03 or p.z < low)
             if len(pts) > 2:
-                card(bm, uv, pts, rnd.uniform(.012, .020), rnd.randrange(3), twist=rnd.uniform(-.25, .25), tip_width=.85)
+                card(bm, uv, pts, rnd.uniform(.010, .018), rnd.randrange(3), twist=rnd.uniform(-.25, .25), tip_width=.45)
         # the ponytail: long cards from the tie, out and up a little, then falling behind, spreading toward the ends
         tail_dir = Vector((0, .6, .12)).normalized()
         for i in range(420):
@@ -300,7 +308,7 @@ def build(info, T, tex_dir, log=print):
             r0 = rnd.uniform(0, .024)
             off = Vector((math.cos(a) * r0, math.sin(a) * r0 * .6, math.sin(a) * r0 * .6))
             L = rnd.uniform(.40, .54)                    # to the shoulder blades
-            spread = rnd.uniform(.03, .10)
+            spread = rnd.uniform(.015, .055)
             pts = []
             steps = 16
             p = tie + off + tail_dir * .012
@@ -309,7 +317,7 @@ def build(info, T, tex_dir, log=print):
                 t = k / steps
                 outward = off.normalized() if off.length > 1e-6 else Vector((0, 1, 0))
                 n_ = (outward + Vector((0, .3, 0))).normalized()
-                swell = math.sin(math.pi * min(1.0, t * 1.4)) * .018   # body: the tail puffs out below the tie
+                swell = math.sin(math.pi * min(1.0, t * 1.4)) * .010   # body: the tail puffs out below the tie
                 pts.append((p + outward * (spread * t * t + swell), n_))
                 d = (d + Vector((0, -.012, -.30))).normalized()
                 p = p + d * (L / steps)
@@ -327,8 +335,18 @@ def build(info, T, tex_dir, log=print):
     soft_cap(cap, info)
     parts = [cap, o]
     if not m:
-        parts.append(garment.rounded_box((.028, .022, .024), garment.frame_at(tie, Vector((0, 1, .3))), tie + Vector((0, .006, 0)),
-                                         "orion_steel", bevel=.005, name="tie"))
+        parts.append(tie_band(tie + tail_dir * .010, tail_dir, .021, .0055))
+        # the tail's root is solid hair (a dome in the cap texture) so no hollow shows inside the band
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=.019, location=tie + tail_dir * .006)
+        plug = bpy.context.active_object
+        plug.scale = (1, 1, 1)
+        plug.data.materials.append(mat_cap)
+        plug.data.uv_layers[0].name = "UVMap"
+        for d in plug.data.uv_layers[0].data:
+            d.uv = (d.uv.x * 4, 0.0)                      # the scalp texture's solid fill (v = 0)
+        for poly in plug.data.polygons:
+            poly.use_smooth = True
+        parts.append(plug)
     log(f"hair: {len(o.data.polygons)} card quads")
     return join(parts, name)
 
@@ -361,7 +379,7 @@ def scalp_texture(path, size=512, seed=5):
             alpha[rows[upd], X[upd]] = a[upd]
             col[rows[upd], X[upd]] = rng.uniform(.6, 1.1) * (.5 + .5 * t[upd])
     img = np.dstack([np.repeat(np.clip(col, 0, 1)[..., None], 3, 2), alpha])[::-1]
-    im = bpy.data.images.new("hero_hair_scalp", W, H, alpha=True)
+    im = bpy.data.images.new(os.path.splitext(os.path.basename(path))[0], W, H, alpha=True)
     im.pixels.foreach_set(img.astype(np.float32).ravel())
     im.filepath_raw = path
     im.file_format = 'PNG'
@@ -369,7 +387,7 @@ def scalp_texture(path, size=512, seed=5):
     return path
 
 
-def soft_cap(o, info, depth=.012, smooth=8):
+def soft_cap(o, info, depth=.018, smooth=8):
     """the cap's border made a smooth curve (whole faces leave a staircase), then UVs: v = distance in from the
     border / depth (the scalp texture fades in), u along the border (angle round the head)"""
     import heapq
@@ -408,6 +426,38 @@ def soft_cap(o, info, depth=.012, smooth=8):
     bm.free()
 
 
+def tie_band(c, axis, R, r, segs=28, sides=10):
+    """the hair tie: an elastic band (a flattened torus) round the ponytail's root"""
+    from wardrobe import material
+    axis = axis.normalized()
+    u = axis.cross(Vector((0, 0, 1)) if abs(axis.z) < .9 else Vector((1, 0, 0))).normalized()
+    v = axis.cross(u)
+    bm = bmesh.new()
+    rings = []
+    for i in range(segs):
+        a = 2 * math.pi * i / segs
+        radial = u * math.cos(a) + v * math.sin(a)
+        ring = []
+        for j in range(sides):
+            b = 2 * math.pi * j / sides
+            ring.append(bm.verts.new(c + radial * (R + r * .7 * math.cos(b)) + axis * (r * 1.4 * math.sin(b))))
+        rings.append(ring)
+    for i in range(segs):
+        A, B = rings[i], rings[(i + 1) % segs]
+        for j in range(sides):
+            f = bm.faces.new((A[j], A[(j + 1) % sides], B[(j + 1) % sides], B[j]))
+            f.smooth = True
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new("tie")
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new("tie", me)
+    bpy.context.scene.collection.objects.link(o)
+    me.materials.append(material("orion_black"))
+    me.uv_layers.new(name="UVMap")
+    return o
+
+
 def cap_uv(o):
     """the cap's UVs: strands running from the front of the head toward the back (v along y), tiled"""
     me = o.data
@@ -422,17 +472,60 @@ def cap_uv(o):
 
 # ------------------------------------------------------------------------------------------------ brows and lashes
 
-def tex_dir():
-    return os.path.normpath(os.environ.get("HERO_TEX") or os.path.join(
+def lash_texture(path, size=256, seed=9):
+    """eyelashes: ~14 thick, tapered, slightly curved strands per card (v = 0 at the lid), dark at the root"""
+    if os.path.exists(path):
+        return path
+    rng = np.random.RandomState(seed)
+    H = W = size
+    v = (np.arange(H, dtype=np.float32) + .5) / H
+    alpha = np.zeros((H, W), np.float32)
+    col = np.zeros((H, W), np.float32)
+    for k in range(14):
+        x0 = (k + .5 + rng.uniform(-.3, .3)) / 14 * W
+        length = rng.uniform(.70, 1.0)
+        w0 = rng.uniform(4.5, 7.0)
+        bend = rng.uniform(-.10, .10) * W
+        n = int(length * H)
+        t = v[:n] / length
+        xs = x0 + bend * t * t
+        wpx = np.maximum(.6, w0 * (1 - t) ** .8)
+        for dx in range(-8, 9):
+            X = np.floor(xs).astype(int) + dx
+            ok = (X >= 0) & (X < W)
+            a = np.clip(1.2 - np.abs(X + .5 - xs) / wpx, 0, 1) * np.clip(1.4 - t, 0, 1)
+            rows = np.nonzero(ok & (a > alpha[np.arange(n), np.clip(X, 0, W - 1)]))[0]
+            alpha[rows, X[rows]] = a[rows]
+            col[rows, X[rows]] = .35 + .4 * t[rows]
+    img = np.dstack([col, col, col, alpha])[::-1]
+    im = bpy.data.images.new(os.path.splitext(os.path.basename(path))[0], W, H, alpha=True)
+    im.pixels.foreach_set(img.astype(np.float32).ravel())
+    im.filepath_raw = path
+    im.file_format = 'PNG'
+    im.save()
+    return path
+
+
+def tex_dir(T=None):
+    """the generated textures' folder: SourceArt/Characters/src/tex/<sex> (each body has its own files, nothing shared)"""
+    base = os.environ.get("HERO_TEX") or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "unreal", "ShatteredOrbit", "SourceArt",
-        "Characters", "src", "tex"))
+        "Characters", "src", "tex")
+    return os.path.normpath(os.path.join(base, T["sex"]) if T else base)
 
 
-def ribbon(bm, uv, pts, side, w0, w1, col, mat=0):
+def tex_path(T, kind):
+    """hero_<sex>_<kind>.png in the body's own folder"""
+    d = tex_dir(T)
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, f"hero_{T['sex']}_{kind}.png")
+
+
+def ribbon(bm, uv, pts, side, w0, w1, col, mat=0, full=False):
     """a card along pts whose width runs along `side` (one vector or one per point), w0 at the root to w1 at the tip;
     UV u across atlas column col, v root -> tip"""
     n = len(pts)
-    u0, u1 = col / ATLAS_COLS + .01, (col + 1) / ATLAS_COLS - .01
+    u0, u1 = (0.0, 1.0) if full else (col / ATLAS_COLS + .01, (col + 1) / ATLAS_COLS - .01)
     rows = []
     for i, p in enumerate(pts):
         s = side[i] if isinstance(side, list) else side
@@ -457,8 +550,15 @@ def eye_frames(body, eyes):
         side = [p for p in P if p.x * sx > 0]
         c = sum(side, Vector()) / len(side)
         r = max((p - c).length for p in side)
-        loop = min(boundary_loops(body), key=lambda L: (sum((me.vertices[i].co for i in L), Vector()) / len(L) - c).length)
-        L = [me.vertices[i].co.copy() for i in loop]
+        if "eye_margins" in body.keys():                      # (fit.eye_sockets closed the opening behind the lids)
+            import json
+            L = min(([Vector(p) for p in M] for M in json.loads(body["eye_margins"])),
+                    key=lambda M: (sum(M, Vector()) / len(M) - c).length)
+            m0 = sum(L, Vector()) / len(L)
+            L.sort(key=lambda p: math.atan2(p.z - m0.z, p.x - m0.x))
+        else:
+            loop = min(boundary_loops(body), key=lambda L: (sum((me.vertices[i].co for i in L), Vector()) / len(L) - c).length)
+            L = [me.vertices[i].co.copy() for i in loop]
         inner = min(range(len(L)), key=lambda i: abs(L[i].x))
         outer = max(range(len(L)), key=lambda i: abs(L[i].x))
         a = L[inner:] + L[:inner]                                  # starts at the inner corner
@@ -468,6 +568,25 @@ def eye_frames(body, eyes):
         up, lo = (arc1, arc2) if sum(p.z for p in arc1) / len(arc1) > sum(p.z for p in arc2) / len(arc2) else (arc2, arc1)
         out.append((sx, c, r, up, lo))
     return out
+
+
+def visible_edge(bvh, ebvh, p, up, step=.00025, reach=.0035):
+    """the lid's visible edge near the margin point p: the lid skin can overhang the margin (which then hides behind
+    it), so step from p toward the opening's middle (down for the upper lid, up for the lower) until a ray from the
+    front meets the eye before the skin; the root is the last skin point (a hair inside the edge)"""
+    last = None
+    ray = Vector((0, 1, 0))
+    for k in range(int(reach / step)):
+        q = Vector((p.x, -.4, p.z - up * k * step))
+        hb = bvh.ray_cast(q, ray)[0]
+        he = ebvh.ray_cast(q, ray)[0]
+        if he is not None and (hb is None or he.y < hb.y - .0002):
+            break
+        if hb is not None:
+            last = hb
+    else:
+        return p                                         # (no eye in reach: a corner, keep the margin point)
+    return (last + Vector((0, -.0003, 0))) if last is not None else p
 
 
 def along(arc, t):
@@ -487,10 +606,14 @@ def face_hair(body, eyes, arm, T, log=print):
     from mathutils.bvhtree import BVHTree
     m = T["sex"] == "male"
     rnd = random.Random(23 if m else 29)
-    tex = atlas(os.path.join(tex_dir(), "hero_hair_strands.png"))
+    tex = atlas(tex_path(T, "hair_strands"))
     sbm = bmesh.new()
     sbm.from_mesh(body.data)
     bvh = BVHTree.FromBMesh(sbm)
+    ebm = bmesh.new()
+    ebm.from_mesh(eyes.data)
+    ebvh = BVHTree.FromBMesh(ebm)
+    ebm.free()
     bm = bmesh.new()
     uv = bm.loops.layers.uv.new("UVMap")
     lash_faces = 0
@@ -498,15 +621,14 @@ def face_hair(body, eyes, arm, T, log=print):
     for sx, c, r, up, lo in eye_frames(body, eyes):
         # lashes: two staggered rows of small clumps on the upper lid, curling forward and up, longest past the middle
         # and swept outward at the outer corner; a sparse short row on the lower lid
-        for lid, n_cards, (Lmin, Lmax), curl in ((up, 64, (.0080, .0115) if not m else (.0062, .0092), 1),
-                                                 (lo, 16, (.0022, .0036), -1)):
+        for lid, n_cards, (Lmin, Lmax), curl in ((up, 72, (.0090, .0130) if not m else (.0072, .0105), 1),
+                                                 (lo, 22, (.0028, .0045), -1)):
             for k in range(n_cards):
                 t = .06 + .90 * (k + rnd.uniform(-.3, .3)) / (n_cards - 1)
                 t = min(.97, max(.03, t))
                 p, tan = along(lid, t)
                 radial = (p - c).normalized()
-                # the margin is tucked behind the lid's front: root the lash on the lid skin just in front of it
-                p, _, _, _ = bvh.find_nearest(p + fwd * .0018 + radial * .0008)
+                p = visible_edge(bvh, ebvh, p, curl)          # where the lid's skin meets the eye, seen from the front
                 outward = Vector((sx, 0, 0)) * (max(0.0, t - .55) * 1.2)
                 d0 = (radial * .45 + fwd * .85 + outward).normalized()
                 L = (Lmin + (Lmax - Lmin) * math.sin(math.pi * min(1.0, t * 1.15))) * rnd.uniform(.85, 1.1)
@@ -515,7 +637,7 @@ def face_hair(body, eyes, arm, T, log=print):
                 for i in range(5):
                     s = i / 4
                     pts.append(p + d0 * (L * s) + upv * (L * .6 * s * s))
-                ribbon(bm, uv, pts, tan, .0032 if curl > 0 else .0016, .0026 if curl > 0 else .0012, 2, mat=1)
+                ribbon(bm, uv, pts, tan, .0040 if curl > 0 else .0022, .0034 if curl > 0 else .0018, 2, mat=1, full=True)
                 lash_faces += 4
         # brows: short hairs over the brow band, lying on the skin: the inner head grows up, the body and tail outward
         ix = .013 if m else .014
@@ -523,7 +645,7 @@ def face_hair(body, eyes, arm, T, log=print):
         inner = Vector((ix, 0, ez_ + (.015 if m else .017)))
         peak = Vector((ex + .006, 0, ez_ + (.023 if m else .024)))
         tail = Vector((ex + .027, 0, ez_ + (.015 if m else .019)))
-        thick = (.012, .0135, .0060) if m else (.0085, .0080, .0032)
+        thick = (.012, .0135, .0060) if m else (.0065, .0058, .0024)
 
         def curve(u):
             if u < .62:
@@ -531,7 +653,7 @@ def face_hair(body, eyes, arm, T, log=print):
                 return inner.lerp(peak, f), thick[0] + (thick[1] - thick[0]) * f
             f = (u - .62) / .38
             return peak.lerp(tail, f), thick[1] + (thick[2] - thick[1]) * f
-        for _ in range(1100 if m else 620):
+        for _ in range(1100 if m else 460):
             u = rnd.random() ** .9
             q, h = curve(u)
             a_ = (rnd.random() + rnd.random()) / 2 - .5           # denser along the middle: soft, feathered edges
@@ -551,7 +673,7 @@ def face_hair(body, eyes, arm, T, log=print):
                 pts.append(loc + n2 * (.0003 + .0009 * i / 3))
                 p = loc + dirn * (L / 3)
             side = nrm.cross(dirn).normalized()
-            ribbon(bm, uv, pts, side, .0026 if m else .0017, .0011, rnd.choice((0, 1, 2, 2) if m else (2, 2, 3)))
+            ribbon(bm, uv, pts, side, .0026 if m else .0014, .0010, rnd.choice((0, 1, 2, 2) if m else (2, 2, 3)))
     sbm.free()
     me = bpy.data.meshes.new("B_brows")
     bm.to_mesh(me)
@@ -559,7 +681,7 @@ def face_hair(body, eyes, arm, T, log=print):
     o = bpy.data.objects.new("B_brows", me)
     bpy.context.scene.collection.objects.link(o)
     brow = hair_material("hair__brow", tex)
-    lash = hair_material("hair__lash", tex)
+    lash = hair_material("hair__lash", lash_texture(tex_path(T, "hair_lash")))
     me.materials.append(brow)
     me.materials.append(lash)
     vg = o.vertex_groups.new(name="head")

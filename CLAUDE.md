@@ -71,8 +71,17 @@ outfit per slot `C_<slot>__<item>` from the concept sheet, skinned by data trans
 (own numpy atlas `hero_hair_strands.png`: clumps of separate strands with ragged roots and pointed tips; a cap with a
 soft, strand-broken edge from `hero_hair_scalp.png`; hairline wisps on a density gradient), male short swept, female
 high ponytail with volume and a side-swept fringe; Unreal material `M_SOHair` for `hair`, `hair__cap`, `hair__brow`,
-`hair__lash`. `export_unreal.sh` builds `SourceArt/Characters/src/hero_<sex>.glb` (delete it, and the cached
-`src/tex/hero_hair_*.png`, to rebuild) and exports `--per-item` + `--arms-only`.
+`hair__lash` (lashes have their own thick-strand texture and root at the lid's visible edge). Eyes: big rounded lid
+openings (`eye_hu/eye_hl` in `headshape.head_geometry`), `fit.eye_sockets` closes the opening behind the lids (skin
+walls round the eyeball; the lid margins are kept in the body's `eye_margins`), eyeballs `eye_white`/`eye_iris`/
+`eye_pupil`; the body's vertex colour `Col` tints the lips and shades the lid crease and rims (Unreal multiplies it).
+Male and female heads differ on purpose (his heavy brow ridge, square wide jaw, big chin, broad nose; her narrow face
+tapering to a small chin, high round cheekbones, small nose, full lips, bigger eyes). Face keys `face_*` are created
+at 0 (Blender 5 adds new keys at 1.0). Heat weights are solved on a cleaned copy of the body (`rig.heat_weights`).
+The two bodies share no generated file: textures `src/tex/<sex>/hero_<sex>_hair_*.png`, GLBs `src/hero_<sex>.glb`,
+Unreal folders `/Game/Characters/Player<Sex>` (own skeleton, clips, materials, textures, wardrobe).
+`export_unreal.sh` builds `SourceArt/Characters/src/hero_<sex>.glb` (delete it, and `src/tex/<sex>`, to rebuild) and
+exports `--per-item` + `--arms-only`.
 
 ## Earth (free roam)
 The city follows the owner's river-city art (`art/reference/city_river.jpg`). A river (`RIVER_Z`, `riverZ()` in

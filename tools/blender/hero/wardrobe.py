@@ -722,7 +722,7 @@ def dress(body, arm, T, log=print):
     m = info.m
     # body shape keys must be off while sampling (the basis is what the pieces fit)
     import hair as hair_mod
-    tex_dir = hair_mod.tex_dir()
+    tex_dir = hair_mod.tex_dir(T)
     pieces = [top(info), legs(info), feet(info), hands(info), hands(info, armoured=True), vest(info), outer(info),
               hair_mod.build(info, T, tex_dir, log=log)]
     info.free()
