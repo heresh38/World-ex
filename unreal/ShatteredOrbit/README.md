@@ -141,7 +141,18 @@ a history.
    `M_SOCarPaint` (per-instance colour).
 5. `make_nexus_map.py` makes `/Game/Maps/L_Nexus`: one `ASONexusCity` (tiles, the instance file, stations, the scaled
    Nexus landmarks; keeps `RoadNodes`, `RoadEdges` with lanes and `Stations`), sky, haze, map points, the start on
-   the Spire plaza. `SOCaptureSeries 1 4` in `L_Nexus` takes aerial, night and street-level pictures.
+   the Spire plaza. `SOCaptureSeries 1 4` in `L_Nexus` takes aerial, night, street-level and weather pictures.
+6. Weather and the air (`USOWeatherSubsystem`, `Source/SOWorld/Public/SOWeather.h`, every level): clear, cloudy,
+   overcast, rain, storm, fog and windy, chosen every 6-14 min and blended over ~75 s; a wandering wind with gusts;
+   streets that soak in the rain and dry after. It drives the volumetric clouds (coverage, density, darker rain
+   clouds), the height fog, sun and sky light, lightning with thunder in storms, the wind / rain ambience
+   (`sfx_synth.py`: `amb_wind`, `amb_rain`, `amb_gust`, `amb_thunder`) and `/Game/Environments/MPC_SOWeather`
+   (WindX, WindY, Wind, Gust, Wetness, Rain): `M_SOGround` darkens, turns glossy and pools on the flat when wet;
+   the trees (`city_trees.py`: street, park and shrub `CT_*` with their own bark / leaf textures) use
+   `M_SOFoliage`, bending with the wind by height above the trunk and fluttering. Round the camera: dust motes in
+   the light, leaves, paper and wrappers (`NCK_leaf_*`, `NCK_paper`, `NCK_wrapper`) skittering on the wind and
+   lifting on gusts, rain streaks slanted by the wind, steam from roof vents and open manholes and smoke from the
+   exhaust stacks (`ASONexusCity` publishes `SteamPoints` / `SmokePoints`). `SetWeather(...)`, `SetWetness(...)`.
 
 ## Automation tests
 

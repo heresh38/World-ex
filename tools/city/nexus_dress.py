@@ -577,6 +577,11 @@ def dress_construction(lot, city, O, rng, stats):
 
 # ---------------------------------------------------------------- streets
 def dress_streets(plan, O, rng, stats, dist_of):
+    # roads crossing the landmark grounds (Spire plaza, parks, arena, dome, dock pads) keep their lamps but no kerb
+    # furniture: those grounds are furnished as places of their own
+    from shapely import affinity
+    grounds = [prep(affinity.scale(Point(L["centre"]).buffer(1, 48), L["radius"][0], L["radius"][1])) for L in plan["landmarks"].values()]
+    open_ground = lambda q: any(g.contains(Point(q)) for g in grounds)
     roads = plan["roads"]
     nodes = roads["nodes"]
     deg, wmax, classes = {}, {}, {}
@@ -630,14 +635,18 @@ def dress_streets(plan, O, rng, stats, dist_of):
                     if min((abs(s - x) for x in lamp_s), default=99) > 5 and all(abs(s - b) > 9 for b in bus_s):
                         q, t, lft = at(s, side * (w / 2 + 1.7))
                         sc = float(rng.uniform(.85, 1.1))
-                        O.add(str(rng.choice(trees)), q[0], q[1], K, float(rng.uniform(0, 360)), (sc, sc, sc))
+                        if not open_ground(q):
+                            O.add(str(rng.choice(trees)), q[0], q[1], K, float(rng.uniform(0, 360)), (sc, sc, sc))
                         stats["street trees"] += 1
                     s += float(rng.uniform(11, 15))
             for s in np.arange(r0 + 20, r1, 95):
                 q, t, lft = at(s + float(rng.uniform(-5, 5)), side * (w / 2 + .5))
-                O.add("NCK_hydrant", q[0], q[1], K, yaw_out((-lft[0] * side, -lft[1] * side)))
+                if not open_ground(q):
+                    O.add("NCK_hydrant", q[0], q[1], K, yaw_out((-lft[0] * side, -lft[1] * side)))
             for s in np.arange(r0 + 12, r1, 55):
                 q, t, lft = at(s + float(rng.uniform(-6, 6)), side * (w / 2 + .9))
+                if open_ground(q):
+                    continue
                 O.add("NCK_bin", q[0], q[1], K, yaw_out((-lft[0] * side, -lft[1] * side)))
                 if kind in ("spire", "market", "mixed", "arena", "housing") and rng.random() < .3:
                     q, t, lft = at(s + 3, side * (w / 2 + 3.2))

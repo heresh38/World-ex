@@ -14,6 +14,9 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
+static TAutoConsoleVariable<int32> CVarCityTrees(TEXT("so.City.Trees"), 1, TEXT("Place the city's trees and shrubs (CT_*)."));
+static TAutoConsoleVariable<int32> CVarCityTreeSway(TEXT("so.City.TreeSway"), 1, TEXT("Evaluate the trees' wind sway (world position offset)."));
+
 namespace
 {
 	using FJsonArray = TArray<TSharedPtr<FJsonValue>>;
@@ -194,6 +197,12 @@ UInstancedStaticMeshComponent* ASONexusCity::Instancer(UStaticMesh* Mesh, int32 
 	C->SetupAttachment(RootComponent);
 	C->SetCollisionEnabled(bCollide ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	C->SetNumCustomDataFloats(CustomFloats);
+	if (Mesh->GetName().StartsWith(TEXT("SM_CT_")) && CVarCityTreeSway.GetValueOnGameThread() != 0)
+	{
+		C->SetEvaluateWorldPositionOffset(true);           // M_SOFoliage sways the trees on the weather's wind
+		C->SetWorldPositionOffsetDisableDistance(25000);
+		C->SetCastShadow(true);
+	}
 	// facade materials get their own dynamic instance (one per material, shared by every design) for "Night"
 	for (int32 i = 0; i < Mesh->GetStaticMaterials().Num(); ++i)
 	{
@@ -246,6 +255,8 @@ void ASONexusCity::Clear()
 	RoadNodes.Reset();
 	RoadEdges.Reset();
 	Stations.Reset();
+	SteamPoints.Reset();
+	SmokePoints.Reset();
 	NumBuildings = NumInstances = MissingMeshes = 0;
 	NightApplied = -1.0f;
 }
@@ -361,15 +372,27 @@ void ASONexusCity::Build()
 					MissingMeshes++;
 					continue;
 				}
+				if (CVarCityTrees.GetValueOnGameThread() == 0 && FPaths::GetBaseFilename(Path).StartsWith(TEXT("SM_CT_")))
+				{
+					continue;
+				}
 				FPending& P = Pending.FindOrAdd(Mesh);
 				P.Floats = Custom;
 				P.bCollide = M->GetBoolField(TEXT("collide"));
 				P.CullCm = float(M->GetNumberField(TEXT("cull"))) * 100.0f;
 				P.Xf.Reserve(P.Xf.Num() + Count);
+				const FString Base = FPaths::GetBaseFilename(Path);
+				TArray<FVector>* Emitters = Base == TEXT("SM_NCK_exhaust_stack") ? &SmokePoints
+					: (Base == TEXT("SM_NCK_roof_vents") || Base == TEXT("SM_NCK_manhole_open")) ? &SteamPoints : nullptr;
+				const double OutletZ = Base == TEXT("SM_NCK_exhaust_stack") ? 900.0 : Base == TEXT("SM_NCK_roof_vents") ? 120.0 : 10.0;
 				for (int32 i = 0; i < Count; ++i, Rec += Stride)
 				{
 					P.Xf.Add(FTransform(FRotator(0.0, Rec[3], 0.0), FVector(Rec[0], Rec[1], Rec[2]), FVector(Rec[4], Rec[5], Rec[6])));
 					P.Custom.Append(Rec + 7, Custom);
+					if (Emitters)
+					{
+						Emitters->Add(FVector(Rec[0], Rec[1], Rec[2] + OutletZ * Rec[6]));
+					}
 				}
 				NumInstances += Count;
 				if (FPaths::GetBaseFilename(Path).StartsWith(TEXT("SM_NCB_")) && !FPaths::GetBaseFilename(Path).StartsWith(TEXT("SM_NCB_gf_")))
@@ -471,6 +494,6 @@ void ASONexusCity::Build()
 	}
 	NightApplied = -1.0f;
 	Tick(0.0f);                                   // the windows match the time of day from the first frame
-	UE_LOG(LogTemp, Log, TEXT("ASONexusCity: %d instances (%d buildings) of %d meshes (%d missing), %d roads, %d stations, %d components"),
-		NumInstances, NumBuildings, Pending.Num(), MissingMeshes, RoadEdges.Num(), Stations.Num(), Built.Num());
+	UE_LOG(LogTemp, Log, TEXT("ASONexusCity: %d instances (%d buildings) of %d meshes (%d missing), %d roads, %d stations, %d steam / %d smoke outlets, %d components"),
+		NumInstances, NumBuildings, Pending.Num(), MissingMeshes, RoadEdges.Num(), Stations.Num(), SteamPoints.Num(), SmokePoints.Num(), Built.Num());
 }

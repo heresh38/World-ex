@@ -115,6 +115,14 @@ public:
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
 	TArray<FSOCityStation> Stations;
 
+	/** Where the air of the city comes from (for USOWeatherSubsystem): steam at roof vents and open manholes, smoke at
+	 *  exhaust stacks (world, at the outlet). */
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
+	TArray<FVector> SteamPoints;
+
+	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
+	TArray<FVector> SmokePoints;
+
 	UPROPERTY(Transient, VisibleAnywhere, BlueprintReadOnly, Category = "SO|City")
 	int32 NumBuildings = 0;
 

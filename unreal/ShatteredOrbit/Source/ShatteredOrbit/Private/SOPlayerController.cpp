@@ -17,6 +17,7 @@
 #include "SOLootLibrary.h"
 #include "SOHUD.h"
 #include "SOTimeOfDaySubsystem.h"
+#include "SOWeather.h"
 #include "SOCombatStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "SOInventoryWidget.h"
@@ -172,7 +173,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			SetViewTarget(CaptureCamera);
 		};
 		auto Hour = [this](float H) { if (USOTimeOfDaySubsystem* T = GetWorld()->GetSubsystem<USOTimeOfDaySubsystem>()) { T->SetHour(H); T->SetPaused(true); } };
-		struct FCityShot { const TCHAR* Name; double E, N, Z; float Yaw, Pitch, Fov, Hour; };
+		struct FCityShot { const TCHAR* Name; double E, N, Z, Yaw, Pitch, Fov; float Hour; };
 		static const FCityShot Shots[] = {
 			{ TEXT("n1_spire_plaza"), 0, -330, 1.8, 0, 8, 80, 15.5f },
 			{ TEXT("n2_market_street"), -2394, 0, 1.8, 0, 2, 80, 15.5f },
@@ -202,8 +203,25 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		for (const FCityShot& S : Shots)
 		{
 			const FCityShot Copy = S;
-			Do(0.2f, [=]() { Hour(Copy.Hour); CityView(Copy.E, Copy.N, Copy.Z, Copy.Yaw, Copy.Pitch, Copy.Fov); });
+			Do(0.2f, [=]() { Hour(Copy.Hour); CityView(Copy.E, Copy.N, Copy.Z, float(Copy.Yaw), float(Copy.Pitch), float(Copy.Fov)); });
 			Snap(6.0f, Copy.Name);
+		}
+		// the weather (USOWeatherSubsystem): each state set at once, the streets soaked for the wet ones
+		struct FWeatherShot { const TCHAR* Name; ESOWeather Weather; float Wet; double E, N, Z, Yaw, Pitch; };
+		static const FWeatherShot WeatherShots[] = {
+			{ TEXT("w1_rain_avenue"), ESOWeather::Rain, 0.9f, 0, -900, 1.8, 0, 4 },
+			{ TEXT("w2_storm_aerial"), ESOWeather::Storm, 1.0f, -900, -1400, 420, 35, -22 },
+			{ TEXT("w3_fog_market"), ESOWeather::Fog, 0.3f, -2394, 0, 1.8, 0, 2 },
+			{ TEXT("w4_windy_street"), ESOWeather::Windy, 0.0f, -2042.2, 314.2, 1.7, -160.7, -8 },
+			{ TEXT("w5_steam_crew_site"), ESOWeather::Rain, 0.8f, -1850.3, -996.9, 1.8, -11.8, -3 },
+			{ TEXT("w6_smoke_industry"), ESOWeather::Overcast, 0.2f, 2216.4, -2664.4, 35.0, 45.0, 2 },
+		};
+		auto Weather = [this](ESOWeather W, float Wet) { if (USOWeatherSubsystem* S = GetWorld()->GetSubsystem<USOWeatherSubsystem>()) { S->bAutomatic = false; S->SetWeather(W, 0.0f); S->SetWetness(Wet); } };
+		for (const FWeatherShot& S : WeatherShots)
+		{
+			const FWeatherShot Copy = S;
+			Do(0.2f, [=]() { Hour(14.5f); Weather(Copy.Weather, Copy.Wet); CityView(Copy.E, Copy.N, Copy.Z, float(Copy.Yaw), float(Copy.Pitch), 80.0f); });
+			Snap(7.0f, Copy.Name);
 		}
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);

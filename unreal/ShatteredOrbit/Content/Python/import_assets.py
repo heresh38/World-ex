@@ -1296,7 +1296,7 @@ def foliage_material(defaults, mpc):
     """/Game/Environments/NexusCity/M_SOFoliage: the city's trees and shrubs (city_trees.py): bark and leaf cards
     (alpha mask), the same parameters as the master (BaseColorTex, BaseColorTint, NormalTex, Roughness), swaying on
     MPC_SOWeather's wind by the height above the trunk base, leaves fluttering, a per-tree phase."""
-    mat = _material("/Game/Environments/NexusCity/M_SOFoliage", {"used_with_instanced_static_meshes": True, "two_sided": True,
+    mat = _material("/Game/Environments/NexusCity/M_SOFoliage", {"used_with_instanced_static_meshes": True, "used_with_nanite": True, "two_sided": True,
                                                                 "blend_mode": unreal.BlendMode.BLEND_MASKED})
     S = unreal.MaterialSamplerType
     col = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "BaseColorTex", (defaults["white"], S.SAMPLERTYPE_COLOR), -800, -200)
@@ -1327,7 +1327,7 @@ def foliage_material(defaults, mpc):
 def ground_material(defaults):
     """/Game/Environments/NexusCity/M_SOGround: city ground, roofs, wall, land. The textures are projected in world
     metres (TilingM = metres per tile): from above on flat faces, along the face on walls; normal map in world space."""
-    mat = _material("/Game/Environments/NexusCity/M_SOGround", {"tangent_space_normal": False, "used_with_instanced_static_meshes": True})
+    mat = _material("/Game/Environments/NexusCity/M_SOGround", {"tangent_space_normal": False, "used_with_instanced_static_meshes": True, "used_with_nanite": True})
     S = unreal.MaterialSamplerType
     wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -1400, 0)
     vn = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, -1400, 120)
@@ -1377,7 +1377,7 @@ def facade_material(defaults):
     Wear streaks the walls down from the openings, splashes dirt up from the street and leaves patches of repair;
     boarded puts plywood over the glass (abandoned buildings). The mask's R marks glass: a hash per window, building
     and face lights the lit share of the rooms, scaled by Night (set by ASONexusCity)."""
-    mat = _material("/Game/Environments/NexusCity/M_SOFacade", {"used_with_instanced_static_meshes": True})
+    mat = _material("/Game/Environments/NexusCity/M_SOFacade", {"used_with_instanced_static_meshes": True, "used_with_nanite": True})
     S = unreal.MaterialSamplerType
     u0 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1500, -100)
     u1 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1500, 0)
@@ -1430,7 +1430,7 @@ def facade_material(defaults):
 def car_paint_material():
     """/Game/Environments/NexusCity/M_SOCarPaint: the city's parked cars, each painted by its instance's custom data
     (0..2 = linear RGB)."""
-    mat = _material("/Game/Environments/NexusCity/M_SOCarPaint", {"used_with_instanced_static_meshes": True})
+    mat = _material("/Game/Environments/NexusCity/M_SOCarPaint", {"used_with_instanced_static_meshes": True, "used_with_nanite": True})
     rgb = []
     for i, d in enumerate((.5, .5, .5)):
         e = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, -700, i * 90)
@@ -1537,6 +1537,13 @@ def nexus_city(master, defaults):
     ensure_dir(dest + "/Textures")
     ensure_dir(dest + "/Tiles")
     ground, facade = ground_material(defaults), facade_material(defaults)
+    # the city instances its props: the master needs the instanced usage, or a game build draws them with the
+    # engine's default checker material (usage flags cannot be added at runtime)
+    if not (master.get_editor_property("used_with_instanced_static_meshes") and master.get_editor_property("used_with_nanite")):
+        master.set_editor_property("used_with_instanced_static_meshes", True)
+        master.set_editor_property("used_with_nanite", True)
+        mel.recompile_material(master)
+        eal.save_loaded_asset(master, only_if_is_dirty=False)
 
     def tex(stem, kind):
         f = os.path.join(REPO_TEXTURES, stem)
