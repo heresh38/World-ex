@@ -1,0 +1,827 @@
+{
+ "name": "Meridian Fall",
+ "tagline": "The old capital went silent in the Stillfall. Something answers from its crown.",
+ "groups": {
+  "approach_rubble": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -24600.0,
+     -1800.0,
+     0.0
+    ],
+    [
+     -24600.0,
+     -900.0,
+     0.0
+    ],
+    [
+     -24600.0,
+     0.0,
+     0.0
+    ],
+    [
+     -24600.0,
+     900.0,
+     0.0
+    ],
+    [
+     -24600.0,
+     1800.0,
+     0.0
+    ]
+   ]
+  },
+  "court_north": {
+   "yaw": -180.0,
+   "points": [
+    [
+     -14600.0,
+     -2200.0,
+     0.0
+    ],
+    [
+     -14600.0,
+     -1320.0,
+     0.0
+    ],
+    [
+     -14600.0,
+     -440.0,
+     0.0
+    ],
+    [
+     -14600.0,
+     440.0,
+     0.0
+    ],
+    [
+     -14600.0,
+     1320.0,
+     0.0
+    ],
+    [
+     -14600.0,
+     2200.0,
+     0.0
+    ]
+   ]
+  },
+  "court_flanks": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -17600.0,
+     -3100.0,
+     0.0
+    ],
+    [
+     -17600.0,
+     3100.0,
+     0.0
+    ],
+    [
+     -16000.0,
+     -3000.0,
+     0.0
+    ],
+    [
+     -16000.0,
+     3000.0,
+     0.0
+    ]
+   ]
+  },
+  "boulevard_mid": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -8400.0,
+     -1000.0,
+     0.0
+    ],
+    [
+     -8400.0,
+     -500.0,
+     0.0
+    ],
+    [
+     -8400.0,
+     0.0,
+     0.0
+    ],
+    [
+     -8400.0,
+     500.0,
+     0.0
+    ],
+    [
+     -8400.0,
+     1000.0,
+     0.0
+    ]
+   ]
+  },
+  "plaza_north": {
+   "yaw": -180.0,
+   "points": [
+    [
+     3852.7,
+     1402.3,
+     0.0
+    ],
+    [
+     4037.7,
+     712.0,
+     0.0
+    ],
+    [
+     4100.0,
+     0.0,
+     0.0
+    ],
+    [
+     4037.7,
+     -712.0,
+     0.0
+    ],
+    [
+     3852.7,
+     -1402.3,
+     0.0
+    ]
+   ]
+  },
+  "plaza_west": {
+   "yaw": 90.0,
+   "points": [
+    [
+     1402.3,
+     -3852.7,
+     0.0
+    ],
+    [
+     712.0,
+     -4037.7,
+     0.0
+    ],
+    [
+     0.0,
+     -4100.0,
+     0.0
+    ],
+    [
+     -712.0,
+     -4037.7,
+     0.0
+    ],
+    [
+     -1402.3,
+     -3852.7,
+     0.0
+    ]
+   ]
+  },
+  "plaza_east": {
+   "yaw": -90.0,
+   "points": [
+    [
+     2050.0,
+     3550.7,
+     0.0
+    ],
+    [
+     2635.4,
+     3140.8,
+     0.0
+    ],
+    [
+     -2635.4,
+     3140.8,
+     0.0
+    ],
+    [
+     -2050.0,
+     3550.7,
+     0.0
+    ]
+   ]
+  },
+  "terrace_east": {
+   "yaw": 180.0,
+   "points": [
+    [
+     3400.0,
+     8000.0,
+     1000.0
+    ],
+    [
+     4300.0,
+     8000.0,
+     1000.0
+    ],
+    [
+     5200.0,
+     8000.0,
+     1000.0
+    ],
+    [
+     6100.0,
+     8000.0,
+     1000.0
+    ],
+    [
+     7000.0,
+     8000.0,
+     1000.0
+    ]
+   ]
+  },
+  "terrace_north": {
+   "yaw": 150.95,
+   "points": [
+    [
+     11400.0,
+     7000.0,
+     1000.0
+    ],
+    [
+     11400.0,
+     6000.0,
+     1000.0
+    ],
+    [
+     11400.0,
+     5000.0,
+     1000.0
+    ],
+    [
+     11400.0,
+     4000.0,
+     1000.0
+    ],
+    [
+     11400.0,
+     3000.0,
+     1000.0
+    ]
+   ]
+  },
+  "crown_boss": {
+   "yaw": -174.64,
+   "points": [
+    [
+     22500.0,
+     600.0,
+     1000.0
+    ]
+   ]
+  },
+  "crown_ring": {
+   "yaw": 172.12,
+   "points": [
+    [
+     21162.9,
+     3195.0,
+     1000.0
+    ],
+    [
+     22944.5,
+     1700.0,
+     1000.0
+    ],
+    [
+     23348.3,
+     -590.4,
+     1000.0
+    ],
+    [
+     22185.5,
+     -2604.6,
+     1000.0
+    ],
+    [
+     21162.9,
+     -3195.0,
+     1000.0
+    ]
+   ]
+  }
+ },
+ "stages": [
+  {
+   "id": "approach",
+   "title": "Meridian Approach",
+   "objective": "Reach the city gate",
+   "kind": "travel",
+   "goal": [
+    -20400.0,
+    0.0,
+    0.0
+   ],
+   "radius": 1800,
+   "checkpoint": [
+    -30600.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "spawn": [
+      [
+       "remnant",
+       4,
+       "approach_rubble"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gate",
+   "title": "Meridian Gate",
+   "objective": "Break the hold on the gate",
+   "kind": "clear",
+   "goal": [
+    -16800.0,
+    0.0,
+    0.0
+   ],
+   "checkpoint": [
+    -19400.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "spawn": [
+      [
+       "remnant",
+       6,
+       "court_north"
+      ],
+      [
+       "stalker",
+       2,
+       "court_flanks"
+      ]
+     ]
+    },
+    {
+     "delay": 2.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "remnant",
+       6,
+       "court_north"
+      ],
+      [
+       "veilborn",
+       2,
+       "court_flanks"
+      ]
+     ]
+    },
+    {
+     "delay": 2.0,
+     "maxAlive": 2,
+     "spawn": [
+      [
+       "bulwark",
+       1,
+       "court_north"
+      ],
+      [
+       "remnant",
+       4,
+       "court_flanks"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "boulevard",
+   "title": "The Boulevard",
+   "objective": "Push into the central district",
+   "kind": "travel",
+   "goal": [
+    -4200.0,
+    0.0,
+    0.0
+   ],
+   "radius": 1500,
+   "waves": [
+    {
+     "spawn": [
+      [
+       "stalker",
+       2,
+       "boulevard_mid"
+      ],
+      [
+       "remnant",
+       4,
+       "boulevard_mid"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ring",
+   "title": "Concord Ring",
+   "objective": "Hold the ring until the terrace barrier falls",
+   "kind": "hold",
+   "hold": 90,
+   "goal": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "checkpoint": [
+    -4000.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "spawn": [
+      [
+       "remnant",
+       6,
+       "plaza_north"
+      ]
+     ]
+    },
+    {
+     "delay": 6.0,
+     "maxAlive": 4,
+     "spawn": [
+      [
+       "remnant",
+       5,
+       "plaza_west"
+      ],
+      [
+       "stalker",
+       2,
+       "plaza_north"
+      ]
+     ]
+    },
+    {
+     "delay": 8.0,
+     "maxAlive": 4,
+     "spawn": [
+      [
+       "veilborn",
+       2,
+       "plaza_east"
+      ],
+      [
+       "remnant",
+       4,
+       "plaza_west"
+      ]
+     ]
+    },
+    {
+     "delay": 8.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "bulwark",
+       1,
+       "plaza_north"
+      ],
+      [
+       "remnant",
+       4,
+       "plaza_west"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "climb",
+   "title": "High Terraces",
+   "objective": "Climb to the terraces",
+   "kind": "travel",
+   "goal": [
+    200.0,
+    8000.0,
+    1000.0
+   ],
+   "radius": 1200,
+   "checkpoint": [
+    0.0,
+    3600.0,
+    100.0,
+    90.0
+   ]
+  },
+  {
+   "id": "terraces",
+   "title": "High Terraces",
+   "objective": "Clear the terraces",
+   "kind": "clear",
+   "goal": [
+    6000.0,
+    8000.0,
+    1000.0
+   ],
+   "checkpoint": [
+    400.0,
+    8000.0,
+    1100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "spawn": [
+      [
+       "veilborn",
+       3,
+       "terrace_north"
+      ],
+      [
+       "remnant",
+       6,
+       "terrace_east"
+      ]
+     ]
+    },
+    {
+     "delay": 2.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "bulwark",
+       2,
+       "terrace_north"
+      ],
+      [
+       "stalker",
+       3,
+       "terrace_east"
+      ]
+     ]
+    },
+    {
+     "delay": 2.0,
+     "maxAlive": 2,
+     "spawn": [
+      [
+       "veilborn",
+       2,
+       "terrace_north"
+      ],
+      [
+       "remnant",
+       6,
+       "terrace_east"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bridge",
+   "title": "Crown Bridge",
+   "objective": "Cross to the Crown",
+   "kind": "travel",
+   "goal": [
+    15900.0,
+    0.0,
+    1000.0
+   ],
+   "radius": 1000,
+   "checkpoint": [
+    11400.0,
+    5600.0,
+    1100.0,
+    -90.0
+   ]
+  },
+  {
+   "id": "crown",
+   "title": "The Crown",
+   "objective": "Bring down the Hollow Colossus",
+   "kind": "boss",
+   "boss": "colossus",
+   "bossGroup": "crown_boss",
+   "goal": [
+    20000.0,
+    0.0,
+    1000.0
+   ],
+   "checkpoint": [
+    15500.0,
+    0.0,
+    1100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "bossHealth": 0.75,
+     "spawn": [
+      [
+       "remnant",
+       6,
+       "crown_ring"
+      ]
+     ]
+    },
+    {
+     "bossHealth": 0.5,
+     "spawn": [
+      [
+       "veilborn",
+       3,
+       "crown_ring"
+      ],
+      [
+       "remnant",
+       4,
+       "crown_ring"
+      ]
+     ]
+    },
+    {
+     "bossHealth": 0.25,
+     "spawn": [
+      [
+       "bulwark",
+       2,
+       "crown_ring"
+      ],
+      [
+       "stalker",
+       3,
+       "crown_ring"
+      ]
+     ]
+    }
+   ]
+  }
+ ],
+ "barriers": [
+  {
+   "id": "terrace_barrier",
+   "opens": "climb",
+   "c": [
+    0.0,
+    4500.0,
+    0.0
+   ],
+   "width": 1400.0,
+   "height": 800.0,
+   "yaw": 90.0
+  },
+  {
+   "id": "crown_barrier",
+   "opens": "bridge",
+   "c": [
+    12200.0,
+    0.0,
+    1000.0
+   ],
+   "width": 1600.0,
+   "height": 800.0,
+   "yaw": 0.0
+  }
+ ],
+ "pylons": [
+  [
+   22800.0,
+   0.0,
+   1000.0
+  ],
+  [
+   18600.0,
+   -2424.9,
+   1000.0
+  ],
+  [
+   18600.0,
+   2424.9,
+   1000.0
+  ]
+ ],
+ "crown": {
+  "c": [
+   20000.0,
+   0.0,
+   1000.0
+  ],
+  "r": 4000.0
+ },
+ "map": [
+  {
+   "label": "Meridian Approach",
+   "subtitle": "Where you come in",
+   "kind": "FastTravel",
+   "at": [
+    -30600.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "label": "Meridian Gate",
+   "subtitle": "The city wall",
+   "kind": "Landmark",
+   "at": [
+    -20000.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "label": "Concord Ring",
+   "subtitle": "The central district",
+   "kind": "Landmark",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "label": "High Terraces",
+   "subtitle": "The upper sectors",
+   "kind": "Landmark",
+   "at": [
+    5000.0,
+    8000.0,
+    1000.0
+   ]
+  },
+  {
+   "label": "The Crown",
+   "subtitle": "The beam",
+   "kind": "Mission",
+   "at": [
+    20000.0,
+    0.0,
+    1000.0
+   ]
+  },
+  {
+   "label": "Shuttle to Nexus Prime",
+   "subtitle": "Back to the city",
+   "kind": "AreaTravel",
+   "at": [
+    -31200.0,
+    800.0,
+    0.0
+   ]
+  }
+ ],
+ "rewards": {
+  "rarity": 3,
+  "armor": [
+   [
+    "head",
+    "void_sentinel"
+   ],
+   [
+    "vest",
+    "void_sentinel"
+   ],
+   [
+    "hands",
+    "void_sentinel"
+   ],
+   [
+    "legs",
+    "void_sentinel"
+   ],
+   [
+    "feet",
+    "void_sentinel"
+   ],
+   [
+    "outer",
+    "void_sentinel"
+   ]
+  ],
+  "weapons": [
+   "vr_rifle",
+   "vr_sniper",
+   "vr_smg",
+   "vr_shotgun",
+   "vr_lmg",
+   "vr_handcannon",
+   "vr_pistol",
+   "vr_fusion",
+   "vr_rocket"
+  ]
+ }
+}

@@ -12,6 +12,10 @@
 #include "SOGunRigComponent.h"
 #include "SOViewmodelComponent.h"
 #include "SOEnemy.h"
+#include "SOAltered.h"
+#include "Components/CapsuleComponent.h"
+#include "SOOperation.h"
+#include "SOEnemyAIController.h"
 #include "SOLog.h"
 #include "SOWeapon.h"
 #include "SOInventoryComponent.h"
@@ -157,6 +161,79 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 9)
+	{
+		// Meridian (L_Meridian): a camera tour of the route, then each of the Altered posed in the plaza and the
+		// Colossus on the Crown (files m*). The operation is held so no wave walks into the pictures.
+		for (TActorIterator<ASOOperation> It(GetWorld()); It; ++It)
+		{
+			It->SetActorTickEnabled(false);
+		}
+		auto Cam = [this](const FVector& PlanEye, const FVector& PlanAt)
+		{
+			// plan metres (E, N, up) -> world cm (X = N, Y = E)
+			const FVector Eye(PlanEye.Y * 100.0f, PlanEye.X * 100.0f, PlanEye.Z * 100.0f);
+			const FVector At(PlanAt.Y * 100.0f, PlanAt.X * 100.0f, PlanAt.Z * 100.0f);
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			if (ACameraActor* CamActor = Cast<ACameraActor>(CaptureCamera)) { CamActor->GetCameraComponent()->SetFieldOfView(75.0f); }
+			CaptureCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		auto Pose = [this](UClass* Class, const FVector& Plan, float Yaw)
+		{
+			FActorSpawnParameters P;
+			P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+			const ASOEnemy* Cdo = Cast<ASOEnemy>(Class->GetDefaultObject());
+			const float Half = Cdo ? Cdo->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.0f;
+			if (ASOEnemy* E = GetWorld()->SpawnActor<ASOEnemy>(Class, FVector(Plan.Y * 100.0f, Plan.X * 100.0f, Plan.Z * 100.0f + Half + 5.0f), FRotator(0, Yaw, 0), P))
+			{
+				if (AController* AI = E->GetController())
+				{
+					AI->SetActorTickEnabled(false);
+				}
+			}
+		};
+		struct FView { const TCHAR* Name; FVector Eye, At; };
+		const FView Views[] = {
+			{ TEXT("m1_approach"), FVector(2, -306, 1.7), FVector(0, -200, 9) },
+			{ TEXT("m2_gate"), FVector(-6, -228, 1.7), FVector(0, -200, 10) },
+			{ TEXT("m3_court"), FVector(10, -192, 2.0), FVector(-4, -140, 4) },
+			{ TEXT("m4_boulevard"), FVector(-6, -130, 1.7), FVector(0, -60, 6) },
+			{ TEXT("m5_ring"), FVector(18, -32, 2.0), FVector(-4, 6, 6) },
+			{ TEXT("m6_ramp"), FVector(30, -3, 1.8), FVector(80, 2, 10) },
+			{ TEXT("m7_terraces"), FVector(80, 6, 11.7), FVector(80, 90, 14) },
+			{ TEXT("m8_north_leg"), FVector(70, 114, 11.7), FVector(0, 116, 13) },
+			{ TEXT("m9_bridge"), FVector(0, 124, 11.7), FVector(0, 200, 18) },
+			{ TEXT("m10_crown"), FVector(24, 168, 13.0), FVector(0, 205, 16) },
+			{ TEXT("m11_aerial"), FVector(160, -260, 140), FVector(10, 0, 0) },
+		};
+		Do(8.0f, []() {});
+		for (const FView& V : Views)
+		{
+			const FView Copy = V;
+			Act([=]() { Cam(Copy.Eye, Copy.At); });
+			Snap(1.5f, Copy.Name);
+		}
+		// the Altered, lined up in the plaza; the Colossus on the Crown
+		Act([=]()
+		{
+			Pose(ASORemnant::StaticClass(), FVector(-6, -26, 0), 180.0f);
+			Pose(ASOVeilborn::StaticClass(), FVector(-2, -26, 0), 180.0f);
+			Pose(ASOBulwark::StaticClass(), FVector(3, -26, 0), 180.0f);
+			Pose(ASOEnemy::StaticClass(), FVector(8, -26, 0), 180.0f);
+			Pose(ASOColossus::StaticClass(), FVector(6, 225, 10), 190.0f);
+		});
+		Act([=]() { Cam(FVector(1, -35, 1.8), FVector(1, -26, 1.2)); });
+		Snap(2.5f, TEXT("m12_altered"));
+		Act([=]() { Cam(FVector(24, 186, 12.0), FVector(6, 225, 15)); });
+		Snap(1.5f, TEXT("m13_colossus"));
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 4)
 	{
 		// Nexus Prime (L_Nexus): the start, street level in three districts, a gate, aerials by day and at night.

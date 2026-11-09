@@ -15,10 +15,10 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
 ## Asset pipeline
 - `bash tools/blender/build_all.sh` builds the Blender sources Unreal's export reads into `assets/` (generated, not
   committed): textures (`textures.py`, `weapon_textures.py`, `wear_textures.py`, `horror_textures.py`,
-  `nexus_textures.py`, `nexus_city_textures.py`), the guns and optics (`weapons.py` + `gunkit.py`), the stalker
-  (`aliens.py`, `fleshkit.py`), Nexus Prime (`nexus.py`, `nexus_city.py` kit), the city trees (`city_trees.py`), loot
-  props (`props.py`), the reliquary (`vanthos.py`, to be replaced by the operation's own kit) and effect cards
-  (`fx_kit.py`). Then `bash tools/blender/export_unreal.sh` builds the players and turns everything into
+  `nexus_textures.py`, `nexus_city_textures.py`, `ruins_textures.py`), the guns and optics (`weapons.py` + `gunkit.py`),
+  the stalker (`aliens.py`, `fleshkit.py`), the Altered (`altered.py`), Nexus Prime (`nexus.py`, `nexus_city.py` kit),
+  the city trees (`city_trees.py`), loot props (`loot_props.py`), the reliquary (`vanthos.py`), Meridian (`meridian.py`)
+  and effect cards (`fx_kit.py`). Then `bash tools/blender/export_unreal.sh` builds the players and turns everything into
   `unreal/ShatteredOrbit/SourceArt` (FBX + textures + json), and `Content/Python/import_assets.py` imports it.
 - `bl.py` helpers (materials, primitives, loft, export). Blender is Z-up, -Y forward; glTF is Y-up, +Z forward.
 - Weapons (`weapons.py` + `gunkit.py`, textures `weapon_textures.py`): every archetype in `Data/game_data.json` has a
@@ -121,8 +121,23 @@ both views hold the gun with arm IK onto the rig's grips and the fingers close b
 screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`,
 kit + baked tiles `tools/blender/nexus_city.py`, built at runtime by `ASONexusCity`. Inventory icons:
 `tools/blender/icons.py`. Sounds: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis).
-Operation (next): the reward sets are the owner's concept sheets in `art/reference/operation/` (Void Sentinel armour,
-Void Requiem guns); finishing the operation grants one random piece.
+Operations (`SOOperation` module): `ASOOperation` runs a level as stages (travel / clear / hold / boss) with waves,
+spawn groups, checkpoints (the game mode respawns there) and boss adds keyed to the boss's health, read from a plan json;
+`ASOOperationBarrier` energy walls keep the route linear until their stage; finishing grants every player ONE random
+piece of the reward sets (`AddArmorPiece` for armour: wardrobe items with a `Set` are earned, never handed out).
+HUD: objective panel, stage banner, goal marker, boss bar, end screen. Tests `ShatteredOrbit.Operation.*`.
+The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
+`art/reference/operation/first_operation_map.png` made smaller and linear, our own names. One source for layout and
+mission: `tools/operation/meridian_plan.py` (writes `Data/op_meridian.json`); `tools/blender/meridian.py` builds the ruined
+city from it with `ruinkit.py` (ruined towers: slab cells, columns, cores, cladding, a damage field of broken tops and
+blast holes, rebar, hanging slabs, rubble heaps; wall + gate, viaducts, the Concord Ring, the High Terraces, the
+Crown Bridge, the Crown with its beam, the far spire and broken orbital ring, invisible blockers) into `MR_<zone>`
+chunks + `Data/op_meridian_art.json` (lights); `make_operation_map.py` assembles the level (storm night).
+Enemies, the Altered (`altered.py` + `SOAltered.h`): Remnant (husk swarm), Veilborn (void bolts, blinks), Bulwark
+(frontal shield, ground slam), the Hollow Colossus (boss: slam, sweep, barrage; shields at 2/3 and 1/3 until its three
+conduits die, then staggers). Tests `ShatteredOrbit.Altered.*`; pictures `SOCaptureSeries 1 9` on L_Meridian.
+Reward sets still to model: the owner's concept sheets in `art/reference/operation/` (Void Sentinel armour, Void
+Requiem guns, plan ids `void_sentinel` / `vr_*`); until they exist the reward falls back to a legendary gun.
 
 ## Testing
 Build: `Build.bat ShatteredOrbitEditor Win64 Development -Project=<uproject>`. Tests: `UnrealEditor-Cmd <uproject>

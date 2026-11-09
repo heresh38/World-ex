@@ -38,6 +38,11 @@ run "$OUT/NexusCity/src/nexus_city_tiles.glb" "$OUT/NexusCity/Tiles"
 run "$M/city_trees.glb" "$OUT/NexusCity/Trees"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
+# The Altered, the operation's enemies (altered.py: own clips per creature)
+for k in remnant veilborn bulwark colossus; do
+  K="$(echo "${k:0:1}" | tr a-z A-Z)${k:1}"
+  run "$M/altered_$k.glb" "$OUT/Characters/$K" --single
+done
 # Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail
 for f in "$M"/gun_*.glb; do
   stem="$(basename "$f" .glb)"
@@ -48,6 +53,9 @@ done
 run "$M/gun_attach.glb" "$OUT/Weapons/Attach" --split-parts
 # Loot: the loot core and ammo pickups, and the VANTHOS reliquary (its lid is a child part)
 run "$M/loot_props.glb" "$OUT/Props/Loot"
+# Meridian, the first operation (meridian.py: the zones, their detail, the backdrop, blockers, conduit and barrier)
+[ -f "$M/meridian.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/meridian.py" >/dev/null 2>&1
+run "$M/meridian.glb" "$OUT/Meridian"
 run "$M/vanthos.glb" "$OUT/Props/Reliquary" "--only=VX_reliquary_mesh,reliquary_lid_mesh"
 # Effect cards (tracers, sparks, smoke, muzzle flash) from tools/blender/fx_kit.py
 [ -f "$M/fx_kit.glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/fx_kit.py" >/dev/null 2>&1

@@ -20,8 +20,14 @@ namespace
 
 void USOLocomotionAnimInstance::PlayAttack(float PlayRate)
 {
-	if (Clips.Attack)
+	PlayAction(Clips.Attack, PlayRate);
+}
+
+void USOLocomotionAnimInstance::PlayAction(UAnimSequenceBase* Clip, float PlayRate)
+{
+	if (Clip)
 	{
+		ActiveAttack = Clip;
 		AttackTime = 0.0f;
 		AttackRate = FMath::Max(PlayRate, 0.05f);
 	}
@@ -82,7 +88,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// Target weights.
 	float Target[Count] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	const bool bAttacking = AttackTime >= 0.0f && Clips.Attack;
+	const bool bAttacking = AttackTime >= 0.0f && ActiveAttack;
 	if (bDead && Clips.Death)
 	{
 		Target[Death] = 1.0f;
@@ -193,7 +199,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		AttackTime += DeltaSeconds * AttackRate;
 		Times[Attack] = AttackTime;
-		if (AttackTime >= Clips.Attack->GetPlayLength())
+		if (AttackTime >= ActiveAttack->GetPlayLength())
 		{
 			AttackTime = -1.0f;
 		}
@@ -316,7 +322,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	FAnimInstanceProxy::PreUpdate(InAnimInstance, DeltaSeconds);
 	const USOLocomotionAnimInstance* Instance = CastChecked<USOLocomotionAnimInstance>(InAnimInstance);
 	const UAnimSequenceBase* ClipList[Count] = { Instance->Clips.Idle, Instance->Clips.Walk, Instance->Clips.Run, Instance->Clips.Jump,
-		Instance->Clips.Death, Instance->Clips.Attack, Instance->Clips.Slide, Instance->FidgetClip };
+		Instance->Clips.Death, Instance->ActiveAttack ? Instance->ActiveAttack.Get() : Instance->Clips.Attack.Get(), Instance->Clips.Slide, Instance->FidgetClip };
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FSOLocomotionLayer& Layer = Layers[i];

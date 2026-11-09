@@ -33,7 +33,10 @@ mel = unreal.MaterialEditingLibrary
 # Weapon and loot numbers come from Data/game_data.json: that file is their source (edit it, then re-import).
 
 # Creature flesh: the GLBs ship without images; enemies.js applies these hx_* sets by material name.
-FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac"}
+FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac",
+         # the Altered (altered.py)
+         "alt_skin": "hx_skin", "alt_flesh": "hx_flesh", "alt_plate": "hx_chitin", "alt_bone": "hx_bone", "alt_rag": "hx_rag"}
+ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus")
 
 SKIN_TONE = (0.55, 0.32, 0.22)
 
@@ -1647,6 +1650,82 @@ def nexus_city(master, defaults):
     log(f"NexusCity: {count} meshes")
 
 
+ENERGY_HLSL = """
+// bands of light drifting up the surface, brighter toward its edges (UV), a slow breathing pulse
+float band = 0.5 + 0.5 * sin(WP.z * 0.045 - T * 3.0) * sin(WP.z * 0.013 + T * 1.3);
+float2 e = min(UV, 1.0 - UV);
+float edge = saturate(1.0 - min(e.x, e.y) * 8.0);
+float pulse = 0.85 + 0.15 * sin(T * 2.1);
+return C * I * pulse * (0.35 + 0.45 * band + 0.6 * edge);
+"""
+
+
+def energy_materials():
+    """/Game/Environments/Meridian/M_SOEnergy: unlit additive light (the barriers, the crown's beam): Color x Intensity
+    in drifting bands, brighter at the edges. MI_SOEnergy_Barrier for ASOOperationBarrier's panel; MI_ru_beam (the
+    beam in the crown's detail) is re-parented onto it."""
+    dest = "/Game/Environments/Meridian"
+    ensure_dir(dest)
+    mat = _material(dest + "/M_SOEnergy", {"blend_mode": unreal.BlendMode.BLEND_ADDITIVE, "shading_model": unreal.MaterialShadingModel.MSM_UNLIT,
+                                           "two_sided": True, "used_with_nanite": False})
+    wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -800, 0)
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -800, 120)
+    t = mel.create_material_expression(mat, unreal.MaterialExpressionTime, -800, 240)
+    col = _param(mat, unreal.MaterialExpressionVectorParameter, "Color", (0.55, 0.3, 1.0, 1.0), -800, 360)
+    inten = _param(mat, unreal.MaterialExpressionScalarParameter, "Intensity", 3.0, -800, 480)
+    node = _custom(mat, ENERGY_HLSL, ("WP", "UV", "T", "C", "I"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -400, 200)
+    for src, pin in ((wp, "WP"), (uv, "UV"), (t, "T"), (col, "C"), (inten, "I")):
+        mel.connect_material_expressions(src, "", node, pin)
+    mel.connect_material_property(node, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+
+    def inst(path, color, intensity):
+        if eal.does_asset_exist(path):
+            mi = eal.load_asset(path)
+        else:
+            folder, name = path.rsplit("/", 1)
+            mi = tools.create_asset(name, folder, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+        mel.set_material_instance_parent(mi, mat)
+        mel.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(*color))
+        mel.set_material_instance_scalar_parameter_value(mi, "Intensity", intensity)
+        mel.update_material_instance(mi)
+        eal.save_loaded_asset(mi, only_if_is_dirty=False)
+    inst(dest + "/MI_SOEnergy_Barrier", (0.5, 0.28, 1.0, 1.0), 1.6)
+    inst(dest + "/MI_ru_beam", (0.75, 0.6, 1.0, 1.0), 12.0)
+    log("energy materials ready")
+
+
+def meridian(master):
+    """tools/blender/meridian.py (through export_fbx.py) -> /Game/Environments/Meridian: SM_MR_<zone> (the structure:
+    complex-as-simple collision), SM_MR_<zone>_detail and SM_MR_backdrop (make_operation_map.py turns their collision
+    off), SM_MR_blockers (invisible walls), SM_MRK_conduit and SM_MRK_barrier (actor pieces). All Nanite."""
+    src = os.path.join(SOURCE, "Meridian")
+    dest = "/Game/Environments/Meridian"
+    if not os.path.isdir(src):
+        log("Meridian: skipped (SourceArt/Meridian missing, run export_unreal.sh)")
+        return
+    ensure_dir(dest)
+    if not master.get_editor_property("used_with_nanite"):
+        master.set_editor_property("used_with_nanite", True)
+        mel.recompile_material(master)
+        eal.save_loaded_asset(master, only_if_is_dirty=False)
+    manifest = load_json(os.path.join(src, "export_fbx.json"))
+    materials = load_json(os.path.join(src, "materials.json"))
+    used = {base_slot(n) for a in manifest["assets"] for n in a["materials"]}
+    tex = import_textures_for(src, materials, dest + "/Textures", used)
+    instances = {key: make_instance(master, dest, key, materials.get(key) or {}, tex) for key in used}
+    for a in manifest["assets"]:
+        name = os.path.splitext(a["file"])[0]
+        if eal.does_asset_exist(f"{dest}/SM_{name}"):           # a fresh import: the zones change content
+            eal.delete_asset(f"{dest}/SM_{name}")
+        mesh = import_static(src, a["file"], dest, f"SM_{name}", instances)
+        _nanite(mesh, not name.endswith("_detail") and name != "MR_backdrop")
+    energy_materials()
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"Meridian: {len(manifest['assets'])} pieces")
+
+
 def ui_materials():
     """/Game/UI/M_UI_Stage: the loadout screen's live character picture. The scene capture stores inverse opacity in
     alpha (1 where it drew nothing), so the material shows the colour with opacity = 1 - alpha."""
@@ -1745,6 +1824,10 @@ def main():
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
                   master, stalker_extra, flesh=True)
+    if want("altered"):
+        for k in ALTERED:
+            if os.path.isdir(os.path.join(SOURCE, "Characters", k)):
+                character(os.path.join(SOURCE, "Characters", k), f"/Game/Characters/{k}", f"SK_{k}", f"A_{k}_", master, stalker_extra, flesh=True)
     if want("weapons") or want("rifle"):
         weapons(master, defaults)
     if want("fx"):
@@ -1759,6 +1842,10 @@ def main():
         nexus(master)
     if want("nexuscity"):
         nexus_city(master, defaults)
+    if want("meridian"):
+        meridian(master)
+    elif want("energy"):
+        energy_materials()
     log("done")
 
 

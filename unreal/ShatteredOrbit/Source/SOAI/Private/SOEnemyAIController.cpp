@@ -176,6 +176,12 @@ void ASOEnemyAIController::Think()
 	}
 
 	Me->SetRunning(true);
+	if (Me->ThinkCombat(this, Target.Get()))
+	{
+		State = ESOEnemyState::Attack;
+		bDirectChase = false;
+		return;
+	}
 	if (Me->DistanceTo(Target.Get()) <= Me->MeleeRange)
 	{
 		State = ESOEnemyState::Attack;

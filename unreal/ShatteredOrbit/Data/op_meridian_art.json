@@ -1,0 +1,344 @@
+{
+ "lights": [
+  {
+   "kind": "fire",
+   "at": [
+    -23600.0,
+    -300.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -25000,
+    -2200,
+    60
+   ],
+   "radius": 1550.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -21400,
+    2400,
+    60
+   ],
+   "radius": 1700.0,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -16000,
+    1600,
+    60
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -19400,
+    -3000,
+    60
+   ],
+   "radius": 1650.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -14400,
+    3100,
+    60
+   ],
+   "radius": 1550.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -19600.0,
+    -1000.0,
+    860.0
+   ],
+   "radius": 1400.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -7400,
+    -1500,
+    78.0
+   ],
+   "radius": 1500.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -12600,
+    1600,
+    78.0
+   ],
+   "radius": 1400.0,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -8800,
+    -900,
+    60
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    0,
+    0,
+    390.0
+   ],
+   "radius": 1800.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    2294.3,
+    3276.6,
+    60
+   ],
+   "radius": 1600.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    2828.4,
+    -2828.4,
+    60
+   ],
+   "radius": 1600.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -2828.4,
+    -2828.4,
+    60
+   ],
+   "radius": 1600.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -2828.4,
+    2828.4,
+    60
+   ],
+   "radius": 1600.0,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    1200,
+    -2000,
+    60
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -2400,
+    1400,
+    60
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    1000,
+    8600.0,
+    1060.0
+   ],
+   "radius": 1500.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    7000,
+    7400.0,
+    1060.0
+   ],
+   "radius": 1500.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    12000.0,
+    5000,
+    1060.0
+   ],
+   "radius": 1500.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    10800.0,
+    1000,
+    1060.0
+   ],
+   "radius": 1500.0,
+   "intensity": null
+  },
+  {
+   "kind": "beam",
+   "at": [
+    20000.0,
+    0.0,
+    1860.0
+   ],
+   "radius": 4000,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    20000.0,
+    3870.0,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    22736.5,
+    2736.5,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    23870.0,
+    0.0,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    22736.5,
+    -2736.5,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    20000.0,
+    -3870.0,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    17263.5,
+    -2736.5,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    16130.0,
+    -0.0,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    17263.5,
+    2736.5,
+    1060.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    21750.0,
+    3031.1,
+    1060.0
+   ],
+   "radius": 1650.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    21750.0,
+    -3031.1,
+    1060.0
+   ],
+   "radius": 1650.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    16711.1,
+    -1197.1,
+    1060.0
+   ],
+   "radius": 1650.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    18250.0,
+    3031.1,
+    1060.0
+   ],
+   "radius": 1650.0,
+   "intensity": null
+  }
+ ]
+}

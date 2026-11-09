@@ -56,6 +56,9 @@ public:
 
 	ASOCombatCharacter* GetTarget() const { return Target.Get(); }
 
+	/** Chases the current target (nav path, or straight at it): for ThinkCombat. */
+	void Chase() { ChaseTarget(); }
+
 	/** True when the pawn moved along a nav mesh path last time it chased. */
 	bool UsedNavigation() const { return bUsedNav; }
 

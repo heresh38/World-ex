@@ -455,11 +455,12 @@ void ASOHUD::DrawHUD()
 		DrawRect(bLastDamageHealth ? FLinearColor(0.7f, 0.02f, 0.0f, A) : FLinearColor(0.1f, 0.45f, 1.0f, A), 0.0f, 0.0f, W, H);
 	}
 
-	// Bars over hurt creatures in view (within 40 m).
+	// Bars over hurt creatures in view (within 40 m); an operation's boss has its own bar across the top.
+	const ASOOperation* Operation = ASOOperation::Get(this);
 	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
 	{
 		const ASOCombatCharacter* Other = *It;
-		if (Other == Player || Other->IsDead() || Other->Faction == Player->Faction || Other->GetHealth() >= Other->GetMaxHealth())
+		if ((Operation && Other == Operation->GetBoss()) || Other == Player || Other->IsDead() || Other->Faction == Player->Faction || Other->GetHealth() >= Other->GetMaxHealth())
 		{
 			continue;
 		}

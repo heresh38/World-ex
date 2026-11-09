@@ -127,6 +127,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SO|Anim")
 	float GetAttackLength() const;
 
+	/** Plays any one-shot clip on the attack layer (a creature's special moves: cast, slam, sweep...). */
+	void PlayAction(UAnimSequenceBase* Clip, float PlayRate = 1.0f);
+
+	/** True while an attack or action clip plays. */
+	bool IsPlayingAction() const { return AttackTime >= 0.0f; }
+
+	/** The clip on the attack layer right now. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> ActiveAttack;
+
 	// State read by the proxy (game thread).
 	float Speed = 0.0f;
 	bool bInAir = false;

@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "SOCombatStatics.h"
@@ -96,7 +97,65 @@ void ASOEnemy::LoadContent()
 		Anim->Clips.Death = Clip(TEXT("Death"));
 		Anim->Clips.WalkSpeed = WalkSpeed;
 		Anim->Clips.RunSpeed = RunSpeed;
+		for (const FName& Name : ActionClips)
+		{
+			if (UAnimSequenceBase* A = Clip(*Name.ToString()))
+			{
+				Actions.Add(Name, A);
+			}
+		}
 	}
+}
+
+void ASOEnemy::PlayAction(FName Clip, float Rate)
+{
+	if (HasAuthority())
+	{
+		MulticastAction(Clip, Rate);
+	}
+}
+
+void ASOEnemy::MulticastAction_Implementation(FName Clip, float Rate)
+{
+	USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance());
+	if (const TObjectPtr<UAnimSequenceBase>* A = Actions.Find(Clip); A && Anim)
+	{
+		Anim->PlayAction(*A, Rate);
+	}
+}
+
+float ASOEnemy::GetActionLength(FName Clip) const
+{
+	const TObjectPtr<UAnimSequenceBase>* A = Actions.Find(Clip);
+	return A && *A ? (*A)->GetPlayLength() : 0.0f;
+}
+
+int32 ASOEnemy::DamageAround(const FVector& Center, float Radius, float Damage, float Knock)
+{
+	int32 Hits = 0;
+	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
+	{
+		ASOCombatCharacter* Other = *It;
+		if (Other == this || Other->IsDead() || !USOCombatStatics::AreHostile(this, Other))
+		{
+			continue;
+		}
+		const FVector D = Other->GetActorLocation() - Center;
+		if (D.Size2D() > Radius || FMath::Abs(D.Z) > 350.0f)
+		{
+			continue;
+		}
+		const float Falloff = 1.0f - 0.5f * D.Size2D() / FMath::Max(Radius, 1.0f);
+		if (USOCombatStatics::ApplyDamage(this, Other, Damage * Falloff, false) > 0.0f)
+		{
+			++Hits;
+		}
+		if (Knock > 0.0f)
+		{
+			Other->LaunchCharacter(D.GetSafeNormal2D() * Knock * Falloff + FVector(0, 0, Knock * 0.45f), true, true);
+		}
+	}
+	return Hits;
 }
 
 void ASOEnemy::SetRunning(bool bRun)
@@ -145,7 +204,7 @@ bool ASOEnemy::TryAttack(AActor* Target)
 
 void ASOEnemy::MulticastAttack_Implementation()
 {
-	USOSoundLibrary::PlayAt(this, TEXT("stalker_attack"), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.08f, ESOSoundRange::Mid);
+	USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_attack")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.08f, ESOSoundRange::Mid);
 	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
 		const float Length = Anim->GetAttackLength();
@@ -162,7 +221,7 @@ void ASOEnemy::Tick(float DeltaSeconds)
 		if (LastHealthSeen >= 0.0f && Health < LastHealthSeen - 0.5f && W->GetTimeSeconds() - LastHurtSound > 0.35f)
 		{
 			LastHurtSound = W->GetTimeSeconds();
-			USOSoundLibrary::PlayAt(this, TEXT("stalker_hurt"), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid);
+			USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_hurt")), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid);
 		}
 		LastHealthSeen = Health;
 	}
@@ -192,7 +251,7 @@ void ASOEnemy::Tick(float DeltaSeconds)
 void ASOEnemy::HandleDeath()
 {
 	Super::HandleDeath();
-	USOSoundLibrary::PlayAt(this, TEXT("stalker_death"), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
+	USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_death")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
 	PendingStrikeTime = -1.0f;
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	if (AController* AI = GetController())

@@ -114,7 +114,8 @@ def main():
     beacon = unreal.load_asset("/Game/Environments/Nexus/SM_NX_beacon")
     K = unreal.SOMapPointKind
     places = [("The Spire", "The city's heart", K.FAST_TRAVEL, (0.0, -260.0), None),
-              ("Shuttle to the Proving Range", "Back to the range", K.AREA_TRAVEL, (60.0, -300.0), "/Game/Maps/L_TestRange")]
+              ("Shuttle to the Proving Range", "Back to the range", K.AREA_TRAVEL, (60.0, -300.0), "/Game/Maps/L_TestRange"),
+              ("Operation: Meridian Fall", "The first operation", K.AREA_TRAVEL, (-60.0, -300.0), "/Game/Maps/L_Meridian")]
     for name, gp in plan["gates"].items():
         places.append((f"{dict(N='North', S='South', W='West', E='East')[name]} Gate", "The city wall", K.LANDMARK, on_road((gp[0] * .96, gp[1] * .96)), None))
     for key, d in plan["districts"].items():

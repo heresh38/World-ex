@@ -215,6 +215,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	TArray<FSOOperationRewardOption> Rewards;
 
+	/** The sky while the operation runs (the weather stays put). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
+	bool bStorm = true;
+
 	/** The rarity a reward drops at (3 = Legendary). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	int32 RewardRarity = 3;

@@ -5,6 +5,9 @@
 #include "SOEnemy.generated.h"
 
 class USkeletalMesh;
+class UAnimSequenceBase;
+class ASOEnemyAIController;
+class ASOCombatCharacter;
 
 /**
  * A creature. Defaults are the VANTHOS stalker from the browser build (enemies.js: hp 140, speed 5.4 m/s,
@@ -59,6 +62,25 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	FString ClipPathPrefix = TEXT("/Game/Characters/Stalker/Anims/A_Stalker_");
 
+	/** Extra one-shot clips (<ClipPathPrefix><Name>) the creature's special moves play (Cast, Slam, ...). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	TArray<FName> ActionClips;
+
+	/** Its sounds: <SoundPrefix>_attack / _hurt / _death. */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FString SoundPrefix = TEXT("stalker");
+
+	/** Server, every think (~10 Hz) with a target: a creature's own fighting (ranged, specials). Return true when it
+	 *  handled this think (the controller then does nothing more); false falls back to chase and melee. */
+	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target) { return false; }
+
+	/** Server: plays a named action clip on every machine. */
+	void PlayAction(FName Clip, float Rate = 1.0f);
+	float GetActionLength(FName Clip) const;
+
+	/** Server: damages every hostile within Radius of Center (a slam, a blast) and throws them back by Knock cm/s. */
+	int32 DamageAround(const FVector& Center, float Radius, float Damage, float Knock);
+
 	/** Server: starts a melee attack on Target if off cooldown. */
 	bool TryAttack(AActor* Target);
 
@@ -85,6 +107,12 @@ protected:
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastAttack();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastAction(FName Clip, float Rate);
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UAnimSequenceBase>> Actions;
 
 	void LoadContent();
 

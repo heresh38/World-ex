@@ -13,6 +13,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "SOCombatCharacter.h"
 #include "SOCombatStatics.h"
+#include "SOAltered.h"
 #include "SOEnemy.h"
 #include "SOEnemyAIController.h"
 #include "SOInventoryComponent.h"
@@ -21,6 +22,7 @@
 #include "SOLootTypes.h"
 #include "SOSound.h"
 #include "SOWardrobe.h"
+#include "SOWeather.h"
 
 namespace
 {
@@ -56,6 +58,10 @@ ASOOperation::ASOOperation()
 	bAlwaysRelevant = true;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("Root")));
 	EnemyClasses.Add(TEXT("stalker"), ASOEnemy::StaticClass());
+	EnemyClasses.Add(TEXT("remnant"), ASORemnant::StaticClass());
+	EnemyClasses.Add(TEXT("veilborn"), ASOVeilborn::StaticClass());
+	EnemyClasses.Add(TEXT("bulwark"), ASOBulwark::StaticClass());
+	EnemyClasses.Add(TEXT("colossus"), ASOColossus::StaticClass());
 	Rng.Initialize(FMath::Rand());
 }
 
@@ -193,6 +199,12 @@ void ASOOperation::BeginPlay()
 		{
 			UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: could not read the plan %s"), *PlanFile);
 		}
+	}
+	if (USOWeatherSubsystem* Weather = bStorm ? GetWorld()->GetSubsystem<USOWeatherSubsystem>() : nullptr)
+	{
+		Weather->bAutomatic = false;
+		Weather->SetWeather(ESOWeather::Storm, 0.0f);
+		Weather->SetWetness(0.85f);
 	}
 	if (HasAuthority())
 	{

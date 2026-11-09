@@ -97,6 +97,7 @@ const TArray<FSOAreaInfo>& ASOMapInfo::Areas()
 		TArray<FSOAreaInfo> L;
 		L.Add({ NSLOCTEXT("SO", "AreaNexus", "Nexus Prime"), TEXT("/Game/Maps/L_Nexus") });
 		L.Add({ NSLOCTEXT("SO", "AreaRange", "Proving Range"), TEXT("/Game/Maps/L_TestRange") });
+		L.Add({ NSLOCTEXT("SO", "AreaMeridian", "Operation: Meridian Fall"), TEXT("/Game/Maps/L_Meridian") });
 		return L;
 	}();
 	return List;
