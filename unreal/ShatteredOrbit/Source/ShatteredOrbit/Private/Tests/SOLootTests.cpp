@@ -385,6 +385,35 @@ bool FSOLootRequiemSetTest::RunTest(const FString& Parameters)
 		}
 	}
 	TestEqual(TEXT("the shotgun racks its pump after a shot"), SOReload::GetStyle(TEXT("vr_shotgun")), FName(TEXT("pump")));
+
+	// the proving range's cache: one Legendary copy of each of the nine, no credits, and it reseals
+	{
+		SOTest::FTestWorld W;
+		USOInventoryComponent* Inv = nullptr;
+		ASOCharacter* Player = SOTest::SpawnLooter(W, Inv);
+		ASOReliquary* Cache = W.World->SpawnActorDeferred<ASOReliquary>(ASOReliquary::StaticClass(), FTransform(FVector(200, 0, 0)));
+		Cache->RewardSet = TEXT("void_requiem");
+		Cache->SourceName = TEXT("Void Requiem cache");
+		Cache->RearmTime = 0.5f;
+		Cache->FinishSpawning(FTransform(FVector(200, 0, 0)));
+		W.Run(0.1f);
+		const int32 Items = Inv->GetItems().Num();
+		const int32 Credits = Inv->GetCredits();
+		Cache->Interact(Player);
+		TestTrue(TEXT("cache open"), Cache->IsOpen());
+		TestEqual(TEXT("the cache hands out all nine guns"), Inv->GetItems().Num() - Items, Guns.Num());
+		TestEqual(TEXT("and no credits"), Inv->GetCredits(), Credits);
+		TSet<FName> Got;
+		for (const FSOWeaponInstance& Gun : Cache->GetLastRewards())
+		{
+			Got.Add(Gun.Archetype);
+			TestEqual(*FString::Printf(TEXT("%s from the cache is Legendary"), *Gun.Archetype.ToString()), Gun.Rarity, 3);
+			TestTrue(*FString::Printf(TEXT("%s from the cache is one of the set"), *Gun.Archetype.ToString()), Guns.Contains(Gun.Archetype));
+		}
+		TestEqual(TEXT("one copy of each"), Got.Num(), Guns.Num());
+		W.Run(0.7f);
+		TestFalse(TEXT("the cache reseals"), Cache->IsOpen());
+	}
 	for (const TCHAR* Foley : { TEXT("vr_mag_in"), TEXT("vr_mag_slap"), TEXT("vr_rack_back"), TEXT("vr_hatch_open"), TEXT("vr_hatch_close"), TEXT("vr_bio_in"),
 		TEXT("vr_shell_in"), TEXT("vr_pump_back"), TEXT("vr_cyl_open"), TEXT("vr_speedload"), TEXT("vr_slide_back") })
 	{

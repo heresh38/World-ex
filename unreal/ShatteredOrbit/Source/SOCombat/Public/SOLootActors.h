@@ -120,6 +120,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Loot")
 	FString SourceName = TEXT("Spire reliquary");
 
+	/** A set cache: opening it hands out one Legendary copy of every gun of this set (USOWeaponData::SetId) instead of
+	 *  the pool's roll, and nothing else (the proving range's Void Requiem cache: the first operation's reward guns,
+	 *  there to be tried). None = the reward pool. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Loot")
+	FName RewardSet;
+
 	bool IsOpen() const { return bOpen; }
 	/** The last roll (server). */
 	const TArray<struct FSOWeaponInstance>& GetLastRewards() const;

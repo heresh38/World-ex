@@ -214,6 +214,13 @@ def main():
     reliquary = spawn(unreal.SOReliquary, (950, -800, 0), (0, 140, 0), "Reliquary")
     reliquary.set_folder_path("Gameplay")
 
+    # The Void Requiem cache: one Legendary copy of each of the first operation's nine reward guns, to try here.
+    cache = spawn(unreal.SOReliquary, (450, -300, 0), (0, 146, 0), "VoidRequiemCache")
+    cache.set_editor_property("reward_set", "void_requiem")
+    cache.set_editor_property("source_name", "Void Requiem cache")
+    cache.set_editor_property("rearm_time", 10.0)
+    cache.set_folder_path("Gameplay")
+
     # Stage 6: the area map (mini-map, map screen) with its places and the way to Nexus Prime
     info = spawn(unreal.SOMapInfo, (0, 0, 0), (0, 0, 0), "MapInfo")
     info.set_editor_property("area_name", unreal.Text("Proving Range"))

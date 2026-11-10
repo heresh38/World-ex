@@ -17,6 +17,7 @@
 #include "SOLootLibrary.h"
 #include "SOSound.h"
 #include "SOWeapon.h"
+#include "SOWeaponData.h"
 
 namespace
 {
@@ -253,11 +254,19 @@ void ASOReliquary::BeginPlay()
 	{
 		Mesh->SetStaticMesh(TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(ReliquaryMesh)).LoadSynchronous());
 	}
+	if (RewardSet == TEXT("void_requiem"))
+	{
+		Light->SetLightColor(FLinearColor(0.45f, 0.18f, 1.0f)); // the set's violet instead of the reliquary's amber
+	}
 	OnRep_Open();
 }
 
 FText ASOReliquary::GetInteractPrompt(const APawn* User) const
 {
+	if (!bOpen && !RewardSet.IsNone())
+	{
+		return FText::Format(NSLOCTEXT("SO", "SetCacheSealed", "Open the {0}"), FText::FromString(SourceName));
+	}
 	return bOpen ? NSLOCTEXT("SO", "ReliquaryOpen", "Emptied  ·  it reseals soon") : NSLOCTEXT("SO", "ReliquarySealed", "Open the reliquary");
 }
 
@@ -276,6 +285,30 @@ void ASOReliquary::Interact(APawn* User)
 	bOpen = true;
 	OpenedAt = GetWorld()->GetTimeSeconds();
 	FRandomStream Rng(FMath::Rand());
+	if (!RewardSet.IsNone())
+	{
+		// a set cache: one Legendary copy of every gun of the set, nothing else
+		LastRewards.Reset();
+		if (const USOLootTables* Tables = USOLootLibrary::GetTables())
+		{
+			for (const FSOArchetypeEntry& Entry : Tables->Archetypes)
+			{
+				const USOWeaponData* Data = Tables->LoadArchetype(Entry.Id);
+				if (Data && Data->SetId == RewardSet)
+				{
+					FSOWeaponInstance W = USOLootLibrary::MakeWeapon(Entry.Id, 3, Inventory->GetPower() + 2, Rng);
+					W.Source = SourceName;
+					LastRewards.Add(W);
+				}
+			}
+		}
+		for (const FSOWeaponInstance& W : LastRewards)
+		{
+			Inventory->AddWeapon(W);
+		}
+		OnRep_Open();
+		return;
+	}
 	LastRewards = USOLootLibrary::RollReliquary(Inventory->GetPower(), Rng, SourceName);
 	for (const FSOWeaponInstance& W : LastRewards)
 	{
