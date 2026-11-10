@@ -1,0 +1,32 @@
+{
+ "shared": [
+  "/Game/Environments/Nexus/SM_NX_beacon",
+  "/Game/Environments/Nexus/MI_nx_glow_cyan",
+  "/Game/Environments/Nexus/MI_nx_stone",
+  "/Game/Environments/Nexus/Textures/T_nx_stone_"
+ ],
+ "areas": [
+  {
+   "id": "range",
+   "name": "Proving Range",
+   "kind": "range",
+   "level": "/Game/Maps/L_TestRange",
+   "content": []
+  },
+  {
+   "id": "nexus",
+   "name": "Nexus Prime",
+   "kind": "city",
+   "level": "/Game/Maps/L_Nexus",
+   "content": ["/Game/Environments/Nexus", "/Game/Environments/NexusCity"]
+  },
+  {
+   "id": "meridian",
+   "name": "Meridian Fall",
+   "kind": "operation",
+   "level": "/Game/Maps/L_Meridian",
+   "plan": "Data/op_meridian.json",
+   "content": ["/Game/Environments/Meridian"]
+  }
+ ]
+}

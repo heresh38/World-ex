@@ -112,6 +112,14 @@ def diffuse(me, val, iters, keep=.62):
     return v
 
 
+# the helmets are painted to their outfits: his in the coat's charcoal, hers in the jacket's white, both with the
+# lining's blue down the spine (hers along the peak as well)
+HELMET = {
+    "male": dict(primary=(.082, .084, .092), accent=(.060, .130, .420), mark=(.082, .084, .092)),
+    "female": dict(primary=(1.0, 1.0, .985), accent=(.16, .30, .70), mark=(1.0, 1.0, .985)),
+}
+
+
 def accent_zone(piece, P, isl, sex):
     """0..1 accent paint per vertex, by piece (object space: +X her/his left, -Y forward, +Z up)"""
     m = sex == "male"
@@ -120,10 +128,15 @@ def accent_zone(piece, P, isl, sex):
     if name.startswith("C_head__orion_helmet"):
         # the brow ridge and the left cheek / ear plate in the accent; a marking stripe down the right of the crown
         top = P[:, 2].max()
-        brow = (P[:, 2] > top - .115) & (P[:, 2] < top - .085) & (P[:, 1] < -.02)
-        a = np.maximum(a, brow.astype(F32))
-        if m:                                                    # his left side plates
-            a = np.maximum(a, ((P[:, 0] > .055) & (P[:, 2] < top - .10) & (P[:, 2] > top - .20)).astype(F32))
+        # whole plates take the accent (a zone painted across a plate ends in a ragged line): the spine, and on hers
+        # the peak over the shield
+        ids, inv = np.unique(isl, return_inverse=True)
+        cnt = np.maximum(np.bincount(inv), 1).astype(F32)
+        mean = lambda v: (np.bincount(inv, weights=v) / cnt)[inv]
+        ax, sx_, my, mz = mean(np.abs(P[:, 0])), mean(P[:, 0]), mean(P[:, 1]), mean(P[:, 2])
+        a = np.maximum(a, ((ax < .008) & (mz > top - .09)).astype(F32))
+        if not m:
+            a = np.maximum(a, ((np.abs(sx_) < .01) & (ax > .02) & (my < P[:, 1].min() + .07) & (mz > top - .125) & (mz < top - .075)).astype(F32))
     elif name.startswith("C_hands__orion_armoured"):         # the knuckle guard and finger plates
         a = np.maximum(a, (P[:, 2] > P[:, 2].min() + .02).astype(F32) * 0.6)
     return a
@@ -142,7 +155,7 @@ def mark_zone(piece, P, sex):
 def apply(piece, T, log=print):
     me = piece.data
     sex = T["sex"]
-    S = SCHEME[sex]
+    S = HELMET[sex] if piece.name.startswith("C_head__orion_helmet") else SCHEME[sex]
     n = len(me.vertices)
     if not n:
         return

@@ -92,6 +92,9 @@ def import_texture(file_path, dest, name, kind):
     elif kind == "mask":
         tex.set_editor_property("srgb", False)
         tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
+    if "_skin_" in name.lower():
+        # the players' skin maps are written at 4K; the game holds them at 2K (three per body: video memory)
+        tex.set_editor_property("max_texture_size", 2048)
     if "hair" in name.lower():
         # strand cards: smaller mips keep the strands' alpha coverage (plain averaging thins hair out with distance)
         try:
@@ -577,7 +580,8 @@ HAIR_TONE = (0.020, 0.014, 0.010)     # dark brown, near black (the concept pair
 
 def player_extra(key, m):
     if key in ("skin", "skin_face"):
-        return {"tint": list(SKIN_TONE)}
+        # (the body's own skin maps carry the colour; the flat tone only for a body exported without them)
+        return {"tint": [1.0, 1.0, 1.0] if m.get("baseColorTex") else list(SKIN_TONE)}
     if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
     return None
@@ -680,6 +684,9 @@ def player_wardrobe(sex, master):
     worn = wear_texture()
     for key in used:
         m = materials.get(key) or (materials.get("skin") if key == "skin_face" else None) or {}
+        if not m and key in ("skin", "skin_face"):
+            # the body's sections are skin__<region> in the file: they all carry the same skin maps
+            m = materials.get("skin__head" if key == "skin_face" else "skin__chest") or {}
         instances[key] = make_instance(master, dest, key, m, tex, player_extra(key, m))
         amounts = ARMOUR_WEAR.get(key)
         if amounts and worn:

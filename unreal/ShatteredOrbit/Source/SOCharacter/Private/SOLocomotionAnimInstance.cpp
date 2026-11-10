@@ -4,6 +4,9 @@
 #include "Animation/AnimationPoseData.h"
 #include "AnimationRuntime.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "ReferenceSkeleton.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "SOCharacterMovementComponent.h"
@@ -66,6 +69,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	const ASOCombatCharacter* Holder = Cast<ASOCombatCharacter>(Character);
 	const ASOWeapon* Held = Holder ? Holder->GetWeapon() : nullptr;
 	const USOGunRigComponent* Rig = Held ? (bArmsOnly ? Held->GetFirstPersonRig() : Held->GetThirdPersonRig()) : nullptr;
+	if (Player && Player->IsWeaponStowed() && !bArmsOnly)
+	{
+		Rig = nullptr;                                           // (the gun is on the back: the hands are free)
+	}
 	FTransform Right, Left;
 	if (!bDead && Mesh && Rig && Rig->GetAttachParent() && Rig->GetHandTargets(Right, Left))
 	{
@@ -73,6 +80,22 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		RightTarget = Right.GetRelativeTransform(ToMesh);
 		LeftTarget = Left.GetRelativeTransform(ToMesh);
 		Rig->GetFingerPoses(RightFingers, LeftFingers);
+		// the hands fitted to this gun (once per gun, when it is at rest in them)
+		if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading())
+		{
+			FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
+		}
+		if (bFitDone && FitRig.Get() == Rig)
+		{
+			const FTransform& RigT = Rig->GetComponentTransform();
+			RightFingers = FitFingers[0];
+			RightTarget.AddToTranslation(ToMesh.InverseTransformVector(RigT.TransformVector(FitOffset[0])));
+			if (!Held->IsReloading())
+			{
+				LeftFingers = FitFingers[1];
+				LeftTarget.AddToTranslation(ToMesh.InverseTransformVector(RigT.TransformVector(FitOffset[1])));
+			}
+		}
 		const float Ads = Player ? (Player->GetViewmodel() ? Player->GetViewmodel()->GetAds() : 0.0f) : (Holder->IsAimingDownSights() ? 1.0f : 0.0f);
 		AimPitch = FRotator::NormalizeAxis(Player ? Player->GetAimRotation().Pitch : Holder->GetBaseAimRotation().Pitch);
 		EyeCS = ToMesh.InverseTransformPosition(Player ? Player->GetEyeTransform(false).GetLocation() : Holder->GetPawnViewLocation());
@@ -207,6 +230,297 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			AttackTime = -1.0f;
 		}
 	}
+}
+
+void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USkeletalMeshComponent* Mesh, bool bOneHanded)
+{
+	FitRig = Rig;
+	bFitDone = false;
+	FitOffset[0] = FitOffset[1] = FVector::ZeroVector;
+	Rig->GetFingerPoses(FitFingers[0], FitFingers[1]);
+	const USkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+	FTransform Target[2];
+	if (!Asset || !Rig->IsBuilt() || !Rig->GetGunSpace() || !Rig->GetHandTargets(Target[0], Target[1]))
+	{
+		return;
+	}
+	const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+	const TArray<FTransform>& RefLocal = Ref.GetRefBonePose();
+	auto RefCS = [&](int32 Bone)
+	{
+		FTransform T = FTransform::Identity;
+		for (int32 I = Bone; I != INDEX_NONE; I = Ref.GetParentIndex(I))
+		{
+			T = T * RefLocal[I];
+		}
+		return T;
+	};
+
+	// The gun's meshes answer shape queries for the length of the fit (they collide with nothing otherwise).
+	TArray<USceneComponent*> Children;
+	Rig->GetGunSpace()->GetChildrenComponents(true, Children);
+	TArray<UStaticMeshComponent*> Parts;
+	for (USceneComponent* Child : Children)
+	{
+		UStaticMeshComponent* Part = Cast<UStaticMeshComponent>(Child);
+		if (Part && Part->GetStaticMesh() && Part->IsVisible())
+		{
+			Part->SetCollisionResponseToAllChannels(ECR_Ignore);
+			Part->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			Parts.Add(Part);
+		}
+	}
+	auto Touches = [&Parts](const FVector& A, const FVector& B, float Radius)
+	{
+		FHitResult Hit;
+		for (UStaticMeshComponent* Part : Parts)
+		{
+			if (Part->SweepComponent(Hit, A, B, FQuat::Identity, FCollisionShape::MakeSphere(Radius), true))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	auto Surface = [&Parts](const FVector& A, const FVector& B, FVector& OutPoint)
+	{
+		bool bAny = false;
+		float Best = 2.0f;
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOFitGrip), true);
+		for (UStaticMeshComponent* Part : Parts)
+		{
+			if (Part->LineTraceComponent(Hit, A, B, Params) && Hit.Time < Best)
+			{
+				Best = Hit.Time;
+				OutPoint = Hit.ImpactPoint;
+				bAny = true;
+			}
+		}
+		return bAny;
+	};
+
+	static const TCHAR* FingerNames[5] = { TEXT("index"), TEXT("middle"), TEXT("ring"), TEXT("pinky"), TEXT("thumb") };
+	static const float FingerRadius[5] = { 0.92f, 0.96f, 0.90f, 0.80f, 1.05f };
+	static const float MaxCurl[5][3] = { { 88, 100, 70 }, { 90, 102, 72 }, { 92, 104, 72 }, { 94, 104, 72 }, { 46, 50, 55 } };
+	const FTransform RigT = Rig->GetComponentTransform();
+	int32 Fitted = 0;
+	for (int32 Side = 0; Side < (bOneHanded ? 1 : 2); ++Side)
+	{
+		const bool bLeft = Side == 1;
+		const int32 Hand = Ref.FindBoneIndex(bLeft ? TEXT("hand_L") : TEXT("hand_R"));
+		const int32 Lower = Hand != INDEX_NONE ? Ref.GetParentIndex(Hand) : INDEX_NONE;
+		if (Hand == INDEX_NONE || Lower == INDEX_NONE)
+		{
+			continue;
+		}
+		const FTransform HandRef = RefCS(Hand);
+		const FVector RestAlong = (HandRef.GetLocation() - RefCS(Lower).GetLocation()).GetSafeNormal();
+		const FQuat RestBasis = FSOHandGrip::MakeBasis(RestAlong, FVector(0.0f, 1.0f, 0.0f), bLeft);
+		const FQuat HandOffset = RestBasis.Inverse() * HandRef.GetRotation();
+		const FQuat Basis = Target[Side].GetRotation();
+		const FVector Along = Basis.GetAxisX();
+		const FVector Palm = FSOHandGrip::PalmNormal(Basis, bLeft);
+
+		// 1. the hand onto the gun. The firing hand is seated on the grip as this gun has it: the web between thumb and
+		//    index under the top of the backstrap, the palm on the grip's side (measured on the mesh: the backstrap from
+		//    behind, the side from the right). The support hand's palm goes onto the surface under it.
+		FVector Wrist = Target[Side].GetLocation();
+		if (!bLeft)
+		{
+			auto RigPoint = [&RigT](float X, float Y, float Z) { return RigT.TransformPosition(FVector(X, Y, Z)); };
+			FVector Back, SideHit;
+			if (Surface(RigPoint(-18.0f, 0.0f, -4.0f), RigPoint(3.0f, 0.0f, -4.0f), Back))
+			{
+				const float BackX = static_cast<float>(RigT.InverseTransformPosition(Back).X);
+				float SideY = 1.6f;
+				if (Surface(RigPoint(BackX + 1.8f, 8.0f, -4.5f), RigPoint(BackX + 1.8f, -1.0f, -4.5f), SideHit))
+				{
+					SideY = static_cast<float>(RigT.InverseTransformPosition(SideHit).Y);
+				}
+				// rig-space basis of the grip (the same the rig built the target from)
+				const FVector AlongR = RigT.InverseTransformVectorNoScale(Along);
+				const FVector ThumbR = RigT.InverseTransformVectorNoScale(Basis.GetAxisY());
+				// the web sits about 6.2 cm along the hand and 3 cm to the thumb's side of the wrist
+				FVector WristR = FVector(BackX + 0.5f, 0.0f, -1.6f) - AlongR * 6.2f - ThumbR * 3.0f;
+				WristR.Y = SideY + 1.3f;
+				const FVector Now = RigT.InverseTransformPosition(Wrist);
+				const FVector Move = (WristR - Now).GetClampedToMaxSize(6.0f);
+				FitOffset[Side] = Move;
+				Wrist = RigT.TransformPosition(Now + Move);
+			}
+		}
+		else
+		{
+			const FVector Contact = Wrist + Along * 5.0f + Palm * 1.3f;
+			FVector On;
+			if (Surface(Contact - Palm * 6.0f, Contact + Palm * 5.0f, On))
+			{
+				const float Shift = FMath::Clamp(static_cast<float>(FVector::DotProduct(On - Contact, Palm)), -3.0f, 3.0f);
+				Wrist += Palm * Shift;
+				FitOffset[Side] = RigT.InverseTransformVector(Palm * Shift);
+			}
+		}
+
+		// 2. the fingers, joint by joint from the knuckle: each closes until the rest of the finger touches the gun
+		const FTransform HandWorld(Basis * HandOffset, Wrist, Mesh->GetComponentScale());
+		const float Size = static_cast<float>(Mesh->GetComponentScale().X);
+		for (int32 F = 0; F < 5; ++F)
+		{
+			int32 Chain[3];
+			bool bChain = true;
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Chain[K] = Ref.FindBoneIndex(*FString::Printf(TEXT("%s_0%d_%s"), FingerNames[F], K + 1, bLeft ? TEXT("L") : TEXT("R")));
+				bChain &= Chain[K] != INDEX_NONE;
+			}
+			if (!bChain)
+			{
+				continue;
+			}
+			const float TipLength = static_cast<float>(RefLocal[Chain[2]].GetLocation().Size()) * 0.8f * Size;
+			float Curl[3] = { 0.0f, 0.0f, 0.0f };
+			float SpreadDeg = 0.0f;
+			// the finger's joints and tip in world space for the current curl
+			auto Pose = [&](FVector Joint[4])
+			{
+				FTransform Parent = HandWorld;
+				FVector Axis = FVector::ZeroVector;
+				FVector Dir = Along;
+				for (int32 K = 0; K < 3; ++K)
+				{
+					FTransform Rigid = RefLocal[Chain[K]] * Parent;
+					if (K == 0)
+					{
+						FVector FingerDir = ((RefLocal[Chain[1]] * Rigid).GetLocation() - Rigid.GetLocation()).GetSafeNormal();
+						if (F == 4 && SpreadDeg > 0.01f)
+						{
+							const float Sign = FVector::DotProduct(FVector::CrossProduct(FingerDir, Palm), Along) >= 0.0f ? 1.0f : -1.0f;
+							const FQuat Spread(Along, FMath::DegreesToRadians(SpreadDeg) * Sign);
+							Rigid.SetRotation(Spread * Rigid.GetRotation());
+							FingerDir = Spread.RotateVector(FingerDir);
+						}
+						Axis = FVector::CrossProduct(FingerDir, Palm).GetSafeNormal();
+					}
+					const FQuat Close(Axis, FMath::DegreesToRadians(Curl[K]));
+					Parent = FTransform(Close * Rigid.GetRotation(), Rigid.GetLocation(), Rigid.GetScale3D());
+					Joint[K] = Rigid.GetLocation();
+					if (K == 2)
+					{
+						Dir = (Joint[2] - Joint[1]).GetSafeNormal();
+						Dir = Close.RotateVector(Dir);
+					}
+				}
+				Joint[3] = Joint[2] + Dir * TipLength;
+			};
+			auto Blocked = [&](int32 From)
+			{
+				FVector J[4];
+				Pose(J);
+				// (the knuckle end of the first bone lies in the palm, against what the palm rests on: the test starts
+				// a little way out; the thumb's first bone is the ball of the thumb itself and is left out)
+				for (int32 K = FMath::Max(From, F == 4 ? 1 : 0); K < 3; ++K)
+				{
+					const FVector A = K == 0 ? FMath::Lerp(J[0], J[1], 0.4f) : J[K];
+					if (Touches(A, J[K + 1], FingerRadius[F] * Size * (K == 0 ? 0.80f : (K == 1 ? 0.78f : 0.72f))))
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+			// Closing: all three joints together in a natural proportion (a curved finger, not a hook). A straight
+			// finger often starts inside something in front of the hand (the magazine, the trigger guard): the first
+			// free pose past that is where the wrap begins; from there it closes until it touches, then the middle
+			// and tip joints go on alone until they touch too.
+			static const float Share[3] = { 0.82f, 1.0f, 0.62f };
+			auto Set = [&](float T) { for (int32 K = 0; K < 3; ++K) { Curl[K] = T * MaxCurl[F][K] * Share[K]; } };
+			bool bAnyContact = false;
+			if (F == 4 && Blocked(0))
+			{
+				// the thumb lies through what the hand holds: swing it round to the far side until it comes free
+				for (float S = 8.0f; S <= 80.0f; S += 8.0f)
+				{
+					SpreadDeg = S;
+					if (!Blocked(0))
+					{
+						SpreadDeg = FMath::Min(S + 6.0f, 80.0f);      // a little clear of the edge it came round
+						break;
+					}
+				}
+				if (Blocked(0))
+				{
+					SpreadDeg = 0.0f;
+				}
+			}
+			const bool bStartsInside = Blocked(0);
+			const float Step = 0.035f;
+			float T = 0.0f;
+			bool bFree = !bStartsInside;
+			for (; !bFree && T <= 1.0f; T += Step)
+			{
+				Set(T);
+				bFree = !Blocked(0);
+			}
+			if (bFree)
+			{
+				float Last = T;
+				for (T += Step; T <= 1.0f; T += Step)
+				{
+					Set(T);
+					if (Blocked(0))
+					{
+						bAnyContact = true;
+						break;
+					}
+					Last = T;
+				}
+				Set(Last);
+				for (int32 K = 1; K < 3 && bAnyContact; ++K)
+				{
+					for (float A = Curl[K] + 3.0f; A <= MaxCurl[F][K]; A += 3.0f)
+					{
+						const float Keep = Curl[K];
+						Curl[K] = A;
+						if (Blocked(K))
+						{
+							Curl[K] = Keep;
+							break;
+						}
+					}
+				}
+			}
+			UE_LOG(LogTemp, Verbose, TEXT("FitGrip:   %s %s %s curl %.0f %.0f %.0f (preset %.0f %.0f %.0f)"), bLeft ? TEXT("L") : TEXT("R"), FingerNames[F],
+				bStartsInside ? TEXT("INSIDE") : (bAnyContact ? TEXT("fit") : TEXT("no contact")), Curl[0], Curl[1], Curl[2],
+				FitFingers[Side].Curl[F][0], FitFingers[Side].Curl[F][1], FitFingers[Side].Curl[F][2]);
+			if (F == 4 && !bStartsInside)
+			{
+				// the thumb keeps where it came free even with nothing to press on (its preset would put it back through)
+				FitFingers[Side].ThumbSpread = SpreadDeg;
+				if (!bAnyContact && SpreadDeg > 0.0f)
+				{
+					Set(0.18f);
+					bAnyContact = true;
+				}
+			}
+			if (bAnyContact)
+			{
+				// the trigger finger rests on the trigger: it never closes harder than its preset
+				for (int32 K = 0; K < 3; ++K)
+				{
+					const float Preset = FitFingers[Side].Curl[F][K];
+					FitFingers[Side].Curl[F][K] = (!bLeft && F == 0) ? FMath::Min(Curl[K], Preset + 30.0f) : Curl[K];
+				}
+				++Fitted;
+			}
+		}
+	}
+	for (UStaticMeshComponent* Part : Parts)
+	{
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	bFitDone = true;
+	UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %d fingers fitted on %d parts, offsets %s / %s"), Fitted, Parts.Num(), *FitOffset[0].ToCompactString(), *FitOffset[1].ToCompactString());
 }
 
 void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, float DeltaSeconds)
@@ -729,10 +1043,19 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			for (int32 k = 0; k < 3; ++k)
 			{
 				const int32 I = Chain[k];
-				const FTransform Rigid = Local[I] * ParentCS;
+				FTransform Rigid = Local[I] * ParentCS;
 				if (k == 0)
 				{
-					const FVector FingerDir = ((Local[Chain[1]] * Rigid).GetLocation() - Rigid.GetLocation()).GetSafeNormal();
+					FVector FingerDir = ((Local[Chain[1]] * Rigid).GetLocation() - Rigid.GetLocation()).GetSafeNormal();
+					if (f == 4 && FMath::Abs(Fingers.ThumbSpread) > 0.01f)
+					{
+						// the thumb round the hand's long axis, toward the palm's side
+						const FVector AlongHand = Target.GetRotation().GetAxisX();
+						const float Sign = FVector::DotProduct(FVector::CrossProduct(FingerDir, Palm), AlongHand) >= 0.0f ? 1.0f : -1.0f;
+						const FQuat Spread(AlongHand, FMath::DegreesToRadians(Fingers.ThumbSpread) * Sign);
+						Rigid.SetRotation(Spread * Rigid.GetRotation());
+						FingerDir = Spread.RotateVector(FingerDir);
+					}
 					Axis = FVector::CrossProduct(FingerDir, Palm).GetSafeNormal();
 				}
 				const FQuat Close(Axis, FMath::DegreesToRadians(Fingers.Curl[f][k]));

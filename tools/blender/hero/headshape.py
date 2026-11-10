@@ -20,7 +20,7 @@ eyeballs with eyelid shells, cheekbones and the zygomatic arch, the mandible's b
 import math
 import numpy as np
 from mathutils import Vector
-from sdf import smin, smax, ellipsoid, round_cone, Loft, sphere
+from sdf import smin, smax, ellipsoid, round_cone, Loft
 
 F32 = np.float32
 ARCH = 13.0         # dental arch: the mouth's surface recedes ARCH * x^2 (male frame) at the corners
@@ -58,6 +58,38 @@ FACE_KEYS = {
     "brow": dict(brow=1.7), "ear_size": dict(ear_size=1.15), "ear_out": dict(ear_out=1.5),
 }
 
+import anatomy
+import os
+OFF = set(os.environ.get("HERO_OFF", "").split(","))      # (debug: pieces left out, to see what each one does)
+
+# his lower jaw with the surface anatomy (FACE rows by height): half width, section centre y, front exponent
+# the face with the surface anatomy (same heights as FACE): midline front y, half width, back limit, section centre y,
+# front exponent. The midline follows soft-tissue norms about a vertical through the subnasale (glabella 8 mm behind
+# it, the nose's tip 17 ahead, the upper lip 3, the lower lip 1, the fold under it 7 behind, the chin 3.5 behind: the
+# forehead does not overhang the mouth); the sections are rounder (the muzzle leads, the cheeks sweep back); below the
+# mouth the jaw is an arch whose widest point moves back toward the angle, and it carries the chin itself (a chin
+# blended on as a ball stands off the jaw). Every column runs smooth: a zigzag between rows shows as a band.
+AFACE = [
+    (-.003, -.0740, .0260, -.042, -.052, 2.3),
+    (.006, -.0945, .0390, -.032, -.045, 2.45),
+    (.016, -.1000, .0490, -.022, -.036, 2.5),      # pogonion (a broad, square chin)
+    (.030, -.0962, .0530, -.010, -.026, 2.4),      # the fold under the lower lip
+    (.045, -.0985, .0562, .030, -.020, 2.3),
+    (.058, -.1035, .0588, .036, -.018, 2.2),
+    (.072, -.1030, .0615, .045, -.018, 2.15),      # subnasale
+    (.090, -.0985, .0655, .045, -.020, 2.2),
+    (.104, -.0940, .0680, .060, -.022, 2.2),
+    (.121, -.0825, .0680, .070, -.026, 2.2),
+    (.136, -.0900, .0655, .070, -.028, 2.3),
+    (.156, -.0915, .0620, .070, -.030, 2.4),
+    (.182, -.0850, .0555, .070, -.030, 2.3),
+]
+
+
+# her face with the surface anatomy: very round (FACE's heights): the half widths stay full from the cheekbones down
+# to the mouth and come round to a small chin in one curve; every section an ellipse (no planes, no corners)
+ROUND_HW = [.0165, .0280, .0395, .0505, .0592, .0645, .0668, .0680, .0680, .0668, .0645, .0605, .0540]
+
 
 class HeadShape:
     """mixin for shape.Body: head_geometry(), head_part(P, ear=True), ear()"""
@@ -72,27 +104,37 @@ class HeadShape:
         chin = T["chin_z"]
         ez = T["eye_z"]
         # her lower face is shorter: below the mouth (z .05) the heights are drawn up by a quarter, the chin ~13 mm higher
-        zf = (lambda z: z) if m else (lambda z: z if z >= .05 else .05 - (.05 - z) * .74)
+        # (his lower third a tenth shorter: the mouth-to-chin height of the adult norm)
+        zf = (lambda z: z if z >= .05 else .05 - (.05 - z) * (.90 if m else .74))
         X = lambda x, y, z: Vector((x * hs, Y0 + y * hs, chin + zf(z) * hs))
         ezr = (ez - chin) / hs                                   # eye height in the male frame
         self._g = g = dict(
             hs=hs, h=h, chin=chin, ez=ez, X=X, zf=zf,
-            eye_c=Vector((T["interpupil"] / 2, Y0 + (-.0822 + .0122) * hs, ez)), eye_r=.0122,
+            eye_c=Vector((T["interpupil"] / 2, Y0 + ((-.0865 if m else -.0885) + .0122) * hs, ez)), eye_r=.0122,
             # the lid opening above / below the eye centre: big, open, rounded eyes (hers a little bigger)
-            eye_hu=(.0066 if m else .0080) * hs, eye_hl=(.0050 if m else .0059) * hs,
+            eye_hu=(.0047 if m else .0063) * hs,
+            eye_hl=(.0055 if m else .0062) * hs,
             nasion=X(0, -.0905, ezr + .003),
             glabella=X(0, -.0965 if m else -.0925, ezr + .015),
-            pronasale=X(0, -.080 + ((-.1195 if m else -.1150) + .080) * F("nose_length"), .088),
-            subnasale=X(0, -.0965, .071),
-            stomion=X(0, -.1000 if m else -.0995, .050),
-            mouth_w=(.052 if m else .045) * hs * F("mouth_width"),
-            pogonion=X(0, (-.0935 if m else -.0935) - .006 * (F("chin") - 1), .016),
+            pronasale=X(0, -.080 + ((-.1225 if m else -.1190) + .080) * F("nose_length"), .088),
+            subnasale=X(0, -.1045, .071),
+            stomion=X(0, -.1035 if m else -.1005, .050),
+            mouth_w=(.052 if m else .049) * hs * F("mouth_width"),
+            pogonion=X(0, -.1000 - .006 * (F("chin") - 1), .016),
             menton=X(0, -.070, 0),
-            gonion=X((.050 if m else .043) * F("jaw_width"), .004 if m else .002, .033 if m else .041),   # hers higher, softer
+            # (the jaw's back edge runs in from the ear lobe to the angle: no flap beside the mouth)
+            gonion=X((.051 if m else .045) * F("jaw_width"), .004 if m else .002,
+                     .033 if m else .041),   # hers higher, softer
             tragion=X(.0715, .004, .100),
             vertex_z=chin + h,
             centre=Vector((0, Y0, ez)),
         )
+        # the lids: a shell round the eyeball, wider than it (the fissure runs past the globe: the inner corner sits
+        # well in front of it with the tear duct, the outer corner wraps back onto it); the lid margins are pinned
+        # on this same shell (fit.place_features), so the opening lies in the surface with the lid's own thickness
+        w = T["eye_w"] / 2 * F("eye_size") * (1.0 if m else 1.07)        # (her eyes larger)
+        wm, wl = w * .975, w * .96
+        g["lid"] = dict(R=g["eye_r"] + .0018, wm=wm, wl=wl, rxm=wm / .80, rxl=wl / .96)
         return g
 
     @property
@@ -106,16 +148,14 @@ class HeadShape:
         m, hs, chin = self.m, g["hs"], g["chin"]
         T, F = self.T, self.face
         rows = []
-        for z, yf, hw, yb, cw, nf in FACE:
-            if not m:
-                t = min(1.0, max(0.0, (z - .015) / .10))
-                k = .78 + .18 * t * t * (3 - 2 * t)                 # a smooth taper to a small chin (no step), and
-                hw *= k                                             # a narrower face under the cranium overall
+        for i, (z, yf, hw, yb, cw, nf) in enumerate(FACE):
+            yf, nf = AFACE[i][1], AFACE[i][5]
+            if m:
+                hw, yb, cw = AFACE[i][2:5]
+            else:
+                hw, nf = ROUND_HW[i], (2.0 if z < .10 else nf)
                 if .125 < z < .165:
                     yf += .003                                      # less glabella
-            else:
-                t = min(1.0, max(0.0, (.075 - z) / .05))
-                hw *= 1 + .03 * t * t * (3 - 2 * t)                 # his broad, square lower jaw
             if z < .06:
                 hw *= 1 + (F("jaw_width") - 1) * min(1.0, (.06 - z) / .03)
             rows.append((g["zf"](z), yf, hw, yb, cw, nf))
@@ -131,10 +171,11 @@ class HeadShape:
         # nose: a pyramid lofted up the dorsum (sections: z, dorsum front y, half width at the face, front exponent
         # < 2 for the triangular section); the tip's lobule and the alae are added in head_part
         nk = (1.08 if m else .74) * F("nose_width")
-        nf = (.98 if m else .82) * F("nose_length")              # her nose a little less projecting
-        NOSE = [(.073, -.1020, .0150, 2.0), (.080, -.1155, .0160, 2.2), (.087, -.1195, .0150, 2.3),
-                (.094, -.1140, .0140, 1.8), (.103, -.1060, .0140, 1.4), (.113, -.0990, .0125, 1.3),
-                (.124, -.0915, .0105, 1.3)]
+        nf = (.98 if m else .84) * F("nose_length")              # her nose a little less projecting
+        # a straight bridge, a tip that leads, a level underside
+        NOSE = [(.0725, -.1100, .0120, 2.0), (.0775, -.1195, .0135, 2.2), (.0850, -.1232, .0130, 2.3),
+                (.0930, -.1165, .0120, 1.8), (.1030, -.1070, .0112, 1.5), (.1130, -.0985, .0102, 1.4),
+                (.1240, -.0872, .0092, 1.4)]
         cwn = -.080
         nz = np.array([r[0] for r in NOSE])
         self._nose = Loft(V((0, Y0, chin + nz[0] * hs)), V((0, Y0, chin + nz[-1] * hs)), dict(
@@ -144,12 +185,13 @@ class HeadShape:
             v_axis=(1, 0, 0), cap=.3)
         # lips: an upper and a lower roll across the mouth (fuller on her); the stomion is their front
         st, mw = g["stomion"], g["mouth_w"]
-        full = (.85 if m else 1.65) * F("lips_full")
+        full = (1.25 if m else 1.85) * F("lips_full")
+        up = 1.3 if m else 1.25                                    # the upper lip's height
         tt = [0, .1, .25, .42, .5, .58, .75, .9, 1]
         yo = .0042
         self._lips = (
             Loft(V(st + Vector((-mw / 2, yo, .0006))), V(st + Vector((mw / 2, yo, .0006))), dict(
-                t=tt, rv_pos=[.0008, .0028, .0050, .0058, .0052, .0058, .0050, .0028, .0008],
+                t=tt, rv_pos=[f * up for f in (.0008, .0028, .0050, .0058, .0052, .0058, .0050, .0028, .0008)],
                 rv_neg=[.0006, .0012, .0018, .0020, .0020, .0020, .0018, .0012, .0006],
                 rw_pos=[f * full * 1.2 for f in (.0010, .0026, .0046, .0056, .0058, .0056, .0046, .0026, .0010)],
                 rw_neg=[.004] * 9), v_axis=(0, 0, 1), cap=.9),
@@ -173,8 +215,8 @@ class HeadShape:
         d = smin(d, self._face(P), .018)
         # brow ridges (his stronger) over each orbit, the glabella between them
         k = (1.3 if m else .15) * F("brow")
-        d = smin(d, round_cone(P, V(X(.003, -.0935, .139)), V(X(.047, -.0790, .1385)), .0054 * hs * (.55 + .45 * k),
-                               .0046 * hs * (.6 + .4 * k)), .012)
+        d = smin(d, round_cone(P, V(X(.003, -.0870, .139)), V(X(.047, -.0740, .1385)), .0054 * hs * (.55 + .45 * k),
+                               .0036 * hs * (.6 + .4 * k)), .012)
         # cheekbones (malar eminence) and the zygomatic arch back to the ear
         cb = F("cheekbones")
         cz_ = .102 if m else .107                                    # hers higher and rounder
@@ -182,20 +224,28 @@ class HeadShape:
                               (.018 * hs * cb, (.007 if m else .008) * hs * cb, (.013 if m else .015) * hs * cb)), .022)
         d = smin(d, round_cone(P, V(X(.050, -.060, .101)), V(X(.063, -.010, .103)), .0050 * hs, .0045 * hs), .020)
         # the cheek's soft fullness over the masseter and buccal pad (keeps the face from looking gaunt)
-        cp = 1.0 if m else .96                                     # (slimmer on her: the face tapers to the chin)
-        d = smin(d, ellipsoid(P, V(X(.043, -.046, .064)), (.015 * hs * cp, .026 * hs * cp, .026 * hs * cp)), .03)
+        cp = .96 if m else .96 * 1.22                                    # (his lean, the planes show; hers full and round)
+        if "cheekpad" not in OFF:                                   # (high and soft: it must not end in a line by the chin)
+            d = smin(d, ellipsoid(P, V(X(.036, -.040, .066)), (.013 * hs * cp, .026 * hs * cp, .034 * hs * cp)), .04)
         if not m:
             # her softer face: the round "apple" of the cheek under the eye
-            d = smin(d, ellipsoid(P, V(X(.033, -.073, .091)), (.013 * hs, .007 * hs, .011 * hs)), .02)
+            d = smin(d, ellipsoid(P, V(X(.033, -.073, .091)), (.016 * hs, .0085 * hs, .0135 * hs)), .02)
         # behind and below the ear: the mastoid and the upper neck muscles fill the skull's underside (no dent)
-        d = smin(d, ellipsoid(P, V(X(.040, .036, .080)), (.018 * hs, .030 * hs, .034 * hs)), .035)
+        # (small: it must not widen the neck under the ear)
+        d = smin(d, ellipsoid(P, V(X(.034, .038, .084)), (.014 * hs, .026 * hs, .028 * hs)), .018)
         # mandible: the lower border chin -> angle, the ramus up toward the ear; the chin's mound (squarer on him)
-        jw = 1.08 if m else .62                                     # her jaw slight, no hard angle
+        jw = 1.08 if m else .48                                     # her jaw slight, no angle to see
         # (the angle stays inside the face's outline: a fat end cap there shows as a knob under the ear)
-        d = smin(d, round_cone(P, V(X(.004, -.084, .013)), V(g["gonion"]), .0072 * hs * jw, .0076 * hs * jw), .020 if m else .026)   # the jawline
-        d = smin(d, round_cone(P, V(g["gonion"]), V(X(.060, .004, .088)), .0074 * hs * jw, .0070 * hs), .026 if m else .03)
-        d = smin(d, ellipsoid(P, V(g["pogonion"] + Vector((0, .009, -.002))),
-                              ((.024 if m else .012) * hs * F("chin"), (.0078 if m else .0065) * hs, (.012 if m else .008) * hs * F("chin"))), .014 if m else .02)
+        # (the border is a slim edge under the face's own taper: a fat one, blended wide, piles
+        # up with the cheek and the neck into a flap beside the mouth; blended tight, it creases)
+        jr = (.0058, .0062, .022) if m else (.0072, .0076, .026)
+        if "jawline" not in OFF:
+            d = smin(d, round_cone(P, V(X(.004, -.084, .013)), V(g["gonion"]), jr[0] * hs * jw, jr[1] * hs * jw), jr[2])   # the jawline
+        if "ramus" not in OFF:
+            d = smin(d, round_cone(P, V(g["gonion"]), V(X(.060, .004, .088)), .0064 * hs * jw, .0070 * hs), .016 if m else .018)
+        # the chin: carried by the jaw's own sections, only a small mound on top
+        d = smin(d, ellipsoid(P, V(g["pogonion"] + Vector((0, .0065, -.001))),
+                              ((.021 if m else .011) * hs * F("chin"), .0050 * hs, (.010 if m else .008) * hs * F("chin"))), .010)
         # lips
         Q = P.copy()
         Q[:, 1] -= ARCH / hs * Q[:, 0] ** 2                         # the lips follow the dental arch
@@ -204,26 +254,97 @@ class HeadShape:
         # orbits hollowed round the eyeball, the lids a thin shell over it
         ec, er = g["eye_c"], g["eye_r"]
         op = (g["eye_hu"] + g["eye_hl"]) / (.0106 * hs)              # the orbit opened to the lid opening
-        d = smax(d, -ellipsoid(P, V(ec + Vector((.0005, -.0095, .0012))), (.0145 * hs, .0048 * hs, .0095 * hs * op)), .006)
-        d = smin(d, sphere(P, V(ec), er + .0014), .006)
+        L = g["lid"]
+        d = smax(d, -ellipsoid(P, V(ec + Vector((.0005, -.0095, .0012))), (.0150 * hs, (.0050 if m else .0033) * hs, .0098 * hs * op)), .005)
+        q = P - V(ec)
+        rx = np.where(q[:, 0] >= 0, L["rxl"], L["rxm"]).astype(F32)
+        R_ = L["R"]
+        k0 = np.sqrt((q[:, 0] / rx) ** 2 + (q[:, 1] / R_) ** 2 + (q[:, 2] / R_) ** 2)
+        k1 = np.sqrt((q[:, 0] / rx ** 2) ** 2 + (q[:, 1] / R_ ** 2) ** 2 + (q[:, 2] / R_ ** 2) ** 2)
+        dl = k0 * (k0 - 1) / np.maximum(k1, 1e-9)
+        # the upper lid meets the brow's soft tissue in a crease; the lower lid runs soft into the cheek
+        t = np.clip((q[:, 2] + .003) / .006, 0, 1)
+        tx = np.clip(1.35 - np.abs(q[:, 0]) / (.0115 * hs), 0, 1)
+        d = smin(d, dl, .0060 - (.0032 if m else .0015) * t * t * (3 - 2 * t) * tx * tx * (3 - 2 * tx))
+        hh = np.where(q[:, 2] >= 0, g["eye_hu"], g["eye_hl"]) * 1.2
+        ww = np.where(q[:, 0] >= 0, L["wl"], L["wm"]) * 1.04
+        rho = np.sqrt((q[:, 0] / ww) ** 2 + (q[:, 2] / hh) ** 2)
+        wgt = 1 - np.clip((rho - .86) / .30, 0, 1) ** 2 * (3 - 2 * np.clip((rho - .86) / .30, 0, 1))
+        wgt = wgt * (q[:, 1] < 0)
+        d = d + (dl - d) * wgt
         # nose: dorsum from the root to the tip, the tip's lobule, the alae; nostrils hollowed
         tip, sub = g["pronasale"], g["subnasale"]
         nk = (1.08 if m else .74) * F("nose_width")
         d = smin(d, self._nose(P), .008)
         d = smin(d, ellipsoid(P, V(tip + Vector((0, .0075, -.0025))), (.0070 * nk, .0050, .0058)), .008)
-        d = smin(d, ellipsoid(P, V(sub + Vector((.0140 * nk, .0068, .0062))), (.0052 * nk, .0072, .0060)), .004)
-        d = smax(d, -ellipsoid(P, V(sub + Vector((.0060 * nk, .0068, .0008))), (.0034 * nk, .0048, .0020)), .0018)
+        d = smin(d, ellipsoid(P, V(sub + Vector((.0122 * nk, .0072, .0064))), (.0048 * nk, .0074, .0060)), .004)
+        # nostrils that go up into the nose, not a dent under it
+        d = smax(d, -ellipsoid(P, V(sub + Vector((.0064 * nk, .0060, .0022))), (.0036 * nk, .0052, .0040)), .0016)
         if ear:
             d = smin(d, self.ear(P, g), .006)
         return d
 
     def ear(self, P, g=None):
-        g = g or self.head_geometry()
+        return self.ear_anatomy(P, g or self.head_geometry())
+
+    def ear_anatomy(self, P, g):
+        """the outer ear as its parts: the auricle's plate standing off the head toward the back on a root, the helix
+        (its rim, from the crus above the canal over the top and down the back into the lobe), the antihelix with its
+        two crura, the scapha between them, the concha's bowl, the tragus and antitragus, the lobe. Everything is a
+        relief on the plate's outer face (no overhang a base mesh's quads would fold over)."""
         es = g["hs"] * self.face("ear_size")
         c = g["tragion"] + Vector((.006 * es + .006 * (self.face("ear_out") - 1), .012 * es, .005 * es))
         tilt = math.radians(14)
         R = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]], F32)
-        outer = ellipsoid(P, V(c), (.0085 * es, .0170 * es, .0305 * es), R)
-        bowl = ellipsoid(P, V(c + Vector((.0085 * es, -.002 * es, -.004 * es))), (.0055 * es, .0095 * es, .0125 * es), R)
-        # the bowl only a shallow dish: a deep concha folds a base mesh's few ear quads (detail comes from the normal map)
-        return smax(outer, -bowl + .0025 * es, .003)
+        q = ((P - V(c)) @ R.T) / es                              # local, in ear units: 0 out, 1 back, 2 up
+        u, v, w = q[:, 1], q[:, 2], q[:, 0]
+        cant = .26
+        wp = w - cant * u                                       # height over the plate's mid surface
+        L = np.stack([u, v, wp], 1).astype(F32)                 # the plate's own frame (sheared: fine at this size)
+
+        def tube(pts, r, k=.0012):
+            out = None
+            for (a, ra), (b, rb) in zip(zip(pts[:-1], r[:-1]), zip(pts[1:], r[1:])):
+                dd = round_cone(L, V(a), V(b), ra, rb)
+                out = dd if out is None else smin(out, dd, k)
+            return out
+
+        # the plate: an egg, narrower toward the lobe
+        nar = 1 - .22 * np.clip(-v / .03, 0, 1) ** 1.5
+        a_, b_ = .0160 * nar, .0300
+        k0 = np.sqrt((u / a_) ** 2 + (v / b_) ** 2 + (wp / .0030) ** 2)
+        k1 = np.sqrt((u / a_ ** 2) ** 2 + (v / b_ ** 2) ** 2 + (wp / .0030 ** 2) ** 2)
+        d = k0 * (k0 - 1) / np.maximum(k1, 1e-9)
+        # the root that carries it off the head (the back of the concha)
+        root = ellipsoid(np.stack([u, v, w], 1).astype(F32), V((.0005, .002, -.0050)), (.0120, .0210, .0085))
+        d = smin(d, root, .004)
+        h = .0012                                                # the rim's centre line over the mid surface
+        helix = tube([(-.0030, .0050, h), (-.0085, .0105, h), (-.0118, .0185, h), (-.0085, .0262, h), (.0005, .0285, h),
+                      (.0090, .0245, h), (.0138, .0150, h), (.0146, .0030, h), (.0128, -.0085, h), (.0090, -.0165, h)],
+                     [.0018, .0023, .0026, .0027, .0027, .0027, .0026, .0025, .0022, .0018])
+        fine = getattr(self, "fine", False)
+        if not fine:
+            # the base mesh: a full rim, one bowl, the tragus and the lobe (what its quads can carry cleanly)
+            rim = tube([(-.0085, .0105, h), (-.0112, .0185, h), (-.0080, .0255, h), (.0005, .0278, h),
+                        (.0088, .0240, h), (.0132, .0150, h), (.0140, .0030, h), (.0122, -.0085, h), (.0085, -.0165, h)],
+                       [.0026, .0030, .0031, .0031, .0031, .0030, .0029, .0026, .0022], k=.002)
+            d = smin(d, rim, .0030)
+            d = smin(d, ellipsoid(L, V((.0015, -.0235, .0004)), (.0072, .0078, .0036)), .004)
+            d = smax(d, -ellipsoid(L, V((.0005, .0040, .0052)), (.0072, .0135, .0058)), .0035)
+            d = smin(d, ellipsoid(L, V((-.0098, -.0010, .0020)), (.0040, .0052, .0028)), .0035)
+            return d * es
+        d = smin(d, helix, .0020)
+        anti = tube([(.0048, -.0120, h), (.0075, -.0040, h), (.0078, .0060, h), (.0050, .0150, h), (.0008, .0215, h)],
+                    [.0018, .0022, .0023, .0021, .0016])
+        d = smin(d, anti, .0020)
+        d = smin(d, tube([(.0074, .0075, h), (.0020, .0125, h), (-.0050, .0140, h)], [.0020, .0018, .0014]), .0020)   # lower crus
+        # the lobe: soft and full
+        d = smin(d, ellipsoid(L, V((.0015, -.0235, .0004)), (.0072, .0078, .0034)), .003)
+        # the concha's bowl, behind the tragus, down toward the canal
+        bowl = ellipsoid(L, V((-.0015, .0005, .0042)), (.0062, .0090, .0062))
+        d = smax(d, -bowl, .0022)
+        d = smax(d, -ellipsoid(L, V((.0090, .0165, .0036)), (.0022, .0060, .0024)), .0016)       # the scapha's groove
+        # tragus (a flap over the canal from the front) and antitragus
+        d = smin(d, ellipsoid(L, V((-.0098, -.0010, .0022)), (.0036, .0046, .0026)), .0022)
+        d = smin(d, ellipsoid(L, V((.0030, -.0122, .0020)), (.0030, .0026, .0020)), .0020)
+        return d * es

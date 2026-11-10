@@ -158,6 +158,15 @@ REWARDS = dict(
     weapons=["vr_rifle", "vr_sniper", "vr_smg", "vr_shotgun", "vr_lmg", "vr_handcannon", "vr_pistol", "vr_fusion", "vr_rocket"],
 )
 
+# What this operation puts on top of the species it uses. The creatures themselves are written once in the game
+# (one class per species, USOSpeciesLibrary) and are the same in every operation: a plan never describes behaviour.
+# ENEMIES: multipliers on every creature here, e.g. dict(health=1.2, damage=1.1).
+# VARIANTS: named dressings of a species that waves spawn like a species, e.g.
+#   dict(remnant_ashen=dict(species="remnant", name="Ashen Remnant", health=1.6, damage=1.2, speed=1.1, aim=0.8,
+#                           sight=1.2, weapon="shotgun"))  ->  ["remnant_ashen", 3, "court_north"] in a wave.
+ENEMIES = {}
+VARIANTS = {}
+
 
 def to_json():
     groups = {}
@@ -179,6 +188,8 @@ def to_json():
         crown=dict(c=cm((CROWN["c"][0], CROWN["c"][1], CROWN["z"])), r=CROWN["r"] * 100.0),
         map=[dict(label=l, subtitle=s, kind=k, at=cm(p)) for l, s, k, p in MAP_POINTS],
         rewards=REWARDS,
+        **(dict(enemies=ENEMIES) if ENEMIES else {}),
+        **(dict(variants=VARIANTS) if VARIANTS else {}),
     )
 
 

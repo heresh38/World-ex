@@ -17,8 +17,9 @@ import math
 import numpy as np
 from mathutils import Vector
 import sdf
-from sdf import smin, smax, ellipsoid, capsule, round_cone, round_box, Loft, sphere
+from sdf import smin, smax, ellipsoid, capsule, round_cone, Loft, sphere
 import skeleton
+import anatomy
 from headshape import HeadShape
 
 F32 = np.float32
@@ -26,6 +27,11 @@ F32 = np.float32
 
 def V(v):
     return np.asarray(tuple(v), F32)
+
+
+def headshape_off():
+    import headshape
+    return headshape.OFF
 
 
 def frame_rows(a, up):
@@ -58,8 +64,9 @@ class Body(HeadShape):
         st = [
             (z0, H["w"] * .41, H["d"] * .40, H["d"] * .42, .012),
             (T["crotch_z"] + .02, H["w"] * .47, H["d"] * .45, H["d"] * .50, .014),
-            (H["z"], H["w"] / 2, H["d"] * .47, H["d"] * .53, .015),
-            (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .45) / 2, lerp(H["d"], Wst["d"], .5) * (.55 if m else .5), lerp(H["d"], Wst["d"], .6) * .48, .008),
+            (H["z"], H["w"] / 2, H["d"] * (.47 if m else .445), H["d"] * .53, .015),
+            # (her belly flat between the hip bones: a trained body, no paunch)
+            (lerp(H["z"], Wst["z"], .5), lerp(H["w"], Wst["w"], .45) / 2, lerp(H["d"], Wst["d"], .5) * (.55 if m else .455), lerp(H["d"], Wst["d"], .6) * .48, .008),
             (Wst["z"], Wst["w"] / 2, Wst["d"] * (.56 if m else .5), Wst["d"] * .44, .0),         # the lumbar curve: the back comes in
             (lerp(Wst["z"], U["z"], .5), lerp(Wst["w"], U["w"], .5) / 2, lerp(Wst["d"], U["d"], .5) * (.54 if m else .5), lerp(Wst["d"], U["d"], .5) * .5, -.002),
             (U["z"], U["w"] / 2, U["d"] * .5, U["d"] * .52, -.003),
@@ -82,7 +89,10 @@ class Body(HeadShape):
         # its front (the throat) is set back under the chin
         nb, nt = Vector((0, .028, T["neck_base_z"] - .03)), Vector((0, .012, T["chin_z"] + .090))
         nw, nd = T["neck_w"] / 2, T["neck_d"] / 2
-        self.neck_loft = Loft(V(nb), V(nt), dict(t=[0, .5, 1], rv_pos=[nw * 1.0, nw * .92, nw * .84], rw_neg=[nd * .95, nd * .90, nd * .86],
+        # (the neck is a column clearly narrower than the jaw, about a centimetre inside each
+        # jaw angle, coming out from under the jaw; the jaw's own line from the ear to the chin is the face's outline)
+        nwf = [.93, .78, .65] if m else [.93, .80, .68]
+        self.neck_loft = Loft(V(nb), V(nt), dict(t=[0, .5, 1], rv_pos=[nw * nwf[0], nw * nwf[1], nw * nwf[2]], rw_neg=[nd * .95, nd * .90, nd * .86],
                                                   rw_pos=[nd * 1.02, nd * .86, nd * .66], cw=[0, nd * .06, nd * .20]),
                                   v_axis=(1, 0, 0), cap=.5)      # (its top a D: widest toward the back, under the skull)
         self.arm = skeleton.arm(T)
@@ -143,11 +153,16 @@ class Body(HeadShape):
             R = frame_rows((1, .28, .15), (0, 0, 1))
             d = smin(d, ellipsoid(P, (.074, -C["d"] * .36, C["z"] + .030), (.088, .066, .040), np.array([R[0], R[1], -R[2]], F32)), .045)
         else:
-            d = smin(d, ellipsoid(P, (.062, -C["d"] * .34, C["z"] + .045), (.055, .020, .036)), .03)    # pectoral under the breast
-            R = frame_rows((0, -1, -.12), (.25, 0, 1))
-            # breast: a teardrop, the upper pole sloping down from the pectoral, the fuller lower pole
-            Rb = frame_rows((0, -.35, -1), (1, 0, 0))                     # tilted: the upper pole slopes, the lower is full
-            d = smin(d, ellipsoid(P, (.074, -C["d"] * .36, C["z"] - .002), (.040, .042, .038), Rb), .06)      # breast
+            # her breasts: each its own teardrop on the chest wall (a full lower pole over a fold, an upper pole that
+            # slopes down from the collar bone, the breastbone flat between them), set apart, natural in size
+            yc = -self.rib_d * .48                                       # the chest wall's front
+            cz = C["z"] - .004
+            low = ellipsoid(P, (.080, yc + .013, cz), (.053, .049, .050))
+            up = ellipsoid(P, (.076, yc + .020, cz + .040), (.050, .034, .054))
+            br = smin(low, up, .035)
+            # the fold under the breast is tight; above, it runs out soft into the chest
+            kb = .017 + .033 * np.clip((P[:, 2] - (cz - .030)) / .060, 0, 1)
+            d = smin(d, br, kb)
         # glutes, scapulae, lats
         Hh = T["hips"]
         # glutes: low and behind the hips (with the lumbar curve above them, the side view's S)
@@ -162,8 +177,14 @@ class Body(HeadShape):
             d = smin(d, ellipsoid(P, (U["w"] * .44, -U["d"] * .18, U["z"] + .015), (.026, .040, .055)), .03)
         d = smin(d, ellipsoid(P, (.090 if m else .085, self.rib_d * (.405 if m else .38), T["shoulder_z"] - .115), (.048 if m else .036, .030 if m else .022, .068 if m else .052)), .045 if m else .05)     # scapula
         # trapezius: neck to acromion
-        d = smin(d, round_cone(P, (.032, .040, T["neck_base_z"] + .002), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
-                               .034 if m else .022, .024 if m else .020), .04)
+        if m:
+            # (it climbs the neck: the slope from the neck down to the shoulder that carries a head on a broad torso; a flat
+            # shoulder line leaves the head on a stalk)
+            d = smin(d, round_cone(P, (.030, .038, T["neck_base_z"] + .026), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
+                                   .031, .024), .045)
+        else:
+            d = smin(d, round_cone(P, (.032, .040, T["neck_base_z"] + .002), (.150 * T["biacromial"] / .41, .020, T["shoulder_z"] - .010),
+                                   .022, .020), .04)
         # clavicles
         d = smin(d, capsule(P, (.018, -T["neck_d"] * .40, T["neck_base_z"] - .030), (.16 * T["biacromial"] / .41, -.025, T["shoulder_z"] - .010), .012), .035)
         return d
@@ -172,7 +193,8 @@ class Body(HeadShape):
         d = self.neck_loft(P)
         if self.m:
             T = self.T
-            d = smin(d, capsule(P, (.050, .020, T["chin_z"] + .07), (.018, -T["neck_d"] * .40, T["neck_base_z"] - .01), .0095), .03)
+            sx, sr, sk = .036, .0060, .016                              # (a cord under the skin, not a bulge)
+            d = smin(d, capsule(P, (sx, .020, T["chin_z"] + .07), (.018, -T["neck_d"] * .40, T["neck_base_z"] - .01), sr), sk)
             d = smin(d, ellipsoid(P, (0, -T["neck_d"] * .27, T["chin_z"] - .036), (.007, .0045, .010)), .010)  # thyroid cartilage
         return d
 
@@ -184,7 +206,8 @@ class Body(HeadShape):
         # deltoid: wraps the shoulder from the clavicle to a third down the arm
         # (a long teardrop over the shoulder, not a ball: its centre a little down the arm, blended wide)
         c = A["S"] + a * .055 + dor * .010
-        d = smin(d, ellipsoid(P, V(c), (.095, ur * (1.10 if self.m else .98), ur * (1.06 if self.m else 1.02)), self.arm_rows), .04)
+        dl = .98 if self.m else .96     # (shoulders ~3.1 head breadths)
+        d = smin(d, ellipsoid(P, V(c), (.095, ur * dl, ur * (1.06 if self.m else 1.02)), self.arm_rows), .04)
         # biceps / triceps bellies
         fwd = (A["thumb"] - a * A["thumb"].dot(a)).normalized()
         d = smin(d, ellipsoid(P, V(A["S"] + a * .16 + fwd * ur * .45), (.075, ur * .55, ur * .6), self.arm_rows), .025)
@@ -197,30 +220,52 @@ class Body(HeadShape):
         return d
 
     def hand_part(self, P):
+        """the hand: the palm a loft from the wrist to the webs (narrow at the wrist, widest
+        across the knuckles, thick at the heel and thin at the webs, its back arched), full fingers of almost even
+        width that only taper in the last joint, joined by webs; the thumb on its own mound with the first web"""
         T, Hd = self.T, self.hand
         A = Hd["arm"]
         a, dor, th = A["a"], A["dorsal"], A["thumb"]
         Pm = T["palm"]
         R = frame_rows(a, dor)
-        c = A["W"] + a * (Pm["l"] * .50)
-        d = round_box(P, V(c), (Pm["l"] * .50, Pm["t"] / 2 * .92, Pm["w"] / 2 * .96), .012, np.array([R[0], R[1], R[2]], F32))
-        # thenar / hypothenar pads on the palm side
-        d = smin(d, ellipsoid(P, V(A["W"] + a * (Pm["l"] * .35) + th * (Pm["w"] * .28) - dor * (Pm["t"] * .30)), (.032, .014, .02), R), .012)
-        d = smin(d, ellipsoid(P, V(A["W"] + a * (Pm["l"] * .40) - th * (Pm["w"] * .33) - dor * (Pm["t"] * .25)), (.034, .012, .015), R), .012)
-        # wrist joint
+        if not hasattr(self, "_palm"):
+            sg = 1.0 if Vector(a).cross(Vector(th)).dot(Vector(dor)) > 0 else -1.0
+            w2, t2 = Pm["w"] / 2, Pm["t"] / 2
+            ww, wd = T["wrist"]["w"] / 2, T["wrist"]["d"] / 2
+            ts = [0, .12, .32, .60, .86, 1.0]
+            wide = [ww * .98, ww * 1.06, w2 * .90, w2 * .98, w2 * 1.0, w2 * .96]
+            back = [wd * .96, wd * .98, t2 * .92, t2 * .88, t2 * .76, t2 * .58]        # dorsal half thickness
+            palm = [wd * .96, wd * 1.02, t2 * 1.02, t2 * .98, t2 * .84, t2 * .60]      # palmar half thickness
+            self._palm = Loft(V(A["W"] - a * .004), V(A["W"] + a * (Pm["l"] * .985)), dict(
+                t=ts, rv_pos=wide, rv_neg=wide, rw_pos=back if sg > 0 else palm, rw_neg=palm if sg > 0 else back,
+                n=[2.6, 2.8, 3.0, 3.0, 3.0, 3.0], nb=[2.6, 2.8, 3.0, 3.0, 3.0, 3.0]), v_axis=tuple(th), cap=.45)
+        d = self._palm(P)
+        # the heel of the hand: the thumb's mound and the little finger's
+        d = smin(d, ellipsoid(P, V(A["W"] + a * (Pm["l"] * .34) + th * (Pm["w"] * .27) - dor * (Pm["t"] * .30)), (.034, .016, .024), R), .014)
+        d = smin(d, ellipsoid(P, V(A["W"] + a * (Pm["l"] * .40) - th * (Pm["w"] * .33) - dor * (Pm["t"] * .25)), (.036, .012, .015), R), .012)
         d = smin(d, ellipsoid(P, V(A["W"] + a * .005), (.022, T["wrist"]["d"] / 2 * 1.02, T["wrist"]["w"] / 2 * 1.02), R), .015)
+        fd = None
         for f, ch in Hd["fingers"].items():
             J = ch["joints"]
             w = ch["width"] / 2
             for i in range(3):
-                r0 = w * (1.0, .92, .84)[i]
-                r1 = w * (.92, .84, .74)[i]
-                d = smin(d, round_cone(P, V(J[i]), V(J[i + 1]), r0, r1), .006)
+                r0 = w * (1.10, 1.05, 1.00)[i]
+                r1 = w * (1.05, 1.00, .86)[i]
+                c = round_cone(P, V(J[i]), V(J[i + 1]), r0, r1)
+                fd = c if fd is None else smin(fd, c, .0035)
+        d = smin(d, fd, .009)                                    # (the webs: the fingers run into the palm, not off its edge)
         tc = Hd["thumb"]
         J = tc["joints"]
         w = tc["width"] / 2
+        td = None
         for i in range(3):
-            d = smin(d, round_cone(P, V(J[i]), V(J[i + 1]), w * (1.25, 1.0, .9)[i], w * (1.0, .9, .78)[i]), .008)
+            c = round_cone(P, V(J[i]), V(J[i + 1]), w * (1.40, 1.14, 1.06)[i], w * (1.14, 1.06, .90)[i])
+            td = c if td is None else smin(td, c, .004)
+        d = smin(d, td, .013)
+        # the first web between the thumb and the index finger
+        ji = Hd["fingers"]["index"]["joints"][0]
+        mid = (Vector(J[1]) + Vector(ji)) * .5 - Vector(dor) * (Pm["t"] * .05)
+        d = smin(d, ellipsoid(P, V(mid), (.020, .0065, .016), R), .012)
         return d
 
     def leg_part(self, P):
@@ -267,9 +312,14 @@ class Body(HeadShape):
     def part(self, name, P):
         P = np.asarray(P, F32).copy()
         P[:, 0] = np.abs(P[:, 0])
-        return {"torso": self.torso, "neck": self.neck, "arm": self.arm_part, "hand": self.hand_part, "leg": self.leg_part,
-                "foot": self.foot_part, "toe": self.toes, "head": self.head_part, "ear": self.ear,
-                "skull": lambda Q: self.head_part(Q, ear=False)}[name](P)
+        d = {"torso": self.torso, "neck": self.neck, "arm": self.arm_part, "hand": self.hand_part, "leg": self.leg_part,
+             "foot": self.foot_part, "toe": self.toes, "head": self.head_part, "ear": self.ear,
+             "skull": lambda Q: self.head_part(Q, ear=False)}[name](P)
+        if name in ("torso", "arm", "hand", "leg", "foot", "toe"):
+            d = d - anatomy.relief(self, P)                  # the surface anatomy (anatomy.py)
+        elif name in ("head", "skull", "neck") and "relief" not in headshape_off():
+            d = d - anatomy.head(self, P)
+        return d
 
     def __call__(self, P):
         P = np.asarray(P, F32).copy()
@@ -281,4 +331,6 @@ class Body(HeadShape):
         d = smin(d, self.hand_part(P), .015)
         d = smin(d, self.leg_part(P), .05)
         d = smin(d, self.foot_part(P), .02)
+        if "relief" not in headshape_off():
+            d = d - anatomy.relief(self, P)
         return d

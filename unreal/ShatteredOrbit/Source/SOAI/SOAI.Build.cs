@@ -6,6 +6,6 @@ public class SOAI : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "AIModule", "NavigationSystem", "GameplayTasks",
-			"GameplayAbilities", "GameplayTags", "SOCore", "SOCombat", "SOCharacter" });
+			"GameplayAbilities", "GameplayTags", "Json", "SOCore", "SOCombat", "SOCharacter" });
 	}
 }

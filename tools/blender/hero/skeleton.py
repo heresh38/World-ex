@@ -55,7 +55,7 @@ def hand(T):
     # thumb: from the radial side of the palm near the wrist
     tb = A["W"] + a * (P["l"] * .30) + th * (P["w"] / 2 * .95) - d * (P["t"] * .15)
     tdir = unit(a * .55 + th * .55 - d * .35)
-    L = .068 * sc
+    L = .080 * sc
     joints = [tb]
     p, k = tb, tdir
     for i, s in enumerate((.42, .32, .26)):

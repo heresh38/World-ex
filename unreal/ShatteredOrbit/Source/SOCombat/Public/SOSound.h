@@ -27,6 +27,11 @@ class SOCOMBAT_API USOSoundLibrary : public UBlueprintFunctionLibrary
 public:
 	static USoundBase* Find(FName Name);
 
+	/** Sounds stay loaded once played, but only for the area being played: leaving it (USOAreaSubsystem) lets them
+	 *  all go. */
+	static void ReleaseAll();
+	static int32 NumHeld();
+
 	/** 3D at Location. PitchJitter = random +- fraction so repeats do not sound identical. */
 	UFUNCTION(BlueprintCallable, Category = "SO|Sound", meta = (WorldContext = "WorldContext"))
 	static void PlayAt(const UObject* WorldContext, FName Name, FVector Location, float Volume = 1.0f, float PitchJitter = 0.04f, ESOSoundRange Range = ESOSoundRange::Near);

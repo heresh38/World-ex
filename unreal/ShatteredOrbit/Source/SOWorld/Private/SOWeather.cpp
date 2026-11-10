@@ -1,5 +1,7 @@
 #include "SOWeather.h"
 
+#include "SOAreaSubsystem.h"
+
 #include "SONexusCity.h"
 
 #include "Camera/PlayerCameraManager.h"
@@ -234,12 +236,17 @@ void USOWeatherSubsystem::ApplyEnvironment(float DeltaTime)
 		{
 			Flash = 1.0f;
 			LightningTimer = Random.FRandRange(7.0f, 24.0f);
-			if (USoundBase* Thunder = LoadSound(TEXT("S_amb_thunder")))
+			// (the sound is looked up when the thunder comes: nothing holds it until then, so a pointer taken now
+			// could be collected before the timer fires)
+			FTimerHandle H;
+			TWeakObjectPtr<UWorld> W(World);
+			World->GetTimerManager().SetTimer(H, [W]()
 			{
-				FTimerHandle H;
-				TWeakObjectPtr<UWorld> W(World);
-				World->GetTimerManager().SetTimer(H, [W, Thunder]() { if (W.IsValid()) { UGameplayStatics::PlaySound2D(W.Get(), Thunder, 0.9f); } }, Random.FRandRange(0.6f, 3.5f), false);
-			}
+				if (USoundBase* Thunder = W.IsValid() ? LoadSound(TEXT("S_amb_thunder")) : nullptr)
+				{
+					UGameplayStatics::PlaySound2D(W.Get(), Thunder, 0.9f);
+				}
+			}, Random.FRandRange(0.6f, 3.5f), false);
 		}
 	}
 	Flash = FMath::Max(0.0f, Flash - DeltaTime * 3.0f);
@@ -411,9 +418,16 @@ bool USOWeatherSubsystem::EnsureHost()
 	RainStreaks = MakeISM(TEXT("/Game/FX/SM_FX_Streak.SM_FX_Streak"), TEXT("/Game/FX/MI_FxStreak.MI_FxStreak"), true, 4);
 	Steam = MakeISM(TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke"), true, 4);
 	Smoke = MakeISM(TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke"), true, 4);
+	// the city's airborne debris: only where the city is the area being played (other areas load none of it)
+	const USOAreaSubsystem* Areas = USOAreaSubsystem::Get(World);
+	const FSOArea* Area = Areas ? Areas->GetCurrent() : nullptr;
+	const bool bCity = Area && Area->Content.Contains(TEXT("/Game/Environments/NexusCity"));
 	for (const TCHAR* Name : { TEXT("NCK_leaf_dry"), TEXT("NCK_leaf_red"), TEXT("NCK_paper"), TEXT("NCK_wrapper") })
 	{
-		// the city's airborne debris (other levels have none: only the cards)
+		if (!bCity)
+		{
+			break;
+		}
 		Litter.Add(MakeISM(*FString::Printf(TEXT("/Game/Environments/NexusCity/SM_%s.SM_%s"), Name, Name), nullptr, false, 0));
 	}
 	return true;

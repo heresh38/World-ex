@@ -8,10 +8,13 @@ class USkeletalMesh;
 class UAnimSequenceBase;
 class ASOEnemyAIController;
 class ASOCombatCharacter;
+struct FSOSpeciesVariant;
 
 /**
- * A creature. Defaults are the VANTHOS stalker from the browser build (enemies.js: hp 140, speed 5.4 m/s,
- * melee 18 damage at 2.2 m every 0.9 s). Melee strikes land after a wind-up if the target is still in reach.
+ * A creature. One class per species (see SOSpecies.h): everything it is lives in its class (body, clips, voice, gun,
+ * numbers, its own moves in ThinkCombat), it names itself with SpeciesId, and levels ask for it by that id. The
+ * defaults here are the feral stalker (hp 140, 5.4 m/s, melee 18 damage at 2.2 m every 0.9 s). Melee strikes land
+ * after a wind-up if the target is still in reach.
  */
 UCLASS()
 class SOAI_API ASOEnemy : public ASOCombatCharacter
@@ -21,8 +24,24 @@ class SOAI_API ASOEnemy : public ASOCombatCharacter
 public:
 	ASOEnemy(const FObjectInitializer& ObjectInitializer);
 
+	/** What it is: the id every level asks for it by (USOSpeciesLibrary). A class without one is not a species. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SO|Species")
+	FName SpeciesId;
+
+	/** Server: a level's dressing on top of the species' own numbers (health, damage, speed, aim, sight, another gun,
+	 *  another name). The only way a level changes a creature; its behaviour stays the species'. Before it begins play
+	 *  (USOSpeciesLibrary::Spawn does that) it also arms itself with the variant's gun. */
+	virtual void ApplyVariant(const FSOSpeciesVariant& Variant);
+	FName GetVariantId() const { return VariantId; }
+
+	/** What its special moves multiply their damage by (a variant's). */
+	float GetDamageScale() const { return DamageScale; }
+
+	/** Loads everything it needs to appear (body, clips, voice, gun; WeaponOverride: a variant's) into OutHeld. */
+	virtual void LoadSpeciesContent(FName WeaponOverride, TArray<UObject*>& OutHeld) const;
+
 	/** What the player sees (the boss bar). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "SO|Enemy")
 	FText DisplayName;
 
 	/** Why it takes no damage right now (shown under the boss bar). */
@@ -180,6 +199,10 @@ protected:
 	TMap<FName, TObjectPtr<UAnimSequenceBase>> Actions;
 
 	void LoadContent();
+	UAnimSequenceBase* LoadClip(const TCHAR* Name) const;
+
+	FName VariantId;
+	float DamageScale = 1.0f;
 
 	UPROPERTY(Replicated)
 	bool bImmune = false;

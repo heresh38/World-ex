@@ -14,8 +14,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "SOCombatCharacter.h"
 #include "SOCombatStatics.h"
-#include "SOAltered.h"
 #include "SOEnemy.h"
+#include "SOSpecies.h"
 #include "SOEnemyAIController.h"
 #include "SOInventoryComponent.h"
 #include "SOLog.h"
@@ -58,11 +58,6 @@ ASOOperation::ASOOperation()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("Root")));
-	EnemyClasses.Add(TEXT("stalker"), ASOArmedStalker::StaticClass());
-	EnemyClasses.Add(TEXT("remnant"), ASORemnant::StaticClass());
-	EnemyClasses.Add(TEXT("veilborn"), ASOVeilborn::StaticClass());
-	EnemyClasses.Add(TEXT("bulwark"), ASOBulwark::StaticClass());
-	EnemyClasses.Add(TEXT("colossus"), ASOColossus::StaticClass());
 	Rng.Initialize(FMath::Rand());
 }
 
@@ -104,6 +99,29 @@ bool ASOOperation::LoadPlan(const FString& JsonText)
 				Group.Points.Add(Vec(P->AsArray()));
 			}
 			Groups.Add(FName(Pair.Key), Group);
+		}
+	}
+
+	// what this operation puts on top of the species it uses
+	Baseline = FSOSpeciesVariant();
+	Variants.Reset();
+	if (const TSharedPtr<FJsonObject>* E = nullptr; Root->TryGetObjectField(TEXT("enemies"), E))
+	{
+		Baseline = FSOSpeciesVariant::FromJson(NAME_None, *E);
+	}
+	if (const TSharedPtr<FJsonObject>* V = nullptr; Root->TryGetObjectField(TEXT("variants"), V))
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*V)->Values)
+		{
+			const FSOSpeciesVariant Variant = FSOSpeciesVariant::FromJson(FName(Pair.Key), Pair.Value->AsObject());
+			if (USOSpeciesLibrary::Find(Variant.Species))
+			{
+				Variants.Add(Variant.Id, Variant);
+			}
+			else
+			{
+				UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: variant '%s' is of no known species ('%s')"), *Pair.Key, *Variant.Species.ToString());
+			}
 		}
 	}
 
@@ -202,6 +220,25 @@ void ASOOperation::BeginPlay()
 			UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: could not read the plan %s"), *PlanFile);
 		}
 	}
+	// its species, loaded now (while the level comes up) and held only while it runs: no hitch at the first wave
+	for (const FName& Name : GetEnemyNames())
+	{
+		FName Species;
+		FSOSpeciesVariant Variant;
+		if (ResolveEnemy(Name, Species, Variant))
+		{
+			TArray<UObject*> Loaded;
+			USOSpeciesLibrary::Preload(Species, &Variant, Loaded);
+			for (UObject* O : Loaded)
+			{
+				HeldContent.AddUnique(O);
+			}
+		}
+		else
+		{
+			UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: the plan asks for '%s', which is no species and no variant"), *Name.ToString());
+		}
+	}
 	if (USOWeatherSubsystem* Weather = bStorm ? GetWorld()->GetSubsystem<USOWeatherSubsystem>() : nullptr)
 	{
 		Weather->bAutomatic = false;
@@ -221,6 +258,7 @@ void ASOOperation::BeginPlay()
 void ASOOperation::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	USOCombatStatics::OnCharacterDied().Remove(DiedHandle);
+	HeldContent.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -475,58 +513,68 @@ void ASOOperation::SpawnWave(const FSOWave& Wave)
 	}
 }
 
+bool ASOOperation::ResolveEnemy(FName Name, FName& OutSpecies, FSOSpeciesVariant& OutVariant) const
+{
+	if (const FSOSpeciesVariant* V = Variants.Find(Name))
+	{
+		OutSpecies = V->Species;
+		OutVariant = V->Over(Baseline);
+	}
+	else
+	{
+		OutSpecies = Name;
+		OutVariant = Baseline;
+	}
+	OutVariant.Species = OutSpecies;
+	return USOSpeciesLibrary::Find(OutSpecies) != nullptr;
+}
+
+TArray<FName> ASOOperation::GetEnemyNames() const
+{
+	TArray<FName> Out;
+	for (const FSOStage& S : Stages)
+	{
+		if (!S.Boss.IsNone())
+		{
+			Out.AddUnique(S.Boss);
+		}
+		for (const FSOWave& W : S.Waves)
+		{
+			for (const FSOWaveEntry& E : W.Entries)
+			{
+				Out.AddUnique(E.Enemy);
+			}
+		}
+	}
+	return Out;
+}
+
 ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index, bool bHunt)
 {
-	const TSubclassOf<ASOEnemy>* Class = EnemyClasses.Find(Kind);
+	FName Species;
+	FSOSpeciesVariant Variant;
 	const FSOSpawnGroup* G = Groups.Find(Group);
-	if (!Class || !*Class || !G || G->Points.Num() == 0)
+	if (!ResolveEnemy(Kind, Species, Variant) || !G || G->Points.Num() == 0)
 	{
 		UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: no enemy '%s' or spawn group '%s'"), *Kind.ToString(), *Group.ToString());
 		return nullptr;
 	}
-	UWorld* World = GetWorld();
-	const ASOEnemy* Cdo = Class->GetDefaultObject();
-	const float Half = Cdo->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	const float Radius = Cdo->GetCapsuleComponent()->GetScaledCapsuleRadius();
-	UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
-	const bool bNav = Nav && Nav->GetDefaultNavDataInstance(FNavigationSystem::DontCreate);
-	// round the group's points; a second lap steps out so a crowd does not stack. Each try lands on the nav mesh (a
-	// floor it can walk from, never inside a wall or a heap) and only where its capsule fits.
+	// round the group's points; a second lap steps out so a crowd does not stack. Where exactly it lands (on the nav
+	// mesh, where its capsule fits) is the species library's business: the same in every operation.
+	const float Radius = USOSpeciesLibrary::Find(Species)->GetDefaultObject<ASOEnemy>()->GetCapsuleComponent()->GetScaledCapsuleRadius();
 	const int32 Lap = Index / G->Points.Num();
-	const FVector Base = G->Points[Index % G->Points.Num()];
-	for (int32 Try = 0; Try < 10; ++Try)
+	const float A = Index * 2.39996f;
+	const FVector Feet = G->Points[Index % G->Points.Num()] + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * (Radius * 2.6f * Lap);
+	FSOSpawnOptions Options;
+	Options.bHunter = bHunt;                                     // reinforcements know where the players are; a garrison has to find out
+	Options.Variant = &Variant;
+	Options.Index = Index;
+	ASOEnemy* Enemy = USOSpeciesLibrary::Spawn(GetWorld(), Species, Feet, G->Yaw, Options);
+	if (!Enemy)
 	{
-		const float A = Index * 2.39996f + Try * 1.1f;
-		const float Out = (Lap > 0 ? Radius * 2.6f * Lap : 0.0f) + Try * Radius * 2.2f;
-		FVector Feet = Base + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * Out;
-		if (bNav)
-		{
-			FNavLocation OnNav;
-			if (!Nav->ProjectPointToNavigation(Feet, OnNav, FVector(300.0f, 300.0f, 500.0f)))
-			{
-				continue;
-			}
-			Feet = OnNav.Location;
-		}
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding;
-		ASOEnemy* Enemy = World->SpawnActor<ASOEnemy>(*Class, Feet + FVector(0, 0, Half + 5.0f), FRotator(0.0f, G->Yaw, 0.0f), Params);
-		if (!Enemy)
-		{
-			continue;
-		}
-		if (!Enemy->GetController())
-		{
-			Enemy->SpawnDefaultController();
-		}
-		if (ASOEnemyAIController* AI = Cast<ASOEnemyAIController>(Enemy->GetController()))
-		{
-			AI->bHunter = bHunt; // reinforcements know where the players are; a garrison has to find out
-		}
-		return Enemy;
+		UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: no free floor for a %s at group '%s'"), *Kind.ToString(), *Group.ToString());
 	}
-	UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: no free floor for a %s at group '%s'"), *Kind.ToString(), *Group.ToString());
-	return nullptr;
+	return Enemy;
 }
 
 void ASOOperation::OnCharacterDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)

@@ -142,6 +142,7 @@ FSOFingerPose FSOFingerPose::Lerp(const FSOFingerPose& A, const FSOFingerPose& B
 			P.Curl[f][j] = FMath::Lerp(A.Curl[f][j], B.Curl[f][j], Alpha);
 		}
 	}
+	P.ThumbSpread = FMath::Lerp(A.ThumbSpread, B.ThumbSpread, Alpha);
 	return P;
 }
 
@@ -250,6 +251,52 @@ FBox USOGunRigComponent::GetRigBounds() const
 	FBox Out(ForceInit);
 	Out += MeshToRig(B.Min);
 	Out += MeshToRig(B.Max);
+	return Out;
+}
+
+void USOGunRigComponent::Dismantle()
+{
+	TArray<USceneComponent*> Made;
+	GetChildrenComponents(true, Made);
+	for (USceneComponent* Part : Made)
+	{
+		if (Part && Part->GetOwner() == GetOwner())
+		{
+			Part->DestroyComponent();
+		}
+	}
+	Body = nullptr;
+	Spare = nullptr;
+	Optic = nullptr;
+	GunSpace = nullptr;
+	PartComponents.Reset();
+	bBuilt = false;
+	DestroyComponent();
+}
+
+FBox USOGunRigComponent::GetWornBounds() const
+{
+	FBox Out = GetRigBounds();
+	auto Add = [this, &Out](const UStaticMeshComponent* Comp)
+	{
+		const UStaticMesh* Mesh = Comp ? Comp->GetStaticMesh() : nullptr;
+		if (!Mesh || Comp == Body || Comp == Spare)
+		{
+			return;
+		}
+		const FTransform InMesh = PartInMesh(Comp);
+		FVector Corners[8];
+		Mesh->GetBoundingBox().GetVertices(Corners);
+		for (const FVector& C : Corners)
+		{
+			Out += MeshToRig(InMesh.TransformPosition(C));
+		}
+	};
+	for (const UStaticMeshComponent* Part : PartComponents)
+	{
+		Add(Part);
+	}
+	Add(Optic);
 	return Out;
 }
 

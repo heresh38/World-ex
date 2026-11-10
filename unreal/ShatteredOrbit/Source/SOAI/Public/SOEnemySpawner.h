@@ -20,6 +20,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Spawner")
 	TSubclassOf<ASOEnemy> EnemyClass;
 
+	/** The species it spawns (USOSpeciesLibrary); set, it wins over EnemyClass. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Spawner")
+	FName Species;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Spawner", meta = (Units = "s"))
 	float RespawnDelay = 8.0f;
 

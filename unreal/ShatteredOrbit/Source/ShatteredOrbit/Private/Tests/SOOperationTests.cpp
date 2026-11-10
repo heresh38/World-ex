@@ -10,6 +10,7 @@
 #include "Misc/Paths.h"
 #include "SOCombatStatics.h"
 #include "SOEnemy.h"
+#include "SOSpecies.h"
 #include "SOEnemyAIController.h"
 #include "SOInventoryComponent.h"
 #include "SOOperation.h"
@@ -76,13 +77,13 @@ bool FSOOperationPlanTest::RunTest(const FString& Parameters)
 				{
 					for (const FSOWaveEntry& E : Wave.Entries)
 					{
-						TestTrue(*FString::Printf(TEXT("%s: enemy %s has a class"), *S.Id.ToString(), *E.Enemy.ToString()), Real->EnemyClasses.Contains(E.Enemy));
+						TestTrue(*FString::Printf(TEXT("%s: enemy %s has a class"), *S.Id.ToString(), *E.Enemy.ToString()), USOSpeciesLibrary::Find(E.Enemy) != nullptr || Real->Variants.Contains(E.Enemy));
 						TestTrue(*FString::Printf(TEXT("%s: group %s exists"), *S.Id.ToString(), *E.Group.ToString()), Real->Groups.Contains(E.Group));
 					}
 				}
 				if (S.Kind == ESOStageKind::Boss)
 				{
-					TestTrue(TEXT("boss has a class"), Real->EnemyClasses.Contains(S.Boss));
+					TestTrue(TEXT("boss has a class"), USOSpeciesLibrary::Find(S.Boss) != nullptr || Real->Variants.Contains(S.Boss));
 					TestTrue(TEXT("boss group exists"), Real->Groups.Contains(S.BossGroup));
 				}
 			}

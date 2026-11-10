@@ -197,7 +197,7 @@ def build(info, T, tex_dir, log=print):
         at the back; a touch of noise so it is not a ruled line"""
         x, y = abs(c.x), c.y
         temple = .012 * math.exp(-((x - .034) / .012) ** 2)
-        front = ez + (.044 if m else .032) + .016 * (x / .06) ** 2 + temple * (1 if m else .4) + .003 * math.sin(c.x * 140) + .002 * math.sin(c.x * 330 + 1.3)
+        front = ez + (.044 if m else .027) + .016 * (x / .06) ** 2 + temple * (1 if m else .4) + .003 * math.sin(c.x * 140) + .002 * math.sin(c.x * 330 + 1.3)
         if y > -.01:                                     # behind the front: falls toward the ears and the nape
             k = min(1.0, (y + .01) / .07)
             back = ez - (.010 if m else .02) - (.050 if m else .06) * max(0.0, y - .03) / .06
@@ -276,37 +276,40 @@ def build(info, T, tex_dir, log=print):
 
         def direction(p):
             return tie - p
+        def vol(root):
+            """how much the hair stands off the scalp here: pulled tight and flat from the forehead and temples back
+            (a front that lifts rolls over into a quiff and reads as folded), full only over the crown"""
+            f = max(0.0, min(1.0, (root.y + .075) / .085))
+            return .16 + .84 * f * f * (3 - 2 * f)
         for lift0, lift1, n_cards, w in ((.001, .008, 560, .018), (.0015, .016, 480, .020), (.002, .024, 360, .022),
                                          (.003, .030, 200, .022)):     # roots on the scalp, volume above
             for _ in range(n_cards):
                 root, nrm = rnd.choice(scalp.pts)
                 L = (root - tie).length * 1.05
-                pts = grow(scalp, root, nrm, direction, L, lift0, lift1, steps=10, stop=lambda p: (p - tie).length < .010, bulge=True)
+                pts = grow(scalp, root, nrm, direction, L, lift0, max(lift0 + .0008, lift1 * vol(root)), steps=10,
+                           stop=lambda p: (p - tie).length < .010, bulge=True)
                 if len(pts) > 2:
-                    card(bm, uv, pts, w * rnd.uniform(.8, 1.2), rnd.randrange(3), twist=rnd.uniform(-.2, .2), tip_width=.9)
+                    # (a broad card rooted at the forehead's edge ends there as a block: the edge is made of fine ones)
+                    edge = root.y < -.02 and root.z < line_z(root) + .014
+                    card(bm, uv, pts, w * rnd.uniform(.8, 1.2) * (.38 if edge else 1.0), rnd.choice((2, 3)) if edge else rnd.randrange(3),
+                         twist=rnd.uniform(-.2, .2), tip_width=.9)
         band = hairline_band(info, area_low, line_z, rnd)
-        for _ in range(420):
+        for _ in range(760):
             root, nrm = rnd.choice(band)
-            pts = grow(scalp, root, nrm, direction, rnd.uniform(.025, .045), .0006, .002, steps=4)
+            pts = grow(scalp, root, nrm, direction, rnd.uniform(.016, .038), .0006, .002, steps=4)
             if len(pts) > 2:
-                card(bm, uv, pts, rnd.uniform(.006, .010), rnd.choice((2, 3)), twist=rnd.uniform(-.2, .2), tip_width=.9)
-        # a side-swept fringe: from a parting on the right, across the upper forehead, back past the left temple to the
-        # tie; it hangs a little off the skin and covers the top of the forehead
-        part_x = -.028
-
-        def sweep(p):
-            k = max(0.0, min(1.0, (p.x - .030) / .035))          # past the temple: turns back toward the tie
-            across = Vector((1, .15, -.12))
-            return across * (1 - k) + (tie - p).normalized() * k * 1.6
-        fr = [(r, n) for r, n in scalp.pts if r.y < -.035 and part_x < r.x < .045 and line_z(r) + .006 < r.z < line_z(r) + .045]
-        for _ in range(240):
+                card(bm, uv, pts, rnd.uniform(.0035, .0065), rnd.choice((2, 3)), twist=rnd.uniform(-.2, .2), tip_width=.9)
+        # the front: combed straight back from the hairline into the tie, close to the head, in narrow cards (one
+        # direction, nothing across it, nothing lifted: a fringe over these cards read as a tangle, a lifted front as
+        # a fold)
+        fr = [(r, n) for r, n in scalp.pts if r.y < -.020 and line_z(r) - .002 < r.z < line_z(r) + .034]
+        for _ in range(980):
             root, nrm = rnd.choice(fr)
-            L = rnd.uniform(.06, .15)                    # piecey: the tips end at different places
-            low = ez + rnd.uniform(.034, .050)          # each piece ends at its own height (clear of the brows)
-            pts = grow(scalp, root, nrm, sweep, L, .0015, rnd.uniform(.004, .009), steps=10,
-                       stop=lambda p, low=low: (p - tie).length < .03 or p.z < low)
+            L = (root - tie).length * 1.02
+            pts = grow(scalp, root, nrm, direction, L, .0008, rnd.uniform(.0025, .0055), steps=12,
+                       stop=lambda p: (p - tie).length < .012, bulge=True)
             if len(pts) > 2:
-                card(bm, uv, pts, rnd.uniform(.010, .018), rnd.randrange(3), twist=rnd.uniform(-.25, .25), tip_width=.45)
+                card(bm, uv, pts, rnd.uniform(.0038, .0075), rnd.choice((0, 1, 2, 2, 3, 3)), twist=rnd.uniform(-.06, .06), tip_width=.9)
         # the ponytail: long cards from the tie, out and up a little, then falling behind, spreading toward the ends
         tail_dir = Vector((0, .6, .12)).normalized()
         for i in range(420):

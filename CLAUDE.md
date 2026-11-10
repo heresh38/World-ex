@@ -74,7 +74,7 @@ everything a piece covers (no skin through clothes in any pose). Rules: no lumps
 (check silhouettes front, back, sides, 3/4); surface rays only search near the part (a long ray finds the far side). `hair.py`: hair as strand cards
 (own numpy atlas `hero_hair_strands.png`: clumps of separate strands with ragged roots and pointed tips; a cap with a
 soft, strand-broken edge from `hero_hair_scalp.png`; hairline wisps on a density gradient), male short swept, female
-high ponytail with volume and a side-swept fringe; Unreal material `M_SOHair` for `hair`, `hair__cap`, `hair__brow`,
+high ponytail with volume, the front drawn straight back into the tie (one direction, nothing across it); Unreal material `M_SOHair` for `hair`, `hair__cap`, `hair__brow`,
 `hair__lash` (lashes have their own thick-strand texture and root at the lid's visible edge). Eyes: big rounded lid
 openings (`eye_hu/eye_hl` in `headshape.head_geometry`), `fit.eye_sockets` closes the opening behind the lids (skin
 walls round the eyeball; the lid margins are kept in the body's `eye_margins`), eyeballs `eye_white`/`eye_iris`/
@@ -84,12 +84,16 @@ sealed helmet over the head, face and neck (hides the hair and the head / neck s
 it comes off): a base surface from signed distances on this body's measured head (cranium ellipsoid fit, face volume,
 ribbed neck seal), plates cut from a relaxed smooth copy of it (`cut_plate`: base faces inside the plate's region, the
 open edge slid onto the region's outline along the surface, lifted along the field normal, solidified without even
-offset or clamp, chamfered), the visor (a dark mirrored lens in a raised frame, centre seam, light line, temple
-sensors), turned ear discs with light rings, faceplate vent slats; his steel-grey and square with a heavy crest and a
-faceplate ridge, hers white, a V visor, a pointed chin plate. Plus the Orion Comms Headset (oval cups, band clear of
+offset or clamp, chamfered). Clean and sleek, made to go with each outfit (no vents, discs or sensors; the shell's
+front is set from this face's measured nose and chin, so no face pokes through): his tactical for the black coat (a
+visor wrapped round the eyes, a mandible guard in two chamfered steps with a breather, a rail along each temple,
+charcoal), hers ONE full, rounded face shield from the brow to the chin (white, for the jacket); both a peak over
+the eyes like a hood's edge, swept jaw guards, three nape lames, a slim spine in the lining's blue, one line of
+light. Plus the Orion Comms Headset (oval cups, band clear of
 the hair, boom mic; the hair stays). Finish (`finish.py`, every piece but hair): the corner colour `Col` = paint scheme
 x per-plate tone x grime / dust / ground dirt in RGB (the plate materials are a light neutral, the paint lives here:
-his gunmetal + desert tan + signal-orange marking, hers off-white + lining blue), edge wear in A (a rubbed band
+his gunmetal + desert tan + signal-orange marking, hers off-white + lining blue; the helmets have their own,
+`finish.HELMET`, and take the accent by whole plate: a zone painted across a plate ends ragged), edge wear in A (a rubbed band
 diffused in from convex edges, chips only near edges, more on upper / front faces); Unreal `ARMOUR_WEAR` sets each
 material's EdgeWear / Scratches / Grime / WearMetal / WearTiling with the shared wear mask.
 Motion: each body has its own clip set in its own folder, nothing shared: `hero/male/motion.py` (masculine: wide
@@ -109,6 +113,24 @@ The two bodies share no generated file: textures `SourceArt/Characters/src/tex/<
 Unreal folders `/Game/Characters/Player<Sex>` (own skeleton, clips, materials, textures, wardrobe).
 `export_unreal.sh` builds `SourceArt/Characters/src/hero_<sex>.glb` (delete it, and `SourceArt/Characters/src/tex/<sex>`, to rebuild) and
 exports `--per-item` + `--arms-only`.
+The bodies' surface anatomy and skin (both the game's players and the naked base asset use the same body; the first,
+smoother bodies were removed on 2026-11-09 at the owner's request). `build.py` gives the game's body its UVs and skin
+maps (`basemesh_finish.game_skin`: `hero_<sex>_skin_BaseColor / _Normal / _ORM / _Subsurface`, `hero_<sex>_eye_BaseColor`
+beside the other textures; the import makes the skin and eye instances from the GLB's materials, tint white).
+Naked base characters (the production asset: `blender -b -P tools/blender/hero/basemesh.py -- male|female`, then
+`basemesh_project.py` for both in one file; output `SourceArt/Characters/OrionBase`, generated, not committed).
+Faces on the owner's direction: his broad and square (the jaw almost as wide as the cheekbones, the lower third
+short), hers very round (`headshape.ROUND_HW`), big eyes, a small nose, full lips. `anatomy.py` =
+signed relief on the body's distance field (muscle borders, tendons, knuckles, nails, face folds; `line` takes the
+strongest segment per point, never the nearest one's fade: that jumps and cuts a line); `headshape.AFACE` = the face's
+sections on soft-tissue profile norms (every column smooth: a zigzag between rows shows as a band); the lids are a
+shell round the eyeball the lid margins are pinned on (`g["lid"]`); `ear_anatomy` (coarse for the base mesh, the fine
+folds behind `self.fine`); `Body.hand_anatomy` (palm loft, webs, thumb mound). Smooth-min blends inflate where several
+primitives nearly coincide (up to k/4): tune against numbers, not by eye. `basemesh_finish.py`: UV seams (back midline
+of head and trunk, hidden side of each limb by shortest path, hands back / palm, soles), unwrap and pack, position /
+normal / occlusion baked, `skinmaps.py` writes the skin's colour, roughness, normal and subsurface maps and the eye from
+them (functions of the 3D position: nothing shows at a seam), collections `<Sex>_Base_Body/_Head/_Eyes/_Hair/_Skeleton`,
+`Materials`, `Reference`, `Export` (LOD1-3), FBX per LOD, renders, a manifest json.
 
 ## Unreal project
 `unreal/ShatteredOrbit` (UE 5.8, C++ modules ShatteredOrbit/SOCore/SOCharacter/SOCombat/SOAI/SOWorld/SOUI); plan in
@@ -133,6 +155,27 @@ city from it with `ruinkit.py` (ruined towers: slab cells, columns, cores, cladd
 blast holes, rebar, hanging slabs, rubble heaps; wall + gate, viaducts, the Concord Ring, the High Terraces, the
 Crown Bridge, the Crown with its beam, the far spire and broken orbital ring, invisible blockers) into `MR_<zone>`
 chunks + `Data/op_meridian_art.json` (lights); `make_operation_map.py` assembles the level (storm night).
+Modular by rule (owner, 2026-11-10). **Species**: every creature is written ONCE: one class with everything it is
+(body, clips, voice, gun, numbers, its own moves; the brain is the shared `ASOEnemyAIController`), one file per species
+(`SOAI/Private/Species/SO<Name>.cpp`), named by `ASOEnemy::SpeciesId`. Nothing lists them: `USOSpeciesLibrary`
+(`SOSpecies.h`) finds every class that names itself, and `Spawn(World, id, feet, yaw, options)` is the ONLY way a
+level puts one into the world (operations, spawners, scripts): never write creature code, a class table or spawn rules
+in an operation or a level. What a level may add is data: a variant (`FSOSpeciesVariant`: health / damage / speed / aim /
+sight multipliers, another gun, another name), applied by `ASOEnemy::ApplyVariant`, the one place that knows how; an
+operation's plan has `"enemies"` (a baseline for all) and `"variants"` (named dressings its waves spawn like a
+species), and `USOSpeciesLibrary::OnSpawned` for a level's own extras. Tests `ShatteredOrbit.Species.*`.
+**Areas**: one area at a time (`USOAreaSubsystem`, `Data/areas.json`: range, city, operations with the content folders
+that are theirs alone). Nothing of another area is built or loaded: each level builds itself when it begins, an
+operation loads its species then and holds them only while it runs, travel goes through `USOAreaSubsystem::Travel`,
+and anything kept by hand (the sound cache) lets go on `OnReleaseContent` before the old level is torn down. Check
+with the console: `SOCensus` (what is loaded by folder + anything of another area), `SOAreaTour quit [area ...]`
+(visits every area and back, `Saved/area_tour.json`; run it with `-game -nullrhi -nosound -unattended`). A prop every
+area uses must not live in one area's folder (until it moves it is listed under `"shared"` in areas.json). Never keep
+a bare pointer to a loaded asset across a timer or a level change (nothing holds it: it is collected). Test
+`ShatteredOrbit.Area.OneAtATime`.
+The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own sized from
+the gun's bounds (`ASOCharacter::RefreshHolsters`: long guns stand side by side on the back, one behind each shoulder,
+never stacked; handguns at the hips; the gun in hand is stowed while mantling); pictures `SOCaptureSeries 1 12|13`.
 Enemies, the Altered (`altered.py` + `SOAltered.h`), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
 by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as
 they track): Remnant (SMG, pushes in), armed Stalker (auto rifle, cover), Veilborn (scout rifle from cover, the odd void

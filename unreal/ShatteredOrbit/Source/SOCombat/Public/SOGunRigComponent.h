@@ -35,6 +35,9 @@ struct SOCOMBAT_API FSOHandGrip
 struct SOCOMBAT_API FSOFingerPose
 {
 	float Curl[5][3] = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+	/** The thumb swung round the hand's long axis toward the palm's side, degrees: it lies on the far side of what
+	 *  the fingers hold (a grip between thumb and fingers), instead of through it. */
+	float ThumbSpread = 0.0f;
 
 	static FSOFingerPose Make(const float Index[3], const float Middle[3], const float Ring[3], const float Pinky[3], const float Thumb[3]);
 	/** Firing hand on a pistol grip: three fingers wrapped, the index finger on the trigger, the thumb over the top. */
@@ -71,6 +74,10 @@ public:
 	 *  finish and the glow in its rarity colour (material names are an API: gun_body, gun_glow). */
 	void Dress(const FSOWeaponInstance& Instance);
 
+	/** Removes the gun: every mesh it made, then itself. (Destroying only this component would hand its meshes to
+	 *  whatever it was attached to: they would stay there.) */
+	void Dismantle();
+
 	/** Shows or hides the whole gun; parts the pose or a mounted optic keep hidden stay hidden. */
 	void SetShown(bool bInShown);
 
@@ -97,6 +104,9 @@ public:
 
 	/** The gun body's bounds in rig space (+X barrel, +Y right, +Z up, cm). */
 	FBox GetRigBounds() const;
+
+	/** The whole gun as it is carried: the body with its parts (magazine, bolt, ...) and the mounted optic. */
+	FBox GetWornBounds() const;
 
 	/** Rig-space grips (tests / debugging). */
 	const FSOHandGrip& GetRightGrip() const { return RightGrip; }

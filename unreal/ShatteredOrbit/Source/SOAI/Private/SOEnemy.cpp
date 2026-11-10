@@ -12,6 +12,8 @@
 #include "SOEnemyAIController.h"
 #include "SOLocomotionAnimInstance.h"
 #include "SOSound.h"
+#include "SOSpecies.h"
+#include "SOAttributeSet.h"
 #include "SOGunRigComponent.h"
 #include "SOLootLibrary.h"
 #include "SOLootTypes.h"
@@ -23,6 +25,7 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = true;
 	Faction = ESOFaction::Alien;
+	SpeciesId = TEXT("stalker_feral");
 	DisplayName = NSLOCTEXT("SO", "Stalker", "Stalker");
 	StartMaxHealth = 140.0f;
 	StartMaxShield = 0.0f;
@@ -65,6 +68,103 @@ void ASOEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ASOEnemy, bImmune);
 	DOREPLIFETIME(ASOEnemy, ImmuneReason);
+	DOREPLIFETIME(ASOEnemy, DisplayName);
+}
+
+namespace
+{
+	/** How many takes each cry has (sounds <VoicePrefix>_<kind>_<n>; one take: no number). */
+	const TMap<FName, int32>& VoiceTakes()
+	{
+		static const TMap<FName, int32> Takes = { { TEXT("idle"), 4 }, { TEXT("query"), 2 }, { TEXT("alert"), 3 }, { TEXT("hurt"), 3 }, { TEXT("death"), 2 } };
+		return Takes;
+	}
+}
+
+void ASOEnemy::ApplyVariant(const FSOSpeciesVariant& Variant)
+{
+	VariantId = Variant.Id;
+	if (!Variant.DisplayName.IsEmpty())
+	{
+		DisplayName = Variant.DisplayName;
+	}
+	StartMaxHealth *= Variant.Health;
+	if (IsActorInitialized() && Attributes)
+	{
+		const float Fraction = GetMaxHealth() > 0.0f ? GetHealth() / GetMaxHealth() : 1.0f;
+		Attributes->InitMaxHealth(StartMaxHealth);
+		Attributes->InitHealth(StartMaxHealth * Fraction);
+	}
+	DamageScale *= Variant.Damage;
+	WeaponDamageScale *= Variant.Damage;
+	MeleeDamage *= Variant.Damage;
+	WalkSpeed *= Variant.Speed;
+	RunSpeed *= Variant.Speed;
+	GetCharacterMovement()->MaxWalkSpeed *= Variant.Speed;
+	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		Anim->Clips.WalkSpeed = WalkSpeed;
+		Anim->Clips.RunSpeed = RunSpeed;
+	}
+	AimError *= Variant.AimError;
+	SightRange *= Variant.Sight;
+	if (!Variant.Weapon.IsNone() && Variant.Weapon != WeaponArchetype)
+	{
+		WeaponArchetype = Variant.Weapon;
+		if (HasActorBegunPlay() && HasAuthority())
+		{
+			if (const USOLootTables* Tables = USOLootLibrary::GetTables())
+			{
+				if (ASOWeapon* W = EquipWeapon(Tables->LoadArchetype(WeaponArchetype)))
+				{
+					W->SetAmmo(W->GetMag() > 0 ? W->GetMag() : 30, 9999);
+				}
+			}
+		}
+	}
+}
+
+UAnimSequenceBase* ASOEnemy::LoadClip(const TCHAR* Name) const
+{
+	if (ClipPathPrefix.IsEmpty())
+	{
+		return nullptr;
+	}
+	const FString Asset = FPaths::GetBaseFilename(ClipPathPrefix) + Name;
+	return TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(ClipPathPrefix + Name + TEXT(".") + Asset)).LoadSynchronous();
+}
+
+void ASOEnemy::LoadSpeciesContent(FName WeaponOverride, TArray<UObject*>& OutHeld) const
+{
+	auto Hold = [&OutHeld](UObject* O) { if (O) { OutHeld.AddUnique(O); } };
+	Hold(BodyMesh.LoadSynchronous());
+	for (const TCHAR* Name : { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("Attack"), TEXT("Death") })
+	{
+		Hold(LoadClip(Name));
+	}
+	for (const FName& Name : ActionClips)
+	{
+		Hold(LoadClip(*Name.ToString()));
+	}
+	if (!VoicePrefix.IsEmpty())
+	{
+		for (const TPair<FName, int32>& Take : VoiceTakes())
+		{
+			for (int32 N = 1; N <= Take.Value; ++N)
+			{
+				Hold(USOSoundLibrary::Find(FName(FString::Printf(TEXT("%s_%s_%d"), *VoicePrefix, *Take.Key.ToString(), N))));
+			}
+		}
+	}
+	const FName Gun = WeaponOverride.IsNone() ? WeaponArchetype : WeaponOverride;
+	if (const USOLootTables* Tables = Gun.IsNone() ? nullptr : USOLootLibrary::GetTables())
+	{
+		if (USOWeaponData* Data = Tables->LoadArchetype(Gun))
+		{
+			Hold(Data);
+			Hold(Data->BodyMesh.LoadSynchronous());
+		}
+	}
 }
 
 void ASOEnemy::SetImmune(bool bOn, const FText& Reason)
@@ -99,11 +199,7 @@ void ASOEnemy::LoadContent()
 	}
 	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance()))
 	{
-		auto Clip = [this](const TCHAR* Name) -> UAnimSequenceBase*
-		{
-			const FString Asset = FPaths::GetBaseFilename(ClipPathPrefix) + Name;
-			return TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(ClipPathPrefix + Name + TEXT(".") + Asset)).LoadSynchronous();
-		};
+		auto Clip = [this](const TCHAR* Name) { return LoadClip(Name); };
 		Anim->Clips.Idle = Clip(TEXT("Idle"));
 		Anim->Clips.Walk = Clip(TEXT("Walk"));
 		Anim->Clips.Run = Clip(TEXT("Run"));
@@ -160,7 +256,7 @@ int32 ASOEnemy::DamageAround(const FVector& Center, float Radius, float Damage, 
 			continue;
 		}
 		const float Falloff = 1.0f - 0.5f * D.Size2D() / FMath::Max(Radius, 1.0f);
-		if (USOCombatStatics::ApplyDamage(this, Other, Damage * Falloff, false) > 0.0f)
+		if (USOCombatStatics::ApplyDamage(this, Other, Damage * DamageScale * Falloff, false) > 0.0f)
 		{
 			++Hits;
 		}
@@ -378,8 +474,7 @@ void ASOEnemy::Voice(FName Kind, float Volume)
 	{
 		return;
 	}
-	static const TMap<FName, int32> Variants = { { TEXT("idle"), 4 }, { TEXT("query"), 2 }, { TEXT("alert"), 3 }, { TEXT("hurt"), 3 }, { TEXT("death"), 2 } };
-	const int32 N = Variants.FindRef(Kind);
+	const int32 N = VoiceTakes().FindRef(Kind);
 	const FString Name = N > 1 ? FString::Printf(TEXT("%s_%s_%d"), *VoicePrefix, *Kind.ToString(), FMath::RandRange(1, N))
 		: FString::Printf(TEXT("%s_%s"), *VoicePrefix, *Kind.ToString());
 	USOSoundLibrary::PlayAt(this, FName(Name), GetActorLocation() + FVector(0, 0, 60.0f), Volume, 0.08f, ESOSoundRange::Mid);

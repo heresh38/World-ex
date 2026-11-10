@@ -193,6 +193,12 @@ public:
 	FSOFingerPose LeftFingers;
 	FVector EyeCS = FVector::ZeroVector;
 
+	/** The hands fitted to the gun in them (FitGrip): how each finger closes on this gun's surfaces and how far each
+	 *  wrist moves (rig space, cm) to lay the palm on it. Solved once per gun and body. */
+	const FSOFingerPose& GetFittedFingers(bool bLeft) const { return FitFingers[bLeft ? 1 : 0]; }
+	FVector GetFittedOffset(bool bLeft) const { return FitOffset[bLeft ? 1 : 0]; }
+	bool HasFittedGrip() const { return bFitDone; }
+
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget. */
 	float Weights[8] = { 1, 0, 0, 0, 0, 0, 0, 0 };
 	float Times[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -213,6 +219,15 @@ public:
 	float CyclePhase = 0.0f;
 
 protected:
+	/** Fits both hands to the gun's own shape: the palm laid on the surface under it, every finger closed joint by
+	 *  joint until it touches (swept against the gun's triangles). Game thread; the gun must be at rest in the hands. */
+	void FitGrip(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh, bool bOneHanded);
+
+	TWeakObjectPtr<const class USOGunRigComponent> FitRig;
+	FSOFingerPose FitFingers[2];
+	FVector FitOffset[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	bool bFitDone = false;
+
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	void UpdateBodyMotion(const ACharacter* Character, float DeltaSeconds);
 

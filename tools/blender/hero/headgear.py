@@ -69,7 +69,11 @@ def head_measures(info):
         if hit is not None:
             rad.append((hit - Vector((0, .02, zm))).length)
     neck_r = float(np.median(rad)) if rad else .06
-    return dict(c=np.array(c, F32), r=np.array(r, F32), ez=ez, cz=cz, nz=nz, neck_r=neck_r, neck_y=.02)
+    front = {}
+    for key, z in (("nose", ez - .034), ("mouth", ez - .068), ("chin", cz + .020)):
+        hit, _, _, _ = info.bvh.ray_cast(Vector((0, -.4, z)), Vector((0, 1, 0)), .6)
+        front[key] = float(hit.y) if hit is not None else float(c[1] - r[1])
+    return dict(c=np.array(c, F32), r=np.array(r, F32), ez=ez, cz=cz, nz=nz, neck_r=neck_r, neck_y=.02, front=front)
 
 
 def helmet_layout(M, m):
@@ -78,17 +82,25 @@ def helmet_layout(M, m):
     import sdf
     c, r, ez, cz, nz, nr = M["c"], M["r"], M["ez"], M["cz"], M["nz"], M["neck_r"]
     ny = M["neck_y"]
-    g = .030 if m else .027                                       # clearance over the skull (pads and liner)
+    g = .026 if m else .022                                       # clearance over the skull (pads and liner): close
     face_c = np.array((0, c[1] - (.020 if m else .016), (ez + cz) / 2 - .005), F32)
+    fr = M["front"]
+    nose_y = min(fr["nose"], fr["mouth"]) - .017                  # the shell's front: clear of the nose's tip and the lips
+    chin_y = fr["chin"] - .016
 
     def base(P, ribs=True):
         dome = sdf.ellipsoid(P, c, r + g)
-        if m:                                                     # his jaw: square and heavy
-            face = sdf.round_box(P, face_c - np.array((0, .004, .010), F32),
-                                 (r[0] * .80 + .022, r[1] * .78 + .010, (ez - cz) / 2 + .052), .034)
+        if m:                                                     # his: a muzzle that narrows to the chin, not a bucket
+            cyb = float(face_c[1] - .004)
+            face = sdf.round_box(P, np.array((0, cyb, face_c[2] - .010), F32),
+                                 (r[0] * .74 + .016, cyb - nose_y, (ez - cz) / 2 + .050), .044)
+            jaw = sdf.round_cone(P, np.array((0, cyb, ez - .040), F32), np.array((0, chin_y + .046, cz - .012), F32), r[0] * .74 + .014, .046)
+            face = sdf.smin(sdf.smax(face, cz - .030 - P[:, 2] + .0 * P[:, 0], .02), jaw, .03)
         else:                                                     # hers: tapering to a small chin
-            face = sdf.round_cone(P, face_c + np.array((0, .006, .040), F32), np.array((0, face_c[1] - .004, cz - .006), F32),
-                                  r[0] * .80 + .020, .040)
+            rc = .040
+            face = sdf.round_cone(P, face_c + np.array((0, .006, .040), F32), np.array((0, chin_y + rc, cz - .006), F32),
+                                  r[0] * .80 + .016, rc)
+            face = sdf.smin(face, sdf.ellipsoid(P, np.array((0, nose_y + .030, ez - .045), F32), (.045, .030, .050)), .03)
         head = sdf.smin(dome, face, .045)
         z = P[:, 2]
         neck = sdf.round_cone(P, np.array((0, ny, cz - .005), F32), np.array((0, ny + .006, nz - .035), F32), nr + .020, nr + .036)
@@ -106,67 +118,76 @@ def helmet_layout(M, m):
         a = np.abs(az(P))
         return np.maximum.reduce([z0 - P[:, 2], P[:, 2] - z1, (a - a1) * R_, (a0 - a) * R_])
 
-    vz = ez + (.004 if m else .008)
-    vh = .019 if m else .016
-    va = rad(78 if m else 74)
+    # ---- clean and sleek, made to go with the outfit: a close smooth shell and a peak over the eyes like a hood's
+    # edge, swept guards along the jaw, three lames at the nape, a slim spine in the lining's blue, one line of light
+    # under the brow. No vents, discs or sensors.
+    #   his   tactical, for the black coat: a level visor band wrapped round the eyes down to the nose, under it a
+    #         mandible guard in two chamfered steps with a breather, a rail along each temple
+    #   hers  ONE face shield from the brow to the chin, full and rounded, for the white jacket
+    z_top = ez + (.020 if m else .028)
+    z_bot = (ez - .036) if m else (cz + .012)
+    a_top, a_bot = rad(72 if m else 70), rad(72 if m else 25)     # (his a level band: no taper)
 
-    def vline(P):
-        """the visor's centre height by azimuth: his angled down toward the temples, hers a V at the middle"""
-        a = np.abs(az(P)) / va
-        return vz - (.007 * a * a if m else .011 * np.clip(1 - a * 1.6, 0, 1) - .004 * a * a)
+    def mand_w(P):
+        """his mandible guard's half width: the same all the way down (every edge of his plates runs level or upright:
+        cut on a slant, a plate's edge comes out in steps)"""
+        return np.full(len(P), rad(46), F32)
+
+    def shield_w(P):
+        t = np.clip((z_top - P[:, 2]) / (z_top - z_bot), 0, 1)
+        return a_top + (a_bot - a_top) * t ** (1.5 if m else 2.3)
 
     def visor(P, grow=0.0):
-        return np.maximum(np.abs(P[:, 2] - vline(P)) - (vh + grow), (np.abs(az(P)) - (va + grow / R_)) * R_)
+        zc, hh = (z_top + z_bot) / 2, (z_top - z_bot) / 2
+        return sdf.smax(np.abs(P[:, 2] - zc) - (hh + grow), (np.abs(az(P)) - shield_w(P)) * R_ - grow, .006 if m else .014)
 
-    crest_w = .013 if m else .007
-    crest_end = float(c[1] + r[1] * (.55 if m else .85))
-    ear = [(np.array((sx * (r[0] + g), c[1] + .012, ez - .004), F32), .036 if m else .030) for sx in (1, -1)]
+    crest_w = .0050 if m else .0042
+    crest_end = float(c[1] + r[1] * (.72 if m else .85))
     plate_mat = "orion_plate" if m else "orion_plate_white"
     P_ = []                                                       # (name, region, lift, thick, material, bevel)
-    # crown halves either side of the crest
-    P_.append(("crown", lambda P: np.maximum.reduce([vline(P) + vh + .006 - P[:, 2], crest_w + .004 - np.abs(P[:, 0]),
+    # the crown, either side of the spine, down to the peak in front and the lames behind
+    P_.append(("crown", lambda P: np.maximum.reduce([z_top + .006 - P[:, 2], crest_w + .004 - np.abs(P[:, 0]),
                                                      -visor(P, .006)]), .002, .0055, plate_mat, .0018))
-    # the brow ridge following the visor's top round to the temples
-    P_.append(("brow", lambda P: np.maximum.reduce([vline(P) + vh + .004 - P[:, 2], P[:, 2] - (vline(P) + vh + (.020 if m else .015)),
-                                                    (np.abs(az(P)) - va * .92) * R_]), .0075, .0050, plate_mat, .0016))
-    # the back of the head between the crown and the neck lames
-    P_.append(("back", lambda P: np.maximum(band(P, cz + .050, vz - .004, rad(116), rad(181)), -visor(P, .006)),
+    # the peak over the shield, round to the temples (the edge of a hood)
+    P_.append(("brow", lambda P: np.maximum.reduce([z_top + .003 - P[:, 2], P[:, 2] - (z_top + (.022 if m else .016)),
+                                                    (np.abs(az(P)) - a_top * 1.10) * R_]), .0100 if m else .0060, .0050, plate_mat, .0018))
+    P_.append(("back", lambda P: np.maximum(band(P, cz + .050, z_top + .004, rad(116), rad(181)), -visor(P, .006)),
                .002, .0055, plate_mat, .0018))
-    # cheek plates under the visor line
-    P_.append(("cheek", lambda P: np.maximum.reduce([cz + .010 - P[:, 2], P[:, 2] - (vline(P) - vh - .005),
-                                                     (rad(26) - np.abs(az(P))) * R_, (np.abs(az(P)) - rad(114)) * R_]),
-               .002, .0055, plate_mat, .0016))
-
-    def face(P):
+    # the jaw guards: from the shield's edge back to the nape, rising toward the ear
+    def guard(P):
         a = np.abs(az(P))
-        wide = rad(30 if m else 24)
-        # (hers comes to a rounded point at the chin: a smooth curve the outline can follow)
-        low = np.full(len(P), cz - .022, F32) if m else cz - .016 + .018 * (1 - np.cos(np.clip(a / wide, 0, 1) * np.pi / 2))
-        d = np.maximum.reduce([low - P[:, 2], P[:, 2] - (vline(P) - vh - .006), (a - wide) * R_])
-        return d
-    P_.append(("faceplate", face, .004, .0060, plate_mat, .0016))
-    if m:                                                         # his faceplate ridge
-        P_.append(("ridge", lambda P: np.maximum(face(P) + .006, np.abs(P[:, 0]) - .006), .0100, .0030, plate_mat, .0010))
+        # (his is cut square, level under the visor: slanted edges crossing at a sharp angle leave a saw's teeth)
+        top = (z_bot - .005) if m else z_top - .010 - .030 * np.clip((rad(112) - a) / rad(60), 0, 1)
+        inner = mand_w(P) + rad(1) if m else shield_w(P)
+        return np.maximum.reduce([cz + .002 - P[:, 2], P[:, 2] - top, (inner + rad(5) - a) * R_, (a - rad(114)) * R_])
+    P_.append(("cheek", guard, .0045, .0055, plate_mat, .0018))
+    if m:
+        mand = lambda P, g_=0.0: np.maximum.reduce([cz - .004 - P[:, 2], P[:, 2] - (z_bot - .005), (np.abs(az(P)) - mand_w(P)) * R_]) + g_
+        P_.append(("mandible", lambda P: mand(P), .0060, .0065, plate_mat, .0028))
+        # its raised centre, coming to the chin
+        P_.append(("muzzle", lambda P: np.maximum(mand(P, .007), (np.abs(az(P)) - mand_w(P) * .52) * R_), .0125, .0045, plate_mat, .0024))
+        P_.append(("breather", lambda P: np.maximum.reduce([np.abs(P[:, 2] - (cz + .030)) - .0085, (np.abs(az(P)) - rad(8)) * R_]),
+                   .0170, .0030, "orion_steel", .0012))
+        # a rail along each temple, behind the visor's end
+        P_.append(("rail", lambda P: np.maximum.reduce([np.abs(P[:, 2] - (ez + .004)) - .0085, (rad(a_top / rad(1) + 6) - np.abs(az(P))) * R_,
+                                                       (np.abs(az(P)) - rad(122)) * R_]), .0085, .0050, "orion_steel", .0022))
     for k, (z0, z1) in enumerate(((cz + .014, cz + .048), (cz - .018, cz + .018), (cz - .050, cz - .014))):
         P_.append((f"lame{k}", lambda P, z0=z0, z1=z1: band(P, z0, z1, rad(112), rad(181)), .004 + .0045 * k, .0055, plate_mat, .0016))
-    P_.append(("crest", lambda P: np.maximum.reduce([np.abs(P[:, 0]) - crest_w, vline(P) + vh + .010 - P[:, 2], P[:, 1] - crest_end]),
-               .004, .010 if m else .007, "orion_steel", .0020))
-    # the visor: the lens a little proud of the base, a raised frame round it, a centre seam, its lower light line
+    P_.append(("crest", lambda P: np.maximum.reduce([np.abs(P[:, 0]) - crest_w, z_top + .012 - P[:, 2], P[:, 1] - crest_end]),
+               .004, .0060 if m else .0048, plate_mat, .0016))
+    # the shield: the lens a little proud of the base in a slim dark frame; the light under the peak
     P_.append(("visor", lambda P: visor(P), .0015, .0040, VISOR, .0012))
-    P_.append(("visorframe", lambda P: np.abs(visor(P) + .0016) - .0026, .0035, .0060, "orion_steel", .0010))
-    P_.append(("visorseam", lambda P: np.maximum(visor(P) + .002, np.abs(P[:, 0]) - .0016), .0058, .0016, "orion_steel", .0006))
-    P_.append(("visorlight", lambda P: np.maximum(np.abs(P[:, 2] - (vline(P) - vh + .0042)) - .0007, (np.abs(az(P)) - va * .86) * R_),
-               .0058, .0010, "orion_glow", .0003))
-    P_.append(("cheeklight", lambda P: np.maximum.reduce([np.abs(P[:, 2] - (vline(P) - vh - .0090)) - .0009,
-                                                          (rad(32) - np.abs(az(P))) * R_, (np.abs(az(P)) - rad(62)) * R_]),
-               .0080, .0014, "orion_glow", .0004))
-    # temple sensors: a small housing either side of the visor with two lenses
-    for sx in (1, -1):
-        sc = lambda P, sx=sx: np.maximum.reduce([np.abs(P[:, 2] - (vz + .002)) - .011, (np.abs(az(P) - sx * (va + rad(9)))) * R_ - .010])
-        P_.append((f"sensor{sx}", sc, .006, .0080, "orion_steel", .0020))
-    vents = [(cz + .008 + k * .0115, (.050 if m else .034) - k * .006) for k in range(3)]
-    return base, P_, dict(lens=[(np.array((sx * (r[0] + g) * .98, c[1] - r[1] * .30, vz + .003), F32), sx) for sx in (1, -1)],
-                          ears=ear, vents=vents, plate=plate_mat, front_y=float(c[1] - r[1] - g))
+    P_.append(("visorframe", lambda P: np.abs(visor(P) + .0014) - .0022, .0032, .0052, "orion_steel", .0010))
+    P_.append(("browlight", lambda P: np.maximum(np.abs(P[:, 2] - (z_top - .0075)) - .0008, (np.abs(az(P)) - a_top * .66) * R_),
+               .0056, .0010, "orion_glow", .0003))
+    if m:                                                         # his: the coat's slanted light, once, on the left guard
+        P_.append(("guardlight", lambda P: np.maximum.reduce([
+            np.abs(P[:, 2] - (ez - .034) - (az(P) - rad(86)) * R_ * .85) - .0011, (rad(74) - az(P)) * R_, (az(P) - rad(98)) * R_]),
+            .0092, .0012, "orion_glow", .0004))
+    else:                                                         # hers: a short line under the shield's point
+        P_.append(("chinlight", lambda P: np.maximum(np.abs(P[:, 2] - (z_bot - .0070)) - .0009, (np.abs(az(P)) - rad(9)) * R_),
+                   .0056, .0010, "orion_glow", .0003))
+    return base, P_, dict(lens=[], ears=[], vents=[], plate=plate_mat, front_y=float(c[1] - r[1] - g))
 
 
 def relax_on(bm, fn, iters=16, k=.6):

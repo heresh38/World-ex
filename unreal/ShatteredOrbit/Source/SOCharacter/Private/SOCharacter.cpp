@@ -1,4 +1,6 @@
 #include "SOCharacter.h"
+
+#include "SOAreaSubsystem.h"
 #include "SOCombatStatics.h"
 #include "Components/SpotLightComponent.h"
 
@@ -28,6 +30,7 @@
 #include "GameFramework/PlayerState.h"
 #include "SOInventoryComponent.h"
 #include "SOLootActors.h"
+#include "SOLootLibrary.h"
 #include "SOGunRigComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
@@ -688,9 +691,217 @@ float ASOCharacter::GetTargetEyeOffset() const
 	return (bIsCrouched ? CrouchEyeHeight : StandingEyeHeight) - HalfHeight;
 }
 
+void ASOCharacter::RefreshHolsters()
+{
+	const USOInventoryComponent* Inventory = GetInventory();
+	USkeletalMeshComponent* Body = GetMesh();
+	const USkeletalMesh* Asset = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+	const int32 Num = USOInventoryComponent::NumSlots;
+	HolsterRigs.SetNum(Num);
+	HolsterUids.SetNum(Num);
+	HolsterPlaces.SetNum(Num);
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	auto Drop = [this](int32 Slot)
+	{
+		if (HolsterRigs[Slot])
+		{
+			HolsterRigs[Slot]->Dismantle();                          // (with its meshes: they would stay on the body otherwise)
+			HolsterRigs[Slot] = nullptr;
+		}
+		HolsterUids[Slot].Reset();
+		HolsterPlaces[Slot] = NAME_None;
+	};
+
+	// 1. Which guns are worn: every equipped gun that is not in the hands (all of them while the hands are busy).
+	TArray<int32, TInlineAllocator<4>> Order;
+	int32 Stowed = INDEX_NONE;
+	for (int32 Slot = 0; Slot < Num; ++Slot)
+	{
+		const FSOWeaponInstance* Copy = Inventory && Asset && !bDead ? Inventory->GetEquipped(Slot) : nullptr;
+		const bool bHeld = Copy && Weapon && Weapon->GetInstance().Uid == Copy->Uid;
+		if (!Copy || (bHeld && !bHeldStowed))
+		{
+			Drop(Slot);
+			continue;
+		}
+		if (!HolsterRigs[Slot] || HolsterUids[Slot] != Copy->Uid)
+		{
+			Drop(Slot);
+			USOWeaponData* Data = Tables ? Tables->LoadArchetype(Copy->Archetype) : nullptr;
+			if (!Data)
+			{
+				continue;
+			}
+			USOGunRigComponent* Rig = NewObject<USOGunRigComponent>(this);
+			Rig->SetupAttachment(Body);
+			Rig->RegisterComponent();
+			Rig->Build(Data, false);
+			Rig->Dress(*Copy);
+			HolsterRigs[Slot] = Rig;
+			HolsterUids[Slot] = Copy->Uid;
+		}
+		if (bHeld)
+		{
+			Stowed = Slot;                                           // takes its place last: the others keep theirs
+		}
+		else
+		{
+			Order.Add(Slot);
+		}
+	}
+	if (Stowed != INDEX_NONE)
+	{
+		Order.Add(Stowed);
+	}
+	if (Order.Num() == 0)
+	{
+		return;
+	}
+
+	// 2. Where. Every worn gun has a place of its own, sized from the gun itself (its bounds), so two never share a
+	//    spot or pass through each other: long guns stand on the back side by side, muzzles up, one behind each
+	//    shoulder with its top to the spine (the primary's home is the right, the special's the left, the heavy takes
+	//    the free one; a third, the gun put away for a climb, lies across them); handguns hang at the hips, the first
+	//    on the right, muzzle down and the grip to the rear (a third behind the belt).
+	//    Rest pose, component space: +X the body's left, +Y forward, +Z up.
+	const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+	auto RefCS = [&Ref](FName Bone)
+	{
+		FTransform T = FTransform::Identity;
+		for (int32 I = Ref.FindBoneIndex(Bone); I != INDEX_NONE; I = Ref.GetParentIndex(I))
+		{
+			T = T * Ref.GetRefBonePose()[I];
+		}
+		return T;
+	};
+	const float K = FMath::Max(static_cast<float>(RefCS(TEXT("head")).GetLocation().Z) / 165.0f, 0.5f);
+	const FVector Chest = RefCS(TEXT("chest")).GetLocation();
+	const FVector Hips = RefCS(TEXT("hips")).GetLocation();
+	const bool bFemale = Inventory->GetBody() == TEXT("female");
+	// the clothed body's surface from its joints (cm): behind the chest, behind the belt, beside the hip joint
+	// (a coat or jacket over the back adds its cloth and folded hood)
+	const float BackDepth = ((bFemale ? HolsterBackDepth.Y : HolsterBackDepth.X) + (GetWornPiece(TEXT("outer"), false) ? HolsterCoat : 0.0f)) * K;
+	const float BeltDepth = (bFemale ? 10.5f : 12.0f) * K;
+	const float HipSide = (bFemale ? HolsterHipSide.Y : HolsterHipSide.X) * K;
+	const float SpineGap = 1.6f;                                   // each back gun keeps this far from the midline
+	const float AcrossMax = 25.0f;                                 // a gun taller than this (sights to grip) stands on edge
+
+	bool bBackTaken[2] = { false, false };
+	bool bHipTaken[2] = { false, false };
+	float BackOuter = BackDepth;                                   // how far behind the chest the back guns reach
+	for (const int32 Slot : Order)
+	{
+		USOGunRigComponent* Rig = HolsterRigs[Slot];
+		if (!Rig)
+		{
+			continue;
+		}
+		const FBox Box = Rig->GetWornBounds();
+		FVector Corners[8];
+		Box.GetVertices(Corners);
+		auto Turned = [&Corners](const FQuat& Q)
+		{
+			FBox Out(ForceInit);
+			for (const FVector& C : Corners)
+			{
+				Out += Q.RotateVector(C);
+			}
+			return Out;
+		};
+		FName Bone, Place;
+		FQuat Rot;
+		FVector At;
+		if (Rig->IsHandgun())
+		{
+			const int32 Side = !bHipTaken[0] ? 0 : (!bHipTaken[1] ? 1 : 2);
+			if (Side < 2)
+			{
+				bHipTaken[Side] = true;
+				const float Sign = Side == 0 ? -1.0f : 1.0f;           // -X is the body's right
+				Bone = Side == 0 ? TEXT("thigh_R") : TEXT("thigh_L");
+				Place = Side == 0 ? TEXT("hip_right") : TEXT("hip_left");
+				Rot = FRotationMatrix::MakeFromXZ(FVector(0.0f, 0.10f, -0.995f), FVector(0.0f, 1.0f, 0.0f)).ToQuat();
+				const FBox B = Turned(Rot);
+				const FVector Joint = RefCS(Bone).GetLocation();
+				// its inner side on the hip's surface, the top of the grip just under the hip joint
+				At = FVector(Joint.X + Sign * HipSide - (Sign < 0.0f ? B.Max.X : B.Min.X), Joint.Y + 1.0f * K, Joint.Z - 3.0f * K);
+			}
+			else
+			{
+				Bone = TEXT("hips");
+				Place = TEXT("belt_back");
+				Rot = FRotationMatrix::MakeFromXZ(FVector(0.94f, 0.0f, -0.34f), FVector(0.34f, 0.0f, 0.94f)).ToQuat();
+				const FBox B = Turned(Rot);
+				At = FVector(-B.GetCenter().X, Hips.Y - BeltDepth - 1.0f - B.Max.Y, Hips.Z + 5.0f * K - B.GetCenter().Z);
+			}
+		}
+		else
+		{
+			Bone = TEXT("chest");
+			const int32 Home = Slot == 0 ? 0 : (Slot == 1 ? 1 : (bBackTaken[0] ? 1 : 0));
+			const int32 Side = !bBackTaken[Home] ? Home : (!bBackTaken[1 - Home] ? 1 - Home : 2);
+			if (Side < 2)
+			{
+				bBackTaken[Side] = true;
+				const float Sign = Side == 0 ? -1.0f : 1.0f;
+				Place = Side == 0 ? TEXT("back_right") : TEXT("back_left");
+				// muzzle up and a little out over the shoulder; its top to the spine, the grip outward. A very tall gun
+				// is turned onto its edge (grip out and back) until it is no wider than the half of the back it has.
+				const float Tall = static_cast<float>(Box.GetSize().Z);
+				const float Roll = FMath::Acos(FMath::Clamp(AcrossMax / FMath::Max(Tall, 1.0f), 0.0f, 1.0f));
+				const FVector Barrel(Sign * 0.14f, 0.0f, 0.99f);
+				const FVector Top(-Sign * FMath::Cos(Roll), FMath::Sin(Roll), 0.0f);
+				Rot = FRotationMatrix::MakeFromXZ(Barrel, Top).ToQuat();
+				const FBox B = Turned(Rot);
+				const float Middle = static_cast<float>(Chest.Z) + 1.0f * K;
+				const float Low = FMath::Max(Middle - 0.5f * static_cast<float>(B.GetSize().Z), static_cast<float>(Hips.Z) - 6.0f * K);
+				At = FVector(Sign * SpineGap - (Sign < 0.0f ? B.Max.X : B.Min.X), Chest.Y - BackDepth - 1.0f - B.Max.Y, Low - B.Min.Z);
+				BackOuter = FMath::Max(BackOuter, BackDepth + 1.0f + static_cast<float>(B.GetSize().Y));
+			}
+			else
+			{
+				// both sides taken: slung across the two, outside them
+				Place = TEXT("back_across");
+				Rot = FRotationMatrix::MakeFromXZ(FVector(-0.56f, 0.0f, 0.83f), FVector(0.83f, 0.0f, 0.56f)).ToQuat();
+				const FBox B = Turned(Rot);
+				At = FVector(-B.GetCenter().X, Chest.Y - BackOuter - 1.0f - B.Max.Y, Chest.Z + 1.0f * K - B.GetCenter().Z);
+			}
+		}
+		if (HolsterPlaces[Slot] != Place || Rig->GetAttachSocketName() != Bone)
+		{
+			const FTransform Desired(Rot, At);
+			Rig->AttachToComponent(Body, FAttachmentTransformRules::KeepRelativeTransform, Bone);
+			Rig->SetRelativeTransform(Desired.GetRelativeTransform(RefCS(Bone)));
+			HolsterPlaces[Slot] = Place;
+		}
+		Rig->SetShown(true);
+		Rig->SetOwnerNoSeeAll(Body->bOwnerNoSee);
+	}
+}
+
 void ASOCharacter::Tick(float DeltaSeconds)
 {
 	TickFootstepNoise(DeltaSeconds);
+	// the hands are busy on a vault, a mantle or a climb: the gun in them goes to its holster and comes back after
+	if (const USOCharacterMovementComponent* SOMove = GetSOMovement())
+	{
+		const bool bStow = SOMove->IsMantling() && !bDead;
+		if (bStow != bHeldStowed)
+		{
+			bHeldStowed = bStow;
+			if (Weapon && Weapon->GetThirdPersonRig())
+			{
+				Weapon->GetThirdPersonRig()->SetShown(!bStow);
+			}
+			HolsterTimer = 0.0f;
+		}
+	}
+	HolsterTimer -= DeltaSeconds;
+	if (HolsterTimer <= 0.0f)
+	{
+		HolsterTimer = 0.2f;
+		RefreshHolsters();
+	}
 	if (bFlashlightOn)
 	{
 		// from the chest (third person) or just below the eye (first person), along the aim
@@ -1186,13 +1397,10 @@ void ASOCharacter::ServerTravelToArea_Implementation(const FString& Level)
 		return;
 	}
 	StoreWeaponAmmo();
-	if (World->GetNetMode() == NM_Standalone)
+	// one area at a time: the subsystem lets go of this one before the next is built
+	if (USOAreaSubsystem* Areas = USOAreaSubsystem::Get(this); !Areas || !Areas->TravelToLevel(Level))
 	{
-		UGameplayStatics::OpenLevel(this, FName(*Level));
-	}
-	else
-	{
-		World->ServerTravel(Level + TEXT("?listen"));
+		UE_LOG(LogShatteredOrbit, Warning, TEXT("Travel: %s is not a listed area (Data/areas.json)"), *Level);
 	}
 }
 
@@ -1316,6 +1524,7 @@ void ASOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ASOCharacter::OnWeaponEquipped()
 {
 	ApplyViewMode();
+	RefreshHolsters();
 	if (Viewmodel)
 	{
 		Viewmodel->Raise();
@@ -1501,6 +1710,13 @@ void ASOCharacter::ApplyViewMode()
 		if (Weapon->GetFirstPersonRig())
 		{
 			Weapon->GetFirstPersonRig()->SetShown(bFirst && !bScopeView);
+		}
+	}
+	for (USOGunRigComponent* Rig : HolsterRigs)
+	{
+		if (Rig)
+		{
+			Rig->SetOwnerNoSeeAll(bEye);
 		}
 	}
 }

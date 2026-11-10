@@ -124,22 +124,29 @@ def place_features(V, loops, body, T):
             es, tilt = fc.get("eye_size", 1.0), fc.get("eye_tilt", 1.0)
             w = T["eye_w"] / 2 * es
             hu, hl = g["eye_hu"] * es, g["eye_hl"] * es
+            lid = g["lid"]
             for k, i in enumerate(loop):
                 a = ang[k]
                 ca, sa = math.cos(a), math.sin(a)
-                # almond: the upper lid's peak a little inward of centre, the lower lid's low point a little outward
-                u = w * ca
-                lift = .0008 * tilt * (u / w)                                  # positive canthal tilt
-                if sa >= 0:                                                    # rounded: a fuller arc than an almond
-                    v = hu * math.copysign(abs(sa) ** .8, sa) * (1 - .08 * ca) + lift
-                else:
-                    v = hl * -abs(sa) ** .85 * (1 + .10 * ca) + lift
-                x = cx + u * sx
-                z = cz + v
-                # the fissure is wider than the globe: laid on it compressed across (the canthi wrap round it)
-                du, dv = (x - ec.x * sx) * (.76 * er / w), z - ec.z
-                y = ec.y - math.sqrt(max((er + .0004) ** 2 - du * du - dv * dv, 1e-8))
-                V[i] = (x, y, z)
+                # almond, rounded: the upper lid's peak a little inward of centre, the lower lid's low point a little
+                # outward, the outer corner a touch higher; laid on the lid shell (headshape: g["lid"])
+                u = (lid["wl"] if ca >= 0 else lid["wm"]) * ca
+                lift = .0010 * tilt * ca
+                v = (hu * abs(sa) ** .8 * (1 - .08 * ca) if sa >= 0 else hl * -abs(sa) ** .85 * (1 + .10 * ca)) + lift
+                rx, R_ = (lid["rxl"] if ca >= 0 else lid["rxm"]), lid["R"]
+                y = ec.y - R_ * math.sqrt(max(1 - (u / rx) ** 2 - (v / R_) ** 2, 1e-6))
+                # where the face's own surface runs in front of the shell (the corners, the lower lid's root)
+                # the margin comes forward onto it: a buried margin sits in a pit
+                if body(np.array([[cx + u * sx, y, cz + v]], F32))[0] < 0:
+                    lo_, hi_ = y - .006, y
+                    for _ in range(16):
+                        mid = (lo_ + hi_) / 2
+                        if body(np.array([[cx + u * sx, mid, cz + v]], F32))[0] < 0:
+                            hi_ = mid
+                        else:
+                            lo_ = mid
+                    y = (lo_ + hi_) / 2
+                V[i] = (cx + u * sx, y, cz + v)
             pinned += loop
         else:                                                          # the mouth
             st, mw = g["stomion"], g["mouth_w"]
@@ -226,6 +233,20 @@ def fit(o, body, T, relax=6, log=print, per_part=True, hold=None):
         Vn[tv] = sdf.project(lambda P: body.part("toe", P), Vn[tv], iters=2, max_step=.004)
         V = np.where(mask[:, None], V, Vn)
         V = symmetrize(V, pair)
+    g_ = body.head_geometry()
+    if hold is None:
+        # the ears: a longer relaxation of their own, so the rim and the back of the auricle
+        # get their share of the quads (the projection lands nearly all of them on the ear's face)
+        c = np.array(g_["tragion"], F32) + np.array((.010, .012, .004), F32)
+        sel = np.where((np.linalg.norm(V - c, axis=1) < .050) & ~mask)[0]
+        for it in range(70):
+            L = laplacian(V, nb, start, deg)
+            Nn = sdf.normals(body, V[sel])
+            d = L[sel] - V[sel]
+            d -= Nn * (d * Nn).sum(1)[:, None]
+            V[sel] = sdf.project(body, V[sel] + d * .5, iters=2, max_step=.004)
+        V = symmetrize(V, pair)
+        log(f"ears relaxed ({len(sel)} vertices)")
     log(f"relaxed; max |f| {np.abs(body(V[~mask])).max():.4f}")
     o.data.vertices.foreach_set("co", V.astype(F32).ravel())
     o.data.update()

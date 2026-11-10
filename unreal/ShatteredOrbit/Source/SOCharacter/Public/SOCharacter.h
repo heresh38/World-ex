@@ -289,6 +289,34 @@ public:
 	/** Server: hold the copy the inventory has in the active slot (stores the current one's ammo first). */
 	void EquipFromInventory();
 
+	/** The equipped guns that are not in the hands, worn where the body carries them, each in a place of its own
+	 *  (sized from the gun, so two never overlap): long guns stand on the back side by side, one behind each
+	 *  shoulder; handguns hang at the hips. Always there in third person; they follow the loadout and change
+	 *  places with the gun in hand. Cheap when nothing changed. */
+	void RefreshHolsters();
+
+	/** The gun in hand is in its holster and the hands are free: while vaulting, mantling or climbing. */
+	bool IsWeaponStowed() const { return bHeldStowed; }
+
+	/** The worn gun of an equipped slot (null: that slot is empty or in the hands). */
+	class USOGunRigComponent* GetHolsteredRig(int32 Slot) const { return HolsterRigs.IsValidIndex(Slot) ? HolsterRigs[Slot].Get() : nullptr; }
+
+	/** Where an equipped slot's gun is worn: back_right, back_left, back_across, hip_right, hip_left, belt_back
+	 *  (None: not worn). */
+	FName GetHolsterPlace(int32 Slot) const { return HolsterPlaces.IsValidIndex(Slot) ? HolsterPlaces[Slot] : FName(); }
+
+	/** The clothed body's surface behind the chest joint and beside the hip joint (cm; X = his, Y = hers): what the
+	 *  worn guns rest on. */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Weapon")
+	FVector2D HolsterBackDepth = FVector2D(11.5f, 10.0f);
+
+	/** What a worn coat or jacket adds behind the back (cm). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Weapon")
+	float HolsterCoat = 3.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Weapon")
+	FVector2D HolsterHipSide = FVector2D(9.5f, 9.5f);
+
 	/** Fully aimed through magnified glass (either view; third person cuts to the eye): the scope picture replaces
 	 *  the gun (HUD draws it). */
 	bool IsScopeView() const { return bScopeView; }
@@ -334,6 +362,13 @@ protected:
 	void StoreWeaponAmmo();
 	FDelegateHandle LoadoutHandle;
 	TWeakObjectPtr<USOInventoryComponent> BoundInventory;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class USOGunRigComponent>> HolsterRigs;
+	TArray<FString> HolsterUids;
+	TArray<FName> HolsterPlaces;
+	float HolsterTimer = 0.0f;
+	bool bHeldStowed = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;

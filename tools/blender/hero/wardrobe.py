@@ -737,9 +737,33 @@ def skin_like_body(piece, body, arm):
     dt.layers_vgroup_select_dst = 'NAME'
     bpy.context.view_layer.objects.active = piece
     bpy.ops.object.modifier_apply(modifier=dt.name)
+    fill_unweighted(piece)
     piece.parent = arm
     mod = piece.modifiers.new("Armature", 'ARMATURE')
     mod.object = arm
+
+
+def fill_unweighted(piece):
+    """a vertex the transfer left without any weight takes its nearest weighted neighbour's (one such vertex and the
+    glTF exporter adds a second root bone for it, which Unreal's skeletal import refuses)"""
+    from mathutils import kdtree
+    me = piece.data
+    has = [any(g.weight > 1e-6 for g in v.groups) for v in me.vertices]
+    if all(has) or not any(has):
+        return 0
+    kd = kdtree.KDTree(sum(has))
+    for v in me.vertices:
+        if has[v.index]:
+            kd.insert(v.co, v.index)
+    kd.balance()
+    n = 0
+    for v in me.vertices:
+        if not has[v.index]:
+            _, j, _ = kd.find(v.co)
+            for g in me.vertices[j].groups:
+                piece.vertex_groups[g.group].add([v.index], g.weight, 'REPLACE')
+            n += 1
+    return n
 
 
 def dress(body, arm, T, log=print):

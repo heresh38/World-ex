@@ -261,6 +261,171 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 10 || Set == 11)
+	{
+		// The holds (files g_<body>_<gun>_<n>): every gun in the hands of one body (10 = male, 11 = female), close on
+		// the firing hand, the support hand and from above in third person, the first-person view, then jogging and
+		// sprinting from the side. For checking that the fingers close on every grip and nothing passes through.
+		const FString Body = Set == 10 ? TEXT("male") : TEXT("female");
+		static const TCHAR* Guns[] = {
+			TEXT("auto"), TEXT("pulse"), TEXT("scout"), TEXT("handcannon"), TEXT("shotgun"), TEXT("sniper"), TEXT("smg"), TEXT("sidearm"),
+			TEXT("energy"), TEXT("hmg"), TEXT("rocket"), TEXT("rifle"), TEXT("carbine"), TEXT("dmr"), TEXT("ksmg"), TEXT("bolt"), TEXT("pistol"),
+			TEXT("revolver"), TEXT("pump"), TEXT("spitter"), TEXT("bile"), TEXT("brood"), TEXT("vr_rifle"), TEXT("vr_sniper"), TEXT("vr_smg"),
+			TEXT("vr_shotgun"), TEXT("vr_lmg"), TEXT("vr_handcannon"), TEXT("vr_pistol"), TEXT("vr_fusion"), TEXT("vr_rocket") };
+		auto EquipGun = [Hero](const FString& Arch)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(*Arch));
+				H->EquipInstance(USOLootLibrary::MakeWeapon(*Arch, 2, 20, Rng));
+			}
+		};
+		// a camera close on the held gun (yaw relative to the facing: +90 = from the character's right)
+		auto Close = [this, Hero](float Yaw, float Distance, float Height, int32 On = 0)
+		{
+			ASOCharacter* H = Hero();
+			if (!H)
+			{
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			FVector Focus = H->GetActorLocation() + FVector(0, 0, 40.0f);
+			if (const ASOWeapon* W = H->GetWeapon())
+			{
+				if (const USOGunRigComponent* Rig = W->GetThirdPersonRig())
+				{
+					// 0 = the whole hold, 1 = the firing hand on the grip, 2 = the support hand
+					Focus = On == 1 ? Rig->GetComponentLocation() - Rig->GetForwardVector() * 1.0f - Rig->GetUpVector() * 5.0f
+						: (On == 2 ? H->GetMesh()->GetBoneLocation(TEXT("hand_L")) : Rig->GetComponentLocation() + Rig->GetForwardVector() * 12.0f);
+				}
+			}
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + Yaw, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * Distance + FVector(0, 0, Height);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera)) { Cam->GetCameraComponent()->SetFieldOfView(On == 0 ? 50.0f : 34.0f); }
+			SetViewTarget(CaptureCamera);
+		};
+		TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		auto Back = [Hero, Start, this]()
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				CaptureMove = FVector2D::ZeroVector;
+				H->HandleSprintReleased();
+				H->TeleportTo(Start->GetLocation(), Start->Rotator());
+				H->GetCharacterMovement()->StopMovementImmediately();
+				SetControlRotation(Start->Rotator());
+			}
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(*Body); }
+			if (ASOCharacter* H = Hero())
+			{
+				SetControlRotation(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f));   // the open side of the range
+				*Start = FTransform(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f), H->GetActorLocation());
+			}
+		});
+		Do(1.0f, [=]() { Back(); });
+		for (const TCHAR* G : Guns)
+		{
+			const FString A = G;
+			Do(0.3f, [=]() { EquipGun(A); View(ESOViewMode::ThirdPerson); });
+			Do(0.9f, [=]() { Close(80.0f, 60.0f, 6.0f, 1); });
+			Snap(0.15f, FString::Printf(TEXT("g_%s_%s_1_right"), *Body, *A));
+			Act([=]() { Close(-80.0f, 60.0f, 6.0f, 2); });
+			Snap(0.15f, FString::Printf(TEXT("g_%s_%s_2_left"), *Body, *A));
+			Act([=]() { Close(55.0f, 45.0f, -55.0f, 0); });
+			Snap(0.15f, FString::Printf(TEXT("g_%s_%s_3_front"), *Body, *A));
+			Act([=]() { Close(-125.0f, 55.0f, 22.0f, 1); });
+			Snap(0.15f, FString::Printf(TEXT("g_%s_%s_7_thumb"), *Body, *A));
+			Act([=, this]() { View(ESOViewMode::FirstPerson); if (ASOCharacter* H = Hero()) { SetViewTarget(H); } });
+			Snap(0.5f, FString::Printf(TEXT("g_%s_%s_4_fp"), *Body, *A));
+			Act([=, this]() { View(ESOViewMode::ThirdPerson); CaptureMove = FVector2D(0.0f, 1.0f); });
+			Do(0.8f, [=]() { Close(90.0f, 150.0f, 15.0f); });
+			Snap(0.0f, FString::Printf(TEXT("g_%s_%s_5_jog"), *Body, *A));
+			Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } });
+			Do(0.8f, [=]() { Close(90.0f, 150.0f, 15.0f); });
+			Snap(0.0f, FString::Printf(TEXT("g_%s_%s_6_sprint"), *Body, *A));
+			Do(0.05f, [=]() { Back(); });
+		}
+		// the loadout worn: each slot in hand in turn, the other two on the back / at the hip (files h_<body>_<slot>_<view>)
+		for (int32 Slot = 0; Slot < 3; ++Slot)
+		{
+			Do(0.4f, [=, this]()
+			{
+				if (ASOCharacter* H = Hero())
+				{
+					if (Slot == 0) { H->HandleWeapon1(); } else if (Slot == 1) { H->HandleWeapon2(); } else { H->HandleWeapon3(); }
+					if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(Slot); }
+					View(ESOViewMode::ThirdPerson);
+				}
+			});
+			Do(1.6f, [=]() { Orbit(180.0f, 230.0f, 30.0f); });
+			Snap(0.2f, FString::Printf(TEXT("h_%s_%d_1_back"), *Body, Slot));
+			Act([=]() { Orbit(235.0f, 230.0f, 30.0f); });
+			Snap(0.2f, FString::Printf(TEXT("h_%s_%d_2_backright"), *Body, Slot));
+			Act([=]() { Orbit(60.0f, 230.0f, 20.0f); });
+			Snap(0.2f, FString::Printf(TEXT("h_%s_%d_3_frontright"), *Body, Slot));
+			Act([=]() { Orbit(-60.0f, 230.0f, 20.0f); });
+			Snap(0.2f, FString::Printf(TEXT("h_%s_%d_4_frontleft"), *Body, Slot));
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 12 || Set == 13)
+	{
+		// The loadout worn (files w_<body>_<loadout>_<slot in hand>_<view>): three loadouts (three long guns; a rifle,
+		// a sidearm and a launcher; the Void Requiem set), each slot in hand in turn, from behind, three-quarter and
+		// the right side: every worn gun in a place of its own, nothing stacked.
+		const FString Body = Set == 12 ? TEXT("male") : TEXT("female");
+		static const TCHAR* Loadouts[3][3] = {
+			{ TEXT("rifle"), TEXT("shotgun"), TEXT("hmg") },
+			{ TEXT("auto"), TEXT("sidearm"), TEXT("rocket") },
+			{ TEXT("vr_rifle"), TEXT("vr_handcannon"), TEXT("vr_lmg") } };
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(*Body); }
+			if (ASOCharacter* H = Hero()) { SetControlRotation(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f)); }
+		});
+		for (int32 L = 0; L < 3; ++L)
+		{
+			Do(0.6f, [=, this]()
+			{
+				if (USOInventoryComponent* Inv = SOFindInventory(this))
+				{
+					for (const TCHAR* Arch : Loadouts[L])
+					{
+						FRandomStream Rng(FCrc::StrCrc32(Arch));
+						Inv->Equip(Inv->AddWeapon(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng), false).Uid);
+					}
+				}
+			});
+			for (int32 Slot = 0; Slot < 3; ++Slot)
+			{
+				Do(0.4f, [=, this]()
+				{
+					if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(Slot); }
+					View(ESOViewMode::ThirdPerson);
+				});
+				Do(1.4f, [=]() { Orbit(180.0f, 260.0f, 30.0f); });
+				Snap(0.2f, FString::Printf(TEXT("w_%s_%d_%d_1_back"), *Body, L, Slot));
+				Act([=]() { Orbit(232.0f, 260.0f, 30.0f); });
+				Snap(0.2f, FString::Printf(TEXT("w_%s_%d_%d_2_quarter"), *Body, L, Slot));
+				Act([=]() { Orbit(270.0f, 260.0f, 10.0f); });
+				Snap(0.2f, FString::Printf(TEXT("w_%s_%d_%d_3_side"), *Body, L, Slot));
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 4)
 	{
 		// Nexus Prime (L_Nexus): the start, street level in three districts, a gate, aerials by day and at night.

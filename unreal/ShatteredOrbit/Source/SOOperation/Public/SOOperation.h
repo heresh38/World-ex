@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "SOSpecies.h"
 #include "SOOperation.generated.h"
 
 class APlayerState;
@@ -37,6 +38,7 @@ struct SOOPERATION_API FSOWaveEntry
 {
 	GENERATED_BODY()
 
+	/** A species (USOSpeciesLibrary) or one of this operation's variants of one. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
 	FName Enemy;
 
@@ -183,6 +185,13 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FSOOnStageChanged, int32 /*Stage*/, ESOOper
  * (an armour piece or a gun). One per level. The plan (stages, waves, spawn groups, rewards) is read from a json file
  * (PlanFile, written by tools/operation/<name>_plan.py), so the level's geometry and its mission share one source.
  * Server-authoritative; clients get the stage, progress, boss and rewards.
+ *
+ * It holds NO creature code: its waves name species (USOSpeciesLibrary: each written once, the same in every
+ * operation) and spawn them through the library. What an operation may add for itself is data in its plan:
+ * "enemies" (a baseline for all of them: {"health": 1.2, "damage": 1.1}) and "variants" (named dressings of a
+ * species: {"remnant_ashen": {"species": "remnant", "name": "Ashen Remnant", "health": 1.6, "weapon": "shotgun"}};
+ * waves then spawn "remnant_ashen" like any species). It loads the species it uses when the level starts and
+ * holds them only while it runs.
  */
 UCLASS()
 class SOOPERATION_API ASOOperation : public AActor
@@ -204,9 +213,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation", meta = (Units = "s"))
 	float StageGap = 2.5f;
 
-	/** The plan's enemy names -> classes. */
+	/** This operation's dressings of species, by the name its waves use. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
-	TMap<FName, TSubclassOf<ASOEnemy>> EnemyClasses;
+	TMap<FName, FSOSpeciesVariant> Variants;
+
+	/** On every creature of this operation (under its variant, if it has one). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
+	FSOSpeciesVariant Baseline;
+
+	/** A wave's enemy name -> the species it is and what this operation puts on top (false: no such creature). */
+	bool ResolveEnemy(FName Name, FName& OutSpecies, FSOSpeciesVariant& OutVariant) const;
+
+	/** Every enemy name the plan's stages use. */
+	TArray<FName> GetEnemyNames() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	FText OperationName;
@@ -305,6 +324,10 @@ protected:
 
 	UPROPERTY(Replicated)
 	TArray<FSOOperationReward> Granted;
+
+	/** What its species need to appear, held while the operation's level runs. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UObject>> HeldContent;
 
 	/** Server: the stage's enemies still standing, its next wave, when the last wave came, the hold's loop. */
 	TArray<TWeakObjectPtr<ASOEnemy>> Alive;

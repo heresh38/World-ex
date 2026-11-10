@@ -5,6 +5,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
+#include "SOAreaSubsystem.h"
 #include "UObject/StrongObjectPtr.h"
 
 namespace
@@ -12,6 +13,8 @@ namespace
 	TMap<FName, TStrongObjectPtr<USoundBase>>& Cache()
 	{
 		static TMap<FName, TStrongObjectPtr<USoundBase>> Sounds;
+		// held only for the area being played: leaving it lets them all go (the next area loads what it plays)
+		static const FDelegateHandle Release = USOAreaSubsystem::OnReleaseContent().AddLambda([]() { Sounds.Reset(); });
 		return Sounds;
 	}
 
@@ -59,6 +62,21 @@ USoundBase* USOSoundLibrary::Find(FName Name)
 	USoundBase* Sound = Cast<USoundBase>(Path.TryLoad());
 	Cache().Add(Name, TStrongObjectPtr<USoundBase>(Sound));
 	return Sound;
+}
+
+void USOSoundLibrary::ReleaseAll()
+{
+	Cache().Reset();
+}
+
+int32 USOSoundLibrary::NumHeld()
+{
+	int32 N = 0;
+	for (const TPair<FName, TStrongObjectPtr<USoundBase>>& Pair : Cache())
+	{
+		N += Pair.Value.IsValid();
+	}
+	return N;
 }
 
 void USOSoundLibrary::PlayAt(const UObject* WorldContext, FName Name, FVector Location, float Volume, float PitchJitter, ESOSoundRange Range)

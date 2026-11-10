@@ -175,6 +175,9 @@ def main():
                 pb.location = (0, 0, 0)
             wardrobe.dress(o, arm, T, log=log)
             arm.animation_data.action = bpy.data.actions["Idle"]
+        if "--noskin" not in flags:                    # the skin's UVs and maps (basemesh_finish)
+            import basemesh_finish
+            basemesh_finish.game_skin(o, T, sex, log, size=int(flags["--size"]) if isinstance(flags.get("--size"), str) else 4096)
         if isinstance(flags.get("--glb"), str):
             rig_mod.write_glb(flags["--glb"])
             log(f"wrote {flags['--glb']}")
