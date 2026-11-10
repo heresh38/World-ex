@@ -549,7 +549,8 @@ void ASOWeapon::PlayEventSound(FName Event)
 		{ TEXT("hatchopen"), TEXT("hatch_open") }, { TEXT("hatchclose"), TEXT("hatch_close") }, { TEXT("bioin"), TEXT("bio_in") },
 		{ TEXT("cellout"), TEXT("cell_out") }, { TEXT("cellin"), TEXT("cell_in") } };
 	// the carbine and the compact SMG rack a charging handle, not a bolt
-	const bool bCharge = Data && (Data->Archetype == TEXT("carbine") || Data->Archetype == TEXT("ksmg"));
+	const FName Style = Data ? SOReload::GetStyle(Data->Archetype) : NAME_None;
+	const bool bCharge = Style == TEXT("carbine") || Style == TEXT("ksmg");
 	if (bCharge && (Event == TEXT("rackback") || Event == TEXT("rackfwd")))
 	{
 		Event = Event == TEXT("rackback") ? FName(TEXT("chargeback")) : FName(TEXT("chargefwd"));
@@ -563,7 +564,17 @@ void ASOWeapon::PlayEventSound(FName Event)
 	ASOCombatCharacter* Holder = GetHolder();
 	if (Sound && Holder)
 	{
-		USOSoundLibrary::PlayFor(Holder, *Sound, Holder->GetActorLocation(), 0.9f, ESOSoundRange::Near, 0.05f);
+		// The Void Requiem set has its own foley (crystal and void under the steel): vr_<sound> where one was made.
+		FName Play = *Sound;
+		if (Data && Data->SetId == TEXT("void_requiem"))
+		{
+			const FName Own(*(TEXT("vr_") + Play.ToString()));
+			if (USOSoundLibrary::Find(Own))
+			{
+				Play = Own;
+			}
+		}
+		USOSoundLibrary::PlayFor(Holder, Play, Holder->GetActorLocation(), 0.9f, ESOSoundRange::Near, 0.05f);
 	}
 }
 
@@ -723,7 +734,8 @@ void ASOWeapon::Tick(float DeltaSeconds)
 
 	TArray<FSOReloadEvent> Events;
 	const bool bFinished = Reload.Update(DeltaSeconds, Events);
-	const bool bPerRound = Data && (Data->Archetype == TEXT("pump") || Data->Archetype == TEXT("bolt"));
+	const FName ReloadStyle = Data ? SOReload::GetStyle(Data->Archetype) : NAME_None;
+	const bool bPerRound = ReloadStyle == TEXT("pump") || ReloadStyle == TEXT("bolt");
 	for (const FSOReloadEvent& Event : Events)
 	{
 		if (Event.Name == TEXT("seat") && HasAuthority() && !bPerRound)

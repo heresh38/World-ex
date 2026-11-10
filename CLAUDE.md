@@ -153,8 +153,20 @@ breathes (`M_SOGlowPulse`); `ASOAmbience` loops (`amb_alien_hum`, `amb_hive`, `a
 Player: flashlight (F / right stick; `ASOCharacter::SetFlashlight`), clamber (ledges 2.45-3.8 m: a hang and pull up,
 `ClamberMaxHeight`), footsteps the creatures hear. Loot lands on the ground (traced on the world only) and drops in.
 Tests `ShatteredOrbit.Altered.*`, `ShatteredOrbit.AI.*`; pictures `SOCaptureSeries 1 9` on L_Meridian (logs the nav path).
-Reward sets still to model: the owner's concept sheets in `art/reference/operation/` (Void Sentinel armour, Void
-Requiem guns, plan ids `void_sentinel` / `vr_*`); until they exist the reward falls back to a legendary gun.
+Reward sets: the owner's concept sheets in `art/reference/operation/`. The Void Requiem guns (plan ids `vr_*`, set
+`void_requiem`, shader `requiem`, LootWeight 0) are built by `tools/blender/requiem_guns.py` on `voidkit.py` (direct
+meshes, no booleans: `talon` swept blade plates with a gold bead / a line of light under them, `feathers` rows of
+them, `plate` / `prism`, `lathe` turned parts, `crystal`, `vein`, the gold-ringed `core`, the plasma `chamber`);
+materials `gun_body` (black by the shader), `gun_metal__void` (polished silver), `gun_metal`, `gun_dark`, `gun_trim`
+and `gun_glow` / `gun_glow__dim` / `gun_glow__crystal` (Unreal tints every `gun_glow*` slot with the rarity colour).
+Look at them with `requiem_sheet.py -- out.png gun_vr_rifle:s gun_vr_rifle:q ...` (the game's dressing, bloom).
+Their reloads move real parts (`SOReload::GetStyle`: rifle = cell magazine + charging handle, sniper = magazine +
+straight-pull bolt, SMG, pistol = slide, shotgun = pump + crystal shells, hand cannon = crane / cylinder / speedloader;
+own sequences: `BeltSegments` (LMG feed cover `hatch` + belt box), `CoreSegments` (fusion: flank `hatch` + core
+crystal `biomass`), `BreechSegments` (launcher: breech lid + warhead `mag`)); their sounds are `sfx_synth.py` VOID
+(every shot over a struck bell tuned along D minor) and the `vr_<foley>` reload sounds `ASOWeapon::PlayEventSound`
+picks for the set. Test `ShatteredOrbit.Loot.RequiemSet`. Still to model: the Void Sentinel armour (`void_sentinel`);
+until it exists that part of the reward falls back to a legendary gun.
 
 ## Testing
 Build: `Build.bat ShatteredOrbitEditor Win64 Development -Project=<uproject>`. Tests: `UnrealEditor-Cmd <uproject>

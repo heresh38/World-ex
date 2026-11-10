@@ -17,6 +17,8 @@
 #include "SOLootLibrary.h"
 #include "SOPlayerState.h"
 #include "SOProjectileSubsystem.h"
+#include "SOReload.h"
+#include "SOSound.h"
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
 
@@ -312,6 +314,81 @@ bool FSOEveryArchetypeTest::RunTest(const FString& Parameters)
 		TestFalse(*FString::Printf(TEXT("%s: reload finished (%.2f s)"), *Name, Gun->GetReloadDuration()), Gun->IsReloading());
 		TestEqual(*FString::Printf(TEXT("%s: magazine full"), *Name), Gun->GetMag(), Gun->GetStats().Mag);
 		W.Run(1.5f); // let rounds, rockets and goo land
+	}
+	return true;
+}
+
+// The Void Requiem set (the first operation's reward guns): every gun carries the parts its reload moves, reloads with
+// a sequence of its own length, tolls with its own shot and has the set's foley.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLootRequiemSetTest, "ShatteredOrbit.Loot.RequiemSet", SOTest::Flags)
+bool FSOLootRequiemSetTest::RunTest(const FString& Parameters)
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!TestNotNull(TEXT("DA_LootTables (run import_assets.py)"), Tables))
+	{
+		return false;
+	}
+	const TMap<FName, TArray<FName>> Guns = {
+		{ TEXT("vr_rifle"), { TEXT("mag"), TEXT("charge"), TEXT("bolt") } }, { TEXT("vr_sniper"), { TEXT("mag"), TEXT("bolt") } },
+		{ TEXT("vr_smg"), { TEXT("mag"), TEXT("charge"), TEXT("bolt") } }, { TEXT("vr_shotgun"), { TEXT("pump"), TEXT("x_shell") } },
+		{ TEXT("vr_lmg"), { TEXT("hatch"), TEXT("mag"), TEXT("charge") } },
+		{ TEXT("vr_handcannon"), { TEXT("crane"), TEXT("cylinder"), TEXT("rounds"), TEXT("x_speedloader") } },
+		{ TEXT("vr_pistol"), { TEXT("mag"), TEXT("slide") } }, { TEXT("vr_fusion"), { TEXT("hatch"), TEXT("biomass") } },
+		{ TEXT("vr_rocket"), { TEXT("hatch"), TEXT("mag") } } };
+	for (const TPair<FName, TArray<FName>>& Gun : Guns)
+	{
+		const FString Name = Gun.Key.ToString();
+		const USOWeaponData* W = Tables->LoadArchetype(Gun.Key);
+		if (!TestNotNull(*FString::Printf(TEXT("%s data"), *Name), W))
+		{
+			continue;
+		}
+		TestEqual(*FString::Printf(TEXT("%s is in the set"), *Name), W->SetId, FName(TEXT("void_requiem")));
+		TestTrue(*FString::Printf(TEXT("%s never drops as ordinary loot"), *Name), W->LootWeight <= 0.0f);
+		TestTrue(*FString::Printf(TEXT("%s violet tracer"), *Name), W->TracerColor.B > W->TracerColor.G && W->TracerColor.R > W->TracerColor.G);
+		for (const FName Part : Gun.Value)
+		{
+			const FSOWeaponPart* Found = W->Parts.FindByPredicate([Part](const FSOWeaponPart& P) { return P.Name == Part; });
+			TestTrue(*FString::Printf(TEXT("%s has its %s"), *Name, *Part.ToString()), Found && !Found->Mesh.IsNull());
+		}
+		for (const TCHAR* View : { TEXT("fp"), TEXT("world") })
+		{
+			TestNotNull(*FString::Printf(TEXT("%s shot sound (%s)"), *Name, View), USOSoundLibrary::Find(FName(*FString::Printf(TEXT("%s_shot_%s"), *Name, View))));
+		}
+		// tactical and empty reloads: real sequences (hand keys, events), the tactical one as long as the data says
+		for (const bool bEmpty : { false, true })
+		{
+			int32 From = -1, To = -1;
+			const TArray<FSOReloadSegment> Segs = SOReload::BuildReload(Gun.Key, true, false, bEmpty, W->ReloadTime, 3, From, To);
+			TestTrue(*FString::Printf(TEXT("%s reload sequence"), *Name), Segs.Num() > 0);
+			bool bHand = false, bMoves = false, bFeeds = false;
+			for (const FSOReloadSegment& S : Segs)
+			{
+				bHand |= S.Channels.Contains(TEXT("hand"));
+				for (const TPair<FName, TArray<FSOKey>>& Channel : S.Channels)
+				{
+					bMoves |= Channel.Key != TEXT("hand") && Channel.Key != TEXT("gun");
+				}
+				for (const FSOReloadEvent& E : S.Events)
+				{
+					bFeeds |= E.Name == TEXT("seat") || E.Name == TEXT("grant");
+				}
+			}
+			TestTrue(*FString::Printf(TEXT("%s reload moves the off hand"), *Name), bHand);
+			TestTrue(*FString::Printf(TEXT("%s reload moves a part of the gun"), *Name), bMoves);
+			TestTrue(*FString::Printf(TEXT("%s reload feeds the gun"), *Name), bFeeds);
+			if (!bEmpty && From < 0)
+			{
+				const float Nominal = Segs.Num() > 1 ? Segs[0].Duration + Segs.Last().Duration : Segs[0].Duration;
+				TestTrue(*FString::Printf(TEXT("%s tactical reload lasts its reload time"), *Name), FMath::IsNearlyEqual(Nominal, W->ReloadTime, 0.02f));
+			}
+		}
+	}
+	TestEqual(TEXT("the shotgun racks its pump after a shot"), SOReload::GetStyle(TEXT("vr_shotgun")), FName(TEXT("pump")));
+	for (const TCHAR* Foley : { TEXT("vr_mag_in"), TEXT("vr_mag_slap"), TEXT("vr_rack_back"), TEXT("vr_hatch_open"), TEXT("vr_hatch_close"), TEXT("vr_bio_in"),
+		TEXT("vr_shell_in"), TEXT("vr_pump_back"), TEXT("vr_cyl_open"), TEXT("vr_speedload"), TEXT("vr_slide_back") })
+	{
+		TestNotNull(*FString::Printf(TEXT("foley %s"), Foley), USOSoundLibrary::Find(FName(Foley)));
 	}
 	return true;
 }

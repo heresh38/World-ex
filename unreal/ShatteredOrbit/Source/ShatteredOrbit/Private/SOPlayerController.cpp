@@ -674,7 +674,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		// Hold study: every gun in the hands from every side the player sees it.
 		const TCHAR* Guns[] = { TEXT("rifle"), TEXT("carbine"), TEXT("dmr"), TEXT("ksmg"), TEXT("bolt"), TEXT("pistol"), TEXT("revolver"), TEXT("pump"),
 			TEXT("auto"), TEXT("pulse"), TEXT("scout"), TEXT("handcannon"), TEXT("shotgun"), TEXT("sniper"), TEXT("smg"), TEXT("sidearm"), TEXT("energy"),
-			TEXT("hmg"), TEXT("rocket"), TEXT("spitter"), TEXT("bile"), TEXT("brood") };
+			TEXT("hmg"), TEXT("rocket"), TEXT("spitter"), TEXT("bile"), TEXT("brood"), TEXT("vr_rifle"), TEXT("vr_sniper"), TEXT("vr_smg"), TEXT("vr_shotgun"),
+			TEXT("vr_lmg"), TEXT("vr_handcannon"), TEXT("vr_pistol"), TEXT("vr_fusion"), TEXT("vr_rocket") };
 		auto Arm = [Hero](const TCHAR* Arch)
 		{
 			if (ASOCharacter* H = Hero())
@@ -704,6 +705,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Act([=, this]() { Aim(false); });
 			Do(0.5f, [=]() { EmptyReload(); });
 			Snap(0.0f, Tag + TEXT("_c_reload"), Reloading(0.4f));
+			Snap(0.0f, Tag + TEXT("_c2_reload"), Reloading(0.62f));
+			Snap(0.0f, Tag + TEXT("_c3_reload"), Reloading(0.8f));
 			Do(5.0f, []() {});
 			Act([=, this]() { View(ESOViewMode::ThirdPerson); Orbit(80.0f, 150.0f, 15.0f); });
 			Snap(0.8f, Tag + TEXT("_d_tp_right"));

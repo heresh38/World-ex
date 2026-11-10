@@ -4,7 +4,9 @@
 
 Weapons: every archetype gets `<id>_shot_fp` (stereo, the player's own gun) and `<id>_shot_world` (mono, positional),
 from per-class recipes: KINETIC (kin_core), ENERGY (nrg_core: FM zaps, plasma noise, arcing), rocket and the horror
-biomass guns (wet squelches, gurgles, spatter). Then reload / action foley, impacts, loot and UI sounds.
+biomass guns (wet squelches, gurgles, spatter), and the Void Requiem set (VOID: an energy discharge over a struck bell,
+the void taking the air back; `vr_<foley>` = the reload sounds with crystal chimes). Then reload / action foley,
+impacts, loot and UI sounds.
 
 Every sound is built from layers: a transient (clicks, the supersonic crack), a body (filtered noise blasts, pitch-
 dropping thumps), mechanical detail (modal synthesis: damped resonant modes of steel parts) and space (a synthetic
@@ -1806,6 +1808,146 @@ for _s in VOICE_SETS:
             SOUNDS[f"{_s}_{_kind}_{_k}"] = (lambda s=_s, kind=_kind, k=_k: alien_voice(s, kind, k))
 SOUNDS.update({"torch_on": lambda: torch(True), "torch_off": lambda: torch(False), "amb_alien_hum": amb_alien_hum,
                "amb_alien_chorus": amb_alien_chorus, "amb_hive": amb_hive})
+
+
+# ---------------------------------------------------------------------------- Void Requiem (the first operation's set)
+# Every gun of the set tolls: under the energy discharge sits a struck bell (the partials of a cast bell: hum, prime,
+# minor tierce, quint, nominal), tuned along D minor from the SMG's high A down to the launcher's low D, and after the
+# transient the void takes the air back (a rising band of noise cut dead, a falling sub). Shards ring on top.
+
+BELL_PARTIALS = ((0.5, 0.55, 1.6), (1.0, 1.0, 1.0), (1.2, 0.7, 0.8), (1.5, 0.4, 0.6), (2.0, 0.55, 0.45), (2.5, 0.22, 0.3),
+                 (3.0, 0.2, 0.25), (4.0, 0.1, 0.18))
+GLASS_PARTIALS = ((1.0, 1.0, 1.0), (2.76, 0.5, 0.6), (5.4, 0.28, 0.4), (8.93, 0.12, 0.25))
+
+VOID = {
+    # Last Rite, 600 rpm: a tight dark zap, a short toll on D4
+    "vr_rifle": dict(base="auto", seed=7001, toll=(293.7, 0.3, 0.07, 0.3), suck=(0.07, 0.3), drop=(120, 42, 0.16, 0.035, 0.5),
+                     shimmer=0.1, over=dict(zaps=[(1500, 240, 0.09, 1.5, 3.4, 0.02, 0.024, 0.55)], thump=(135, 44, 0.15, 0.032, 1.0, 1.5))),
+    # Vigil's End: the charge chirp, a huge discharge, the bell left ringing in the valley
+    "vr_sniper": dict(base="sniper", seed=7101, T=2.6, toll=(146.8, 2.4, 0.85, 0.55), suck=(0.16, 0.5), drop=(90, 24, 0.6, 0.12, 0.7),
+                      shimmer=0.22, over=dict(zaps=[(3400, 110, 0.5, 1.5, 6.5, 0.06, 0.09, 0.55), (640, 96, 0.4, 0.25, 3.0, 0.06, 0.07, 0.3)])),
+    # Threnody, 900 rpm: light and quick, a bright A
+    "vr_smg": dict(base="smg", seed=7201, toll=(440.0, 0.2, 0.045, 0.24), suck=(0.045, 0.22), drop=(170, 70, 0.08, 0.02, 0.35),
+                   shimmer=0.08, over=dict(zaps=[(2300, 560, 0.05, 2.5, 2.0, 0.012, 0.013, 0.55)])),
+    # Toll of Ruin: eight shards in a wide blast, a low heavy toll
+    "vr_shotgun": dict(base="shotgun", seed=7301, T=1.6, toll=(73.4, 1.5, 0.5, 0.6), suck=(0.13, 0.5), drop=(80, 24, 0.5, 0.1, 0.8),
+                       shimmer=0.25),
+    # Last Procession, 1100 rpm: deep and short, the low D of the cortege
+    "vr_lmg": dict(base="hmg", seed=7401, toll=(146.8, 0.22, 0.05, 0.3), suck=(0.04, 0.2), drop=(100, 40, 0.08, 0.02, 0.5), shimmer=0.07),
+    # Final Verse: a growl and a punch, the bell an octave under the rifle's
+    "vr_handcannon": dict(base="handcannon", seed=7501, T=1.5, toll=(110.0, 1.4, 0.42, 0.55), suck=(0.11, 0.45), drop=(85, 26, 0.45, 0.09, 0.7),
+                          shimmer=0.2),
+    # Ashen Psalm: a small clear toll on F
+    "vr_pistol": dict(base="sidearm", seed=7601, toll=(349.2, 0.45, 0.11, 0.32), suck=(0.06, 0.28), drop=(140, 52, 0.14, 0.03, 0.45), shimmer=0.12),
+    # Eulogy: six arcs out of the lance, a long F under them
+    "vr_fusion": dict(base="energy", seed=7701, T=1.6, toll=(174.6, 1.5, 0.48, 0.5), suck=(0.14, 0.5), drop=(110, 30, 0.5, 0.1, 0.6), shimmer=0.3),
+    # Funeral Bell: the launch, and the great bell struck once
+    "vr_rocket": dict(base="rocket", seed=7801, T=3.4, toll=(73.4, 3.3, 1.25, 0.85), suck=(0.2, 0.45), drop=(70, 22, 0.8, 0.16, 0.6), shimmer=0.15),
+}
+
+
+def void_core(seed, P):
+    if P["base"] == "rocket":
+        dry = rocket_core(seed); t0 = 0.0
+    else:
+        base = dict(ENERGY[P["base"]]); base.update(P.get("over", {}))
+        dry = nrg_core(seed, base); t0 = base["pre"][0] if "pre" in base else 0.0
+    out = silence(max(len(dry) / SR, P.get("T", 0.0)) + 0.02)
+    out = place(out, dry, 0.0)
+    f, d, tau, g = P["toll"]
+    out = place(out, bell(f, d, tau, BELL_PARTIALS, 0.0015), t0, g)
+    out = place(out, bell(f * 2.004, d * 0.6, tau * 0.5, BELL_PARTIALS[1:5], 0.001), t0 + 0.004, g * 0.25)  # a second, thinner skin: beating
+    if "drop" in P:
+        f0, f1, d, tau, g = P["drop"]
+        out = place(out, tone(f0, f1, d, tau, 0.006), t0 + 0.004, g)
+    if "suck" in P:  # the void taking the air back
+        d, g = P["suck"]
+        n = secs(d)
+        s = svf_sweep(noise(d, seed + 71) * np.linspace(0, 1, n) ** 2.2, "band", 240, 2800, 2.5) / 1.6
+        k = max(secs(0.004), 2)
+        s[-k:] *= np.linspace(1, 0, k)
+        out = place(out, s, t0 + 0.035, g)
+        out = place(out, click(seed + 72, 2200, 0.5, 0.012), t0 + 0.035 + d, g * 0.6)
+    if P.get("shimmer"):  # crystal shards ringing
+        r = rng(seed + 73)
+        modes = [(float(r.uniform(4200, 9800)), float(r.uniform(0.03, 0.09)), float(r.uniform(0.2, 0.5))) for _ in range(5)]
+        out = place(out, modal(0.5, modes, seed + 74), t0 + 0.002, P["shimmer"])
+    return saturate(headroom(out, 3.0) * 0.9, 1.25)
+
+
+def vr_shot(gun, fp):
+    P = VOID[gun]
+    s = P["seed"] + (0 if fp else 50)
+    dry = void_core(s, P)
+    if P["base"] == "rocket":
+        sp = dict(decay=0.55, wet=0.36, rumble=0.7, rumble_tau=0.5, taps=[(0.4, 0.12), (0.8, 0.07), (1.3, 0.04)])
+    else:
+        sp = dict(ENERGY[P["base"]]["space"])
+        sp["decay"] = sp.get("decay", 0.3) * 1.15
+    return shot_space(dry, s + 30, fp, **sp)
+
+
+def _chime(f, g=0.2, tau=0.11, t=0.5):
+    return bell(f, t, tau, GLASS_PARTIALS, 0.001) * g
+
+
+def void_foley(base, chimes=(), bloom=None, down=None, peak=-3.0, seed=900):
+    """The set's reload foley: the steel sound it was built on, with crystal chimes (at, Hz, gain), an optional void
+    bloom (the cell taking charge: a low swell with arcing) and an optional power falling away."""
+    x = np.asarray(base(), dtype=np.float64)
+    if x.ndim == 2:
+        x = x.mean(axis=1)
+    out = silence(len(x) / SR + 0.6)
+    out = place(out, x, 0.0)
+    for at, f, g in chimes:
+        out = place(out, _chime(f, g), at)
+    if bloom:
+        at, g = bloom
+        d = 0.4
+        w = (osc(sweep(55, 110, d)) + 0.4 * osc(sweep(220, 660, d), "tri")) * np.sin(np.pi * np.linspace(0, 1, secs(d)) ** 0.6) ** 2
+        out = place(out, w, at, g)
+        out = place(out, crackle(0.12, seed, 1500, 3000, 12000, 0.04), at, g * 0.6)
+    if down:
+        at, g = down
+        d = 0.3
+        out = place(out, osc(sweep(900, 180, d)) * env_ad(d, 0.004, 0.08), at, g)
+    return finish(room(out, 0.22), peak)
+
+
+_D5, _A5, _D6, _F6, _A6, _C7, _D7 = 587.3, 880.0, 1174.7, 1396.9, 1760.0, 2093.0, 2349.3
+VR_FOLEY = {
+    "reload_start": (reload_start, [(0.02, _D6, 0.1)], None, None),
+    "mag_release": (mag_release, [(0.01, _A6, 0.16)], None, (0.02, 0.12)),
+    "mag_out": (mag_out, [(0.03, _F6, 0.1)], None, None),
+    "mag_in": (mag_in, [(0.05, _D6, 0.18), (0.09, _A6, 0.12)], (0.08, 0.14), None),
+    "mag_slap": (mag_slap, [(0.0, _D6, 0.14)], (0.01, 0.2), None),
+    "mag_tap": (mag_tap, [(0.0, _F6, 0.14)], (0.01, 0.16), None),
+    "mag_clatter": (mag_clatter, [(0.02, _C7, 0.09), (0.09, _A6, 0.07)], None, None),
+    "rack_back": (rack_back, [(0.02, _A5, 0.14)], None, None),
+    "rack_fwd": (rack_fwd, [(0.01, _D6, 0.18)], (0.02, 0.12), None),
+    "charge_back": (charge_back, [(0.02, _A5, 0.14)], None, None),
+    "charge_fwd": (charge_fwd, [(0.01, _D6, 0.18)], (0.02, 0.12), None),
+    "slide_back": (slide_back, [(0.01, _A6, 0.12)], None, None),
+    "slide_fwd": (slide_fwd, [(0.01, _D7, 0.14)], (0.02, 0.1), None),
+    "latch": (latch, [(0.0, _A6, 0.12)], None, None),
+    "cyl_open": (cyl_open, [(0.03, _F6, 0.12)], None, (0.03, 0.1)),
+    "cyl_close": (cyl_close, [(0.02, _D6, 0.16)], (0.03, 0.14), None),
+    "eject": (eject, [(0.05 + i * 0.045, f, 0.11) for i, f in enumerate((_C7, _A6, _D7, _F6, _A6, _C7))], None, None),
+    "speedload": (speedload, [(0.04 + i * 0.012, f, 0.09) for i, f in enumerate((_D6, _F6, _A6, _D7, _A6, _F6))], (0.08, 0.12), None),
+    "shell_in": (shell_in, [(0.03, _A6, 0.18)], (0.04, 0.1), None),
+    "pump_back": (pump_back, [(0.02, _A5, 0.1)], None, None),
+    "pump_fwd": (pump_fwd, [(0.02, _D6, 0.12)], (0.03, 0.1), None),
+    "hatch_open": (cyl_open, [(0.0, _D6, 0.1), (0.06, _A6, 0.09)], None, (0.02, 0.14)),
+    "hatch_close": (cyl_close, [(0.02, _D6, 0.14)], (0.03, 0.2), None),
+    "bio_in": (cell_in, [(0.06, _D6, 0.2), (0.1, _A6, 0.14), (0.15, _D7, 0.09)], (0.1, 0.22), None),
+    "cell_out": (cell_out, [(0.01, _A6, 0.14), (0.07, _F6, 0.09)], None, (0.02, 0.1)),
+    "cell_in": (cell_in, [(0.06, _D6, 0.18), (0.1, _A6, 0.12)], (0.1, 0.18), None),
+}
+for _g in VOID:
+    SOUNDS[_g + "_shot_fp"] = lambda g=_g: vr_shot(g, True)
+    SOUNDS[_g + "_shot_world"] = lambda g=_g: vr_shot(g, False)
+for _i, (_k, _v) in enumerate(VR_FOLEY.items()):
+    SOUNDS["vr_" + _k] = lambda v=_v, i=_i: void_foley(v[0], v[1], v[2], v[3], seed=900 + i * 7)
 
 
 def main():

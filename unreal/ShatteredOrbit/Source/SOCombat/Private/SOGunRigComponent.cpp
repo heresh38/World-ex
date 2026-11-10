@@ -350,7 +350,11 @@ void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
 			bPaint = Data && Data->WeaponClass == ESOWeaponClass::Energy; // kinetic / horror keep their own materials
 		}
 	}
-	const FLinearColor Glow = Tables ? Tables->GetRarity(Instance.Rarity).Color : FLinearColor(0.2f, 0.8f, 1.0f);
+	FLinearColor Glow = Tables ? Tables->GetRarity(Instance.Rarity).Color : FLinearColor(0.2f, 0.8f, 1.0f);
+	if (Data && Data->SetId == TEXT("void_requiem"))
+	{
+		Glow = FLinearColor(0.3f, 0.06f, 1.0f); // the set burns violet whatever the copy's rarity
+	}
 	TArray<USceneComponent*> Children;
 	GunSpace->GetChildrenComponents(true, Children);
 	for (USceneComponent* Child : Children)
@@ -579,7 +583,7 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		Rounds->SetVisibility(bShown && Pose.bRounds);
 	}
 	// horror: the hatch (flank flap about the barrel, brood lid about X) and the biomass
-	const bool bBrood = Archetype == TEXT("brood");
+	const bool bBrood = Archetype == TEXT("brood") || Archetype == TEXT("vr_lmg"); // a lid hinged across the gun
 	Place(TEXT("hatch"), FVector::ZeroVector, bBrood ? GltfEulerToMesh(Pose.Hatch, 0.0f, 0.0f) : GltfEulerToMesh(0.0f, 0.0f, Pose.Hatch));
 	Place(TEXT("biomass"), Six(Pose.Bio), SixRot(Pose.Bio), Pose.bBio);
 	// loose props held by the hand (absolute in gun space)

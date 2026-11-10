@@ -162,6 +162,11 @@ namespace SOReload
 	/** The cycling after a shot (pump rack, bolt throw); empty when the gun has none. Delay: seconds after the shot. */
 	SOCOMBAT_API bool BuildCycle(FName Archetype, FSOReloadSegment& OutCycle, float& OutDelay);
 
+	/** The manual of arms an archetype reloads with. The Void Requiem set (vr_*) was built on the same parts as the
+	 *  kinetic guns (cell magazine + charging handle, straight-pull bolt, slide, pump and shells, crane and cylinder),
+	 *  so each maps to that family; the belt-fed gun, the fusion rifle and the launcher have sequences of their own. */
+	SOCOMBAT_API FName GetStyle(FName Archetype);
+
 	/** Total duration of a sequence. */
 	SOCOMBAT_API float GetDuration(const TArray<FSOReloadSegment>& Segments);
 }

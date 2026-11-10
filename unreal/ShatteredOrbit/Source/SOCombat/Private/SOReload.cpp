@@ -254,15 +254,16 @@ void FSOReloadPlayer::Idle(float DeltaTime, TArray<FSOReloadEvent>& OutEvents)
 	const int32 Segment = Pose.Segment;
 	Pose.Reset();
 	Pose.Segment = Segment;
-	if (KickArch == TEXT("pistol"))
+	const FName Kick = SOReload::GetStyle(KickArch);
+	if (Kick == TEXT("pistol"))
 	{
 		Pose.Slide = bSlideLock ? 0.045f : 0.045f * Env;
 	}
-	else if (KickArch == TEXT("rifle") || KickArch.IsNone())
+	else if (Kick == TEXT("rifle") || Kick.IsNone())
 	{
 		Pose.Bolt = 0.06f * Env;
 	}
-	else if (KickArch == TEXT("carbine") || KickArch == TEXT("ksmg") || KickArch == TEXT("dmr"))
+	else if (Kick == TEXT("carbine") || Kick == TEXT("ksmg") || Kick == TEXT("dmr"))
 	{
 		Pose.Bolt = 0.04f * Env;
 	}
@@ -696,10 +697,127 @@ namespace SOReload
 		return { S };
 	}
 
+	FName GetStyle(FName Arch)
+	{
+		static const TMap<FName, FName> Styles = { { TEXT("vr_rifle"), TEXT("carbine") }, { TEXT("vr_sniper"), TEXT("dmr") }, { TEXT("vr_smg"), TEXT("ksmg") },
+			{ TEXT("vr_pistol"), TEXT("pistol") }, { TEXT("vr_shotgun"), TEXT("pump") }, { TEXT("vr_handcannon"), TEXT("revolver") } };
+		const FName* Style = Styles.Find(Arch);
+		return Style ? *Style : Arch;
+	}
+
+	/** Last Procession (belt-fed): the feed cover swings up on its front hinge, the spent box and its belt come away
+	 *  downward, a fresh box is brought up and locked under the receiver, the cover is slapped shut; empty: the
+	 *  charging handle on the right flank is racked. */
+	static TArray<FSOReloadSegment> BeltSegments(bool bEmpty)
+	{
+		const float Open = 1.15f;
+		const F6 Tilt{ -0.03f, 0.02f, 0.02f, 0.18f, 0.28f, -0.45f };
+		const F6 T2 = Tilt.Mul(5, 0.8f).Add(3, 0.05f);
+		TArray<FSOReloadSegment> Segs;
+		FSOReloadSegment Main = Seg(1.0f);
+		Main.Channels.Add(NGun, { K(0, Zero), K(0.12f, Tilt), K(0.2f, Tilt.Add(1, 0.008f), ESOEase::Out), K(0.28f, Tilt), K(0.4f, Tilt.Add(1, -0.012f)), K(0.5f, T2),
+			K(0.76f, T2), K(0.8f, T2.Add(1, 0.014f), ESOEase::Out), K(0.9f, T2), K(0.93f, T2.Add(1, -0.012f).Add(3, 0.04f), ESOEase::Out), K(1.0f, T2) });
+		Main.Channels.Add(NHatch, { K1(0, 0), K1(0.12f, 0), K1(0.2f, Open * 1.08f, ESOEase::Back), K1(0.26f, Open), K1(0.87f, Open), K1(0.92f, 0, ESOEase::In) });
+		Main.Channels.Add(NMag, { K(0, Zero), K(0.3f, Zero), K(0.38f, { 0, -0.045f, 0, 0, 0, 0 }, ESOEase::In), K(0.46f, { 0.03f, -0.15f, 0, 0, 0, -0.3f }) });
+		Main.Channels.Add(NSpare, { K(0, { 0.04f, -0.42f, -0.12f, 0.3f, 0, 0.3f }), K(0.58f, { 0.04f, -0.42f, -0.12f, 0.3f, 0, 0.3f }), K(0.7f, { 0, -0.09f, 0, 0, 0, 0.06f }),
+			K(0.76f, { 0, -0.03f, 0, 0, 0, 0 }), K(0.8f, Zero, ESOEase::Out) });
+		Main.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.12f, TEXT("hatch"), { 0, 0.01f, 0, -0.2f, 0, -0.4f }), H(0.2f, TEXT("hatch"), { 0, 0.02f, 0, -0.2f, 0, -0.4f }),
+			H(0.3f, TEXT("mag"), { 0, -0.02f, 0, -0.2f, 0, -0.3f }), H(0.46f, TEXT("mag"), { 0, -0.02f, 0, -0.3f, 0, -0.3f }),
+			H(0.56f, TEXT("pouch"), { 0, 0, 0, 0.5f, 0.3f, -0.6f }), H(0.7f, TEXT("spare"), { 0, -0.02f, 0, -0.25f, 0.05f, -0.25f }),
+			H(0.8f, TEXT("spare"), { 0, -0.02f, 0, -0.2f, 0, -0.2f }), H(0.88f, TEXT("hatch"), { 0, 0.03f, 0, -0.2f, 0, -0.4f }),
+			H(0.93f, TEXT("hatch"), { 0, 0.005f, 0, -0.2f, 0, -0.4f }, ESOEase::Out), H(1.0f, TEXT("hatch"), { 0, 0.005f, 0, -0.2f, 0, -0.4f }) });
+		Ev(Main, 0.14f, TEXT("sfx"), TEXT("hatchopen"));
+		Ev(Main, 0.3f, TEXT("sfx"), TEXT("magrelease"));
+		Ev(Main, 0.46f, TEXT("drop"));
+		Ev(Main, 0.52f, TEXT("sfx"), TEXT("pouch"));
+		Ev(Main, 0.58f, TEXT("spare"));
+		Ev(Main, 0.77f, TEXT("sfx"), TEXT("magin"));
+		Ev(Main, 0.8f, TEXT("seat"));
+		Ev(Main, 0.8f, TEXT("sfx"), TEXT("slap"));
+		Ev(Main, 0.92f, TEXT("sfx"), TEXT("hatchclose"));
+		Segs.Add(Main);
+		const F6 G2{ -0.05f, 0.05f, 0.03f, 0.2f, 0.3f, -0.3f };
+		if (bEmpty)
+		{
+			FSOReloadSegment Rack = Seg(0.3f);
+			const F6 Hk{ 0.004f, -0.03f, -0.01f, -0.35f, 0, 0.25f };
+			Rack.Channels.Add(NGun, { K(0, T2), K(0.35f, G2), K(0.62f, G2.Add(2, 0.015f)), K(0.76f, G2.Add(3, 0.04f), ESOEase::Out), K(1.0f, G2) });
+			Rack.Channels.Add(NHand, { H(0, TEXT("cur"), { 0, 0, 0, 0.2f, 0, -0.2f }), H(0.4f, TEXT("charge"), Hk), H(0.62f, TEXT("charge"), Hk),
+				H(0.72f, TEXT("charge"), Hk.Add(1, 0.02f).Add(2, -0.03f)), H(1.0f, TEXT("fore"), { 0.02f, 0.03f, 0.04f, 0.1f, 0, 0 }) });
+			Rack.Channels.Add(NCharge, { K1(0, 0), K1(0.42f, 0), K1(0.62f, 0.07f), K1(0.7f, 0.07f), K1(0.76f, 0, ESOEase::Out) });
+			Ev(Rack, 0.6f, TEXT("sfx"), TEXT("rackback"));
+			Ev(Rack, 0.76f, TEXT("sfx"), TEXT("rackfwd"));
+			Segs.Add(Rack);
+		}
+		FSOReloadSegment Back = Seg(0.24f);
+		Back.Channels.Add(NGun, { K(0, bEmpty ? G2 : T2), K(1.0f, Zero) });
+		Back.Channels.Add(NHand, { H(0, TEXT("cur"), { 0, 0, 0, 0.2f, 0, -0.2f }), H(0.85f, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		Segs.Add(Back);
+		return Segs;
+	}
+
+	/** Eulogy (fusion): the flank hatch flips up on its top hinge, the spent core crystal slides out of the jaws and
+	 *  falls away, a fresh one is pushed home along the bore, the hatch snaps shut. */
+	static TArray<FSOReloadSegment> CoreSegments()
+	{
+		const float Open = 1.4f;
+		const F6 G{ -0.09f, 0.05f, 0.09f, 0.2f, 0.46f, -0.72f };
+		const F6 Far{ 0.2f, -0.14f, -0.06f, 0.5f, 0.3f, 0 };
+		FSOReloadSegment S = Seg(1.0f);
+		S.Channels.Add(NGun, { K(0, Zero), K(0.16f, G), K(0.26f, G.Add(1, 0.01f), ESOEase::Out), K(0.34f, G), K(0.84f, G), K(0.9f, G.Add(3, 0.05f), ESOEase::Out), K(1.0f, Zero) });
+		S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.14f, TEXT("hatch"), { 0, 0.02f, 0, -0.2f, 0, -0.4f }), H(0.22f, TEXT("hatch"), { 0, 0.03f, 0, -0.2f, 0, -0.4f }),
+			H(0.3f, TEXT("biomass"), { 0.03f, -0.02f, 0, -0.3f, 0, -0.5f }), H(0.42f, TEXT("pouch"), { 0, 0.1f, 0.1f, 0.5f, 0.3f, -0.6f }),
+			H(0.5f, TEXT("pouch"), { 0, 0, 0, 0.5f, 0.3f, -0.6f }), H(0.62f, TEXT("biomass"), { 0, -0.025f, 0, -0.3f, 0, -0.5f }),
+			H(0.74f, TEXT("biomass"), { 0, -0.022f, 0, -0.3f, 0, -0.5f }), H(0.8f, TEXT("biomass"), { 0, -0.01f, 0, -0.3f, 0, -0.5f }),
+			H(0.86f, TEXT("hatch"), { 0, 0.015f, 0, -0.2f, 0, -0.4f }), H(0.9f, TEXT("hatch"), { 0, 0.005f, 0, -0.2f, 0, -0.4f }, ESOEase::Out), H(1.0f, TEXT("fore"), Zero) });
+		S.Channels.Add(NHatch, { K1(0, 0), K1(0.18f, 0), K1(0.25f, Open * 1.1f, ESOEase::Back), K1(0.31f, Open), K1(0.82f, Open), K1(0.87f, Open * 0.15f, ESOEase::In),
+			K1(0.9f, 0, ESOEase::Out) });
+		S.Channels.Add(NBio, { K(0, Zero), K(0.24f, Zero), K(0.3f, { 0.05f, -0.004f, 0, 0, 0, 0 }, ESOEase::In), K(0.301f, Far, ESOEase::Linear), K(0.5f, Far),
+			K(0.66f, { 0.075f, 0.004f, 0, 0, 0.12f, 0 }), K(0.76f, { 0.02f, 0, 0, 0, 0, 0 }), K(0.8f, Zero, ESOEase::Out) });
+		Ev(S, 0.2f, TEXT("sfx"), TEXT("hatchopen"));
+		Ev(S, 0.28f, TEXT("sfx"), TEXT("cellout"));
+		Ev(S, 0.3f, TEXT("husk"));
+		Ev(S, 0.45f, TEXT("sfx"), TEXT("pouch"));
+		Ev(S, 0.5f, TEXT("bio"));
+		Ev(S, 0.76f, TEXT("sfx"), TEXT("bioin"));
+		Ev(S, 0.8f, TEXT("seat"));
+		Ev(S, 0.88f, TEXT("sfx"), TEXT("hatchclose"));
+		return { S };
+	}
+
+	/** Funeral Bell (launcher): the tube comes down off the shoulder line, the breech lid on top swings open to the
+	 *  right, a crystal warhead is lowered into the tube, the lid is pushed shut. */
+	static TArray<FSOReloadSegment> BreechSegments()
+	{
+		const float Open = 1.5f;
+		const F6 G{ 0.0f, -0.075f, 0.0f, 0.12f, 0.05f, 0.32f };
+		const F6 Away{ 0.12f, -0.36f, -0.26f, 0.2f, 0, 0.3f };
+		FSOReloadSegment S = Seg(1.0f);
+		S.Channels.Add(NGun, { K(0, Zero), K(0.14f, G), K(0.24f, G.Add(1, 0.008f), ESOEase::Out), K(0.3f, G), K(0.76f, G), K(0.8f, G.Add(1, -0.012f), ESOEase::Out),
+			K(0.86f, G), K(0.9f, G.Add(1, -0.01f).Add(3, 0.03f), ESOEase::Out), K(1.0f, Zero) });
+		// the spent round is gone: what is left of it sits deep in the tube until the fresh one is seated
+		S.Channels.Add(NMag, { K(0, Zero), K(0.1f, { 0, 0, 0.3f, 0, 0, 0 }) });
+		S.Channels.Add(NHatch, { K1(0, 0), K1(0.14f, 0), K1(0.24f, Open * 1.06f, ESOEase::Back), K1(0.3f, Open), K1(0.84f, Open), K1(0.9f, 0, ESOEase::In) });
+		S.Channels.Add(NSpare, { K(0, Away), K(0.5f, Away), K(0.64f, { 0.03f, 0.15f, 0, 0, 0, 0.1f }), K(0.72f, { 0, 0.1f, 0, 0, 0, 0 }), K(0.78f, Zero, ESOEase::In) });
+		S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.13f, TEXT("hatch"), { 0.02f, 0.02f, 0, -0.2f, 0, -0.4f }), H(0.24f, TEXT("hatch"), { 0.02f, 0.02f, 0, -0.2f, 0, -0.4f }),
+			H(0.42f, TEXT("pouch"), { 0, 0.1f, 0.1f, 0.5f, 0.3f, -0.6f }), H(0.5f, TEXT("pouch"), { 0, 0, 0, 0.5f, 0.3f, -0.6f }),
+			H(0.64f, TEXT("spare"), { 0.02f, 0.03f, 0, -0.2f, 0, -0.3f }), H(0.78f, TEXT("spare"), { 0.02f, 0.03f, 0, -0.2f, 0, -0.3f }),
+			H(0.85f, TEXT("hatch"), { 0.02f, 0.03f, 0, -0.2f, 0, -0.4f }), H(0.9f, TEXT("hatch"), { 0.02f, 0.01f, 0, -0.2f, 0, -0.4f }, ESOEase::Out), H(1.0f, TEXT("fore"), Zero) });
+		Ev(S, 0.16f, TEXT("sfx"), TEXT("hatchopen"));
+		Ev(S, 0.45f, TEXT("sfx"), TEXT("pouch"));
+		Ev(S, 0.5f, TEXT("spare"));
+		Ev(S, 0.76f, TEXT("sfx"), TEXT("magin"));
+		Ev(S, 0.78f, TEXT("seat"));
+		Ev(S, 0.9f, TEXT("sfx"), TEXT("hatchclose"));
+		return { S };
+	}
+
 	TArray<FSOReloadSegment> BuildReload(FName Arch, bool bEnergy, bool bHorror, bool bEmpty, float ReloadTime, int32 Rounds, int32& OutLoopFrom, int32& OutLoopTo)
 	{
 		OutLoopFrom = OutLoopTo = -1;
 		TArray<FSOReloadSegment> Segs;
+		const FName Own = Arch;
+		Arch = GetStyle(Arch);
 		const bool bLoop = Arch == TEXT("pump") || Arch == TEXT("bolt");
 		if (bLoop)
 		{
@@ -722,6 +840,18 @@ namespace SOReload
 		else if (Arch == TEXT("revolver"))
 		{
 			Segs = RevolverSegments();
+		}
+		else if (Own == TEXT("vr_lmg"))
+		{
+			Segs = BeltSegments(bEmpty);
+		}
+		else if (Own == TEXT("vr_fusion"))
+		{
+			Segs = CoreSegments();
+		}
+		else if (Own == TEXT("vr_rocket"))
+		{
+			Segs = BreechSegments();
 		}
 		else if (bHorror)
 		{
@@ -750,6 +880,7 @@ namespace SOReload
 	bool BuildCycle(FName Arch, FSOReloadSegment& Out, float& OutDelay)
 	{
 		Out = FSOReloadSegment();
+		Arch = GetStyle(Arch);
 		if (Arch == TEXT("pump"))
 		{
 			Out.Duration = 0.62f;
