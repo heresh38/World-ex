@@ -18,7 +18,7 @@
 
 namespace
 {
-	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Count };
+	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Count };
 }
 
 void USOLocomotionAnimInstance::PlayAttack(float PlayRate)
@@ -50,10 +50,45 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Speed = Character->GetVelocity().Size2D();
 		const UCharacterMovementComponent* Move = Character->GetCharacterMovement();
+		const bool bWasFalling = bInAir;
 		bInAir = Move && Move->IsFalling();
+		const USOCharacterMovementComponent* Lander = Cast<USOCharacterMovementComponent>(Move);
+		bLanded = bWasFalling && !bInAir && Lander && !Lander->IsMantling();
+		LandImpact = Lander ? Lander->GetLastLandSpeed() : 0.0f;
 		const USOCharacterMovementComponent* SOMove = Cast<USOCharacterMovementComponent>(Move);
 		bSliding = SOMove && SOMove->IsSliding();
 		bMantling = SOMove && SOMove->IsMantling();
+		TraversalAlpha = SOMove ? SOMove->GetMantleAlpha() : 0.0f;
+		TraversalKind = !bMantling ? 0 : (SOMove->IsVaulting() ? 1 : 2);
+		TraversalClimb = bMantling && SOMove->IsClambering();
+		// The air pose follows the motion, not the clock: legs long driving off the ground, tucked at the top,
+		// reaching for the ground on the way down; over an obstacle the knees come up as the body passes it.
+		float WantTuck = 0.0f;
+		if (bMantling)
+		{
+			WantTuck = (TraversalKind == 1 ? 0.35f : 0.2f) + (TraversalKind == 1 ? 0.65f : 0.6f) * FMath::Sin(TraversalAlpha * PI);
+		}
+		else if (bInAir)
+		{
+			const float Vz = static_cast<float>(Character->GetVelocity().Z);
+			WantTuck = Vz > 0.0f ? FMath::Lerp(1.0f, 0.3f, FMath::Clamp(Vz / 600.0f, 0.0f, 1.0f)) : FMath::Lerp(1.0f, 0.25f, FMath::Clamp(-Vz / 950.0f, 0.0f, 1.0f));
+		}
+		AirTuck = FMath::FInterpTo(AirTuck, WantTuck, FMath::Max(DeltaSeconds, 1e-4f), 9.0f);
+		// The jump clip is three poses in a row (driving off the ground, tucked at the top, reaching for the ground):
+		// rising reads the first part by how much rise is left, falling the second by how fast.
+		if (bInAir && !bMantling && Clips.Jump)
+		{
+			const float Vz = static_cast<float>(Character->GetVelocity().Z);
+			const float Length = Clips.Jump->GetPlayLength();
+			const float Tuck = FMath::Min(JumpTuckTime, Length);
+			const float Want = Vz > 0.0f ? Tuck * (1.0f - FMath::Clamp(Vz / 600.0f, 0.0f, 1.0f)) : Tuck + (Length - Tuck) * FMath::Clamp(-Vz / 900.0f, 0.0f, 1.0f);
+			JumpPose = FMath::FInterpTo(JumpPose, Want, FMath::Max(DeltaSeconds, 1e-4f), 14.0f);
+			AirTuck = JumpPose <= Tuck ? JumpPose / FMath::Max(Tuck, 1e-3f) : 1.0f - 0.75f * (JumpPose - Tuck) / FMath::Max(Length - Tuck, 1e-3f);
+		}
+		else if (!bMantling)
+		{
+			JumpPose = 0.0f;
+		}
 		const ASOCombatCharacter* Combat = Cast<ASOCombatCharacter>(Character);
 		bDead = Combat && Combat->IsDead();
 	}
@@ -110,11 +145,75 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bHold = true;
 	}
 
+	// A vault, a mantle or a climb: the hands go onto the edge and stay there while the body moves past them (reaching
+	// up for it, pulling, then pushing down on it), coming on and off through HoldAlpha. A vault plants one hand.
+	bLedge = false;
+	HoldAlpha = 1.0f;
+	const USOCharacterMovementComponent* Traverse = Character ? Cast<USOCharacterMovementComponent>(Character->GetCharacterMovement()) : nullptr;
+	FVector Edge, EdgeNormal;
+	if (!bHold && !bDead && !bArmsOnly && Mesh && Traverse && Traverse->GetTraversalLedge(Edge, EdgeNormal))
+	{
+		const FTransform ToMesh = Mesh->GetComponentTransform();
+		const FVector EdgeCS = ToMesh.InverseTransformPosition(Edge);
+		const FVector Out = ToMesh.InverseTransformVectorNoScale(EdgeNormal).GetSafeNormal2D(1e-4f, FVector(0.0f, -1.0f, 0.0f)); // off the face, toward the body
+		FVector Along = FVector::CrossProduct(FVector::UpVector, Out).GetSafeNormal();
+		if (Along.X < 0.0f)
+		{
+			Along = -Along;                                          // toward the character's left (+X)
+		}
+		const bool bVault = TraversalKind == 1;
+		const float Half = bVault ? 13.0f : 19.0f;                    // each hand's distance from the body's line
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const bool bLeft = Side == 1;
+			const FVector SideDir = bLeft ? Along : -Along;
+			// the palm flat on the top a little in from the edge, fingers onto the ledge, thumbs toward each other
+			const FVector Wrist = EdgeCS + SideDir * Half - Out * 6.0f + FVector(0.0f, 0.0f, 2.2f);
+			(bLeft ? LeftTarget : RightTarget) = FTransform(FSOHandGrip::MakeBasis(-Out, -SideDir, bLeft), Wrist);
+		}
+		RightFingers = LeftFingers = FSOFingerPose::Wrap(0.45f);
+		bOneHand = bVault;
+		AimPitch = 0.0f;
+		Blade = Lean = HeadCant = 0.0f;
+		// On while the edge can be reached: reaching up for it from below (the arms go straight toward it), on it while
+		// the body comes up and pushes, off once the shoulders are too far above it for the arms.
+		float Reach = 1.0f;
+		for (int32 Side = 0; Side < (bVault ? 1 : 2); ++Side)
+		{
+			const bool bLeft = Side == 1;
+			const FName Upper = bLeft ? TEXT("upperarm_L") : TEXT("upperarm_R"), Lower = bLeft ? TEXT("forearm_L") : TEXT("forearm_R"), Hand = bLeft ? TEXT("hand_L") : TEXT("hand_R");
+			if (Mesh->GetBoneIndex(Upper) == INDEX_NONE || Mesh->GetBoneIndex(Lower) == INDEX_NONE || Mesh->GetBoneIndex(Hand) == INDEX_NONE)
+			{
+				continue;
+			}
+			const FVector Shoulder = ToMesh.InverseTransformPosition(Mesh->GetBoneLocation(Upper));
+			const float Arm = static_cast<float>(FVector::Dist(Mesh->GetBoneLocation(Upper), Mesh->GetBoneLocation(Lower)) + FVector::Dist(Mesh->GetBoneLocation(Lower), Mesh->GetBoneLocation(Hand)));
+			const FVector To = (bLeft ? LeftTarget : RightTarget).GetLocation() - Shoulder;
+			const float Far = To.Z > 0.0f ? FMath::Min(static_cast<float>(To.Size()), Arm) : static_cast<float>(To.Size());
+			Reach = FMath::Min(Reach, 1.0f - FMath::SmoothStep(Arm * 1.02f, Arm * 1.28f, Far));
+		}
+		const float In = bVault ? 0.06f : 0.0f, Full = bVault ? 0.24f : 0.1f;
+		HoldAlpha = FMath::FInterpTo(bLedgeWas ? HoldAlphaLast : 0.0f, FMath::SmoothStep(In, Full, TraversalAlpha) * Reach, FMath::Max(DeltaSeconds, 1e-4f), 18.0f);
+		bLedge = HoldAlpha > 0.01f;
+		bHold = bLedge;
+	}
+	bLedgeWas = bLedge;
+	HoldAlphaLast = HoldAlpha;
+
 	UpdateBodyMotion(Character, DeltaSeconds);
 
 	// Target weights.
-	float Target[Count] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Target[Count] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	const bool bAttacking = AttackTime >= 0.0f && ActiveAttack;
+	// over or onto an obstacle: the clip made for it (read by progress); bodies without one hold the jump's tuck
+	const UAnimSequenceBase* Over = !bMantling ? nullptr : (TraversalKind == 1 ? Clips.Vault.Get() : (TraversalClimb ? Clips.Climb.Get() : Clips.Mantle.Get()));
+	// a landing: shown by how hard it was, less the faster the body is already moving on
+	if (bLanded)
+	{
+		LandStrength = Clips.Land ? FMath::Clamp((LandImpact - 320.0f) / 620.0f, 0.0f, 1.0f) * FMath::Lerp(1.0f, 0.35f, FMath::Clamp(Speed / 500.0f, 0.0f, 1.0f)) : 0.0f;
+		LandTime = 0.0f;
+	}
+	LandTime += DeltaSeconds;
 	if (bDead && Clips.Death)
 	{
 		Target[Death] = 1.0f;
@@ -127,17 +226,46 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Target[Slide] = 1.0f;
 	}
+	else if (Over)
+	{
+		Target[TraversalKind == 1 ? Vault : (TraversalClimb ? Climb : Mantle)] = 1.0f;
+	}
 	else if ((bInAir || bMantling) && Clips.Jump)
 	{
 		Target[Jump] = 1.0f;
 	}
 	else
 	{
-		const float Walk01 = FMath::Clamp(Speed / FMath::Max(Clips.WalkSpeed * 0.5f, 1.0f), 0.0f, 1.0f);
 		const float Run01 = FMath::Clamp((Speed - Clips.WalkSpeed) / FMath::Max(Clips.RunSpeed - Clips.WalkSpeed, 1.0f), 0.0f, 1.0f);
-		Target[Idle] = 1.0f - Walk01;
-		Target[Walk] = Walk01 * (Clips.Run ? 1.0f - Run01 : 1.0f);
-		Target[Run] = Clips.Run ? Walk01 * Run01 : 0.0f;
+		if (Clips.Stroll)
+		{
+			// standing -> the slow walk -> the run -> the sprint, each handing over to the next with the speed
+			const float Slow = FMath::Max(Clips.StrollSpeed, 1.0f);
+			const float Moving = FMath::Clamp(Speed / (Slow * 0.45f), 0.0f, 1.0f);
+			const float Jog = FMath::Clamp((Speed - Slow) / FMath::Max(Clips.WalkSpeed - Slow, 1.0f), 0.0f, 1.0f);
+			Target[Idle] = 1.0f - Moving;
+			Target[Stroll] = Moving * (1.0f - Jog);
+			Target[Walk] = Moving * Jog * (Clips.Run ? 1.0f - Run01 : 1.0f);
+			Target[Run] = Clips.Run ? Moving * Jog * Run01 : 0.0f;
+		}
+		else
+		{
+			const float Walk01 = FMath::Clamp(Speed / FMath::Max(Clips.WalkSpeed * 0.5f, 1.0f), 0.0f, 1.0f);
+			Target[Idle] = 1.0f - Walk01;
+			Target[Walk] = Walk01 * (Clips.Run ? 1.0f - Run01 : 1.0f);
+			Target[Run] = Clips.Run ? Walk01 * Run01 : 0.0f;
+		}
+		// the landing over whatever comes next, fading as its clip plays out
+		const float LandLength = Clips.Land ? Clips.Land->GetPlayLength() : 0.0f;
+		const float Landing = LandLength > 0.0f && LandTime < LandLength ? LandStrength * (1.0f - FMath::SmoothStep(LandLength * 0.45f, LandLength, LandTime)) : 0.0f;
+		if (Landing > 0.0f)
+		{
+			for (float& T : Target)
+			{
+				T *= 1.0f - Landing;
+			}
+			Target[Land] = Landing;
+		}
 	}
 
 	// Idle variations: standing still, not aiming, a full body (the first-person arms never fidget).
@@ -192,7 +320,9 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	float Sum = 0.0f;
 	for (int32 i = 0; i < Count; ++i)
 	{
-		Weights[i] = FMath::FInterpConstantTo(Weights[i], Target[i], 1.0f, Rate);
+		// (linear progress, eased shape: a blend starts and ends gently instead of at full rate)
+		Ramp[i] = FMath::FInterpConstantTo(Ramp[i], Target[i], 1.0f, Rate);
+		Weights[i] = Ramp[i] * Ramp[i] * (3.0f - 2.0f * Ramp[i]);
 		Sum += Weights[i];
 	}
 	if (Sum > 1e-4f)
@@ -212,13 +342,28 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	// blending the two never crosses the legs.
 	const float WalkLen = Clips.Walk ? FMath::Max(Clips.Walk->GetPlayLength(), 0.05f) : 1.0f;
 	const float RunLen = Clips.Run ? FMath::Max(Clips.Run->GetPlayLength(), 0.05f) : WalkLen;
-	const float WW = Weights[Walk], WR = Weights[Run];
-	const float PhaseRate = WW + WR > 1e-3f ? (WW * WalkRate / WalkLen + WR * RunRate / RunLen) / (WW + WR) : WalkRate / WalkLen;
+	const float StrollLen = Clips.Stroll ? FMath::Max(Clips.Stroll->GetPlayLength(), 0.05f) : WalkLen;
+	const float StrollRate = FMath::Clamp(Speed / FMath::Max(Clips.StrollSpeed, 1.0f), 0.45f, 1.7f);
+	const float WW = Weights[Walk], WR = Weights[Run], WS = Weights[Stroll];
+	const float PhaseRate = WW + WR + WS > 1e-3f ? (WW * WalkRate / WalkLen + WR * RunRate / RunLen + WS * StrollRate / StrollLen) / (WW + WR + WS)
+		: (Clips.Stroll ? StrollRate / StrollLen : WalkRate / WalkLen);
 	CyclePhase += DeltaSeconds * PhaseRate * Direction;
 	CyclePhase -= FMath::FloorToFloat(CyclePhase);
 	Times[Walk] = CyclePhase * WalkLen;
 	Times[Run] = CyclePhase * RunLen;
-	Times[Jump] = bInAir ? Times[Jump] + DeltaSeconds : 0.0f;
+	Times[Stroll] = CyclePhase * StrollLen;
+	Times[Land] = LandTime;
+	// over and onto things: the pose for how far through the move the body is
+	for (const int32 Layer : { static_cast<int32>(Vault), static_cast<int32>(Mantle), static_cast<int32>(Climb) })
+	{
+		const UAnimSequenceBase* Clip = Layer == Vault ? Clips.Vault.Get() : (Layer == Mantle ? Clips.Mantle.Get() : Clips.Climb.Get());
+		if (Clip && bMantling)
+		{
+			Times[Layer] = TraversalAlpha * Clip->GetPlayLength();
+		}
+	}
+	// (players: the air pose is picked by the motion; creatures play their jump clip through)
+	Times[Jump] = Cast<ASOCharacter>(TryGetPawnOwner()) ? (bMantling ? JumpTuckTime * AirTuck : JumpPose) : (bInAir ? Times[Jump] + DeltaSeconds : 0.0f);
 	Times[Death] = bDead ? Times[Death] + DeltaSeconds : 0.0f;
 	Times[Slide] = bSliding ? Times[Slide] + DeltaSeconds : 0.0f;
 	if (bAttacking)
@@ -530,7 +675,8 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	bBodyMotion = Character && Mesh && !bArmsOnly && !bDead;
 	if (!bBodyMotion)
 	{
-		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = 0.0f;
+		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = StandYaw = 0.0f;
+		bHaveYaw = bTurning = false;
 		return;
 	}
 	const FTransform ToMesh = Mesh->GetComponentTransform();
@@ -559,6 +705,24 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	}
 	WarpYaw = FMath::FInterpTo(WarpYaw, WantWarp, Dt, 9.0f);
 
+	// Standing: the feet stay where they are while the aim turns (the hips keep their heading, the spine takes the
+	// twist). Past TurnInPlaceAngle the body steps round under the aim; moving, the legs come round at once.
+	const float ActorYaw = static_cast<float>(Character->GetActorRotation().Yaw);
+	const float Turned = bHaveYaw ? FRotator::NormalizeAxis(ActorYaw - LastActorYaw) : 0.0f;
+	LastActorYaw = ActorYaw;
+	bHaveYaw = true;
+	const bool bStanding = Speed2D < 25.0f && !bInAir && !bSliding && !bMantling;
+	if (bStanding && !bTurning)
+	{
+		StandYaw = FMath::Clamp(StandYaw - Turned, -TurnInPlaceAngle - 12.0f, TurnInPlaceAngle + 12.0f);
+		bTurning = FMath::Abs(StandYaw) > TurnInPlaceAngle;
+	}
+	else
+	{
+		StandYaw = FMath::FInterpTo(StandYaw - (bStanding ? Turned : 0.0f), 0.0f, Dt, bStanding ? 7.5f : 12.0f);
+		bTurning = bTurning && bStanding && FMath::Abs(StandYaw) > 1.5f;
+	}
+
 	// Lean into the acceleration (smoothed), a touch forward with speed.
 	const FVector RawAccel = (VelCS - LastVelocityCS) / Dt;
 	LastVelocityCS = VelCS;
@@ -571,6 +735,16 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 		WantRoll = 0.0f;
 		WantPitch = 0.0f;
 	}
+	if (bMantling)
+	{
+		// over an obstacle: a vault lays the body over away from the planted (right) hand; a mantle / climb folds
+		// forward over the lip as the chest comes past it
+		// (a body with its own vault / mantle / climb clips gets all of this from them)
+		const bool bOwnClip = TraversalKind == 1 ? Clips.Vault != nullptr : (TraversalClimb ? Clips.Climb != nullptr : Clips.Mantle != nullptr);
+		const float Arc = bOwnClip ? 0.0f : FMath::Sin(TraversalAlpha * PI);
+		WantRoll = TraversalKind == 1 ? 18.0f * Arc : 0.0f;
+		WantPitch = bOwnClip ? 0.0f : (TraversalKind == 1 ? -30.0f * Arc : -18.0f * FMath::SmoothStep(0.2f, 0.6f, TraversalAlpha) * (1.0f - FMath::SmoothStep(0.8f, 1.0f, TraversalAlpha)));
+	}
 
 	// Landing: the hips sink with the impact and spring back.
 	if (bInAir)
@@ -579,15 +753,20 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	}
 	else if (bWasInAir && !bMantling)
 	{
-		CompressVel += FMath::Clamp((-LastAirVz - 200.0f) * 0.12f, 0.0f, 160.0f);
+		// (with a landing clip the clip folds the body: the spring only adds the first give)
+		CompressVel += FMath::Clamp((-LastAirVz - 200.0f) * 0.12f, 0.0f, 160.0f) * (Clips.Land ? 0.45f : 1.0f);
 	}
 	bWasInAir = bInAir;
+	// crouched: the hips sink over bent legs (the feet stay where the clip puts them) and the chest comes forward
+	const bool bCrouched = Character->bIsCrouched && !bSliding && !bMantling && !bInAir;
+	CrouchAlpha = FMath::FInterpTo(CrouchAlpha, bCrouched ? 1.0f : 0.0f, Dt, 9.0f);
+	WantPitch -= 15.0f * CrouchAlpha;
 	const float Stiff = 260.0f, Damp = 2.0f * FMath::Sqrt(Stiff) * 0.75f;
 	CompressVel += (-Stiff * Compress - Damp * CompressVel) * Dt;
 	Compress = FMath::Max(Compress + CompressVel * Dt, 0.0f);
 	WantPitch -= Compress * 0.6f;
-	LeanRoll = FMath::FInterpTo(LeanRoll, WantRoll, Dt, 8.0f);
-	LeanPitch = FMath::FInterpTo(LeanPitch, WantPitch, Dt, 8.0f);
+	LeanRoll = FMath::FInterpTo(LeanRoll, WantRoll, Dt, bMantling ? 14.0f : 8.0f);
+	LeanPitch = FMath::FInterpTo(LeanPitch, WantPitch, Dt, bMantling ? 14.0f : 8.0f);
 
 	// Feet on the ground: a short trace under each ankle; the hips drop so the lower foot reaches.
 	const UCharacterMovementComponent* Move = Character->GetCharacterMovement();
@@ -621,7 +800,10 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 		FootOffset[i] = FMath::FInterpTo(FootOffset[i], FootIKAlpha > 0.01f ? Want[i] : 0.0f, Dt, 14.0f);
 	}
 	PelvisFeet = FMath::FInterpTo(PelvisFeet, FMath::Max(0.0f, -FMath::Min(FootOffset[0], FootOffset[1])), Dt, 14.0f);
-	PelvisDrop = PelvisFeet * FootIKAlpha + Compress;
+	// (a turn on the spot: the weight sinks a touch while the feet step round)
+	// (a vault: the body goes over low, hips down by the planted hand, the knees up under it)
+	const float VaultLow = bMantling && TraversalKind == 1 && !Clips.Vault ? 26.0f * FMath::Sin(TraversalAlpha * PI) : 0.0f;
+	PelvisDrop = PelvisFeet * FootIKAlpha + Compress + VaultLow + CrouchDrop * CrouchAlpha + (bTurning ? 1.6f * FMath::Min(FMath::Abs(StandYaw) / FMath::Max(TurnInPlaceAngle, 1.0f), 1.0f) : 0.0f);
 }
 
 FAnimInstanceProxy* USOLocomotionAnimInstance::CreateAnimInstanceProxy()
@@ -639,13 +821,14 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	FAnimInstanceProxy::PreUpdate(InAnimInstance, DeltaSeconds);
 	const USOLocomotionAnimInstance* Instance = CastChecked<USOLocomotionAnimInstance>(InAnimInstance);
 	const UAnimSequenceBase* ClipList[Count] = { Instance->Clips.Idle, Instance->Clips.Walk, Instance->Clips.Run, Instance->Clips.Jump,
-		Instance->Clips.Death, Instance->ActiveAttack ? Instance->ActiveAttack.Get() : Instance->Clips.Attack.Get(), Instance->Clips.Slide, Instance->FidgetClip };
+		Instance->Clips.Death, Instance->ActiveAttack ? Instance->ActiveAttack.Get() : Instance->Clips.Attack.Get(), Instance->Clips.Slide, Instance->FidgetClip,
+		Instance->Clips.Stroll, Instance->Clips.Land, Instance->Clips.Vault, Instance->Clips.Mantle, Instance->Clips.Climb };
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FSOLocomotionLayer& Layer = Layers[i];
 		Layer.Clip = ClipList[i];
 		Layer.Weight = Instance->Weights[i];
-		Layer.bLoop = i != Death && i != Attack && i != Jump && i != Fidget;
+		Layer.bLoop = i == Idle || i == Walk || i == Run || i == Slide || i == Stroll;
 		const float Length = Layer.Clip ? Layer.Clip->GetPlayLength() : 0.0f;
 		const float T = Instance->Times[i];
 		// positive modulo: the walk / run cycles run backward when backpedalling
@@ -666,6 +849,8 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	EyeCS = Instance->EyeCS;
 	bBodyMotion = Instance->bBodyMotion;
 	WarpYaw = Instance->WarpYaw;
+	StandYaw = Instance->GetStandYaw();
+	HoldAlpha = Instance->GetHoldAlpha();
 	LeanRoll = Instance->LeanRoll;
 	LeanPitch = Instance->LeanPitch;
 	PelvisDrop = Instance->PelvisDrop;
@@ -787,9 +972,14 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 
 	// 1. Orientation warping: the hips (and legs) turn toward the movement, spine and chest turn back so the
 	//    shoulders keep facing the aim.
-	if (FMath::Abs(WarpYaw) > 0.1f)
+	//    Standing, the same turn keeps the feet planted while the aim (and the capsule) turns on the spot: that one
+	//    is about the capsule's own axis (the component's origin), so the feet stay exactly where they were.
+	if (FMath::Abs(WarpYaw + StandYaw) > 0.1f)
 	{
-		const float W = FMath::DegreesToRadians(WarpYaw);
+		const float W = FMath::DegreesToRadians(WarpYaw + StandYaw);
+		const FQuat Stand(Up, FMath::DegreesToRadians(StandYaw));
+		const FTransform H = CS[Hips];
+		SetCS(Hips, FTransform(H.GetRotation(), Stand.RotateVector(H.GetLocation()), H.GetScale3D()));
 		Turn(Hips, FQuat(Up, W));
 		if (Spine != INDEX_NONE)
 		{
@@ -932,6 +1122,9 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	{
 		SetCS(I, FTransform(Q * CS[I].GetRotation(), CS[I].GetLocation(), CS[I].GetScale3D()));
 	};
+
+	// (what the clips gave, to blend the solve in and out by HoldAlpha)
+	const TArray<FTransform, TInlineAllocator<64>> Before = Local;
 
 	// Component space of the shared rig: +Y forward, +Z up, the character's left is +X.
 	const FVector Side(1.0f, 0.0f, 0.0f), Up(0.0f, 0.0f, 1.0f);
@@ -1092,6 +1285,15 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		}
 	}
 
+	if (HoldAlpha < 0.999f)
+	{
+		for (int32 I = 0; I < Num; ++I)
+		{
+			FTransform Mixed;
+			Mixed.Blend(Before[I], Local[I], HoldAlpha);
+			Local[I] = Mixed;
+		}
+	}
 	for (FCompactPoseBoneIndex Index : Pose.ForEachBoneIndex())
 	{
 		Pose[Index] = Local[Index.GetInt()];

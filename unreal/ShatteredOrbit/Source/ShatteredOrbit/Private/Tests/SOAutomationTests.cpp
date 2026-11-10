@@ -97,16 +97,18 @@ bool FSOMovementSpeedsTest::RunTest(const FString& Parameters)
 	W.Run(1.0f, Forward);
 	TestEqual(TEXT("crouch speed"), static_cast<float>(Move->Velocity.Size2D()), 270.0f, 5.0f);
 
-	// Jump: ~1 m apex, lands again.
+	// Jump (the button held: the full height): ~1 m apex, lands again.
 	C->UnCrouch();
 	Move->SetWantsToSprint(false);
 	W.Run(0.5f);
 	const float StartZ = C->GetActorLocation().Z;
 	float ApexZ = StartZ;
+	Move->SetWantsToMantle(true);
 	C->Jump();
 	W.Step();
-	C->StopJumping();
 	W.Run(1.2f, [C, &ApexZ] { ApexZ = FMath::Max(ApexZ, static_cast<float>(C->GetActorLocation().Z)); });
+	C->StopJumping();
+	Move->SetWantsToMantle(false);
 	TestEqual(TEXT("jump apex ~98 cm"), ApexZ - StartZ, 98.0f, 8.0f);
 	TestTrue(TEXT("landed after the jump"), Move->IsMovingOnGround());
 	return true;
@@ -122,6 +124,7 @@ bool FSOMovementCoyoteTest::RunTest(const FString& Parameters)
 		W.AddBox(FVector(-3000, -3000, -2100), FVector(6000, 3000, -2000)); // far below
 		ASOCharacter* C = W.SpawnCharacter(FVector(-200, 0, 0));
 		USOCharacterMovementComponent* Move = C->GetSOMovement();
+		Move->SetMaxAirJumps(0);                                    // the ground jump alone: is it still there after the ledge?
 		W.Run(0.3f);
 
 		int32 Guard = 0;

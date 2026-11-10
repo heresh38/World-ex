@@ -33,6 +33,8 @@ enum class ESOViewMode : uint8
  * The gun is held by USOViewmodelComponent (a first-person and a third-person hold) and both bodies reach for its grips
  * with arm IK; aims down sights (zoom from the weapon); plays the Blender body's clips through USOLocomotionAnimInstance.
  */
+enum class ESOMovementEvent : uint8;
+
 UCLASS(config = Game)
 class SOCHARACTER_API ASOCharacter : public ASOCombatCharacter
 {
@@ -149,6 +151,17 @@ public:
 
 	/** Current camera dip (cm, negative = down) from landings and jumps; the viewmodel lags it a little. */
 	float GetLandDip() const { return LandDip; }
+
+	/** Roll of the eye while vaulting (degrees). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float VaultCameraRoll = 2.5f;
+
+	/** What the feet are on: concrete (the default), metal, dirt, grass, wood or water. From the floor's physical
+	 *  material when it has one, else from the names of its material and mesh (material names are an API). */
+	FName GetFloorSurface() const;
+
+	/** The footstep / landing sound for a surface (the surface's own set when it exists, else the plain one). */
+	static FName SurfaceSound(FName Surface, const TCHAR* Kind, int32 Takes);
 	float GetCameraRoll() const { return CameraRoll; }
 
 	/** Aim-down-sights field of view as a fraction of the hip field of view. */
@@ -458,6 +471,10 @@ private:
 
 	/** First-person camera feel: step smoothing, landing spring, head bob, roll, field-of-view boost. */
 	void UpdateCameraFeel(float DeltaSeconds);
+	/** Sound, camera and effects for the movement component's one-off events (jump, land, slide, vault, ...). */
+	void HandleMovementEvent(ESOMovementEvent Event, float Strength);
+	/** A few puffs of dust at the feet (landings, slides, air jumps). */
+	void KickDust(float Strength, const FVector& Along);
 	float StepSmooth = 0.0f;      // cm: hides the capsule popping up / down steps
 	double LastFeelZ = 0.0;
 	bool bHaveFeelZ = false;

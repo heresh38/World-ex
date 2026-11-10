@@ -3,21 +3,35 @@
   Idle      contrapposto: weight on the right leg, the right hip out and up, the left knee soft and turned in a
             little with the left foot ahead and turned out, shoulders tilted against the hips, head poised; light,
             quick breathing
-  Walk      the game's default move (4.4 m/s): a light jog. Feet landing close to the line of travel (crossover),
-            quicker shorter steps, a pronounced hip roll and sway, little shoulder turn, a high heel kick, arms
-            carried close with the forearms swinging slightly across the body, hands relaxed
-  Run       the sprint (8.6 m/s): the same character at speed, quick cadence, high heel recovery, a lighter lean
-  Jump      knees together, the trailing leg tucked behind, toes pointed, arms lifting gracefully (held airborne)
+  Stroll    the slow move (1.5 m/s: a light stick, aiming, crouched): an easy, swinging walk on one line, the hips
+            rolling over each step, shoulders quiet, the arms loose and close with soft elbows and trailing wrists
+  Walk      the game's default move (4.4 m/s): a light run. Feet landing close to the line of travel (crossover),
+            quick short steps, the heel recovering high, a pronounced hip roll and sway, little shoulder turn, arms
+            carried close with the forearms swinging across the body, hands relaxed and a beat behind
+  Run       the sprint (8.6 m/s): the same character at speed, quick cadence, heels to the seat, a lighter lean
+  Jump      three poses the game moves between by how fast she is rising or falling: springing off the toes (arms
+            lifting), tucked at the top (knees together, the trailing leg behind), reaching down with pointed toes
+  Land      the landing after a fall: knees together, she folds low and light, one hand toward the ground, and rises
+            onto her standing leg
+  Vault     over a low wall off the right hand: the reach, both legs swept through to the left together, the lead
+            leg reaching down, away in stride
+  Mantle    onto a ledge: the reach, the catch with a toe on the face, the press with the knee coming up onto the top,
+            the step up
+  Climb     a high ledge: the hang at full stretch, the toes walking up, the pull, then the press, the knee and the
+            step up
   Slide     lead leg extended with the toes pointed, the other folded beneath, back arched, one hand brushing the
             ground, the other out for balance
   Death     she crumples: the knees fold and she twists down onto her side
   Fidget1-3 idle variations: the weight shifts onto the other hip and back, a look back over the right shoulder,
             a neck and shoulder stretch; each starts and ends on the idle pose
+
+Vault, Mantle and Climb are one second long and are not played by the clock: the game shows the pose for how far
+through the move the body is (and puts the hands on the real edge while it is in reach).
 """
 import math
 from mathutils import Vector
 import gait
-from gait import X, Y, Z, Pose, Foot, Gait, smooth, bump
+from gait import X, Y, Z, Pose, Foot, Gait, Track, smooth, bump, locomote
 
 TAU = 2 * math.pi
 
@@ -35,10 +49,31 @@ def heel_lift():
     return HEEL_F * .95
 
 
-WALK = dict(v=4.4, cadence=176, duty=.19, front=.52, width=.035, toe_out=4, lift=.08, kick=.22, strike=8, toeoff=36,
-            swing_in=-.012, swing_pitch=-16)
-RUN = dict(v=8.6, cadence=206, duty=.15, front=.48, width=.035, toe_out=3, lift=.13, kick=.42, strike=4, toeoff=44,
-           swing_in=-.010, swing_pitch=-26)
+# --- the three gaits: where the feet go (gait.Gait) and how the body rides over them (gait.locomote) -----------------
+SOFT = ((22, 34, 18), (30, 42, 22), (36, 46, 24), (40, 50, 26))        # relaxed, open hands
+OPEN = ((6, 10, 5), (9, 13, 6), (12, 16, 8), (15, 19, 9))              # fingers long, a soft fan
+GRIP = ((38, 56, 28),) * 4
+STROLL = dict(v=1.5, cadence=122, duty=.60, front=.48, width=.028, toe_out=5, lift=.03, kick=.03, strike=13, toeoff=46,
+              swing_in=-.010, swing_pitch=-8, retract=.22, peak=.36)
+STROLL_BODY = dict(lean=2.5, hip_yaw=8, hip_roll=8.5, sway=.028, bob=-.011, bob2=.002, drop=.008, dip=.0, counter=.25, nod=.6,
+                   lag=dict(spine=.03, chest=.06, head=.08, arm=.04, forearm=.09, hand=.14),
+                   arm=17, arm_bias=-2, arm_h2=.08, abd=3, abd_back=1, abd_fwd=2, cross=8, elbow=20, elbow_fwd=16, elbow_back=6,
+                   wrist=4, wrist_lag=12, hand_turn=8, clav=1.5, curl=((8, 12, 6), (12, 18, 9), (16, 22, 12), (20, 26, 14)), thumb=8,
+                   knee_out=-.04, asym=.94, asym_ph=.015)
+WALK = dict(v=4.4, cadence=180, duty=.21, front=.48, width=.035, toe_out=4, lift=.08, kick=.32, strike=6, toeoff=38,
+            swing_in=-.012, swing_pitch=-18, retract=.30, peak=.40)
+WALK_BODY = dict(lean=7, hip_yaw=9, hip_roll=7, sway=.020, bob=.022, bob2=.005, drop=.016, dip=.004, counter=.3, nod=1.0,
+                 lag=dict(spine=.03, chest=.05, head=.07, arm=.03, forearm=.08, hand=.13),
+                 arm=32, arm_bias=-12, arm_h2=.14, abd=3, abd_back=4, abd_fwd=1, cross=20, elbow=78, elbow_fwd=16, elbow_back=20,
+                 wrist=4, wrist_lag=14, hand_turn=6, clav=3, clav_up=1, curl=SOFT, thumb=16,
+                 knee_out=-.05, asym=.95, asym_ph=.012, asym_elbow=1.04)
+RUN = dict(v=8.6, cadence=248, duty=.17, front=.44, width=.035, toe_out=3, lift=.11, kick=.48, strike=2, toeoff=46,
+           swing_in=-.010, swing_pitch=-28, retract=.35, peak=.42)
+RUN_BODY = dict(lean=12, hip_yaw=10, hip_roll=5.5, sway=.014, bob=.026, bob2=.005, drop=.028, dip=.004, counter=.35, nod=1.4,
+                lag=dict(spine=.03, chest=.05, head=.07, arm=.03, forearm=.08, hand=.13),
+                arm=50, arm_bias=-8, arm_h2=.18, abd=3, abd_back=6, abd_fwd=1, cross=20, elbow=86, elbow_fwd=12, elbow_back=30,
+                wrist=2, wrist_lag=16, hand_turn=6, clav=6, clav_up=2, curl=SOFT, thumb=16,
+                knee_out=-.05, asym=.96, asym_ph=.010, asym_elbow=1.03)
 
 
 def idle_pose(b, t, shift=0.0, hp=None):
@@ -72,68 +107,217 @@ def idle_pose(b, t, shift=0.0, hp=None):
     return p
 
 
-def run_pose(b, g, t, lean, hip_yaw, hip_roll, sway, bob, drop, arm_sw, elbow, counter, cross):
-    ph = g.phase(t)
-    p = Pose()
-    for s, _ in gait.SIDES:
-        p.feet[s], _ = g.foot(s, ph)
-    duty = g.p["duty"]
-    step = (2 * ph) % 1.0
-    p.hips = Vector((sway * math.cos(TAU * (ph - duty / 2)), 0,
-                     heel_lift() - drop - bob * math.cos(TAU * (step - duty))))
-    yaw = -hip_yaw * math.cos(TAU * ph)
-    roll = -hip_roll * math.cos(TAU * (ph - duty / 2))
-    p.add("hips", (Z, yaw), (Y, roll), (X, lean * .45))
-    # the hips do the moving; the shoulders stay quiet and level, the head floats
-    cy = -yaw * (1 + counter)
-    p.add("spine", (Z, cy * .5), (Y, -roll * .75), (X, lean * .3))
-    p.add("chest", (Z, cy * .5), (Y, -roll * .35), (X, lean * .2 - 2))
-    p.add("neck", (Z, counter * yaw * .5), (Y, roll * .15), (X, -lean * .45))
-    p.add("head", (Z, counter * yaw * .5), (X, -lean * .3))
-    for s, sx in gait.SIDES:
-        sw = arm_sw * -math.cos(TAU * ph + (0 if s == "L" else math.pi))
-        p.add("upperarm." + s, (Y, -sx * 3), (X, -sw), (Z, sx * cross))           # forearms swing across a little
-        p.add("forearm." + s, (b.elbow[s], -elbow - max(0.0, sw) * .3), (Z, sx * cross * .5))
-        p.add("hand." + s, (b.elbow[s], -4), (Z, sx * (6 + .15 * sw)))
-        p.curl(s, ((22, 34, 18), (30, 42, 22), (36, 46, 24), (40, 50, 26)), 16)   # relaxed, open hands
-    p.knee_out = {"L": -.05, "R": -.05}
-    return p
+def arms(b, p, side, fwd, out, elbow, turn=0.0, hand=-4.0, curl=SOFT, thumb=16):
+    """one arm: fwd = degrees raised forward (negative = behind), out = degrees out from the body, elbow = bend,
+    turn = the upper arm turned in (the forearm across the body)"""
+    sx = 1 if side == "L" else -1
+    p.add("upperarm." + side, (Y, -sx * out), (X, -fwd), (Z, sx * turn))
+    p.add("forearm." + side, (b.elbow[side], -elbow))
+    p.add("hand." + side, (b.elbow[side], hand), (Z, sx * 8))
+    p.curl(side, curl, thumb)
+
+
+def leg(p, side, hip, knee, foot=30.0, out=0.0):
+    """one leg off the ground: hip = degrees the thigh is raised forward (negative = behind), knee = bend,
+    foot = toes pointed (+) / up (-), out = knee out from the middle (negative = turned in)"""
+    sx = 1 if side == "L" else -1
+    p.add("thigh." + side, (Y, -sx * out), (X, -hip))
+    p.add("shin." + side, (X, knee))
+    p.add("foot." + side, (X, foot))
+
+
+def trunk(p, hips=0.0, spine=0.0, chest=0.0, head=0.0, roll=0.0, turn=0.0, z=0.0, y=0.0, x=0.0):
+    """pitch forward (+) of hips / spine / chest, the head against it; roll (+ = to her left) and turn (+ = left) of
+    the hips, undone above; the hips moved by (x, y, z) metres"""
+    p.hips = Vector((x, y, z))
+    p.add("hips", (Z, turn), (Y, roll), (X, hips))
+    p.add("spine", (Z, -turn * .4), (Y, -roll * .4), (X, spine))
+    p.add("chest", (Z, -turn * .4), (Y, -roll * .35), (X, chest))
+    p.add("neck", (X, head * .4))
+    p.add("head", (Y, -roll * .2), (X, head * .6))
 
 
 def clips(b):
     hp = heel_pitch(b)
-    walk, run = Gait(b, **dict(WALK, heel=hp)), Gait(b, **dict(RUN, heel=hp))
+    up = heel_lift()
+    stroll, walk, run = Gait(b, **dict(STROLL, heel=hp)), Gait(b, **dict(WALK, heel=hp)), Gait(b, **dict(RUN, heel=hp))
 
     def Idle(t):
         return idle_pose(b, t)
 
+    def Stroll(t):
+        return locomote(b, stroll, t, STROLL_BODY, up)
+
     def Walk(t):
-        return run_pose(b, walk, t, lean=8, hip_yaw=9, hip_roll=7, sway=.020, bob=.022, drop=.016,
-                        arm_sw=26, elbow=78, counter=.2, cross=9)
+        return locomote(b, walk, t, WALK_BODY, up)
 
     def Run(t):
-        return run_pose(b, run, t, lean=13, hip_yaw=10, hip_roll=5.5, sway=.014, bob=.030, drop=.026,
-                        arm_sw=46, elbow=84, counter=.25, cross=8)
+        return locomote(b, run, t, RUN_BODY, up)
+
+    # --- the air: three poses, read by the game by the rise and the fall --------------------------------------------
+    def takeoff():
+        p = Pose()
+        trunk(p, hips=0, spine=-4, chest=-7, head=4, z=.01)
+        leg(p, "L", -4, 6, 38)
+        leg(p, "R", 8, 16, 36)
+        arms(b, p, "L", 12, 10, 40, turn=4)                      # lifting with the spring
+        arms(b, p, "R", 4, 8, 46, turn=4)
+        return p
+
+    def tuck():
+        p = Pose()
+        trunk(p, hips=2, spine=2, chest=-3, head=-5, turn=-6, z=-.01)
+        leg(p, "L", 50, 98, 26, -4)                             # knees together, the trailing leg tucked behind
+        leg(p, "R", -12, 84, 32, -4)
+        arms(b, p, "L", 34, 12, 54, turn=8, hand=8, curl=OPEN, thumb=6)
+        arms(b, p, "R", 26, 16, 48, turn=8, hand=8, curl=OPEN, thumb=6)
+        return p
+
+    def reach():
+        p = Pose()
+        trunk(p, hips=3, spine=3, chest=-1, head=-4)
+        leg(p, "L", 18, 24, 34, -2)                             # toes first
+        leg(p, "R", 4, 20, 36, -2)
+        arms(b, p, "L", 6, 44, 22, hand=10, curl=OPEN, thumb=6)
+        arms(b, p, "R", 12, 38, 26, hand=10, curl=OPEN, thumb=6)
+        return p
+
+    jump = Track([(0.0, takeoff()), (.22, tuck()), (.5, reach())])
 
     def Jump(t):
-        k = smooth(t / .22)
+        return jump.at(t, dict(arm=.03, forearm=.05, hand=.08, head=.02))
+
+    def Land(t):
+        def down(z, hips, spine, chest, head, la, ra, knees):
+            p = Pose()
+            for s, sx in gait.SIDES:
+                a = b.ankle[s]
+                p.feet[s] = Foot(b.planted(s, (sx * .07 * b.scale, a.y + (-.05 if s == "L" else .03) * b.scale), -hp, 8), -hp, 8)
+            trunk(p, hips=hips, spine=spine, chest=chest, head=head, z=up + z)
+            arms(b, p, "L", *la)
+            arms(b, p, "R", *ra)
+            p.knee_out = {"L": knees, "R": knees}
+            return p
+        land = Track([(0.0, down(-.04, 4, 4, 0, -4, (6, 44, 22), (12, 38, 26), -.02)),
+                      (.10, down(-.25, 22, 16, 8, -22, (44, 10, 24), (10, 30, 30), -.06)),      # low, a hand toward the ground
+                      (.28, down(-.09, 8, 4, -1, -6, (14, 8, 22), (6, 14, 24), -.03)),
+                      (.5, idle_pose(b, 0.0))], ease=smooth)
+        return land.at(t, dict(chest=.02, head=.04, arm=.03, forearm=.06, hand=.09))
+
+    # --- over and onto things: poses by how far through the move the body is ----------------------------------------
+    def Vault(t):
+        def run_in():
+            p = Pose()
+            trunk(p, hips=11, spine=9, chest=5, head=-14)
+            leg(p, "L", 40, 66, 20)
+            leg(p, "R", -18, 34, 36)
+            arms(b, p, "R", 70, 6, 16, hand=-20, curl=OPEN, thumb=6)
+            arms(b, p, "L", -28, 6, 60)
+            return p
+
+        def over():
+            p = Pose()
+            trunk(p, hips=18, spine=8, chest=3, head=-16, roll=-44, turn=24, z=-.18, x=.05)
+            leg(p, "L", 84, 96, 34, -6)                             # both legs through together, toes pointed
+            leg(p, "R", 76, 100, 36, -8)
+            arms(b, p, "R", 20, 18, 8, hand=-40, curl=OPEN, thumb=6)
+            arms(b, p, "L", 10, 78, 20, hand=10, curl=OPEN, thumb=6)
+            return p
+
+        def clearing():
+            p = Pose()
+            trunk(p, hips=10, spine=5, chest=0, head=-8, roll=-18, turn=8, z=-.08)
+            leg(p, "L", 58, 28, 30)
+            leg(p, "R", 34, 86, 36)
+            arms(b, p, "R", -34, 10, 20)
+            arms(b, p, "L", 30, 16, 56, turn=10)
+            return p
+
+        def away():
+            p = Pose()
+            trunk(p, hips=5, spine=4, chest=1, head=-6, z=-.02)
+            leg(p, "L", 30, 16, 10)
+            leg(p, "R", -20, 60, 36)
+            arms(b, p, "R", 18, 3, 84, turn=14)
+            arms(b, p, "L", -40, 6, 58)
+            return p
+        return Track([(0.0, run_in()), (.36, over()), (.68, clearing()), (1.0, away())]).at(t, dict(chest=.02, head=.04, forearm=.04, hand=.07))
+
+    def press():
         p = Pose()
-        p.hips = Vector((0, 0, -.01 * k))
-        p.add("hips", (Z, -6 * k), (X, 2 * k))
-        p.add("spine", (X, 2 * k), (Z, 4 * k))
-        p.add("chest", (X, -3 * k), (Z, -8 * k))
-        p.add("head", (X, -4 * k))
-        p.add("thigh.L", (Y, 4 * k), (X, -48 * k))
-        p.add("shin.L", (X, 96 * k))
-        p.add("foot.L", (X, 26 * k))
-        p.add("thigh.R", (Y, -4 * k), (X, 12 * k))
-        p.add("shin.R", (X, 82 * k))
-        p.add("foot.R", (X, 32 * k))
-        for s, sx in gait.SIDES:
-            p.add("upperarm." + s, (Y, -sx * (4 + 8 * k)), (X, -34 * k), (Z, sx * 8 * k))
-            p.add("forearm." + s, (b.elbow[s], -22 - 30 * k))
-            p.add("hand." + s, (b.elbow[s], 8 * k))
+        trunk(p, hips=15, spine=10, chest=4, head=-20)
+        leg(p, "R", 104, 124, 10, 10)
+        leg(p, "L", -8, 10, 38)
+        for s in "LR":
+            arms(b, p, s, -10, 12, 16, hand=-50, curl=OPEN, thumb=6)
         return p
+
+    def step_up():
+        p = Pose()
+        trunk(p, hips=18, spine=9, chest=2, head=-16, z=-.03)
+        leg(p, "R", 88, 98, 0, 6)
+        leg(p, "L", 20, 56, 30)
+        for s in "LR":
+            arms(b, p, s, -24, 8, 26)
+        return p
+
+    def stand():
+        p = Pose()
+        trunk(p, hips=6, spine=2, chest=-2, head=-3, z=-.03)
+        leg(p, "L", 14, 24, 6, -2)
+        leg(p, "R", 12, 22, 6, -2)
+        for s in "LR":
+            arms(b, p, s, -2, 3, 20)
+        return p
+
+    def Mantle(t):
+        def reach_up():
+            p = Pose()
+            trunk(p, hips=-2, spine=-5, chest=-9, head=-16, z=.01)
+            leg(p, "L", -6, 8, 38)
+            leg(p, "R", 12, 22, 36)
+            for s in "LR":
+                arms(b, p, s, 124, 8, 20, hand=-10, curl=OPEN, thumb=6)
+            return p
+
+        def catch():
+            p = Pose()
+            trunk(p, hips=5, spine=5, chest=0, head=-12)
+            leg(p, "R", 58, 88, -10, 2)                            # a toe on the face
+            leg(p, "L", 6, 28, 34)
+            for s in "LR":
+                arms(b, p, s, 66, 10, 72, hand=-40, curl=OPEN, thumb=6)
+            return p
+        return Track([(0.0, reach_up()), (.30, catch()), (.58, press()), (.82, step_up()), (1.0, stand())]).at(t, dict(chest=.02, head=.03))
+
+    def Climb(t):
+        def hang():
+            p = Pose()
+            trunk(p, hips=-5, spine=-5, chest=-5, head=-24)
+            leg(p, "L", 4, 16, 38)
+            leg(p, "R", 12, 30, 38, -2)
+            for s in "LR":
+                arms(b, p, s, 170, 6, 5, hand=-10, curl=GRIP, thumb=18)
+            return p
+
+        def walk_up():
+            p = Pose()
+            trunk(p, hips=3, spine=-1, chest=-3, head=-22)
+            leg(p, "R", 54, 72, -8, 2)
+            leg(p, "L", 20, 44, 30)
+            for s in "LR":
+                arms(b, p, s, 152, 8, 34, hand=-14, curl=GRIP, thumb=18)
+            return p
+
+        def pull():
+            p = Pose()
+            trunk(p, hips=8, spine=6, chest=2, head=-14)
+            leg(p, "L", 66, 98, 30, -3)
+            leg(p, "R", 82, 102, 24, -3)
+            for s in "LR":
+                arms(b, p, s, 74, 16, 118, hand=-30, curl=GRIP, thumb=18)
+            return p
+        return Track([(0.0, hang()), (.26, walk_up()), (.54, pull()), (.76, press()), (.90, step_up()), (1.0, stand())]).at(t, dict(chest=.02, head=.03))
 
     def Slide(t):
         v = math.sin(TAU * t / .8)
@@ -209,7 +393,8 @@ def clips(b):
         p.add("chest", (X, -5 * lift))
         p.hips.z += .004 * lift
 
-    return {"Idle": (Idle, 5.6, True), "Walk": (Walk, walk.T, True), "Run": (Run, run.T, True),
-            "Jump": (Jump, .5, False), "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
+    return {"Idle": (Idle, 5.6, True), "Stroll": (Stroll, stroll.T, True), "Walk": (Walk, walk.T, True), "Run": (Run, run.T, True),
+            "Jump": (Jump, .5, False), "Land": (Land, .5, False), "Vault": (Vault, 1.0, False), "Mantle": (Mantle, 1.0, False),
+            "Climb": (Climb, 1.0, False), "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Fidget1": (fidget(4.4, none, weight), 4.4, False), "Fidget2": (fidget(4.2, look_back), 4.2, False),
             "Fidget3": (fidget(4.0, stretch), 4.0, False)}, (walk, run)

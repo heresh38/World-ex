@@ -656,6 +656,66 @@ def make_lods(mesh, count=4):
         log(f"{mesh.get_name()}: no LODs ({e})")
 
 
+def player_clips(sex):
+    """Only the body's clips again (SO_IMPORT_ONLY=player_clips): the takes of the body FBX onto the skeleton that is
+    already there, as Anims/A_Player<Sex>_<Clip>. For work on motion (tools/blender/hero/reclip.py): nothing else of
+    the player is touched."""
+    Sex = sex.capitalize()
+    src = os.path.join(SOURCE, "Characters", f"Player{Sex}")
+    dest = f"/Game/Characters/Player{Sex}"
+    body = unreal.load_asset(f"{dest}/SK_Player{Sex}")
+    if not body or not os.path.isdir(src):
+        log(f"Player{Sex} clips: skipped (import the player first)")
+        return
+    manifest = load_json(os.path.join(src, "export_fbx.json"))
+    entry = next(a for a in manifest["assets"] if a["name"] == "Body")
+    ui = unreal.FbxImportUI()
+    ui.set_editor_property("import_mesh", False)
+    ui.set_editor_property("import_textures", False)
+    ui.set_editor_property("import_materials", False)
+    ui.set_editor_property("import_as_skeletal", True)
+    ui.set_editor_property("automated_import_should_detect_type", False)
+    ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_ANIMATION)
+    ui.set_editor_property("skeleton", body.get_editor_property("skeleton"))
+    ui.set_editor_property("import_animations", True)
+    anim = ui.get_editor_property("anim_sequence_import_data")
+    anim.set_editor_property("animation_length", unreal.FBXAnimationLengthImportType.FBXALIT_EXPORTED_TIME)
+    anim.set_editor_property("import_bone_tracks", True)
+    anim.set_editor_property("convert_scene_unit", False)
+    tmp = dest + "/ClipsIn"
+    if eal.does_directory_exist(tmp):
+        eal.delete_directory(tmp)
+    ensure_dir(tmp)
+    ensure_dir(dest + "/Anims")
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", os.path.join(src, entry["file"]))
+    task.set_editor_property("destination_path", tmp)
+    task.set_editor_property("destination_name", f"Clip{Sex}")
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", False)
+    task.set_editor_property("options", ui)
+    tools.import_asset_tasks([task])
+    actions = sorted(entry.get("actions", []), key=len, reverse=True)
+    done = []
+    for path in eal.list_assets(tmp, recursive=False, include_folder=False):
+        obj = eal.load_asset(path)
+        if not isinstance(obj, unreal.AnimSequence):
+            continue
+        clip = next((a for a in actions if obj.get_name().endswith(a)), None)
+        if not clip:
+            continue
+        target = f"{dest}/Anims/A_Player{Sex}_{clip}"
+        if eal.does_asset_exist(target):
+            eal.delete_asset(target)
+        if eal.rename_asset(path, target):
+            fix_clip_units(eal.load_asset(target))
+            eal.save_asset(target, only_if_is_dirty=False)
+            done.append(clip)
+    eal.delete_directory(tmp)
+    log(f"Player{Sex}: {len(done)} clips ({', '.join(sorted(done))})")
+
+
 def player_wardrobe(sex, master):
     """export_fbx.py --per-item output of player_<sex>.glb (body + every piece, and their first-person cuts) ->
     SK_Player<Sex> (body, clips, physics), SK_Player<Sex>Arms, Wardrobe/SK_<Sex>_<slot>_<item>,
@@ -1828,8 +1888,10 @@ def audio():
     src = os.path.join(SOURCE, "Audio")
     ensure_dir("/Game/Audio")
     count = 0
+    # SO_AUDIO_ONLY=move_,footstep_metal: only the sounds whose names start with one of these
+    prefixes = [x.strip() for x in os.environ.get("SO_AUDIO_ONLY", "").split(",") if x.strip()]
     for f in sorted(os.listdir(src)):
-        if not f.endswith(".wav"):
+        if not f.endswith(".wav") or (prefixes and not any(f.startswith(x) for x in prefixes)):
             continue
         name = "S_" + os.path.splitext(f)[0]
         task = unreal.AssetImportTask()
@@ -1859,6 +1921,9 @@ def main():
     if want("player"):
         for sex in ("male", "female"):
             player_wardrobe(sex, master)
+    if "player_clips" in only:
+        for sex in ("male", "female"):
+            player_clips(sex)
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
                   master, stalker_extra, flesh=True)

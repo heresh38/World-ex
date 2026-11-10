@@ -99,8 +99,19 @@ material's EdgeWear / Scratches / Grime / WearMetal / WearTiling with the shared
 Motion: each body has its own clip set in its own folder, nothing shared: `hero/male/motion.py` (masculine: wide
 track, heel strike, shoulder drive, loose fists, a squared idle; idle variations neck stretch / scan / shoulder roll) and
 `hero/female/motion.py` (feminine: crossover line, hip roll and sway, quick light steps, arms close, contrapposto
-idle; variations weight shift / look back / neck stretch). Clips: Idle, Walk (the game's 4.4 m/s jog), Run (8.6 m/s
-sprint), Jump, Slide, Death, Fidget1-3. `hero/gait.py` is the engine only (no style): feet planned so a planted foot
+idle; variations weight shift / look back / neck stretch). Clips: Idle, Stroll (1.5 m/s: the slow walk), Walk (the
+game's 4.4 m/s run), Run (8.6 m/s sprint), Jump (three poses: take-off at 0, the tuck at 0.22 s, the reach for the
+ground at the end; the game reads it by the rise and the fall), Land, Vault / Mantle / Climb (1 s each, read by how far
+through the move the body is), Slide, Death, Fidget1-3. Generated motion must never read as a machine (the owner:
+"very robotic" on the first set, whose every joint ran on one sine): nothing peaks together (`gait.locomote` runs the
+spine, chest, head, forearms and hands a lag behind the pelvis; keyed clips use `gait.Track.at(t, lags)`), no pure
+sine (second harmonics, the swing foot recovers high and is drawn back before it lands: `retract`, `peak`), the two
+sides are not copies (`asym`), elbows open behind and close in front, and a walk is a walk (double support, the body
+highest over the planted leg), not a slowed run. Work on motion without rebuilding a body: `blender -b <saved build>
+-P tools/blender/hero/reclip.py -- <sex> --frames=<dir> --clips=Walk,Run` (13 s: re-bakes and renders frames; look
+at them), `--glb=SourceArt/Characters/src/hero_<sex>.glb` writes the game's source again, then `export_fbx.py ...
+--per-item` and `SO_IMPORT_ONLY=player_clips` imports just the clips. `hero/gait.py` is the engine only (no style):
+feet planned so a planted foot
 moves back at exactly the clip's speed (rolling heel -> ball about real pivots: no sliding at Clips.WalkSpeed /
 RunSpeed), leg IK + foot orientation baked to FK, the hips lowered (smoothed over the clip) wherever a leg would
 over-reach, arm bends about the elbow hinge (`Body.elbow`), finger curls (`Pose.curl`). Unreal: walk and run share one
@@ -176,6 +187,24 @@ a bare pointer to a loaded asset across a timer or a level change (nothing holds
 The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own sized from
 the gun's bounds (`ASOCharacter::RefreshHolsters`: long guns stand side by side on the back, one behind each shoulder,
 never stacked; handguns at the hips; the gun in hand is stowed while mantling); pictures `SOCaptureSeries 1 12|13`.
+Movement (`USOCharacterMovementComponent`, the owner's brief of 2026-11-09): instant run, built sprint, coyote time,
+buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
+(`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
+measured from the obstacle (`ESOTraversal`: low / medium vault over a thin obstacle met at speed, automatic at a sprint;
+mantle onto a ledge; climb): one path checked for room, relative to what is climbed (moving platforms), speed kept.
+Landing keeps the impact speed (heavy landings recover, `FallDamageMinSpeed` is the fall damage hook, off by default).
+`GetMovementState()` / `OnMovementStateChanged` / `OnMovementEvent` are the ONE place animation, sound, camera and
+effects listen to: a new ability adds a custom mode, a state and its events there. `ASOCharacter::HandleMovementEvent`
+plays the sounds (`move_*`, `footstep_<surface>_<n>` picked by `GetFloorSurface` from the floor's material names:
+metal, dirt, grass, wood, water; plain `footstep_<n>` is concrete; `sfx_synth.py ... movement`, import with
+`SO_IMPORT_ONLY=audio SO_AUDIO_ONLY=move_,footstep_metal,...`), dust and camera kicks. The body is driven by the
+motion, never by a clock (`USOLocomotionAnimInstance`): standing, the feet stay planted while the aim turns
+(`StandYaw`, a turn on the spot past `TurnInPlaceAngle`); in the air the jump clip is a pose picked by the rise and
+the fall (`AirTuck`); in a traversal the hands go onto the measured edge by arm IK while it is in reach and the body
+leans over it; cross-fades are eased. Tests `ShatteredOrbit.Movement.*`, `ShatteredOrbit.Anim.BodyFollowsMotion`;
+pictures `SOCaptureSeries 1 14|15` (slow motion, files `SO_m_*`). The animation layers: Idle / Stroll / Walk / Run by
+speed on one shared cycle phase, Jump by the rise and fall, Land by the impact, Vault / Mantle / Climb by progress,
+crouch as sunk hips over the clip's feet (`CrouchDrop`). Still to do: first-person hands on a ledge.
 Enemies, the Altered (`altered.py` + `SOAltered.h`), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
 by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as
 they track): Remnant (SMG, pushes in), armed Stalker (auto rifle, cover), Veilborn (scout rifle from cover, the odd void

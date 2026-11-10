@@ -1,6 +1,7 @@
 #include "SOCharacterMovementComponent.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 
@@ -20,11 +21,22 @@ public:
 	float SavedFallTime = 0.0f;
 	float SavedSlideElapsed = 0.0f;
 	float SavedSlideCooldownLeft = 0.0f;
+	float SavedLandRecoverLeft = 0.0f;
+	float SavedLandStateLeft = 0.0f;
+	ESOTraversal SavedTraversal = ESOTraversal::None;
 	FVector SavedMantleStart = FVector::ZeroVector;
 	FVector SavedMantleTarget = FVector::ZeroVector;
+	FVector SavedMantleNear = FVector::ZeroVector;
 	float SavedMantleElapsed = 0.0f;
 	float SavedMantleDuration = 0.0f;
 	float SavedMantleEntrySpeed = 0.0f;
+	float SavedVaultApproach = 0.0f;
+	float SavedVaultOver = 0.0f;
+	float SavedVaultApexZ = 0.0f;
+	float SavedVaultRiseEnd = 0.0f;
+	float SavedVaultDropStart = 1.0f;
+	TWeakObjectPtr<UPrimitiveComponent> SavedTraversalBase;
+	FTransform SavedTraversalBaseStart = FTransform::Identity;
 
 	FSOSavedMove()
 		: bSavedWantsToSprint(false)
@@ -42,11 +54,22 @@ public:
 		SavedFallTime = 0.0f;
 		SavedSlideElapsed = 0.0f;
 		SavedSlideCooldownLeft = 0.0f;
+		SavedLandRecoverLeft = 0.0f;
+		SavedLandStateLeft = 0.0f;
+		SavedTraversal = ESOTraversal::None;
 		SavedMantleStart = FVector::ZeroVector;
 		SavedMantleTarget = FVector::ZeroVector;
+		SavedMantleNear = FVector::ZeroVector;
 		SavedMantleElapsed = 0.0f;
 		SavedMantleDuration = 0.0f;
 		SavedMantleEntrySpeed = 0.0f;
+		SavedVaultApproach = 0.0f;
+		SavedVaultOver = 0.0f;
+		SavedVaultApexZ = 0.0f;
+		SavedVaultRiseEnd = 0.0f;
+		SavedVaultDropStart = 1.0f;
+		SavedTraversalBase.Reset();
+		SavedTraversalBaseStart = FTransform::Identity;
 	}
 
 	virtual uint8 GetCompressedFlags() const override
@@ -71,7 +94,7 @@ public:
 	{
 		const FSOSavedMove* Other = static_cast<const FSOSavedMove*>(NewMove.Get());
 		if (bSavedWantsToSprint != Other->bSavedWantsToSprint || bSavedWantsToMantle != Other->bSavedWantsToMantle
-			|| bSavedWantsToAim != Other->bSavedWantsToAim)
+			|| bSavedWantsToAim != Other->bSavedWantsToAim || SavedTraversal != Other->SavedTraversal)
 		{
 			return false;
 		}
@@ -89,11 +112,22 @@ public:
 			SavedFallTime = Move->FallTime;
 			SavedSlideElapsed = Move->SlideElapsed;
 			SavedSlideCooldownLeft = Move->SlideCooldownLeft;
+			SavedLandRecoverLeft = Move->LandRecoverLeft;
+			SavedLandStateLeft = Move->LandStateLeft;
+			SavedTraversal = Move->Traversal;
 			SavedMantleStart = Move->MantleStart;
 			SavedMantleTarget = Move->MantleTarget;
+			SavedMantleNear = Move->MantleNear;
 			SavedMantleElapsed = Move->MantleElapsed;
 			SavedMantleDuration = Move->MantleDuration;
 			SavedMantleEntrySpeed = Move->MantleEntrySpeed;
+			SavedVaultApproach = Move->VaultApproach;
+			SavedVaultOver = Move->VaultOver;
+			SavedVaultApexZ = Move->VaultApexZ;
+			SavedVaultRiseEnd = Move->VaultRiseEnd;
+			SavedVaultDropStart = Move->VaultDropStart;
+			SavedTraversalBase = Move->TraversalBase;
+			SavedTraversalBaseStart = Move->TraversalBaseStart;
 		}
 	}
 
@@ -105,11 +139,22 @@ public:
 			Move->FallTime = SavedFallTime;
 			Move->SlideElapsed = SavedSlideElapsed;
 			Move->SlideCooldownLeft = SavedSlideCooldownLeft;
+			Move->LandRecoverLeft = SavedLandRecoverLeft;
+			Move->LandStateLeft = SavedLandStateLeft;
+			Move->Traversal = SavedTraversal;
 			Move->MantleStart = SavedMantleStart;
 			Move->MantleTarget = SavedMantleTarget;
+			Move->MantleNear = SavedMantleNear;
 			Move->MantleElapsed = SavedMantleElapsed;
 			Move->MantleDuration = SavedMantleDuration;
 			Move->MantleEntrySpeed = SavedMantleEntrySpeed;
+			Move->VaultApproach = SavedVaultApproach;
+			Move->VaultOver = SavedVaultOver;
+			Move->VaultApexZ = SavedVaultApexZ;
+			Move->VaultRiseEnd = SavedVaultRiseEnd;
+			Move->VaultDropStart = SavedVaultDropStart;
+			Move->TraversalBase = SavedTraversalBase;
+			Move->TraversalBaseStart = SavedTraversalBaseStart;
 		}
 	}
 };
@@ -137,7 +182,7 @@ USOCharacterMovementComponent::USOCharacterMovementComponent()
 	, bWantsToMantle(false)
 	, bWantsToAim(false)
 {
-	// Fast modern shooter feel (numbers from the browser build's MOVE table, in cm).
+	// Fast, responsive and weighty: at run speed in under a tenth of a second, a harder stop than start.
 	MaxWalkSpeed = 440.0f;
 	MaxWalkSpeedCrouched = 270.0f;
 	MaxAcceleration = 5500.0f;              // walk speed in ~0.08 s
@@ -147,17 +192,59 @@ USOCharacterMovementComponent::USOCharacterMovementComponent()
 	GroundFriction = 8.0f;
 	JumpZVelocity = 610.0f;                 // ~1.0 m at gravity 19 m/s2
 	GravityScale = 1900.0f / 980.0f;
-	AirControl = 0.15f;
+	AirControl = 0.32f;                     // strong air steering; it never adds speed beyond what was carried
 	AirControlBoostMultiplier = 1.0f;
 	FallingLateralFriction = 0.0f;
 	BrakingDecelerationFalling = 0.0f;      // momentum is kept in the air
 	MaxStepHeight = 45.0f;
 	SetWalkableFloorAngle(46.0f);
 	bCanWalkOffLedgesWhenCrouching = true;
+	bMaintainHorizontalGroundVelocity = true; // the same speed up and down stairs and slopes
 	SetCrouchedHalfHeight(58.0f);
 	bOrientRotationToMovement = false;
 	NavAgentProps.bCanCrouch = true;
 	NavAgentProps.bCanJump = true;
+}
+
+void USOCharacterMovementComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	SetMaxAirJumps(MaxAirJumps);
+}
+
+void USOCharacterMovementComponent::SetMaxAirJumps(int32 Count)
+{
+	MaxAirJumps = FMath::Max(Count, 0);
+	if (CharacterOwner)
+	{
+		CharacterOwner->JumpMaxCount = 1 + MaxAirJumps;
+	}
+}
+
+int32 USOCharacterMovementComponent::GetAirJumpsLeft() const
+{
+	if (!CharacterOwner || !IsFalling())
+	{
+		return MaxAirJumps;
+	}
+	// (walking off a ledge spends the ground jump once the coyote window has passed)
+	const int32 Used = CharacterOwner->JumpCurrentCount == 0 && !IsInCoyoteWindow() ? 1 : CharacterOwner->JumpCurrentCount;
+	return FMath::Clamp(CharacterOwner->JumpMaxCount - FMath::Max(Used, 1), 0, MaxAirJumps);
+}
+
+bool USOCharacterMovementComponent::IsInCoyoteWindow() const
+{
+	// only after walking off: a jump has no coyote time of its own
+	return IsFalling() && FallTime <= CoyoteTime && CharacterOwner && CharacterOwner->JumpCurrentCount == 0;
+}
+
+void USOCharacterMovementComponent::Notify(ESOMovementEvent Event, float Strength)
+{
+	// (a replay after a server correction runs the same moves again: the event already happened)
+	if (CharacterOwner && !CharacterOwner->bClientUpdating)
+	{
+		OnMovementEvent.Broadcast(Event, Strength);
+	}
 }
 
 bool USOCharacterMovementComponent::IsSprinting() const
@@ -183,15 +270,18 @@ float USOCharacterMovementComponent::GetMaxSpeed() const
 	}
 	if (MovementMode == MOVE_Walking || MovementMode == MOVE_NavWalking)
 	{
+		// a very hard landing: a moment to get the legs back under the body
+		const float Land = LandRecoverLeft > 0.0f && LandRecoverTime > 0.0f
+			? FMath::Lerp(1.0f, LandSpeedScale, FMath::Clamp(LandRecoverLeft / LandRecoverTime, 0.0f, 1.0f)) : 1.0f;
 		if (IsCrouching())
 		{
-			return MaxWalkSpeedCrouched;
+			return MaxWalkSpeedCrouched * Land;
 		}
 		if (IsSprinting())
 		{
-			return SprintSpeed;
+			return SprintSpeed * Land;
 		}
-		return bWantsToAim ? MaxWalkSpeed * AimSpeedScale : MaxWalkSpeed;
+		return (bWantsToAim ? MaxWalkSpeed * AimSpeedScale : MaxWalkSpeed) * Land;
 	}
 	return Super::GetMaxSpeed();
 }
@@ -204,6 +294,32 @@ float USOCharacterMovementComponent::GetMaxAcceleration() const
 		return SprintBuildAcceleration;
 	}
 	return Super::GetMaxAcceleration();
+}
+
+float USOCharacterMovementComponent::GetGravityZ() const
+{
+	float Scale = 1.0f;
+	if (MovementMode == MOVE_Falling)
+	{
+		if (Velocity.Z > 0.0f)
+		{
+			// variable height: rising from a jump with the button let go, the rise is cut short
+			if (CharacterOwner && CharacterOwner->JumpCurrentCount > 0 && !bWantsToMantle)
+			{
+				Scale = JumpCutGravityScale;
+			}
+		}
+		else
+		{
+			Scale = FallGravityScale;
+		}
+	}
+	return Super::GetGravityZ() * Scale;
+}
+
+float USOCharacterMovementComponent::GetFallDamage(float ImpactSpeed) const
+{
+	return FallDamageMinSpeed > 0.0f && ImpactSpeed > FallDamageMinSpeed ? (ImpactSpeed - FallDamageMinSpeed) * FallDamagePerSpeed : 0.0f;
 }
 
 bool USOCharacterMovementComponent::IsMovingOnGround() const
@@ -221,9 +337,61 @@ bool USOCharacterMovementComponent::CanAttemptJump() const
 	return Super::CanAttemptJump();
 }
 
+bool USOCharacterMovementComponent::DoJump(bool bReplayingMoves, float DeltaTime)
+{
+	// (the character counts a fall without a jump as the first jump once the coyote window has passed)
+	const bool bAirJump = IsFalling() && CharacterOwner && CharacterOwner->JumpCurrentCount >= 1;
+	if (!bAirJump)
+	{
+		const bool bJumped = Super::DoJump(bReplayingMoves, DeltaTime);
+		if (bJumped && !bReplayingMoves)
+		{
+			Notify(ESOMovementEvent::Jumped);
+		}
+		return bJumped;
+	}
+	if (!CharacterOwner->CanJump())
+	{
+		return false;
+	}
+	// An air jump: up again whatever the fall was doing, and the carried speed turned toward the stick (the
+	// correction in the air); the speed itself is kept.
+	const FVector Input = Acceleration.GetSafeNormal2D();
+	FVector Flat(Velocity.X, Velocity.Y, 0.0f);
+	if (!Input.IsNearlyZero())
+	{
+		const float Speed = static_cast<float>(Flat.Size());
+		const float Keep = FMath::Max(Speed, MaxWalkSpeed * 0.6f);
+		const FVector Turned = FMath::Lerp(Flat, Input * Keep, FMath::Clamp(AirJumpRedirect, 0.0f, 1.0f));
+		Flat = Turned.GetSafeNormal() * FMath::Max(Speed, static_cast<float>(Turned.Size()));
+	}
+	Velocity = FVector(Flat.X, Flat.Y, AirJumpZVelocity);
+	SetMovementMode(MOVE_Falling);
+	if (!bReplayingMoves)
+	{
+		Notify(ESOMovementEvent::AirJumped);
+	}
+	return true;
+}
+
+void USOCharacterMovementComponent::ProcessLanded(const FHitResult& Hit, float RemainingTime, int32 Iterations)
+{
+	const float Impact = FMath::Max(0.0f, static_cast<float>(-Velocity.Z));
+	LastLandSpeed = Impact;
+	LandStateLeft = LandStateTime;
+	if (Impact > HeavyLandSpeed && HeavyLandSpeed > 0.0f)
+	{
+		LandRecoverLeft = LandRecoverTime;
+	}
+	Super::ProcessLanded(Hit, RemainingTime, Iterations);
+	Notify(ESOMovementEvent::Landed, Impact);
+}
+
 void USOCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 {
 	SlideCooldownLeft = FMath::Max(0.0f, SlideCooldownLeft - DeltaSeconds);
+	LandRecoverLeft = FMath::Max(0.0f, LandRecoverLeft - DeltaSeconds);
+	LandStateLeft = FMath::Max(0.0f, LandStateLeft - DeltaSeconds);
 	FallTime = IsFalling() ? FallTime + DeltaSeconds : 0.0f;
 
 	// Crouch / uncrouch (the slide counts as moving on ground, so it stays crouched).
@@ -241,11 +409,69 @@ void USOCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float Del
 		EnterSlide();
 	}
 
-	// Jump held toward a ledge: mantle (works from the ground and in the air).
-	if (bWantsToMantle && !IsCrouching() && (IsFalling() || MovementMode == MOVE_Walking))
+	// Jump held toward a ledge: take it (works from the ground and in the air). Sprinting into something that can be
+	// vaulted takes it without the button.
+	if (!IsCrouching() && (IsFalling() || MovementMode == MOVE_Walking))
 	{
-		TryMantle();
+		if (bWantsToMantle)
+		{
+			TryMantle();
+		}
+		else if (bAutoVault && MovementMode == MOVE_Walking && IsSprinting() && Velocity.Size2D() >= VaultEntrySpeed)
+		{
+			TryMantle(true);
+		}
 	}
+}
+
+void USOCharacterMovementComponent::UpdateCharacterStateAfterMovement(float DeltaSeconds)
+{
+	Super::UpdateCharacterStateAfterMovement(DeltaSeconds);
+	const ESOMovementState Now = ComputeState();
+	if (Now != State)
+	{
+		const ESOMovementState Old = State;
+		State = Now;
+		if (!CharacterOwner || !CharacterOwner->bClientUpdating)
+		{
+			OnMovementStateChanged.Broadcast(Old, Now);
+		}
+	}
+}
+
+ESOMovementState USOCharacterMovementComponent::ComputeState() const
+{
+	if (IsMantling())
+	{
+		return Traversal == ESOTraversal::Climb ? ESOMovementState::Climb
+			: (Traversal == ESOTraversal::Mantle ? ESOMovementState::Mantle : ESOMovementState::Vault);
+	}
+	if (IsSliding())
+	{
+		return ESOMovementState::Slide;
+	}
+	if (IsFalling())
+	{
+		return Velocity.Z > 0.0f && CharacterOwner && CharacterOwner->JumpCurrentCount > 0 ? ESOMovementState::Jump : ESOMovementState::Falling;
+	}
+	if (LandStateLeft > 0.0f)
+	{
+		return ESOMovementState::Land;
+	}
+	if (IsCrouching())
+	{
+		return ESOMovementState::Crouch;
+	}
+	const float Speed = static_cast<float>(Velocity.Size2D());
+	if (Speed < 15.0f)
+	{
+		return ESOMovementState::Idle;
+	}
+	if (IsSprinting())
+	{
+		return ESOMovementState::Sprint;
+	}
+	return Speed < WalkStateSpeed ? ESOMovementState::Walk : ESOMovementState::Run;
 }
 
 void USOCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
@@ -281,6 +507,7 @@ void USOCharacterMovementComponent::OnMovementModeChanged(EMovementMode Previous
 		{
 			bWantsToCrouch = false;
 		}
+		Notify(ESOMovementEvent::SlideEnded);
 	}
 
 	if (IsSliding())
@@ -293,6 +520,14 @@ void USOCharacterMovementComponent::OnMovementModeChanged(EMovementMode Previous
 	if (MovementMode == MOVE_Falling && PreviousMovementMode != MOVE_Falling)
 	{
 		FallTime = 0.0f;
+	}
+
+	const bool bWasMantling = PreviousMovementMode == MOVE_Custom && PreviousCustomMode == static_cast<uint8>(ESOCustomMovementMode::Mantle);
+	if (bWasMantling && !IsMantling())
+	{
+		Traversal = ESOTraversal::None;
+		TraversalBase.Reset();
+		Notify(ESOMovementEvent::TraversalEnded);
 	}
 }
 
@@ -318,6 +553,7 @@ void USOCharacterMovementComponent::EnterSlide()
 	Velocity = (Velocity + Dir * SlideBoost).GetClampedToMaxSize(SlideMaxSpeed);
 	SlideElapsed = 0.0f;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(ESOCustomMovementMode::Slide));
+	Notify(ESOMovementEvent::SlideStarted, static_cast<float>(Velocity.Size2D()));
 }
 
 void USOCharacterMovementComponent::PhysSlide(float DeltaTime, int32 Iterations)
@@ -404,7 +640,11 @@ void USOCharacterMovementComponent::PhysSlide(float DeltaTime, int32 Iterations)
 	}
 }
 
-bool USOCharacterMovementComponent::TryMantle()
+// ---------------------------------------------------------------------------------------------
+// Traversal: the obstacle in front is measured, then taken the way that fits it.
+// ---------------------------------------------------------------------------------------------
+
+bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 {
 	if (!CharacterOwner || !UpdatedComponent || IsMantling())
 	{
@@ -434,10 +674,10 @@ bool USOCharacterMovementComponent::TryMantle()
 	InitCollisionParams(Params, Response);
 	const ECollisionChannel Channel = UpdatedComponent->GetCollisionObjectType();
 
-	// 1. A wall in front, somewhere between just above step height and the max ledge height.
+	// 1. A wall in front, somewhere between just above step height and the highest ledge that can be taken.
 	FHitResult WallHit;
 	bool bFoundWall = false;
-	const float MaxLedge = FMath::Max(MantleMaxHeight, ClamberMaxHeight);
+	const float MaxLedge = bVaultOnly ? VaultMediumMaxHeight : FMath::Max(MantleMaxHeight, ClamberMaxHeight);
 	for (float Height = MaxStepHeight - 10.0f; Height <= MaxLedge; Height += 15.0f)
 	{
 		const FVector Start(Location.X, Location.Y, FeetZ + Height);
@@ -471,34 +711,230 @@ bool USOCharacterMovementComponent::TryMantle()
 	{
 		return false;
 	}
-	bClamber = LedgeHeight > MantleMaxHeight;
-
-	// 3. The standing capsule fits on top, and the path (straight up, then over) is clear.
-	const FVector Target(TopXY.X, TopXY.Y, LedgeZ + HalfHeight + 2.0f);
+	const float EntrySpeed = FMath::Max(static_cast<float>(FVector::DotProduct(Velocity, Forward)), 0.0f);
 	const FCollisionShape Shape = Capsule->GetCollisionShape(-2.0f);
-	if (World->OverlapBlockingTestByChannel(Target, FQuat::Identity, Channel, Shape, Params, Response))
+	auto Blocked = [&](const FVector& From, const FVector& To, const FCollisionShape& With)
 	{
-		return false;
+		FHitResult Hit;
+		return World->SweepSingleByChannel(Hit, From, To, FQuat::Identity, Channel, With, Params, Response);
+	};
+
+	// 3. A thin obstacle with ground behind it, met at speed: over it. The far side is found by probing down along
+	//    the way we are going until the top ends; then the whole path (up, across, down) must be clear.
+	ESOTraversal Kind = ESOTraversal::None;
+	FVector Target = FVector::ZeroVector;
+	if (LedgeHeight <= VaultMediumMaxHeight && EntrySpeed >= VaultEntrySpeed)
+	{
+		const float Cos = FMath::Max(static_cast<float>(FVector::DotProduct(-WallNormal2D, Forward)), 0.5f);
+		const float ToFace = WallHit.Distance;
+		float Depth = -1.0f;
+		FHitResult FarFloor;
+		for (float D = 16.0f; D <= VaultMaxDepth + 12.0f; D += 12.0f)
+		{
+			const FVector At = WallHit.ImpactPoint + Forward * D;
+			FHitResult Down;
+			if (!World->LineTraceSingleByChannel(Down, FVector(At.X, At.Y, LedgeZ + 25.0f), FVector(At.X, At.Y, FeetZ - VaultMaxDrop), Channel, Params, Response))
+			{
+				break;                                              // nothing under it: a drop, not a vault
+			}
+			if (Down.ImpactPoint.Z < LedgeZ - 25.0f)
+			{
+				Depth = D;
+				FarFloor = Down;
+				break;
+			}
+		}
+		if (Depth > 0.0f && Depth <= VaultMaxDepth && IsWalkable(FarFloor))
+		{
+			const bool bLow = LedgeHeight <= VaultLowMaxHeight;
+			const float Tuck = bLow ? VaultTuck.X : VaultTuck.Y;
+			const float Approach = FMath::Max(0.0f, ToFace - Radius / Cos - 2.0f);
+			const float Clear = ToFace + Depth + Radius / Cos + 4.0f;       // the capsule is past the far face
+			const float Forth = FMath::Clamp(EntrySpeed * 0.05f, 24.0f, 46.0f); // a step on while coming down
+			const float ApexZ = FMath::Max(static_cast<float>(LedgeZ) + HalfHeight - Tuck + 6.0f, static_cast<float>(Location.Z));
+			const FVector Land = Location + Forward * (Clear + Forth);
+			FHitResult LandFloor;
+			const bool bFloor = World->LineTraceSingleByChannel(LandFloor, FVector(Land.X, Land.Y, LedgeZ + 25.0f), FVector(Land.X, Land.Y, FeetZ - VaultMaxDrop), Channel, Params, Response)
+				&& IsWalkable(LandFloor) && FMath::Abs(LandFloor.ImpactPoint.Z - FarFloor.ImpactPoint.Z) < 35.0f;
+			if (bFloor)
+			{
+				const FVector End(Land.X, Land.Y, LandFloor.ImpactPoint.Z + HalfHeight + 2.0f);
+				// (the legs tuck: the corridor is checked for the upper body, the landing for the whole of it)
+				const FCollisionShape Upper = FCollisionShape::MakeCapsule(Radius - 2.0f, FMath::Max(HalfHeight - Tuck * 0.5f - 2.0f, Radius));
+				const FVector Up(0.0f, 0.0f, Tuck * 0.5f);
+				const FVector Above(Location.X, Location.Y, ApexZ);
+				const FVector Past = Location + Forward * Clear;
+				const FVector PastAbove(Past.X, Past.Y, ApexZ);
+				const bool bClear = !(ApexZ > Location.Z + 1.0f && Blocked(Location + Up, Above + Up, Upper))
+					&& !Blocked(Above + Up, PastAbove + Up, Upper) && !Blocked(PastAbove + Up, End + Up, Upper)
+					&& !World->OverlapBlockingTestByChannel(End, FQuat::Identity, Channel, Shape, Params, Response);
+				if (bClear)
+				{
+					Kind = bLow ? ESOTraversal::VaultLow : ESOTraversal::VaultMedium;
+					Target = End;
+					VaultApproach = Approach;
+					VaultOver = Clear - Approach;
+					VaultApexZ = ApexZ;
+					// the time each part takes at the path's speed: up to it, over it, down from it
+					const float Speed = FMath::Clamp(EntrySpeed, static_cast<float>(VaultPathSpeed.X), static_cast<float>(VaultPathSpeed.Y));
+					const float RiseTime = FMath::Max(FMath::Sqrt(FMath::Square(Approach) + FMath::Square(ApexZ - static_cast<float>(Location.Z))) / Speed, 0.1f);
+					const float OverTime = VaultOver / Speed;
+					const float DropTime = FMath::Max(FMath::Sqrt(FMath::Square(Forth) + FMath::Square(ApexZ - static_cast<float>(End.Z))) / Speed, 0.1f);
+					MantleDuration = RiseTime + OverTime + DropTime;
+					VaultRiseEnd = RiseTime / MantleDuration;
+					VaultDropStart = (RiseTime + OverTime) / MantleDuration;
+				}
+			}
+		}
 	}
-	const FVector Raised(Location.X, Location.Y, Target.Z);
-	FHitResult PathHit;
-	if (World->SweepSingleByChannel(PathHit, Location, Raised, FQuat::Identity, Channel, Shape, Params, Response)
-		|| World->SweepSingleByChannel(PathHit, Raised, Target, FQuat::Identity, Channel, Shape, Params, Response))
+	if (Kind == ESOTraversal::None)
 	{
-		return false;
+		if (bVaultOnly)
+		{
+			return false;
+		}
+		// 4. Onto it: the standing capsule fits on top, and the path (in to the face, up along it, then over) is clear.
+		Kind = LedgeHeight > MantleMaxHeight ? ESOTraversal::Climb : ESOTraversal::Mantle;
+		Target = FVector(TopXY.X, TopXY.Y, LedgeZ + HalfHeight + 2.0f);
+		if (World->OverlapBlockingTestByChannel(Target, FQuat::Identity, Channel, Shape, Params, Response))
+		{
+			return false;
+		}
+		// (the body closes in on the face first: the hands reach the edge and the rise is against the wall)
+		const float FaceCos = FMath::Max(static_cast<float>(FVector::DotProduct(-WallNormal2D, Forward)), 0.5f);
+		const FVector Near = Location + Forward * FMath::Max(0.0f, WallHit.Distance - Radius / FaceCos - 3.0f);
+		const FVector Raised(Near.X, Near.Y, Target.Z);
+		if (Blocked(Location, Near, Shape) || Blocked(Near, Raised, Shape) || Blocked(Raised, Target, Shape))
+		{
+			return false;
+		}
+		MantleNear = Near;
+		const float Fast = FMath::Clamp(EntrySpeed / FMath::Max(SprintSpeed, 1.0f), 0.0f, 1.0f);
+		MantleDuration = Kind == ESOTraversal::Climb
+			? ClamberBaseTime + ClamberTimePerMeter * (LedgeHeight / 100.0f)   // a climb: no speed carried into it
+			: (MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f)) * FMath::Lerp(1.0f, MantleFastTimeScale, Fast);
 	}
 
+	if (Kind == ESOTraversal::VaultLow || Kind == ESOTraversal::VaultMedium)
+	{
+		MantleNear = Location;
+	}
+	Traversal = Kind;
 	MantleStart = Location;
 	MantleTarget = Target;
 	MantleElapsed = 0.0f;
-	MantleEntrySpeed = FMath::Max(static_cast<float>(FVector::DotProduct(Velocity, Forward)), 0.0f);
-	const float Fast = FMath::Clamp(MantleEntrySpeed / FMath::Max(SprintSpeed, 1.0f), 0.0f, 1.0f);
-	MantleDuration = bClamber
-		? ClamberBaseTime + ClamberTimePerMeter * (LedgeHeight / 100.0f)   // a climb: no speed carried into it
-		: (MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f)) * FMath::Lerp(1.0f, MantleFastTimeScale, Fast);
+	MantleEntrySpeed = EntrySpeed;
+	LedgePoint = FVector(WallHit.ImpactPoint.X, WallHit.ImpactPoint.Y, LedgeZ);
+	LedgeNormal = WallNormal2D;
+	// what is being climbed carries the move with it when it can move (a platform, a lift, a vehicle)
+	UPrimitiveComponent* Top = TopHit.GetComponent();
+	TraversalBase = Top && Top->Mobility == EComponentMobility::Movable ? Top : nullptr;
+	TraversalBaseStart = Top ? FTransform(Top->GetComponentQuat(), Top->GetComponentLocation()) : FTransform::Identity;
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(ESOCustomMovementMode::Mantle));
+	Notify(Kind == ESOTraversal::Climb ? ESOMovementEvent::ClimbStarted : (Kind == ESOTraversal::Mantle ? ESOMovementEvent::MantleStarted : ESOMovementEvent::VaultStarted), EntrySpeed);
 	return true;
+}
+
+FVector USOCharacterMovementComponent::FromTraversalFrame(const FVector& Point) const
+{
+	if (const UPrimitiveComponent* Base = TraversalBase.Get())
+	{
+		const FTransform Now(Base->GetComponentQuat(), Base->GetComponentLocation());
+		return Now.TransformPosition(TraversalBaseStart.InverseTransformPosition(Point));
+	}
+	return Point;
+}
+
+FVector USOCharacterMovementComponent::DirFromTraversalFrame(const FVector& Dir) const
+{
+	if (const UPrimitiveComponent* Base = TraversalBase.Get())
+	{
+		return Base->GetComponentQuat().RotateVector(TraversalBaseStart.GetRotation().UnrotateVector(Dir));
+	}
+	return Dir;
+}
+
+bool USOCharacterMovementComponent::GetTraversalLedge(FVector& OutPoint, FVector& OutNormal) const
+{
+	if (!IsMantling())
+	{
+		return false;
+	}
+	OutPoint = FromTraversalFrame(LedgePoint);
+	OutNormal = DirFromTraversalFrame(LedgeNormal);
+	return true;
+}
+
+FVector USOCharacterMovementComponent::TraversalPoint(float Alpha) const
+{
+	if (Traversal == ESOTraversal::VaultLow || Traversal == ESOTraversal::VaultMedium)
+	{
+		// Up to the obstacle (the rise leads, the step toward it follows: the body never meets the near face), across
+		// it at one height, then down and on (the step leads, the drop follows: the far face is behind by then).
+		const FVector Dir = (MantleTarget - MantleStart).GetSafeNormal2D();
+		const float Total = static_cast<float>(FVector::Dist2D(MantleStart, MantleTarget));
+		const float Forth = FMath::Max(Total - VaultApproach - VaultOver, 0.0f);
+		float Along, Z;
+		if (Alpha < VaultRiseEnd)
+		{
+			const float S = Alpha / FMath::Max(VaultRiseEnd, 1e-3f);
+			Along = VaultApproach * S * S;
+			Z = FMath::Lerp(static_cast<float>(MantleStart.Z), VaultApexZ, 1.0f - FMath::Square(1.0f - S));
+		}
+		else if (Alpha < VaultDropStart)
+		{
+			const float S = (Alpha - VaultRiseEnd) / FMath::Max(VaultDropStart - VaultRiseEnd, 1e-3f);
+			Along = VaultApproach + VaultOver * S;
+			Z = VaultApexZ;
+		}
+		else
+		{
+			const float S = (Alpha - VaultDropStart) / FMath::Max(1.0f - VaultDropStart, 1e-3f);
+			Along = VaultApproach + VaultOver + Forth * (1.0f - FMath::Square(1.0f - S));
+			Z = FMath::Lerp(VaultApexZ, static_cast<float>(MantleTarget.Z), S * S);
+		}
+		return FVector(MantleStart.X + Dir.X * Along, MantleStart.Y + Dir.Y * Along, Z);
+	}
+
+	// Up (eased out), and over the lip once the body is nearly up: the two overlap so the move is one arc rather than
+	// a lift and a shove (the path stays inside what TryMantle validated: the lip is cleared before most of the push).
+	// A climb hangs a moment, pulls up hard, then rolls over the lip (the rise ends before the push).
+	const bool bClimb = Traversal == ESOTraversal::Climb;
+	const float RiseEnd = bClimb ? 0.78f : 0.74f;
+	float RiseEased;
+	if (bClimb)
+	{
+		RiseEased = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - 0.08f) / (RiseEnd - 0.08f), 0.0f, 1.0f));
+	}
+	else
+	{
+		// A mantle is a spring up until the chest is level with the edge (the hands land on it), then a push up off
+		// the hands: two beats, not one glide. A ledge already at chest height has only the push.
+		const float Height = FMath::Max(static_cast<float>(MantleTarget.Z - MantleStart.Z), 1.0f);
+		const float HalfHeight = CharacterOwner ? CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.0f;
+		const float Catch = FMath::Clamp(1.0f - (HalfHeight + 47.0f) / Height, 0.0f, 0.9f);   // the rise done when the hands land
+		// (already that high, from a jump: the body comes in to the face first, the hands land, then the push)
+		const float CatchAt = Catch > 0.0f ? 0.3f : 0.2f;
+		if (Alpha < CatchAt)
+		{
+			RiseEased = Catch * (1.0f - FMath::Square(1.0f - Alpha / CatchAt));
+		}
+		else
+		{
+			RiseEased = Catch + (1.0f - Catch) * FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - CatchAt) / (RiseEnd - CatchAt), 0.0f, 1.0f));
+		}
+	}
+	const float OverStart = bClimb ? 0.62f : 0.46f;
+	const float Over = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - OverStart) / (1.0f - OverStart), 0.0f, 1.0f));
+	// in to the face while the rise begins (done before the push over the lip starts)
+	const float In = FMath::SmoothStep(0.0f, bClimb ? 0.18f : 0.2f, Alpha);
+	const float FromX = FMath::Lerp(static_cast<float>(MantleStart.X), static_cast<float>(MantleNear.X), In);
+	const float FromY = FMath::Lerp(static_cast<float>(MantleStart.Y), static_cast<float>(MantleNear.Y), In);
+	return FVector(
+		FMath::Lerp(FromX, static_cast<float>(MantleTarget.X), Over),
+		FMath::Lerp(FromY, static_cast<float>(MantleTarget.Y), Over),
+		FMath::Lerp(MantleStart.Z, MantleTarget.Z, RiseEased));
 }
 
 void USOCharacterMovementComponent::PhysMantle(float DeltaTime, int32 Iterations)
@@ -511,29 +947,20 @@ void USOCharacterMovementComponent::PhysMantle(float DeltaTime, int32 Iterations
 	MantleElapsed += DeltaTime;
 	const float Alpha = MantleDuration > 0.0f ? FMath::Clamp(MantleElapsed / MantleDuration, 0.0f, 1.0f) : 1.0f;
 
-	// Up (eased out), and over the lip once the body is nearly up: the two overlap so the move is one arc rather than
-	// a lift and a shove (the path stays inside what TryMantle validated: the lip is cleared before most of the push).
-	// A clamber hangs a moment, pulls up hard, then rolls over the lip (the rise ends before the push).
-	const float RiseEnd = bClamber ? 0.78f : 0.7f;
-	const float Rise = bClamber ? FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - 0.08f) / (RiseEnd - 0.08f), 0.0f, 1.0f))
-		: FMath::Clamp(Alpha / RiseEnd, 0.0f, 1.0f);
-	const float RiseEased = bClamber ? Rise : 1.0f - FMath::Pow(1.0f - Rise, 3.0f);
-	const float OverStart = bClamber ? 0.62f : 0.42f;
-	const float Over = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Alpha - OverStart) / (1.0f - OverStart), 0.0f, 1.0f));
-
-	const FVector Desired(
-		FMath::Lerp(MantleStart.X, MantleTarget.X, Over),
-		FMath::Lerp(MantleStart.Y, MantleTarget.Y, Over),
-		FMath::Lerp(MantleStart.Z, MantleTarget.Z, RiseEased));
+	// Where the path says the body is now, carried along with whatever it is climbing.
+	const FVector Desired = FromTraversalFrame(TraversalPoint(Alpha));
 	const FVector Delta = Desired - UpdatedComponent->GetComponentLocation();
 	MoveUpdatedComponent(Delta, UpdatedComponent->GetComponentQuat(), false);
 	Velocity = Delta / DeltaTime;
 
 	if (Alpha >= 1.0f)
 	{
-		// Out the far side with the speed you came in with (a sprint vault flows on).
-		const float Exit = bClamber ? MantleExitSpeed : FMath::Max(MantleExitSpeed, MantleEntrySpeed * MantleKeepSpeed);
-		Velocity = (MantleTarget - MantleStart).GetSafeNormal2D() * Exit;
+		// Out the far side the way it came in, with the speed it came in with (a vault keeps nearly all of it, a
+		// sprint mantle most, a climb none).
+		const bool bVault = Traversal == ESOTraversal::VaultLow || Traversal == ESOTraversal::VaultMedium;
+		const float Exit = Traversal == ESOTraversal::Climb ? MantleExitSpeed
+			: FMath::Max(MantleExitSpeed, MantleEntrySpeed * (bVault ? VaultKeepSpeed : MantleKeepSpeed));
+		Velocity = DirFromTraversalFrame((MantleTarget - MantleStart).GetSafeNormal2D()) * Exit;
 		SetMovementMode(MOVE_Walking);
 	}
 }

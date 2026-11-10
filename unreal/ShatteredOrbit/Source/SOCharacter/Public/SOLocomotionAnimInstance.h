@@ -36,6 +36,24 @@ struct SOCHARACTER_API FSOLocomotionClips
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> Slide;
 
+	/** The slow walk (a light stick, aiming, crouched). Without it the walk clip is slowed down instead. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Stroll;
+
+	/** The landing after a fall (blended in by how hard it was). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Land;
+
+	/** Over and onto obstacles: each is read by how far through the move the body is, never by the clock. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Vault;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Mantle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Climb;
+
 	/** Idle variations (Fidget1..n): one plays now and then while standing still and not aiming; each starts and ends
 	 *  on the idle pose. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
@@ -47,6 +65,9 @@ struct SOCHARACTER_API FSOLocomotionClips
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	float RunSpeed = 860.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	float StrollSpeed = 150.0f;
 };
 
 struct FSOLocomotionLayer
@@ -66,8 +87,9 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	virtual void PreUpdate(UAnimInstance* InAnimInstance, float DeltaSeconds) override;
 	virtual bool Evaluate(FPoseContext& Output) override;
 
-	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget */
-	FSOLocomotionLayer Layers[8];
+	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget, 8 Stroll, 9 Land, 10 Vault, 11 Mantle,
+	 *  12 Climb */
+	FSOLocomotionLayer Layers[13];
 
 	// Held gun (players): copied from the instance each update.
 	bool bHold = false;
@@ -86,8 +108,13 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	/** Eye position in component space (first person: the shoulders turn with the view about it). */
 	FVector EyeCS = FVector::ZeroVector;
 
+	/** How much of the arm / stance solve shows (1 = all; hands coming onto and off a ledge blend through it). */
+	float HoldAlpha = 1.0f;
+
 	// Body motion (third-person bodies; see USOLocomotionAnimInstance).
 	float WarpYaw = 0.0f;
+	/** The hips and legs stay where they stood while the aim turns on the spot (degrees, see StandYaw). */
+	float StandYaw = 0.0f;
 	float LeanRoll = 0.0f;
 	float LeanPitch = 0.0f;
 	float PelvisDrop = 0.0f;
@@ -163,6 +190,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
 	float FootReach = 40.0f;
 
+	/** Standing still, the feet stay planted while the aim turns: the hips keep their heading and the spine takes
+	 *  the twist, up to this many degrees; past it the body steps round (a turn on the spot). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float TurnInPlaceAngle = 50.0f;
+
+	/** How far the hips sink when crouched (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float CrouchDrop = 34.0f;
+
+	/** Where in the jump clip the tuck is complete (s). In the air the clip is not played by the clock: the pose
+	 *  follows the rise and the fall (legs driving off, tucked at the top, reaching for the ground coming down). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float JumpTuckTime = 0.22f;
+
+	/** The hips' heading left behind the aim while standing (degrees; 0 when moving). */
+	float GetStandYaw() const { return StandYaw; }
+	bool IsTurningInPlace() const { return bTurning; }
+	/** 0 = legs long, 1 = fully tucked (in the air and through a traversal). */
+	float GetAirTuck() const { return AirTuck; }
+	/** 0 standing .. 1 crouched (the body's pose, eased). */
+	float GetCrouchAlpha() const { return CrouchAlpha; }
+	/** How much of the landing clip shows right now (0..1). */
+	float GetLandWeight() const { return Weights[9]; }
+	/** The hands are on a ledge (a vault, a mantle or a climb). */
+	bool HasLedgeHands() const { return bLedge; }
+	float GetHoldAlpha() const { return HoldAlpha; }
+
 	/** Movement yaw relative to the facing (deg, 0 = forward) and whether the cycle runs backward. */
 	float MoveYaw = 0.0f;
 	bool bBackward = false;
@@ -199,9 +253,10 @@ public:
 	FVector GetFittedOffset(bool bLeft) const { return FitOffset[bLeft ? 1 : 0]; }
 	bool HasFittedGrip() const { return bFitDone; }
 
-	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget. */
-	float Weights[8] = { 1, 0, 0, 0, 0, 0, 0, 0 };
-	float Times[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
+	 *  Mantle, Climb. */
+	float Weights[13] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Times[13] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 	/** Seconds of standing still before an idle variation, picked between these (random each time). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
@@ -230,6 +285,33 @@ protected:
 
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	void UpdateBodyMotion(const ACharacter* Character, float DeltaSeconds);
+
+	float StandYaw = 0.0f;
+	float LastActorYaw = 0.0f;
+	bool bHaveYaw = false;
+	bool bTurning = false;
+	float AirTuck = 0.0f;
+	bool bLedge = false;
+	bool bLedgeWas = false;
+	float HoldAlpha = 1.0f;
+	float HoldAlphaLast = 0.0f;
+	/** 0..1 through the current traversal and what kind (0 none, 1 vault, 2 mantle / climb). */
+	float TraversalAlpha = 0.0f;
+	int32 TraversalKind = 0;
+	bool TraversalClimb = false;
+	/** This update the body touched down, and how fast (cm/s). */
+	bool bLanded = false;
+	float LandImpact = 0.0f;
+	/** Linear cross-fade progress per layer; the weights are its eased shape. */
+	float Ramp[13] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	/** Where in the jump clip the air pose is read (s): take-off at 0, the tuck at JumpTuckTime, the reach for the
+	 *  ground at the end. */
+	float JumpPose = 0.0f;
+	/** The landing layer: how strong this landing is (0..1) and how far through its clip. */
+	float LandStrength = 0.0f;
+	float LandTime = 100.0f;
+	/** 0 standing, 1 crouched: the hips sink over bent legs and the chest comes forward. */
+	float CrouchAlpha = 0.0f;
 
 	FVector LastVelocityCS = FVector::ZeroVector;
 	FVector AccelCS = FVector::ZeroVector;

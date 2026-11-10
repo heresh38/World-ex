@@ -14,6 +14,15 @@ Pose fields:
 Feet planned with `Gait` plant exactly: a foot on the ground moves back at the clip's ground speed, rolling from the
 heel to the ball about real pivots, so at the speed the game plays the clip at (Clips.WalkSpeed / RunSpeed) nothing
 slides. The hips are lowered whenever a planted leg would have to reach farther than it can (no knee pops).
+
+What makes generated motion read as a body and not a machine, and where it lives here:
+  - nothing peaks together: `locomote` drives the spine, chest, head, forearms and hands off the same cycle with a
+    lag each (overlap / follow-through), and `Track.at(t, lags)` does the same for keyed clips;
+  - no pure sine: the swings carry a second harmonic (a quick drive, a slower return), the pelvis loads fast and
+    rises slowly, the swing foot recovers high behind, passes under the hip and comes back toward the ground before
+    it lands (`retract`), so it meets the ground already moving with it;
+  - the two sides are not copies: `asym` scales and shifts one side a little.
+`locomote` and `Track` hold no style either: every number comes from the body's own motion.py.
 """
 import math
 import bpy
@@ -181,7 +190,11 @@ class Gait:
     def __init__(self, body, **p):
         self.b = body
         self.p = dict(v=4.4, cadence=165, duty=.33, front=.42, width=.10, toe_out=8, lift=.10, kick=.10,
-                      strike=12, toeoff=38, swing_in=.015, swing_pitch=-18, heel=0.0)
+                      strike=12, toeoff=38, swing_in=.015, swing_pitch=-18, heel=0.0,
+                      # retract: 0..1, how much of the ground's speed the swing foot has at both ends of the swing (it
+                      # trails back after toe-off and comes back before it lands); peak: where in the swing (0..1) the
+                      # foot is highest (the heel recovery behind the body comes early); None = the old symmetric arc
+                      retract=0.0, peak=None)
         self.p.update(p)
         frames = max(8, round(120.0 / self.p["cadence"] * FPS))   # one cycle = two steps
         self.T = frames / FPS
@@ -217,9 +230,21 @@ class Gait:
         m = minjerk(w)
         ankle = a_off.lerp(a_on, m)
         ankle.x -= sx * p["swing_in"] * math.sin(math.pi * w)
-        ankle.z += p["lift"] * math.sin(math.pi * w) ** 1.5 + p["kick"] * bump(w, .3, .3)
-        # the heel kick carries the foot up behind the body before it swings through
-        ankle.y += p["kick"] * .6 * bump(w, .25, .25)
+        if p["peak"] is None:
+            ankle.z += p["lift"] * math.sin(math.pi * w) ** 1.5 + p["kick"] * bump(w, .3, .3)
+            # the heel kick carries the foot up behind the body before it swings through
+            ankle.y += p["kick"] * .6 * bump(w, .25, .25)
+        else:
+            # along the way: a Hermite curve that leaves and arrives with part of the stance speed (the foot trails
+            # behind the hip after toe-off, reaches ahead and is drawn back before the strike)
+            tang = p["retract"] * p["v"] * (1 - duty) * self.T
+            h00, h10 = 2 * w ** 3 - 3 * w ** 2 + 1, w ** 3 - 2 * w ** 2 + w
+            h01, h11 = -2 * w ** 3 + 3 * w ** 2, w ** 3 - w ** 2
+            ankle.y = h00 * a_off.y + h10 * tang + h01 * a_on.y + h11 * tang
+            # up: the recovery peaks early (the heel comes up behind), the foot stays up as the knee drives through
+            # and comes down late
+            e = math.log(.5) / math.log(max(.05, min(.95, p["peak"])))
+            ankle.z = a_off.z + (a_on.z - a_off.z) * m + (p["lift"] + p["kick"]) * math.sin(math.pi * w ** e) ** 1.25
         if w < .45:
             pitch = -p["toeoff"] + (p["toeoff"] + p["swing_pitch"]) * smooth(w / .45)
         else:
@@ -236,6 +261,160 @@ def arms_down(body, pose):
         k = "upperarm." + s
         pose.rot[k] = [(Y, sx * -body.arms_down)] + pose.rot.get(k, [])
     return pose
+
+
+# --- cyclic locomotion ----------------------------------------------------------------------------------------------
+
+TAU = 2 * math.pi
+
+
+def wave(ph, h2=0.0, ph2=0.0):
+    """cos of the cycle with a second harmonic (h2 its share, ph2 its phase in cycles): a swing that drives one way
+    quicker than it comes back"""
+    return math.cos(TAU * ph) + h2 * math.cos(2 * TAU * (ph + ph2))
+
+
+def locomote(b, g, t, S, lift=0.0):
+    """One pose of a walk or run cycle planned by the Gait `g`, the body above the feet solved from the cycle's phase.
+    Left contact at phase 0. S (all from the body's own motion.py):
+
+      lean        forward lean, deg (hips, spine and chest share it; the head stays level)
+      hip_yaw     pelvis rotation with the stride      hip_roll   pelvis list (the swing side drops)
+      sway, bob   pelvis side shift (m) and rise / fall per step (m; negative = highest over the planted foot: a walk)
+      bob2        second harmonic of the bob (the quick load after the strike)      drop  how low the pelvis rides (m)
+      dip         the extra give at each strike (m)
+      counter     shoulders against the hips (0 = just undoing the pelvis, 1 = as much again)
+      lag         {"spine", "chest", "head", "arm", "forearm", "hand"}: cycles each part runs behind the pelvis
+      nod         chest pitch per step, deg
+      arm         swing amplitude, deg      arm_bias  centre of the swing, deg (negative = carried behind)
+      arm_h2      second harmonic of the swing (the drive)
+      abd         elbow out from the body, deg; abd_back / abd_fwd: more on the back swing, less on the forward one
+      cross       the upper arm turning in on the forward swing, deg (the hand comes toward the middle)
+      elbow       elbow bend, deg; elbow_fwd: more at the front; elbow_back: less (it opens) at the back
+      wrist, wrist_lag  hand bend and how much it drags behind the forearm, deg
+      clav        shoulder girdle forward / back with the arm, deg
+      curl        finger curl (see Pose.curl), thumb
+      knee_out    knee poles (m)
+      asym        the right side's amplitude scale; asym_ph: its phase shift (cycles)
+    """
+    ph = g.phase(t)
+    duty = g.p["duty"]
+    p = Pose()
+    for s, _ in SIDES:
+        p.feet[s], _ = g.foot(s, ph)
+    L = S.get("lag", {})
+    step = (2 * ph) % 1.0
+    bob = S["bob"] * math.cos(TAU * (step - duty)) + S.get("bob2", 0.0) * math.cos(2 * TAU * (step - duty) + 1.1)
+    p.hips = Vector((S["sway"] * math.cos(TAU * (ph - duty / 2)), 0.0,
+                     lift - S["drop"] - bob - S.get("dip", 0.0) * bump(step, .07, .09)))
+    yaw = -S["hip_yaw"] * wave(ph, .12, .08)
+    roll = -S["hip_roll"] * math.cos(TAU * (ph - duty / 2))
+    lean = S["lean"]
+    p.add("hips", (Z, yaw), (Y, roll), (X, lean * .40))
+
+    def turn(lag):                                   # the shoulders' answer to the pelvis, running behind it
+        return S["hip_yaw"] * (1 + S["counter"]) * wave(ph - lag, .12, .08)
+
+    def list_(lag):
+        return S["hip_roll"] * math.cos(TAU * (ph - duty / 2 - lag))
+
+    nod = S.get("nod", 0.0)
+    p.add("spine", (Z, turn(L.get("spine", 0)) * .45), (Y, list_(L.get("spine", 0)) * .6), (X, lean * .32 + nod * .4 * math.cos(2 * TAU * (ph - L.get("spine", 0)) - .6)))
+    p.add("chest", (Z, turn(L.get("chest", 0)) * .55), (Y, list_(L.get("chest", 0)) * .3), (X, lean * .28 + nod * .6 * math.cos(2 * TAU * (ph - L.get("chest", 0)) - .6)))
+    # the head stays on the line of travel and level: it undoes what is below it, a touch late
+    hy = S["hip_yaw"] * S["counter"] * wave(ph - L.get("head", 0), .12, .08)
+    p.add("neck", (Z, -hy * .5), (Y, -roll * .15), (X, -lean * .42))
+    p.add("head", (Z, -hy * .5), (X, -lean * .30 - nod * .5 * math.cos(2 * TAU * (ph - L.get("head", 0)) - .6)))
+
+    for s, sx in SIDES:
+        amp = 1.0 if s == "L" else S.get("asym", 1.0)
+        off = (0.0 if s == "L" else .5 + S.get("asym_ph", 0.0))
+
+        def fwd(lag):                                # -1 = fully back, +1 = fully forward (the left arm back at left contact)
+            return -wave(ph + off - lag, S.get("arm_h2", 0.0), .12) / (1 + abs(S.get("arm_h2", 0.0)))
+
+        f = fwd(L.get("arm", 0))
+        ff = fwd(L.get("forearm", 0))
+        fh = fwd(L.get("hand", 0))
+        ang = S.get("arm_bias", 0.0) + S["arm"] * amp * f                         # + = forward
+        abd = S["abd"] + S.get("abd_back", 0.0) * max(0.0, -f) - S.get("abd_fwd", 0.0) * max(0.0, f)
+        p.add("clavicle." + s, (Z, sx * S.get("clav", 0.0) * f), (Y, sx * -S.get("clav_up", 0.0) * max(0.0, -f)))
+        p.add("upperarm." + s, (Y, -sx * abd), (X, -ang), (Z, sx * S.get("cross", 0.0) * max(0.0, f)))
+        flex = S["elbow"] + S.get("elbow_fwd", 0.0) * max(0.0, ff) - S.get("elbow_back", 0.0) * max(0.0, -ff)
+        p.add("forearm." + s, (b.elbow[s], -flex * (1.0 if s == "L" else S.get("asym_elbow", 1.0))))
+        p.add("hand." + s, (b.elbow[s], -S.get("wrist", 8.0) - S.get("wrist_lag", 0.0) * fh), (Z, sx * S.get("hand_turn", 0.0)))
+        p.curl(s, S["curl"], S.get("thumb", 20))
+    k = S.get("knee_out", .08)
+    p.knee_out = {"L": k, "R": k}
+    return p
+
+
+# --- keyed clips ----------------------------------------------------------------------------------------------------
+
+def blend(a, c, k):
+    """the pose k of the way from a to c: joint rotations the short way round, the rest straight"""
+    k = min(1.0, max(0.0, k))
+    out = Pose()
+    out.hips = a.hips.lerp(c.hips, k)
+    for bone in set(a.rot) | set(c.rot):
+        q = quat(a.rot.get(bone, [])).slerp(quat(c.rot.get(bone, [])), k)
+        out.rot[bone] = [(tuple(q.axis), math.degrees(q.angle))]
+    for bone in set(a.local) | set(c.local):
+        la, lc = a.local.get(bone, [((1, 0, 0), 0.0)]), c.local.get(bone, [((1, 0, 0), 0.0)])
+        out.local[bone] = [(la[0][0], la[0][1] + (lc[0][1] - la[0][1]) * k)]
+    for s in ("L", "R"):
+        fa, fc = a.feet[s], c.feet[s]
+        if fa is not None and fc is not None:
+            out.feet[s] = Foot(fa.ankle.lerp(fc.ankle, k), fa.pitch + (fc.pitch - fa.pitch) * k, fa.yaw + (fc.yaw - fa.yaw) * k,
+                               fa.roll + (fc.roll - fa.roll) * k)
+        else:
+            out.feet[s] = fa if k < .5 else fc
+        out.knee_out[s] = a.knee_out[s] + (c.knee_out[s] - a.knee_out[s]) * k
+    return out
+
+
+class Track:
+    """a clip from key poses: [(time, Pose), ...] eased from one to the next. `at(t, lags)` reads each part of the
+    body a little later than the hips ({"spine", "chest", "head", "arm", "forearm", "hand", "leg"}: seconds), so the
+    body does not arrive in a pose all at once: the hips lead, the chest, head and hands follow through."""
+    PARTS = (("spine", ("spine",)), ("chest", ("chest", "clavicle")), ("head", ("neck", "head")),
+             ("arm", ("upperarm",)), ("forearm", ("forearm",)),
+             ("hand", ("hand", "index", "middle", "ring", "pinky", "thumb")), ("leg", ("thigh", "shin", "foot", "toe")))
+
+    def __init__(self, keys, ease=minjerk):
+        self.keys = sorted(keys, key=lambda k: k[0])
+        self.ease = ease
+
+    def pose(self, t):
+        K = self.keys
+        if t <= K[0][0]:
+            return K[0][1]
+        for (t0, a), (t1, c) in zip(K, K[1:]):
+            if t <= t1:
+                return blend(a, c, self.ease((t - t0) / max(t1 - t0, 1e-6)))
+        return K[-1][1]
+
+    def at(self, t, lags=None):
+        base = self.pose(t)
+        if not lags:
+            return base
+        out = blend(base, base, 0.0)
+        late = {}
+        for part, prefixes in self.PARTS:
+            lag = lags.get(part, 0.0)
+            if lag <= 0.0:
+                continue
+            if lag not in late:
+                late[lag] = self.pose(t - lag)
+            src = late[lag]
+            for bone in list(out.rot):
+                if bone.split(".")[0].split("_")[0] in prefixes:
+                    q = quat(src.rot.get(bone, []))
+                    out.rot[bone] = [(tuple(q.axis), math.degrees(q.angle))]
+            for bone in list(out.local):
+                if bone.split(".")[0].split("_")[0] in prefixes and bone in src.local:
+                    out.local[bone] = src.local[bone]
+        return out
 
 
 # --- baking ---------------------------------------------------------------------------------------------------------

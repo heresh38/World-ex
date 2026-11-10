@@ -24,6 +24,9 @@
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
 #include "SOSound.h"
+#include "SOFxSubsystem.h"
+#include "Materials/MaterialInterface.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Engine/SkeletalMesh.h"
 #include "Net/UnrealNetwork.h"
@@ -446,6 +449,18 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 		Anim->Clips.Jump = Clip(TEXT("Jump"));
 		Anim->Clips.Death = Clip(TEXT("Death"));
 		Anim->Clips.Slide = Clip(TEXT("Slide"));
+		// (this body's newer clips: older imports do without them)
+		auto Own = [this, &Clip](const TCHAR* Name) -> UAnimSequenceBase*
+		{
+			const FString Path = ClipPathPrefix + Name + TEXT(".") + FPaths::GetBaseFilename(ClipPathPrefix) + Name;
+			return FPackageName::DoesPackageExist(FSoftObjectPath(Path).GetLongPackageName()) ? Clip(Name) : nullptr;
+		};
+		Anim->Clips.Stroll = Own(TEXT("Stroll"));
+		Anim->Clips.Land = Own(TEXT("Land"));
+		Anim->Clips.Vault = Own(TEXT("Vault"));
+		Anim->Clips.Mantle = Own(TEXT("Mantle"));
+		Anim->Clips.Climb = Own(TEXT("Climb"));
+		Anim->Clips.StrollSpeed = 150.0f;
 		Anim->Clips.Fidgets.Reset();
 		for (int32 i = 1; i <= 8; ++i)                       // this body's idle variations (Fidget1..n)
 		{
@@ -469,6 +484,10 @@ void ASOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentFov = GetHipFov();
+	if (USOCharacterMovementComponent* Move = GetSOMovement())
+	{
+		Move->OnMovementEvent.AddUObject(this, &ASOCharacter::HandleMovementEvent);
+	}
 	if (HasAuthority() && !Weapon && !DefaultWeapon.IsNull())
 	{
 		EquipWeapon(DefaultWeapon.LoadSynchronous());
@@ -631,8 +650,7 @@ void ASOCharacter::UpdateFeedbackSounds(float DeltaSeconds)
 		{
 			StepDistance = 0.0f;
 			const float Volume = bIsCrouched ? 0.22f : (Move->IsSprinting() ? 0.6f : 0.42f);
-			const FName Step(*FString::Printf(TEXT("footstep_%d"), FMath::RandRange(1, 4)));
-			USOSoundLibrary::PlayFor(this, Step, GetActorLocation() - FVector(0, 0, 85.0f), Volume, ESOSoundRange::Near, 0.08f);
+			USOSoundLibrary::PlayFor(this, SurfaceSound(GetFloorSurface(), TEXT("footstep"), 4), GetActorLocation() - FVector(0, 0, 85.0f), Volume, ESOSoundRange::Near, 0.08f);
 		}
 	}
 
@@ -1544,6 +1562,11 @@ void ASOCharacter::Landed(const FHitResult& Hit)
 	LandDipVel -= FMath::Clamp((-LastAirVz - 150.0f) * 0.16f, 0.0f, 190.0f);
 
 	const USOCharacterMovementComponent* Move = GetSOMovement();
+	// fall damage (off unless the movement component's FallDamageMinSpeed is set)
+	if (const float Damage = Move ? Move->GetFallDamage(Move->GetLastLandSpeed()) : 0.0f; Damage > 0.0f && HasAuthority())
+	{
+		USOCombatStatics::ApplyDamage(this, this, Damage, false);
+	}
 	if (BufferedJumpTime >= 0.0f && Move && GetWorld()->GetTimeSeconds() - BufferedJumpTime <= Move->JumpBufferTime)
 	{
 		Jump();
@@ -1557,6 +1580,137 @@ void ASOCharacter::OnJumped_Implementation()
 	LandDipVel -= 35.0f;   // a small push off the legs before the view rises
 }
 
+FName ASOCharacter::GetFloorSurface() const
+{
+	const FHitResult& Floor = GetCharacterMovement()->CurrentFloor.HitResult;
+	FString Key;
+	if (const UPhysicalMaterial* Phys = Floor.PhysMaterial.Get(); Phys && Phys->SurfaceType != SurfaceType_Default)
+	{
+		Key = Phys->GetName();
+	}
+	else if (const UPrimitiveComponent* Comp = Floor.GetComponent())
+	{
+		const UMaterialInterface* Material = Comp->GetNumMaterials() > 0 ? Comp->GetMaterial(0) : nullptr;
+		Key = (Material ? Material->GetName() : FString()) + TEXT(" ") + Comp->GetName() + TEXT(" ") + GetNameSafe(Comp->GetOwner());
+	}
+	Key.ToLowerInline();
+	auto Has = [&Key](std::initializer_list<const TCHAR*> Words)
+	{
+		for (const TCHAR* Word : Words)
+		{
+			if (Key.Contains(Word))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	if (Has({ TEXT("water"), TEXT("puddle"), TEXT("pool") })) { return TEXT("water"); }
+	if (Has({ TEXT("metal"), TEXT("steel"), TEXT("grate"), TEXT("plate"), TEXT("hull"), TEXT("alloy"), TEXT("rail"), TEXT("pipe"), TEXT("catwalk") })) { return TEXT("metal"); }
+	if (Has({ TEXT("grass"), TEXT("moss"), TEXT("lawn"), TEXT("leaf"), TEXT("park") })) { return TEXT("grass"); }
+	if (Has({ TEXT("dirt"), TEXT("soil"), TEXT("mud"), TEXT("sand"), TEXT("gravel"), TEXT("rubble"), TEXT("ash"), TEXT("hive"), TEXT("chitin") })) { return TEXT("dirt"); }
+	if (Has({ TEXT("wood"), TEXT("plank"), TEXT("crate"), TEXT("timber") })) { return TEXT("wood"); }
+	return TEXT("concrete");
+}
+
+FName ASOCharacter::SurfaceSound(FName Surface, const TCHAR* Kind, int32 Takes)
+{
+	const int32 Take = FMath::RandRange(1, FMath::Max(Takes, 1));
+	if (Surface != TEXT("concrete") && !Surface.IsNone())
+	{
+		const FName Own(*FString::Printf(TEXT("%s_%s_%d"), Kind, *Surface.ToString(), Take));
+		if (USOSoundLibrary::Find(Own))
+		{
+			return Own;
+		}
+	}
+	return FName(*FString::Printf(TEXT("%s_%d"), Kind, Take));
+}
+
+void ASOCharacter::KickDust(float Strength, const FVector& Along)
+{
+	UWorld* World = GetWorld();
+	USOFxSubsystem* Fx = World && World->GetNetMode() != NM_DedicatedServer ? World->GetSubsystem<USOFxSubsystem>() : nullptr;
+	if (!Fx || Strength <= 0.0f)
+	{
+		return;
+	}
+	const FVector Feet = GetActorLocation() - FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 4.0f);
+	const int32 Puffs = FMath::Clamp(FMath::RoundToInt(3.0f + Strength * 5.0f), 3, 9);
+	for (int32 i = 0; i < Puffs; ++i)
+	{
+		const float Angle = (i + FMath::FRand()) * 2.0f * PI / Puffs;
+		const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+		FSOFxParticle P;
+		P.Kind = ESOFxKind::Smoke;
+		P.Position = Feet + Out * 14.0f;
+		P.Velocity = Out * (50.0f + 70.0f * Strength) + Along * 0.25f + FVector(0.0f, 0.0f, 18.0f + 22.0f * FMath::FRand());
+		P.Drag = 3.2f;
+		P.Life = 0.55f + 0.35f * FMath::FRand();
+		P.Size0 = 12.0f + 6.0f * Strength;
+		P.Size1 = 46.0f + 30.0f * Strength;
+		P.Intensity0 = 0.16f + 0.10f * FMath::Min(Strength, 1.0f);
+		P.Intensity1 = 0.0f;
+		P.Color = FLinearColor(0.62f, 0.60f, 0.56f);
+		Fx->Spawn(P);
+	}
+}
+
+void ASOCharacter::HandleMovementEvent(ESOMovementEvent Event, float Strength)
+{
+	UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() == NM_DedicatedServer || bDead)
+	{
+		return;
+	}
+	const FVector Feet = GetActorLocation() - FVector(0.0f, 0.0f, 85.0f);
+	const FVector Flat(GetVelocity().X, GetVelocity().Y, 0.0f);
+	switch (Event)
+	{
+	case ESOMovementEvent::Jumped:
+		USOSoundLibrary::PlayFor(this, TEXT("move_jump"), Feet, 0.45f, ESOSoundRange::Near, 0.06f);
+		break;
+	case ESOMovementEvent::AirJumped:
+		USOSoundLibrary::PlayFor(this, TEXT("move_airjump"), Feet, 0.55f, ESOSoundRange::Near, 0.05f);
+		LandDipVel -= 28.0f;                                     // a short push under the view
+		KickDust(0.35f, -Flat);
+		break;
+	case ESOMovementEvent::Landed:
+	{
+		// the sound of the surface, heavier with the fall; a hard one kicks up dust
+		const float Hard = FMath::Clamp((Strength - 500.0f) / 1100.0f, 0.0f, 1.0f);
+		if (Strength > 220.0f)
+		{
+			USOSoundLibrary::PlayFor(this, SurfaceSound(GetFloorSurface(), TEXT("footstep"), 4), Feet, 0.5f + 0.4f * Hard, ESOSoundRange::Near, 0.05f);
+			USOSoundLibrary::PlayFor(this, Hard > 0.45f ? TEXT("move_land_hard") : TEXT("move_land_soft"), Feet, 0.35f + 0.5f * Hard, ESOSoundRange::Near, 0.05f);
+		}
+		if (Hard > 0.25f)
+		{
+			KickDust(Hard, Flat);
+		}
+		StepDistance = 0.0f;
+		break;
+	}
+	case ESOMovementEvent::SlideStarted:
+		USOSoundLibrary::PlayFor(this, TEXT("move_slide"), Feet, 0.6f, ESOSoundRange::Near, 0.05f);
+		KickDust(0.5f, Flat);
+		break;
+	case ESOMovementEvent::VaultStarted:
+		USOSoundLibrary::PlayFor(this, TEXT("move_vault"), Feet + FVector(0, 0, 80.0f), 0.55f, ESOSoundRange::Near, 0.05f);
+		break;
+	case ESOMovementEvent::MantleStarted:
+	case ESOMovementEvent::ClimbStarted:
+		USOSoundLibrary::PlayFor(this, TEXT("move_mantle"), Feet + FVector(0, 0, 120.0f), 0.55f, ESOSoundRange::Near, 0.05f);
+		break;
+	case ESOMovementEvent::TraversalEnded:
+		USOSoundLibrary::PlayFor(this, SurfaceSound(GetFloorSurface(), TEXT("footstep"), 4), Feet, 0.5f, ESOSoundRange::Near, 0.05f);
+		LandDipVel -= 22.0f;                                     // the feet meet the ground again
+		break;
+	default:
+		break;
+	}
+}
+
 void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 {
 	const float Dt = FMath::Max(DeltaSeconds, 1e-4f);
@@ -1565,12 +1719,25 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	const double Z = GetActorLocation().Z;
 	if (!bFeel)
 	{
+		// the shoulder camera: the capsule pops up and down steps, the view glides over them
+		const bool bShoulder = Move && IsLocallyControlled() && ViewMode == ESOViewMode::ThirdPerson && !bDead;
+		if (bShoulder && bHaveFeelZ && Move->MovementMode == MOVE_Walking)
+		{
+			const float Dz = static_cast<float>(Z - LastFeelZ);
+			if (FMath::Abs(Dz) > 1.5f + static_cast<float>(GetVelocity().Size2D()) * Dt * 1.1f && FMath::Abs(Dz) < 60.0f)
+			{
+				StepSmooth = FMath::Clamp(StepSmooth - Dz, -60.0f, 60.0f);
+			}
+		}
+		StepSmooth = bShoulder ? FMath::FInterpTo(StepSmooth, 0.0f, Dt, 11.0f) : 0.0f;
+		ThirdPersonBoom->TargetOffset = FVector(0.0f, 0.0f, StepSmooth);
 		FeelOffset = FVector::ZeroVector;
-		StepSmooth = LandDip = LandDipVel = CameraRoll = FovBoost = BobAmp = 0.0f;
+		LandDip = LandDipVel = CameraRoll = FovBoost = BobAmp = 0.0f;
 		LastFeelZ = Z;
 		bHaveFeelZ = true;
 		return;
 	}
+	ThirdPersonBoom->TargetOffset = FVector::ZeroVector;
 	const FVector Velocity = GetVelocity();
 	const float Speed = Velocity.Size2D();
 	const bool bGrounded = Move->IsMovingOnGround() && !Move->IsSliding();
@@ -1613,12 +1780,13 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	// 4. Roll: into a slide, a touch toward a strafe, a whisper with the stride.
 	const FVector Right = GetActorRightVector();
 	const float Strafe = Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(FVector::DotProduct(Velocity, Right)) / 440.0f, -1.0f, 1.0f) : 0.0f;
-	const float WantRoll = (Move->IsSliding() ? -SlideCameraRoll : 0.0f) + Strafe * StrafeCameraRoll * (1.0f - Ads)
+	const float VaultArc = Move->IsVaulting() ? FMath::Sin(Move->GetMantleAlpha() * PI) : 0.0f;
+	const float WantRoll = (Move->IsSliding() ? -SlideCameraRoll : 0.0f) + VaultArc * VaultCameraRoll + Strafe * StrafeCameraRoll * (1.0f - Ads)
 		+ FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.25f;
 	CameraRoll = FMath::FInterpTo(CameraRoll, WantRoll, Dt, 7.0f);
 
 	// 5. Field of view widens with speed.
-	const float WantFov = Move->IsSliding() ? SlideFovBoost : (Move->IsSprinting() ? SprintFovBoost * FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f);
+	const float WantFov = Move->IsSliding() ? SlideFovBoost : Move->IsVaulting() ? SprintFovBoost : (Move->IsSprinting() ? SprintFovBoost * FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f);
 	FovBoost = FMath::FInterpTo(FovBoost, WantFov, Dt, 5.0f);
 
 	FeelOffset = FVector(0.0f, BobY, StepSmooth + LandDip + BobZ);

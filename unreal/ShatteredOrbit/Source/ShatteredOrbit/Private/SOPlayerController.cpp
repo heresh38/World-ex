@@ -35,6 +35,10 @@
 #include "Engine/GameViewportClient.h"
 #include "RHI.h"
 #include "UnrealEngine.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/CollisionProfile.h"
+#include "Kismet/GameplayStatics.h"
+#include "SOCharacterMovementComponent.h"
 
 ASOPlayerController::ASOPlayerController()
 {
@@ -374,6 +378,129 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Act([=]() { Orbit(-60.0f, 230.0f, 20.0f); });
 			Snap(0.2f, FString::Printf(TEXT("h_%s_%d_4_frontleft"), *Body, Slot));
 		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 14 || Set == 15)
+	{
+		// The body in motion (files m_<body>_<n>): in slow motion from the side, a turn on the spot (the feet stay), a
+		// jump at take-off, at the top and coming down, a vault over a low wall, a mantle onto a 2 m ledge and a climb
+		// up a 3.3 m one. For checking that the pose follows the motion and the hands land on the edges.
+		const FString Body = Set == 14 ? TEXT("male") : TEXT("female");
+		TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		TSharedRef<TArray<TWeakObjectPtr<AActor>>> Walls = MakeShared<TArray<TWeakObjectPtr<AActor>>>();
+		auto Slow = [this](float Rate) { UGameplayStatics::SetGlobalTimeDilation(this, Rate); };
+		// a block in front of where the character starts: Near cm ahead, Deep cm deep, High cm high
+		auto Wall = [this, Start, Walls](float Near, float Deep, float High)
+		{
+			// (3 m wide: the camera sees the body past its end)
+			AStaticMeshActor* A = GetWorld()->SpawnActor<AStaticMeshActor>();
+			UStaticMeshComponent* M = A->GetStaticMeshComponent();
+			M->SetMobility(EComponentMobility::Movable);
+			M->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
+			M->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+			const FVector Fwd = Start->GetRotation().GetForwardVector();
+			const float Floor = static_cast<float>(Start->GetLocation().Z) - 90.0f;
+			A->SetActorLocationAndRotation(FVector(Start->GetLocation().X, Start->GetLocation().Y, Floor + High * 0.5f) + Fwd * (Near + Deep * 0.5f), Start->GetRotation());
+			A->SetActorScale3D(FVector(Deep / 100.0f, 3.0f, High / 100.0f));
+			Walls->Add(A);
+		};
+		auto Reset = [this, Hero, Start, Walls, Slow]()
+		{
+			Slow(1.0f);
+			for (const TWeakObjectPtr<AActor>& W : *Walls)
+			{
+				if (W.IsValid())
+				{
+					W->Destroy();
+				}
+			}
+			Walls->Reset();
+			if (ASOCharacter* H = Hero())
+			{
+				CaptureMove = FVector2D::ZeroVector;
+				H->HandleSprintReleased();
+				H->HandleJumpReleased();
+				H->TeleportTo(Start->GetLocation(), Start->Rotator());
+				H->GetCharacterMovement()->StopMovementImmediately();
+				SetControlRotation(Start->Rotator());
+			}
+		};
+		// from the character's right, level with the chest, looking at a point Ahead cm in front of the start
+		auto Side = [this, Start](float Ahead, float Up, float Distance, float YawOff = 0.0f)
+		{
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Focus = Start->GetLocation() + Start->GetRotation().GetForwardVector() * Ahead + FVector(0, 0, Up);
+			const FVector Eye = Focus + FRotator(0.0f, Start->Rotator().Yaw + 90.0f + YawOff, 0.0f).Vector() * Distance + FVector(0, 0, 25.0f);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera)) { Cam->GetCameraComponent()->SetFieldOfView(50.0f); }
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(*Body); }
+			if (ASOCharacter* H = Hero())
+			{
+				*Start = FTransform(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f), H->GetActorLocation());
+				View(ESOViewMode::ThirdPerson);
+			}
+		});
+		Do(1.0f, [=]() { Reset(); });
+		// 1. a turn on the spot: the aim goes 40 degrees round, the feet stay
+		Do(1.0f, [=]() { Side(0.0f, 0.0f, 300.0f, -55.0f); });
+		Snap(0.3f, FString::Printf(TEXT("m_%s_1_stand"), *Body));
+		Act([=, this]() { SetControlRotation(FRotator(0.0f, Start->Rotator().Yaw + 40.0f, 0.0f)); });
+		Snap(0.6f, FString::Printf(TEXT("m_%s_2_turned"), *Body));
+		Do(0.1f, [=]() { Reset(); });
+		// 2. a jump: off the ground, at the top, coming down
+		Do(0.6f, [=]() { Side(0.0f, 40.0f, 380.0f, -55.0f); Slow(0.2f); if (ASOCharacter* H = Hero()) { H->HandleJumpPressed(); } });
+		Snap(0.07f, FString::Printf(TEXT("m_%s_3_takeoff"), *Body));
+		Snap(0.25f, FString::Printf(TEXT("m_%s_4_top"), *Body));
+		Snap(0.24f, FString::Printf(TEXT("m_%s_5_down"), *Body));
+		Snap(0.07f, FString::Printf(TEXT("m_%s_5b_land"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && H->GetCharacterMovement()->IsMovingOnGround(); });
+		Do(0.3f, [=]() { Reset(); });
+		// 2b. crouched, then the slow walk, the run and the sprint from the side
+		Do(0.5f, [=]() { if (ASOCharacter* H = Hero()) { H->Crouch(); } Side(0.0f, 0.0f, 300.0f, -55.0f); });
+		Snap(0.6f, FString::Printf(TEXT("m_%s_12_crouch"), *Body));
+		Act([=, this]() { CaptureMove = FVector2D(0.0f, 0.34f); });
+		Do(1.1f, [=]() { Orbit(80.0f, 300.0f, 10.0f); });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_13_crouch_walk"), *Body));
+		Do(0.1f, [=]() { if (ASOCharacter* H = Hero()) { H->UnCrouch(); } Reset(); });
+		for (int32 Pace = 0; Pace < 3; ++Pace)
+		{
+			static const TCHAR* Names[3] = { TEXT("14_stroll"), TEXT("15_run"), TEXT("16_sprint") };
+			Do(0.5f, [=, this]()
+			{
+				CaptureMove = FVector2D(0.0f, Pace == 0 ? 0.34f : 1.0f);
+				if (ASOCharacter* H = Hero(); H && Pace == 2) { H->HandleSprintPressed(); }
+			});
+			for (int32 Take = 0; Take < 3; ++Take)
+			{
+				Do(Take == 0 ? 1.0f : (Pace == 0 ? 0.26f : 0.12f), [=]() { Orbit(80.0f, 300.0f, 10.0f); });
+				Snap(0.0f, FString::Printf(TEXT("m_%s_%s_%d"), *Body, Names[Pace], Take));
+			}
+			Do(0.1f, [=]() { Reset(); });
+		}
+		// 3. a vault over a low wall at a sprint
+		Do(0.5f, [=, this]() { Wall(330.0f, 40.0f, 90.0f); Side(350.0f, 40.0f, 330.0f, -35.0f); Slow(0.2f); CaptureMove = FVector2D(0.0f, 1.0f); if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_6_vault_a"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && H->GetSOMovement()->GetMantleAlpha() > 0.3f; });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_7_vault_b"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && (H->GetSOMovement()->GetMantleAlpha() > 0.6f || !H->GetSOMovement()->IsMantling()); });
+		Do(0.3f, [=]() { Reset(); });
+		// 4. a mantle onto a 2 m ledge
+		Do(0.5f, [=, this]() { Wall(170.0f, 300.0f, 200.0f); Side(150.0f, 150.0f, 400.0f); Slow(0.2f); CaptureMove = FVector2D(0.0f, 1.0f); if (ASOCharacter* H = Hero()) { H->HandleJumpPressed(); } });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_8_mantle_a"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && H->GetSOMovement()->GetMantleAlpha() > 0.3f; });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_9_mantle_b"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && (H->GetSOMovement()->GetMantleAlpha() > 0.55f || !H->GetSOMovement()->IsMantling()); });
+		Do(0.3f, [=]() { Reset(); });
+		// 5. a climb up a 3.3 m ledge
+		Do(0.5f, [=, this]() { Wall(170.0f, 300.0f, 330.0f); Side(150.0f, 230.0f, 520.0f); Slow(0.2f); CaptureMove = FVector2D(0.0f, 1.0f); if (ASOCharacter* H = Hero()) { H->HandleJumpPressed(); } });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_10_climb_a"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && H->GetSOMovement()->GetMantleAlpha() > 0.22f; });
+		Snap(0.0f, FString::Printf(TEXT("m_%s_11_climb_b"), *Body), [Hero]() { const ASOCharacter* H = Hero(); return H && (H->GetSOMovement()->GetMantleAlpha() > 0.6f || !H->GetSOMovement()->IsMantling()); });
+		Do(0.3f, [=]() { Reset(); });
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
@@ -1060,7 +1187,8 @@ void ASOPlayerController::CaptureStep()
 		return;
 	}
 	const FCaptureCue& Cue = CaptureCues[CaptureIndex];
-	if (CaptureWait < Cue.Delay || (Cue.Ready && !Cue.Ready()))
+	// (a cue whose moment never comes is taken anyway after a while: the series never hangs)
+	if (CaptureWait < Cue.Delay || (Cue.Ready && !Cue.Ready() && CaptureWait < Cue.Delay + 8.0f))
 	{
 		return;
 	}

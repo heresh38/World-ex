@@ -1950,9 +1950,137 @@ for _i, (_k, _v) in enumerate(VR_FOLEY.items()):
     SOUNDS["vr_" + _k] = lambda v=_v, i=_i: void_foley(v[0], v[1], v[2], v[3], seed=900 + i * 7)
 
 
+# ============================================================================ movement (the player's body)
+# Footsteps per surface (the game picks footstep_<surface>_<n> from what the feet are on; plain footstep_<n> is
+# concrete), landings, the jump, the air jump, the slide, a vault and a mantle.
+
+def footstep_metal(seed):
+    r = rng(seed)
+    out = silence(0.3)
+    out = place(out, filt(noise(0.03, seed), "band", (900, 4200)) * env_ad(0.03, 0.001, 0.007), 0.0, 0.8)   # sole on plate
+    f = r.uniform(310, 420)
+    out = place(out, modal(0.24, [(f, 0.05, 0.5), (f * 2.31, 0.035, 0.35), (f * 3.9, 0.02, 0.22), (f * 6.2, 0.012, 0.12)], seed + 1), 0.002, 0.55)
+    out = place(out, thump(110, 70, 0.05, 0.014), 0.0, 0.35)
+    out = place(out, click(seed + 2, r.uniform(2600, 3400), 0.25), r.uniform(0.04, 0.06))                   # toe
+    return finish(room(out, 0.2), -11)
+
+
+def footstep_dirt(seed):
+    r = rng(seed)
+    out = silence(0.26)
+    out = place(out, filt(noise(0.08, seed, "pink"), "low", r.uniform(420, 620)) * env_ad(0.08, 0.004, 0.02), 0.0, 1.0)
+    out = place(out, thump(80, 52, 0.06, 0.016), 0.0, 0.4)
+    out = place(out, rustle(0.14, seed + 1, 1500, 6500, 26, 0.3), 0.012)                                   # grit rolling
+    out = place(out, rustle(0.06, seed + 2, 3000, 9000, 10, 0.16), r.uniform(0.05, 0.08))
+    return finish(room(out, 0.06), -11)
+
+
+def footstep_grass(seed):
+    r = rng(seed)
+    out = silence(0.3)
+    out = place(out, filt(noise(0.07, seed, "pink"), "low", r.uniform(320, 460)) * env_ad(0.07, 0.006, 0.02), 0.0, 0.8)
+    out = place(out, rustle(0.2, seed + 1, 2500, 10000, 46, 0.34) * env_ad(0.2, 0.012, 0.06), 0.0)          # blades
+    out = place(out, rustle(0.08, seed + 2, 5000, 12000, 14, 0.14), r.uniform(0.07, 0.1))
+    return finish(out, -12)
+
+
+def footstep_wood(seed):
+    r = rng(seed)
+    out = silence(0.28)
+    f = r.uniform(150, 210)
+    out = place(out, modal(0.2, [(f, 0.035, 0.7), (f * 2.4, 0.02, 0.35), (f * 4.3, 0.01, 0.15)], seed), 0.0, 0.7)
+    out = place(out, filt(noise(0.04, seed + 1), "band", (700, 3200)) * env_ad(0.04, 0.0015, 0.009), 0.0, 0.6)
+    out = place(out, click(seed + 2, r.uniform(1800, 2400), 0.3), r.uniform(0.04, 0.055))
+    return finish(room(out, 0.16), -11)
+
+
+def footstep_water(seed):
+    r = rng(seed)
+    out = silence(0.42)
+    out = place(out, filt(noise(0.06, seed, "pink"), "low", 700) * env_ad(0.06, 0.003, 0.016), 0.0, 0.7)
+    out = place(out, svf_sweep(noise(0.3, seed + 1), "band", r.uniform(1500, 2100), 600, 1.6) * env_ad(0.3, 0.008, 0.07), 0.004, 0.55)  # slosh
+    out = place(out, rustle(0.26, seed + 2, 3500, 12000, 38, 0.3) * env_ad(0.26, 0.01, 0.09), 0.015)        # spray
+    for k in range(3):                                                                                       # drops falling back
+        out = place(out, tone(r.uniform(900, 1700), r.uniform(1900, 3000), 0.03, 0.008) * 0.25, r.uniform(0.12, 0.3))
+    return finish(out, -12)
+
+
+def move_land(hard):
+    out = silence(0.5 if hard else 0.32)
+    out = place(out, thump(120 if hard else 105, 46 if hard else 60, 0.14 if hard else 0.09, 0.04 if hard else 0.024, 1.8), 0.0, 1.0 if hard else 0.7)
+    out = place(out, filt(noise(0.09, 811 if hard else 801), "low", 900) * env_ad(0.09, 0.002, 0.02), 0.0, 0.8)   # both feet
+    out = place(out, rustle(0.22, 803, 1400, 6000, 34, 0.32 if hard else 0.2), 0.01)                             # gear settling
+    if hard:
+        out = place(out, filt(noise(0.05, 805), "band", (500, 2400)) * env_ad(0.05, 0.002, 0.012), 0.035, 0.5)   # a hand / knee
+        out = place(out, rustle(0.25, 807, 2500, 9000, 30, 0.25), 0.09)
+    return finish(room(out, 0.14), -8 if hard else -11)
+
+
+def move_jump():
+    out = silence(0.26)
+    out = place(out, filt(noise(0.05, 821), "low", 800) * env_ad(0.05, 0.003, 0.012), 0.0, 0.7)                 # the push off
+    out = place(out, rustle(0.2, 823, 1800, 8000, 30, 0.3) * env_ad(0.2, 0.03, 0.06), 0.0)                    # cloth and straps
+    out = place(out, filt(noise(0.18, 825, "pink"), "band", (300, 1400)) * env_ad(0.18, 0.06, 0.05), 0.02, 0.18)  # air past
+    return finish(out, -13)
+
+
+def move_airjump():
+    # a short breath of thrust from the suit under the feet, and the cloth it throws
+    t = 0.42
+    out = silence(t)
+    out = place(out, svf_sweep(noise(0.32, 831), "band", 420, 2400, 2.2) * env_ad(0.32, 0.012, 0.085), 0.0, 0.8)
+    out = place(out, thump(150, 70, 0.1, 0.03, 1.6), 0.0, 0.5)
+    out = place(out, tone(520, 1180, 0.2, 0.06, 0.006) * 0.22, 0.0)
+    out = place(out, tone(784, 1570, 0.16, 0.05, 0.006) * 0.12, 0.012)
+    out = place(out, rustle(0.22, 833, 2200, 9000, 30, 0.22), 0.03)
+    return finish(room(out, 0.18), -9)
+
+
+def move_slide():
+    t = 0.85
+    out = silence(t)
+    body = svf_sweep(noise(t, 841, "pink"), "band", 900, 380, 1.2) * env_ad(t, 0.03, 0.34)                    # cloth and armour on the ground
+    grit = svf_sweep(noise(t, 843), "band", 3200, 1500, 2.0) * env_ad(t, 0.02, 0.26) * (0.6 + 0.4 * np.abs(rng(845).standard_normal(secs(t))) ** 0.5)
+    out = place(out, body, 0.0, 0.9)
+    out = place(out, grit, 0.0, 0.42)
+    out = place(out, thump(95, 55, 0.08, 0.022), 0.0, 0.6)                                                    # dropping onto the hip
+    out = place(out, rustle(0.5, 847, 2500, 9000, 60, 0.2), 0.05)
+    return finish(room(out, 0.1), -9)
+
+
+def move_vault():
+    out = silence(0.5)
+    out = place(out, filt(noise(0.04, 851), "band", (600, 3000)) * env_ad(0.04, 0.0015, 0.01), 0.03, 0.9)     # the hand on the top
+    out = place(out, thump(140, 80, 0.06, 0.016), 0.03, 0.4)
+    out = place(out, rustle(0.36, 853, 1600, 8000, 50, 0.34) * env_ad(0.36, 0.06, 0.12), 0.0)                  # the body going over
+    out = place(out, filt(noise(0.2, 855, "pink"), "band", (300, 1500)) * env_ad(0.2, 0.07, 0.06), 0.06, 0.16)
+    return finish(room(out, 0.12), -11)
+
+
+def move_mantle():
+    out = silence(0.62)
+    for k, at in enumerate((0.0, 0.07)):                                                                      # both hands on the edge
+        out = place(out, filt(noise(0.04, 861 + k), "band", (500, 2800)) * env_ad(0.04, 0.0015, 0.011), at, 0.8)
+        out = place(out, thump(130, 75, 0.06, 0.016), at, 0.35)
+    out = place(out, scrape(0.22, 1800, 900, 865, 0.3), 0.16)                                                 # boots on the face
+    out = place(out, rustle(0.4, 867, 1600, 7500, 52, 0.32) * env_ad(0.4, 0.1, 0.14), 0.1)                    # the pull
+    return finish(room(out, 0.12), -11)
+
+
+for _surface, _fn, _seed in (("metal", footstep_metal, 901), ("dirt", footstep_dirt, 921), ("grass", footstep_grass, 941),
+                             ("wood", footstep_wood, 961), ("water", footstep_water, 981)):
+    for _n in range(4):
+        SOUNDS[f"footstep_{_surface}_{_n + 1}"] = (lambda fn=_fn, seed=_seed + 5 * _n: fn(seed))
+SOUNDS.update({"move_land_soft": lambda: move_land(False), "move_land_hard": lambda: move_land(True), "move_jump": move_jump,
+               "move_airjump": move_airjump, "move_slide": move_slide, "move_vault": move_vault, "move_mantle": move_mantle})
+MOVEMENT = [n for n in SOUNDS if n.startswith("move_") or (n.startswith("footstep_") and n.count("_") == 2)]
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unreal", "ShatteredOrbit", "SourceArt", "Audio")
     only = set(sys.argv[2:])  # optional: build just these names
+    if only == {"movement"}:
+        only = set(MOVEMENT)
     os.makedirs(out_dir, exist_ok=True)
     for name, fn in SOUNDS.items():
         if only and name not in only:
