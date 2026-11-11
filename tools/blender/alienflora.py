@@ -15,6 +15,12 @@ gd = the rest (never collides).
   moss(gd, c, r)                   a low cushion of it, bright specks
   bulbs(gd, c, n)                  a stand of lanterns on stalks
   pads(g, gd, c, r)                wide floating pads where water stood (the canal)
+  consume(g, gd, c, w, d, yaw, h)  a building taken whole: great stems wound round it to the roof, strands off every
+                                   edge, moss up its walls, a crown of fans on top
+  moss_sheet(gd, foot, n, w, h)    moss up a wall from its foot, its top edge ragged
+  moss_ground(gd, c, r)            a flat spread of it over paving
+  flowers(gd, c, n)                bells on stalks, faintly alight
+  creeper(gd, a, b)                a stem along the ground from a to b, leaves standing off it
 """
 import math
 import random
@@ -71,22 +77,24 @@ def leaf(gd, p, out, size, rnd, mat="ru_leaf"):
 
 
 def bulb(gd, p, r, mat="ru_bio"):
-    """a small lantern: a glowing drop"""
+    """a small lantern: a glowing drop, round below and drawn to a point above"""
     p = Vector(p)
-    n = 6
-    vs = [tuple(p + Vector((0, 0, r * 1.5)))]
-    for (zz, rr) in ((.7, .75), (0.0, 1.0), (-.8, .6)):
+    n = 8
+    prof = ((1.25, .22), (.85, .55), (.35, .9), (-.15, 1.0), (-.6, .8), (-.9, .45))
+    vs = [tuple(p + Vector((0, 0, r * 1.6)))]
+    for (zz, rr) in prof:
         for i in range(n):
             a = TAU * i / n
             vs.append(tuple(p + Vector((math.cos(a) * r * rr, math.sin(a) * r * rr, r * zz))))
-    vs.append(tuple(p + Vector((0, 0, -r * 1.3))))
+    vs.append(tuple(p + Vector((0, 0, -r * 1.02))))
     faces = [(0, 1 + (i + 1) % n, 1 + i) for i in range(n)]
-    for ring in range(2):
+    for ring in range(len(prof) - 1):
         for i in range(n):
             a, b = 1 + ring * n + i, 1 + ring * n + (i + 1) % n
             faces.append((a, b, b + n, a + n))
     last = len(vs) - 1
-    faces += [(last, 1 + 2 * n + i, 1 + 2 * n + (i + 1) % n) for i in range(n)]
+    o = 1 + (len(prof) - 1) * n
+    faces += [(last, o + i, o + (i + 1) % n) for i in range(n)]
     gd.add(vs, faces, mat, smooth=True)
 
 
@@ -220,23 +228,47 @@ def fungus(gd, p, normal, r, seed, mat="ru_fungus"):
             bulb(gd, c + n * rr * .7 + Vector((0, 0, -rr * .3)), rr * .12)
 
 
-def moss(gd, c, r, seed, mat="ru_moss"):
-    """a low cushion over whatever is under it"""
-    rnd = random.Random(seed)
-    c = Vector(c)
-    m, rings = 10, 3
-    vs = [tuple(c + Vector((0, 0, r * .16)))]
-    for k in range(1, rings + 1):
-        for i in range(m):
-            a = TAU * i / m + k * .3
-            rr = r * k / rings * rnd.uniform(.8, 1.1)
-            vs.append(tuple(c + Vector((math.cos(a) * rr, math.sin(a) * rr, r * .16 * (1 - (k / rings) ** 2) + .015))))
-    faces = [(0, 1 + i, 1 + (i + 1) % m) for i in range(m)]
-    for k in range(rings - 1):
-        for i in range(m):
-            a, b = 1 + k * m + i, 1 + k * m + (i + 1) % m
-            faces.append((a, a + m, b + m, b))
+def _cushions(gd, spots, zf, mat):
+    """Moss as it grows: many small cushions, each lying on the surface under it (`zf(x, y)` -> heights for arrays of
+    points; None = flat at each spot's own z). `spots` = (x, y, z, radius, squash, turn)."""
+    m, rings = 7, 2
+    X, Y, B, Z0 = [], [], [], []
+    for (x, y, z, r, sq, turn) in spots:
+        hgt = min(.11, r * .42)
+        X.append(x); Y.append(y); B.append(hgt); Z0.append(z)
+        for k in range(1, rings + 1):
+            t = k / rings
+            for i in range(m):
+                a = TAU * i / m + turn
+                rr = r * t * (1.0 + .16 * math.sin(a * 3 + turn * 5))
+                dx, dy = math.cos(a) * rr, math.sin(a) * rr * sq
+                ct, st = math.cos(turn), math.sin(turn)
+                X.append(x + dx * ct - dy * st); Y.append(y + dx * st + dy * ct)
+                B.append(hgt * (1 - t * t) - (.035 if k == rings else 0.0)); Z0.append(z)   # the rim goes under the surface
+    Z = zf(X, Y) if zf else Z0
+    vs = [(X[k], Y[k], Z[k] + B[k]) for k in range(len(X))]
+    faces = []
+    per = 1 + m * rings
+    for q in range(len(spots)):
+        o = q * per
+        faces += [(o, o + 1 + i, o + 1 + (i + 1) % m) for i in range(m)]
+        for k in range(rings - 1):
+            for i in range(m):
+                a, b = o + 1 + k * m + i, o + 1 + k * m + (i + 1) % m
+                faces.append((a, a + m, b + m, b))
     gd.add(vs, faces, mat, smooth=True)
+
+
+def moss(gd, c, r, seed, mat="ru_moss", zf=None, count=None):
+    """a colony of moss cushions round c: packed at its heart, thinning and shrinking to nothing at radius r"""
+    rnd = random.Random(seed)
+    spots = []
+    for _ in range(count or int(16 * r * r) + 6):
+        d = rnd.random() ** 1.5                                      # most of them near the middle
+        a = rnd.uniform(0, TAU)
+        rr = rnd.uniform(.07, .26) * (1.15 - .75 * d)
+        spots.append((c[0] + math.cos(a) * r * d, c[1] + math.sin(a) * r * d * .8, c[2], rr, rnd.uniform(.6, 1.0), rnd.uniform(0, TAU)))
+    _cushions(gd, spots, zf, mat)
 
 
 def bulbs(gd, c, n, seed, spread=1.2):
@@ -267,3 +299,145 @@ def pads(g, gd, c, r, seed):
             top = p + Vector((0, 0, hgt + rnd.uniform(.4, .9)))
             rk.tube(gd, "ru_bark", [(p.x, p.y, c.z + hgt), tuple(top)], .02, 4)
             bulb(gd, top + Vector((0, 0, .1)), rnd.uniform(.08, .14))
+
+
+def moss_sheet(gd, foot, normal, width, height, seed, mat="ru_moss"):
+    """moss up a wall from its foot: thick at the bottom, its top edge ragged"""
+    rnd = random.Random(seed)
+    n = Vector((normal[0], normal[1], 0)).normalized()
+    t = Vector((-n.y, n.x, 0))
+    foot = Vector(foot)
+    cols = max(3, int(width / .9))
+    tops = [height * rnd.uniform(.35, 1.0) for _ in range(cols + 1)]
+    vs, faces = [], []
+    for i in range(cols + 1):
+        u = -width / 2 + width * i / cols
+        for k in range(3):
+            z = tops[i] * k / 2
+            vs.append(tuple(foot + t * u + n * (.035 + .05 * (1 - k / 2)) + Vector((0, 0, z))))
+    for i in range(cols):
+        for k in range(2):
+            a = i * 3 + k
+            faces.append((a, a + 3, a + 4, a + 1))
+    gd.add(vs, faces, mat, smooth=True)
+
+
+def moss_ground(gd, c, r, seed, mat="ru_moss", zf=None):
+    """moss spreading over paving: a few colonies run together, cushions strung out along the joints between them"""
+    rnd = random.Random(seed)
+    moss(gd, c, r * .55, seed, mat, zf)
+    for k in range(rnd.randint(2, 4)):
+        a = rnd.uniform(0, TAU)
+        q = (c[0] + math.cos(a) * r * .6, c[1] + math.sin(a) * r * .6, c[2])
+        moss(gd, q, r * rnd.uniform(.25, .4), seed * 5 + k, mat, zf)
+    spots = []
+    for k in range(rnd.randint(2, 4)):                               # along a joint in the paving
+        a = rnd.choice((0.0, math.pi / 2)) + rnd.uniform(-.04, .04)
+        o = rnd.uniform(-r, r) * .5
+        for t in range(int(r * 4)):
+            u = rnd.uniform(-r, r)
+            spots.append((c[0] + math.cos(a) * u - math.sin(a) * o, c[1] + math.sin(a) * u + math.cos(a) * o, c[2],
+                          rnd.uniform(.04, .1), rnd.uniform(.5, .9), a))
+    _cushions(gd, spots, zf, mat)
+
+
+def flowers(gd, c, n, seed, spread=1.0):
+    """Bells: a thin stem that rises and nods over, one to three flowers hanging from it, each five separate pointed
+    petals opening round a small lit heart."""
+    rnd = random.Random(seed)
+    c = Vector(c)
+    for k in range(n):
+        p = c + Vector((rnd.uniform(-spread, spread), rnd.uniform(-spread, spread), 0))
+        hgt = rnd.uniform(.3, .75)
+        lean = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), 0))
+        lean.normalize()
+        reach = hgt * rnd.uniform(.25, .4)
+        stem = [p, p + lean * (reach * .15) + Vector((0, 0, hgt * .55)), p + lean * (reach * .55) + Vector((0, 0, hgt * .95)),
+                p + lean * reach + Vector((0, 0, hgt * .9))]
+        rk.tube(gd, "ru_bark", [tuple(q) for q in stem], .011, 4, r_end=.006, cap=False)
+        for b in range(rnd.randint(1, 3)):
+            hang = stem[3].lerp(stem[2], b * .45) + Vector((0, 0, -.01))
+            r = rnd.uniform(.035, .06)
+            L = r * rnd.uniform(2.2, 3.0)
+            drop = hang + Vector((rnd.uniform(-.01, .01), rnd.uniform(-.01, .01), -rnd.uniform(.03, .07)))
+            rk.tube(gd, "ru_bark", [tuple(hang), tuple(drop)], .005, 3, cap=False)
+            vs, faces = [], []
+            for i in range(5):                                       # each petal: base, two shoulders, a tip curled out
+                a = TAU * i / 5 + b
+                o = Vector((math.cos(a), math.sin(a), 0))
+                t = Vector((-o.y, o.x, 0))
+                q = len(vs)
+                vs += [tuple(drop + o * (r * .25)),
+                       tuple(drop + o * (r * .8) + t * (r * .42) + Vector((0, 0, -L * .45))),
+                       tuple(drop + o * (r * .8) - t * (r * .42) + Vector((0, 0, -L * .45))),
+                       tuple(drop + o * (r * .95) + Vector((0, 0, -L * .5))),
+                       tuple(drop + o * (r * 1.7) + Vector((0, 0, -L * .92)))]
+                faces += [(q, q + 1, q + 3), (q, q + 3, q + 2), (q + 1, q + 4, q + 3), (q + 3, q + 4, q + 2),
+                          (q + 3, q + 1, q), (q + 2, q + 3, q), (q + 3, q + 4, q + 1), (q + 2, q + 4, q + 3)]
+            gd.add(vs, faces, "ru_petal", smooth=True)
+            bulb(gd, drop + Vector((0, 0, -L * .3)), r * .3)
+
+
+def creeper(gd, a, b, seed, r=.06):
+    """a stem that crossed the ground from a to b, leaves standing off it, a lantern here and there"""
+    rnd = random.Random(seed)
+    pts = _wander(a, b, max(5, int((Vector(b) - Vector(a)).length / 1.2)), .7, rnd)
+    for p in pts:
+        p.z = a[2] + r * .8
+    vine(gd, pts, r, seed, leaves=.9, glow=.18, out=(0, 0, 1))
+
+
+def consume(g, gd, c, w, d, yaw, height, base_z, seed):
+    """A building the plants have taken whole: three great stems wound round it from the ground to the roof (thick as
+    a man at the foot), strands hanging from them and from the roof's edge, moss up its walls, fans on top."""
+    rnd = random.Random(seed)
+    cy, sy = math.cos(yaw), math.sin(yaw)
+
+    def P(x, y, z):
+        return Vector((c[0] + x * cy - y * sy, c[1] + x * sy + y * cy, base_z + z))
+
+    def rim(a, out):
+        """the point on the building's outline in direction a (local), `out` clear of the wall"""
+        dx, dy = math.cos(a), math.sin(a)
+        t = min((w / 2) / max(abs(dx), 1e-6), (d / 2) / max(abs(dy), 1e-6))
+        return dx * (t + out), dy * (t + out)
+    for k in range(3):
+        a0 = TAU * k / 3 + rnd.uniform(-.4, .4)
+        turns = rnd.uniform(.7, 1.3) * rnd.choice((-1, 1))
+        n = max(10, int(height / 2.0))
+        pts = []
+        for i in range(n + 1):
+            t = i / n
+            x, y = rim(a0 + turns * TAU * t, .28 + .15 * math.sin(t * 9 + k))
+            pts.append(P(x, y, height * t ** .85))
+        r0 = rnd.uniform(.3, .5)
+        rk.tube(g if k == 0 else gd, "ru_bark", [tuple(p) for p in pts], r0, 8, r_end=.07)
+        for i in range(1, n, 2):                                    # leaves and strands off the stem
+            x, y = rim(a0 + turns * TAU * i / n, 1.0)
+            out = (P(x, y, 0) - P(0, 0, 0)).normalized()
+            leaf(gd, pts[i], out, rnd.uniform(.9, 1.6), rnd)
+            if rnd.random() < .5:
+                e = pts[i] + out * .3 + Vector((0, 0, -rnd.uniform(1.5, 4.0)))
+                vine(gd, _wander(pts[i], e, 4, .15, rnd), .03, seed * 7 + k * 31 + i, leaves=.4, glow=0.0)
+                if rnd.random() < .5:
+                    bulb(gd, e, rnd.uniform(.08, .14))
+    for s, (ax, ay, bx, by) in enumerate(((-w / 2, -d / 2, w / 2, -d / 2), (w / 2, -d / 2, w / 2, d / 2), (w / 2, d / 2, -w / 2, d / 2),
+                                          (-w / 2, d / 2, -w / 2, -d / 2))):
+        nx, ny = (0, -1) if s == 0 else ((1, 0) if s == 1 else ((0, 1) if s == 2 else (-1, 0)))
+        wn = P(nx, ny, 0) - P(0, 0, 0)
+        if rnd.random() < .8:
+            curtain(gd, P(ax + nx * .3, ay + ny * .3, height + .3), P(bx + nx * .3, by + ny * .3, height + .3), min(height * .45, 9.0), seed * 11 + s, .45)
+        if rnd.random() < .75:
+            mid = P((ax + bx) / 2 + nx * .02, (ay + by) / 2 + ny * .02, 0)
+            moss_sheet(gd, mid, (wn.x, wn.y), math.hypot(bx - ax, by - ay) * .8, min(height * .6, 9.0), seed * 13 + s)
+    top = P(rnd.uniform(-w / 5, w / 5), rnd.uniform(-d / 5, d / 5), height)
+    for k in range(7):                                              # a crown of fans over the roof
+        a = TAU * k / 7 + rnd.uniform(-.2, .2)
+        dv = Vector((math.cos(a), math.sin(a), 0))
+        e = top + dv * rnd.uniform(3.0, 6.0) + Vector((0, 0, rnd.uniform(1.0, 3.5)))
+        pts = _wander(top, e, 4, .3, rnd)
+        rk.tube(gd, "ru_bark", [tuple(p) for p in pts], .12, 5, r_end=.03)
+        for p in pts[1:]:
+            leaf(gd, p, dv, rnd.uniform(1.4, 2.4), rnd)
+        if rnd.random() < .5:
+            bulb(gd, e + Vector((0, 0, -.4)), rnd.uniform(.12, .2))

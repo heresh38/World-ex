@@ -31,7 +31,7 @@ def zone_flora(G, H):
 
     def glow(p, radius=900.0):
         nonlocal lit
-        if lit < 60:
+        if lit < 80:
             H.light("bio", p, radius)
             lit += 1
 
@@ -44,14 +44,35 @@ def zone_flora(G, H):
             continue
         g, gd = G[zone]
         af.climber(gd, foot, normal, min(height, 26.0) * rnd.uniform(.5, 1.0), width, 9100 + k, dens)
+        if rnd.random() < dens * .7:
+            af.moss_sheet(gd, foot, normal, width * rnd.uniform(.8, 1.6), rnd.uniform(1.0, 4.0) * dens, 9150 + k)
+        if rnd.random() < dens * .5:
+            af.flowers(gd, (foot[0] + normal[0] * .8, foot[1] + normal[1] * .8, foot[2]), rnd.randint(4, 9), 9170 + k, spread=1.4)
         if rnd.random() < dens * .35:
             af.roots(g, gd, (foot[0] + normal[0] * 1.2, foot[1] + normal[1] * 1.2, foot[2]), rnd.uniform(1.5, 3.0), 9300 + k)
         if rnd.random() < dens * .4:
             af.fungus(gd, (foot[0] + normal[0] * .05, foot[1] + normal[1] * .05, foot[2] + rnd.uniform(.4, 1.6)), normal, rnd.uniform(.25, .5), 9500 + k)
         if rnd.random() < .25:
             glow((foot[0] + normal[0] * 1.5, foot[1] + normal[1] * 1.5, foot[2] + 1.5), 800)
+    # ---- whole buildings: near where it came from, some are taken entirely; further off, a roof edge and a wall
+    taken = 0
+    for k, (zone, c, w, d, yaw, height, base_z) in enumerate(citykit.BUILDINGS):
+        if zone not in G or height < 6.0:
+            continue
+        dens = density(c[1])
+        g, gd = G[zone]
+        if dens > .8 and taken < 16 and rnd.random() < (dens - .62) * .9:
+            af.consume(g, gd, c, w, d, yaw, height, base_z, 9400 + k)
+            taken += 1
+            glow((c[0], c[1], base_z + min(height, 12.0)), 1800)
+        elif rnd.random() < dens * .3:
+            cy, sy = math.cos(yaw), math.sin(yaw)
+            s = rnd.choice((-1, 1))
+            a = (c[0] + (-w / 2) * cy - (s * d / 2) * sy, c[1] + (-w / 2) * sy + (s * d / 2) * cy, base_z + height + .2)
+            b = (c[0] + (w / 2) * cy - (s * d / 2) * sy, c[1] + (w / 2) * sy + (s * d / 2) * cy, base_z + height + .2)
+            af.curtain(gd, a, b, min(height * .4, 7.0), 9450 + k, .4 * dens)
     # ---- over the rubble
-    for k, (zone, c, r) in enumerate(rk.HEAPS):
+    for k, (zone, c, r, top) in enumerate(rk.HEAPS):
         if zone not in G or zone == "backdrop":
             continue
         dens = density(c[1])
@@ -60,13 +81,37 @@ def zone_flora(G, H):
         g, gd = G[zone]
         a = rnd.uniform(0, TAU)
         p = (c[0] + math.cos(a) * r * .75, c[1] + math.sin(a) * r * .75, c[2])
-        af.moss(gd, (c[0] + math.cos(a + 2) * r * .5, c[1] + math.sin(a + 2) * r * .5, c[2] + .05), rnd.uniform(.8, 1.8), 9700 + k)
+        af.moss(gd, (c[0] + math.cos(a + 2) * r * .45, c[1] + math.sin(a + 2) * r * .45, c[2]), rnd.uniform(.9, 1.9), 9700 + k, zf=top)
         af.bulbs(gd, p, rnd.randint(3, 7), 9800 + k, spread=r * .35)
+        af.moss_ground(gd, (c[0] + math.cos(a + 1) * r * 1.1, c[1] + math.sin(a + 1) * r * 1.1, c[2]), rnd.uniform(1.5, 3.5) * dens, 9850 + k, zf=top)
+        if rnd.random() < dens * .6:
+            af.flowers(gd, (c[0] + math.cos(a - 1) * r * .9, c[1] + math.sin(a - 1) * r * .9, c[2]), rnd.randint(3, 8), 9870 + k)
         if rnd.random() < dens * .5:
             q = (c[0] + math.cos(a + 3.5) * r * 1.1, c[1] + math.sin(a + 3.5) * r * 1.1, c[2])
             af.vine(gd, af._wander(q, (c[0], c[1], c[2] + r * .35), 6, .4, rnd), rnd.uniform(.04, .08), 9900 + k, glow=.25)
 
     V, S, M, D, L = P.VERGE, P.STACKS, P.GALLERIA, P.DEEPLINE, P.SLUICE
+    # ---- across the streets: stems that crossed from one side to the other, more of them nearer its sources
+    for i, (zone, n0, n1, half) in enumerate((("verge", V["n0"] + 30, V["n1"], 8.5), ("stacks", S["alley"]["n0"] + 6, S["alley"]["n1"] - 4, 8.5),
+                                              ("causeway", -420.0, -324.0, 7.5), ("approach", -316.0, -212.0, 7.5), ("boulevard", -134.0, -50.0, 11.0))):
+        g, gd = G[zone]
+        n = n0 + rnd.uniform(4, 16)
+        while n < n1:
+            dens = density(n)
+            if rnd.random() < dens * .55:
+                s = rnd.choice((-1, 1))
+                af.creeper(gd, (s * half, n, .06), (-s * half * rnd.uniform(.2, 1.0), n + rnd.uniform(-6, 6), .06), 9600 + i * 40 + int(n) % 37, r=rnd.uniform(.05, .11))
+                if rnd.random() < .5:
+                    af.moss_ground(gd, (s * (half - 1.5), n, .05), rnd.uniform(1.5, 3.0), 9650 + int(n) % 91)
+            n += rnd.uniform(14, 30)
+    # ---- trees that came up through the paving
+    for i, (zone, e, n, h) in enumerate((("stacks", 7.2, S["alley"]["n0"] + 30.0, 7.0), ("stacks", -7.2, S["alley"]["n0"] + 76.0, 8.5),
+                                         ("boulevard", 15.4, -108.0, 8.0), ("boulevard", -15.4, -62.0, 9.5), ("verge", -9.6, -2052.0, 5.0),
+                                         ("causeway", -8.2, -372.0, 6.5))):
+        g, gd = G[zone]
+        af.tree(g, gd, (e, n, .1), h, 9700 + i, crown=.9)
+        af.flowers(gd, (e + 1.0, n + .6, .1), 6, 9710 + i)
+        glow((e, n, h * .7), 1300)
     # ---- the Verge: only the first of it, hanging from the toll canopy and the broken flyover
     g, gd = G["verge"]
     tn = V["toll_n"]
@@ -98,6 +143,14 @@ def zone_flora(G, H):
     af.tree(g, gd, (rot[0], rot[1], 2.3), 12.5, 9050, crown=1.3)
     glow((rot[0], rot[1], 9.0), 2400)
     glow((rot[0] + 6, rot[1] - 5, 3.0), 1200)
+    af.flowers(gd, (rot[0] + 3.5, rot[1] - 2.0, .14), 12, 9054, spread=2.2)
+    af.moss_ground(gd, (rot[0] - 5.0, rot[1] + 4.0, .06), 4.0, 9055)
+    af.moss_ground(gd, (rot[0] + 7.0, rot[1] - 6.0, .06), 3.2, 9056)
+    for i in range(6):
+        s = (-1) ** i
+        n = M["n0"] + 40 + i * 44
+        af.moss_sheet(gd, (s * (M["conc"] - .21), n, 0), (-s, 0), 8.0, rnd.uniform(1.5, 3.4), 9057 + i)
+        af.creeper(gd, (s * (M["conc"] - 1.0), n + 6, .06), (-s * 2.0, n + rnd.uniform(-8, 8), .06), 9064 + i, r=.07)
     af.moss(gd, (rot[0] + 2.5, rot[1] + 1.0, .14), 1.6, 9051)
     af.moss(gd, (rot[0] - 2.0, rot[1] - 2.4, .14), 1.2, 9052)
     af.bulbs(gd, (rot[0] - 3.0, rot[1] + 3.0, .14), 7, 9053)
@@ -165,6 +218,13 @@ def zone_flora(G, H):
     for i, bn in enumerate(L["bridges"]):
         af.curtain(gd, (-half, bn - 2.0, .1), (half if i == 0 else -2.0, bn - 2.0, .1), 3.6, 9280 + i, .7)
         af.curtain(gd, (-half, bn + 2.0, .1), (half if i == 0 else -2.0, bn + 2.0, .1), 3.0, 9283 + i, .5)
+    for i, (e, n, h) in enumerate(((-9.0, -850.0, 6.5), (6.0, -774.0, 8.0), (-4.0, -668.0, 10.0), (10.5, -596.0, 7.0))):   # a grove in the bed
+        af.tree(g, gd, (e, n, zc), h, 9292 + i, crown=1.0)
+        af.flowers(gd, (e + 1.5, n - 1.0, zc), 9, 9296 + i, spread=2.0)
+        af.moss_ground(gd, (e - 1.0, n + 1.5, zc), 3.5, 9299 + i)
+    for i in range(10):
+        n = L["n0"] + 22 + i * 33
+        af.creeper(gd, (-half + .5, n, zc), (half - .5, n + rnd.uniform(-10, 10), zc), 9260 + i, r=rnd.uniform(.08, .16))
     af.tree(g, gd, (-11.5, -640.0, zc), 9.0, 9290, crown=1.0)
     af.tree(g, gd, (11.0, -812.0, zc), 7.5, 9291, crown=.8)
     glow((-11.5, -640.0, zc + 6.0), 1800)

@@ -206,8 +206,13 @@ audit, art direction per district, the ten stages and their status; the prototyp
 each district its architecture: resi, mixed, office, civic, industrial, lab; the skyline is `far_building`),
 `streetkit.py` + `meridian_story.py` = the streets and what was left in them (our own vehicles, the army's line,
 each district's story), `alienflora.py` + `meridian_flora.py` = the alien plants and where they grow (from
-`citykit.ANCHORS` and `rk.HEAPS`, denser toward the canal, the tunnel and the Crown). Zones run in the order
-districts, story, flora. Look at the geometry before importing: build with `--noexport --save=x.blend`, then
+`citykit.ANCHORS` and `rk.HEAPS`, denser toward the canal, the tunnel and the Crown). Buildings the growth has taken (`alienflora.consume`) are
+picked from `citykit.BUILDINGS`. Moss lies ON what it grows on
+(`alienflora.moss(..., zf=)`: cushions set to the surface's own height; a rubble mound hands out its height function in
+`rk.HEAPS`): never a sheet or dome pushed through another mesh, never a flat polygon laid on the ground. `meridian_landmarks.py` = one landmark per district (control tower and gantry, the
+three slabs with sky bridges, the Galleria's arch and vault, the station canopy, the annex with its cooling towers,
+the downed gunship, the Assembly's dome). Zones run in the order
+districts, landmarks, story, flora. Look at the geometry before importing: build with `--noexport --save=x.blend`, then
 `blender -b x.blend -P tools/blender/meridian_preview.py -- <outdir>` (workbench views along the route).
 **What is drawn is not what collides** (the cause of "the enemy can shoot through walls / get stuck in walls and
 rocks"): a Nanite mesh's collision is built from its simplified fallback (the Crown kept 3% of its triangles, even

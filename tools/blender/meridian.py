@@ -30,6 +30,7 @@ import meridian_plan as P
 import meridian_south as south
 import meridian_flora as flora
 import meridian_story as story
+import meridian_landmarks as landmarks
 
 TAU = rk.TAU
 ART = os.path.join(P.ROOT, "unreal", "ShatteredOrbit", "Data", "op_meridian_art.json")
@@ -641,7 +642,8 @@ def zone_backdrop(G):
         w, d_ = rnd.uniform(10, 26), rnd.uniform(10, 26)
         h = rnd.uniform(4, 14)
         off = [(0, 0, 0)] * 4 + [(0, 0, -rnd.uniform(0, h * .6)) for _ in range(4)]
-        rk.box(g, rnd.choice(("ru_concrete", "ru_panel")), (x, y, h / 2), (w / 2, d_ / 2, h / 2), rnd.uniform(0, TAU), top_mat="ru_fracture", offsets=off)
+        # (low buildings with their windows, not grey boxes)
+        rk.box(g, rnd.choice(("ru_far_a", "ru_far_b", "ru_far_a")), (x, y, h / 2), (w / 2, d_ / 2, h / 2), rnd.uniform(0, TAU), top_mat="ru_fracture", offsets=off)
         k += 1
     # the spire: a tapering octagonal shaft in tiers with fins, glowing seams, a broken crown of spikes
     sx, sy = P.SPIRE["c"]
@@ -784,6 +786,7 @@ ZONES = dict(ground=zone_ground, approach=zone_approach, gate=zone_gate, bouleva
              terraces=zone_terraces, crown=zone_crown, backdrop=zone_backdrop, blockers=zone_blockers, hive=zone_hive)
 for _name, _fn in south.ZONES.items():
     ZONES[_name] = (lambda fn: lambda G: fn(G, Helpers))(_fn)
+ZONES["landmarks"] = lambda G: landmarks.zone_landmarks(G, Helpers)   # one thing per district seen from far off
 ZONES["story"] = lambda G: story.zone_story(G, Helpers)          # what was left in the streets, district by district
 ZONES["flora"] = lambda G: flora.zone_flora(G, Helpers)          # (last: it grows on what the others built)
 # Each district's architecture (citykit.STYLES): what its buildings were before they were ruined.

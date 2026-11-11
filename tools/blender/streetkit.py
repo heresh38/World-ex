@@ -70,13 +70,30 @@ def street(g, gd, a, b, width, seed, lanes=2, walk=0.0, z=0.04):
         s, off = rnd.uniform(3, L - 3), rnd.uniform(-width / 4, width / 4)
         p = at(s, off)
         rk.cyl(gd, "ru_metal", (p[0], p[1]), .42, z, z + .02, n=14, smooth=False)
-    for k in range(int(L / 16) + 1):                               # potholes and old patches
+    for k in range(int(L / 16) + 1):                               # where the surface broke up: a wash of grit and stones
         s, off = rnd.uniform(2, L - 2), rnd.uniform(-width / 2 + 1, width / 2 - 1)
         p = at(s, off)
         r = rnd.uniform(.5, 1.6)
-        m = 9
-        vs = [(p[0], p[1], z + .008)] + [(p[0] + math.cos(TAU * i / m) * r * rnd.uniform(.6, 1.1), p[1] + math.sin(TAU * i / m) * r * rnd.uniform(.5, 1.0), z + .008) for i in range(m)]
-        gd.add(vs, [(0, 1 + i, 1 + (i + 1) % m) for i in range(m)], "ru_rubble" if rnd.random() < .6 else "ru_fracture")
+        m, rings = 22, 3
+        ph = [rnd.uniform(0, TAU) for _ in range(3)]
+        sq, turn = rnd.uniform(.5, .9), rnd.uniform(0, TAU)
+        vs = [(p[0], p[1], z + .03)]
+        for q in range(1, rings + 1):
+            t = q / rings
+            for i in range(m):
+                ang = TAU * i / m
+                rr = r * t * (1 + .22 * math.sin(ang * 2 + ph[0]) + .14 * math.sin(ang * 5 + ph[1]) + .08 * math.sin(ang * 9 + ph[2]))
+                dx, dy = math.cos(ang) * rr, math.sin(ang) * rr * sq
+                # (the rim lies under the road: the wash thins to nothing, it has no edge)
+                vs.append((p[0] + dx * math.cos(turn) - dy * math.sin(turn), p[1] + dx * math.sin(turn) + dy * math.cos(turn),
+                           z + .03 * (1 - t * t) - (.02 if q == rings else 0.0)))
+        faces = [(0, 1 + i, 1 + (i + 1) % m) for i in range(m)]
+        for q in range(rings - 1):
+            for i in range(m):
+                f0, f1 = 1 + q * m + i, 1 + q * m + (i + 1) % m
+                faces.append((f0, f0 + m, f1 + m, f1))
+        gd.add(vs, faces, "ru_rubble", smooth=True)
+        rk.chunks(gd, (p[0], p[1]), r * .8, rnd.randint(4, 9), rnd.randint(0, 99999), size=(.04, .14), z=z)
 
 
 # ------------------------------------------------------------------ street furniture

@@ -258,6 +258,18 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{ TEXT("s17_pump"), FVector(3, -745, -3.3), FVector(0, -700, -1) },
 			{ TEXT("s18_causeway"), FVector(45, -552, 1.7), FVector(30, -500, 2) },
 			{ TEXT("s19_aerial_south"), FVector(150, -2250, 150), FVector(0, -1900, 0) },
+			// each district's landmark, and the growth where it is thickest (files l*)
+			{ TEXT("l1_tower"), FVector(6, -2300, 1.7), FVector(-47, -2292, 20) },
+			{ TEXT("l2_gantry"), FVector(0, -2034, 1.7), FVector(0, -1988, 10) },
+			{ TEXT("l3_slabs"), FVector(20, -1900, 1.7), FVector(-84, -1852, 45) },
+			{ TEXT("l4_arch"), FVector(0, -1640, 1.7), FVector(0, -1604, 11) },
+			{ TEXT("l5_canopy"), FVector(-12, -1292, 1.7), FVector(2, -1256, 5) },
+			{ TEXT("l6_annex"), FVector(11, -788, -3.3), FVector(-48, -736, 9) },
+			{ TEXT("l7_cooling"), FVector(-9, -792, -3.3), FVector(77, -764, 20) },
+			{ TEXT("l8_gunship"), FVector(23, -478, 1.7), FVector(22, -503, 2.0) },
+			{ TEXT("l9_dome"), FVector(26, -22, 1.7), FVector(-98, 16, 46) },
+			{ TEXT("l10_grove"), FVector(9, -646, -3.3), FVector(-4, -668, 0) },
+			{ TEXT("l11_moss"), FVector(40, -522, 1.7), FVector(31, -513, 0.3) },
 			{ TEXT("m1_approach"), FVector(2, -306, 1.7), FVector(0, -200, 9) },
 			{ TEXT("m2_gate"), FVector(-6, -228, 1.7), FVector(0, -200, 10) },
 			{ TEXT("m3_court"), FVector(10, -192, 2.0), FVector(-4, -140, 4) },
@@ -275,7 +287,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		{
 			const FView Copy = V;
 			Act([=]() { Cam(Copy.Eye, Copy.At); });
-			Snap(1.5f, Copy.Name);
+			// (a view far from the last one hitches while its district comes in: a still taken sooner showed the next view)
+			Snap(3.0f, Copy.Name);
 		}
 		// the Altered, lined up in the plaza; the Colossus on the Crown
 		Act([=]()

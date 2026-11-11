@@ -63,6 +63,8 @@ def material(name):
         nt.links.new(sp.outputs['Blue'], b.inputs['Metallic'])
     elif name == "ru_glass":
         m = bl.mat(name, '#0d1317', .7, .07)
+    elif name == "ru_petal":
+        m = bl.mat(name, '#8a3fd0', 0.0, .5, emit='#b04cff', strength=.5)
     elif name == "ru_paint":
         m = bl.mat(name, '#b9b6a8', 0.0, .7)
     elif name == "ru_block_dark":
@@ -405,24 +407,64 @@ def heap(g, c, r, h, seed, chunks=14, res=.22, ry=None):
     V, Q = sdf.mesh(fn, lo, hi, res, project_iters=1)
     if len(Q) == 0:
         return
-    # rubble on what faces up, broken concrete on the steep sides
-    P0, P1, P2 = V[Q[:, 0]], V[Q[:, 1]], V[Q[:, 2]]
-    nz = np.cross(P1 - P0, P2 - P0)
-    nz = nz[:, 2] / (np.linalg.norm(nz, axis=1) + 1e-9)
-    mats = ["ru_rubble" if z > .72 else "ru_fracture" for z in nz]
+    def top(X, Y, fn=fn, z0=cz - .2, z1=cz + h + 1.6):
+        """the mound's surface under each point (x, y): the highest place the field is solid"""
+        X = np.asarray(X, np.float32); Y = np.asarray(Y, np.float32)
+        Z = np.full(len(X), z0, np.float32)
+        found = np.zeros(len(X), bool)
+        n = 28
+        for k in range(n):                                           # down from above in steps, then halved
+            z = z1 - (z1 - z0) * k / (n - 1)
+            d = fn(np.stack([X, Y, np.full(len(X), z, np.float32)], 1))
+            hit = (d < 0) & ~found
+            Z[hit] = z
+            found |= hit
+        lo, hi = Z.copy(), Z + (z1 - z0) / (n - 1)
+        for _ in range(7):
+            mid = (lo + hi) * .5
+            inside = fn(np.stack([X, Y, mid], 1)) < 0
+            lo = np.where(inside, mid, lo); hi = np.where(inside, hi, mid)
+        return np.where(found, (lo + hi) * .5, cz).tolist()
     if g.col and ZONE:
-        HEAPS.append((ZONE, (cx, cy, cz), max(r, ry)))
+        HEAPS.append((ZONE, (cx, cy, cz), max(r, ry), top))
     # drawn fine, collided with coarse: a mound's collision at the drawn resolution is most of a zone's collision mesh
     # for a few centimetres nobody feels on rubble
     was = g.col
     coarse = was and HEAP_COL_RES > res * 1.2
     g.col = was and not coarse
-    g.add(V.tolist(), Q.tolist(), mats, smooth=True)
+    # one material over the whole mound (two, split face by face on the slope, drew a sawtooth across it)
+    g.add(V.tolist(), Q.tolist(), "ru_rubble", smooth=True)
     if coarse:
         V2, Q2 = sdf.mesh(fn, lo, hi, HEAP_COL_RES, project_iters=1)
         if len(Q2):
             g.col, g.vis = True, False
             g.add(V2.tolist(), Q2.tolist(), "ru_rubble")
+    # What a mound is made of: the broken pieces lying in and on it (drawn only: none stands a hand above the fill).
+    # Small lumps everywhere, blocks, and a few floor slabs lying on the slope with the fall of it.
+    g.col, g.vis = False, True
+    pieces = []
+    for _ in range(min(300, int(14 + 5.0 * r * ry))):
+        a = rnd.random() * TAU; d = math.sqrt(rnd.random()) * .97
+        kind = rnd.random()
+        if kind < .1:
+            hx, hy, hz = rnd.uniform(.7, 1.5), rnd.uniform(.5, 1.0), rnd.uniform(.07, .12)          # a slab
+        elif kind < .45:
+            sz = rnd.uniform(.25, .55)
+            hx, hy, hz = sz, sz * rnd.uniform(.5, .9), sz * rnd.uniform(.3, .6)                   # a block
+        else:
+            sz = rnd.uniform(.08, .22)
+            hx, hy, hz = sz, sz * rnd.uniform(.6, 1.0), sz * rnd.uniform(.4, .8)                  # a lump
+        pieces.append((cx + math.cos(a) * r * d, cy + math.sin(a) * ry * d, hx, hy, hz, a, kind))
+    Zs = top([p[0] for p in pieces], [p[1] for p in pieces])
+    e = .35
+    Zx = top([p[0] + e for p in pieces], [p[1] for p in pieces])
+    Zy = top([p[0] for p in pieces], [p[1] + e for p in pieces])
+    for (x, y, hx, hy, hz, a, kind), z, zx, zy in zip(pieces, Zs, Zx, Zy):
+        sx, sy = max(-1.0, min(1.0, (zx - z) / e)), max(-1.0, min(1.0, (zy - z) / e))          # the slope it lies on
+        Rm = (Matrix.Rotation(math.atan(sy) + rnd.uniform(-.25, .25), 3, 'X') @ Matrix.Rotation(-math.atan(sx) + rnd.uniform(-.25, .25), 3, 'Y')
+              @ Matrix.Rotation(rnd.uniform(0, TAU), 3, 'Z'))
+        off = [(rnd.uniform(-.28, .28) * hx, rnd.uniform(-.28, .28) * hy, rnd.uniform(-.3, .3) * hz) for _ in range(8)]
+        box(g, "ru_fracture" if kind > .1 and rnd.random() < .7 else "ru_concrete", (x, y, z + hz * rnd.uniform(-.1, .35)), (hx, hy, hz), R=Rm, offsets=off)
     g.col, g.vis = was, True
 
 

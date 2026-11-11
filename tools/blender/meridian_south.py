@@ -813,7 +813,10 @@ def zone_sluice(G, H):
         k = 0
         while n < n1 - 20:
             L = rnd.uniform(18, 28)
-            if not (s > 0 and n + L > R["n0"] - 14):
+            # (none where the spillway comes up the east bank, nor where the research annex stands on the west one,
+            # nor in front of the cooling towers: the plant's yard is open to the canal)
+            if (not (s > 0 and n + L > R["n0"] - 14) and not (s < 0 and S["pump_n"] - 66 < n + L / 2 < S["pump_n"] + 36)
+                    and not (s > 0 and S["pump_n"] - 104 < n + L / 2 < S["pump_n"] + 14)):
                 rk.tower(g, gd, (s * (half + 20 + rnd.uniform(0, 6)), n + L / 2), rnd.uniform(16, 20), L, rnd.randint(4, 9), yaw=rnd.uniform(-.05, .05),
                          seed=3200 + k * 2 + (s > 0), style=rnd.choice(("panel", "concrete")), top=(.35, 1.0), holes=2, col_top=7.0)
             n += L + rnd.uniform(4, 8)

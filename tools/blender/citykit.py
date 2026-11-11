@@ -42,6 +42,9 @@ SIGNS = ("ru_holo_cyan", "ru_holo_magenta", "ru_sign_amber")
 # Where a plant can climb: (zone, foot on the ground at a wall, the wall's outward normal, how high the wall still
 # stands there, how wide). Filled by building() for the buildings beside the route; meridian_flora.py grows from them.
 ANCHORS = []
+# Every building beside the route: (zone, centre, w, d, yaw, how high it still stands, foot z). The plants take some
+# of them whole.
+BUILDINGS = []
 SIDES = ((Vector((0, -1)), Vector((1, 0)), 0.0), (Vector((1, 0)), Vector((0, 1)), PI / 2),
          (Vector((0, 1)), Vector((-1, 0)), PI), (Vector((-1, 0)), Vector((0, -1)), 1.5 * PI))
 
@@ -390,6 +393,8 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
             p = P(x, y, 0)
             rk.heap(g, (p[0], p[1], base_z), rnd.uniform(3, 6) * (.6 + damage * .6), rnd.uniform(1.0, 3.0) * (.5 + damage * .7),
                     seed * 7 + s + _, chunks=6, res=.4)
+    if rk.ZONE and lod < 2 and base_z < .5:
+        BUILDINGS.append((rk.ZONE, (c[0], c[1]), w, d, yaw, max([levels[k] for (k, i, j), on in cell.items() if on] or [levels[1]]), base_z))
     limit = rk.COL_TOP if col_top is None else col_top
     for fi in range(first_face, len(g.F)):
         if g.C[fi] and (limit <= 0 or min(g.V[v][2] for v in g.F[fi]) - base_z > limit):
