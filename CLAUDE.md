@@ -102,12 +102,24 @@ track, heel strike, shoulder drive, loose fists, a squared idle; idle variations
 idle; variations weight shift / look back / neck stretch). Clips: Idle, Stroll (1.5 m/s: the slow walk), Walk (the
 game's 4.4 m/s run), Run (8.6 m/s sprint), Jump (three poses: take-off at 0, the tuck at 0.22 s, the reach for the
 ground at the end; the game reads it by the rise and the fall), Land, Vault / Mantle / Climb (1 s each, read by how far
-through the move the body is), Slide, Death, Fidget1-3. Generated motion must never read as a machine (the owner:
+through the move the body is), Crouch / CrouchWalk (2.7 m/s; authored down there, feet planted: the game bends
+nothing at runtime), Slide, Death, Fidget1-3. Generated motion must never read as a machine (the owner:
 "very robotic" on the first set, whose every joint ran on one sine): nothing peaks together (`gait.locomote` runs the
 spine, chest, head, forearms and hands a lag behind the pelvis; keyed clips use `gait.Track.at(t, lags)`), no pure
 sine (second harmonics, the swing foot recovers high and is drawn back before it lands: `retract`, `peak`), the two
 sides are not copies (`asym`), elbows open behind and close in front, and a walk is a walk (double support, the body
-highest over the planted leg), not a slowed run. Work on motion without rebuilding a body: `blender -b <saved build>
+highest over the planted leg), not a slowed run. A run is TALL, UPRIGHT and LONG-LEGGED (the owner: "crouched like a penguin" on
+the set whose feet landed far ahead of the hips, 18 cm apart, knees out; then "still a bit too much knees bent ... more
+upright ... more force"): the foot lands just ahead of the hip (`front` under a quarter: every cm of reach at the strike
+pulls the hips down for the whole stance), the knee bends about 20-30 degrees at mid-stance and no more, the hips stay
+within 2 cm of standing height (`drop` negative), the trunk is upright (`lean` 5 / 11, `chest_up`), the heel is carried
+through the stance at a sprint (`stance`), the arms pump hard. Tune against numbers, not by eye: `reclip.py -- <sex>
+--measure=Walk,Run` prints the hips' height, each knee's bend and each ankle per frame without baking. His gait is a
+man's (the owner: "male run/walk seems too much like a women" on the narrow-track set): the feet under the hip joints
+(`width` 7-8.5 cm, knees straight ahead: wide track + knees out is the waddle), the pelvis level and still (`hip_roll`
+about 1, `sway` .002-.01), the shoulders doing the turning (`counter` 1.2+), elbows a little out, heavy half-closed
+hands; hers stays on a line with the hips rolling. `ShatteredOrbit.Anim.RunsTall` measures the hips against standing
+height and the feet's track in the game. Work on motion without rebuilding a body: `blender -b <saved build>
 -P tools/blender/hero/reclip.py -- <sex> --frames=<dir> --clips=Walk,Run` (13 s: re-bakes and renders frames; look
 at them), `--glb=SourceArt/Characters/src/hero_<sex>.glb` writes the game's source again, then `export_fbx.py ...
 --per-item` and `SO_IMPORT_ONLY=player_clips` imports just the clips. `hero/gait.py` is the engine only (no style):
@@ -184,9 +196,12 @@ with the console: `SOCensus` (what is loaded by folder + anything of another are
 area uses must not live in one area's folder (until it moves it is listed under `"shared"` in areas.json). Never keep
 a bare pointer to a loaded asset across a timer or a level change (nothing holds it: it is collected). Test
 `ShatteredOrbit.Area.OneAtATime`.
-The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own sized from
-the gun's bounds (`ASOCharacter::RefreshHolsters`: long guns stand side by side on the back, one behind each shoulder,
-never stacked; handguns at the hips; the gun in hand is stowed while mantling); pictures `SOCaptureSeries 1 12|13`.
+The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own
+(`ASOCharacter::RefreshHolsters`: long guns stand side by side on the back, one behind each shoulder, placed by their
+BORE LINE inside the shoulders' width, never by their outline (a gun with fins was pushed out beside the body);
+handguns at the hips; the gun in hand is stowed while mantling); pictures `SOCaptureSeries 1 12|13`. The waist never
+twists far (`USOLocomotionAnimInstance::MaxWaistTwist`, 20 degrees): strafing or standing while the aim turns, the
+pelvis takes half the turn up to that and the legs the rest about their own hip joints (a bare waist shows every degree).
 Movement (`USOCharacterMovementComponent`, the owner's brief of 2026-11-09): instant run, built sprint, coyote time,
 buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
@@ -204,7 +219,11 @@ the fall (`AirTuck`); in a traversal the hands go onto the measured edge by arm 
 leans over it; cross-fades are eased. Tests `ShatteredOrbit.Movement.*`, `ShatteredOrbit.Anim.BodyFollowsMotion`;
 pictures `SOCaptureSeries 1 14|15` (slow motion, files `SO_m_*`). The animation layers: Idle / Stroll / Walk / Run by
 speed on one shared cycle phase, Jump by the rise and fall, Land by the impact, Vault / Mantle / Climb by progress,
-crouch as sunk hips over the clip's feet (`CrouchDrop`). Still to do: first-person hands on a ledge.
+crouched: the body's own Crouch / CrouchWalk on the same phase (`CrouchDrop` only sinks a body that has no crouch
+clips; sinking the standing clips over runtime leg IK made the legs flip: the owner's "legs glitch everywhere and under
+the floor"). The runtime leg IK's knee can only bend ahead of the hip-ankle line in the leg's own heading
+(`KneeAhead`: an almost straight animated leg says nothing about the knee's side). Test `ShatteredOrbit.Anim.CrouchWalk`
+(feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). Still to do: first-person hands on a ledge.
 Enemies, the Altered (`altered.py` + `SOAltered.h`), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
 by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as
 they track): Remnant (SMG, pushes in), armed Stalker (auto rifle, cover), Veilborn (scout rifle from cover, the odd void

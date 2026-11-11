@@ -455,7 +455,12 @@ bool FSOHolstersTest::RunTest(const FString& Parameters)
 		const FBox A = Covers(Player->GetHolsteredRig(0)).ExpandBy(-0.5f);
 		const FBox B = Covers(Player->GetHolsteredRig(2)).ExpandBy(-0.5f);
 		TestTrue(TEXT("both back guns are there"), A.IsValid && B.IsValid);
-		TestFalse(TEXT("the two guns on the back do not overlap"), A.Intersect(B));
+		// side by side: their bore lines a good hand apart, each inside the shoulders' width
+		const FTransform Mesh = Player->GetMesh()->GetComponentTransform();
+		const float LineR = static_cast<float>(Mesh.InverseTransformPosition(Player->GetHolsteredRig(0)->GetComponentLocation()).X);
+		const float LineL = static_cast<float>(Mesh.InverseTransformPosition(Player->GetHolsteredRig(2)->GetComponentLocation()).X);
+		TestTrue(FString::Printf(TEXT("the two guns on the back sit side by side (bore lines %.0f cm right and %.0f cm left of the spine)"), -LineR, LineL),
+			LineR < -6.0f && LineL > 6.0f && LineR > -14.0f && LineL < 14.0f);
 		const FTransform ToBody = Player->GetMesh()->GetComponentTransform();
 		const float Right = static_cast<float>(ToBody.InverseTransformPosition(A.GetCenter()).X);
 		const float Left = static_cast<float>(ToBody.InverseTransformPosition(B.GetCenter()).X);
@@ -521,7 +526,9 @@ bool FSOHolstersTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("three long guns, heavy in hand: the primary behind the right shoulder"), Player->GetHolsterPlace(0), FName(TEXT("back_right")));
 		TestEqual(TEXT("the special behind the left"), Player->GetHolsterPlace(1), FName(TEXT("back_left")));
 		TestTrue(TEXT("and the heavy in the hands"), Player->GetHolsterPlace(2).IsNone() && Player->GetHolsteredRig(2) == nullptr);
-		TestFalse(TEXT("they do not overlap"), Covers(Player->GetHolsteredRig(0)).ExpandBy(-0.5f).Intersect(Covers(Player->GetHolsteredRig(1)).ExpandBy(-0.5f)));
+		const FTransform Mesh = Player->GetMesh()->GetComponentTransform();
+		TestTrue(TEXT("on either side of the spine"), Mesh.InverseTransformPosition(Player->GetHolsteredRig(0)->GetComponentLocation()).X < -6.0f
+			&& Mesh.InverseTransformPosition(Player->GetHolsteredRig(1)->GetComponentLocation()).X > 6.0f);
 	}
 	return true;
 }

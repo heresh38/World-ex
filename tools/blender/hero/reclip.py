@@ -1,13 +1,16 @@
 """Re-bakes a hero body's clips on a saved build, without rebuilding the body: for working on motion.
 
 blender -b <saved.blend> -P tools/blender/hero/reclip.py -- male|female [--glb=out.glb] [--save=out.blend]
-        [--frames=dir --clips=Walk,Run --n=8 --views=side,front]
+        [--frames=dir --clips=Walk,Run --n=8 --views=side,front] [--measure=Walk,Run]
 
   <saved.blend>   a rigged, dressed build (build.py -- <sex> --glb=... --save=<saved.blend>)
   --glb           write the game's GLB again (the same file build.py writes: SourceArt/Characters/src/hero_<sex>.glb)
   --save          save the blend with the new clips
   --frames        render --n frames of each of --clips (default: all) from each of --views into this folder
                   (<clip>_<view>_<i>.png, workbench, orthographic): a quick look at the motion
+
+  --measure       no bake: prints each clip's numbers frame by frame (hips against standing height, knee bend, ankle
+                  height, trunk pitch) and stops: tune against these, then look at frames
 
 The clips come from <sex>/motion.py through gait.py exactly as in a full build (rig.animate).
 """
@@ -89,6 +92,11 @@ def main():
         pb.rotation_mode = 'QUATERNION'
         pb.rotation_quaternion = (1, 0, 0, 0)
         pb.location = (0, 0, 0)
+    if isinstance(flags.get("--measure"), str):
+        import gait
+        body, clips = rig_mod.motion_clips(arm, T, sex)
+        gait.measure(body, clips, flags["--measure"].split(","), log)
+        return
     made = rig_mod.animate(arm, T, sex, log)
     arm.animation_data.action = bpy.data.actions["Idle"]
     if isinstance(flags.get("--frames"), str):

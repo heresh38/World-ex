@@ -40,6 +40,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** The game's window lost or regained the foreground. */
+	void OnWindowActivation(bool bActive);
+	FDelegateHandle ActivationHandle;
 
 private:
 	void CaptureStep();

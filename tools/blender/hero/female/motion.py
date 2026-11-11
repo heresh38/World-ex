@@ -5,7 +5,9 @@
             quick breathing
   Stroll    the slow move (1.5 m/s: a light stick, aiming, crouched): an easy, swinging walk on one line, the hips
             rolling over each step, shoulders quiet, the arms loose and close with soft elbows and trailing wrists
-  Walk      the game's default move (4.4 m/s): a light run. Feet landing close to the line of travel (crossover),
+  Crouch    crouched and still: the left foot ahead, the right back on its toes, knees close, chest folded, head up
+  CrouchWalk  the crouched move (2.7 m/s): hips low the whole way round, short quick steps, a foot always down
+  Walk      the game's default move (4.4 m/s): a light, upright run. Feet landing close to the line of travel (crossover),
             quick short steps, the heel recovering high, a pronounced hip roll and sway, little shoulder turn, arms
             carried close with the forearms swinging across the body, hands relaxed and a beat behind
   Run       the sprint (8.6 m/s): the same character at speed, quick cadence, heels to the seat, a lighter lean
@@ -53,27 +55,61 @@ def heel_lift():
 SOFT = ((22, 34, 18), (30, 42, 22), (36, 46, 24), (40, 50, 26))        # relaxed, open hands
 OPEN = ((6, 10, 5), (9, 13, 6), (12, 16, 8), (15, 19, 9))              # fingers long, a soft fan
 GRIP = ((38, 56, 28),) * 4
-STROLL = dict(v=1.5, cadence=122, duty=.60, front=.48, width=.028, toe_out=5, lift=.03, kick=.03, strike=13, toeoff=46,
+STROLL = dict(v=1.5, cadence=134, duty=.60, front=.37, width=.028, toe_out=5, lift=.03, kick=.03, strike=13, toeoff=50,
               swing_in=-.010, swing_pitch=-8, retract=.22, peak=.36)
-STROLL_BODY = dict(lean=2.5, hip_yaw=8, hip_roll=8.5, sway=.028, bob=-.011, bob2=.002, drop=.008, dip=.0, counter=.25, nod=.6,
+STROLL_BODY = dict(lean=2.5, hip_yaw=7, hip_roll=5.5, sway=.016, bob=-.011, bob2=.002, drop=0.0, dip=.0, counter=.25, nod=.6,
                    lag=dict(spine=.03, chest=.06, head=.08, arm=.04, forearm=.09, hand=.14),
                    arm=17, arm_bias=-2, arm_h2=.08, abd=3, abd_back=1, abd_fwd=2, cross=8, elbow=20, elbow_fwd=16, elbow_back=6,
                    wrist=4, wrist_lag=12, hand_turn=8, clav=1.5, curl=((8, 12, 6), (12, 18, 9), (16, 22, 12), (20, 26, 14)), thumb=8,
-                   knee_out=-.04, asym=.94, asym_ph=.015)
-WALK = dict(v=4.4, cadence=180, duty=.21, front=.48, width=.035, toe_out=4, lift=.08, kick=.32, strike=6, toeoff=38,
-            swing_in=-.012, swing_pitch=-18, retract=.30, peak=.40)
-WALK_BODY = dict(lean=7, hip_yaw=9, hip_roll=7, sway=.020, bob=.022, bob2=.005, drop=.016, dip=.004, counter=.3, nod=1.0,
+                   knee_out=-.012, asym=.94, asym_ph=.015)
+# The run: upright and long: the foot lands just ahead of the hip on a nearly straight leg, the rear leg drives straight
+# behind, the heel comes half way up in recovery. Hers stays on one line with the hips rolling a little.
+WALK = dict(v=4.4, cadence=172, duty=.19, front=.22, width=.030, toe_out=3, lift=.08, kick=.20, strike=6, toeoff=48,
+            swing_in=-.012, swing_pitch=-16, retract=.34, peak=.42, stance=2)
+WALK_BODY = dict(lean=5, hip_yaw=8, hip_roll=3.5, sway=.006, bob=.010, bob2=.004, drop=-.020, dip=0.0, counter=.4, nod=1.2, chest_up=3,
                  lag=dict(spine=.03, chest=.05, head=.07, arm=.03, forearm=.08, hand=.13),
-                 arm=32, arm_bias=-12, arm_h2=.14, abd=3, abd_back=4, abd_fwd=1, cross=20, elbow=78, elbow_fwd=16, elbow_back=20,
-                 wrist=4, wrist_lag=14, hand_turn=6, clav=3, clav_up=1, curl=SOFT, thumb=16,
-                 knee_out=-.05, asym=.95, asym_ph=.012, asym_elbow=1.04)
-RUN = dict(v=8.6, cadence=248, duty=.17, front=.44, width=.035, toe_out=3, lift=.11, kick=.48, strike=2, toeoff=46,
-           swing_in=-.010, swing_pitch=-28, retract=.35, peak=.42)
-RUN_BODY = dict(lean=12, hip_yaw=10, hip_roll=5.5, sway=.014, bob=.026, bob2=.005, drop=.028, dip=.004, counter=.35, nod=1.4,
+                 arm=40, arm_bias=-12, arm_h2=.16, abd=3, abd_back=4, abd_fwd=1, cross=20, elbow=80, elbow_fwd=14, elbow_back=24,
+                 wrist=4, wrist_lag=14, hand_turn=6, clav=4, clav_up=1, curl=SOFT, thumb=16,
+                 knee_out=-.012, asym=.95, asym_ph=.012, asym_elbow=1.04)
+RUN = dict(v=8.6, cadence=244, duty=.16, front=.24, width=.030, toe_out=2, lift=.10, kick=.33, strike=-4, toeoff=50,
+           swing_in=-.010, swing_pitch=-26, retract=.36, peak=.42, stance=14)
+RUN_BODY = dict(lean=10, hip_yaw=9, hip_roll=3.0, sway=.004, bob=.015, bob2=.004, drop=-.016, dip=0.0, counter=.45, nod=1.6, chest_up=2,
                 lag=dict(spine=.03, chest=.05, head=.07, arm=.03, forearm=.08, hand=.13),
-                arm=50, arm_bias=-8, arm_h2=.18, abd=3, abd_back=6, abd_fwd=1, cross=20, elbow=86, elbow_fwd=12, elbow_back=30,
-                wrist=2, wrist_lag=16, hand_turn=6, clav=6, clav_up=2, curl=SOFT, thumb=16,
-                knee_out=-.05, asym=.96, asym_ph=.010, asym_elbow=1.03)
+                arm=56, arm_bias=-8, arm_h2=.20, abd=3, abd_back=6, abd_fwd=1, cross=20, elbow=86, elbow_fwd=10, elbow_back=34,
+                wrist=2, wrist_lag=16, hand_turn=6, clav=7, clav_up=2, curl=SOFT, thumb=16,
+                knee_out=-.012, asym=.96, asym_ph=.010, asym_elbow=1.03)
+# Crouched: the hips low between bent legs the whole way round (authored down there: nothing is bent at runtime), short
+# quick steps with a foot always on the ground, knees close, the chest folded forward, the head up.
+CROUCH = dict(v=2.7, cadence=244, duty=.44, front=.48, width=.060, toe_out=6, lift=.05, kick=.02, strike=3, toeoff=22,
+              swing_in=0.0, swing_pitch=-6, retract=.18, peak=.42)
+CROUCH_BODY = dict(lean=32, hip_yaw=6, hip_roll=3.0, sway=.010, bob=.007, bob2=0.0, drop=.28, dip=.003, counter=.4, nod=.8, chest_up=0,
+                   lag=dict(spine=.03, chest=.05, head=.07, arm=.03, forearm=.08, hand=.13),
+                   arm=8, arm_bias=6, arm_h2=0.0, abd=5, abd_back=2, abd_fwd=1, cross=14, elbow=74, elbow_fwd=6, elbow_back=6,
+                   wrist=4, wrist_lag=6, hand_turn=6, clav=2, curl=SOFT, thumb=16, knee_out=.03, asym=.96, asym_ph=.012)
+
+
+def crouch_pose(b, t, hp, up):
+    """crouched and still: the left foot ahead, the right back on its toes, knees close, the weight between them"""
+    p = Pose()
+    br = math.sin(TAU * t / 2.8)
+    for s, sx in gait.SIDES:
+        a = b.ankle[s]
+        fwd = (-.13 if s == "L" else .10) * b.scale
+        pitch = -hp if s == "L" else -hp - 22.0
+        p.feet[s] = Foot(b.planted(s, (sx * .085 * b.scale, a.y + fwd), pitch, 8), pitch, 8)
+    p.hips = Vector((.004 * math.sin(TAU * t / 5.6), .02, up - .29 * b.scale - .002 * (1 + br)))
+    p.add("hips", (X, 14))
+    p.add("spine", (X, 10 - .6 * br))
+    p.add("chest", (X, 6 - 1.0 * br))
+    p.add("neck", (X, -11))
+    p.add("head", (X, -14 + .4 * br), (Z, 1.2 * math.sin(TAU * t / 5.6 + .8)))
+    for s, sx in gait.SIDES:
+        p.add("upperarm." + s, (Y, -sx * 5), (X, -12), (Z, sx * 10))
+        p.add("forearm." + s, (b.elbow[s], -60))
+        p.add("hand." + s, (b.elbow[s], -4), (Z, sx * 8))
+        p.curl(s, SOFT, 16)
+    p.knee_out = {"L": .03, "R": .05}
+    return p
 
 
 def idle_pose(b, t, shift=0.0, hp=None):
@@ -141,6 +177,14 @@ def clips(b):
     hp = heel_pitch(b)
     up = heel_lift()
     stroll, walk, run = Gait(b, **dict(STROLL, heel=hp)), Gait(b, **dict(WALK, heel=hp)), Gait(b, **dict(RUN, heel=hp))
+    crouch = Gait(b, **dict(CROUCH, heel=hp))
+    crouch_body = dict(CROUCH_BODY, drop=CROUCH_BODY["drop"] * b.scale)
+
+    def Crouch(t):
+        return crouch_pose(b, t, hp, up)
+
+    def CrouchWalk(t):
+        return locomote(b, crouch, t, crouch_body, up)
 
     def Idle(t):
         return idle_pose(b, t)
@@ -395,6 +439,7 @@ def clips(b):
 
     return {"Idle": (Idle, 5.6, True), "Stroll": (Stroll, stroll.T, True), "Walk": (Walk, walk.T, True), "Run": (Run, run.T, True),
             "Jump": (Jump, .5, False), "Land": (Land, .5, False), "Vault": (Vault, 1.0, False), "Mantle": (Mantle, 1.0, False),
-            "Climb": (Climb, 1.0, False), "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
+            "Climb": (Climb, 1.0, False), "Crouch": (Crouch, 5.6, True), "CrouchWalk": (CrouchWalk, crouch.T, True),
+            "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Fidget1": (fidget(4.4, none, weight), 4.4, False), "Fidget2": (fidget(4.2, look_back), 4.2, False),
             "Fidget3": (fidget(4.0, stretch), 4.0, False)}, (walk, run)

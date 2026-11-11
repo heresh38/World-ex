@@ -460,7 +460,10 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 		Anim->Clips.Vault = Own(TEXT("Vault"));
 		Anim->Clips.Mantle = Own(TEXT("Mantle"));
 		Anim->Clips.Climb = Own(TEXT("Climb"));
+		Anim->Clips.Crouch = Own(TEXT("Crouch"));
+		Anim->Clips.CrouchWalk = Own(TEXT("CrouchWalk"));
 		Anim->Clips.StrollSpeed = 150.0f;
+		Anim->Clips.CrouchSpeed = GetCharacterMovement() ? GetCharacterMovement()->MaxWalkSpeedCrouched : 270.0f;
 		Anim->Clips.Fidgets.Reset();
 		for (int32 i = 1; i <= 8; ++i)                       // this body's idle variations (Fidget1..n)
 		{
@@ -801,8 +804,8 @@ void ASOCharacter::RefreshHolsters()
 	const float BackDepth = ((bFemale ? HolsterBackDepth.Y : HolsterBackDepth.X) + (GetWornPiece(TEXT("outer"), false) ? HolsterCoat : 0.0f)) * K;
 	const float BeltDepth = (bFemale ? 10.5f : 12.0f) * K;
 	const float HipSide = (bFemale ? HolsterHipSide.Y : HolsterHipSide.X) * K;
-	const float SpineGap = 1.6f;                                   // each back gun keeps this far from the midline
-	const float AcrossMax = 25.0f;                                 // a gun taller than this (sights to grip) stands on edge
+	const float SpineGap = 1.6f;                                   // a back gun's top keeps this far from the midline
+	const float ShoulderX = FMath::Max(FMath::Abs(static_cast<float>(RefCS(TEXT("upperarm_L")).GetLocation().X)), 12.0f);
 
 	bool bBackTaken[2] = { false, false };
 	bool bHipTaken[2] = { false, false };
@@ -863,18 +866,19 @@ void ASOCharacter::RefreshHolsters()
 				bBackTaken[Side] = true;
 				const float Sign = Side == 0 ? -1.0f : 1.0f;
 				Place = Side == 0 ? TEXT("back_right") : TEXT("back_left");
-				// muzzle up and a little out over the shoulder; its top to the spine, the grip outward. A very tall gun
-				// is turned onto its edge (grip out and back) until it is no wider than the half of the back it has.
-				const float Tall = static_cast<float>(Box.GetSize().Z);
-				const float Roll = FMath::Acos(FMath::Clamp(AcrossMax / FMath::Max(Tall, 1.0f), 0.0f, 1.0f));
-				const FVector Barrel(Sign * 0.14f, 0.0f, 0.99f);
-				const FVector Top(-Sign * FMath::Cos(Roll), FMath::Sin(Roll), 0.0f);
-				Rot = FRotationMatrix::MakeFromXZ(Barrel, Top).ToQuat();
+				// Flat on the back behind its shoulder, muzzle up and a little out, its top to the spine and the grip
+				// outward. It is placed by its bore line (the rig's own origin), never by its outline: a gun with fins
+				// or a tall sight would otherwise be pushed out past the shoulder. The line sits as far from the spine
+				// as the gun's top needs, but always inside the shoulder's width.
+				Rot = FRotationMatrix::MakeFromXZ(FVector(Sign * 0.10f, 0.0f, 0.995f), FVector(-Sign, 0.0f, 0.0f)).ToQuat();
 				const FBox B = Turned(Rot);
+				const float Line = FMath::Clamp(static_cast<float>(Box.Max.Z) + SpineGap, ShoulderX * 0.42f, ShoulderX * 0.62f);
+				// (its side on the back: the flat of the receiver, not the tip of a fin)
+				const float Thick = FMath::Min(static_cast<float>(Side == 0 ? -Box.Min.Y : Box.Max.Y), 6.5f);
 				const float Middle = static_cast<float>(Chest.Z) + 1.0f * K;
 				const float Low = FMath::Max(Middle - 0.5f * static_cast<float>(B.GetSize().Z), static_cast<float>(Hips.Z) - 6.0f * K);
-				At = FVector(Sign * SpineGap - (Sign < 0.0f ? B.Max.X : B.Min.X), Chest.Y - BackDepth - 1.0f - B.Max.Y, Low - B.Min.Z);
-				BackOuter = FMath::Max(BackOuter, BackDepth + 1.0f + static_cast<float>(B.GetSize().Y));
+				At = FVector(Sign * Line, Chest.Y - BackDepth - 1.0f - Thick - (Side == 1 ? 1.5f : 0.0f), Low - B.Min.Z);
+				BackOuter = FMath::Max(BackOuter, BackDepth + 2.5f + 2.0f * Thick);
 			}
 			else
 			{

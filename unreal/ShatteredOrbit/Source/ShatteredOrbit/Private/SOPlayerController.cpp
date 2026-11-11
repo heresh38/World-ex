@@ -36,6 +36,7 @@
 #include "RHI.h"
 #include "UnrealEngine.h"
 #include "Engine/StaticMeshActor.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Engine/CollisionProfile.h"
 #include "Kismet/GameplayStatics.h"
 #include "SOCharacterMovementComponent.h"
@@ -53,6 +54,31 @@ void ASOPlayerController::BeginPlay()
 		AddDefaultMappingContext();
 		SetInputMode(FInputModeGameOnly());
 		SetShowMouseCursor(false);
+		// Leaving the window (the Windows key, alt-tab) and coming back: no key stays held, and the game takes the
+		// mouse again by itself instead of waiting for a click.
+		if (FSlateApplication::IsInitialized())
+		{
+			ActivationHandle = FSlateApplication::Get().OnApplicationActivationStateChanged().AddUObject(this, &ASOPlayerController::OnWindowActivation);
+		}
+	}
+}
+
+void ASOPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (ActivationHandle.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().OnApplicationActivationStateChanged().Remove(ActivationHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void ASOPlayerController::OnWindowActivation(bool bActive)
+{
+	FlushPressedKeys();
+	if (bActive && !bShowMouseCursor)
+	{
+		SetInputMode(FInputModeGameOnly());
+		FSlateApplication::Get().SetAllUserFocusToGameViewport();
 	}
 }
 
@@ -104,6 +130,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		{
 			UE_LOG(LogShatteredOrbit, Log, TEXT("  camera %s rot %s | actor %s yaw %.1f | aim %.2f"), *PlayerCameraManager->GetCameraLocation().ToCompactString(),
 				*PlayerCameraManager->GetCameraRotation().ToCompactString(), *H->GetActorLocation().ToCompactString(), H->GetActorRotation().Yaw, H->GetAimProgress());
+			if (const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(H->GetMesh()->GetAnimInstance()))
+			{
+				const float Floor = static_cast<float>(H->GetActorLocation().Z) - H->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+				UE_LOG(LogShatteredOrbit, Log, TEXT("  body: hips %.1f cm up, pelvis drop %.1f, crouch %.2f (capsule %s, half height %.0f), lean %.1f, speed %.0f, weights idle %.2f stroll %.2f walk %.2f run %.2f jump %.2f land %.2f"),
+					static_cast<float>(H->GetMesh()->GetBoneLocation(TEXT("hips")).Z) - Floor, Anim->GetPelvisDrop(), Anim->GetCrouchAlpha(), H->bIsCrouched ? TEXT("crouched") : TEXT("standing"),
+					H->GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), Anim->GetLeanPitch(), H->GetVelocity().Size2D(), Anim->Weights[0], Anim->Weights[8], Anim->Weights[1], Anim->Weights[2], Anim->Weights[3], Anim->Weights[9]);
+			}
 			const USkeletalMeshComponent* Arms = H->GetFirstPersonArms();
 			UE_LOG(LogShatteredOrbit, Log, TEXT("  arms visible %d rendered %d hiddenInGame %d bounds %s r=%.0f view %d"), Arms->IsVisible(), Arms->WasRecentlyRendered(0.2f),
 				Arms->bHiddenInGame, *Arms->Bounds.Origin.ToCompactString(), Arms->Bounds.SphereRadius, (int32)H->GetViewMode());
@@ -471,17 +504,18 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Do(1.1f, [=]() { Orbit(80.0f, 300.0f, 10.0f); });
 		Snap(0.0f, FString::Printf(TEXT("m_%s_13_crouch_walk"), *Body));
 		Do(0.1f, [=]() { if (ASOCharacter* H = Hero()) { H->UnCrouch(); } Reset(); });
-		for (int32 Pace = 0; Pace < 3; ++Pace)
+		for (int32 Pace = 0; Pace < 5; ++Pace)
 		{
-			static const TCHAR* Names[3] = { TEXT("14_stroll"), TEXT("15_run"), TEXT("16_sprint") };
+			// (the last two: a strafe to the right and the run again, both seen from behind: the waist and the track)
+			static const TCHAR* Names[5] = { TEXT("14_stroll"), TEXT("15_run"), TEXT("16_sprint"), TEXT("17_strafe"), TEXT("18_run_behind") };
 			Do(0.5f, [=, this]()
 			{
-				CaptureMove = FVector2D(0.0f, Pace == 0 ? 0.34f : 1.0f);
+				CaptureMove = Pace == 3 ? FVector2D(1.0f, 0.0f) : FVector2D(0.0f, Pace == 0 ? 0.34f : 1.0f);
 				if (ASOCharacter* H = Hero(); H && Pace == 2) { H->HandleSprintPressed(); }
 			});
 			for (int32 Take = 0; Take < 3; ++Take)
 			{
-				Do(Take == 0 ? 1.0f : (Pace == 0 ? 0.26f : 0.12f), [=]() { Orbit(80.0f, 300.0f, 10.0f); });
+				Do(Take == 0 ? 1.0f : (Pace == 0 ? 0.26f : 0.12f), [=]() { Orbit(Pace >= 3 ? 180.0f : 80.0f, 520.0f, 10.0f); });
 				Snap(0.0f, FString::Printf(TEXT("m_%s_%s_%d"), *Body, Names[Pace], Take));
 			}
 			Do(0.1f, [=]() { Reset(); });

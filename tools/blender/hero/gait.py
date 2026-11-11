@@ -185,12 +185,13 @@ class Gait:
     strike   heel-strike toe-up (deg)                        toeoff   heel-up at toe-off (deg)
     swing_in the swing foot passes this much nearer the middle (m)
     heel     a heeled boot: every planted foot is pitched heel-up by this many degrees (the heel block meets the ground)
+    stance   heel-up through the middle of the stance, deg (a run on the ball of the foot: the leg stays long)
     """
 
     def __init__(self, body, **p):
         self.b = body
         self.p = dict(v=4.4, cadence=165, duty=.33, front=.42, width=.10, toe_out=8, lift=.10, kick=.10,
-                      strike=12, toeoff=38, swing_in=.015, swing_pitch=-18, heel=0.0,
+                      strike=12, toeoff=38, swing_in=.015, swing_pitch=-18, heel=0.0, stance=0.0,
                       # retract: 0..1, how much of the ground's speed the swing foot has at both ends of the swing (it
                       # trails back after toe-off and comes back before it lands); peak: where in the swing (0..1) the
                       # foot is highest (the heel recovery behind the body comes early); None = the old symmetric arc
@@ -212,11 +213,12 @@ class Gait:
         duty = p["duty"]
 
         def stance_pitch(u):
+            st = -p["stance"]
             if u < .2:
-                return p["strike"] * (1 - smooth(u / .2))
+                return p["strike"] + (st - p["strike"]) * smooth(u / .2)
             if u > .5:
-                return -p["toeoff"] * smooth((u - .5) / .5)
-            return 0.0
+                return st + (-p["toeoff"] - st) * smooth((u - .5) / .5)
+            return st
 
         hl = p["heel"]
         if ph < duty:
@@ -285,7 +287,7 @@ def locomote(b, g, t, S, lift=0.0):
       dip         the extra give at each strike (m)
       counter     shoulders against the hips (0 = just undoing the pelvis, 1 = as much again)
       lag         {"spine", "chest", "head", "arm", "forearm", "hand"}: cycles each part runs behind the pelvis
-      nod         chest pitch per step, deg
+      nod         chest pitch per step, deg      chest_up  the chest carried up and back against the lean, deg
       arm         swing amplitude, deg      arm_bias  centre of the swing, deg (negative = carried behind)
       arm_h2      second harmonic of the swing (the drive)
       abd         elbow out from the body, deg; abd_back / abd_fwd: more on the back swing, less on the forward one
@@ -320,10 +322,11 @@ def locomote(b, g, t, S, lift=0.0):
 
     nod = S.get("nod", 0.0)
     p.add("spine", (Z, turn(L.get("spine", 0)) * .45), (Y, list_(L.get("spine", 0)) * .6), (X, lean * .32 + nod * .4 * math.cos(2 * TAU * (ph - L.get("spine", 0)) - .6)))
-    p.add("chest", (Z, turn(L.get("chest", 0)) * .55), (Y, list_(L.get("chest", 0)) * .3), (X, lean * .28 + nod * .6 * math.cos(2 * TAU * (ph - L.get("chest", 0)) - .6)))
+    p.add("chest", (Z, turn(L.get("chest", 0)) * .55), (Y, list_(L.get("chest", 0)) * .3),
+          (X, lean * .28 - S.get("chest_up", 0.0) + nod * .6 * math.cos(2 * TAU * (ph - L.get("chest", 0)) - .6)))
     # the head stays on the line of travel and level: it undoes what is below it, a touch late
     hy = S["hip_yaw"] * S["counter"] * wave(ph - L.get("head", 0), .12, .08)
-    p.add("neck", (Z, -hy * .5), (Y, -roll * .15), (X, -lean * .42))
+    p.add("neck", (Z, -hy * .5), (Y, -roll * .15), (X, -lean * .42 + S.get("chest_up", 0.0) * .6))
     p.add("head", (Z, -hy * .5), (X, -lean * .30 - nod * .5 * math.cos(2 * TAU * (ph - L.get("head", 0)) - .6)))
 
     for s, sx in SIDES:
@@ -508,6 +511,65 @@ def _apply(arm, body, pose, frame):
             b.keyframe_insert("rotation_quaternion", frame=frame)
 
 
+def plan(body, f, dur, loop):
+    """the clip's poses, one per frame, with the hips brought down where a leg would over-reach"""
+    n = max(2, round(dur * FPS))
+    poses = []
+    for i in range(n + 1):
+        t = (i / n) * dur
+        pose = f(t % dur if loop else t)
+        arms_down(body, pose)
+        poses.append(pose)
+    # the hips come down where a leg would over-reach, planned over the whole clip and smoothed (a widened,
+    # blurred envelope), so the reach never shows as a dip in a single frame; a last per-frame clamp is a guard
+    need = [body.need_drop(p) for p in poses]
+    m = len(need) - 1 if loop else len(need)
+    idx = (lambda k: k % m) if loop else (lambda k: min(max(k, 0), m - 1))
+    wide = [max(need[idx(i + k)] for k in range(-3, 4)) for i in range(len(need))]
+    kern = (1, 3, 6, 7, 6, 3, 1)
+    soft = [sum(w * wide[idx(i + k - 3)] for k, w in enumerate(kern)) / sum(kern) for i in range(len(need))]
+    for i, pose in enumerate(poses):
+        pose.hips.z -= soft[i]
+        body.reach(pose)
+    return poses
+
+
+def measure(body, clips, names, log=print):
+    """Numbers instead of eyes: for each clip, frame by frame, how high the hips ride against standing (cm), each
+    knee's bend (deg; 0 = straight) and each ankle's height (cm), then the trunk's forward pitch. Nothing is baked."""
+    a, c = body.thigh, body.shin
+    for name in names:
+        if name not in clips:
+            log(f"no clip {name}")
+            continue
+        f, dur, loop = clips[name]
+        poses = plan(body, f, dur, loop)
+        rows, flex = [], {"L": [], "R": []}
+        for i, pose in enumerate(poses[:-1] if loop else poses):
+            cell = [f"{i:2d}", f"hips {pose.hips.z * 100:+5.1f}"]
+            for s, _sx in SIDES:
+                ft = pose.feet[s]
+                if ft is None:
+                    cell.append(f"{s} fk")
+                    continue
+                d = min((ft.ankle - body.hip_joint(s, pose)).length, a + c)
+                k = 180.0 - math.degrees(math.acos(max(-1.0, min(1.0, (a * a + c * c - d * d) / (2 * a * c)))))
+                flex[s].append(k)
+                cell.append(f"{s} knee {k:5.1f} ankle {(ft.ankle.z - body.ankle[s].z) * 100:+5.1f} y {(body.hip[s].y - ft.ankle.y) * 100:+6.1f}")
+            rows.append("  ".join(cell))
+        z = [p.hips.z * 100 for p in poses]
+
+        def pitch(p, bones):
+            return sum(ang for b in bones for ax, ang in p.rot.get(b, []) if ax == X)
+
+        mid = poses[len(poses) // 4]
+        log(f"--- {name} ({dur:.2f} s): hips {min(z):+.1f} .. {max(z):+.1f} cm (mean {sum(z) / len(z):+.1f}); "
+            f"knee L {min(flex['L'], default=0):.0f}-{max(flex['L'], default=0):.0f}; "
+            f"trunk pitch {pitch(mid, ('hips', 'spine', 'chest')):.0f}, head {pitch(mid, ('hips', 'spine', 'chest', 'neck', 'head')):.0f}")
+        for r in rows:
+            log("   " + r)
+
+
 def bake(arm, body, clips, log=print):
     """clips: {name: (sampler, duration, loop)} -> one baked action per clip (FK keys only)"""
     for a in list(bpy.data.actions):
@@ -519,24 +581,9 @@ def bake(arm, body, clips, log=print):
         act = bpy.data.actions.new(name)
         act.use_fake_user = True
         arm.animation_data.action = act
-        n = max(2, round(dur * FPS))
-        poses = []
-        for i in range(n + 1):
-            t = (i / n) * dur
-            pose = f(t % dur if loop else t)
-            arms_down(body, pose)
-            poses.append(pose)
-        # the hips come down where a leg would over-reach, planned over the whole clip and smoothed (a widened,
-        # blurred envelope), so the reach never shows as a dip in a single frame; a last per-frame clamp is a guard
-        need = [body.need_drop(p) for p in poses]
-        m = len(need) - 1 if loop else len(need)
-        idx = (lambda k: k % m) if loop else (lambda k: min(max(k, 0), m - 1))
-        wide = [max(need[idx(i + k)] for k in range(-3, 4)) for i in range(len(need))]
-        kern = (1, 3, 6, 7, 6, 3, 1)
-        soft = [sum(w * wide[idx(i + k - 3)] for k, w in enumerate(kern)) / sum(kern) for i in range(len(need))]
+        poses = plan(body, f, dur, loop)
+        n = len(poses) - 1
         for i, pose in enumerate(poses):
-            pose.hips.z -= soft[i]
-            body.reach(pose)
             _apply(arm, body, pose, 1 + i)
         made.append((act, n))
     bpy.context.view_layer.objects.active = arm

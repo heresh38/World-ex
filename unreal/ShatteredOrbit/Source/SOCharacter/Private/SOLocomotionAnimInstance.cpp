@@ -18,7 +18,7 @@
 
 namespace
 {
-	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Count };
+	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Crouch, CrouchWalk, Count };
 }
 
 void USOLocomotionAnimInstance::PlayAttack(float PlayRate)
@@ -203,7 +203,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	UpdateBodyMotion(Character, DeltaSeconds);
 
 	// Target weights.
-	float Target[Count] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Target[Count] = {};
 	const bool bAttacking = AttackTime >= 0.0f && ActiveAttack;
 	// over or onto an obstacle: the clip made for it (read by progress); bodies without one hold the jump's tuck
 	const UAnimSequenceBase* Over = !bMantling ? nullptr : (TraversalKind == 1 ? Clips.Vault.Get() : (TraversalClimb ? Clips.Climb.Get() : Clips.Mantle.Get()));
@@ -254,6 +254,18 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			Target[Idle] = 1.0f - Walk01;
 			Target[Walk] = Walk01 * (Clips.Run ? 1.0f - Run01 : 1.0f);
 			Target[Run] = Clips.Run ? Walk01 * Run01 : 0.0f;
+		}
+		// Crouched: the body's own crouch clips take over from the standing set (still <-> the crouched walk with the
+		// speed). They are authored down there, feet planted: nothing is bent at runtime.
+		if (bCrouchPose && HasCrouchClips())
+		{
+			const float Go = FMath::Clamp(Speed / FMath::Max(Clips.CrouchSpeed * 0.4f, 1.0f), 0.0f, 1.0f);
+			for (float& T : Target)
+			{
+				T = 0.0f;
+			}
+			Target[Crouch] = 1.0f - Go;
+			Target[CrouchWalk] = Go;
 		}
 		// the landing over whatever comes next, fading as its clip plays out
 		const float LandLength = Clips.Land ? Clips.Land->GetPlayLength() : 0.0f;
@@ -344,14 +356,19 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	const float RunLen = Clips.Run ? FMath::Max(Clips.Run->GetPlayLength(), 0.05f) : WalkLen;
 	const float StrollLen = Clips.Stroll ? FMath::Max(Clips.Stroll->GetPlayLength(), 0.05f) : WalkLen;
 	const float StrollRate = FMath::Clamp(Speed / FMath::Max(Clips.StrollSpeed, 1.0f), 0.45f, 1.7f);
-	const float WW = Weights[Walk], WR = Weights[Run], WS = Weights[Stroll];
-	const float PhaseRate = WW + WR + WS > 1e-3f ? (WW * WalkRate / WalkLen + WR * RunRate / RunLen + WS * StrollRate / StrollLen) / (WW + WR + WS)
+	const float CrouchLen = Clips.CrouchWalk ? FMath::Max(Clips.CrouchWalk->GetPlayLength(), 0.05f) : WalkLen;
+	const float CrouchRate = FMath::Clamp(Speed / FMath::Max(Clips.CrouchSpeed, 1.0f), 0.5f, 1.5f);
+	const float WW = Weights[Walk], WR = Weights[Run], WS = Weights[Stroll], WC = Clips.CrouchWalk ? Weights[CrouchWalk] : 0.0f;
+	const float PhaseRate = WW + WR + WS + WC > 1e-3f
+		? (WW * WalkRate / WalkLen + WR * RunRate / RunLen + WS * StrollRate / StrollLen + WC * CrouchRate / CrouchLen) / (WW + WR + WS + WC)
 		: (Clips.Stroll ? StrollRate / StrollLen : WalkRate / WalkLen);
 	CyclePhase += DeltaSeconds * PhaseRate * Direction;
 	CyclePhase -= FMath::FloorToFloat(CyclePhase);
 	Times[Walk] = CyclePhase * WalkLen;
 	Times[Run] = CyclePhase * RunLen;
 	Times[Stroll] = CyclePhase * StrollLen;
+	Times[CrouchWalk] = CyclePhase * CrouchLen;
+	Times[Crouch] += DeltaSeconds;
 	Times[Land] = LandTime;
 	// over and onto things: the pose for how far through the move the body is
 	for (const int32 Layer : { static_cast<int32>(Vault), static_cast<int32>(Mantle), static_cast<int32>(Climb) })
@@ -676,7 +693,7 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	if (!bBodyMotion)
 	{
 		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = StandYaw = 0.0f;
-		bHaveYaw = bTurning = false;
+		bHaveYaw = bTurning = bCrouchPose = false;
 		return;
 	}
 	const FTransform ToMesh = Mesh->GetComponentTransform();
@@ -757,10 +774,13 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 		CompressVel += FMath::Clamp((-LastAirVz - 200.0f) * 0.12f, 0.0f, 160.0f) * (Clips.Land ? 0.45f : 1.0f);
 	}
 	bWasInAir = bInAir;
-	// crouched: the hips sink over bent legs (the feet stay where the clip puts them) and the chest comes forward
+	// Crouched: a body with its own crouch clips plays them (see the weights). One without: the hips sink over bent
+	// legs (the feet stay where the standing clip puts them) and the chest comes forward.
 	const bool bCrouched = Character->bIsCrouched && !bSliding && !bMantling && !bInAir;
+	bCrouchPose = bCrouched;
 	CrouchAlpha = FMath::FInterpTo(CrouchAlpha, bCrouched ? 1.0f : 0.0f, Dt, 9.0f);
-	WantPitch -= 15.0f * CrouchAlpha;
+	const float SunkCrouch = HasCrouchClips() ? 0.0f : CrouchAlpha;
+	WantPitch -= 15.0f * SunkCrouch;
 	const float Stiff = 260.0f, Damp = 2.0f * FMath::Sqrt(Stiff) * 0.75f;
 	CompressVel += (-Stiff * Compress - Damp * CompressVel) * Dt;
 	Compress = FMath::Max(Compress + CompressVel * Dt, 0.0f);
@@ -803,7 +823,7 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	// (a turn on the spot: the weight sinks a touch while the feet step round)
 	// (a vault: the body goes over low, hips down by the planted hand, the knees up under it)
 	const float VaultLow = bMantling && TraversalKind == 1 && !Clips.Vault ? 26.0f * FMath::Sin(TraversalAlpha * PI) : 0.0f;
-	PelvisDrop = PelvisFeet * FootIKAlpha + Compress + VaultLow + CrouchDrop * CrouchAlpha + (bTurning ? 1.6f * FMath::Min(FMath::Abs(StandYaw) / FMath::Max(TurnInPlaceAngle, 1.0f), 1.0f) : 0.0f);
+	PelvisDrop = PelvisFeet * FootIKAlpha + Compress + VaultLow + CrouchDrop * SunkCrouch + (bTurning ? 1.6f * FMath::Min(FMath::Abs(StandYaw) / FMath::Max(TurnInPlaceAngle, 1.0f), 1.0f) : 0.0f);
 }
 
 FAnimInstanceProxy* USOLocomotionAnimInstance::CreateAnimInstanceProxy()
@@ -822,13 +842,14 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	const USOLocomotionAnimInstance* Instance = CastChecked<USOLocomotionAnimInstance>(InAnimInstance);
 	const UAnimSequenceBase* ClipList[Count] = { Instance->Clips.Idle, Instance->Clips.Walk, Instance->Clips.Run, Instance->Clips.Jump,
 		Instance->Clips.Death, Instance->ActiveAttack ? Instance->ActiveAttack.Get() : Instance->Clips.Attack.Get(), Instance->Clips.Slide, Instance->FidgetClip,
-		Instance->Clips.Stroll, Instance->Clips.Land, Instance->Clips.Vault, Instance->Clips.Mantle, Instance->Clips.Climb };
+		Instance->Clips.Stroll, Instance->Clips.Land, Instance->Clips.Vault, Instance->Clips.Mantle, Instance->Clips.Climb,
+		Instance->Clips.Crouch, Instance->Clips.CrouchWalk };
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FSOLocomotionLayer& Layer = Layers[i];
 		Layer.Clip = ClipList[i];
 		Layer.Weight = Instance->Weights[i];
-		Layer.bLoop = i == Idle || i == Walk || i == Run || i == Slide || i == Stroll;
+		Layer.bLoop = i == Idle || i == Walk || i == Run || i == Slide || i == Stroll || i == Crouch || i == CrouchWalk;
 		const float Length = Layer.Clip ? Layer.Clip->GetPlayLength() : 0.0f;
 		const float T = Instance->Times[i];
 		// positive modulo: the walk / run cycles run backward when backpedalling
@@ -850,6 +871,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	bBodyMotion = Instance->bBodyMotion;
 	WarpYaw = Instance->WarpYaw;
 	StandYaw = Instance->GetStandYaw();
+	MaxWaistTwist = Instance->MaxWaistTwist;
 	HoldAlpha = Instance->GetHoldAlpha();
 	LeanRoll = Instance->LeanRoll;
 	LeanPitch = Instance->LeanPitch;
@@ -969,25 +991,39 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 
 	// Component space: +Y forward, +Z up, +X the character's left.
 	const FVector Side(1.0f, 0.0f, 0.0f), Fwd(0.0f, 1.0f, 0.0f), Up(0.0f, 0.0f, 1.0f);
+	const float KneeAhead = 4.0f;       // cm of "forward" added to the animated knee's offset from the hip-ankle line
 
 	// 1. Orientation warping: the hips (and legs) turn toward the movement, spine and chest turn back so the
 	//    shoulders keep facing the aim.
 	//    Standing, the same turn keeps the feet planted while the aim (and the capsule) turns on the spot: that one
 	//    is about the capsule's own axis (the component's origin), so the feet stay exactly where they were.
-	if (FMath::Abs(WarpYaw + StandYaw) > 0.1f)
+	//    The waist only twists so far (a body is not a hinge: a bare waist shows every degree): the pelvis takes half
+	//    of the turn up to MaxWaistTwist, undone by the spine and chest, and the legs take the rest about their own
+	//    hip joints.
+	const float Total = WarpYaw + StandYaw;
+	if (FMath::Abs(Total) > 0.1f)
 	{
-		const float W = FMath::DegreesToRadians(WarpYaw + StandYaw);
-		const FQuat Stand(Up, FMath::DegreesToRadians(StandYaw));
+		const float Pelvis = FMath::Clamp(Total * 0.5f, -MaxWaistTwist, MaxWaistTwist);
+		const float Legs = Total - Pelvis;
+		const float W = FMath::DegreesToRadians(Pelvis);
+		const FQuat Stand(Up, FMath::DegreesToRadians(Pelvis * StandYaw / Total));
 		const FTransform H = CS[Hips];
 		SetCS(Hips, FTransform(H.GetRotation(), Stand.RotateVector(H.GetLocation()), H.GetScale3D()));
 		Turn(Hips, FQuat(Up, W));
 		if (Spine != INDEX_NONE)
 		{
-			Turn(Spine, FQuat(Up, -W * 0.55f));
+			Turn(Spine, FQuat(Up, -W * 0.5f));
 		}
 		if (Chest != INDEX_NONE)
 		{
-			Turn(Chest, FQuat(Up, -W * 0.45f));
+			Turn(Chest, FQuat(Up, -W * 0.5f));
+		}
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (Leg[i][0] != INDEX_NONE)
+			{
+				Turn(Leg[i][0], FQuat(Up, FMath::DegreesToRadians(Legs)));
+			}
 		}
 	}
 
@@ -1027,9 +1063,14 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 		SetCS(Hips, H);
 	}
 
-	// 4. Two-bone leg IK onto the wanted feet; the knee keeps the side the animation bent it to.
+	// 4. Two-bone leg IK onto the wanted feet. The knee keeps the side the animation bent it to, but a knee only bends
+	//    one way: ahead of the line from the hip to the ankle, in the leg's own heading. An almost straight animated
+	//    leg says nothing about that side (its offset from the line is a few millimetres of noise, and it flipped the
+	//    knee backward and through the floor when the hips came down), so the leg's forward is always part of it and
+	//    whatever points behind the line is taken out.
 	if (PelvisDrop > 0.01f || FootIKAlpha > 0.01f)
 	{
+		const FVector LegFwd = FQuat(Up, FMath::DegreesToRadians(Total)).RotateVector(Fwd);
 		for (int32 i = 0; i < 2; ++i)
 		{
 			if (!bLeg[i])
@@ -1046,8 +1087,14 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 			const float D = FMath::Clamp(static_cast<float>(ToTarget.Size()), FMath::Abs(L1 - L2) + 0.5f, (L1 + L2) * 0.999f);
 			const float Along = (L1 * L1 - L2 * L2 + D * D) / (2.0f * D);
 			const float Height = FMath::Sqrt(FMath::Max(L1 * L1 - Along * Along, 0.0f));
-			FVector Bend = (Knee0 - S) - Dir * FVector::DotProduct(Knee0 - S, Dir);
-			Bend = Bend.GetSafeNormal(1e-4f, Fwd);
+			FVector Bend = (Knee0 - S) - Dir * FVector::DotProduct(Knee0 - S, Dir);      // cm off the line, as animated
+			const FVector Ahead = (LegFwd - Dir * FVector::DotProduct(LegFwd, Dir)).GetSafeNormal(1e-4f, Fwd);
+			const float Behind = static_cast<float>(FVector::DotProduct(Bend, Ahead));
+			if (Behind < 0.0f)
+			{
+				Bend -= Ahead * Behind;
+			}
+			Bend = (Bend + Ahead * KneeAhead).GetSafeNormal(1e-4f, Ahead);
 			const FVector Knee = S + Dir * Along + Bend * Height;
 			const FVector Ankle = S + Dir * D;
 			Turn(Upper, FQuat::FindBetweenNormals((CS[Lower].GetLocation() - S).GetSafeNormal(), (Knee - S).GetSafeNormal()));

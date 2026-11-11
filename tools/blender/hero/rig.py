@@ -240,9 +240,8 @@ def lower_arms(T):
     return math.degrees(math.atan2(-a.z, a.x)) - 84.0      # the shared rig's arms hang ~84 degrees below horizontal
 
 
-def animate(arm, T, sex, log=print):
-    """bakes the body's own clips: tools/blender/hero/<sex>/motion.py (its style lives there and nowhere else) through
-    the motion engine (gait.py: planted feet at the game's speeds, leg IK baked to FK)"""
+def motion_clips(arm, T, sex):
+    """(body, clips): the body's measurements and its own clips from tools/blender/hero/<sex>/motion.py"""
     import importlib.util
     import os
     import gait
@@ -252,6 +251,14 @@ def animate(arm, T, sex, log=print):
     spec.loader.exec_module(mod)
     body = gait.Body(arm, T, lower_arms(T))
     clips, _ = mod.clips(body)
+    return body, clips
+
+
+def animate(arm, T, sex, log=print):
+    """bakes the body's own clips: tools/blender/hero/<sex>/motion.py (its style lives there and nowhere else) through
+    the motion engine (gait.py: planted feet at the game's speeds, leg IK baked to FK)"""
+    import gait
+    body, clips = motion_clips(arm, T, sex)
     return gait.bake(arm, body, clips, log)
 
 

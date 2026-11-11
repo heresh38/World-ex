@@ -44,6 +44,14 @@ struct SOCHARACTER_API FSOLocomotionClips
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> Land;
 
+	/** Crouched: still, and the crouched walk (authored down there, feet planted at CrouchSpeed). A body with both
+	 *  plays them while crouched; without them the standing clips are sunk over bent legs (CrouchDrop). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Crouch;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> CrouchWalk;
+
 	/** Over and onto obstacles: each is read by how far through the move the body is, never by the clock. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> Vault;
@@ -68,6 +76,10 @@ struct SOCHARACTER_API FSOLocomotionClips
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	float StrollSpeed = 150.0f;
+
+	/** The ground speed the crouched walk was made for (cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	float CrouchSpeed = 270.0f;
 };
 
 struct FSOLocomotionLayer
@@ -88,8 +100,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	virtual bool Evaluate(FPoseContext& Output) override;
 
 	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget, 8 Stroll, 9 Land, 10 Vault, 11 Mantle,
-	 *  12 Climb */
-	FSOLocomotionLayer Layers[13];
+	 *  12 Climb, 13 Crouch, 14 CrouchWalk */
+	FSOLocomotionLayer Layers[15];
 
 	// Held gun (players): copied from the instance each update.
 	bool bHold = false;
@@ -115,6 +127,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float WarpYaw = 0.0f;
 	/** The hips and legs stay where they stood while the aim turns on the spot (degrees, see StandYaw). */
 	float StandYaw = 0.0f;
+	float MaxWaistTwist = 20.0f;
 	float LeanRoll = 0.0f;
 	float LeanPitch = 0.0f;
 	float PelvisDrop = 0.0f;
@@ -177,7 +190,7 @@ public:
 	/** Max yaw the legs turn toward the movement direction (orientation warping); beyond it a backward move plays
 	 *  the cycle in reverse. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
-	float MaxWarpYaw = 80.0f;
+	float MaxWarpYaw = 60.0f;
 
 	/** Lean into acceleration: degrees per m/s2, and the cap. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
@@ -193,9 +206,14 @@ public:
 	/** Standing still, the feet stay planted while the aim turns: the hips keep their heading and the spine takes
 	 *  the twist, up to this many degrees; past it the body steps round (a turn on the spot). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
-	float TurnInPlaceAngle = 50.0f;
+	float TurnInPlaceAngle = 36.0f;
 
-	/** How far the hips sink when crouched (cm). */
+	/** The most the pelvis turns against the chest (degrees), whatever the legs are doing: strafing, or standing
+	 *  while the aim turns. The legs take the rest of the turn about their own hip joints. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float MaxWaistTwist = 20.0f;
+
+	/** How far the hips sink when crouched (cm): only for a body without its own crouch clips. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
 	float CrouchDrop = 34.0f;
 
@@ -211,11 +229,16 @@ public:
 	float GetAirTuck() const { return AirTuck; }
 	/** 0 standing .. 1 crouched (the body's pose, eased). */
 	float GetCrouchAlpha() const { return CrouchAlpha; }
+	/** This body has its own crouch clips (nothing is bent at runtime). */
+	bool HasCrouchClips() const { return Clips.Crouch != nullptr && Clips.CrouchWalk != nullptr; }
 	/** How much of the landing clip shows right now (0..1). */
 	float GetLandWeight() const { return Weights[9]; }
 	/** The hands are on a ledge (a vault, a mantle or a climb). */
 	bool HasLedgeHands() const { return bLedge; }
 	float GetHoldAlpha() const { return HoldAlpha; }
+	/** How far the hips are sunk below the clip's (cm) and the body's pitch from leaning (deg): for tests. */
+	float GetPelvisDrop() const { return PelvisDrop; }
+	float GetLeanPitch() const { return LeanPitch; }
 
 	/** Movement yaw relative to the facing (deg, 0 = forward) and whether the cycle runs backward. */
 	float MoveYaw = 0.0f;
@@ -254,9 +277,9 @@ public:
 	bool HasFittedGrip() const { return bFitDone; }
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
-	 *  Mantle, Climb. */
-	float Weights[13] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-	float Times[13] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	 *  Mantle, Climb, Crouch, CrouchWalk. */
+	float Weights[15] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Times[15] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 	/** Seconds of standing still before an idle variation, picked between these (random each time). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
@@ -303,7 +326,7 @@ protected:
 	bool bLanded = false;
 	float LandImpact = 0.0f;
 	/** Linear cross-fade progress per layer; the weights are its eased shape. */
-	float Ramp[13] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Ramp[15] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	/** Where in the jump clip the air pose is read (s): take-off at 0, the tuck at JumpTuckTime, the reach for the
 	 *  ground at the end. */
 	float JumpPose = 0.0f;
@@ -312,6 +335,8 @@ protected:
 	float LandTime = 100.0f;
 	/** 0 standing, 1 crouched: the hips sink over bent legs and the chest comes forward. */
 	float CrouchAlpha = 0.0f;
+	/** Crouched on the ground right now (the crouch clips play). */
+	bool bCrouchPose = false;
 
 	FVector LastVelocityCS = FVector::ZeroVector;
 	FVector AccelCS = FVector::ZeroVector;

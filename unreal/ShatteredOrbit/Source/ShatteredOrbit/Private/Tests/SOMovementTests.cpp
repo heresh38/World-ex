@@ -603,4 +603,154 @@ bool FSOBodyFollowsMotionTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSORunsTallTest, "ShatteredOrbit.Anim.RunsTall", SOTest::Flags)
+bool FSORunsTallTest::RunTest(const FString& Parameters)
+{
+	// Running is tall: the hips ride at standing height (a few cm of spring in each step), never sunk into a crouch,
+	// the feet come down under the body (his under the hip joints, about 8 cm a side: a man's track; hers on a line),
+	// never out past the hips, and nothing the game adds on top of the clip lowers them.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	for (const int32 Pace : { 0, 1, 2 })
+	{
+		const bool bSprint = Pace == 2;
+		const float Stick = Pace == 0 ? 0.34f : 1.0f;              // (a light stick: the slow walk)
+		SOTest::FTestWorld W;
+		SOTest::Floor(W);
+		ASOCharacter* C = W.SpawnCharacter(FVector(-2500, 0, 0));
+		USOCharacterMovementComponent* Move = C->GetSOMovement();
+		USkeletalMeshComponent* Body = C->GetMesh();
+		Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+		W.Run(1.5f);
+		const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance());
+		if (!TestNotNull(TEXT("the body's animation"), Anim))
+		{
+			return false;
+		}
+		const float Floor = SOTest::Feet(C);
+		const float Standing = static_cast<float>(Body->GetBoneLocation(TEXT("hips")).Z) - Floor;
+		Move->SetWantsToSprint(bSprint);
+		W.Run(1.2f, [&] { C->AddMovementInput(FVector::ForwardVector, Stick); });
+		float Low = BIG_NUMBER, High = -BIG_NUMBER, Sum = 0.0f, Drop = 0.0f, Wide = 0.0f, Crouch = 0.0f;
+		int32 N = 0;
+		W.Run(1.4f, [&]
+		{
+			C->AddMovementInput(FVector::ForwardVector, Stick);
+			const float Z = static_cast<float>(Body->GetBoneLocation(TEXT("hips")).Z) - SOTest::Feet(C);
+			Low = FMath::Min(Low, Z);
+			High = FMath::Max(High, Z);
+			Sum += Z;
+			++N;
+			Drop = FMath::Max(Drop, Anim->GetPelvisDrop());
+			Crouch = FMath::Max(Crouch, Anim->GetCrouchAlpha());
+			for (const TCHAR* Foot : { TEXT("foot_L"), TEXT("foot_R") })
+			{
+				const FVector At = C->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(Foot));
+				if (At.Z < -78.0f)                                // (on or near the ground)
+				{
+					Wide = FMath::Max(Wide, FMath::Abs(static_cast<float>(At.Y)));
+				}
+			}
+		});
+		const TCHAR* Name = Pace == 0 ? TEXT("walk") : (bSprint ? TEXT("sprint") : TEXT("run"));
+		AddInfo(FString::Printf(TEXT("%s: standing hips %.1f cm; running %.1f .. %.1f (mean %.1f); pelvis drop %.1f; crouch %.2f; feet %.1f cm from the line; weights walk %.2f run %.2f stroll %.2f idle %.2f"),
+			Name, Standing, Low, High, Sum / N, Drop, Crouch, Wide, Anim->Weights[1], Anim->Weights[2], Anim->Weights[8], Anim->Weights[0]));
+		TestTrue(FString::Printf(TEXT("%s: the hips ride tall (mean %.1f cm under standing height, lowest %.1f)"), Name, Standing - Sum / N, Standing - Low),
+			Standing - Sum / N < 7.0f && Standing - Low < 12.0f);
+		TestTrue(FString::Printf(TEXT("%s: nothing sinks the hips under the clip (%.1f cm, crouch %.2f)"), Name, Drop, Crouch), Drop < 3.0f && Crouch < 0.02f);
+		TestTrue(FString::Printf(TEXT("%s: the feet land under the hips, not out past them (%.1f cm to the side at most)"), Name, Wide), Wide < 11.0f);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOCrouchWalkTest, "ShatteredOrbit.Anim.CrouchWalk", SOTest::Flags)
+bool FSOCrouchWalkTest::RunTest(const FString& Parameters)
+{
+	// Crouched, still and walking (forward, sideways, backward): the body plays its own crouch clips, nothing sinks
+	// the hips at runtime, both feet stay on or over the floor, no knee comes near the floor or bends backward, and
+	// the hips ride level (the legs never pop).
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	static const TCHAR* Names[4] = { TEXT("still"), TEXT("forward"), TEXT("sideways"), TEXT("backward") };
+	for (const int32 Way : { 0, 1, 2, 3 })
+	{
+		SOTest::FTestWorld W;
+		SOTest::Floor(W);
+		ASOCharacter* C = W.SpawnCharacter(FVector(0, -1500, 0));
+		USkeletalMeshComponent* Body = C->GetMesh();
+		Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+		W.Run(1.5f);
+		const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance());
+		if (!TestNotNull(TEXT("the body's animation"), Anim))
+		{
+			return false;
+		}
+		if (!Anim->HasCrouchClips())
+		{
+			AddWarning(TEXT("this body has no crouch clips yet (import them: SO_IMPORT_ONLY=player_clips)"));
+			return true;
+		}
+		const float Standing = static_cast<float>(Body->GetBoneLocation(TEXT("hips")).Z) - SOTest::Feet(C);
+		// the ball of the foot against the ankle, in the reference pose (the foot bone runs from the ankle to the ball)
+		const FReferenceSkeleton& Ref = Body->GetSkeletalMeshAsset()->GetRefSkeleton();
+		auto RefCS = [&Ref](const TCHAR* Name)
+		{
+			FTransform T = FTransform::Identity;
+			for (int32 I = Ref.FindBoneIndex(Name); I != INDEX_NONE; I = Ref.GetParentIndex(I))
+			{
+				T = T * Ref.GetRefBonePose()[I];
+			}
+			return T;
+		};
+		const FVector Dir = Way == 2 ? FVector::RightVector : (Way == 3 ? -FVector::ForwardVector : FVector::ForwardVector);
+		const float Stick = Way == 0 ? 0.0f : 1.0f;
+		C->Crouch();
+		W.Run(1.0f, [&] { C->AddMovementInput(Dir, Stick); });
+		float FootLow = BIG_NUMBER, BallLow = BIG_NUMBER, KneeLow = BIG_NUMBER, KneeBack = BIG_NUMBER, HipLow = BIG_NUMBER, HipHigh = -BIG_NUMBER, Drop = 0.0f, Clip = 1.0f;
+		W.Run(1.6f, [&]
+		{
+			C->AddMovementInput(Dir, Stick);
+			const float Floor = SOTest::Feet(C);
+			const float Z = static_cast<float>(Body->GetBoneLocation(TEXT("hips")).Z) - Floor;
+			HipLow = FMath::Min(HipLow, Z);
+			HipHigh = FMath::Max(HipHigh, Z);
+			Drop = FMath::Max(Drop, Anim->GetPelvisDrop());
+			Clip = FMath::Min(Clip, Anim->Weights[13] + Anim->Weights[14]);
+			const FTransform ToMesh = Body->GetComponentTransform();
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const TCHAR* Thigh = Side ? TEXT("thigh_R") : TEXT("thigh_L");
+				const TCHAR* Shin = Side ? TEXT("shin_R") : TEXT("shin_L");
+				const TCHAR* Foot = Side ? TEXT("foot_R") : TEXT("foot_L");
+				const FVector Hip = Body->GetBoneLocation(Thigh), Knee = Body->GetBoneLocation(Shin), Ankle = Body->GetBoneLocation(Foot);
+				FootLow = FMath::Min(FootLow, static_cast<float>(Ankle.Z) - Floor);
+				KneeLow = FMath::Min(KneeLow, static_cast<float>(Knee.Z) - Floor);
+				// the ball: the reference foot's ankle -> ball, carried by the foot bone as it is now
+				const FTransform FootRef = RefCS(Foot);
+				const FVector BallRef(FootRef.GetLocation().X, FootRef.GetLocation().Y + 13.0f, 2.6f);
+				const FVector Ball = Body->GetBoneTransform(Body->GetBoneIndex(Foot)).TransformPosition(FootRef.InverseTransformPosition(BallRef));
+				BallLow = FMath::Min(BallLow, static_cast<float>(Ball.Z) - Floor);
+				// the knee against the line from the hip to the ankle, measured along the body's forward
+				const FVector Line = (Ankle - Hip).GetSafeNormal();
+				const FVector Off = (Knee - Hip) - Line * FVector::DotProduct(Knee - Hip, Line);
+				KneeBack = FMath::Min(KneeBack, static_cast<float>(FVector::DotProduct(Off, ToMesh.GetUnitAxis(EAxis::Y))));
+			}
+		});
+		AddInfo(FString::Printf(TEXT("crouched %s: hips %.1f .. %.1f cm (standing %.1f); ankles >= %.1f, balls >= %.1f, knees >= %.1f cm over the floor; knee %.1f cm ahead of the hip-ankle line at least; pelvis drop %.1f; crouch clips %.2f"),
+			Names[Way], HipLow, HipHigh, Standing, FootLow, BallLow, KneeLow, KneeBack, Drop, Clip));
+		TestTrue(FString::Printf(TEXT("crouched %s: the crouch clips play (%.2f)"), Names[Way], Clip), Clip > 0.97f);
+		TestTrue(FString::Printf(TEXT("crouched %s: nothing bends the legs at runtime (pelvis drop %.1f cm)"), Names[Way], Drop), Drop < 3.0f);
+		TestTrue(FString::Printf(TEXT("crouched %s: the hips are down (%.1f cm under standing) and level (%.1f cm of travel)"), Names[Way], Standing - HipHigh, HipHigh - HipLow),
+			Standing - HipHigh > 14.0f && Standing - HipLow < 40.0f && HipHigh - HipLow < 6.0f);
+		TestTrue(FString::Printf(TEXT("crouched %s: no foot under the floor (ankle %.1f cm, ball %.1f cm over it)"), Names[Way], FootLow, BallLow), FootLow > 3.0f && BallLow > -2.5f);
+		TestTrue(FString::Printf(TEXT("crouched %s: the knees stay off the floor (%.1f cm)"), Names[Way], KneeLow), KneeLow > 14.0f);
+		TestTrue(FString::Printf(TEXT("crouched %s: no knee bends backward (%.1f cm ahead of the hip-ankle line)"), Names[Way], KneeBack), KneeBack > 1.0f);
+	}
+	return true;
+}
+
 #endif
