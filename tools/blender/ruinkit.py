@@ -23,7 +23,16 @@ import sdf
 from ruins_textures import TILE
 
 TAU = 2 * math.pi
-TEXTURED = ("ru_concrete", "ru_fracture", "ru_asphalt", "ru_stone", "ru_metal", "ru_panel", "ru_rubble", "ru_banner", "ru_hive")
+TEXTURED = ("ru_concrete", "ru_fracture", "ru_asphalt", "ru_stone", "ru_metal", "ru_panel", "ru_rubble", "ru_banner", "ru_hive",
+            "ru_ceramic", "ru_composite", "ru_sandstone", "ru_corrugate", "ru_tile", "ru_plaster", "ru_brass", "ru_far_a", "ru_far_b",
+            "ru_bark", "ru_leaf", "ru_moss", "ru_fungus")
+# The zone being built (meridian.py sets it) and every rubble heap that collides, by zone: the plants grow over them.
+ZONE = None
+HEAPS = []
+# What a tower() call builds: None = the old bare frame (the prototype); dict(styles=(...)) = a complete building of
+# the district's architecture (citykit.building), dict(far=True) = a block of the far skyline. meridian.py sets it
+# per zone.
+CITY = None
 _MATS = {}
 
 
@@ -54,6 +63,28 @@ def material(name):
         nt.links.new(sp.outputs['Blue'], b.inputs['Metallic'])
     elif name == "ru_glass":
         m = bl.mat(name, '#0d1317', .7, .07)
+    elif name == "ru_paint":
+        m = bl.mat(name, '#b9b6a8', 0.0, .7)
+    elif name == "ru_block_dark":
+        m = bl.mat(name, '#0b0c0d', .1, .75)
+    elif name == "ru_sack":
+        m = bl.mat(name, '#7a6c50', 0.0, .95)
+    elif name == "ru_car_red":
+        m = bl.mat(name, '#5f2019', .35, .45)
+    elif name == "ru_car_blue":
+        m = bl.mat(name, '#2f4a5e', .35, .45)
+    elif name == "ru_car_white":
+        m = bl.mat(name, '#a9a8a0', .3, .5)
+    elif name == "ru_car_green":
+        m = bl.mat(name, '#2b3a26', .25, .6)
+    elif name == "ru_bio":
+        m = bl.mat(name, '#3dffd0', 0.0, .35, emit='#3dffd0', strength=7.0)
+    elif name == "ru_holo_cyan":
+        m = bl.mat(name, '#35e0ff', 0.0, .4, emit='#35e0ff', strength=6.0)
+    elif name == "ru_holo_magenta":
+        m = bl.mat(name, '#ff3fb4', 0.0, .4, emit='#ff3fb4', strength=6.0)
+    elif name == "ru_sign_amber":
+        m = bl.mat(name, '#ffb040', 0.0, .4, emit='#ffb040', strength=5.0)
     elif name == "ru_glow":
         m = bl.mat(name, '#7b3cff', 0.0, .35, emit='#9a5cff', strength=9.0)
     elif name == "ru_beam":
@@ -379,6 +410,8 @@ def heap(g, c, r, h, seed, chunks=14, res=.22, ry=None):
     nz = np.cross(P1 - P0, P2 - P0)
     nz = nz[:, 2] / (np.linalg.norm(nz, axis=1) + 1e-9)
     mats = ["ru_rubble" if z > .72 else "ru_fracture" for z in nz]
+    if g.col and ZONE:
+        HEAPS.append((ZONE, (cx, cy, cz), max(r, ry)))
     # drawn fine, collided with coarse: a mound's collision at the drawn resolution is most of a zone's collision mesh
     # for a few centimetres nobody feels on rubble
     was = g.col
@@ -630,6 +663,18 @@ def tower(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="panel", top=(.45, 1.0)
     """A ruined tower centred at c (x, y), width w along its local x, depth d along local y, turned by yaw (radians).
     g gets the structure (collides), gd the fine detail (rebar, glass, mullions). col_top: how far above its foot it
     collides (None = COL_TOP; 0 = not at all: a ruin behind the route's invisible walls)."""
+    if CITY:
+        import citykit
+        if CITY.get("far"):
+            H = sum(4.5 if k == 0 else 3.6 for k in range(floors))
+            citykit.far_building(g, c, w, d, H, yaw, seed)
+            return H
+        r0 = random.Random(seed * 101 + 7)
+        style = CITY["styles"][seed % len(CITY["styles"])]
+        # some stand almost whole, others are half gone: the district's damage, spread
+        dmg = min(.92, max(.06, (1.0 - top[0]) * r0.uniform(.25, 1.25)))
+        lod = 1 if (not detail or col_top == 0) else 0
+        return citykit.building(g, gd, c, w, d, floors, yaw, seed, style, dmg, base_z, heaps, lod, col_top, intact_below)
     rnd = random.Random(seed)
     T = _rz(yaw)
     first_face = len(g.F)

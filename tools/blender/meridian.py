@@ -28,6 +28,8 @@ import bl
 import ruinkit as rk
 import meridian_plan as P
 import meridian_south as south
+import meridian_flora as flora
+import meridian_story as story
 
 TAU = rk.TAU
 ART = os.path.join(P.ROOT, "unreal", "ShatteredOrbit", "Data", "op_meridian_art.json")
@@ -782,6 +784,13 @@ ZONES = dict(ground=zone_ground, approach=zone_approach, gate=zone_gate, bouleva
              terraces=zone_terraces, crown=zone_crown, backdrop=zone_backdrop, blockers=zone_blockers, hive=zone_hive)
 for _name, _fn in south.ZONES.items():
     ZONES[_name] = (lambda fn: lambda G: fn(G, Helpers))(_fn)
+ZONES["story"] = lambda G: story.zone_story(G, Helpers)          # what was left in the streets, district by district
+ZONES["flora"] = lambda G: flora.zone_flora(G, Helpers)          # (last: it grows on what the others built)
+# Each district's architecture (citykit.STYLES): what its buildings were before they were ruined.
+ZONE_STYLES = dict(verge=("industrial", "industrial", "office"), stacks=("resi",), galleria=("mixed", "office"),
+                   deepline=("mixed",), sluice=("industrial", "lab", "lab"), causeway=("mixed", "resi", "industrial"),
+                   approach=("mixed", "resi", "mixed"), gate=("civic", "mixed"), boulevard=("office", "civic", "office"),
+                   ring=("civic", "office", "civic"), terraces=("office", "civic"), crown=("civic",))
 # what never collides (drawn only), and where the towers stand beside a raised deck
 NO_COLLISION = ("backdrop",)
 HIGH_DECKS = ("ring", "terraces", "crown")
@@ -796,7 +805,10 @@ def main():
     for z in want:
         log("zone", z)
         rk.COL_TOP = 34.0 if z in HIGH_DECKS else 16.0
+        rk.CITY = dict(far=True) if z == "backdrop" else (dict(styles=ZONE_STYLES[z]) if z in ZONE_STYLES else None)
+        rk.ZONE = z
         ZONES[z](G)
+        rk.CITY = None
     for z, (g, gd) in G.items():
         for x in (g, gd):
             if len(x):

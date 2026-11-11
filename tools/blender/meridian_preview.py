@@ -8,7 +8,7 @@ only = set(argv[1:])
 os.makedirs(out, exist_ok=True)
 sc = bpy.context.scene
 for o in bpy.data.objects:
-    if o.name.endswith("_col") or o.name == "MR_blockers":
+    if o.name.endswith("_solid") or o.name == "MR_blockers":
         o.hide_render = True
 sc.render.engine = 'BLENDER_WORKBENCH'
 sh = sc.display.shading

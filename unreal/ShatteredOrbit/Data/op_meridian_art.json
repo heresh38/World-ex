@@ -1699,6 +1699,606 @@
    ],
    "radius": 1450.0,
    "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -228257.0,
+    -1060.2,
+    710.0
+   ],
+   "radius": 1500,
+   "intensity": 60.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -106800.0,
+    -190.0,
+    -360.0
+   ],
+   "radius": 900,
+   "intensity": 22.0
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -73600.0,
+    -2100.0,
+    320.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -71800.0,
+    -2100.0,
+    320.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -34582.9,
+    842.9,
+    718.0
+   ],
+   "radius": 1600,
+   "intensity": 70.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -47782.3,
+    2375.7,
+    718.0
+   ],
+   "radius": 1600,
+   "intensity": 70.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -27182.0,
+    -937.0,
+    710.0
+   ],
+   "radius": 1600,
+   "intensity": 70.0
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -24032.5,
+    -7177.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -30653.8,
+    6634.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -25809.4,
+    6707.6,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -9176.6,
+    2587.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    5796.2,
+    -2360.7,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -240.9,
+    -5644.2,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -863.5,
+    -4335.0,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -4634.6,
+    -5100.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -6375.0,
+    3140.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    13859.1,
+    3848.0,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    8193.2,
+    5172.3,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    9174.7,
+    6097.2,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    5225.7,
+    7088.7,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -219398.0,
+    4969.8,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -212769.7,
+    4826.5,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -200576.4,
+    5149.1,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -84432.8,
+    -3822.0,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -81922.8,
+    -3893.3,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -71508.1,
+    -3030.7,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -71449.1,
+    -4961.2,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -56550.2,
+    -5163.9,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -72241.2,
+    4809.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -73077.5,
+    2689.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -62171.7,
+    3390.5,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -48489.2,
+    4508.9,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -43084.9,
+    3640.4,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -42352.0,
+    2229.1,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -39295.6,
+    3769.2,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -42352.0,
+    -3110.6,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -41116.2,
+    -1953.9,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -37904.9,
+    -3521.5,
+    210.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -187000.0,
+    0.0,
+    560.0
+   ],
+   "radius": 1500,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -145000.0,
+    0.0,
+    960.0
+   ],
+   "radius": 2400,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -145500.0,
+    600.0,
+    360.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -119200.0,
+    700.0,
+    -540.0
+   ],
+   "radius": 900,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -115900.0,
+    -700.0,
+    -540.0
+   ],
+   "radius": 900,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -112600.0,
+    700.0,
+    -540.0
+   ],
+   "radius": 900,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -108000.0,
+    -300.0,
+    -560.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -105400.0,
+    -300.0,
+    -560.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -102800.0,
+    -300.0,
+    -560.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -95000.0,
+    -300.0,
+    -560.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -92400.0,
+    -300.0,
+    -560.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -89800.0,
+    -300.0,
+    -560.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -86400.0,
+    295.8,
+    -340.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -78000.0,
+    -415.6,
+    -340.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -69600.0,
+    543.3,
+    -340.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -61200.0,
+    215.9,
+    -340.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -64000.0,
+    -1150.0,
+    160.0
+   ],
+   "radius": 1800,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -81200.0,
+    1100.0,
+    60.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    1863.7,
+    2089.6,
+    510.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    1411.4,
+    -2418.2,
+    510.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -1863.7,
+    -2089.6,
+    510.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "bio",
+   "at": [
+    -2563.3,
+    1126.8,
+    510.0
+   ],
+   "radius": 1300,
+   "intensity": null
   }
  ],
  "ambience": [

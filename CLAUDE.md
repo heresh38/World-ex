@@ -199,8 +199,15 @@ and mission: `tools/operation/meridian_plan.py` (writes `Data/op_meridian.json`:
 the skyline) + `meridian_south.py` (the long way in: `wall` with doors / windows, `slab` grids with holes, `sloped`,
 `escalator`) build it with `ruinkit.py` (ruined towers: slab cells, columns, cores, cladding, a damage field of broken
 tops and blast holes, rebar, hanging slabs, rubble heaps; viaducts, invisible blockers and lids) into `MR_<zone>` +
-`Data/op_meridian_art.json` (lights: void, fire, rim, beam, moon, lamp); `make_operation_map.py` assembles the level
-(storm night). Look at the geometry before importing: build with `--noexport --save=x.blend`, then
+`Data/op_meridian_art.json` (lights: void, fire, rim, beam, moon, lamp, bio); `make_operation_map.py` assembles the
+level (a storm with a low sun under its edge). The overhaul to the final build (`docs/operation/MERIDIAN_OVERHAUL.md`:
+audit, art direction per district, the ten stages and their status; the prototype is commit 607d56d): `citykit.py`
+= complete buildings that were then ruined (a `tower()` call builds one when `rk.CITY` is set: `ZONE_STYLES` gives
+each district its architecture: resi, mixed, office, civic, industrial, lab; the skyline is `far_building`),
+`streetkit.py` + `meridian_story.py` = the streets and what was left in them (our own vehicles, the army's line,
+each district's story), `alienflora.py` + `meridian_flora.py` = the alien plants and where they grow (from
+`citykit.ANCHORS` and `rk.HEAPS`, denser toward the canal, the tunnel and the Crown). Zones run in the order
+districts, story, flora. Look at the geometry before importing: build with `--noexport --save=x.blend`, then
 `blender -b x.blend -P tools/blender/meridian_preview.py -- <outdir>` (workbench views along the route).
 **What is drawn is not what collides** (the cause of "the enemy can shoot through walls / get stuck in walls and
 rocks"): a Nanite mesh's collision is built from its simplified fallback (the Crown kept 3% of its triangles, even

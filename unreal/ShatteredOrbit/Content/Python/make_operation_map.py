@@ -92,11 +92,21 @@ def main():
     log(f"{len(meshes)} city pieces")
 
     # storm night
-    moon = spawn(unreal.DirectionalLight, (0, 0, 3000), (-32, 205, 0), "Moon", "Lighting")
+    # The last of the day under the storm's edge: a low sun out of the west-south-west, so its light comes down the
+    # cross streets and between the towers in long shafts and the rest stays in the storm's dusk (the art direction:
+    # "some streets illuminated by sunlight passing between skyscrapers, others dark, with alien plants providing
+    # subtle illumination"). Not tagged "Sun": the clock does not move it.
+    moon = spawn(unreal.DirectionalLight, (0, 0, 3000), (-13, 62, 0), "Moon", "Lighting")
     mc = moon.get_component_by_class(unreal.DirectionalLightComponent)
     mc.set_mobility(unreal.ComponentMobility.MOVABLE)
-    mc.set_editor_property("intensity", 2.4)
-    mc.set_editor_property("light_color", unreal.Color(r=170, g=182, b=230, a=255))
+    mc.set_editor_property("intensity", 6.5)
+    mc.set_editor_property("light_color", unreal.Color(r=255, g=186, b=132, a=255))
+    for key, value in (("light_shaft_bloom", True), ("bloom_scale", 0.35), ("light_shaft_occlusion", True),
+                       ("volumetric_scattering_intensity", 2.2)):
+        try:
+            mc.set_editor_property("enable_" + key if key.startswith("light_shaft") else key, value)
+        except Exception as e:  # a renamed setting must not stop the map
+            log(f"sun {key}: {e}")
     mc.set_editor_property("atmosphere_sun_light", True)
     mc.set_editor_property("dynamic_shadow_distance_movable_light", 25000.0)
     spawn(unreal.SkyAtmosphere, label="SkyAtmosphere", folder="Lighting")
@@ -108,13 +118,13 @@ def main():
     skc = sky.get_component_by_class(unreal.SkyLightComponent)
     skc.set_mobility(unreal.ComponentMobility.MOVABLE)
     skc.set_editor_property("real_time_capture", True)
-    skc.set_editor_property("intensity", 1.0)
+    skc.set_editor_property("intensity", 2.8)       # (enough sky in the shadows to read a street and who is in it)
     fog = spawn(unreal.ExponentialHeightFog, (0, 0, -100), label="HeightFog", folder="Lighting")
     fc = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
     fc.set_editor_property("fog_density", 0.026)
     fc.set_editor_property("fog_height_falloff", 0.12)
     fc.set_editor_property("start_distance", 1500.0)
-    fc.set_editor_property("fog_inscattering_luminance", unreal.LinearColor(0.06, 0.055, 0.09, 1.0))
+    fc.set_editor_property("fog_inscattering_luminance", unreal.LinearColor(0.085, 0.06, 0.075, 1.0))
     fc.set_editor_property("enable_volumetric_fog", True)
     fc.set_editor_property("volumetric_fog_scattering_distribution", 0.6)
     fc.set_editor_property("volumetric_fog_extinction_scale", 1.4)
@@ -123,7 +133,7 @@ def main():
     pps = ppv.get_editor_property("settings")
     for key, value in (("bloom_intensity", 1.1), ("bloom_threshold", 0.8), ("vignette_intensity", 0.45),
                        ("film_grain_intensity", 0.08), ("ambient_occlusion_intensity", 0.75),
-                       ("auto_exposure_bias", -0.4), ("auto_exposure_min_brightness", 0.04), ("auto_exposure_max_brightness", 1.2),
+                       ("auto_exposure_bias", 0.7), ("auto_exposure_min_brightness", 0.02), ("auto_exposure_max_brightness", 1.4),
                        ("scene_fringe_intensity", 0.2), ("color_saturation", unreal.Vector4(0.9, 0.9, 0.95, 1.0)),
                        ("color_gain_shadows", unreal.Vector4(0.92, 0.94, 1.08, 1.0)), ("white_temp", 6900.0)):
         try:
@@ -137,7 +147,9 @@ def main():
     colours = {"void": (unreal.Color(r=160, g=95, b=255, a=255), 70.0), "fire": (unreal.Color(r=255, g=140, b=60, a=255), 55.0),
                "rim": (unreal.Color(r=170, g=110, b=255, a=255), 25.0), "beam": (unreal.Color(r=200, g=165, b=255, a=255), 120.0),
                # indoors: moonlight down a hole in a roof, and the odd lamp still on its emergency cell
-               "moon": (unreal.Color(r=178, g=196, b=255, a=255), 60.0), "lamp": (unreal.Color(r=255, g=196, b=128, a=255), 38.0)}
+               "moon": (unreal.Color(r=178, g=196, b=255, a=255), 60.0), "lamp": (unreal.Color(r=255, g=196, b=128, a=255), 38.0),
+               # the plants' own light
+               "bio": (unreal.Color(r=70, g=255, b=205, a=255), 22.0)}
     for i, L in enumerate(art["lights"]):
         col, intensity = colours.get(L["kind"], colours["void"])
         p = spawn(unreal.PointLight, tuple(L["at"]), label=f"Light_{L['kind']}_{i}", folder="Lighting/Points")
@@ -148,7 +160,7 @@ def main():
         pc.set_editor_property("attenuation_radius", float(L["radius"]))
         pc.set_editor_property("cast_shadows", L["kind"] == "beam")
         pc.set_editor_property("volumetric_scattering_intensity",
-                               {"void": 1.2, "fire": 1.0, "rim": 0.25, "beam": 0.0, "moon": 1.6, "lamp": 0.0}.get(L["kind"], 1.0))
+                               {"void": 1.2, "fire": 1.0, "rim": 0.25, "beam": 0.0, "moon": 1.6, "lamp": 0.0, "bio": 0.8}.get(L["kind"], 1.0))
     log(f"{len(art['lights'])} lights")
 
     # the operation, its barriers, where players come in

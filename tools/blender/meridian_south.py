@@ -258,27 +258,27 @@ def zone_stacks(G, H):
     # ---- the gatehouse block: the ground storey is rooms (walls a man is not seen through, doors, windows to fire from)
     b0, b1, H1 = B["n0"], B["n1"], 4.5
     lob = B["lobby"]
-    block(g, "ru_stone", -half, half, b0, b1, -.1, .06)
+    block(g, "ru_tile", -half, half, b0, b1, -.1, .06)
     win = lambda xs: [(x - 1.5, x + 1.5, 1.1, 2.9) for x in xs]
     # south face: the lobby's doors in the middle, windows down both wings
-    wall(g, "ru_concrete", (-half, b0), (half, b0), 0, H1, .5, [(half - 4.0, half + 4.0, 3.6)] + win([8, 17, 26, 35, half + 12, half + 21, half + 30, half + 39]))
+    wall(g, "ru_ceramic", (-half, b0), (half, b0), 0, H1, .5, [(half - 4.0, half + 4.0, 3.6)] + win([8, 17, 26, 35, half + 12, half + 21, half + 30, half + 39]))
     # north face onto the yard: a wide door from the lobby, a door from each wing
-    wall(g, "ru_concrete", (-half, b1), (half, b1), 0, H1, .5, [(half - 3.0, half + 3.0, 3.4), (half - 31.5, half - 28.5, 2.8), (half + 28.5, half + 31.5, 2.8)]
+    wall(g, "ru_ceramic", (-half, b1), (half, b1), 0, H1, .5, [(half - 3.0, half + 3.0, 3.4), (half - 31.5, half - 28.5, 2.8), (half + 28.5, half + 31.5, 2.8)]
          + win([7, 23, 33, half + 13, half + 23, half + 39]))
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * half, b0), (s * half, b1), 0, H1, .5)
+        wall(g, "ru_ceramic", (s * half, b0), (s * half, b1), 0, H1, .5)
         # the lobby's side walls, a door into each wing front and back
-        wall(g, "ru_panel", (s * lob, b0), (s * lob, b1), 0, H1, .3, [(8.0, 10.6, 2.8), (28.0, 30.6, 2.8)])
+        wall(g, "ru_plaster", (s * lob, b0), (s * lob, b1), 0, H1, .3, [(8.0, 10.6, 2.8), (28.0, 30.6, 2.8)])
         # the wings: two cross walls with doors, and a wall along the middle of the outer rooms
-        wall(g, "ru_panel", (s * 21.0, b0), (s * 21.0, b1), 0, H1, .3, [(4.0, 6.4, 2.8), (24.0, 26.4, 2.8)] if s < 0 else [(13.0, 15.4, 2.8), (31.0, 33.4, 2.8)])
-        wall(g, "ru_panel", (s * 34.0, b0), (s * 34.0, b1), 0, H1, .3, [(16.0, 18.4, 2.8)] if s < 0 else [(6.0, 8.4, 2.8), (27.0, 29.4, 2.8)])
-        wall(g, "ru_panel", (s * 21.0, b0 + 20), (s * half, b0 + 20), 0, H1, .3, [(4.0, 6.4, 2.8), (17.0, 19.4, 2.8)])
+        wall(g, "ru_plaster", (s * 21.0, b0), (s * 21.0, b1), 0, H1, .3, [(4.0, 6.4, 2.8), (24.0, 26.4, 2.8)] if s < 0 else [(13.0, 15.4, 2.8), (31.0, 33.4, 2.8)])
+        wall(g, "ru_plaster", (s * 34.0, b0), (s * 34.0, b1), 0, H1, .3, [(16.0, 18.4, 2.8)] if s < 0 else [(6.0, 8.4, 2.8), (27.0, 29.4, 2.8)])
+        wall(g, "ru_plaster", (s * 21.0, b0 + 20), (s * half, b0 + 20), 0, H1, .3, [(4.0, 6.4, 2.8), (17.0, 19.4, 2.8)])
     # the ceiling: whole but for where the upper floors came through it (a shaft of moonlight in the lobby, one wing open)
     holes = ((-5.0, 5.0, b0 + 14, b0 + 26), (23.0, 33.0, b0 + 22, b0 + 36), (-44.0, -36.0, b0 + 4, b0 + 14))
 
     def ceiling(e, n):
         return not any(x0 < e < x1 and y0 < n < y1 for x0, x1, y0, y1 in holes)
-    slab(g, "ru_concrete", -half, half, b0, b1, H1 + .34, .34, 2.0, ceiling)
+    slab(g, "ru_tile", -half, half, b0, b1, H1 + .34, .34, 2.0, ceiling, under="ru_plaster")
     rk.heap(g, (0.0, b0 + 20, 0), 4.2, 1.5, 1510, ry=5.0)
     rk.heap(g, (28.0, b0 + 29, 0), 4.5, 2.0, 1511, ry=6.0)
     rk.heap(g, (-40.0, b0 + 9, 0), 3.4, 1.4, 1512)
@@ -305,7 +305,7 @@ def zone_stacks(G, H):
     y0, y1 = Y["n0"], Y["n1"]
     H.ground_slab(g, "ru_stone", -half, half, y0, y1, .06)
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * half, y0), (s * half, y1), 0, 5.2, .5, win([10, 22, 34, 46, 58, 70, 82, 94]))
+        wall(g, "ru_ceramic", (s * half, y0), (s * half, y1), 0, 5.2, .5, win([10, 22, 34, 46, 58, 70, 82, 94]))
         rk.tower(g, gd, (s * (half + 10.5), (y0 + y1) / 2), 20, y1 - y0, 10, yaw=0.0, seed=1540 + (s > 0), style="panel", top=(.45, 1.0),
                  holes=3, base_z=0.0, col_top=10.0, heaps=False)
     yc = (0.0, (y0 + y1) / 2)
@@ -342,10 +342,10 @@ def zone_stacks(G, H):
     # ---- the north block and the archway under it
     a0, a1, ah, AH = A["n0"], A["n1"], A["half"], 5.0
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * ah, a0), (s * ah, a1), 0, AH, .6)
-        wall(g, "ru_concrete", (s * ah, a0), (s * half, a0), 0, AH, .5, win([8, 18, 28, 38]))
-        wall(g, "ru_concrete", (s * ah, a1), (s * half, a1), 0, AH, .5)
-        wall(g, "ru_concrete", (s * half, a0), (s * half, a1), 0, AH, .5)
+        wall(g, "ru_ceramic", (s * ah, a0), (s * ah, a1), 0, AH, .6)
+        wall(g, "ru_ceramic", (s * ah, a0), (s * half, a0), 0, AH, .5, win([8, 18, 28, 38]))
+        wall(g, "ru_ceramic", (s * ah, a1), (s * half, a1), 0, AH, .5)
+        wall(g, "ru_ceramic", (s * half, a0), (s * half, a1), 0, AH, .5)
     slab(g, "ru_concrete", -half, half, a0, a1, AH + .34, .34, 3.0)
     H.ground_slab(g, "ru_asphalt", -ah, ah, a0, a1, .05)
     rk.tower(g, gd, (0.0, (a0 + a1) / 2), 2 * half, a1 - a0, 9, yaw=0.0, seed=1590, style="panel", top=(.4, 1.0), holes=3, base_z=AH + .34, heaps=False,
@@ -359,13 +359,13 @@ def zone_stacks(G, H):
     H.ground_slab(g, "ru_asphalt", -lh, lh, l0, l1 + 2, .04)
     doors = {-1: (18.0, 52.0, 96.0, 128.0), 1: (34.0, 74.0, 112.0)}
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * (lh + .25), l0), (s * (lh + .25), l1), 0, 4.6, .5,
+        wall(g, "ru_ceramic", (s * (lh + .25), l0), (s * (lh + .25), l1), 0, 4.6, .5,
              [(d0, d0 + 3.0, 2.9) for d0 in doors[s]] + win([x for x in (8, 28, 44, 64, 86, 104, 122, 140) if all(abs(x - d0 - 1.5) > 4 for d0 in doors[s])]))
         for d0 in doors[s]:                                       # a closet behind each door: three walls and a ceiling
             n = l0 + d0
-            wall(g, "ru_panel", (s * (lh + 5.0), n - 1.5), (s * (lh + 5.0), n + 4.5), 0, 3.4, .3)
-            wall(g, "ru_panel", (s * (lh + .5), n - 1.5), (s * (lh + 5.0), n - 1.5), 0, 3.4, .3)
-            wall(g, "ru_panel", (s * (lh + .5), n + 4.5), (s * (lh + 5.0), n + 4.5), 0, 3.4, .3)
+            wall(g, "ru_plaster", (s * (lh + 5.0), n - 1.5), (s * (lh + 5.0), n + 4.5), 0, 3.4, .3)
+            wall(g, "ru_plaster", (s * (lh + .5), n - 1.5), (s * (lh + 5.0), n - 1.5), 0, 3.4, .3)
+            wall(g, "ru_plaster", (s * (lh + .5), n + 4.5), (s * (lh + 5.0), n + 4.5), 0, 3.4, .3)
             block(g, "ru_concrete", min(s * (lh + .5), s * (lh + 5.15)), max(s * (lh + .5), s * (lh + 5.15)), n - 1.65, n + 4.65, 3.4, 3.7)
         n = l0 + 2
         i = 0
@@ -427,12 +427,12 @@ def zone_galleria(G, H):
     rk.heap(g, (31.0, f0 + 5, 0), 3.5, 1.6, 2113)
     H.fire(gd, (20.0, f0 + 27, 0.0), 2114)
     # ---- the shell: floor, outer walls, the doors in the south wall, the service gate in the north one
-    block(g, "ru_stone", -half, half, n0, n1, -.1, .05)
+    block(g, "ru_tile", -half, half, n0, n1, -.1, .05)
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * (half + .3), n0), (s * (half + .3), n1), 0, roof, .6)
-    wall(g, "ru_concrete", (-half - .6, n0), (half + .6, n0), 0, roof, .6, [(half + .6 + e - 3.0, half + .6 + e + 3.0, 4.0) for e in M["doors"]])
+        wall(g, "ru_composite", (s * (half + .3), n0), (s * (half + .3), n1), 0, roof, .6)
+    wall(g, "ru_composite", (-half - .6, n0), (half + .6, n0), 0, roof, .6, [(half + .6 + e - 3.0, half + .6 + e + 3.0, 4.0) for e in M["doors"]])
     gh = M["gate_half"]
-    wall(g, "ru_concrete", (-half - .6, n1), (half + .6, n1), 0, roof, .6, [(half + .6 - gh, half + .6 + gh, 4.6)])
+    wall(g, "ru_composite", (-half - .6, n1), (half + .6, n1), 0, roof, .6, [(half + .6 - gh, half + .6 + gh, 4.6)])
     for s in (-1, 1):                                                 # the gate's frame
         block(g, "ru_metal", s * gh - .35, s * gh + .35, n1 - .7, n1 + .7, 0, 4.9)
     block(g, "ru_metal", -gh - .35, gh + .35, n1 - .7, n1 + .7, 4.6, 5.2)
@@ -450,7 +450,7 @@ def zone_galleria(G, H):
         if abs(e) < void:
             return any(abs(n - bn) < 3.0 for bn in M["bridges"])
         return True
-    slab(g, "ru_stone", -half, half, n0, n1, z1, .36, 3.0, gallery, under="ru_concrete")
+    slab(g, "ru_tile", -half, half, n0, n1, z1, .36, 3.0, gallery, under="ru_plaster")
     rk.heap(g, (29.0, -1483.0, 0), 5.0, 2.6, 2120, ry=7.0)
     # ---- shop fronts on both storeys: piers and a lintel round each opening, a shutter down over some
     open_ = {}
@@ -464,9 +464,9 @@ def zone_galleria(G, H):
                     rk.box(g, "ru_metal", (s * (conc - .22), n0 + k * bay + bay / 2, za + top / 2), (.05, 4.0, top / 2))
                 else:
                     ops.append((k * bay + 2.0, k * bay + 10.0, top))
-            wall(g, "ru_panel", (s * conc, n0), (s * conc, n1), za, zb, .4, ops)
+            wall(g, "ru_plaster", (s * conc, n0), (s * conc, n1), za, zb, .4, ops)
             for k in range(1, nb):                                    # the walls between shops
-                wall(g, "ru_panel", (s * (conc + .2), n0 + k * bay), (s * half, n0 + k * bay), za, zb, .25)
+                wall(g, "ru_plaster", (s * (conc + .2), n0 + k * bay), (s * half, n0 + k * bay), za, zb, .25)
     # what is left in the open shops: a counter and shelving (cover, and somewhere for them to wait)
     for (lv, s, k), is_open in sorted(open_.items()):
         if not is_open:
@@ -490,10 +490,10 @@ def zone_galleria(G, H):
         for s in (-1, 1):
             if math.hypot(s * void - rot[0], n - rot[1]) < rr + 1.5:
                 continue
-            block(g, "ru_concrete", s * void - .32, s * void + .32, n - .32, n + .32, 0.0, roof - .35)
+            block(g, "ru_ceramic", s * void - .32, s * void + .32, n - .32, n + .32, 0.0, roof - .35)
 
     def rail(a, b):
-        rk.wall_path(g, "ru_metal", [a, b], .1, 1.1, rnd=rnd, broken=.3)
+        rk.wall_path(g, "ru_brass", [a, b], .1, 1.1, rnd=rnd, broken=.3)
     for s in (-1, 1):
         cuts = sorted([(bn - 3.0, bn + 3.0) for bn in M["bridges"]] + [(rot[1] - rr - 1, rot[1] + rr + 1)])
         n = n0 + .5
@@ -615,11 +615,11 @@ def zone_deepline(G, H):
     H.light("lamp", (0.0, s1 + 3, z + 3.4), 1200)
     # ---- the ticket hall
     h1, hh = D["hall_n1"], D["hall_half"]
-    block(g, "ru_stone", -hh, hh, s1, h1, z - .4, z)
+    block(g, "ru_tile", -hh, hh, s1, h1, z - .4, z)
     for s in (-1, 1):
-        wall(g, "ru_panel", (s * (hh + .3), s1 - .6), (s * (hh + .3), h1), z, top, .6)
-        wall(g, "ru_panel", (s * sh, s1 - .3), (s * (hh + .6), s1 - .3), z, top, .6)
-        wall(g, "ru_panel", (s * D["wall"], h1), (s * (hh + .6), h1), z, top, .6)
+        wall(g, "ru_ceramic", (s * (hh + .3), s1 - .6), (s * (hh + .3), h1), z, top, .6)
+        wall(g, "ru_ceramic", (s * sh, s1 - .3), (s * (hh + .6), s1 - .3), z, top, .6)
+        wall(g, "ru_ceramic", (s * D["wall"], h1), (s * (hh + .6), h1), z, top, .6)
         block(g, "ru_concrete", s * 8.0 - .35, s * 8.0 + .35, s1 + 11.7, s1 + 12.4, z, top)
         block(g, "ru_concrete", s * 8.0 - .35, s * 8.0 + .35, s1 + 25.7, s1 + 26.4, z, top)
         block(g, "ru_panel", min(s * 11.0, s * 15.4), max(s * 11.0, s * 15.4), s1 + 4.0, s1 + 9.0, z, z + 2.6)       # the ticket offices
@@ -634,10 +634,10 @@ def zone_deepline(G, H):
         H.light("lamp", (e, s1 + dn, z + 3.6), 1100)
     # ---- the platform hall: an island platform between two track beds, columns down it
     p1, ph, wl = D["plat_n1"], D["plat_half"], D["wall"]
-    block(g, "ru_stone", -ph, ph, h1, p1, track - .4, z)
+    block(g, "ru_tile", -ph, ph, h1, p1, track - .4, z)
     for s in (-1, 1):
         block(g, "ru_concrete", min(s * ph, s * wl), max(s * ph, s * wl), h1, p1 + 8.0, track - .4, track, top_mat="ru_rubble")
-        wall(g, "ru_panel", (s * (wl + .3), h1), (s * (wl + .3), p1 + 8.0), track, top, .6)
+        wall(g, "ru_ceramic", (s * (wl + .3), h1), (s * (wl + .3), p1 + 8.0), track, top, .6)
         wall(g, "ru_concrete", (s * D["tun_half"], p1 + 8.3), (s * (wl + .6), p1 + 8.3), track, top, .6)      # the side beds' ends
         rk.heap(g, (s * 7.5, p1 + 5.5, track), 2.4, 2.6, 2620 + (s > 0), ry=3.0)
         # the way from the hall down onto each bed, and the yellow line nobody stands behind now
@@ -710,7 +710,7 @@ def zone_deepline(G, H):
         H.light("lamp", ((c0 + c1) / 2, f0 - 4 + i * 16, track + 2.0), 600, 8.0)
     rk.tube(gd, "ru_metal", [(c0 + .2, f0 - 8.5, track + 2.4), (c0 + .2, f1 + 8.5, track + 2.4)], .08, 6)
     # what lives down here
-    for i, (n, e) in enumerate(((-1070.0, -2.5), (-1046.0, 2.0), (-950.0, -1.5), (-926.0, 2.5))):
+    for i, (n, e) in enumerate(((-1070.0, 3.0), (-1046.0, 2.0), (-950.0, -1.5), (-926.0, 2.5))):   # (the first clear of the train)
         rk.alien_barricade(g, (e, n, track), PI, 2660 + i, w=3.0)
     for i, (e, n, w) in enumerate(((-th + .3, -1058.0, (1, 0)), (th - .3, -1034.0, (-1, 0)), (-th + .3, -944.0, (1, 0)), (th - .3, -918.0, (-1, 0)))):
         growth(g, gd, (e, n, track), 3.2, 2670 + i, w)
