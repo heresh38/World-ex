@@ -24,6 +24,16 @@ The alien ecosystem (alienflora.py):
   ru_leaf       the fleshy leaves: deep teal to green, violet veins, a wet sheen
   ru_moss       cushions of it: dark teal-green clumps, pale specks
   ru_fungus     shelf brackets: cream to lavender, ringed
+Interiors (interiorkit.py: what the shops, halls and rooms were fitted out with):
+  ru_wood       counters, shelves, table tops: a warm laminate, grain along the length, worn at the edges, dusty
+  ru_fabric     cloth (clothes on rails, bedding, seats): FOUR colours side by side across the tile (blue, olive, rust,
+                off-white), one weave; a face picks its band by its own UVs (never box-mapped)
+  ru_ceiling    suspended ceiling: 0.6 m mineral-fibre tiles in a T-bar grid, pinholes, water rings
+  ru_shutter    roller shutter: galvanised slats 8 cm high, scuffed, dirt in the joints
+  ru_carpet     shop carpet: a dark loop pile, flattened paths, stains
+  ru_goods      a stocked shelf seen from the front, four shelf rows a tile: packets, tins and bottles, gaps where
+                things were taken (own UVs: a face shows a window of one row)
+  ru_books      the same for a bookcase: spines
 
 Each set: <name>_c.jpg colour, <name>_n.png tangent normal (OpenGL), <name>_m.png (R unused, G roughness, B metal).
 
@@ -38,7 +48,8 @@ from nexus_city_textures import F32, rng, noise, fbm, speck, blur, grid_lines, c
 TILE = {"ru_concrete": 2.5, "ru_fracture": 1.5, "ru_asphalt": 6.0, "ru_stone": 4.0, "ru_metal": 2.0, "ru_panel": 3.0,
         "ru_rubble": 4.0, "ru_banner": 1.0, "ru_hive": 2.0,
         "ru_ceramic": 2.4, "ru_composite": 2.4, "ru_sandstone": 3.0, "ru_corrugate": 2.0, "ru_tile": 2.4, "ru_plaster": 3.0,
-        "ru_brass": 1.5, "ru_far_a": 14.0, "ru_far_b": 14.0, "ru_bark": 1.0, "ru_leaf": .8, "ru_moss": 1.5, "ru_fungus": .8}
+        "ru_brass": 1.5, "ru_far_a": 14.0, "ru_far_b": 14.0, "ru_bark": 1.0, "ru_leaf": .8, "ru_moss": 1.5, "ru_fungus": .8,
+        "ru_wood": 1.2, "ru_fabric": 1.0, "ru_ceiling": 2.4, "ru_shutter": 1.0, "ru_carpet": 2.0, "ru_goods": 1.2, "ru_books": 1.2}
 N = 1024
 
 
@@ -495,7 +506,166 @@ def fungal():
     write("ru_fungus", c, h, 3.0, .55)
 
 
-JOBS = dict(ru_bark=bark, ru_leaf=leafy, ru_moss=mossy, ru_fungus=fungal, ru_hive=hive, ru_concrete=concrete, ru_fracture=fracture, ru_asphalt=asphalt, ru_stone=stone, ru_metal=metal,
+def wood():
+    n = N
+    yy = rng(401).random((n, 1)).astype(F32)
+    grain = np.repeat(blur(np.repeat(yy, 8, 1), 3)[:, :1], n, 1)                       # lines along the length (U)
+    wav = fbm(n, 3, 402)
+    grain = np.clip(grain + (np.roll(grain, 3, 0) - grain) * wav, 0, 1)
+    v = fbm(n, 5, 403)
+    dust = np.clip((fbm(n, 2.5, 404) - .42) * 2.4, 0, 1)
+    scuff = np.clip((noise(n, 40, 405) - .62) * 6, 0, 1) * np.clip((fbm(n, 3, 406) - .45) * 4, 0, 1)
+    c = ramp(grain * .65 + v * .35, '#5b3d24', '#9a7046')
+    c = c * (1 - scuff[..., None] * .5) + col('#c9b596') * scuff[..., None] * .5
+    c = c * (1 - dust[..., None] * .4) + col('#8a8172') * dust[..., None] * .4
+    h = grain * .25 + scuff * .2
+    write("ru_wood", c, h, 1.6, .42 + dust * .4 + scuff * .15)
+
+
+def fabric():
+    n = N
+    xx = np.arange(n)[None, :]; yy = np.arange(n)[:, None]
+    weave = (.5 + .25 * np.sin(xx * 2 * np.pi / 6) + .25 * np.sin(yy * 2 * np.pi / 6)).astype(F32) * np.ones((n, n), F32)
+    twill = (.5 + .5 * np.sin((xx + yy) * 2 * np.pi / 12)).astype(F32)
+    v = fbm(n, 6, 411)
+    fold = np.repeat(blur(np.repeat(rng(412).random((1, n)).astype(F32), 8, 0), 14)[:1], n, 0)      # soft vertical folds
+    fold = (fold - fold.min()) / max(1e-6, fold.max() - fold.min())
+    dirt = np.clip((fbm(n, 3, 413) - .5) * 3, 0, 1)
+    band = (xx * 4 // n).astype(int) * np.ones((n, 1), int)
+    pal = np.stack([col('#2d3d54'), col('#4f5433'), col('#6e3526'), col('#aaa391')])
+    c = pal[band] * (.78 + .22 * weave[..., None]) * (.86 + .14 * v[..., None]) * (.8 + .2 * fold[..., None])
+    c = c * (1 - dirt[..., None] * .3) + col('#4a4336') * dirt[..., None] * .3
+    h = weave * .35 + twill * .15 + fold * .9
+    write("ru_fabric", c, h, 3.0, .9 - weave * .08)
+
+
+def ceiling():
+    n = N
+    j, ix, iy = grid_lines(n, 4, 4, 2.2)
+    r = cell_rand(ix, iy, 421)
+    holes = blur(speck(n, .012, 422), 1) * 2.2
+    holes = np.clip(holes, 0, 1) * (1 - j)
+    v = fbm(n, 6, 423)
+    ring = np.clip(1 - np.abs(fbm(n, 2.2, 424) - .56) * 22, 0, 1) * np.clip((fbm(n, 1.5, 425) - .45) * 4, 0, 1)
+    inside = np.clip((fbm(n, 2.2, 424) - .56) * 12, 0, 1) * np.clip((fbm(n, 1.5, 425) - .45) * 4, 0, 1)
+    c = ramp(v * .5 + r * .5, '#8f8d85', '#b6b3a8')
+    c = c * (1 - holes[..., None] * .55)
+    c = c * (1 - inside[..., None] * .25) + col('#7d6a45') * inside[..., None] * .25
+    c = c * (1 - ring[..., None] * .5) + col('#5a4424') * ring[..., None] * .5
+    bar = ramp(fbm(n, 9, 426), '#b9bbb8', '#d6d7d2')
+    c = c * (1 - j[..., None]) + bar * j[..., None]
+    h = j * .5 - holes * .4 + v * .05                                   # the bars stand a little proud of the tiles
+    write("ru_ceiling", c, h, 3.0, .92 - j * .45, metal=j * .7)
+
+
+def shutter():
+    n = N
+    y = (np.arange(n) + .5)[:, None] / n * 12                            # twelve slats a metre
+    f = y - np.floor(y)
+    prof = (np.sin(np.clip(f / .86, 0, 1) * np.pi) ** .7).astype(F32) * np.ones((1, n), F32)
+    joint = (f > .86).astype(F32) * np.ones((1, n), F32)
+    v = fbm(n, 4, 431)
+    xs = rng(432).random((1, n)).astype(F32)
+    brush = np.repeat(blur(np.repeat(xs, 8, 0), 2)[:1], n, 0)
+    scuff = np.clip((noise(n, 26, 433) - .6) * 5, 0, 1) * np.clip((fbm(n, 2, 434) - .4) * 3, 0, 1)
+    grime = np.clip((fbm(n, 3, 435) - .48) * 3, 0, 1)
+    c = ramp(v * .5 + brush * .2 + prof * .3, '#565c60', '#868d90')
+    c = c * (1 - joint[..., None] * .7)
+    c = c * (1 - grime[..., None] * .4) + col('#3a352c') * grime[..., None] * .4
+    c = c * (1 - scuff[..., None] * .5) + col('#b9bec0') * scuff[..., None] * .5
+    h = prof * 1.0 - joint * .6 + scuff * .1
+    write("ru_shutter", c, h, 5.0, .42 + grime * .35 + joint * .3, metal=.75 * (1 - grime * .6))
+
+
+def carpet():
+    n = N
+    loop = rng(441).random((n, n)).astype(F32)
+    loop = blur(loop, 1)
+    v = fbm(n, 5, 442)
+    path = np.clip((fbm(n, 1.5, 443) - .45) * 3, 0, 1)                    # where feet flattened it
+    stain = np.clip((fbm(n, 3, 444) - .62) * 7, 0, 1)
+    fleck = speck(n, .02, 445)
+    c = ramp(v * .5 + loop * .5, '#1c2a2e', '#34474a')
+    c = c * (1 - fleck[..., None] * .5) + col('#6b7a70') * fleck[..., None] * .5
+    c = c * (1 - path[..., None] * .25) + col('#4a463e') * path[..., None] * .25
+    c = c * (1 - stain[..., None] * .6)
+    h = loop * .6 * (1 - path * .6)
+    write("ru_carpet", c, h, 3.0, .96)
+
+
+def _rows(name, seed, books):
+    """Four shelf rows of things seen from the front. Row height n/4; the top of each row is the shadow under the
+    shelf above. Linear colour + height + roughness."""
+    n = N
+    r = rng(seed)
+    back = col('#0b0c0d')
+    c = np.ones((n, n, 3), F32) * back
+    h = np.zeros((n, n), F32)
+    rough = np.full((n, n), .85, F32)
+    pal = [col(x) for x in ('#7a2f25', '#27506b', '#6f6a3a', '#a79a7c', '#39573a', '#8c5a2b', '#4b3a5e', '#9aa3a6', '#5d1f2f', '#2c2f33',
+                            '#b28a3a', '#3f6f73')]
+    rh = n // 4
+    for row in range(4):
+        y1 = (row + 1) * rh - 3                                           # the shelf the things stand on (image rows run down)
+        x = int(r.integers(2, 10))
+        while x < n - 12:
+            if books:
+                w = int(r.integers(16, 44)); ht = int(rh * r.uniform(.66, .9)); gap = 0 if r.random() < .85 else int(r.integers(6, 60))
+            else:
+                w = int(r.integers(44, 118)); ht = int(rh * r.uniform(.45, .86)); gap = int(r.integers(3, 12)) if r.random() < .82 else int(r.integers(50, 170))
+            w = min(w, n - 4 - x)
+            if w < 10:
+                break
+            base = pal[int(r.integers(0, len(pal)))] * r.uniform(.55, 1.0)
+            x0, x1, y0 = x, x + w, y1 - ht
+            xs = (np.arange(x0, x1) - x0 + .5) / w
+            bulge = np.sin(xs * np.pi) ** (.35 if books else .5)          # each thing rounds off toward its sides
+            neck = (not books) and w < 66 and r.random() < .6                # a bottle: shoulders and a cap
+            body = np.ones((ht, w), F32)
+            if neck:
+                nk = int(ht * .28)
+                keep = (np.abs(xs - .5) < .2)[None, :] * np.ones((nk, 1), F32)
+                body[:nk] = keep
+            m = body > 0
+            shade = (.55 + .45 * bulge)[None, :] * np.ones((ht, 1), F32)
+            blk = c[y0:y1, x0:x1]
+            blk[m] = (base[None, None, :] * shade[..., None])[m]
+            lab = pal[int(r.integers(0, len(pal)))] * .5 + col('#c9c2ad') * .5 # the label: a paler band, a darker stripe in it
+            if books:
+                b0, b1 = int(ht * r.uniform(.12, .3)), int(ht * r.uniform(.36, .5))
+                blk[b0:b1][m[b0:b1]] = (lab[None, None, :] * shade[b0:b1][..., None])[m[b0:b1]]
+            else:
+                b0, b1 = int(ht * (.42 if neck else .25)), int(ht * (.82 if neck else .7))
+                blk[b0:b1][m[b0:b1]] = (lab[None, None, :] * shade[b0:b1][..., None])[m[b0:b1]]
+                s0 = b0 + (b1 - b0) // 3
+                blk[s0:s0 + max(2, (b1 - b0) // 5)][m[s0:s0 + max(2, (b1 - b0) // 5)]] *= .45
+                if neck:
+                    blk[:max(3, int(ht * .07))][m[:max(3, int(ht * .07))]] = col('#1a1b1d')
+            hb = h[y0:y1, x0:x1]
+            hb[m] = (.5 + .5 * bulge[None, :] * np.ones((ht, 1), F32))[m]
+            rb = rough[y0:y1, x0:x1]
+            rb[m] = r.uniform(.3, .7)
+            x = x1 + gap
+        y0r = row * rh
+        sh = np.linspace(1, 0, int(rh * .2))[:, None, None]
+        c[y0r:y0r + len(sh)] *= (1 - sh * .8)                               # the shadow of the shelf above
+        c[y1:y1 + 3] = col('#2a2622')                                       # the shelf's front edge
+        h[y1:y1 + 3] = .8
+    dust = np.clip((fbm(n, 3, seed + 1) - .4) * 2.2, 0, 1)
+    c = c * (1 - dust[..., None] * .35) + col('#6f675a') * dust[..., None] * .35
+    write(name, c, h, 4.0, np.clip(rough + dust * .3, 0, 1))
+
+
+def goods():
+    _rows("ru_goods", 451, False)
+
+
+def books():
+    _rows("ru_books", 461, True)
+
+
+JOBS = dict(ru_wood=wood, ru_fabric=fabric, ru_ceiling=ceiling, ru_shutter=shutter, ru_carpet=carpet, ru_goods=goods, ru_books=books,
+            ru_bark=bark, ru_leaf=leafy, ru_moss=mossy, ru_fungus=fungal, ru_hive=hive, ru_concrete=concrete, ru_fracture=fracture, ru_asphalt=asphalt, ru_stone=stone, ru_metal=metal,
             ru_panel=panel, ru_rubble=rubble, ru_banner=banner,
             ru_ceramic=ceramic, ru_composite=composite, ru_sandstone=sandstone, ru_corrugate=corrugate, ru_tile=tile,
             ru_plaster=plaster, ru_brass=brass, ru_far_a=lambda: far_facade("ru_far_a", True, 271),

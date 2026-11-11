@@ -25,7 +25,8 @@ from ruins_textures import TILE
 TAU = 2 * math.pi
 TEXTURED = ("ru_concrete", "ru_fracture", "ru_asphalt", "ru_stone", "ru_metal", "ru_panel", "ru_rubble", "ru_banner", "ru_hive",
             "ru_ceramic", "ru_composite", "ru_sandstone", "ru_corrugate", "ru_tile", "ru_plaster", "ru_brass", "ru_far_a", "ru_far_b",
-            "ru_bark", "ru_leaf", "ru_moss", "ru_fungus")
+            "ru_bark", "ru_leaf", "ru_moss", "ru_fungus",
+            "ru_wood", "ru_fabric", "ru_ceiling", "ru_shutter", "ru_carpet", "ru_goods", "ru_books")
 # The zone being built (meridian.py sets it) and every rubble heap that collides, by zone: the plants grow over them.
 ZONE = None
 HEAPS = []
@@ -87,6 +88,14 @@ def material(name):
         m = bl.mat(name, '#ff3fb4', 0.0, .4, emit='#ff3fb4', strength=6.0)
     elif name == "ru_sign_amber":
         m = bl.mat(name, '#ffb040', 0.0, .4, emit='#ffb040', strength=5.0)
+    elif name == "ru_lightpanel":                                     # a ceiling light that still works
+        m = bl.mat(name, '#fff0d8', 0.0, .4, emit='#ffe9c4', strength=4.0)
+    elif name == "ru_sign_white":
+        m = bl.mat(name, '#f4f1e6', 0.0, .4, emit='#f4f1e6', strength=3.0)
+    elif name == "ru_sign_red":
+        m = bl.mat(name, '#ff4a3a', 0.0, .4, emit='#ff4a3a', strength=4.0)
+    elif name == "ru_sign_green":
+        m = bl.mat(name, '#3dff7a', 0.0, .4, emit='#3dff7a', strength=3.5)
     elif name == "ru_glow":
         m = bl.mat(name, '#7b3cff', 0.0, .35, emit='#9a5cff', strength=9.0)
     elif name == "ru_beam":
