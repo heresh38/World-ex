@@ -18,7 +18,7 @@
 
 namespace
 {
-	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Crouch, CrouchWalk, Count };
+	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Crouch, CrouchWalk, Stop, Count };
 }
 
 void USOLocomotionAnimInstance::PlayAttack(float PlayRate)
@@ -104,9 +104,9 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	const ASOCombatCharacter* Holder = Cast<ASOCombatCharacter>(Character);
 	const ASOWeapon* Held = Holder ? Holder->GetWeapon() : nullptr;
 	const USOGunRigComponent* Rig = Held ? (bArmsOnly ? Held->GetFirstPersonRig() : Held->GetThirdPersonRig()) : nullptr;
-	if (Player && Player->IsWeaponStowed() && !bArmsOnly)
+	if (Player && Player->IsWeaponStowed())
 	{
-		Rig = nullptr;                                           // (the gun is on the back: the hands are free)
+		Rig = nullptr;                                           // (the gun is put away: the hands are free)
 	}
 	FTransform Right, Left;
 	if (!bDead && Mesh && Rig && Rig->GetAttachParent() && Rig->GetHandTargets(Right, Left))
@@ -151,7 +151,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	HoldAlpha = 1.0f;
 	const USOCharacterMovementComponent* Traverse = Character ? Cast<USOCharacterMovementComponent>(Character->GetCharacterMovement()) : nullptr;
 	FVector Edge, EdgeNormal;
-	if (!bHold && !bDead && !bArmsOnly && Mesh && Traverse && Traverse->GetTraversalLedge(Edge, EdgeNormal))
+	if (!bHold && !bDead && Mesh && Traverse && Traverse->GetTraversalLedge(Edge, EdgeNormal))
 	{
 		const FTransform ToMesh = Mesh->GetComponentTransform();
 		const FVector EdgeCS = ToMesh.InverseTransformPosition(Edge);
@@ -267,6 +267,27 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			Target[Crouch] = 1.0f - Go;
 			Target[CrouchWalk] = Go;
 		}
+		// Braking out of a run to a standstill: the body's brake over the idle, by how fast it was going, gone the
+		// moment it moves off again.
+		RecentSpeed = FMath::Max(Speed, RecentSpeed - 520.0f * DeltaSeconds);
+		const float StopLength = Clips.Stop ? Clips.Stop->GetPlayLength() : 0.0f;
+		if (StopLength > 0.0f && !bCrouchPose && Speed < 90.0f && RecentSpeed > 280.0f && StopTime >= StopLength)
+		{
+			StopStrength = FMath::Clamp((RecentSpeed - 200.0f) / 420.0f, 0.4f, 1.0f);
+			StopTime = 0.0f;
+			RecentSpeed = Speed;
+		}
+		StopTime += DeltaSeconds;
+		const float Braking = StopLength > 0.0f && StopTime < StopLength && Speed < 140.0f && !bCrouchPose
+			? StopStrength * (1.0f - FMath::SmoothStep(StopLength * 0.4f, StopLength, StopTime)) : 0.0f;
+		if (Braking > 0.0f)
+		{
+			for (float& T : Target)
+			{
+				T *= 1.0f - Braking;
+			}
+			Target[Stop] = Braking;
+		}
 		// the landing over whatever comes next, fading as its clip plays out
 		const float LandLength = Clips.Land ? Clips.Land->GetPlayLength() : 0.0f;
 		const float Landing = LandLength > 0.0f && LandTime < LandLength ? LandStrength * (1.0f - FMath::SmoothStep(LandLength * 0.45f, LandLength, LandTime)) : 0.0f;
@@ -370,6 +391,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	Times[CrouchWalk] = CyclePhase * CrouchLen;
 	Times[Crouch] += DeltaSeconds;
 	Times[Land] = LandTime;
+	Times[Stop] = StopTime;
 	// over and onto things: the pose for how far through the move the body is
 	for (const int32 Layer : { static_cast<int32>(Vault), static_cast<int32>(Mantle), static_cast<int32>(Climb) })
 	{
@@ -694,6 +716,7 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	{
 		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = StandYaw = 0.0f;
 		bHaveYaw = bTurning = bCrouchPose = false;
+		TurnTime = TurnLift[0] = TurnLift[1] = 0.0f;
 		return;
 	}
 	const FTransform ToMesh = Mesh->GetComponentTransform();
@@ -736,8 +759,20 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	}
 	else
 	{
-		StandYaw = FMath::FInterpTo(StandYaw - (bStanding ? Turned : 0.0f), 0.0f, Dt, bStanding ? 7.5f : 12.0f);
+		StandYaw = FMath::FInterpTo(StandYaw - (bStanding ? Turned : 0.0f), 0.0f, Dt, bStanding ? 6.5f : 12.0f);
 		bTurning = bTurning && bStanding && FMath::Abs(StandYaw) > 1.5f;
+	}
+	// A turn on the spot is stepped, not slid: the foot on the side of the turn comes off the ground and is carried
+	// round first while the other pivots on its ball, then that one follows.
+	TurnTime = bTurning ? TurnTime + Dt : 0.0f;
+	{
+		auto Step = [this](float From, float To) { return TurnTime > From && TurnTime < To ? FMath::Sin((TurnTime - From) / (To - From) * PI) : 0.0f; };
+		const int32 Lead = StandYaw < 0.0f ? 1 : 0;              // the hips are behind to the left: the turn is to the right
+		const float Want[2] = { 5.5f * (Lead == 0 ? Step(0.0f, 0.22f) : Step(0.18f, 0.42f)), 5.5f * (Lead == 1 ? Step(0.0f, 0.22f) : Step(0.18f, 0.42f)) };
+		for (int32 i = 0; i < 2; ++i)
+		{
+			TurnLift[i] = bTurning ? Want[i] : FMath::FInterpTo(TurnLift[i], 0.0f, Dt, 20.0f);
+		}
 	}
 
 	// Lean into the acceleration (smoothed), a touch forward with speed.
@@ -843,7 +878,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	const UAnimSequenceBase* ClipList[Count] = { Instance->Clips.Idle, Instance->Clips.Walk, Instance->Clips.Run, Instance->Clips.Jump,
 		Instance->Clips.Death, Instance->ActiveAttack ? Instance->ActiveAttack.Get() : Instance->Clips.Attack.Get(), Instance->Clips.Slide, Instance->FidgetClip,
 		Instance->Clips.Stroll, Instance->Clips.Land, Instance->Clips.Vault, Instance->Clips.Mantle, Instance->Clips.Climb,
-		Instance->Clips.Crouch, Instance->Clips.CrouchWalk };
+		Instance->Clips.Crouch, Instance->Clips.CrouchWalk, Instance->Clips.Stop };
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FSOLocomotionLayer& Layer = Layers[i];
@@ -878,6 +913,8 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	PelvisDrop = Instance->PelvisDrop;
 	FootOffset[0] = Instance->FootOffset[0];
 	FootOffset[1] = Instance->FootOffset[1];
+	TurnLift[0] = Instance->GetTurnLift(0);
+	TurnLift[1] = Instance->GetTurnLift(1);
 	FootIKAlpha = Instance->FootIKAlpha;
 }
 
@@ -1051,7 +1088,7 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 		if (bLeg[i])
 		{
 			FootWanted[i] = CS[Leg[i][2]];
-			FootWanted[i].AddToTranslation(Up * FootOffset[i] * FootIKAlpha);
+			FootWanted[i].AddToTranslation(Up * (FootOffset[i] * FootIKAlpha + TurnLift[i]));
 		}
 	}
 

@@ -52,6 +52,10 @@ struct SOCHARACTER_API FSOLocomotionClips
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> CrouchWalk;
 
+	/** Braking out of a run to a standstill (blended in by how fast the body was going). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
+	TObjectPtr<UAnimSequenceBase> Stop;
+
 	/** Over and onto obstacles: each is read by how far through the move the body is, never by the clock. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> Vault;
@@ -100,8 +104,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	virtual bool Evaluate(FPoseContext& Output) override;
 
 	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget, 8 Stroll, 9 Land, 10 Vault, 11 Mantle,
-	 *  12 Climb, 13 Crouch, 14 CrouchWalk */
-	FSOLocomotionLayer Layers[15];
+	 *  12 Climb, 13 Crouch, 14 CrouchWalk, 15 Stop */
+	FSOLocomotionLayer Layers[16];
 
 	// Held gun (players): copied from the instance each update.
 	bool bHold = false;
@@ -132,6 +136,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float LeanPitch = 0.0f;
 	float PelvisDrop = 0.0f;
 	float FootOffset[2] = { 0.0f, 0.0f };
+	float TurnLift[2] = { 0.0f, 0.0f };
 	float FootIKAlpha = 0.0f;
 	bool bBodyMotion = false;
 
@@ -229,6 +234,8 @@ public:
 	float GetAirTuck() const { return AirTuck; }
 	/** 0 standing .. 1 crouched (the body's pose, eased). */
 	float GetCrouchAlpha() const { return CrouchAlpha; }
+	/** How high the turn on the spot has each foot off the ground right now (cm; 0 left, 1 right). */
+	float GetTurnLift(int32 Foot) const { return TurnLift[Foot ? 1 : 0]; }
 	/** This body has its own crouch clips (nothing is bent at runtime). */
 	bool HasCrouchClips() const { return Clips.Crouch != nullptr && Clips.CrouchWalk != nullptr; }
 	/** How much of the landing clip shows right now (0..1). */
@@ -277,9 +284,9 @@ public:
 	bool HasFittedGrip() const { return bFitDone; }
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
-	 *  Mantle, Climb, Crouch, CrouchWalk. */
-	float Weights[15] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-	float Times[15] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	 *  Mantle, Climb, Crouch, CrouchWalk, Stop. */
+	float Weights[16] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Times[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 	/** Seconds of standing still before an idle variation, picked between these (random each time). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
@@ -326,7 +333,7 @@ protected:
 	bool bLanded = false;
 	float LandImpact = 0.0f;
 	/** Linear cross-fade progress per layer; the weights are its eased shape. */
-	float Ramp[15] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Ramp[16] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	/** Where in the jump clip the air pose is read (s): take-off at 0, the tuck at JumpTuckTime, the reach for the
 	 *  ground at the end. */
 	float JumpPose = 0.0f;
@@ -337,6 +344,14 @@ protected:
 	float CrouchAlpha = 0.0f;
 	/** Crouched on the ground right now (the crouch clips play). */
 	bool bCrouchPose = false;
+	/** The brake layer: how hard this stop is (0..1), how far through its clip, and how fast the body was going a
+	 *  moment ago (cm/s, decaying). */
+	float StopStrength = 0.0f;
+	float StopTime = 100.0f;
+	float RecentSpeed = 0.0f;
+	/** A turn on the spot is stepped: seconds into it, and how high each foot (left, right) is off the ground (cm). */
+	float TurnTime = 0.0f;
+	float TurnLift[2] = { 0.0f, 0.0f };
 
 	FVector LastVelocityCS = FVector::ZeroVector;
 	FVector AccelCS = FVector::ZeroVector;

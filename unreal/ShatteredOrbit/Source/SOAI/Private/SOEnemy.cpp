@@ -460,7 +460,17 @@ bool ASOEnemy::HasLineOfFire(const AActor* Other) const
 	{
 		Params.AddIgnoredActor(W);
 	}
-	return !GetWorld()->LineTraceTestByChannel(GetAimOrigin(), Other->GetActorLocation() + FVector(0, 0, 25.0f), ECC_Visibility, Params);
+	const FVector From = GetAimOrigin(), To = Other->GetActorLocation() + FVector(0, 0, 25.0f);
+	return !GetWorld()->SweepTestByChannel(From, To, FQuat::Identity, SO_TRACE_BULLET, FCollisionShape::MakeSphere(6.0f), Params)
+		&& !GetWorld()->LineTraceTestByChannel(From, To, ECC_Visibility, Params);
+}
+
+bool ASOEnemy::FitsAt(const FVector& Location) const
+{
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOFits), false, this);
+	return !GetWorld()->OverlapBlockingTestByChannel(Location, FQuat::Identity, ECC_Pawn,
+		FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius() + 3.0f, FMath::Max(Capsule->GetScaledCapsuleHalfHeight() - 3.0f, Capsule->GetScaledCapsuleRadius() + 3.0f)), Params);
 }
 
 float ASOEnemy::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const

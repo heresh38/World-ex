@@ -1,9 +1,6 @@
 {
  "shared": [
-  "/Game/Environments/Nexus/SM_NX_beacon",
-  "/Game/Environments/Nexus/MI_nx_glow_cyan",
-  "/Game/Environments/Nexus/MI_nx_stone",
-  "/Game/Environments/Nexus/Textures/T_nx_stone_"
+  "/Game/Shared/"
  ],
  "areas": [
   {

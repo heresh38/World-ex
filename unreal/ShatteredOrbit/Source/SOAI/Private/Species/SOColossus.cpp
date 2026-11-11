@@ -63,7 +63,7 @@ void ASOConduit::BeginPlay()
 {
 	Super::BeginPlay();
 	GetCharacterMovement()->DisableMovement();
-	Crystal->SetStaticMesh(TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Environments/Meridian/SM_MRK_conduit.SM_MRK_conduit"))).LoadSynchronous());
+	Crystal->SetStaticMesh(TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Shared/Operation/SM_MRK_conduit.SM_MRK_conduit"))).LoadSynchronous());
 	if (UMaterialInterface* M = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(SOAltered::GlowMaterial)).LoadSynchronous())
 	{
 		Tether->SetMaterial(0, M);

@@ -1260,6 +1260,11 @@ def fx_master():
     log("effect materials ready")
 
 
+# What more than one area uses: never in an area's own folder.
+SHARED = "/Game/Shared"
+SHARED_NEXUS = ("NX_beacon",)
+
+
 def nexus(master):
     """tools/blender/nexus.py (via export_fbx.py) -> /Game/Environments/Nexus/SM_NX_*: the city hub kit, with
     complex-as-simple collision so every surface can be walked on."""
@@ -1274,15 +1279,27 @@ def nexus(master):
     used = {base_slot(n) for a in manifest["assets"] for n in a["materials"]}
     tex = import_textures_for(src, materials, dest + "/Textures", used)
     instances = {key: make_instance(master, dest, key, materials.get(key) or {}, tex) for key in used}
+    # what every area shows (the map beacon) lives in /Game/Shared with its own materials and textures: an area's
+    # folder is that area's alone (USOAreaSubsystem), and nothing else may load from it
+    shared = SHARED + "/Map"
+    common = [a for a in manifest["assets"] if os.path.splitext(a["file"])[0] in SHARED_NEXUS]
+    common_used = {base_slot(n) for a in common for n in a["materials"]}
+    ensure_dir(shared)
+    common_tex = import_textures_for(src, materials, shared + "/Textures", common_used)
+    common_instances = {key: make_instance(master, shared, key, materials.get(key) or {}, common_tex) for key in common_used}
     for a in manifest["assets"]:
         name = os.path.splitext(a["file"])[0]
-        mesh = import_static(src, a["file"], dest, f"SM_{name}", instances)
+        if a in common:
+            mesh = import_static(src, a["file"], shared, f"SM_{name}", common_instances)
+        else:
+            mesh = import_static(src, a["file"], dest, f"SM_{name}", instances)
         body = mesh.get_editor_property("body_setup")
         if body:
             body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
         eal.save_loaded_asset(mesh, only_if_is_dirty=False)
     eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
-    log(f"Nexus: {len(manifest['assets'])} pieces")
+    eal.save_directory(shared, only_if_is_dirty=False, recursive=True)
+    log(f"Nexus: {len(manifest['assets'])} pieces ({len(common)} shared)")
 
 
 # ---------------------------------------------------------------- Nexus Prime, the big city (tools/blender/nexus_city.py)
@@ -1737,8 +1754,8 @@ return C * I * (0.55 + 0.45 * sin(T * 1.7 + ph * 6.2831) * sin(T * 0.53 + ph * 3
 def energy_materials():
     """/Game/Environments/Meridian/M_SOEnergy: unlit additive light (the barriers, the crown's beam): Color x Intensity
     in drifting bands, brighter at the edges. MI_SOEnergy_Barrier for ASOOperationBarrier's panel; MI_ru_beam (the
-    beam in the crown's detail) is re-parented onto it."""
-    dest = "/Game/Environments/Meridian"
+    beam in the crown's detail) is re-parented onto it. Shared: every operation has barriers."""
+    dest = SHARED + "/Operation"
     ensure_dir(dest)
     mat = _material(dest + "/M_SOEnergy", {"blend_mode": unreal.BlendMode.BLEND_ADDITIVE, "shading_model": unreal.MaterialShadingModel.MSM_UNLIT,
                                            "two_sided": True, "used_with_nanite": False})
@@ -1783,21 +1800,38 @@ def energy_materials():
     mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.recompile_material(glow)
     eal.save_loaded_asset(glow, only_if_is_dirty=False)
-    if eal.does_asset_exist(dest + "/MI_ru_glow"):
-        mi = eal.load_asset(dest + "/MI_ru_glow")
-        mel.set_material_instance_parent(mi, glow)
-        mel.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(0.6, 0.36, 1.0, 1.0))
-        mel.set_material_instance_scalar_parameter_value(mi, "Intensity", 18.0)
-        mel.update_material_instance(mi)
-        eal.save_loaded_asset(mi, only_if_is_dirty=False)
-    inst(dest + "/MI_ru_beam", (0.75, 0.6, 1.0, 1.0), 12.0)
+    meridian_dir = "/Game/Environments/Meridian"
+    for folder in (dest, meridian_dir):                         # the shared kit's glow, and Meridian's own
+        if eal.does_asset_exist(folder + "/MI_ru_glow"):
+            mi = eal.load_asset(folder + "/MI_ru_glow")
+            mel.set_material_instance_parent(mi, glow)
+            mel.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(0.6, 0.36, 1.0, 1.0))
+            mel.set_material_instance_scalar_parameter_value(mi, "Intensity", 18.0)
+            mel.update_material_instance(mi)
+            eal.save_loaded_asset(mi, only_if_is_dirty=False)
+    inst(meridian_dir + "/MI_ru_beam", (0.75, 0.6, 1.0, 1.0), 12.0)   # (the crown's beam, in Meridian's detail)
     log("energy materials ready")
 
 
+def _collision_mesh(mesh):
+    """A mesh that exists to be collided with, exactly as built: not Nanite (a Nanite mesh's collision is made from
+    its simplified fallback: the Crown kept 3% of its triangles, and shots, creatures and the nav mesh went through
+    what was drawn), every triangle solid from both sides."""
+    ns = mesh.get_editor_property("nanite_settings")
+    ns.set_editor_property("enabled", False)
+    mesh.set_editor_property("nanite_settings", ns)
+    body = mesh.get_editor_property("body_setup")
+    if body:
+        body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+        body.set_editor_property("double_sided_geometry", True)
+    eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+
+
 def meridian(master):
-    """tools/blender/meridian.py (through export_fbx.py) -> /Game/Environments/Meridian: SM_MR_<zone> (the structure:
-    complex-as-simple collision), SM_MR_<zone>_detail and SM_MR_backdrop (make_operation_map.py turns their collision
-    off), SM_MR_blockers (invisible walls), SM_MRK_conduit and SM_MRK_barrier (actor pieces). All Nanite."""
+    """tools/blender/meridian.py (through export_fbx.py) -> /Game/Environments/Meridian: SM_MR_<zone> (the structure,
+    Nanite, drawn only), SM_MR_<zone>_solid (what of it collides: exact, not Nanite, hidden in the level),
+    SM_MR_<zone>_detail and SM_MR_backdrop (drawn only), SM_MR_blockers (invisible walls), SM_MRK_conduit and
+    SM_MRK_barrier (actor pieces)."""
     src = os.path.join(SOURCE, "Meridian")
     dest = "/Game/Environments/Meridian"
     if not os.path.isdir(src):
@@ -1813,13 +1847,41 @@ def meridian(master):
     used = {base_slot(n) for a in manifest["assets"] for n in a["materials"]}
     tex = import_textures_for(src, materials, dest + "/Textures", used)
     instances = {key: make_instance(master, dest, key, materials.get(key) or {}, tex) for key in used}
+    # the kit every operation uses (the barrier panel, the conduit: the Altered carry it wherever they go) lives in
+    # /Game/Shared/Operation with its own materials: this folder is Meridian's alone
+    shared = SHARED + "/Operation"
+    kit = [a for a in manifest["assets"] if a["file"].startswith("MRK_")]
+    kit_used = {base_slot(n) for a in kit for n in a["materials"]} | {"ru_glow"}
+    ensure_dir(shared)
+    kit_tex = import_textures_for(src, materials, shared + "/Textures", kit_used)
+    kit_instances = {key: make_instance(master, shared, key, materials.get(key) or {}, kit_tex) for key in kit_used}
+    # SO_MERIDIAN_ONLY=deepline,galleria: only those zones again (the skyline alone takes ten minutes)
+    some = {z.strip() for z in os.environ.get("SO_MERIDIAN_ONLY", "").split(",") if z.strip()}
     for a in manifest["assets"]:
         name = os.path.splitext(a["file"])[0]
+        if some and not any(name in (f"MR_{z}", f"MR_{z}_solid", f"MR_{z}_detail") for z in some):
+            continue
         if eal.does_asset_exist(f"{dest}/SM_{name}"):           # a fresh import: the zones change content
             eal.delete_asset(f"{dest}/SM_{name}")
+        if a in kit:
+            if eal.does_asset_exist(f"{shared}/SM_{name}"):
+                eal.delete_asset(f"{shared}/SM_{name}")
+            _nanite(import_static(src, a["file"], shared, f"SM_{name}", kit_instances), True)
+            continue
         mesh = import_static(src, a["file"], dest, f"SM_{name}", instances)
-        _nanite(mesh, not name.endswith("_detail") and name != "MR_backdrop")
+        if name.endswith("_solid") or name == "MR_blockers":
+            _collision_mesh(mesh)
+        else:
+            _nanite(mesh, False)
     energy_materials()
+    for old in ("M_SOEnergy", "MI_SOEnergy_Barrier", "M_SOGlowPulse"):   # (they were here before they were shared)
+        if eal.does_asset_exist(f"{dest}/{old}"):
+            users = [r for r in eal.find_package_referencers_for_asset(f"{dest}/{old}", False) if not str(r).endswith("/" + old)]
+            if users:
+                log(f"Meridian: {old} is still used by {', '.join(str(u) for u in users[:4])}: left in place")
+            else:
+                eal.delete_asset(f"{dest}/{old}")
+    eal.save_directory(shared, only_if_is_dirty=False, recursive=True)
     eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
     log(f"Meridian: {len(manifest['assets'])} pieces")
 

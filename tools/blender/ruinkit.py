@@ -69,11 +69,23 @@ def material(name):
 
 
 # ------------------------------------------------------------------ geometry accumulator
+# A tower's floors collide up to this far above its foot (m): nobody gets higher, and the collision mesh is a
+# fraction of the size. meridian.py raises it where a deck runs beside the towers.
+COL_TOP = 16.0
+HEAP_COL_RES = .5
+
+
 class Geo:
+    """C: does each face collide? The game does not collide with what it draws (a Nanite mesh's collision is built
+    from its simplified fallback: walls that stop nothing, rocks you walk into). collision_of() gives the faces that
+    collide as their own mesh, exact, and that is what the level blocks with."""
+
     def __init__(self, name):
         self.name = name
-        self.V, self.F, self.M, self.S = [], [], [], []
+        self.V, self.F, self.M, self.S, self.C, self.R = [], [], [], [], [], []
         self.UV = {}
+        self.col = True                                          # for the faces added from here on: do they collide,
+        self.vis = True                                          # are they drawn (False: a coarser stand-in to collide with)
 
     def add(self, verts, faces, mat, smooth=False, uvs=None):
         o = len(self.V)
@@ -85,13 +97,54 @@ class Geo:
             self.F.append([i + o for i in f])
             self.M.append(mats[k] if mats else mat)
             self.S.append(smooth)
+            self.C.append(self.col)
+            self.R.append(self.vis)
 
     def __len__(self):
         return len(self.F)
 
 
+def collision_of(geo):
+    """the faces of geo that collide, as a Geo named <name>_solid (same materials: surfaces are told by their names)"""
+    c = Geo(geo.name + "_solid")
+    remap = {}
+    for f, m, k in zip(geo.F, geo.M, geo.C):
+        if not k:
+            continue
+        nf = []
+        for i in f:
+            if i not in remap:
+                remap[i] = len(c.V)
+                c.V.append(geo.V[i])
+            nf.append(remap[i])
+        c.F.append(nf); c.M.append(m); c.S.append(False); c.C.append(True); c.R.append(True)
+    return c
+
+
+def drawn_of(geo):
+    """geo without its collision-only faces (the same object when it has none)"""
+    if all(geo.R):
+        return geo
+    d = Geo(geo.name)
+    remap = {}
+    for fi, (f, m, sm, r) in enumerate(zip(geo.F, geo.M, geo.S, geo.R)):
+        if not r:
+            continue
+        nf = []
+        for i in f:
+            if i not in remap:
+                remap[i] = len(d.V)
+                d.V.append(geo.V[i])
+            nf.append(remap[i])
+        if fi in geo.UV:
+            d.UV[len(d.F)] = geo.UV[fi]
+        d.F.append(nf); d.M.append(m); d.S.append(sm); d.C.append(True); d.R.append(True)
+    return d
+
+
 def build(geo, collection=None):
     """Geo -> Blender mesh object named geo.name at the origin (plan (E, N, z) -> Blender (N, -E, z))."""
+    geo = drawn_of(geo)
     if not geo.F:
         return None
     V = np.asarray(geo.V, np.float64)
@@ -326,7 +379,18 @@ def heap(g, c, r, h, seed, chunks=14, res=.22, ry=None):
     nz = np.cross(P1 - P0, P2 - P0)
     nz = nz[:, 2] / (np.linalg.norm(nz, axis=1) + 1e-9)
     mats = ["ru_rubble" if z > .72 else "ru_fracture" for z in nz]
+    # drawn fine, collided with coarse: a mound's collision at the drawn resolution is most of a zone's collision mesh
+    # for a few centimetres nobody feels on rubble
+    was = g.col
+    coarse = was and HEAP_COL_RES > res * 1.2
+    g.col = was and not coarse
     g.add(V.tolist(), Q.tolist(), mats, smooth=True)
+    if coarse:
+        V2, Q2 = sdf.mesh(fn, lo, hi, HEAP_COL_RES, project_iters=1)
+        if len(Q2):
+            g.col, g.vis = True, False
+            g.add(V2.tolist(), Q2.tolist(), "ru_rubble")
+    g.col, g.vis = was, True
 
 
 def chunks(g, c, r, count, seed, size=(.18, .7), z=0.0):
@@ -562,11 +626,13 @@ def cable(gd, a, b, sag, seed=0):
 
 # ------------------------------------------------------------------ the ruined tower
 def tower(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="panel", top=(.45, 1.0), holes=2, rebar=True,
-          base_z=0.0, heaps=True, detail=True, cell_target=3.0, intact_below=0):
+          base_z=0.0, heaps=True, detail=True, cell_target=3.0, intact_below=0, col_top=None, heap_res=.4):
     """A ruined tower centred at c (x, y), width w along its local x, depth d along local y, turned by yaw (radians).
-    g gets the structure (collides), gd the fine detail (rebar, glass, mullions)."""
+    g gets the structure (collides), gd the fine detail (rebar, glass, mullions). col_top: how far above its foot it
+    collides (None = COL_TOP; 0 = not at all: a ruin behind the route's invisible walls)."""
     rnd = random.Random(seed)
     T = _rz(yaw)
+    first_face = len(g.F)
 
     def W(x, y, z):
         dx, dy = T(x, y)
@@ -794,5 +860,10 @@ def tower(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="panel", top=(.45, 1.0)
             u = rnd.uniform(-.45, .45)
             hx, hy = [(u * w, -d / 2 - 1.5), (w / 2 + 1.5, u * d), (u * w, d / 2 + 1.5), (-w / 2 - 1.5, u * d)][side]
             p = W(hx, hy, 0)
-            heap(g, (p[0], p[1], base_z), rnd.uniform(3, 6), rnd.uniform(1.2, 3.2), seed * 7 + side + _, chunks=6)
+            heap(g, (p[0], p[1], base_z), rnd.uniform(3, 6), rnd.uniform(1.2, 3.2), seed * 7 + side + _, chunks=6, res=heap_res)
+    # what stands higher than anyone gets does not collide
+    limit = COL_TOP if col_top is None else col_top
+    for fi in range(first_face, len(g.F)):
+        if g.C[fi] and (limit <= 0 or min(g.V[i][2] for i in g.F[fi]) - base_z > limit):
+            g.C[fi] = False
     return H

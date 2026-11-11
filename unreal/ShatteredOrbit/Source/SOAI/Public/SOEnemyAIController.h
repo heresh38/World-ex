@@ -41,7 +41,14 @@ enum class ESOEnemyState : uint8
  * target, goes to where it was last seen, looks round, then calms down. Hunters (an operation's waves) always know
  * where the nearest player is.
  *
- * It notices when it is stuck (wants to move, has not moved) and steps to a free nav point.
+ * It notices when it is stuck (wants to move, has not moved) and steps to a free nav point; if it is ever standing in
+ * the world's geometry it is put back on free ground.
+ *
+ * It does not stand there. Hit in the open, or with a gun levelled at it, it steps aside (and a cover-user finds new
+ * cover); badly hurt it falls back to cover further off and stays down longer; when the target goes out of sight the
+ * squad does not wait for it to come back: half of them push to where it was (the flankers round its side) while the
+ * rest hold, then follow. Hunters know where the players are but only aim and fire at what they actually see. Claws
+ * come in round the sides, not in a line. Everyone keeps its own distance so a squad is not a clump.
  */
 UCLASS()
 class SOAI_API ASOEnemyAIController : public AAIController
@@ -113,6 +120,13 @@ public:
 	 *  Exposed for tests. */
 	bool FindCover(const FVector& ThreatEye, FVector& OutPoint, FVector& OutPeek) const;
 
+	/** Badly hurt: falling back to cover further off. */
+	bool IsRetreating() const { return bRetreating; }
+	/** Pushing to where the target went out of sight. */
+	bool IsPushing() const { return bPushing; }
+	/** How many times it has stepped out of the way of a shot or a levelled gun (for tests). */
+	int32 GetDodges() const { return Dodges; }
+
 	//~ AAIController
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
@@ -136,6 +150,14 @@ protected:
 	void CheckStuck(float DeltaSeconds);
 	void OnNoise(UWorld* World, const FVector& Location, AActor* NoiseInstigator, float Radius);
 	ASOCombatCharacter* NearestPlayer() const;
+	/** Foe has its sights on this creature (a player's aim within a few degrees). */
+	bool AimedAt(const ASOCombatCharacter* Foe) const;
+	/** Steps to the side of the line to Foe (a nav point; a little back if Foe is close). */
+	bool Sidestep(const ASOCombatCharacter* Foe);
+	/** The target is out of sight: go and find it (flankers round its side). */
+	void Push();
+	/** Out of the world's geometry, onto free nav ground near here. */
+	bool Rescue();
 
 	TWeakObjectPtr<ASOCombatCharacter> Target;
 	FVector LastKnownLocation = FVector::ZeroVector;
@@ -167,6 +189,20 @@ protected:
 	// stuck
 	FVector StuckCheckFrom = FVector::ZeroVector;
 	float StuckTimer = 0.0f;
+	float NextFitCheck = 0.0f;
+
+	// reactions
+	float LastHurtTime = -100.0f;
+	float NextDodge = 0.0f;
+	/** Until then a move it has committed to (a sidestep) is not replaced by the next thought. */
+	float MoveCommitUntil = 0.0f;
+	float NextRepath = 0.0f;
+	bool bRetreating = false;
+	bool bPushing = false;
+	int32 Dodges = 0;
+	/** Its own distance (a share of the species' preferred range) and side (-1 / 1): a squad is not a clump or a line. */
+	float RangeBias = 1.0f;
+	float SideBias = 1.0f;
 
 	ESOEnemyState State = ESOEnemyState::Idle;
 	bool bInCombat = false;

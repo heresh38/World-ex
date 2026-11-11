@@ -233,6 +233,24 @@ def clips(b):
                       (.26, down(-.10, 8, 5, 0, -6, 12, 12, 26, LOOSE)), (.5, idle_pose(b, 0.0))], ease=smooth)
         return land.at(t, dict(chest=.02, head=.04, arm=.03, forearm=.05, hand=.07))
 
+    def Stop(t):
+        """braking out of a run: the left foot dug in ahead, the weight thrown back and low, then up into the idle"""
+        def brake(z, back, hips, chest, fwd, elbow):
+            p = Pose()
+            for s, sx in gait.SIDES:
+                a = b.ankle[s]
+                ahead = (-.13 if s == "L" else .07) * b.scale
+                pitch = 5.0 if s == "L" else -12.0
+                p.feet[s] = Foot(b.planted(s, (sx * .16 * b.scale, a.y + ahead), pitch, 12), pitch, 12)
+            trunk(p, hips=hips, spine=hips * .5, chest=chest, head=-(hips * 1.5 + chest) * .6, z=z, y=back)
+            for s in "LR":
+                arms(b, p, s, fwd, 16, elbow, curl=LOOSE)
+            p.knee_out = {"L": .07, "R": .09}
+            return p
+        stop = Track([(0.0, brake(-.06, .05, -9, -5, 24, 46)), (.13, brake(-.10, .07, -3, 3, 12, 34)),
+                      (.30, brake(-.04, .03, 2, -1, 6, 22)), (.5, idle_pose(b, 0.0))], ease=smooth)
+        return stop.at(t, dict(chest=.02, head=.04, arm=.03, forearm=.05, hand=.07))
+
     # --- over and onto things: poses by how far through the move the body is ----------------------------------------
     def Vault(t):
         def run_in():
@@ -422,7 +440,7 @@ def clips(b):
         p.hips.z += .006 * e * bump(t, 2.0, 1.6)
 
     return {"Idle": (Idle, 7.2, True), "Stroll": (Stroll, stroll.T, True), "Walk": (Walk, walk.T, True), "Run": (Run, run.T, True),
-            "Jump": (Jump, .5, False), "Land": (Land, .5, False), "Vault": (Vault, 1.0, False), "Mantle": (Mantle, 1.0, False),
+            "Jump": (Jump, .5, False), "Land": (Land, .5, False), "Stop": (Stop, .5, False), "Vault": (Vault, 1.0, False), "Mantle": (Mantle, 1.0, False),
             "Climb": (Climb, 1.0, False), "Crouch": (Crouch, 7.2, True), "CrouchWalk": (CrouchWalk, crouch.T, True),
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Fidget1": (fidget(4.0, neck), 4.0, False), "Fidget2": (fidget(4.6, scan), 4.6, False),

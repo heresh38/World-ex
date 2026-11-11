@@ -2,6 +2,806 @@
  "name": "Meridian Fall",
  "tagline": "The old capital went silent in the Stillfall. Something answers from its crown.",
  "groups": {
+  "verge_toll": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -211000.0,
+     -2000.0,
+     0.0
+    ],
+    [
+     -211000.0,
+     -1200.0,
+     0.0
+    ],
+    [
+     -211000.0,
+     -400.0,
+     0.0
+    ],
+    [
+     -211000.0,
+     400.0,
+     0.0
+    ],
+    [
+     -211000.0,
+     1200.0,
+     0.0
+    ],
+    [
+     -211000.0,
+     2000.0,
+     0.0
+    ]
+   ]
+  },
+  "verge_road": {
+   "yaw": -179.43,
+   "points": [
+    [
+     -206000.0,
+     -1400.0,
+     0.0
+    ],
+    [
+     -205200.0,
+     1200.0,
+     0.0
+    ],
+    [
+     -203800.0,
+     -400.0,
+     0.0
+    ],
+    [
+     -202600.0,
+     1600.0,
+     0.0
+    ]
+   ]
+  },
+  "stacks_lobby": {
+   "yaw": -178.19,
+   "points": [
+    [
+     -193400.0,
+     -300.0,
+     0.0
+    ],
+    [
+     -192800.0,
+     400.0,
+     0.0
+    ],
+    [
+     -193600.0,
+     -2200.0,
+     0.0
+    ],
+    [
+     -194000.0,
+     2400.0,
+     0.0
+    ],
+    [
+     -194400.0,
+     -3400.0,
+     0.0
+    ],
+    [
+     -193200.0,
+     3600.0,
+     0.0
+    ]
+   ]
+  },
+  "yard_north": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -183600.0,
+     -3000.0,
+     0.0
+    ],
+    [
+     -183600.0,
+     -2000.0,
+     0.0
+    ],
+    [
+     -183600.0,
+     -1000.0,
+     0.0
+    ],
+    [
+     -183600.0,
+     0.0,
+     0.0
+    ],
+    [
+     -183600.0,
+     1000.0,
+     0.0
+    ],
+    [
+     -183600.0,
+     2000.0,
+     0.0
+    ],
+    [
+     -183600.0,
+     3000.0,
+     0.0
+    ]
+   ]
+  },
+  "yard_west": {
+   "yaw": 82.5,
+   "points": [
+    [
+     -190000.0,
+     -3800.0,
+     0.0
+    ],
+    [
+     -188750.0,
+     -3800.0,
+     0.0
+    ],
+    [
+     -187500.0,
+     -3800.0,
+     0.0
+    ],
+    [
+     -186250.0,
+     -3800.0,
+     0.0
+    ],
+    [
+     -185000.0,
+     -3800.0,
+     0.0
+    ]
+   ]
+  },
+  "yard_east": {
+   "yaw": -82.5,
+   "points": [
+    [
+     -190000.0,
+     3800.0,
+     0.0
+    ],
+    [
+     -188750.0,
+     3800.0,
+     0.0
+    ],
+    [
+     -187500.0,
+     3800.0,
+     0.0
+    ],
+    [
+     -186250.0,
+     3800.0,
+     0.0
+    ],
+    [
+     -185000.0,
+     3800.0,
+     0.0
+    ]
+   ]
+  },
+  "alley_mid": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -174000.0,
+     -500.0,
+     0.0
+    ],
+    [
+     -173200.0,
+     500.0,
+     0.0
+    ],
+    [
+     -170600.0,
+     -600.0,
+     0.0
+    ],
+    [
+     -169000.0,
+     600.0,
+     0.0
+    ],
+    [
+     -166800.0,
+     0.0,
+     0.0
+    ]
+   ]
+  },
+  "mall_south": {
+   "yaw": -180.0,
+   "points": [
+    [
+     -156000.0,
+     -1600.0,
+     0.0
+    ],
+    [
+     -156000.0,
+     -960.0,
+     0.0
+    ],
+    [
+     -156000.0,
+     -320.0,
+     0.0
+    ],
+    [
+     -156000.0,
+     320.0,
+     0.0
+    ],
+    [
+     -156000.0,
+     960.0,
+     0.0
+    ],
+    [
+     -156000.0,
+     1600.0,
+     0.0
+    ]
+   ]
+  },
+  "mall_gallery_w": {
+   "yaw": 56.31,
+   "points": [
+    [
+     -152000.0,
+     -1500.0,
+     500.0
+    ],
+    [
+     -149600.0,
+     -1500.0,
+     500.0
+    ],
+    [
+     -147200.0,
+     -1500.0,
+     500.0
+    ],
+    [
+     -144800.0,
+     -1500.0,
+     500.0
+    ],
+    [
+     -142400.0,
+     -1500.0,
+     500.0
+    ],
+    [
+     -140000.0,
+     -1500.0,
+     500.0
+    ]
+   ]
+  },
+  "mall_gallery_e": {
+   "yaw": -108.43,
+   "points": [
+    [
+     -150000.0,
+     1500.0,
+     500.0
+    ],
+    [
+     -147800.0,
+     1500.0,
+     500.0
+    ],
+    [
+     -145600.0,
+     1500.0,
+     500.0
+    ],
+    [
+     -143400.0,
+     1500.0,
+     500.0
+    ],
+    [
+     -141200.0,
+     1500.0,
+     500.0
+    ],
+    [
+     -139000.0,
+     1500.0,
+     500.0
+    ]
+   ]
+  },
+  "mall_north": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -138000.0,
+     -1800.0,
+     0.0
+    ],
+    [
+     -138000.0,
+     -1200.0,
+     0.0
+    ],
+    [
+     -138000.0,
+     -600.0,
+     0.0
+    ],
+    [
+     -138000.0,
+     0.0,
+     0.0
+    ],
+    [
+     -138000.0,
+     600.0,
+     0.0
+    ],
+    [
+     -138000.0,
+     1200.0,
+     0.0
+    ],
+    [
+     -138000.0,
+     1800.0,
+     0.0
+    ]
+   ]
+  },
+  "mall_shops_w": {
+   "yaw": 90.0,
+   "points": [
+    [
+     -148600.0,
+     -2900.0,
+     0.0
+    ],
+    [
+     -146200.0,
+     -2900.0,
+     0.0
+    ],
+    [
+     -143800.0,
+     -2900.0,
+     0.0
+    ],
+    [
+     -141400.0,
+     -2900.0,
+     0.0
+    ]
+   ]
+  },
+  "mall_shops_e": {
+   "yaw": -90.0,
+   "points": [
+    [
+     -148600.0,
+     2900.0,
+     0.0
+    ],
+    [
+     -146200.0,
+     2900.0,
+     0.0
+    ],
+    [
+     -143800.0,
+     2900.0,
+     0.0
+    ],
+    [
+     -141400.0,
+     2900.0,
+     0.0
+    ]
+   ]
+  },
+  "mall_gate": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -131600.0,
+     0.0,
+     0.0
+    ]
+   ]
+  },
+  "mall_court": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -132600.0,
+     -2400.0,
+     0.0
+    ],
+    [
+     -132600.0,
+     -1440.0,
+     0.0
+    ],
+    [
+     -132600.0,
+     -480.0,
+     0.0
+    ],
+    [
+     -132600.0,
+     480.0,
+     0.0
+    ],
+    [
+     -132600.0,
+     1440.0,
+     0.0
+    ],
+    [
+     -132600.0,
+     2400.0,
+     0.0
+    ]
+   ]
+  },
+  "deep_hall": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -121200.0,
+     -1000.0,
+     -600.0
+    ],
+    [
+     -121200.0,
+     -500.0,
+     -600.0
+    ],
+    [
+     -121200.0,
+     0.0,
+     -600.0
+    ],
+    [
+     -121200.0,
+     500.0,
+     -600.0
+    ],
+    [
+     -121200.0,
+     1000.0,
+     -600.0
+    ]
+   ]
+  },
+  "deep_hearts": {
+   "yaw": 177.18,
+   "points": [
+    [
+     -117000.0,
+     -750.0,
+     -720.0
+    ],
+    [
+     -115000.0,
+     750.0,
+     -720.0
+    ],
+    [
+     -112800.0,
+     -750.0,
+     -720.0
+    ]
+   ]
+  },
+  "deep_platform": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -117000.0,
+     -300.0,
+     -600.0
+    ],
+    [
+     -115840.0,
+     -180.0,
+     -600.0
+    ],
+    [
+     -114680.0,
+     -60.0,
+     -600.0
+    ],
+    [
+     -113520.0,
+     60.0,
+     -600.0
+    ],
+    [
+     -112360.0,
+     180.0,
+     -600.0
+    ],
+    [
+     -111200.0,
+     300.0,
+     -600.0
+    ]
+   ]
+  },
+  "deep_tracks": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -118500.0,
+     -750.0,
+     -720.0
+    ],
+    [
+     -116500.0,
+     750.0,
+     -720.0
+    ],
+    [
+     -114000.0,
+     -750.0,
+     -720.0
+    ],
+    [
+     -111800.0,
+     750.0,
+     -720.0
+    ]
+   ]
+  },
+  "tunnel_a": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -105000.0,
+     -300.0,
+     -720.0
+    ],
+    [
+     -104500.0,
+     -150.0,
+     -720.0
+    ],
+    [
+     -104000.0,
+     0.0,
+     -720.0
+    ],
+    [
+     -103500.0,
+     150.0,
+     -720.0
+    ],
+    [
+     -103000.0,
+     300.0,
+     -720.0
+    ]
+   ]
+  },
+  "tunnel_b": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -95000.0,
+     -300.0,
+     -720.0
+    ],
+    [
+     -94500.0,
+     -180.0,
+     -720.0
+    ],
+    [
+     -94000.0,
+     -60.0,
+     -720.0
+    ],
+    [
+     -93500.0,
+     60.0,
+     -720.0
+    ],
+    [
+     -93000.0,
+     180.0,
+     -720.0
+    ],
+    [
+     -92500.0,
+     300.0,
+     -720.0
+    ]
+   ]
+  },
+  "sluice_south": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -83600.0,
+     -1000.0,
+     -500.0
+    ],
+    [
+     -83600.0,
+     -600.0,
+     -500.0
+    ],
+    [
+     -83600.0,
+     -200.0,
+     -500.0
+    ],
+    [
+     -83600.0,
+     200.0,
+     -500.0
+    ],
+    [
+     -83600.0,
+     600.0,
+     -500.0
+    ],
+    [
+     -83600.0,
+     1000.0,
+     -500.0
+    ]
+   ]
+  },
+  "sluice_pump": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -71200.0,
+     -1100.0,
+     -500.0
+    ],
+    [
+     -71200.0,
+     1100.0,
+     -500.0
+    ],
+    [
+     -69000.0,
+     -450.0,
+     -500.0
+    ],
+    [
+     -69000.0,
+     450.0,
+     -500.0
+    ],
+    [
+     -67600.0,
+     -1100.0,
+     -500.0
+    ],
+    [
+     -67600.0,
+     1100.0,
+     -500.0
+    ]
+   ]
+  },
+  "sluice_watch": {
+   "yaw": 178.76,
+   "points": [
+    [
+     -80000.0,
+     -600.0,
+     60.0
+    ],
+    [
+     -80000.0,
+     700.0,
+     60.0
+    ],
+    [
+     -62000.0,
+     -900.0,
+     60.0
+    ],
+    [
+     -62000.0,
+     -500.0,
+     60.0
+    ]
+   ]
+  },
+  "sluice_north": {
+   "yaw": 180.0,
+   "points": [
+    [
+     -59000.0,
+     -1000.0,
+     -500.0
+    ],
+    [
+     -59000.0,
+     -600.0,
+     -500.0
+    ],
+    [
+     -59000.0,
+     -200.0,
+     -500.0
+    ],
+    [
+     -59000.0,
+     200.0,
+     -500.0
+    ],
+    [
+     -59000.0,
+     600.0,
+     -500.0
+    ],
+    [
+     -59000.0,
+     1000.0,
+     -500.0
+    ]
+   ]
+  },
+  "causeway_mid": {
+   "yaw": 163.95,
+   "points": [
+    [
+     -50800.0,
+     4000.0,
+     0.0
+    ],
+    [
+     -48600.0,
+     2900.0,
+     0.0
+    ],
+    [
+     -45800.0,
+     1500.0,
+     0.0
+    ],
+    [
+     -41800.0,
+     200.0,
+     0.0
+    ],
+    [
+     -38000.0,
+     -200.0,
+     0.0
+    ]
+   ]
+  },
   "approach_rubble": {
    "yaw": 180.0,
    "points": [
@@ -309,6 +1109,655 @@
   }
  },
  "stages": [
+  {
+   "id": "verge",
+   "title": "Ashfall Verge",
+   "objective": "Follow the dead highway into the city",
+   "kind": "travel",
+   "goal": [
+    -199000.0,
+    0.0,
+    0.0
+   ],
+   "radius": 1400,
+   "checkpoint": [
+    -229000.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "remnant",
+       4,
+       "verge_toll"
+      ],
+      [
+       "stalker",
+       2,
+       "verge_toll"
+      ]
+     ]
+    },
+    {
+     "delay": 14.0,
+     "maxAlive": 3,
+     "hunt": false,
+     "spawn": [
+      [
+       "remnant",
+       3,
+       "verge_road"
+      ],
+      [
+       "veilborn",
+       1,
+       "verge_road"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gatehouse",
+   "title": "The Stacks",
+   "objective": "Find a way through the gatehouse block",
+   "kind": "travel",
+   "goal": [
+    -191200.0,
+    0.0,
+    0.0
+   ],
+   "radius": 900,
+   "checkpoint": [
+    -198600.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "stalker_feral",
+       3,
+       "stacks_lobby"
+      ],
+      [
+       "remnant",
+       3,
+       "stacks_lobby"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "yard",
+   "title": "The Stacks",
+   "objective": "Clear the yard",
+   "kind": "clear",
+   "goal": [
+    -187000.0,
+    0.0,
+    0.0
+   ],
+   "checkpoint": [
+    -191400.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "remnant",
+       5,
+       "yard_north"
+      ],
+      [
+       "stalker",
+       2,
+       "yard_west"
+      ],
+      [
+       "veilborn",
+       1,
+       "yard_north"
+      ]
+     ]
+    },
+    {
+     "delay": 2.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "remnant",
+       4,
+       "yard_east"
+      ],
+      [
+       "stalker",
+       3,
+       "yard_west"
+      ]
+     ]
+    },
+    {
+     "delay": 2.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "remnant_captain",
+       1,
+       "yard_north"
+      ],
+      [
+       "bulwark",
+       1,
+       "yard_north"
+      ],
+      [
+       "remnant",
+       4,
+       "yard_east"
+      ],
+      [
+       "veilborn",
+       1,
+       "yard_west"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "alley",
+   "title": "The Stacks",
+   "objective": "Take the alley to the Galleria",
+   "kind": "travel",
+   "goal": [
+    -161200.0,
+    0.0,
+    0.0
+   ],
+   "radius": 1200,
+   "checkpoint": [
+    -181200.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "stalker",
+       3,
+       "alley_mid"
+      ],
+      [
+       "remnant",
+       2,
+       "alley_mid"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "galleria",
+   "title": "Meridian Galleria",
+   "objective": "Reach the rotunda",
+   "kind": "travel",
+   "goal": [
+    -145400.0,
+    0.0,
+    0.0
+   ],
+   "radius": 1300,
+   "checkpoint": [
+    -161600.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "remnant",
+       4,
+       "mall_south"
+      ],
+      [
+       "veilborn",
+       2,
+       "mall_gallery_w"
+      ],
+      [
+       "stalker",
+       2,
+       "mall_gallery_e"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rotunda",
+   "title": "Meridian Galleria",
+   "objective": "Hold the rotunda while the service gate cycles",
+   "kind": "hold",
+   "hold": 80,
+   "goal": [
+    -145000.0,
+    0.0,
+    0.0
+   ],
+   "checkpoint": [
+    -147600.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "spawn": [
+      [
+       "remnant",
+       5,
+       "mall_north"
+      ],
+      [
+       "stalker",
+       2,
+       "mall_shops_w"
+      ]
+     ]
+    },
+    {
+     "delay": 7.0,
+     "maxAlive": 4,
+     "spawn": [
+      [
+       "remnant",
+       4,
+       "mall_shops_e"
+      ],
+      [
+       "veilborn",
+       2,
+       "mall_gallery_w"
+      ]
+     ]
+    },
+    {
+     "delay": 8.0,
+     "maxAlive": 4,
+     "spawn": [
+      [
+       "stalker",
+       3,
+       "mall_north"
+      ],
+      [
+       "remnant",
+       4,
+       "mall_shops_w"
+      ],
+      [
+       "veilborn",
+       1,
+       "mall_gallery_e"
+      ]
+     ]
+    },
+    {
+     "delay": 8.0,
+     "maxAlive": 4,
+     "spawn": [
+      [
+       "veilborn_seer",
+       1,
+       "mall_gallery_w"
+      ],
+      [
+       "bulwark",
+       1,
+       "mall_north"
+      ],
+      [
+       "remnant",
+       4,
+       "mall_shops_e"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "warden",
+   "title": "Meridian Galleria",
+   "objective": "Bring down the Warden at the service gate",
+   "kind": "boss",
+   "boss": "warden",
+   "bossGroup": "mall_gate",
+   "goal": [
+    -132000.0,
+    0.0,
+    0.0
+   ],
+   "checkpoint": [
+    -142000.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "bossHealth": 0.7,
+     "spawn": [
+      [
+       "remnant",
+       5,
+       "mall_court"
+      ]
+     ]
+    },
+    {
+     "bossHealth": 0.35,
+     "spawn": [
+      [
+       "stalker",
+       3,
+       "mall_court"
+      ],
+      [
+       "veilborn",
+       2,
+       "mall_gallery_e"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "descent",
+   "title": "Deepline",
+   "objective": "Go down into the station",
+   "kind": "travel",
+   "goal": [
+    -120600.0,
+    0.0,
+    -600.0
+   ],
+   "radius": 800,
+   "checkpoint": [
+    -129000.0,
+    0.0,
+    100.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "stalker_feral",
+       4,
+       "deep_hall"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hearts",
+   "title": "Deepline",
+   "objective": "Destroy the hive's hearts",
+   "kind": "clear",
+   "goal": [
+    -115000.0,
+    0.0,
+    -600.0
+   ],
+   "checkpoint": [
+    -122600.0,
+    0.0,
+    -500.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "conduit",
+       3,
+       "deep_hearts"
+      ],
+      [
+       "stalker_feral",
+       4,
+       "deep_tracks"
+      ],
+      [
+       "remnant",
+       3,
+       "deep_platform"
+      ]
+     ]
+    },
+    {
+     "delay": 6.0,
+     "maxAlive": 6,
+     "spawn": [
+      [
+       "stalker_feral",
+       5,
+       "deep_tracks"
+      ],
+      [
+       "veilborn",
+       1,
+       "deep_platform"
+      ]
+     ]
+    },
+    {
+     "delay": 6.0,
+     "maxAlive": 6,
+     "spawn": [
+      [
+       "stalker_alpha",
+       1,
+       "deep_platform"
+      ],
+      [
+       "stalker",
+       2,
+       "deep_platform"
+      ],
+      [
+       "stalker_feral",
+       4,
+       "deep_tracks"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tunnel",
+   "title": "Deepline",
+   "objective": "Follow the tunnel out",
+   "kind": "travel",
+   "goal": [
+    -87200.0,
+    0.0,
+    -500.0
+   ],
+   "radius": 700,
+   "checkpoint": [
+    -110400.0,
+    0.0,
+    -500.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "stalker_feral",
+       4,
+       "tunnel_a"
+      ]
+     ]
+    },
+    {
+     "delay": 10.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "stalker_alpha",
+       1,
+       "tunnel_b"
+      ],
+      [
+       "stalker_feral",
+       4,
+       "tunnel_b"
+      ],
+      [
+       "remnant",
+       2,
+       "tunnel_b"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "sluice",
+   "title": "The Sluice",
+   "objective": "Silence the watch on the canal",
+   "kind": "clear",
+   "goal": [
+    -70000.0,
+    0.0,
+    -500.0
+   ],
+   "checkpoint": [
+    -86800.0,
+    0.0,
+    -400.0,
+    0.0
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "veilborn",
+       4,
+       "sluice_watch"
+      ],
+      [
+       "remnant",
+       5,
+       "sluice_pump"
+      ],
+      [
+       "stalker",
+       2,
+       "sluice_south"
+      ]
+     ]
+    },
+    {
+     "delay": 3.0,
+     "maxAlive": 4,
+     "spawn": [
+      [
+       "remnant",
+       5,
+       "sluice_north"
+      ],
+      [
+       "stalker",
+       3,
+       "sluice_pump"
+      ]
+     ]
+    },
+    {
+     "delay": 3.0,
+     "maxAlive": 3,
+     "spawn": [
+      [
+       "remnant_captain",
+       1,
+       "sluice_north"
+      ],
+      [
+       "bulwark",
+       2,
+       "sluice_north"
+      ],
+      [
+       "veilborn_seer",
+       1,
+       "sluice_pump"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "causeway",
+   "title": "The Causeway",
+   "objective": "Climb the spillway to the old approach",
+   "kind": "travel",
+   "goal": [
+    -31000.0,
+    0.0,
+    0.0
+   ],
+   "radius": 1200,
+   "checkpoint": [
+    -60000.0,
+    400.0,
+    -400.0,
+    13.736268305622572
+   ],
+   "waves": [
+    {
+     "hunt": false,
+     "spawn": [
+      [
+       "remnant",
+       4,
+       "causeway_mid"
+      ],
+      [
+       "stalker",
+       2,
+       "causeway_mid"
+      ]
+     ]
+    }
+   ]
+  },
   {
    "id": "approach",
    "title": "Meridian Approach",
@@ -692,6 +2141,54 @@
  ],
  "barriers": [
   {
+   "id": "arch_barrier",
+   "opens": "alley",
+   "c": [
+    -181800.0,
+    0.0,
+    0.0
+   ],
+   "width": 1000.0,
+   "height": 600.0,
+   "yaw": 0.0
+  },
+  {
+   "id": "galleria_gate",
+   "opens": "descent",
+   "c": [
+    -130000.0,
+    0.0,
+    0.0
+   ],
+   "width": 1100.0,
+   "height": 600.0,
+   "yaw": 0.0
+  },
+  {
+   "id": "tunnel_barrier",
+   "opens": "tunnel",
+   "c": [
+    -109000.0,
+    0.0,
+    -720.0
+   ],
+   "width": 1100.0,
+   "height": 650.0,
+   "yaw": 0.0
+  },
+  {
+   "id": "spillway_barrier",
+   "opens": "causeway",
+   "c": [
+    -55500.0,
+    1600.0,
+    -500.0
+   ],
+   "width": 1600.0,
+   "height": 700.0,
+   "yaw": 90.0
+  },
+  {
    "id": "terrace_barrier",
    "opens": "climb",
    "c": [
@@ -743,9 +2240,59 @@
  },
  "map": [
   {
-   "label": "Meridian Approach",
+   "label": "Ashfall Verge",
    "subtitle": "Where you come in",
    "kind": "FastTravel",
+   "at": [
+    -229000.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "label": "The Stacks",
+   "subtitle": "The housing estate",
+   "kind": "Landmark",
+   "at": [
+    -187000.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "label": "Meridian Galleria",
+   "subtitle": "The rotunda",
+   "kind": "Landmark",
+   "at": [
+    -145000.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "label": "Deepline",
+   "subtitle": "The transit station",
+   "kind": "Landmark",
+   "at": [
+    -115000.0,
+    0.0,
+    -600.0
+   ]
+  },
+  {
+   "label": "The Sluice",
+   "subtitle": "The drained canal",
+   "kind": "Landmark",
+   "at": [
+    -70000.0,
+    0.0,
+    -500.0
+   ]
+  },
+  {
+   "label": "Meridian Approach",
+   "subtitle": "The old road",
+   "kind": "Landmark",
    "at": [
     -30600.0,
     0.0,
@@ -797,11 +2344,148 @@
    "subtitle": "Back to the city",
    "kind": "AreaTravel",
    "at": [
-    -31200.0,
-    800.0,
+    -230000.0,
+    900.0,
     0.0
    ]
   }
+ ],
+ "mapInfo": {
+  "c": [
+   -103500.0,
+   2000.0
+  ],
+  "half": 142000.0
+ },
+ "nav": [
+  [
+   -2314,
+   -1958,
+   -32,
+   32,
+   -2,
+   8
+  ],
+  [
+   -1962,
+   -1788,
+   -48,
+   48,
+   -2,
+   3.6
+  ],
+  [
+   -1792,
+   -1598,
+   -38,
+   38,
+   -2,
+   5
+  ],
+  [
+   -1602,
+   -1298,
+   -37,
+   37,
+   -2,
+   9
+  ],
+  [
+   -1302,
+   -1234,
+   -21,
+   21,
+   -8,
+   4
+  ],
+  [
+   -1238,
+   -878,
+   -17,
+   17,
+   -9,
+   -1
+  ],
+  [
+   -882,
+   -518,
+   -16,
+   41,
+   -7,
+   3
+  ],
+  [
+   -564,
+   -316,
+   -12,
+   58,
+   -2,
+   6
+  ],
+  [
+   -322,
+   -196,
+   -32,
+   32,
+   -2,
+   9
+  ],
+  [
+   -200,
+   -136,
+   -37,
+   37,
+   -2,
+   6
+  ],
+  [
+   -138,
+   -38,
+   -19,
+   19,
+   -2,
+   9
+  ],
+  [
+   -46,
+   46,
+   -46,
+   46,
+   -3,
+   5
+  ],
+  [
+   -8,
+   8,
+   40,
+   80,
+   -2,
+   13
+  ],
+  [
+   -10,
+   123,
+   72,
+   88,
+   7,
+   14
+  ],
+  [
+   106,
+   123,
+   -10,
+   88,
+   7,
+   14
+  ],
+  [
+   118,
+   242,
+   -42,
+   42,
+   7,
+   16
+  ]
  ],
  "rewards": {
   "rarity": 3,
@@ -842,5 +2526,38 @@
    "vr_fusion",
    "vr_rocket"
   ]
+ },
+ "variants": {
+  "warden": {
+   "species": "bulwark",
+   "name": "The Warden",
+   "health": 5.0,
+   "damage": 1.35,
+   "speed": 1.08,
+   "sight": 1.5
+  },
+  "remnant_captain": {
+   "species": "remnant",
+   "name": "Remnant Captain",
+   "health": 2.8,
+   "damage": 1.25,
+   "aim": 0.75,
+   "sight": 1.25
+  },
+  "veilborn_seer": {
+   "species": "veilborn",
+   "name": "Veilborn Seer",
+   "health": 2.4,
+   "damage": 1.3,
+   "aim": 0.7,
+   "sight": 1.4
+  },
+  "stalker_alpha": {
+   "species": "stalker_feral",
+   "name": "Pack Alpha",
+   "health": 3.0,
+   "damage": 1.4,
+   "speed": 1.12
+  }
  }
 }

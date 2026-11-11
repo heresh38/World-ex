@@ -69,12 +69,19 @@ def main():
         comp = a.static_mesh_component
         comp.set_static_mesh(mesh)
         comp.set_mobility(unreal.ComponentMobility.STATIC)
-        if name.endswith("_detail") or name == "SM_MR_backdrop":
+        if name.endswith("_solid"):
+            # what the zone collides with: the exact mesh, never drawn (the zone itself is Nanite and drawn only)
+            a.set_actor_hidden_in_game(True)
+            comp.set_cast_shadow(False)
+            comp.set_collision_profile_name("BlockAll")
+            comp.set_editor_property("can_ever_affect_navigation", True)
+        elif name != "SM_MR_blockers":
             comp.set_collision_profile_name("NoCollision")
             comp.set_editor_property("can_character_step_up_on", unreal.CanBeCharacterBase.ECB_NO)
+            comp.set_editor_property("can_ever_affect_navigation", False)
             if name == "SM_MR_backdrop":
                 comp.set_editor_property("cast_shadow", True)
-        elif name == "SM_MR_blockers":
+        else:
             # invisible walls: they stop players and creatures, never shots, sight or the camera
             a.set_actor_hidden_in_game(True)
             comp.set_cast_shadow(False)
@@ -128,7 +135,9 @@ def main():
 
     # the plan's lights
     colours = {"void": (unreal.Color(r=160, g=95, b=255, a=255), 70.0), "fire": (unreal.Color(r=255, g=140, b=60, a=255), 55.0),
-               "rim": (unreal.Color(r=170, g=110, b=255, a=255), 25.0), "beam": (unreal.Color(r=200, g=165, b=255, a=255), 120.0)}
+               "rim": (unreal.Color(r=170, g=110, b=255, a=255), 25.0), "beam": (unreal.Color(r=200, g=165, b=255, a=255), 120.0),
+               # indoors: moonlight down a hole in a roof, and the odd lamp still on its emergency cell
+               "moon": (unreal.Color(r=178, g=196, b=255, a=255), 60.0), "lamp": (unreal.Color(r=255, g=196, b=128, a=255), 38.0)}
     for i, L in enumerate(art["lights"]):
         col, intensity = colours.get(L["kind"], colours["void"])
         p = spawn(unreal.PointLight, tuple(L["at"]), label=f"Light_{L['kind']}_{i}", folder="Lighting/Points")
@@ -138,7 +147,8 @@ def main():
         pc.set_editor_property("intensity", float(L.get("intensity") or intensity))
         pc.set_editor_property("attenuation_radius", float(L["radius"]))
         pc.set_editor_property("cast_shadows", L["kind"] == "beam")
-        pc.set_editor_property("volumetric_scattering_intensity", {"void": 1.2, "fire": 1.0, "rim": 0.25, "beam": 0.0}.get(L["kind"], 1.0))
+        pc.set_editor_property("volumetric_scattering_intensity",
+                               {"void": 1.2, "fire": 1.0, "rim": 0.25, "beam": 0.0, "moon": 1.6, "lamp": 0.0}.get(L["kind"], 1.0))
     log(f"{len(art['lights'])} lights")
 
     # the operation, its barriers, where players come in
@@ -157,10 +167,7 @@ def main():
     spawn(unreal.PlayerStart, (first[0], first[1], first[2]), (0, first[3], 0), "PlayerStart", "Gameplay")
     # the nav mesh only where the route is walked (plan metres: N0, N1, E0, E1, Z0, Z1): one box over the whole
     # route would take in every floor of every ruined tower and run out of tiles
-    for i, (n0, n1, e0, e1, z0, z1) in enumerate((
-            (-322, -196, -32, 32, -2, 9), (-200, -136, -37, 37, -2, 6), (-138, -38, -19, 19, -2, 9),
-            (-46, 46, -46, 46, -3, 5), (-8, 8, 40, 80, -2, 13), (-10, 123, 72, 88, 7, 14), (106, 123, -10, 88, 7, 14),
-            (118, 242, -42, 42, 7, 16))):
+    for i, (n0, n1, e0, e1, z0, z1) in enumerate(plan["nav"]):
         nav = spawn(unreal.NavMeshBoundsVolume, ((n0 + n1) * 50.0, (e0 + e1) * 50.0, (z0 + z1) * 50.0), label=f"NavBounds_{i}", folder="Gameplay/Nav")
         nav.set_actor_scale3d(unreal.Vector((n1 - n0) / 2.0, (e1 - e0) / 2.0, (z1 - z0) / 2.0))   # the brush is 200 cm
     # the base breathing: loops (machinery, growth, the far chorus) and spores
@@ -173,10 +180,10 @@ def main():
         amb.set_editor_property("spores", bool(a["spores"]))
 
     # the area map
-    info = spawn(unreal.SOMapInfo, (-4000, 2500, 0), label="MapInfo", folder="Map")
+    info = spawn(unreal.SOMapInfo, (plan["mapInfo"]["c"][0], plan["mapInfo"]["c"][1], 0), label="MapInfo", folder="Map")
     info.set_editor_property("area_name", unreal.Text("Meridian"))
-    info.set_editor_property("half_size", 32000.0)
-    beacon = unreal.load_asset("/Game/Environments/Nexus/SM_NX_beacon")
+    info.set_editor_property("half_size", float(plan["mapInfo"]["half"]))
+    beacon = unreal.load_asset("/Game/Shared/Map/SM_NX_beacon")
     K = unreal.SOMapPointKind
     kinds = {"FastTravel": K.FAST_TRAVEL, "Landmark": K.LANDMARK, "Mission": K.MISSION, "AreaTravel": K.AREA_TRAVEL}
     for m in plan["map"]:

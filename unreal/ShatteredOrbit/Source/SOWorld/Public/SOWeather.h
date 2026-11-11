@@ -118,6 +118,8 @@ private:
 	FVector WindVelocity = FVector::ZeroVector;
 	float Gust = 0.0f;
 	float Wetness = 0.0f;
+	/** 0 = under the open sky, 1 = under a roof (the eye): no rain falls indoors or underground, and it sounds far off. */
+	float Shelter = 0.0f;
 	float EnvTimer = 0.0f;
 	float LightningTimer = 8.0f, Flash = 0.0f;
 	float GustSoundTimer = 6.0f;

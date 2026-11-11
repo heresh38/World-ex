@@ -118,6 +118,36 @@ bool FSOArmedTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSONoShotsThroughWallsTest, "ShatteredOrbit.AI.NoShotsThroughWalls", SOTest::Flags)
+bool FSONoShotsThroughWallsTest::RunTest(const FString& Parameters)
+{
+	// A hunter knows where its prey is. With a wall between them it neither levels its gun at the wall nor fires
+	// through it; the moment the wall is gone it shoots.
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-4000, -4000, -100), FVector(4000, 4000, 0));
+	AActor* Wall = W.AddBox(FVector(620, -1500, 0), FVector(660, 1500, 500));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	ASOArmedStalker* S = SOTest::SpawnCreature<ASOArmedStalker>(W, FVector(1300, 0, 0), 180.0f);
+	ASOEnemyAIController* AI = S ? Cast<ASOEnemyAIController>(S->GetController()) : nullptr;
+	if (!TestNotNull(TEXT("an armed stalker with a brain"), AI))
+	{
+		return false;
+	}
+	AI->bHunter = true;
+	const float Before = Player->GetHealth() + Player->GetShield();
+	bool bAimed = false;
+	W.Run(5.0f, [&] { bAimed |= AI->IsInCombat() && S->GetAimTarget() != nullptr && W.World->GetTimeSeconds() > 2.5f; });
+	TestTrue(TEXT("it knows the player is there"), AI->IsInCombat());
+	TestFalse(TEXT("there is no line of fire through the wall"), S->HasLineOfFire(Player));
+	TestEqual(TEXT("it fires nothing through the wall"), S->GetShotsFired(), 0);
+	TestFalse(TEXT("it does not stand aiming at the wall"), bAimed);
+	TestEqual(TEXT("the player is untouched"), Player->GetHealth() + Player->GetShield(), Before, 0.01f);
+	Wall->Destroy();
+	W.Run(6.0f);
+	TestTrue(FString::Printf(TEXT("with the wall gone it shoots (%d rounds)"), S->GetShotsFired()), S->GetShotsFired() > 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLootGroundTest, "ShatteredOrbit.Loot.DropsOnTheGround", SOTest::Flags)
 bool FSOLootGroundTest::RunTest(const FString& Parameters)
 {

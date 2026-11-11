@@ -4,13 +4,16 @@ fallen overpass, the round Concord Ring with its broken monument, the High Terra
 Bridge, and the Crown itself, a round platform with a beam into the sky under the broken orbital ring of the far spire.
 
 Output assets/models/meridian.glb, one root per piece (export_fbx.py writes one FBX each):
-  MR_<zone>          the zone's structure (Unreal: Nanite, complex-as-simple collision)
+  MR_<zone>          the zone's structure (Unreal: Nanite, drawn only)
+  MR_<zone>_solid    what of it collides, exactly as drawn (Unreal: not Nanite, hidden, complex-as-simple collision:
+                     a Nanite mesh's own collision comes from its simplified fallback and stops nothing where it should)
   MR_<zone>_detail   rebar, glass, mullions, small debris, banners, crystals (no collision)
   MR_backdrop        the skyline, the spire and its broken ring (no collision)
   MR_blockers        invisible walls along the route's edges (collision only, hidden in game)
   MRK_conduit        the Colossus's shield conduit (an actor; origin at its foot)
   MRK_barrier        an energy barrier, 1 x 1 m (x across, z up; the actor scales it)
-zones: approach, gate, boulevard, ring, terraces, crown, ground.
+zones: verge, stacks, galleria, deepline, sluice, causeway (meridian_south.py: the long way in), approach, gate,
+boulevard, ring, terraces, crown, ground.
 Also writes unreal/ShatteredOrbit/Data/op_meridian_art.json: where the lights go (void crystals, fires, the crown).
 
 Every surface uses the ru_* sets (ruins_textures.py) through ruinkit.py; coordinates are the plan's (E, N, up) metres.
@@ -24,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'operation'))
 import bl
 import ruinkit as rk
 import meridian_plan as P
+import meridian_south as south
 
 TAU = rk.TAU
 ART = os.path.join(P.ROOT, "unreal", "ShatteredOrbit", "Data", "op_meridian_art.json")
@@ -98,7 +102,17 @@ def ground_slab(g, mat, x0, x1, y0, y1, z=0.0, thick=.05):
 def zone_ground(G):
     """the ground under everything: rubble and ash out to the horizon"""
     g = G["ground"][0]
-    rk.prism(g, "ru_rubble", [(-1600, -1600), (1600, -1600), (1600, 1600), (-1600, 1600)], -1.0, 0.0, side="ru_rubble")
+    # one sheet a metre thick, cut out where something is dug into it and open to the sky (the plan's pits): bands
+    # between the pits' north / south edges, each band the strips between the pits that cross it
+    E0, E1, N0, N1 = -1700.0, 1700.0, -2900.0, 1700.0
+    cuts = sorted({N0, N1} | {p[2] for p in P.PITS} | {p[3] for p in P.PITS})
+    for a, b in zip(cuts, cuts[1:]):
+        spans = sorted((p[0], p[1]) for p in P.PITS if p[2] <= a and p[3] >= b)
+        e = E0
+        for s0, s1 in spans + [(E1, E1)]:
+            if s0 - e > .01:
+                rk.prism(g, "ru_rubble", [(e, a), (s0, a), (s0, b), (e, b)], -1.0, 0.0, side="ru_rubble")
+            e = max(e, s1)
 
 
 def zone_approach(G):
@@ -357,12 +371,14 @@ def zone_terraces(G):
     Rm, T = P.RAMP, P.TERRACE
     z = T["z"]
     rnd = random.Random(51)
-    # ramp
-    rk.path_deck(g, "ru_asphalt", "ru_concrete", [(Rm["e0"] - 2, 0, .02), (Rm["e1"], 0, z)], Rm["half"] * 2, .8)
+    # ramp: it tops out AT the deck's inner edge (it used to run on under the deck to the deck's middle: the last
+    # five metres were a wall, which only the old simplified collision let anyone through)
+    top_e = T["east_e"] - T["w"] / 2 + .4
+    rk.path_deck(g, "ru_asphalt", "ru_concrete", [(Rm["e0"] - 2, 0, .02), (top_e, 0, z)], Rm["half"] * 2, .8)
     for side in (-1, 1):
-        rk.wall_path(g, "ru_concrete", [(Rm["e0"] + 2, side * (Rm["half"] - .2), 0), (Rm["e1"], side * (Rm["half"] - .2), z - .8)], .3, 1.1, rnd=rnd)
-    for e in (56, 66):
-        zz = (e - Rm["e0"] + 2) / (Rm["e1"] - Rm["e0"] + 2) * z
+        rk.wall_path(g, "ru_concrete", [(Rm["e0"] + 2, side * (Rm["half"] - .2), 0), (top_e - .6, side * (Rm["half"] - .2), z - .8)], .3, 1.1, rnd=rnd)
+    for e in (54, 63):
+        zz = (e - Rm["e0"] + 2) / (top_e - Rm["e0"] + 2) * z
         rk.box(g, "ru_concrete", (e, 0, (zz - .8) / 2), (.9, Rm["half"] - 1, (zz - .8) / 2))
     # the deck loop
     E, Nn, w = T["east_e"], T["north_n"], T["w"]
@@ -591,7 +607,7 @@ def zone_backdrop(G):
     """the skyline round the route, the far spire and its broken orbital ring"""
     g = G["backdrop"][0]
     rnd = random.Random(71)
-    route = [(0, -320), (0, -200), (0, -40), (0, 0), (80, 0), (80, 114), (0, 114), (0, 200)]
+    route = P.ROUTE
 
     def near_route(x, y, m):
         for (a, b), (c, d) in zip(route, route[1:]):
@@ -602,9 +618,9 @@ def zone_backdrop(G):
         return False
     count = 0
     tries = 0
-    while count < 120 and tries < 6000:
+    while count < 220 and tries < 20000:
         tries += 1
-        x, y = rnd.uniform(-520, 520), rnd.uniform(-560, 620)
+        x, y = rnd.uniform(-520, 520), rnd.uniform(-2560, 620)
         if near_route(x, y, 120) or math.hypot(x - P.SPIRE["c"][0], y - P.SPIRE["c"][1]) < 70:
             continue
         dist = min(math.hypot(x - a, y - b) for a, b in route)
@@ -615,9 +631,9 @@ def zone_backdrop(G):
     # the low city between: broken blocks of two to four floors, cheap boxes with ragged tops
     k = 0
     tries = 0
-    while k < 420 and tries < 8000:
+    while k < 800 and tries < 30000:
         tries += 1
-        x, y = rnd.uniform(-600, 600), rnd.uniform(-650, 700)
+        x, y = rnd.uniform(-600, 600), rnd.uniform(-2650, 700)
         if near_route(x, y, 85):
             continue
         w, d_ = rnd.uniform(10, 26), rnd.uniform(10, 26)
@@ -671,7 +687,8 @@ def zone_backdrop(G):
 
 
 def zone_blockers(G):
-    """invisible walls along the route's edges (4 m above whatever is walkable; nothing to climb over)"""
+    """invisible walls along the route's edges, 9 m above whatever is walkable: an air jump and a clamber together
+    reach nearly six (they were 4 m, which was enough before there was an air jump), and nothing beside them is taller"""
     g = G["blockers"][0]
 
     def wall(a, b, z0=-1.0, z1=14.0):
@@ -681,12 +698,13 @@ def zone_blockers(G):
         rk.box(g, "ru_block", (m.x, m.y, (z0 + z1) / 2), (d.length / 2 + .3, .3, (z1 - z0) / 2), math.atan2(d.y, d.x))
     A, Cc, B, R, Rm, T, Br, C = P.APPROACH, P.COURT, P.BOULEVARD, P.PLAZA, P.RAMP, P.TERRACE, P.BRIDGE, P.CROWN
     h = A["half"] + 1
-    wall((-h, A["n0"] - 2), (h, A["n0"] - 2))
     for s in (-1, 1):
+        wall((s * h, A["n0"] - 2), (s * 10.0, A["n0"] - 2))            # (the causeway comes in between these)
         wall((s * h, A["n0"] - 2), (s * h, P.WALL["n"] - 3))
         wall((s * (Cc["half"] - 1), Cc["n0"]), (s * (Cc["half"] - 1), Cc["n1"]))
         wall((s * (Cc["half"] - 1), Cc["n1"]), (s * (B["walk"] + .5), Cc["n1"]))
         wall((s * (B["walk"] + .5), B["n0"]), (s * (B["walk"] + .5), -math.sqrt(R["ring_in"] ** 2 - B["walk"] ** 2) + 1))
+    south.blockers(g)
     # the ring: a circle at the inner face of the towers, open south (boulevard) and east (ramp)
     seg = 48
     for i in range(seg):
@@ -698,9 +716,9 @@ def zone_blockers(G):
         wall((math.cos(a0) * rr, math.sin(a0) * rr), (math.cos(a1) * rr, math.sin(a1) * rr))
     # the ramp's sides, then both edges of the deck loop (the inner one open to the ramp, the outer to the bridge)
     for s in (-1, 1):
-        wall((math.sqrt(R["ring_in"] ** 2 - Rm["half"] ** 2), s * (Rm["half"] + .4)), (T["east_e"] - T["w"] / 2, s * (Rm["half"] + .4)), -1, T["z"] + 4)
+        wall((math.sqrt(R["ring_in"] ** 2 - Rm["half"] ** 2), s * (Rm["half"] + .4)), (T["east_e"] - T["w"] / 2, s * (Rm["half"] + .4)), -1, T["z"] + 9)
     E, Nn, w, z = T["east_e"], T["north_n"], T["w"], T["z"]
-    zt = z + 4.0
+    zt = z + 9.0
     wall((E - w / 2 - .3, T["n0"]), (E - w / 2 - .3, -Rm["half"] - .4), z - 2, zt)
     wall((E - w / 2 - .3, Rm["half"] + .4), (E - w / 2 - .3, Nn - w / 2 - .3), z - 2, zt)
     wall((E - w / 2 - .3, Nn - w / 2 - .3), (T["west_e"] - .3, Nn - w / 2 - .3), z - 2, zt)
@@ -719,7 +737,7 @@ def zone_blockers(G):
         if abs(am - 270) < math.degrees(math.asin((Br["half"] + .4) / (C["r"] + .4))):
             continue
         rr = C["r"] + .4
-        wall((cx + math.cos(a0) * rr, cy + math.sin(a0) * rr), (cx + math.cos(a1) * rr, cy + math.sin(a1) * rr), z - 2, z + 5)
+        wall((cx + math.cos(a0) * rr, cy + math.sin(a0) * rr), (cx + math.cos(a1) * rr, cy + math.sin(a1) * rr), z - 2, z + 9)
 
 
 # ------------------------------------------------------------------ actor pieces
@@ -749,8 +767,24 @@ def kit_barrier():
 
 
 # ------------------------------------------------------------------ main
+class Helpers:
+    light = staticmethod(light)
+    void_growth = staticmethod(void_growth)
+    fire = staticmethod(fire)
+    jersey = staticmethod(jersey)
+    hedgehog = staticmethod(hedgehog)
+    lamp_post = staticmethod(lamp_post)
+    ground_slab = staticmethod(ground_slab)
+    ambience = staticmethod(lambda *a, **k: ambience(*a, **k))
+
+
 ZONES = dict(ground=zone_ground, approach=zone_approach, gate=zone_gate, boulevard=zone_boulevard, ring=zone_ring,
              terraces=zone_terraces, crown=zone_crown, backdrop=zone_backdrop, blockers=zone_blockers, hive=zone_hive)
+for _name, _fn in south.ZONES.items():
+    ZONES[_name] = (lambda fn: lambda G: fn(G, Helpers))(_fn)
+# what never collides (drawn only), and where the towers stand beside a raised deck
+NO_COLLISION = ("backdrop",)
+HIGH_DECKS = ("ring", "terraces", "crown")
 
 
 def main():
@@ -761,12 +795,19 @@ def main():
     G = {z: (rk.Geo(f"MR_{z}"), rk.Geo(f"MR_{z}_detail")) for z in ZONES}
     for z in want:
         log("zone", z)
+        rk.COL_TOP = 34.0 if z in HIGH_DECKS else 16.0
         ZONES[z](G)
     for z, (g, gd) in G.items():
         for x in (g, gd):
             if len(x):
                 rk.build(x)
                 log(f"  {x.name}: {len(x)} faces")
+        # what collides, as its own exact mesh (the blockers are their own collision; the backdrop has none)
+        if len(g) and z not in NO_COLLISION and z != "blockers":
+            col = rk.collision_of(g)
+            if len(col):
+                rk.build(col)
+                log(f"  {col.name}: {len(col)} faces")
     kit_conduit()
     kit_barrier()
     if '--save' in flags:

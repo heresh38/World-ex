@@ -156,8 +156,13 @@ public:
 	bool WantsFire() const { return bWantsFire; }
 	int32 GetShotsFired() const { return ShotsFired; }
 
-	/** A clear line from its eyes to Other's body (the world only: bodies do not block). */
+	/** A clear line from its eyes to Other's body for a round: the same trace a bullet makes, a little fat (no shots
+	 *  through a crack), blocked by the world and by anyone standing in the way (it holds its fire behind a mate). */
 	bool HasLineOfFire(const AActor* Other) const;
+
+	/** Would its capsule stand free of the world at Location (the capsule's centre)? Anything that puts it somewhere
+	 *  without walking (a blink, a rescue from being wedged) asks first. */
+	bool FitsAt(const FVector& Location) const;
 
 	/** It knows someone is there (set by its brain): until then it is unaware and ambushes hit harder. */
 	void SetAlert(bool bOn) { bAlert = bOn; }

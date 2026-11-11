@@ -40,8 +40,8 @@ void ASOOperationBarrier::ApplySize()
 	// loaded here, not in the constructor: a mesh the class default loads would pin its materials for the session
 	if (!Panel->GetStaticMesh())
 	{
-		Panel->SetStaticMesh(TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Environments/Meridian/SM_MRK_barrier.SM_MRK_barrier"))).LoadSynchronous());
-		if (UMaterialInterface* Energy = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Environments/Meridian/MI_SOEnergy_Barrier.MI_SOEnergy_Barrier"))).LoadSynchronous())
+		Panel->SetStaticMesh(TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Shared/Operation/SM_MRK_barrier.SM_MRK_barrier"))).LoadSynchronous());
+		if (UMaterialInterface* Energy = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Shared/Operation/MI_SOEnergy_Barrier.MI_SOEnergy_Barrier"))).LoadSynchronous())
 		{
 			Panel->SetMaterial(0, Energy);
 		}

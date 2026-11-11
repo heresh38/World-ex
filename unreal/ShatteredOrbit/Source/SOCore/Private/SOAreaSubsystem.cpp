@@ -11,11 +11,17 @@
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "MoviePlayer.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "SOLog.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
+#include "Styling/CoreStyle.h"
+#include "Widgets/Images/SThrobber.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Text/STextBlock.h"
 
 namespace
 {
@@ -189,6 +195,41 @@ bool USOAreaSubsystem::TravelToLevel(const FString& Level)
 		return false;
 	}
 	UE_LOG(LogShatteredOrbit, Log, TEXT("Area: leaving for %s (%s)"), *Area->Name.ToString(), *Area->Level);
+	// What the player looks at while the old area is torn down and the new one is built: where they are going, on a
+	// dark screen, until the map is in (the engine plays it when the load begins and takes it down when it ends).
+	if (IsMoviePlayerEnabled() && !IsRunningDedicatedServer())
+	{
+		FLoadingScreenAttributes Screen;
+		Screen.bAutoCompleteWhenLoadingCompletes = true;
+		Screen.MinimumLoadingScreenDisplayTime = 1.0f;
+		Screen.WidgetLoadingScreen = SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FLinearColor(0.008f, 0.009f, 0.016f, 1.0f))
+			.Padding(FMargin(110.0f, 0.0f, 110.0f, 96.0f))
+			.VAlign(VAlign_Bottom)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text(NSLOCTEXT("SO", "Travelling", "EN ROUTE"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 15))
+					.ColorAndOpacity(FLinearColor(0.55f, 0.62f, 0.85f, 1.0f))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 18.0f)
+				[
+					SNew(STextBlock)
+					.Text(Area->Name.ToUpper())
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 46))
+					.ColorAndOpacity(FLinearColor(0.92f, 0.94f, 1.0f, 1.0f))
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+				[
+					SNew(SThrobber).NumPieces(5)
+				]
+			];
+		GetMoviePlayer()->SetupLoadingScreen(Screen);
+	}
 	// The old level, everything it built and everything held for it go when the engine loads the new map (it tears
 	// the world down and collects the garbage before the new one is built); OnPreLoadMap lets go of what we keep.
 	if (World->GetNetMode() == NM_Standalone)

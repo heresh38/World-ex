@@ -26,7 +26,7 @@ namespace SOAltered
 	extern const FLinearColor VoidColor;
 	const FLinearColor VoidColor(0.62f, 0.36f, 1.0f);
 	extern const TCHAR* const GlowMaterial;
-	const TCHAR* const GlowMaterial = TEXT("/Game/Environments/Meridian/MI_ru_glow.MI_ru_glow");
+	const TCHAR* const GlowMaterial = TEXT("/Game/Shared/Operation/MI_ru_glow.MI_ru_glow");
 
 	/** Mesh, clips and capsule of one of the Altered (/Game/Characters/<Name>/SK_<Name>). */
 	void Configure(ASOEnemy* E, const TCHAR* Name, float Radius, float HalfHeight)

@@ -462,6 +462,7 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 		Anim->Clips.Climb = Own(TEXT("Climb"));
 		Anim->Clips.Crouch = Own(TEXT("Crouch"));
 		Anim->Clips.CrouchWalk = Own(TEXT("CrouchWalk"));
+		Anim->Clips.Stop = Own(TEXT("Stop"));
 		Anim->Clips.StrollSpeed = 150.0f;
 		Anim->Clips.CrouchSpeed = GetCharacterMovement() ? GetCharacterMovement()->MaxWalkSpeedCrouched : 270.0f;
 		Anim->Clips.Fidgets.Reset();
@@ -915,6 +916,15 @@ void ASOCharacter::Tick(float DeltaSeconds)
 			{
 				Weapon->GetThirdPersonRig()->SetShown(!bStow);
 			}
+			// (first person: the hands go onto the edge too, so the gun is out of them and comes back up after)
+			if (Weapon && Weapon->GetFirstPersonRig())
+			{
+				Weapon->GetFirstPersonRig()->SetShown(!bStow);
+			}
+			if (!bStow && Viewmodel)
+			{
+				Viewmodel->Raise();
+			}
 			HolsterTimer = 0.0f;
 		}
 	}
@@ -953,6 +963,11 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	// Eye height eases across crouch / slide transitions; steps, landings and the head bob ride on top.
 	EyeOffset = FMath::FInterpTo(EyeOffset, GetTargetEyeOffset(), DeltaSeconds, EyeHeightInterpSpeed);
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset) + FeelOffset);
+	// The first-person arms hang from the eye, not from the capsule. Crouched (or sliding) the capsule's centre drops
+	// and the eye comes down to it: left on the capsule, the arms' shoulders ended up above the camera and the arms
+	// reached down into the view from overhead. Their shoulders keep their place under the eye exactly as standing.
+	const FVector ArmsAt = FirstPersonArms->GetRelativeLocation();
+	FirstPersonArms->SetRelativeLocation(FVector(ArmsAt.X, ArmsAt.Y, EyeOffset - StandingEyeHeight));
 
 	// Aim down sights: progress at the weapon ADS rate, zoom by the weapon magnification.
 	const USOWeaponData* WeaponData = Weapon ? Weapon->GetData() : nullptr;

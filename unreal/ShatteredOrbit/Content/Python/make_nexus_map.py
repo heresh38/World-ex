@@ -111,7 +111,7 @@ def main():
     info.set_editor_property("area_name", unreal.Text("Nexus Prime"))
     info.set_editor_property("half_size", max(e1 - e0, n1 - n0) * 50.0 + 15000.0)
 
-    beacon = unreal.load_asset("/Game/Environments/Nexus/SM_NX_beacon")
+    beacon = unreal.load_asset("/Game/Shared/Map/SM_NX_beacon")
     K = unreal.SOMapPointKind
     places = [("The Spire", "The city's heart", K.FAST_TRAVEL, (0.0, -260.0), None),
               ("Shuttle to the Proving Range", "Back to the range", K.AREA_TRAVEL, (60.0, -300.0), "/Game/Maps/L_TestRange"),

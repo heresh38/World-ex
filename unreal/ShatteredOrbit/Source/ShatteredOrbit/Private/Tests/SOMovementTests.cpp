@@ -753,4 +753,110 @@ bool FSOCrouchWalkTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOCrouchFirstPersonTest, "ShatteredOrbit.Anim.CrouchFirstPerson", SOTest::Flags)
+bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
+{
+	// The first-person arms hang from the eye: crouched, sliding or standing, the shoulders sit as far under the camera
+	// as they do standing (they used to stay on the capsule, and crouched the arms came down into the view from above).
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	SOTest::Floor(W);
+	ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 0));
+	C->SetViewMode(ESOViewMode::FirstPerson);
+	USkeletalMeshComponent* Arms = C->GetFirstPersonArms();
+	if (!TestNotNull(TEXT("the first-person arms"), Arms))
+	{
+		return false;
+	}
+	W.Run(1.0f);
+	const bool bBone = Arms->GetBoneIndex(TEXT("upperarm_R")) != INDEX_NONE;
+	auto Under = [&]()
+	{
+		const float Eye = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z);
+		return FVector2f(Eye - static_cast<float>(Arms->GetComponentLocation().Z), bBone ? Eye - static_cast<float>(Arms->GetBoneLocation(TEXT("upperarm_R")).Z) : 0.0f);
+	};
+	const FVector2f Standing = Under();
+	const float EyeStanding = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z) - SOTest::Feet(C);
+	C->Crouch();
+	float Worst = 0.0f;
+	W.Run(1.5f, [&] { Worst = FMath::Max(Worst, FMath::Abs(Under().X - Standing.X)); });
+	const FVector2f Crouched = Under();
+	const float EyeCrouched = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z) - SOTest::Feet(C);
+	AddInfo(FString::Printf(TEXT("eye %.1f cm standing, %.1f crouched; arms' origin %.1f / %.1f cm under the eye; shoulder %.1f / %.1f cm under the eye; worst on the way down %.1f"),
+		EyeStanding, EyeCrouched, Standing.X, Crouched.X, Standing.Y, Crouched.Y, Worst));
+	TestTrue(TEXT("the eye came down with the crouch"), EyeStanding - EyeCrouched > 30.0f);
+	TestTrue(FString::Printf(TEXT("the arms stay under the eye all the way down (%.1f cm off at most)"), Worst), Worst < 1.0f);
+	TestTrue(FString::Printf(TEXT("crouched, the shoulder is as far under the eye as standing (%.1f against %.1f cm)"), Crouched.Y, Standing.Y),
+		!bBone || FMath::Abs(Crouched.Y - Standing.Y) < 3.0f);
+	C->UnCrouch();
+	W.Run(1.0f);
+	TestTrue(TEXT("standing again, the arms are back where they were"), FMath::Abs(Under().X - Standing.X) < 1.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOStopsAndTurnsTest, "ShatteredOrbit.Anim.StopsAndTurns", SOTest::Flags)
+bool FSOStopsAndTurnsTest::RunTest(const FString& Parameters)
+{
+	// Coming to a standstill out of a run plays the body's brake and lets go of it; a turn on the spot is stepped (each
+	// foot comes off the ground in turn, never both at once); on a ledge the first-person hands are free of the gun.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	SOTest::Floor(W);
+	ASOCharacter* C = W.SpawnCharacter(FVector(-1000, 0, 0));
+	USkeletalMeshComponent* Body = C->GetMesh();
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	W.Run(1.0f);
+	const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance());
+	if (!TestNotNull(TEXT("the body's animation"), Anim))
+	{
+		return false;
+	}
+	if (Anim->Clips.Stop)
+	{
+		C->GetSOMovement()->SetWantsToSprint(true);
+		W.Run(1.2f, [&] { C->AddMovementInput(FVector::ForwardVector, 1.0f); });
+		C->GetSOMovement()->SetWantsToSprint(false);
+		float Brake = 0.0f;
+		W.Run(0.6f, [&] { Brake = FMath::Max(Brake, Anim->Weights[15]); });
+		W.Run(0.6f);
+		TestTrue(FString::Printf(TEXT("stopping out of a sprint shows the brake (%.2f)"), Brake), Brake > 0.3f);
+		TestTrue(FString::Printf(TEXT("...and lets go of it (%.2f left, idle %.2f)"), Anim->Weights[15], Anim->Weights[0]), Anim->Weights[15] < 0.03f && Anim->Weights[0] > 0.9f);
+	}
+	else
+	{
+		AddWarning(TEXT("this body has no Stop clip yet (import it: SO_IMPORT_ONLY=player_clips)"));
+	}
+	// a quarter turn on the spot
+	{
+		W.Run(0.5f);
+		float Up[2] = { 0.0f, 0.0f }, Both = 0.0f;
+		bool bTurned = false;
+		float Turned = 0.0f;
+		W.Run(1.2f, [&]
+		{
+			if (Turned < 90.0f)
+			{
+				Turned += 6.0f;
+				C->SetActorRotation(C->GetActorRotation() + FRotator(0.0f, 6.0f, 0.0f));
+			}
+			bTurned |= Anim->IsTurningInPlace();
+			Up[0] = FMath::Max(Up[0], Anim->GetTurnLift(0));
+			Up[1] = FMath::Max(Up[1], Anim->GetTurnLift(1));
+			Both = FMath::Max(Both, FMath::Min(Anim->GetTurnLift(0), Anim->GetTurnLift(1)));
+		});
+		W.Run(0.5f);
+		TestTrue(TEXT("a quarter turn standing still turns on the spot"), bTurned);
+		TestTrue(FString::Printf(TEXT("each foot steps (left %.1f cm, right %.1f cm up)"), Up[0], Up[1]), Up[0] > 3.0f && Up[1] > 3.0f);
+		TestTrue(FString::Printf(TEXT("never both off the ground at once (%.1f cm)"), Both), Both < 1.5f);
+		TestTrue(TEXT("both planted again after the turn"), Anim->GetTurnLift(0) < 0.2f && Anim->GetTurnLift(1) < 0.2f);
+	}
+	return true;
+}
+
 #endif

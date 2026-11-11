@@ -577,6 +577,43 @@ ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index, bool bH
 	return Enemy;
 }
 
+int32 ASOOperation::AuditSpawns(TArray<FString>& OutProblems)
+{
+	int32 Missing = 0, Tried = 0;
+	auto Try = [&](const FSOStage& S, FName Kind, FName Group, int32 Index)
+	{
+		++Tried;
+		if (ASOEnemy* E = SpawnEnemy(Kind, Group, Index, false))
+		{
+			E->Destroy();
+		}
+		else
+		{
+			++Missing;
+			OutProblems.Add(FString::Printf(TEXT("stage '%s': %s #%d at group '%s'"), *S.Id.ToString(), *Kind.ToString(), Index, *Group.ToString()));
+		}
+	};
+	for (const FSOStage& S : Stages)
+	{
+		if (!S.Boss.IsNone())
+		{
+			Try(S, S.Boss, S.BossGroup, 0);
+		}
+		for (const FSOWave& W : S.Waves)
+		{
+			for (const FSOWaveEntry& E : W.Entries)
+			{
+				for (int32 i = 0; i < E.Count; ++i)
+				{
+					Try(S, E.Enemy, E.Group, i);
+				}
+			}
+		}
+	}
+	UE_LOG(LogShatteredOrbit, Log, TEXT("Operation audit: %d of %d spawns found their floor"), Tried - Missing, Tried);
+	return Missing;
+}
+
 void ASOOperation::OnCharacterDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)
 {
 	if (World != GetWorld() || !Victim)

@@ -351,7 +351,7 @@ void USOWeatherSubsystem::ApplyEnvironment(float DeltaTime)
 	}
 	if (UAudioComponent* R = Loop(RainLoop, TEXT("S_amb_rain")))
 	{
-		R->SetVolumeMultiplier(FMath::Clamp(Look.Rain * 0.9f, 0.0f, 0.9f));
+		R->SetVolumeMultiplier(FMath::Clamp(Look.Rain * 0.9f * (1.0f - 0.8f * Shelter), 0.0f, 0.9f));
 	}
 	GustSoundTimer -= DeltaTime;
 	if (GustSoundTimer <= 0.0f)
@@ -497,7 +497,12 @@ void USOWeatherSubsystem::TickAir(float DeltaTime)
 	// ---- rain streaks in a box round the eye, slanted by the wind
 	if (UInstancedStaticMeshComponent* ISM = RainStreaks.Get())
 	{
-		const int32 Want = FMath::RoundToInt(1600.0f * Look.Rain);
+		// (under a roof there is no rain: a mall, a tunnel)
+		FHitResult Roof;
+		const bool bRoof = GetWorld()->LineTraceSingleByChannel(Roof, Eye + FVector(0, 0, 40.0f), Eye + FVector(0, 0, 6000.0f), ECC_Visibility,
+			FCollisionQueryParams(SCENE_QUERY_STAT(SOWeatherRoof), false));
+		Shelter = FMath::FInterpTo(Shelter, bRoof ? 1.0f : 0.0f, DeltaTime, 2.5f);
+		const int32 Want = FMath::RoundToInt(1600.0f * Look.Rain * (1.0f - Shelter));
 		const float Box = 2200.0f;
 		while (DropState.Num() < Want)
 		{

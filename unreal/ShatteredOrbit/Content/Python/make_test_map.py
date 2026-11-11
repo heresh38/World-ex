@@ -226,7 +226,7 @@ def main():
     info.set_editor_property("area_name", unreal.Text("Proving Range"))
     info.set_editor_property("half_size", 4300.0)
     info.set_folder_path("Map")
-    beacon = unreal.load_asset("/Game/Environments/Nexus/SM_NX_beacon")
+    beacon = unreal.load_asset("/Game/Shared/Map/SM_NX_beacon")
     for label, sub, kind, loc, yaw, level in (
             ("Firing Line", "Where you start", unreal.SOMapPointKind.FAST_TRAVEL, (-300, 0, 0), 0, ""),
             ("Reliquary", "The VANTHOS reward pool", unreal.SOMapPointKind.MISSION, (950, -1250, 0), 90, ""),

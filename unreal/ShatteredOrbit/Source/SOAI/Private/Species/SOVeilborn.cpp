@@ -63,7 +63,7 @@ bool ASOVeilborn::Blink(const FVector& Away)
 			}
 			To = OnNav.Location + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 		}
-		if (TeleportTo(To, GetActorRotation(), false, true))
+		if (FitsAt(To) && TeleportTo(To, GetActorRotation(), false, true))      // never into a wall
 		{
 			if (USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>())
 			{

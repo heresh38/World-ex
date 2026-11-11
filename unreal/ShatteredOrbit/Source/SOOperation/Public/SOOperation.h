@@ -227,6 +227,10 @@ public:
 	/** Every enemy name the plan's stages use. */
 	TArray<FName> GetEnemyNames() const;
 
+	/** Tries every spawn of every wave of every stage in this level (and each boss), takes them away again, and
+	 *  returns how many found no floor (OutProblems names each). For checking a plan against the level it runs in. */
+	int32 AuditSpawns(TArray<FString>& OutProblems);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	FText OperationName;
 

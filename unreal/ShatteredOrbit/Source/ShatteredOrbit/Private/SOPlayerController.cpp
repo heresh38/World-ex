@@ -17,6 +17,7 @@
 #include "NavigationPath.h"
 #include "Components/CapsuleComponent.h"
 #include "SOOperation.h"
+#include "SOOperationBarrier.h"
 #include "SOEnemyAIController.h"
 #include "SOLog.h"
 #include "SOWeapon.h"
@@ -237,6 +238,26 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		};
 		struct FView { const TCHAR* Name; FVector Eye, At; };
 		const FView Views[] = {
+			// the long way in (files s*): the city's edge, the estate, the mall, the station, the canal
+			{ TEXT("s01_pad"), FVector(3, -2304, 1.7), FVector(0, -2200, 5) },
+			{ TEXT("s02_toll"), FVector(4, -2152, 1.7), FVector(0, -2110, 3) },
+			{ TEXT("s03_gatehouse"), FVector(0, -1980, 1.7), FVector(0, -1940, 5) },
+			{ TEXT("s04_lobby"), FVector(0, -1957, 1.7), FVector(2, -1925, 1.6) },
+			{ TEXT("s05_yard"), FVector(0, -1916, 1.7), FVector(0, -1840, 3) },
+			{ TEXT("s06_alley"), FVector(0, -1786, 1.7), FVector(0, -1700, 4) },
+			{ TEXT("s07_forecourt"), FVector(0, -1636, 1.7), FVector(0, -1598, 4) },
+			{ TEXT("s08_mall"), FVector(0, -1594, 1.7), FVector(0, -1500, 3) },
+			{ TEXT("s09_gallery"), FVector(-15, -1566, 6.7), FVector(4, -1470, 4) },
+			{ TEXT("s10_rotunda"), FVector(-13, -1478, 1.7), FVector(2, -1448, 2) },
+			{ TEXT("s11_gate"), FVector(0, -1362, 1.7), FVector(0, -1300, 2) },
+			{ TEXT("s12_stair"), FVector(0, -1290, 1.7), FVector(0, -1245, -2) },
+			{ TEXT("s13_hall"), FVector(0, -1233, -4.3), FVector(0, -1200, -4.6) },
+			{ TEXT("s14_platform"), FVector(1, -1196, -4.3), FVector(0, -1120, -4.8) },
+			{ TEXT("s15_tunnel"), FVector(0, -1086, -5.5), FVector(0, -1030, -5.5) },
+			{ TEXT("s16_canal"), FVector(0, -877, -3.3), FVector(0, -800, -2) },
+			{ TEXT("s17_pump"), FVector(3, -745, -3.3), FVector(0, -700, -1) },
+			{ TEXT("s18_causeway"), FVector(45, -552, 1.7), FVector(30, -500, 2) },
+			{ TEXT("s19_aerial_south"), FVector(150, -2250, 150), FVector(0, -1900, 0) },
 			{ TEXT("m1_approach"), FVector(2, -306, 1.7), FVector(0, -200, 9) },
 			{ TEXT("m2_gate"), FVector(-6, -228, 1.7), FVector(0, -200, 10) },
 			{ TEXT("m3_court"), FVector(10, -192, 2.0), FVector(-4, -140, 4) },
@@ -270,6 +291,16 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Act([=]() { Cam(FVector(24, 186, 12.0), FVector(6, 225, 15)); });
 		Snap(1.5f, TEXT("m13_colossus"));
 		// the nav mesh: a walkable path from the entry to the crown, and how much of the route has nav under it
+		// (with every barrier open: a closed one cuts the nav mesh, as it should)
+		Act([this]()
+		{
+			for (TActorIterator<ASOOperationBarrier> It(GetWorld()); It; ++It)
+			{
+				It->SetActorTickEnabled(false);
+				It->SetOpen(true);
+			}
+		});
+		Do(5.0f, []() {});
 		Act([this]()
 		{
 			UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
@@ -278,12 +309,32 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				UE_LOG(LogShatteredOrbit, Warning, TEXT("Nav: no nav mesh"));
 				return;
 			}
-			const FVector From(-30600.0f, 200.0f, 50.0f), To(15000.0f, 0.0f, 1050.0f);
-			const UNavigationPath* Path = Nav->FindPathToLocationSynchronously(GetWorld(), From, To);
-			UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: entry -> crown %s (%d points, %.0f m%s)"), Path && Path->IsValid() ? TEXT("found") : TEXT("NOT FOUND"),
-				Path ? Path->PathPoints.Num() : 0, Path ? Path->GetPathLength() / 100.0f : 0.0f, Path && Path->IsPartial() ? TEXT(", partial") : TEXT(""));
+			// (world cm: X = N, Y = E) the whole way from the landing pad, leg by leg, so a break names its district
+			struct FLeg { const TCHAR* Name; FVector From, To; };
+			const FLeg Legs[] = {
+				{ TEXT("pad -> gatehouse"), FVector(-229000, 0, 50), FVector(-196400, 0, 50) },
+				{ TEXT("gatehouse -> yard"), FVector(-196400, 0, 50), FVector(-190000, 0, 50) },
+				{ TEXT("yard -> alley -> forecourt"), FVector(-190000, 0, 50), FVector(-161500, 0, 50) },
+				{ TEXT("forecourt -> rotunda"), FVector(-161500, 0, 50), FVector(-147500, 600, 50) },
+				{ TEXT("rotunda -> gallery (the escalator)"), FVector(-147500, 600, 50), FVector(-156000, -1500, 550) },
+				{ TEXT("rotunda -> loading yard"), FVector(-147500, 600, 50), FVector(-128000, 0, 50) },
+				{ TEXT("yard -> ticket hall"), FVector(-128000, 0, 50), FVector(-122000, 0, -550) },
+				{ TEXT("hall -> platform -> tunnel"), FVector(-122000, 0, -550), FVector(-106000, 0, -670) },
+				{ TEXT("platform -> a track bed"), FVector(-116000, 0, -550), FVector(-116000, 750, -670) },
+				{ TEXT("tunnel (round the fall) -> canal"), FVector(-106000, 0, -670), FVector(-86000, 0, -450) },
+				{ TEXT("canal -> spillway top"), FVector(-86000, 0, -450), FVector(-55500, 4500, 50) },
+				{ TEXT("spillway -> old approach"), FVector(-55500, 4500, 50), FVector(-31000, 0, 50) },
+				{ TEXT("old approach -> crown"), FVector(-30600, 200, 50), FVector(15000, 0, 1050) },
+			};
+			for (const FLeg& Leg : Legs)
+			{
+				const UNavigationPath* Path = Nav->FindPathToLocationSynchronously(GetWorld(), Leg.From, Leg.To);
+				const bool bWhole = Path && Path->IsValid() && !Path->IsPartial();
+				UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: %s %s (%d points, %.0f m%s)"), Leg.Name, bWhole ? TEXT("found") : TEXT("NOT FOUND"),
+					Path ? Path->PathPoints.Num() : 0, Path ? Path->GetPathLength() / 100.0f : 0.0f, Path && Path->IsPartial() ? TEXT(", partial") : TEXT(""));
+			}
 			int32 On = 0, Total = 0;
-			for (float N = -30000.0f; N <= 22000.0f; N += 1000.0f)
+			for (float N = -229000.0f; N <= 22000.0f; N += 2000.0f)
 			{
 				for (const float E : { -1000.0f, 0.0f, 1000.0f, 8000.0f })
 				{
@@ -293,6 +344,16 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				}
 			}
 			UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: %d of %d probes along the route have nav"), On, Total);
+			// every creature of every wave has a floor to stand on where the plan puts it
+			for (TActorIterator<ASOOperation> It(GetWorld()); It; ++It)
+			{
+				TArray<FString> Problems;
+				It->AuditSpawns(Problems);
+				for (const FString& Problem : Problems)
+				{
+					UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation audit: no floor for %s"), *Problem);
+				}
+			}
 		});
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
@@ -503,6 +564,14 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Act([=, this]() { CaptureMove = FVector2D(0.0f, 0.34f); });
 		Do(1.1f, [=]() { Orbit(80.0f, 300.0f, 10.0f); });
 		Snap(0.0f, FString::Printf(TEXT("m_%s_13_crouch_walk"), *Body));
+		// ...and through the player's own eyes: standing for comparison, then crouched still and moving
+		Act([=, this]() { CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->UnCrouch(); H->SetViewMode(ESOViewMode::FirstPerson); SetViewTarget(H); } });
+		Snap(0.9f, FString::Printf(TEXT("m_%s_13a_fp_stand"), *Body));
+		Act([=]() { if (ASOCharacter* H = Hero()) { H->Crouch(); } });
+		Snap(0.9f, FString::Printf(TEXT("m_%s_13b_fp_crouch"), *Body));
+		Act([=, this]() { CaptureMove = FVector2D(0.0f, 1.0f); });
+		Snap(0.7f, FString::Printf(TEXT("m_%s_13c_fp_crouch_walk"), *Body));
+		Act([=, this]() { CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->SetViewMode(ESOViewMode::ThirdPerson); } });
 		Do(0.1f, [=]() { if (ASOCharacter* H = Hero()) { H->UnCrouch(); } Reset(); });
 		for (int32 Pace = 0; Pace < 5; ++Pace)
 		{

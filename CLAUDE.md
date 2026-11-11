@@ -11,6 +11,18 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
 - No names, terms or text from other games.
 - AAA quality everywhere: nothing blocky or half-done, no lumps / ledges / bulges on any model (check silhouettes).
 - Premium presentation at 60 fps on a mid-range PC.
+- **Operations follow `docs/operation/ART_DIRECTION.md`** (the owner's art direction, 2026-11-10: "For our operation
+  keep this as the rules please"). Read it before touching an operation level. In short: a once-great human city,
+  destroyed, abandoned and taken over by an alien ecosystem; a playable strike, not a showcase. Buildings are COMPLETE
+  buildings that were then damaged (finished walls, windows and frames, balconies, trim, rooftop plant, signage,
+  doors, broken sections showing furnished interiors): never bare concrete skeletons, construction sites, grey boxes
+  or stacked cubes; every district has its own architecture and its own lighting. Every detail has a reason (it tells
+  what happened here); no random scatter. The alien vegetation is its own design language and grows the way plants
+  grow (through windows and cracks, round pillars, roots into concrete, some buildings consumed, some barely
+  touched). Real streets (lane markings, curbs, drains, potholes, wrecked vehicles), no huge flat surfaces, explorable
+  interiors with floors, ceilings, furniture and light. Dark and cinematic but never too dark to see enemies. Audit
+  first, plan, then work in its ten stages, testing after each; keep the route, encounters, collision and nav working;
+  commit before each stage (the backup). Never call it AAA because it uses Nanite and Lumen.
 
 ## Asset pipeline
 - `bash tools/blender/build_all.sh` builds the Blender sources Unreal's export reads into `assets/` (generated, not
@@ -172,12 +184,33 @@ spawn groups, checkpoints (the game mode respawns there) and boss adds keyed to 
 piece of the reward sets (`AddArmorPiece` for armour: wardrobe items with a `Set` are earned, never handed out).
 HUD: objective panel, stage banner, goal marker, boss bar, end screen. Tests `ShatteredOrbit.Operation.*`.
 The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
-`art/reference/operation/first_operation_map.png` made smaller and linear, our own names. One source for layout and
-mission: `tools/operation/meridian_plan.py` (writes `Data/op_meridian.json`); `tools/blender/meridian.py` builds the ruined
-city from it with `ruinkit.py` (ruined towers: slab cells, columns, cores, cladding, a damage field of broken tops and
-blast holes, rebar, hanging slabs, rubble heaps; wall + gate, viaducts, the Concord Ring, the High Terraces, the
-Crown Bridge, the Crown with its beam, the far spire and broken orbital ring, invisible blockers) into `MR_<zone>`
-chunks + `Data/op_meridian_art.json` (lights); `make_operation_map.py` assembles the level (storm night).
+`art/reference/operation/first_operation_map.png` made linear, our own names, and (owner, 2026-11-10: "at least 4x
+longer ... spawn at the very edge of the city and fight through ruined buildings / maybe a mall ... like a strike")
+a long way in before it: 2.5 km south to north, 20 stages. Ashfall Verge (the landing pad, the dead highway, the toll
+plaza) -> The Stacks (through the gatehouse block's rooms, the walled yard: clear, the archway, the alley) ->
+Meridian Galleria (two storeys round an atrium, escalators, the rotunda under the fallen skylight: hold, then the
+Warden at the service gate: a boss stage, a `bulwark` variant) -> Deepline (the stair down, the ticket hall, the
+platform: destroy three `conduit` hearts, the tunnel with its collapse and the service corridor round it) -> The
+Sluice (the drained canal, pump house, footbridges with the watch on them: clear, the spillway) -> the Causeway ->
+the old Approach, Gate, Boulevard, Concord Ring (hold), High Terraces, Crown Bridge, the Crown (the Colossus). Named
+elites (`VARIANTS`: Remnant Captain, Veilborn Seer, Pack Alpha) give the big fights a centre. One source for layout
+and mission: `tools/operation/meridian_plan.py` (writes `Data/op_meridian.json`: stages, groups, barriers, map points,
+`nav` boxes, `mapInfo`; `PITS` = holes in the ground, `ROUTE`); `tools/blender/meridian.py` (the old city, the ground,
+the skyline) + `meridian_south.py` (the long way in: `wall` with doors / windows, `slab` grids with holes, `sloped`,
+`escalator`) build it with `ruinkit.py` (ruined towers: slab cells, columns, cores, cladding, a damage field of broken
+tops and blast holes, rebar, hanging slabs, rubble heaps; viaducts, invisible blockers and lids) into `MR_<zone>` +
+`Data/op_meridian_art.json` (lights: void, fire, rim, beam, moon, lamp); `make_operation_map.py` assembles the level
+(storm night). Look at the geometry before importing: build with `--noexport --save=x.blend`, then
+`blender -b x.blend -P tools/blender/meridian_preview.py -- <outdir>` (workbench views along the route).
+**What is drawn is not what collides** (the cause of "the enemy can shoot through walls / get stuck in walls and
+rocks"): a Nanite mesh's collision is built from its simplified fallback (the Crown kept 3% of its triangles, even
+the invisible walls lost half), so shots, creatures and the nav mesh went through what was drawn. Every zone now
+exports `MR_<zone>_solid` beside itself (`ruinkit.collision_of`: the faces flagged to collide, exact; towers only up
+to `COL_TOP` / `col_top` above their foot, nothing for ruins behind the invisible walls, rubble heaps through a
+coarser stand-in `HEAP_COL_RES`), imported NOT Nanite, complex-as-simple, double-sided (`_collision_mesh`), placed
+hidden; the drawn zone has no collision. Never give a Nanite mesh its own complex collision (Nexus Prime's kit still
+does: to do). Do not name an object `*_col` (the FBX exporter takes that for UCX collision). The invisible walls
+stand 9 m over what is walked on (an air jump + a clamber reach nearly 6), with lids over the estate and the mall.
 Modular by rule (owner, 2026-11-10). **Species**: every creature is written ONCE: one class with everything it is
 (body, clips, voice, gun, numbers, its own moves; the brain is the shared `ASOEnemyAIController`), one file per species
 (`SOAI/Private/Species/SO<Name>.cpp`), named by `ASOEnemy::SpeciesId`. Nothing lists them: `USOSpeciesLibrary`
@@ -193,7 +226,9 @@ operation loads its species then and holds them only while it runs, travel goes 
 and anything kept by hand (the sound cache) lets go on `OnReleaseContent` before the old level is torn down. Check
 with the console: `SOCensus` (what is loaded by folder + anything of another area), `SOAreaTour quit [area ...]`
 (visits every area and back, `Saved/area_tour.json`; run it with `-game -nullrhi -nosound -unattended`). A prop every
-area uses must not live in one area's folder (until it moves it is listed under `"shared"` in areas.json). Never keep
+area uses lives in `/Game/Shared` (listed under `"shared"` in areas.json): `Shared/Operation` (the barrier panel, the
+conduit, `M_SOEnergy`, `M_SOGlowPulse`, their own material instances) and `Shared/Map` (the beacon). Travel shows a
+loading screen (`USOAreaSubsystem::TravelToLevel`, the engine's movie player: the area's name on a dark screen). Never keep
 a bare pointer to a loaded asset across a timer or a level change (nothing holds it: it is collected). Test
 `ShatteredOrbit.Area.OneAtATime`.
 The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own
@@ -223,7 +258,13 @@ crouched: the body's own Crouch / CrouchWalk on the same phase (`CrouchDrop` onl
 clips; sinking the standing clips over runtime leg IK made the legs flip: the owner's "legs glitch everywhere and under
 the floor"). The runtime leg IK's knee can only bend ahead of the hip-ankle line in the leg's own heading
 (`KneeAhead`: an almost straight animated leg says nothing about the knee's side). Test `ShatteredOrbit.Anim.CrouchWalk`
-(feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). Still to do: first-person hands on a ledge.
+(feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). The first-person arms
+hang from the eye, not the capsule (`ASOCharacter::Tick`: crouched, the capsule's centre drops and the eye comes down
+to it; left on the capsule the shoulders ended up above the camera and the arms came into view from overhead; test
+`ShatteredOrbit.Anim.CrouchFirstPerson`). Braking out of a run plays the body's `Stop` clip (by how fast it was going);
+a turn on the spot is stepped (`TurnLift`: the foot on the side of the turn comes off the ground first); on a vault,
+mantle or climb the gun is put away in both views and the first-person hands go onto the edge too. Test
+`ShatteredOrbit.Anim.StopsAndTurns`.
 Enemies, the Altered (`altered.py` + `SOAltered.h`), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
 by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as
 they track): Remnant (SMG, pushes in), armed Stalker (auto rifle, cover), Veilborn (scout rifle from cover, the odd void
@@ -234,7 +275,14 @@ Brain (`ASOEnemyAIController`): sight cone + peripheral band, awareness that fil
 sprinting and a lit flashlight speed it; a light is seen from any side), hearing (gunshots, running feet), states
 unaware / suspicious / combat / search; squad alerts; armed cover-users score nav points that hide them from the
 target but have a peek or a line over the top (flankers swing wide, claims kept apart), peek-shoot-duck, move on
-when flanked; stuck detection steps them back onto free nav. Shots on an unaware creature hit harder (ambush). Voices
+when flanked; stuck detection steps them back onto free nav, and one found standing in the world's geometry is put
+back on free ground (`Rescue`; a blink or a rescue asks `ASOEnemy::FitsAt` first). It does not stand there (the
+owner: "the ai is stupid"): hit in the open or with a gun levelled at it, it steps aside (`Sidestep`, then new cover);
+badly hurt it falls back to cover further off and stays down longer (`bRetreating`); when the target goes out of
+sight half the squad pushes to where it was, the flankers round its side (`Push`), the rest hold and follow; claws
+come in round the sides (`SideBias`), everyone keeps its own distance (`RangeBias`). A hunter knows where the players
+are but aims and fires only at what it sees; `HasLineOfFire` is the bullet's own trace, fat, and stops behind a mate.
+Tests `ShatteredOrbit.AI.NoShotsThroughWalls`. Shots on an unaware creature hit harder (ambush). Voices
 per creature from `sfx_synth.py` (`<set>_idle/query/alert/hurt/death_N`). Operation waves: the first of a stage is an
 unaware garrison (`hunt: false`), later ones hunt. Spawns land on the nav mesh where the capsule fits; L_Meridian's nav
 mesh is bounded to the walkable route per zone (one big volume ran out of tiles in the towers).

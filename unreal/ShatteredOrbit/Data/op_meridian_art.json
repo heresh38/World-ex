@@ -549,6 +549,1156 @@
    ],
    "radius": 1600,
    "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    -229400.0,
+    0.0,
+    160.0
+   ],
+   "radius": 1700,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    -229600.0,
+    -1150.0,
+    660.0
+   ],
+   "radius": 900,
+   "intensity": null
+  },
+  {
+   "kind": "rim",
+   "at": [
+    -229600.0,
+    1150.0,
+    660.0
+   ],
+   "radius": 900,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -212900.0,
+    -600.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -206400.0,
+    1400.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -219000,
+    -2400,
+    60
+   ],
+   "radius": 1600.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -209600,
+    2500,
+    60
+   ],
+   "radius": 1650.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -207800.0,
+    -2200.0,
+    1060.0
+   ],
+   "radius": 1600,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -203000.0,
+    2700.0,
+    60
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "moon",
+   "at": [
+    -194000.0,
+    0.0,
+    400.0
+   ],
+   "radius": 1500,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -194100.0,
+    -1400.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -195200.0,
+    3300.0,
+    420.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -192600.0,
+    -2800.0,
+    420.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -193400.0,
+    2700.0,
+    420.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -194800.0,
+    -4000.0,
+    420.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -193000.0,
+    1400.0,
+    420.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -195200.0,
+    -1400.0,
+    420.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -196160.0,
+    -700.0,
+    450.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -196160.0,
+    700.0,
+    450.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -185600.0,
+    3300.0,
+    1160.0
+   ],
+   "radius": 1700,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -187400.0,
+    -4400.0,
+    160.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -189600.0,
+    1000.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -184000.0,
+    -2400.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -187000.0,
+    -300.0,
+    250.0
+   ],
+   "radius": 1450.0,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -180500.0,
+    0.0,
+    460.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -176600.0,
+    0.0,
+    600.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -171400.0,
+    0.0,
+    600.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -166200.0,
+    0.0,
+    600.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -175200.0,
+    -600.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -169000.0,
+    600.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -171200.0,
+    750.0,
+    160.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -160800.0,
+    0.0,
+    520.0
+   ],
+   "radius": 1500,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -161300.0,
+    2000.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -158200.0,
+    -2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -153400.0,
+    -2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -148600.0,
+    -2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -143800.0,
+    -2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -139000.0,
+    -2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -158200.0,
+    2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -153400.0,
+    2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -148600.0,
+    2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -143800.0,
+    2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -139000.0,
+    2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -134200.0,
+    2700.0,
+    360.0
+   ],
+   "radius": 800,
+   "intensity": null
+  },
+  {
+   "kind": "moon",
+   "at": [
+    -145000.0,
+    0.0,
+    810.0
+   ],
+   "radius": 3400,
+   "intensity": 90.0
+  },
+  {
+   "kind": "moon",
+   "at": [
+    -145000.0,
+    0.0,
+    210.0
+   ],
+   "radius": 1800,
+   "intensity": 30.0
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -158500.0,
+    -550.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -155600.0,
+    1430.0,
+    60
+   ],
+   "radius": 1400.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -151200.0,
+    1430.0,
+    60
+   ],
+   "radius": 1400.0,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -149700.0,
+    -550.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -142400.0,
+    1430.0,
+    60
+   ],
+   "radius": 1400.0,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -140900.0,
+    -550.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -138000.0,
+    1430.0,
+    60
+   ],
+   "radius": 1400.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -152800.0,
+    -1944.0,
+    160.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -141400.0,
+    1944.0,
+    160.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -138000.0,
+    -1944.0,
+    160.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -143400.0,
+    -1200.0,
+    810.0
+   ],
+   "radius": 1500,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -157000.0,
+    1500.0,
+    860.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -152400.0,
+    -1500.0,
+    860.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -147800.0,
+    1500.0,
+    860.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -143200.0,
+    -1500.0,
+    860.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -138600.0,
+    1500.0,
+    860.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -134000.0,
+    -1500.0,
+    860.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -158200.0,
+    1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -154600.0,
+    -1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -151000.0,
+    1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -147400.0,
+    -1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -143800.0,
+    1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -140200.0,
+    -1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -136600.0,
+    1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -133000.0,
+    -1200.0,
+    450.0
+   ],
+   "radius": 1400,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -126800.0,
+    -1500.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -129100.0,
+    1400.0,
+    380.0
+   ],
+   "radius": 1000,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -123300.0,
+    0.0,
+    -200.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -121400.0,
+    -1100.0,
+    -540.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -122200.0,
+    900.0,
+    -180.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -120900.0,
+    -900.0,
+    -180.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -120500.0,
+    900.0,
+    -180.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -123000.0,
+    -1200.0,
+    -180.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -117600.0,
+    -824.5,
+    -420.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -114600.0,
+    824.5,
+    -420.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -111800.0,
+    -824.5,
+    -420.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -119600.0,
+    0.0,
+    -420.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -118400.0,
+    200.0,
+    -90.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -115000.0,
+    -200.0,
+    -90.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -111600.0,
+    200.0,
+    -90.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -101600.0,
+    700.0,
+    -460.0
+   ],
+   "radius": 600,
+   "intensity": 8.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -100000.0,
+    700.0,
+    -460.0
+   ],
+   "radius": 600,
+   "intensity": 8.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -98400.0,
+    700.0,
+    -460.0
+   ],
+   "radius": 600,
+   "intensity": 8.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -96800.0,
+    700.0,
+    -460.0
+   ],
+   "radius": 600,
+   "intensity": 8.0
+  },
+  {
+   "kind": "void",
+   "at": [
+    -105800.0,
+    -376.0,
+    -540.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -103400.0,
+    376.0,
+    -540.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -94400.0,
+    -376.0,
+    -540.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -91800.0,
+    376.0,
+    -540.0
+   ],
+   "radius": 1200,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -107600.0,
+    -320.0,
+    -660.0
+   ],
+   "radius": 1300.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -95600.0,
+    -300.0,
+    -660.0
+   ],
+   "radius": 1300.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -89400.0,
+    -340.0,
+    -660.0
+   ],
+   "radius": 1300.0,
+   "intensity": null
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -108800.0,
+    0.0,
+    -160.0
+   ],
+   "radius": 700,
+   "intensity": 9.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -106400.0,
+    0.0,
+    -160.0
+   ],
+   "radius": 700,
+   "intensity": 9.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -100000.0,
+    0.0,
+    -160.0
+   ],
+   "radius": 700,
+   "intensity": 9.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -98400.0,
+    0.0,
+    -160.0
+   ],
+   "radius": 700,
+   "intensity": 9.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -91000.0,
+    0.0,
+    -160.0
+   ],
+   "radius": 700,
+   "intensity": 9.0
+  },
+  {
+   "kind": "lamp",
+   "at": [
+    -89200.0,
+    0.0,
+    -160.0
+   ],
+   "radius": 700,
+   "intensity": 9.0
+  },
+  {
+   "kind": "void",
+   "at": [
+    -77000.0,
+    -1249.5,
+    -320.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -65000.0,
+    1249.5,
+    -320.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -56000.0,
+    -1249.5,
+    -320.0
+   ],
+   "radius": 1300,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -75600.0,
+    -900.0,
+    560.0
+   ],
+   "radius": 1700,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -84600.0,
+    800.0,
+    -440.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -70500.0,
+    -800.0,
+    -440.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -61200.0,
+    900.0,
+    -440.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -53600.0,
+    0.0,
+    -440.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -49400.0,
+    3600.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "fire",
+   "at": [
+    -37600.0,
+    -500.0,
+    60.0
+   ],
+   "radius": 1100,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -45200.0,
+    2200.0,
+    60
+   ],
+   "radius": 1550.0,
+   "intensity": null
+  },
+  {
+   "kind": "void",
+   "at": [
+    -42000.0,
+    -750.0,
+    60
+   ],
+   "radius": 1450.0,
+   "intensity": null
   }
  ],
  "ambience": [
@@ -836,6 +1986,259 @@
    ],
    "radius": 16000.0,
    "volume": 0.55,
+   "spores": false
+  },
+  {
+   "kind": "hum",
+   "at": [
+    -207800.0,
+    -2200.0,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -203000.0,
+    2700.0,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    -185600.0,
+    3300.0,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -187400.0,
+    -4500.0,
+    80
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -171200.0,
+    800.0,
+    80
+   ],
+   "radius": 1200.0,
+   "volume": 0.7,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -152800.0,
+    -2160.0,
+    80
+   ],
+   "radius": 1200.0,
+   "volume": 0.7,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -141400.0,
+    2160.0,
+    80
+   ],
+   "radius": 1200.0,
+   "volume": 0.7,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -138000.0,
+    -2160.0,
+    80
+   ],
+   "radius": 1200.0,
+   "volume": 0.7,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    -143400.0,
+    -1200.0,
+    80
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -117600.0,
+    -970.0,
+    -520.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -114600.0,
+    970.0,
+    -520.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -111800.0,
+    -970.0,
+    -520.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -119600.0,
+    0.0,
+    -520.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    -115000.0,
+    0.0,
+    -520.0
+   ],
+   "radius": 6000.0,
+   "volume": 0.6,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -105800.0,
+    -470.0,
+    -640.0
+   ],
+   "radius": 1200.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -103400.0,
+    470.0,
+    -640.0
+   ],
+   "radius": 1200.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -94400.0,
+    -470.0,
+    -640.0
+   ],
+   "radius": 1200.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -91800.0,
+    470.0,
+    -640.0
+   ],
+   "radius": 1200.0,
+   "volume": 0.9,
+   "spores": true
+  },
+  {
+   "kind": "chorus",
+   "at": [
+    -99000.0,
+    0.0,
+    -640.0
+   ],
+   "radius": 8000.0,
+   "volume": 0.5,
+   "spores": false
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -77000.0,
+    -1470.0,
+    -420.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -65000.0,
+    1470.0,
+    -420.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hive",
+   "at": [
+    -56000.0,
+    -1470.0,
+    -420.0
+   ],
+   "radius": 1400.0,
+   "volume": 0.8,
+   "spores": true
+  },
+  {
+   "kind": "hum",
+   "at": [
+    -75600.0,
+    -900.0,
+    -420.0
+   ],
+   "radius": 3000.0,
+   "volume": 1.0,
    "spores": false
   }
  ]

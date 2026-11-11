@@ -37,9 +37,11 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** Opens or closes it (the operation does this by its stage; a tool may force it). */
+	void SetOpen(bool bNewOpen);
+
 protected:
 	void ApplySize();
-	void SetOpen(bool bNewOpen);
 
 	UPROPERTY(VisibleAnywhere, Category = "SO|Operation")
 	TObjectPtr<UBoxComponent> Block;
