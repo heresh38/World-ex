@@ -1,6 +1,13 @@
 {
  "name": "Meridian Fall",
- "tagline": "The old capital went silent in the Stillfall. Something answers from its crown.",
+ "tagline": "A beam has lit over the old capital, and Nexus Prime's wall is failing. Walk in and put it out.",
+ "briefing": [
+  "Eleven nights ago a beam lit over Meridian, the old capital, silent since the Stillfall.",
+  "Every night it burns, the Keystones in Nexus Prime's wall lose ground. Two districts are sealed. The wall has about nineteen nights.",
+  "The storm over the city takes anything that flies. The only way in is on foot, from the edge.",
+  "Reach the Crown. Kill what feeds the beam and what guards it. Bring the capital's Keystone home."
+ ],
+ "outcome": "The beam is dark. The capital's Keystone is going home to the wall. Whatever it was calling has stopped answering. For now.",
  "groups": {
   "verge_toll": {
    "yaw": 180.0,
@@ -1159,7 +1166,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "This is as far as anything flies, Orion. The storm starts at the toll plaza. From there you walk."
+   }
   },
   {
    "id": "gatehouse",
@@ -1194,7 +1205,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "The Stacks were sealed from outside in the first week. Whoever was inside is still inside."
+   }
   },
   {
    "id": "yard",
@@ -1275,7 +1290,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "Those were the residents. They kept what they were holding. Clear the yard."
+   }
   },
   {
    "id": "alley",
@@ -1310,7 +1329,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "The Galleria was this district's shelter. Four thousand people. Its last message is a count of doors that would not hold."
+   }
   },
   {
    "id": "galleria",
@@ -1350,7 +1373,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "They slept under the galleries and in the shops. The service gate at the far end is the only way on."
+   }
   },
   {
    "id": "rotunda",
@@ -1442,7 +1469,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "The gate still has power. It needs eighty seconds to cycle, and everything in here can hear it."
+   }
   },
   {
    "id": "warden",
@@ -1488,7 +1519,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "Something has kept that gate shut for years. It is coming to see who opened it."
+   }
   },
   {
    "id": "descent",
@@ -1518,12 +1553,16 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "The beam is fed from under the station. The hive there has three hearts."
+   }
   },
   {
    "id": "hearts",
    "title": "Deepline",
-   "objective": "Destroy the hive's hearts",
+   "objective": "Destroy the three hearts that feed the beam",
    "kind": "clear",
    "goal": [
     -115000.0,
@@ -1594,7 +1633,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "Each heart pumps into the old traction mains, and the mains run to the Crown. Stop all three."
+   }
   },
   {
    "id": "tunnel",
@@ -1645,7 +1688,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "The beam just dimmed. It felt that. Keep moving."
+   }
   },
   {
    "id": "sluice",
@@ -1721,7 +1768,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "The annex on the west bank was ours, three years ago. They coupled the root to the capital's uplink so it could be heard. They wanted to listen. They taught it to speak."
+   }
   },
   {
    "id": "causeway",
@@ -1756,7 +1807,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "The wreck across the road is our gunship, nine nights old. Nothing reached the crew. That is why you are walking."
+   }
   },
   {
    "id": "approach",
@@ -1791,7 +1846,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "The army held this wall for six days in 2189. Past it, everything is the root's ground."
+   }
   },
   {
    "id": "gate",
@@ -1862,7 +1921,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "They guard gates. They always have. Break the hold on this one."
+   }
   },
   {
    "id": "boulevard",
@@ -1891,7 +1954,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "Look at the plan of it. Rings round a middle. The capital was built on top of a root and never knew."
+   }
   },
   {
    "id": "ring",
@@ -1968,7 +2035,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "The veil across the ramp is grown, not built, and it is opening for something. Hold the Ring until it does."
+   }
   },
   {
    "id": "climb",
@@ -1986,7 +2057,11 @@
     3600.0,
     100.0,
     90.0
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "Those banners are the Still Choir's. They came here to hear it speak. Most of them never left."
+   }
   },
   {
    "id": "terraces",
@@ -2057,7 +2132,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "Some of what is up here wears their red. Clear the terraces."
+   }
   },
   {
    "id": "bridge",
@@ -2075,12 +2154,16 @@
     5600.0,
     1100.0,
     -90.0
-   ]
+   ],
+   "intel": {
+    "who": "INSTITUTE",
+    "text": "The beam is not a weapon, Orion. It is a call. The Keystones in our wall were cut from the stone under that light, and they are answering."
+   }
   },
   {
    "id": "crown",
    "title": "The Crown",
-   "objective": "Bring down the Hollow Colossus",
+   "objective": "Bring down the Hollow Colossus and take the Keystone",
    "kind": "boss",
    "boss": "colossus",
    "bossGroup": "crown_boss",
@@ -2136,7 +2219,11 @@
       ]
      ]
     }
-   ]
+   ],
+   "intel": {
+    "who": "RAMPART",
+    "text": "It slept under the Crown longer than the city stood. Break its three conduits, bring it down, and take the stone."
+   }
   }
  ],
  "barriers": [
@@ -2180,13 +2267,13 @@
    "id": "spillway_barrier",
    "opens": "causeway",
    "c": [
-    -55500.0,
-    1600.0,
-    -500.0
+    -51200.0,
+    3900.0,
+    0.0
    ],
-   "width": 1600.0,
-   "height": 700.0,
-   "yaw": 90.0
+   "width": 4600.0,
+   "height": 900.0,
+   "yaw": -25.7
   },
   {
    "id": "terrace_barrier",
@@ -2359,6 +2446,14 @@
  },
  "nav": [
   [
+   -2322,
+   -1972,
+   -62,
+   62,
+   -2,
+   3.4
+  ],
+  [
    -2314,
    -1958,
    -32,
@@ -2373,6 +2468,14 @@
    48,
    -2,
    3.6
+  ],
+  [
+   -1922,
+   -1818,
+   -67,
+   67,
+   -2,
+   3.4
   ],
   [
    -1792,
@@ -2415,12 +2518,28 @@
    3
   ],
   [
+   -882,
+   -518,
+   -68,
+   60,
+   -1,
+   3.4
+  ],
+  [
    -564,
    -316,
    -12,
    58,
    -2,
    6
+  ],
+  [
+   -566,
+   -316,
+   -40,
+   78,
+   -1,
+   3.4
   ],
   [
    -322,
@@ -2431,12 +2550,28 @@
    9
   ],
   [
+   -336,
+   -202,
+   -54,
+   54,
+   -1,
+   3.4
+  ],
+  [
    -200,
    -136,
    -37,
    37,
    -2,
    6
+  ],
+  [
+   -198,
+   -136,
+   -58,
+   58,
+   -1,
+   3.4
   ],
   [
    -138,
@@ -2447,12 +2582,28 @@
    9
   ],
   [
+   -138,
+   -40,
+   -47,
+   47,
+   -1,
+   3.4
+  ],
+  [
    -46,
    46,
    -46,
    46,
    -3,
    5
+  ],
+  [
+   -70,
+   70,
+   -70,
+   70,
+   -1,
+   3.4
   ],
   [
    -8,

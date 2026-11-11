@@ -17,6 +17,9 @@ import math
 import random
 from mathutils import Vector, Matrix
 import ruinkit as rk
+import interiorkit as ik
+import boundskit as bk
+import citykit
 import meridian_plan as P
 
 TAU = rk.TAU
@@ -116,22 +119,66 @@ def table(g, c, r=.55, h=.74):
     rk.cyl(g, "ru_panel", (c[0], c[1]), r, c[2] + h - .04, c[2] + h, n=14, smooth=False)
 
 
-def ruin_rows(g, gd, rnd, n0, n1, e_in, seed, low=(2, 5), high=(6, 12), near=(14, 18)):
-    """low ruins down both sides of a straight street (N n0..n1, their inner faces e_in from the middle), taller behind"""
+def flank(g, gd, a, b, h, mat, seed, face=1):
+    """A boundary wall that reads as a building's flank, too high to climb (h): piers every six metres, a plinth, a
+    coping, dead hoardings on the side people walk past (face = +1 / -1: which side of a -> b that is)."""
+    rnd = random.Random(seed)
+    A, B = Vector((a[0], a[1])), Vector((b[0], b[1]))
+    d = B - A
+    L = d.length
+    u = d / L
+    nrm = Vector((-u.y, u.x)) * face
+    yaw = math.atan2(u.y, u.x)
+    wall(g, mat, a, b, 0, h, .5)
+    m = (A + B) / 2
+    rk.box(g, "ru_concrete", (m.x + nrm.x * .3, m.y + nrm.y * .3, .45), (L / 2, .08, .45), yaw)
+    rk.box(g, "ru_concrete", (m.x, m.y, h + .1), (L / 2 + .1, .36, .1), yaw)
+    k = 0
+    x = 3.0
+    while x < L - 2:
+        p = A + u * x + nrm * .33
+        rk.box(g, mat, (p.x, p.y, h / 2), (.3, .12, h / 2), yaw)
+        if k % 2 == 0 and x + 6 < L:                               # a hoarding between two piers: its frame, what is left on it
+            q = A + u * (x + 3.0) + nrm * .3
+            rk.box(gd, "ru_metal", (q.x, q.y, 3.3), (2.3, .04, 1.3), yaw)
+            lit = rnd.random() < .25
+            q2 = q + nrm * .05
+            rk.box(gd, rnd.choice(("ru_sign_amber", "ru_holo_cyan", "ru_sign_white")) if lit else "ru_paint", (q2.x, q2.y, 3.3), (2.15, .01, 1.15), yaw,
+                   offsets=[(0, 0, 0)] * 4 + [(0, 0, -rnd.uniform(0, .9) if sx > 0 else 0) for sx in (-1, 1, 1, -1)])
+        x += 6.0
+        k += 1
+
+
+def ruin_rows(g, gd, rnd, n0, n1, e_in, seed, low=(2, 5), high=(6, 12), near=(14, 18), plug=None):
+    """Buildings down both sides of a straight street (N n0..n1, their fronts e_in from the middle), taller ones behind.
+    plug: the row IS the route's edge: each building is walked into from the street and sealed behind, and every gap
+    between two of them is closed with that kind of barrier (boundskit)."""
     for side in (-1, 1):
         n = n0
         k = 0
+        prev = None
         while n < n1 - 8:
             L = rnd.uniform(16, 26)
             w = rnd.uniform(*near)
-            rk.tower(g, gd, (side * (e_in + w / 2 + rnd.uniform(0, 3)), n + L / 2), w, L, rnd.randint(*low), yaw=rnd.uniform(-.04, .04),
-                     seed=seed + k * 2 + (side > 0), style=rnd.choice(("panel", "concrete")), top=(.3, 1.0), holes=2, col_top=7.0)
-            # (behind the first row and the invisible wall: seen, never touched)
+            if plug:
+                L = min(L, n1 - n)
+            inset = rnd.uniform(0, 3)
+            rk.tower(g, gd, (side * (e_in + w / 2 + inset), n + L / 2), w, L, rnd.randint(*low), yaw=rnd.uniform(-.04, .04) * (0 if plug else 1),
+                     seed=seed + k * 2 + (side > 0), style=rnd.choice(("panel", "concrete")), top=(.3, 1.0), holes=2, col_top=10.5 if plug else 7.0,
+                     face=(-side, 0) if plug else None)
+            if plug and prev is not None:
+                e = side * (max(prev[1], e_in + inset) + .9)
+                bk.seal(g, gd, (e, prev[0] - .4), (e, n + .4), (side, 0), plug, seed + 900 + k * 2 + (side > 0))
+            prev = (n + L, e_in + inset)
+            # (behind the first row: seen, never touched)
             rk.tower(g, gd, (side * (e_in + w + 14 + rnd.uniform(0, 10)), n + L / 2), rnd.uniform(16, 22), L, rnd.randint(*high),
                      yaw=rnd.uniform(-.1, .1), seed=seed + 500 + k * 2 + (side > 0), style=rnd.choice(("panel", "concrete")),
                      top=(.4, 1.0), holes=2, rebar=False, detail=False, heaps=False, cell_target=6.0, col_top=0)
             n += L + rnd.uniform(3, 6)
             k += 1
+        if plug and prev is not None and prev[0] < n1 - .5:           # what is left of the row's length
+            e = side * (prev[1] + .9)
+            bk.seal(g, gd, (e, prev[0] - .4), (e, n1 + .4), (side, 0), plug, seed + 990 + (side > 0))
 
 
 # ------------------------------------------------------------------ Ashfall Verge
@@ -153,10 +200,16 @@ def zone_verge(G, H):
         rk.tube(g, "ru_metal", [(pe + s * 11.5, pn - 2, 0), (pe + s * 11.5, pn - 2, 6.5)], .14, 8, r_end=.09)
         rk.box(gd, "ru_glow", (pe + s * 11.5, pn - 2, 6.6), (.16, .16, .22))
         H.light("rim", (pe + s * 11.5, pn - 2, 6.0), 900)
-    ruin_rows(g, gd, rnd, n0 - 14, n1 - 4, half + 8, 1200)
+    ruin_rows(g, gd, rnd, n0 - 14, n1 - 4, half + 8, 1200, plug="containers")
+    # the road out, behind the pad: closed with freight boxes from one row to the other in the last days
+    bk.containers(g, gd, (-half - 9.5, n0 - 11.0), (half + 9.5, n0 - 11.0), (0, -1), 1290, tall=4)
+    for e in (-18.0, 18.0):
+        rk.tube(g, "ru_metal", [(e, n0 - 4.0, 0), (e, n0 - 4.0, 6.0)], .1, 8, r_end=.07)
+        rk.box(gd, "ru_lightpanel", (e, n0 - 4.25, 6.1), (.45, .06, .25))
+        H.light("lamp", (e, n0 - 6.5, 5.4), 2400, 60.0)
     for side in (-1, 1):
         for i in range(9):
-            rk.heap(g, (side * (half - rnd.uniform(1, 5)), rnd.uniform(n0 + 30, n1 - 10), 0), rnd.uniform(4, 8), rnd.uniform(1.5, 3.5),
+            rk.heap(g, (side * (half - rnd.uniform(1, 5)), rnd.uniform(n0 + 30, n1 - 10), 0), rnd.uniform(4, 8), rnd.uniform(1.2, 2.2),
                     1300 + i + (side > 0) * 20, ry=rnd.uniform(5, 9))
     # the flyover: the old ring road crossing overhead, one span down on the road (a ramp of broken deck to fight round)
     a, b = Vector((-90.0, -2262.0, 9.5)), Vector((90.0, -2214.0, 9.5))
@@ -168,6 +221,11 @@ def zone_verge(G, H):
         for s in (-1, 1):
             off = Vector((-d.y, d.x, 0)) * s * 6.3
             rk.wall_path(g, "ru_concrete", [tuple(p0 + off), tuple(p1 + off)], .35, 1.0, rnd=rnd, broken=.4)
+    side = Vector((-d.y, d.x, 0))
+    for t_ in ((36.0 - a.x) / (b.x - a.x), (-36.0 - a.x) / (b.x - a.x)):
+        pm = a.lerp(b, t_)
+        o_ = d if pm.x > 0 else -d
+        bk.containers(g, gd, tuple((pm - side * 6.0).to_2d()), tuple((pm + side * 6.0).to_2d()), (o_.x, o_.y), 1295 + (pm.x > 0), tall=3, z=9.5, loose=False)
     top = a.lerp(b, cut1) - d * .5
     foot = a.lerp(b, cut0 + .03) + Vector((0, 0, -9.5 + .75))
     rk.path_deck(g, "ru_asphalt", "ru_concrete", [tuple(foot), tuple(top - Vector((0, 0, .7)))], 12.0, 1.3, end_mat="ru_fracture")
@@ -251,10 +309,10 @@ def zone_stacks(G, H):
     # the street up to the estate, closed in by ruins
     H.ground_slab(g, "ru_asphalt", -9.0, 9.0, S["n0"] - 2, B["n0"], .03)
     H.ground_slab(g, "ru_stone", -half, half, B["n0"] - 14, B["n0"], .08)
-    ruin_rows(g, gd, rnd, S["n0"] - 6, B["n0"] - 14, 31.0, 1600, low=(3, 6))
-    for s in (-1, 1):
-        wall(g, "ru_concrete", (s * half, B["n0"] - 14), (s * 31.0, B["n0"] - 14), 0, 5.0, .5, top_mat="ru_fracture")
-        wall(g, "ru_concrete", (s * half, B["n0"] - 14), (s * half, B["n0"]), 0, 5.0, .5, top_mat="ru_fracture")
+    ruin_rows(g, gd, rnd, S["n0"] - 4, B["n0"] - 14, 31.0, 1600, low=(3, 6), plug="twall")
+    for s in (-1, 1):                                             # the quarantine line round the gatehouse's forecourt
+        bk.twall(g, gd, (s * 30.0, B["n0"] - 14.6), (s * (half + 1.0), B["n0"] - 14.6), (0, -1), 1601 + (s > 0))
+        bk.twall(g, gd, (s * (half + .4), B["n0"] - 15.0), (s * (half + .4), B["n0"] + .5), (s, 0), 1603 + (s > 0))
     # ---- the gatehouse block: the ground storey is rooms (walls a man is not seen through, doors, windows to fire from)
     b0, b1, H1 = B["n0"], B["n1"], 4.5
     lob = B["lobby"]
@@ -304,10 +362,11 @@ def zone_stacks(G, H):
     # ---- the yard: paving, the estate's two long blocks down its sides, a dead fountain, low walls and planters
     y0, y1 = Y["n0"], Y["n1"]
     H.ground_slab(g, "ru_stone", -half, half, y0, y1, .06)
-    for s in (-1, 1):
-        wall(g, "ru_ceramic", (s * half, y0), (s * half, y1), 0, 5.2, .5, win([10, 22, 34, 46, 58, 70, 82, 94]))
-        rk.tower(g, gd, (s * (half + 10.5), (y0 + y1) / 2), 20, y1 - y0, 10, yaw=0.0, seed=1540 + (s > 0), style="panel", top=(.45, 1.0),
-                 holes=3, base_z=0.0, col_top=10.0, heaps=False)
+    for s in (-1, 1):                                             # three stairs to a block: a street door each, sealed behind
+        for q in range(3):
+            dq = (y1 - y0) / 3
+            rk.tower(g, gd, (s * (half + 10.0), y0 + (q + .5) * dq), 20, dq, 10 - q % 2 * 2, yaw=0.0, seed=1540 + q * 2 + (s > 0), style="panel",
+                     top=(.45, 1.0), holes=3, base_z=0.0, col_top=10.5, heaps=False, face=(-s, 0))
     yc = (0.0, (y0 + y1) / 2)
     rk.annulus(g, "ru_stone", yc, 5.0, 5.7, 0.0, .7, n=40)
     rk.cyl(g, "ru_concrete", yc, 5.0, 0.0, .12, n=40, smooth=False)
@@ -361,12 +420,24 @@ def zone_stacks(G, H):
     for s in (-1, 1):
         wall(g, "ru_ceramic", (s * (lh + .25), l0), (s * (lh + .25), l1), 0, 4.6, .5,
              [(d0, d0 + 3.0, 2.9) for d0 in doors[s]] + win([x for x in (8, 28, 44, 64, 86, 104, 122, 140) if all(abs(x - d0 - 1.5) > 4 for d0 in doors[s])]))
-        for d0 in doors[s]:                                       # a closet behind each door: three walls and a ceiling
+        # the ground floor behind the wall: rooms the whole way (through every door, over every window sill), their
+        # back wall the edge of the map. Nothing behind it.
+        e0, e1 = s * (lh + .5), s * (lh + 5.6)
+        wall(g, "ru_plaster", (e1, l0), (e1, l1), 0, 4.6, .4)
+        block(g, "ru_tile", min(e0, e1), max(e0, e1), l0, l1, 0.0, .05)
+        block(g, "ru_concrete", min(e0, e1 + s * .2), max(e0, e1 + s * .2), l0, l1, 3.4, 3.7)
+        for nn in (l0 + .15, l1 - .15):
+            wall(g, "ru_plaster", (e0, nn), (e1, nn), 0, 3.4, .3)
+        for d0 in doors[s]:                                       # a cross wall each side of every door
             n = l0 + d0
-            wall(g, "ru_plaster", (s * (lh + 5.0), n - 1.5), (s * (lh + 5.0), n + 4.5), 0, 3.4, .3)
-            wall(g, "ru_plaster", (s * (lh + .5), n - 1.5), (s * (lh + 5.0), n - 1.5), 0, 3.4, .3)
-            wall(g, "ru_plaster", (s * (lh + .5), n + 4.5), (s * (lh + 5.0), n + 4.5), 0, 3.4, .3)
-            block(g, "ru_concrete", min(s * (lh + .5), s * (lh + 5.15)), max(s * (lh + .5), s * (lh + 5.15)), n - 1.65, n + 4.65, 3.4, 3.7)
+            wall(g, "ru_plaster", (e0, n - 1.5), (e1, n - 1.5), 0, 3.4, .3)
+            wall(g, "ru_plaster", (e0, n + 4.5), (e1, n + 4.5), 0, 3.4, .3)
+        rbox = lambda t_, m_, x, y, z, hx, hy, hz, a_=0.0, **kw: rk.box(t_, m_, (x, y, z), (hx, hy, hz), a_, **kw)
+        n = l0 + 5.0
+        while n < l1 - 4:                                         # what stood in them
+            if all(not (l0 + d0 - 1.5 < n < l0 + d0 + 4.5) for d0 in doors[s]) and rnd.random() < .7:
+                citykit.room(rbox, gd, g, "resi", s * (lh + 3.6), n, .05, PI / 2 if s > 0 else -PI / 2, rnd)
+            n += rnd.uniform(6.0, 9.0)
         n = l0 + 2
         i = 0
         while n < l1 - 10:
@@ -375,7 +446,7 @@ def zone_stacks(G, H):
                      style="panel" if (i + (s > 0)) % 2 else "concrete", top=(.45, 1.0), holes=3, base_z=4.6, heaps=False, col_top=4.2)
             n += L + 2
             i += 1
-        wall(g, "ru_concrete", (s * (lh + .25), l1), (s * P.GALLERIA["half"], l1), 0, 5.0, .5)     # out onto the forecourt
+        flank(g, gd, (s * (lh + .25), l1), (s * (P.GALLERIA["half"] + .6), l1), 8.4, "ru_ceramic", 1790 + (s > 0), face=s)   # out onto the forecourt
     sloped(g, "ru_concrete", (-lh - .3, l0 + 60, 7.4), (lh + .3, l0 + 63, 5.6), 3.2, .4)
     for i in range(6):
         n = l0 + 12 + i * 24
@@ -411,7 +482,7 @@ def zone_galleria(G, H):
     f0 = M["fore_n0"]
     H.ground_slab(g, "ru_stone", -half, half, f0, n0, .06)
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * (half + .3), f0), (s * (half + .3), n0), 0, 5.0, .6)
+        flank(g, gd, (s * (half + .3), f0), (s * (half + .3), n0), 8.4, "ru_composite", 2102 + (s > 0), face=s)
     block(g, "ru_concrete", -24.0, 24.0, n0 - 11.0, n0 - .3, 5.4, 5.8, top_mat="ru_metal")
     for e in (-21.0, -7.0, 7.0, 21.0):
         block(g, "ru_metal", e - .25, e + .25, n0 - 10.4, n0 - 9.9, 0, 5.4)
@@ -452,38 +523,68 @@ def zone_galleria(G, H):
         return True
     slab(g, "ru_tile", -half, half, n0, n1, z1, .36, 3.0, gallery, under="ru_plaster")
     rk.heap(g, (29.0, -1483.0, 0), 5.0, 2.6, 2120, ry=7.0)
-    # ---- shop fronts on both storeys: piers and a lintel round each opening, a shutter down over some
-    open_ = {}
+    # ---- the shops, both storeys (interiorkit): the wall each front stands in, the walls between them, then every
+    # shop by what it sold and how it was left. A bay a wave is put down in keeps its front open and its floor clear
+    # (a shuttered one would hold its wave in); round the rotunda the shelter had spread into the shops.
+    spawn = {(sd, int((pt[1] - n0) // bay)) for name, sd in (("mall_shops_w", -1), ("mall_shops_e", 1)) for pt in P.GROUPS[name]["points"]}
+    trades = ("clothing", "market", "cafe", "electronics", "books", "pharmacy", "clothing", "cafe", "stripped", "market")
     for lv, (za, zb, top) in enumerate(((0.0, z1 - .36, 3.6), (z1, roof - .35, 3.4))):
+        zf = .05 if lv == 0 else z1                                   # the floor the shop stands on
         for s in (-1, 1):
-            ops = []
-            for k in range(nb):
-                shut = rnd.random() < (.3 if lv == 0 else .45)
-                open_[(lv, s, k)] = not shut
-                if shut:
-                    rk.box(g, "ru_metal", (s * (conc - .22), n0 + k * bay + bay / 2, za + top / 2), (.05, 4.0, top / 2))
-                else:
-                    ops.append((k * bay + 2.0, k * bay + 10.0, top))
-            wall(g, "ru_plaster", (s * conc, n0), (s * conc, n1), za, zb, .4, ops)
+            wall(g, "ru_plaster", (s * conc, n0), (s * conc, n1), za, zb, .4, [(k * bay + 2.0, k * bay + 10.0, top) for k in range(nb)])
             for k in range(1, nb):                                    # the walls between shops
                 wall(g, "ru_plaster", (s * (conc + .2), n0 + k * bay), (s * half, n0 + k * bay), za, zb, .25)
-    # what is left in the open shops: a counter and shelving (cover, and somewhere for them to wait)
-    for (lv, s, k), is_open in sorted(open_.items()):
-        if not is_open:
-            continue
-        z = 0.0 if lv == 0 else z1
-        nc = n0 + k * bay + bay / 2
-        if lv == 1 and s > 0 and -1492.0 < nc < -1474.0:
-            continue
-        r = rnd.random()
-        rk.box(g, "ru_panel", (s * (conc + 4.5 + r * 3), nc + (r - .5) * 3, z + .55), (.45, 1.8, .55), rnd.uniform(-.2, .2))
-        for dn in (-bay / 2 + .5, bay / 2 - .5):
-            if rnd.random() < .7:
-                rk.box(g, "ru_metal", (s * (conc + 8.0), nc + dn, z + 1.0), (3.6, .22, 1.0))
-        if rnd.random() < .5:
-            rk.chunks(gd, (s * (conc + 6), nc), 4.0, 8, 2200 + k + lv * 40 + (s > 0) * 80, z=z)
-        if lv == 0 and k % 4 == 1:
-            H.light("lamp", (s * (conc + 5), nc, 3.0), 800)
+            last = None
+            for k in range(nb):
+                nc = n0 + k * bay + bay / 2
+                F = ik.Local((s * conc, nc, zf), 0.0 if s > 0 else PI)
+                fallen = s > 0 and -1492.0 < nc < -1474.0             # under and in the gallery that fell
+                r = rnd.random()
+                if fallen:
+                    front = "bare"
+                elif lv == 0 and (s, k) in spawn:
+                    front = "open"
+                else:
+                    front = ("shut" if r < (.2, .3)[lv] else "stuck" if r < (.34, .42)[lv] else "forced" if r < (.42, .48)[lv] else "open")
+                trade = None
+                if not fallen:
+                    if front == "forced":
+                        trade = "stripped"
+                    elif abs(nc - rot[1]) < 70 and rnd.random() < .4:
+                        trade = "shelter"
+                    else:
+                        trade = rnd.choice([t for t in trades if t != last])
+                    last = trade
+                lit = rnd.random() < (.12 if front == "shut" else .3)
+                lamp = (lv == 0 and k % 4 == 1) or (lv == 1 and k % 6 == 3)
+                ik.shopfront(F, g, gd, top - (zf - za), front, rnd, rnd.choice(ik.SIGNS[trade or "stripped"]), lit, zb - zf)
+                if fallen or front == "shut":
+                    continue
+                ik.ceiling(F, gd, .25, 13.95, -5.85, 5.85, 3.9 - lv * .1, rnd, missing=.16 if trade == "stripped" else .06, lit=.6 if lamp else .22)
+                for kind, pt, radius, _ in ik.fit(F, g, gd, trade, rnd, lit or lamp):
+                    H.light(kind, F.P(*pt), radius)
+                # (light enough in every one of them to see who is inside: the working fittings in a few, emergency
+                # lighting in the rest)
+                H.light("lamp", F.P(6.5, 0, 3.1), 1300 if lamp else 1000, 38.0 if lamp else 20.0)
+    # ---- what hangs under the slabs along both sides of the concourse and the gallery over it: ducts, trays, the
+    # sprinkler main, strip lights (nothing where the floor above is gone: the rotunda, an escalator's well)
+    for s in (-1, 1):
+        def gap(x, s=s):
+            n = n0 + x
+            if math.hypot(15.5, n - rot[1]) < rr + 3:
+                return True
+            return any(ee * s > 0 and min(nf, nt) - 1 < n < max(nf, nt) + 1 for ee, nf, nt in esc)
+        ik.services(ik.Local((s * 15.5, n0 + .5, 0), PI / 2), gd, n1 - n0 - 1.0, z1 - .36, rnd, gap)
+        ik.services(ik.Local((s * 15.5, n0 + .5, 0), PI / 2), gd, n1 - n0 - 1.0, roof - .35, rnd,
+                    lambda x: math.hypot(15.5, n0 + x - rot[1]) < rr + 3)
+    # ---- the concourse's own furniture: a directory inside the doors and each side of the rotunda, bins at the columns
+    for i, (e, n, yaw) in enumerate(((3.6, n0 + 13.0, PI / 2), (-3.6, rot[1] - rr - 10.0, PI / 2), (3.6, rot[1] + rr + 10.0, PI / 2), (-3.6, n1 - 60.0, PI / 2))):
+        ik.totem(ik.Local((e, n, .05), yaw), g, gd, rnd, lit=i != 2)
+    for k in range(1, nb, 3):
+        n = n0 + k * bay + 1.1
+        for s in (-1, 1):
+            if math.hypot(s * void, n - rot[1]) > rr + 3:
+                ik.bin_(ik.Local((s * (void + 1.0), n, .05)), gd, 0, 0)
     # ---- columns down the void's edge, railings between them, the bridges' rails
     for k in range(nb + 1):
         n = n0 + k * bay
@@ -586,11 +687,16 @@ def zone_galleria(G, H):
     H.ground_slab(g, "ru_asphalt", -yh, yh, n1, yn, .04)
     D = P.DEEPLINE
     for s in (-1, 1):
-        wall(g, "ru_concrete", (s * (yh + .3), n1), (s * (yh + .3), D["stair_n1"]), 0, 5.0, .6)
+        flank(g, gd, (s * (yh + .3), n1), (s * (yh + .3), D["stair_n1"] + .6), 8.4, "ru_composite", 2196 + (s > 0), face=s)
         block(g, "ru_concrete", min(s * 9.0, s * 19.0), max(s * 9.0, s * 19.0), n1 + 3.0, n1 + 15.0, 0, 1.2)
-        wall(g, "ru_concrete", (s * D["stair_half"], D["stair_n1"] + .3), (s * (yh + .6), D["stair_n1"] + .3), 0, 5.0, .6)
+        flank(g, gd, (s * D["stair_half"], D["stair_n1"] + .3), (s * (yh + .6), D["stair_n1"] + .3), 8.4, "ru_composite", 2194 + (s > 0), face=s)
         H.jersey(g, (s * 8.0, yn - 4.0, 0), PI / 2, 3.0)
     block(g, "ru_metal", -3.0, 3.0, n1 + 20.0, n1 + 21.0, 0, 1.0)
+    # the station's head wall over the stair's mouth: the yard is closed all the way round
+    block(g, "ru_ceramic", -D["stair_half"] - .3, D["stair_half"] + .3, D["stair_n1"], D["stair_n1"] + .6, D["top"] + .1, 8.4, top_mat="ru_concrete")
+    rk.box(gd, "ru_block_dark", (0.0, D["stair_n1"] - .05, 4.2), (4.2, .05, .7))
+    for k in range(7):
+        rk.box(gd, "ru_holo_cyan" if k != 4 else "ru_block_dark", (-3.0 + k * 1.0, D["stair_n1"] - .11, 4.2), (.36 if k % 2 else .22, .012, .34))
     H.fire(gd, (-15.0, yn - 6.0, 0.0), 2198)
     H.light("lamp", (14.0, n1 + 9.0, 3.2), 1000)
 
@@ -742,8 +848,15 @@ def zone_sluice(G, H):
         wall(g, "ru_concrete", (half + .2, max(a, n0)), (half + .2, min(b, n1)), 0.0, 1.1, .4, top_mat="ru_stone")
     # the south end: the tunnel's mouth; the north end: the dam and its dead gates
     th = D["tun_half"]
-    wall(g, "ru_concrete", (-half - .8, n0 - .4), (half + .8, n0 - .4), z - .5, 1.1, .8, [(half + .8 - th, half + .8 + th, D["tun_top"] - z + .5)])
-    wall(g, "ru_concrete", (-half - .8, n1 + .6), (half + .8, n1 + .6), z - .5, 2.4, 1.2)
+    # (both stand 8.4 m over the banks: the tunnel's portal house and the dam's gate house close the canal's ends)
+    wall(g, "ru_concrete", (-half - .8, n0 - .4), (half + .8, n0 - .4), z - .5, 8.4, .8, [(half + .8 - th, half + .8 + th, D["tun_top"] - z + .5)])
+    wall(g, "ru_concrete", (-half - .8, n1 + .6), (half + .8, n1 + .6), z - .5, 8.4, 1.2)
+    for nn, f in ((n0 - .4, -1), (n1 + .6, 1)):
+        rk.box(g, "ru_concrete", (0.0, nn, 8.5), (half + 1.0, .9, .12))
+        for e in range(-12, 13, 6):                                   # piers down its face, a band of dead windows
+            rk.box(g, "ru_concrete", (e, nn - f * .55, 4.2), (.35, .2, 4.2))
+            if e < 12:
+                rk.box(gd, "ru_glass", (e + 3.0, nn - f * (.42 if f < 0 else .62), 5.6), (2.2, .02, .8))
     for e in (-9.0, 0.0, 9.0):
         block(g, "ru_metal", e - 2.6, e + 2.6, n1 - .3, n1, z + .4, z + 4.6)
         block(g, "ru_concrete", e - 3.1, e - 2.6, n1 - 1.0, n1, z, 2.4)
@@ -808,7 +921,13 @@ def zone_sluice(G, H):
             if s > 0 and R["n0"] - 6 < n < R["n1"] + 6:
                 continue
             H.lamp_post(g, gd, (s * (half + 2.2), n, 0), PI if s > 0 else 0.0, 3170 + i * 2 + (s > 0), broken=(i + (s > 0)) % 3 == 0)
+    # The rows ARE the canal's edge: each building is walked into from the bank and sealed behind; what stands
+    # between two of them is grown (the hive is thick here) or fell. The research annex closes the west bank where
+    # it stands (meridian_landmarks.py), the cooling plant's yard is fenced on the east.
+    yard = (S["pump_n"] - 104, S["pump_n"] + 14)
+    annex = (S["pump_n"] - 56.0, S["pump_n"] - 12.0, half + 21.0)        # (N from, to, its face)
     for s in (-1, 1):
+        items = [annex] if s < 0 else []
         n = n0 + 4
         k = 0
         while n < n1 - 20:
@@ -816,11 +935,36 @@ def zone_sluice(G, H):
             # (none where the spillway comes up the east bank, nor where the research annex stands on the west one,
             # nor in front of the cooling towers: the plant's yard is open to the canal)
             if (not (s > 0 and n + L > R["n0"] - 14) and not (s < 0 and S["pump_n"] - 66 < n + L / 2 < S["pump_n"] + 36)
-                    and not (s > 0 and S["pump_n"] - 104 < n + L / 2 < S["pump_n"] + 14)):
-                rk.tower(g, gd, (s * (half + 20 + rnd.uniform(0, 6)), n + L / 2), rnd.uniform(16, 20), L, rnd.randint(4, 9), yaw=rnd.uniform(-.05, .05),
-                         seed=3200 + k * 2 + (s > 0), style=rnd.choice(("panel", "concrete")), top=(.35, 1.0), holes=2, col_top=7.0)
+                    and not (s > 0 and yard[0] < n + L / 2 < yard[1])):
+                inset, w = rnd.uniform(0, 6), rnd.uniform(16, 20)
+                rk.tower(g, gd, (s * (half + 20 + inset), n + L / 2), w, L, rnd.randint(4, 9), yaw=0.0,
+                         seed=3200 + k * 2 + (s > 0), style=rnd.choice(("panel", "concrete")), top=(.35, 1.0), holes=2, col_top=10.5, face=(-s, 0))
+                items.append((n, n + L, half + 20 + inset - w / 2))
             n += L + rnd.uniform(4, 8)
             k += 1
+        items.sort()
+        ends = [(n0 - .4, n0 - .4, items[0][2])] + items + ([(n1 + .6, n1 + .6, items[-1][2])] if s < 0 else [])
+        for q, (pa, pb) in enumerate(zip(ends, ends[1:])):
+            a, b = pa[1], pb[0]
+            if b - a < .6:
+                continue
+            e = max(pa[2], pb[2]) + .9
+            if s > 0 and yard[0] - 16 < (a + b) / 2 < yard[1] + 16:  # the plant's fence, returned to the buildings each end
+                f = half + 8.0
+                bk.run(g, gd, [(pa[2] + .9, a - .4), (f, a - .4), (f, b + .4), (pb[2] + .9, b + .4)], "palisade", 3290, (f + 40.0, (a + b) / 2))
+            elif b - a > 14.0 or pa is annex or pb is annex:           # a compound wall
+                bk.twall(g, gd, (s * e, a - .4), (s * e, b + .4), (s, 0), 3270 + q * 2 + (s > 0))
+            else:
+                bk.seal(g, gd, (s * e, a - .4), (s * e, b + .4), (s, 0), ("growth", "collapse", "growth")[q % 3], 3250 + q * 2 + (s > 0))
+        if q is not None:
+            pass
+        # the bank's two ends: from the portal house and the gate house out to the row
+        bk.twall(g, gd, (s * (half + .8), n0 - .4), (s * (ends[0][2] + 1.4), n0 - .4), (0, -1), 3296 + (s > 0))
+        if s < 0:
+            bk.twall(g, gd, (s * (half + .8), n1 + .6), (s * (ends[-1][2] + 1.4), n1 + .6), (0, 1), 3298)
+        else:                                                        # east: the last building to the Causeway's apron
+            last = items[-1]
+            bk.run(g, gd, [(last[2] + .9, last[1] - .4), (last[2] + .9, R["n0"] - 4.0), (62.0, R["n0"] - 4.0)], "twall", 3299, (80.0, R["n0"] - 40.0))
 
 
 # ------------------------------------------------------------------ The Causeway
@@ -833,6 +977,7 @@ def zone_causeway(G, H):
     R = P.SLUICE["ramp"]
     H.ground_slab(g, "ru_asphalt", R["e1"] - .5, 57.0, R["n0"] - .5, R["n1"] + 8, .05)
     k = 0
+    rows, firsts = {1: [], -1: []}, {}
     for side, line in ((1, C["east"]), (-1, C["west"])):
         for (a, b) in zip(line[1:], line[2:]):
             a, b = Vector(a), Vector(b)
@@ -845,14 +990,32 @@ def zone_causeway(G, H):
             s = 2.0
             while s < L - 14:
                 w = rnd.uniform(16, 22)
-                c = a + u * (s + w / 2) + nrm * (8 + rnd.uniform(0, 4) + 8)
+                inset = 8 + rnd.uniform(0, 4)
+                c = a + u * (s + w / 2) + nrm * (inset + 8)
+                if side < 0 and c.x < P.SLUICE["half"] + 16 and c.y < P.SLUICE["n1"] + 14:      # (not out over the canal)
+                    s += w + rnd.uniform(3, 7)
+                    k += 1
+                    continue
                 rk.tower(g, gd, (c.x, c.y), 16, w, rnd.randint(3, 8), yaw=math.atan2(u.y, u.x) + PI / 2, seed=3700 + k,
-                         style=rnd.choice(("panel", "concrete")), top=(.3, 1.0), holes=2, col_top=7.0)
+                         style=rnd.choice(("panel", "concrete")), top=(.3, 1.0), holes=2, col_top=10.5, face=(-nrm.x, -nrm.y))
+                # the row is the road's edge: what stands between two buildings is the army's wall or what fell there
+                p0, p1 = a + u * (s - .4) + nrm * (inset + .9), a + u * (s + w + .4) + nrm * (inset + .9)
+                if rows[side]:
+                    bk.seal(g, gd, tuple(rows[side][-1]), tuple(p0), (nrm.x, nrm.y), ("twall", "collapse")[k % 2], 3760 + k)
+                else:
+                    firsts[side] = p0
+                rows[side].append(p1)
                 s += w + rnd.uniform(3, 7)
                 k += 1
             for i in range(2):
                 p = a + u * rnd.uniform(4, L - 4) + nrm * rnd.uniform(-1.5, 1.0)
                 rk.heap(g, (p.x, p.y, 0), rnd.uniform(3, 5), rnd.uniform(1.2, 2.6), 3750 + k * 3 + i, ry=rnd.uniform(4, 7))
+    # where the Causeway's rows meet the Approach's (which stand further back): the army's wall across the step
+    for side in (-1, 1):
+        last = rows[side][-1]
+        bk.run(g, gd, [tuple(last), (side * 33.2, P.APPROACH["n0"] - 14.3)], "twall", 3796 + (side > 0), (side * 90.0, last[1] - 30.0))
+    # from the dam's gate house to the first building of the west row: the army's wall
+    bk.run(g, gd, [(P.SLUICE["half"] + .8, P.SLUICE["n1"] + .6), tuple(firsts[-1])], "twall", 3798, (-60.0, -470.0))
     for i, (e, n, y) in enumerate(((44, -530, .3), (38, -506, 1.2), (27, -488, .4), (20, -470, 1.0), (8, -448, .6), (-3, -410, .1), (4, -390, -.1),
                                    (-4, -362, 1.5), (5, -340, .2))):
         H.jersey(g, (e, n, 0), y, 3.2)
@@ -883,32 +1046,45 @@ def blockers(g):
     def lid(e0, e1, n0, n1, z):
         rk.box(g, "ru_block", ((e0 + e1) / 2, (n0 + n1) / 2, z + .3), ((e1 - e0) / 2, (n1 - n0) / 2, .3))
     V, S, M, D, L, C = P.VERGE, P.STACKS, P.GALLERIA, P.DEEPLINE, P.SLUICE, P.CAUSEWAY
-    h = V["half"] + 1
-    w((-h, V["n0"] - 4), (h, V["n0"] - 4))
+    # From the pad to the station the edge is things: rows of buildings walked into from the street and sealed
+    # behind, freight boxes, the quarantine wall, flanks 8.4 m high. What follows is the net BEHIND them (a polyline
+    # down each side): nobody meets it who has not climbed out over one of those.
+    lh, yh = S["alley"]["half"], M["yard_half"]
     for s in (-1, 1):
-        w((s * h, V["n0"] - 4), (s * h, S["block"]["n0"] - 14))
-        w((s * (S["half"] + .9), S["block"]["n0"] - 14), (s * (S["half"] + .9), S["arch"]["n1"]))
-        w((s * (S["alley"]["half"] + .9), S["arch"]["n1"]), (s * (S["alley"]["half"] + .9), S["alley"]["n1"]))
-        w((s * (M["yard_half"] - .2), M["n1"]), (s * (M["yard_half"] - .2), D["stair_n1"]))
-        w((s * D["stair_half"], D["stair_n1"] + .1), (s * M["yard_half"], D["stair_n1"] + .1))
+        line = [(0.0, V["n0"] - 17.0), (s * 63.0, V["n0"] - 17.0), (s * 63.0, S["n0"] - 2.0), (s * 57.0, S["n0"] - 2.0),
+                (s * 57.0, S["block"]["n0"] - 17.0), (s * (S["half"] + 3.5), S["block"]["n0"] - 17.0), (s * (S["half"] + 3.5), S["yard"]["n0"]),
+                (s * (S["half"] + 22.5), S["yard"]["n0"]), (s * (S["half"] + 22.5), S["arch"]["n0"]), (s * (S["half"] + 2.0), S["arch"]["n0"]),
+                (s * (S["half"] + 2.0), S["arch"]["n1"] + 2.0), (s * (lh + 7.5), S["arch"]["n1"] + 2.0), (s * (lh + 7.5), S["alley"]["n1"] - 2.0),
+                (s * (M["half"] + 2.6), S["alley"]["n1"] - 2.0), (s * (M["half"] + 2.6), M["n0"])]
+        for p0, p1 in zip(line, line[1:]):
+            w(p0, p1)
+        w((s * (yh + 2.4), M["n1"]), (s * (yh + 2.4), D["stair_n1"] + 2.6))
+        w((0.0, D["stair_n1"] + 2.6), (s * (yh + 2.4), D["stair_n1"] + 2.6), .2, 16.0)
     # nothing above the first storey in the estate (the upper floors are scenery), nor over the alley's walls
-    lid(-S["half"] - 1, S["half"] + 1, S["block"]["n0"] - 14, S["arch"]["n1"], 9.6)
-    lid(-S["alley"]["half"] - 1, S["alley"]["half"] + 1, S["arch"]["n1"], S["alley"]["n1"], 8.4)
+    lid(-S["half"] - 22.5, S["half"] + 22.5, S["block"]["n0"] - 17, S["arch"]["n1"], 9.6)
+    lid(-lh - 7.5, lh + 7.5, S["arch"]["n1"], S["alley"]["n1"], 8.6)
+    lid(-M["half"] - 2.6, M["half"] + 2.6, M["fore_n0"] - 2, M["n0"], 9.4)
     lid(-M["half"], M["half"], M["n0"], M["n1"], 9.3)                            # not out through the skylight
-    w((-D["stair_half"], D["stair_n1"] + .1), (D["stair_half"], D["stair_n1"] + .1), .2, 16.0)   # not along the stair's parapets
-    for s in (-1, 1):
-        w((s * (M["half"] - .1), M["fore_n0"]), (s * (M["half"] - .1), M["n0"]))
-    # the canal: its banks, round the spillway, the dam
+    lid(-yh - 2.4, yh + 2.4, M["n1"], D["stair_n1"] + 2.6, 9.4)
+    # The canal and the Causeway: the banks are walked and their rows are the edge; the net runs behind the rows
+    # (the annex stands deeper than its neighbours on the west bank) and behind the dam's gate house.
     R = L["ramp"]
-    w((-L["half"] + .1, L["n0"]), (-L["half"] + .1, L["n1"]), L["z"] - 1, 16.0)
-    w((L["half"] - .1, L["n0"]), (L["half"] - .1, R["n0"]), L["z"] - 1, 16.0)
-    w((L["half"] - .1, R["n1"]), (L["half"] - .1, L["n1"]), L["z"] - 1, 16.0)
-    w((-L["half"], L["n1"] - .2), (L["half"], L["n1"] - .2), L["z"] - 1, 16.0)
-    w((L["half"], R["n0"] + .1), (R["e1"] + .4, R["n0"] + .1), L["z"] - 1, 16.0)
-    w((L["half"], R["n1"] - .1), (R["e1"] + .4, R["n1"] - .1), L["z"] - 1, 16.0)
-    for line in (C["east"], C["west"]):
-        for a, b in zip(line, line[1:]):
-            w(a, b)
+    hw = L["half"]
+    w((-hw - 56.0, L["n0"] - 3.0), (-hw - 56.0, L["n1"] + 3.5))
+    w((-hw - 56.0, L["n0"] - 3.0), (hw + 42.0, L["n0"] - 3.0))
+    w((-hw - 56.0, L["n1"] + 3.5), (hw + .8, L["n1"] + 3.5))
+    w((hw + 42.0, L["n0"] - 3.0), (hw + 42.0, L["pump_n"] - 100.0))
+    w((hw + 42.0, L["pump_n"] + 10.0), (hw + 42.0, R["n0"] - 7.0))
+    for side, line in ((1, C["east"]), (-1, C["west"])):               # behind the Causeway's rows (as zone_causeway lays them)
+        for a, b in zip(line[1:], line[2:]):
+            a, b = Vector(a), Vector(b)
+            u = (b - a).normalized()
+            nrm = Vector((u.y, -u.x)) * side
+            if nrm.x * side < 0:
+                nrm = -nrm
+            w(tuple(a + nrm * 31.0 - u * 8.0), tuple(b + nrm * 31.0 + u * 8.0))
+    for a, b in bk.NET:                                              # and behind every barrier built
+        w(a, b)
 
 
 ZONES = dict(verge=zone_verge, stacks=zone_stacks, galleria=zone_galleria, deepline=zone_deepline, sluice=zone_sluice,

@@ -2,7 +2,8 @@
 made smaller and linear; our own names).
 
 The old capital Meridian went silent in the Stillfall. Its crown, a round platform under a broken orbital ring, now
-holds a beam into the sky and the thing that guards it. The route runs south to north, two and a half kilometres from
+holds a beam into the sky and the thing that guards it. The beam is pulling down the field on Nexus Prime's wall:
+that is why anyone goes (docs/story/MERIDIAN_FALL.md; BRIEFING, INTEL and OUTCOME below are what the game says). The route runs south to north, two and a half kilometres from
 the city's edge to the crown:
 
   Ashfall Verge       the city's edge: the landing pad, the dead highway and its toll plaza (first pickets)
@@ -35,7 +36,38 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "unreal", "ShatteredOrbit", "Data", "op_meridian.json")
 
 NAME = "Meridian Fall"
-TAGLINE = "The old capital went silent in the Stillfall. Something answers from its crown."
+TAGLINE = "A beam has lit over the old capital, and Nexus Prime's wall is failing. Walk in and put it out."
+# Why anyone goes (docs/story/MERIDIAN_FALL.md). Shown as the operation begins, a line at a time.
+BRIEFING = [
+    "Eleven nights ago a beam lit over Meridian, the old capital, silent since the Stillfall.",
+    "Every night it burns, the Keystones in Nexus Prime's wall lose ground. Two districts are sealed. The wall has about nineteen nights.",
+    "The storm over the city takes anything that flies. The only way in is on foot, from the edge.",
+    "Reach the Crown. Kill what feeds the beam and what guards it. Bring the capital's Keystone home.",
+]
+OUTCOME = "The beam is dark. The capital's Keystone is going home to the wall. Whatever it was calling has stopped answering. For now."
+# What comes over the radio as each stage begins: (who, what). What the place means, never how to play it.
+INTEL = dict(
+    verge=("RAMPART", "This is as far as anything flies, Orion. The storm starts at the toll plaza. From there you walk."),
+    gatehouse=("RAMPART", "The Stacks were sealed from outside in the first week. Whoever was inside is still inside."),
+    yard=("RAMPART", "Those were the residents. They kept what they were holding. Clear the yard."),
+    alley=("RAMPART", "The Galleria was this district's shelter. Four thousand people. Its last message is a count of doors that would not hold."),
+    galleria=("RAMPART", "They slept under the galleries and in the shops. The service gate at the far end is the only way on."),
+    rotunda=("RAMPART", "The gate still has power. It needs eighty seconds to cycle, and everything in here can hear it."),
+    warden=("RAMPART", "Something has kept that gate shut for years. It is coming to see who opened it."),
+    descent=("INSTITUTE", "The beam is fed from under the station. The hive there has three hearts."),
+    hearts=("INSTITUTE", "Each heart pumps into the old traction mains, and the mains run to the Crown. Stop all three."),
+    tunnel=("INSTITUTE", "The beam just dimmed. It felt that. Keep moving."),
+    sluice=("INSTITUTE", "The annex on the west bank was ours, three years ago. They coupled the root to the capital's uplink so it could be heard. They wanted to listen. They taught it to speak."),
+    causeway=("RAMPART", "The wreck across the road is our gunship, nine nights old. Nothing reached the crew. That is why you are walking."),
+    approach=("RAMPART", "The army held this wall for six days in 2189. Past it, everything is the root's ground."),
+    gate=("RAMPART", "They guard gates. They always have. Break the hold on this one."),
+    boulevard=("INSTITUTE", "Look at the plan of it. Rings round a middle. The capital was built on top of a root and never knew."),
+    ring=("INSTITUTE", "The veil across the ramp is grown, not built, and it is opening for something. Hold the Ring until it does."),
+    climb=("RAMPART", "Those banners are the Still Choir's. They came here to hear it speak. Most of them never left."),
+    terraces=("RAMPART", "Some of what is up here wears their red. Clear the terraces."),
+    bridge=("INSTITUTE", "The beam is not a weapon, Orion. It is a call. The Keystones in our wall were cut from the stone under that light, and they are answering."),
+    crown=("RAMPART", "It slept under the Crown longer than the city stood. Break its three conduits, bring it down, and take the stone."),
+)
 
 # ---------------------------------------------------------------------------------------------------- layout (m)
 ENTRY = (0.0, -310.0)
@@ -81,11 +113,13 @@ ROUTE = [(0.0, -2320.0), (0.0, -560.0), (47.0, -555.0), (0.0, -426.0), (0.0, -20
          (80.0, 114.0), (0.0, 114.0), (0.0, 200.0)]
 # Where the nav mesh is built (N0, N1, E0, E1, Z0, Z1 metres): only where the route is walked. One box over the
 # whole route would take in every floor of every ruined tower and run out of tiles.
-NAV = [(-2314, -1958, -32, 32, -2, 8), (-1962, -1788, -48, 48, -2, 3.6), (-1792, -1598, -38, 38, -2, 5),
+NAV = [(-2322, -1972, -62, 62, -2, 3.4), (-2314, -1958, -32, 32, -2, 8), (-1962, -1788, -48, 48, -2, 3.6), (-1922, -1818, -67, 67, -2, 3.4),
+       (-1792, -1598, -38, 38, -2, 5),
        (-1602, -1298, -37, 37, -2, 9), (-1302, -1234, -21, 21, -8, 4), (-1238, -878, -17, 17, -9, -1),
-       (-882, -518, -16, 41, -7, 3), (-564, -316, -12, 58, -2, 6),
-       (-322, -196, -32, 32, -2, 9), (-200, -136, -37, 37, -2, 6), (-138, -38, -19, 19, -2, 9),
-       (-46, 46, -46, 46, -3, 5), (-8, 8, 40, 80, -2, 13), (-10, 123, 72, 88, 7, 14), (106, 123, -10, 88, 7, 14),
+       (-882, -518, -16, 41, -7, 3), (-882, -518, -68, 60, -1, 3.4), (-564, -316, -12, 58, -2, 6), (-566, -316, -40, 78, -1, 3.4),
+       (-322, -196, -32, 32, -2, 9), (-336, -202, -54, 54, -1, 3.4), (-200, -136, -37, 37, -2, 6), (-198, -136, -58, 58, -1, 3.4),
+       (-138, -38, -19, 19, -2, 9), (-138, -40, -47, 47, -1, 3.4),
+       (-46, 46, -46, 46, -3, 5), (-70, 70, -70, 70, -1, 3.4), (-8, 8, 40, 80, -2, 13), (-10, 123, 72, 88, 7, 14), (106, 123, -10, 88, 7, 14),
        (118, 242, -42, 42, 7, 16)]
 
 
@@ -215,7 +249,7 @@ STAGES = [
          goal=goal(0.0, -1206.0, DZ), radius=800,
          checkpoint=checkpoint(0.0, -1290.0, 0.0, (0.0, -1240.0)),
          waves=[dict(hunt=False, spawn=[["stalker_feral", 4, "deep_hall"]])]),
-    dict(id="hearts", title="Deepline", objective="Destroy the hive's hearts", kind="clear",
+    dict(id="hearts", title="Deepline", objective="Destroy the three hearts that feed the beam", kind="clear",
          goal=goal(0.0, -1150.0, DZ),
          checkpoint=checkpoint(0.0, -1226.0, DZ, (0.0, -1150.0)),
          waves=[dict(hunt=False, spawn=[["conduit", 3, "deep_hearts"], ["stalker_feral", 4, "deep_tracks"], ["remnant", 3, "deep_platform"]]),
@@ -269,7 +303,7 @@ STAGES = [
     dict(id="bridge", title="Crown Bridge", objective="Cross to the Crown", kind="travel",
          goal=goal(BRIDGE["e"], BRIDGE["n1"] - 2.0, TZ), radius=1000,
          checkpoint=checkpoint(56.0, TERRACE["north_n"], TZ, (0.0, TERRACE["north_n"]))),
-    dict(id="crown", title="The Crown", objective="Bring down the Hollow Colossus", kind="boss",
+    dict(id="crown", title="The Crown", objective="Bring down the Hollow Colossus and take the Keystone", kind="boss",
          boss="colossus", bossGroup="crown_boss", goal=goal(*CROWN["c"], CROWN["z"]),
          checkpoint=checkpoint(BRIDGE["e"], BRIDGE["n1"] - 6.0, TZ, CROWN["c"]),
          waves=[dict(bossHealth=0.75, spawn=[["remnant", 6, "crown_ring"]]),
@@ -285,7 +319,9 @@ BARRIERS = [
     dict(id="arch_barrier", opens="alley", c=(0.0, STACKS["arch"]["n0"] + 2.0, 0.0), width=STACKS["arch"]["half"] * 2 + 1.0, height=6.0, yaw=0.0),
     dict(id="galleria_gate", opens="descent", c=(0.0, GALLERIA["n1"], 0.0), width=GALLERIA["gate_half"] * 2 + 1.0, height=6.0, yaw=0.0),
     dict(id="tunnel_barrier", opens="tunnel", c=(0.0, DEEPLINE["plat_n1"] + 10.0, TRACK), width=DEEPLINE["tun_half"] * 2 + 1.0, height=6.5, yaw=0.0),
-    dict(id="spillway_barrier", opens="causeway", c=(SLUICE["half"] + 1.0, -555.0, CANAL), width=16.0, height=7.0, yaw=90.0),
+    # (across the Causeway past the spillway's apron, not at the ramp's foot: the canal's banks are walked now, and a
+    # wall at the foot of the ramp was walked round along the east bank)
+    dict(id="spillway_barrier", opens="causeway", c=(39.0, -512.0, 0.0), width=46.0, height=9.0, yaw=-25.7),
     dict(id="terrace_barrier", opens="climb", c=(RAMP["e0"] + 1.0, 0.0, 0.0), width=RAMP["half"] * 2 + 2.0, height=8.0, yaw=90.0),
     dict(id="crown_barrier", opens="bridge", c=(BRIDGE["e"], BRIDGE["n0"] + 1.0, TZ), width=BRIDGE["half"] * 2 + 2.0, height=8.0, yaw=0.0),
 ]
@@ -347,9 +383,9 @@ def to_json():
         return [round(p[1] * 100.0, 1), round(p[0] * 100.0, 1), round(p[2] * 100.0, 1)]
 
     return dict(
-        name=NAME, tagline=TAGLINE,
+        name=NAME, tagline=TAGLINE, briefing=BRIEFING, outcome=OUTCOME,
         groups=groups,
-        stages=STAGES,
+        stages=[dict(st, intel=dict(who=INTEL[st["id"]][0], text=INTEL[st["id"]][1])) for st in STAGES],
         barriers=[dict(b, c=cm(b["c"]), width=b["width"] * 100.0, height=b["height"] * 100.0) for b in BARRIERS],
         pylons=[cm(p) for p in PYLONS],
         crown=dict(c=cm((CROWN["c"][0], CROWN["c"][1], CROWN["z"])), r=CROWN["r"] * 100.0),

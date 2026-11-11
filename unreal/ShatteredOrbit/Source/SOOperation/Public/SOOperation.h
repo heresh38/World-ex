@@ -96,6 +96,13 @@ struct SOOPERATION_API FSOStage
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
 	FText Objective;
 
+	/** What comes over the radio as the stage begins: who says it, and what the place means (never how to play it). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
+	FText IntelWho;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
+	FText Intel;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Operation")
 	ESOStageKind Kind = ESOStageKind::Travel;
 
@@ -236,6 +243,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	FText Tagline;
+
+	/** Why anyone goes: shown a line at a time as the operation begins. */
+	UPROPERTY(BlueprintReadOnly, Category = "Operation")
+	TArray<FText> Briefing;
+
+	/** What it came to: one line on the end screen. */
+	UPROPERTY(BlueprintReadOnly, Category = "Operation")
+	FText Outcome;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	TArray<FSOStage> Stages;

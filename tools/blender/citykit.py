@@ -45,18 +45,30 @@ ANCHORS = []
 # Every building beside the route: (zone, centre, w, d, yaw, how high it still stands, foot z). The plants take some
 # of them whole.
 BUILDINGS = []
+# Every building a player can walk into: (zone, the door's foot, the way in (unit E, N), centre, w, d, yaw).
+ENTERABLE = []
 SIDES = ((Vector((0, -1)), Vector((1, 0)), 0.0), (Vector((1, 0)), Vector((0, 1)), PI / 2),
          (Vector((0, 1)), Vector((-1, 0)), PI), (Vector((-1, 0)), Vector((0, -1)), 1.5 * PI))
 
 
 def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, base_z=0.0, heaps=True, lod=0,
-             col_top=None, intact_below=0):
+             col_top=None, intact_below=0, front=None):
     """One building centred at c (x, y), w along its local x, d along local y, turned by yaw. damage 0 = whole,
-    1 = little left. Returns its height."""
+    1 = little left. Returns its height.
+
+    front = (E, N) toward the route: this building is part of the route's edge. A player walks in through its street
+    door (and its shop windows); its other three sides are blind and whole for the first three storeys, its floors
+    whole that far up, no balcony below the fourth: nothing to climb to, no way out the back. The ground floor has a
+    floor, what stood in its rooms, and a fall of rubble against the back wall."""
     S = STYLES[style]
     rnd = random.Random(seed * 7919 + 13)
     first_face = len(g.F)
     cy, sy = math.cos(yaw), math.sin(yaw)
+    fs = None
+    if front is not None:
+        fs = max(range(4), key=lambda q: (SIDES[q][0].x * cy - SIDES[q][0].y * sy) * front[0] + (SIDES[q][0].x * sy + SIDES[q][0].y * cy) * front[1])
+        intact_below = max(intact_below, 3)
+        floors = max(floors, 4)
 
     def P(x, y, z):
         return (c[0] + x * cy - y * sy, c[1] + x * sy + y * cy, base_z + z)
@@ -225,6 +237,8 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
         n, t, ang = SIDES[s]
         b = bw[s % 2]
         door_bay = rnd.randrange(count[s]) if count[s] > 2 else -1
+        if fs is not None:                                         # the street door in the middle of the front, none elsewhere
+            door_bay = count[s] // 2 if s == fs else -1
         for i in range(count[s]):
             u0 = -length[s] / 2 + i * b
             u1 = u0 + b
@@ -237,7 +251,9 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
                         not panel.get((s, i, k + 1), False), i > 0 and not panel[(s, i - 1, k)])
                 hole, mull, kind = None, False, "wall"
                 ground = k == 0 and base_z < .5
-                if ground:
+                if fs is not None and s != fs and k < 3:           # the sides nobody is meant to pass: blind
+                    pass
+                elif ground:
                     if i == door_bay:
                         hole, kind = (um - .95, um + .95, 0.02, 2.5), "door"
                     elif rnd.random() < S["shop"]:
@@ -251,7 +267,7 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
                     hole, mull = (u0 + .14, u1 - .14, z0 + .8, z1 - .14), True
                 elif rnd.random() > plain:
                     ww, wh, sill = S["win"]
-                    if rnd.random() < S.get("balcony", 0.0):
+                    if rnd.random() < S.get("balcony", 0.0) and not (fs is not None and k < 3):
                         hole, kind = (um - .85, um + .85, z0 + .06, z0 + 2.25), "balcony"
                     else:
                         hole = (um - ww / 2, um + ww / 2, z0 + sill, min(z0 + sill + wh, z1 - .35))
@@ -267,8 +283,16 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
                 if kind == "door":
                     x, y = fxy(s, um, -.75)
                     box(g, S["trim"], x, y, 2.78, 1.6, .85, .08, ang)                    # the canopy
-                    x, y = fxy(s, um - .5, .5)
-                    box(g, "ru_metal", x, y, 1.25, .45, .03, 1.2, ang + rnd.uniform(.5, 1.3))   # a leaf standing open
+                    if fs is not None:                                               # the leaf back against the wall: the way is clear
+                        x, y = fxy(s, um - 1.02, .78)
+                        box(gd, "ru_metal", x, y, 1.25, .03, .45, 1.2, ang)
+                        x, y = fxy(s, um, .2)
+                        o = P(0, 0, 0)
+                        wn = P(n.x, n.y, 0)
+                        ENTERABLE.append((rk.ZONE, P(x, y, .06), (o[0] - wn[0], o[1] - wn[1]), (c[0], c[1]), w, d, yaw))
+                    else:
+                        x, y = fxy(s, um - .5, .5)
+                        box(g, "ru_metal", x, y, 1.25, .45, .03, 1.2, ang + rnd.uniform(.5, 1.3))   # a leaf standing open
                     x, y = fxy(s, um + 1.25, -.08)
                     box(gd, "ru_sign_amber" if rnd.random() < .4 else "ru_metal", x, y, 1.6, .12, .03, .2, ang)
                 elif kind == "shop":
@@ -348,6 +372,31 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
                     x0, x1 = xs[i], xs[i + 1]
                     box(g, S["inner"], (x0 + x1) / 2, ys[j], (z0 + z1) / 2, (x1 - x0) / 2, .07, (z1 - z0) / 2)
 
+    # ---- a building on the route's edge: its ground floor is somewhere to go
+    if fs is not None and lod == 0 and base_z < .5:
+        box(g, S["floor_mat"], 0, 0, .03, w / 2 - .31, d / 2 - .31, .03)
+        n_, t_, ang_ = SIDES[fs]
+        for i in range(nbx):
+            for j in range(nby):
+                x, y = (xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2
+                if abs(x) < cw + 1.2 and abs(y) < cd + 1.2:
+                    continue                                       # the core
+                dist = half[fs] - (x * n_.x + y * n_.y)            # how far in from the front
+                along = x * t_.x + y * t_.y
+                if dist < bw[(fs + 1) % 2] * 1.2 and abs(along) < 2.2:
+                    continue                                       # inside the door: left clear
+                if rnd.random() < .42:
+                    room(box, gd, g, style, x, y, .06, ang_ + rnd.choice((0, PI / 2, PI)), rnd)
+        # why there is no way through: the back of it came down inside
+        bs = (fs + 2) % 4
+        for q in range(2):
+            x, y = fxy(bs, rnd.uniform(-.3, .3) * length[bs], rnd.uniform(1.6, 2.6))
+            pp = P(x, y, 0)
+            rk.heap(g, (pp[0], pp[1], base_z + .04), rnd.uniform(2.2, 3.4), rnd.uniform(1.2, 1.9), seed * 11 + q, chunks=7, res=.4)
+            x, y = fxy(bs, rnd.uniform(-.3, .3) * length[bs], rnd.uniform(.9, 1.6))
+            R_ = Matrix.Rotation(yaw + ang_, 3, 'Z') @ Matrix.Rotation(rnd.uniform(.5, .85), 3, 'X')
+            rk.box(g, "ru_concrete", P(x, y, rnd.uniform(1.1, 1.6)), (rnd.uniform(1.4, 2.4), 1.5, .15), R=R_, top_mat=S["floor_mat"])
+
     # ---- what the holes show: the rooms' things, the broken edges
     if lod == 0:
         shown = 0
@@ -391,7 +440,7 @@ def building(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="resi", damage=.5, b
             s = rnd.randrange(4)
             x, y = fxy(s, rnd.uniform(-.45, .45) * length[s], -1.6)
             p = P(x, y, 0)
-            rk.heap(g, (p[0], p[1], base_z), rnd.uniform(3, 6) * (.6 + damage * .6), rnd.uniform(1.0, 3.0) * (.5 + damage * .7),
+            rk.heap(g, (p[0], p[1], base_z), rnd.uniform(3, 6) * (.6 + damage * .6), min(rnd.uniform(1.0, 3.0) * (.5 + damage * .7), 1.3 if fs is not None else 9.0),
                     seed * 7 + s + _, chunks=6, res=.4)
     if rk.ZONE and lod < 2 and base_z < .5:
         BUILDINGS.append((rk.ZONE, (c[0], c[1]), w, d, yaw, max([levels[k] for (k, i, j), on in cell.items() if on] or [levels[1]]), base_z))

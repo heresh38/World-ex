@@ -1574,6 +1574,20 @@ void ASOCharacter::OnWeaponEquipped()
 
 // --- Movement hooks ----------------------------------------------------------------------------
 
+void ASOCharacter::MoveBlockedBy(const FHitResult& Impact)
+{
+	Super::MoveBlockedBy(Impact);
+	const AActor* Other = Impact.GetActor();
+	const UWorld* World = GetWorld();
+	if (Other && World && Other->ActorHasTag(TEXT("SONet")) && World->GetTimeSeconds() - LastNetReport > 4.0)
+	{
+		LastNetReport = World->GetTimeSeconds();
+		const FVector P = GetActorLocation();
+		UE_LOG(LogShatteredOrbit, Warning, TEXT("Boundary net touched at E %.1f N %.1f z %.1f m (a way out of the map: close it with something real)"),
+			P.Y / 100.0f, P.X / 100.0f, P.Z / 100.0f);
+	}
+}
+
 void ASOCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);

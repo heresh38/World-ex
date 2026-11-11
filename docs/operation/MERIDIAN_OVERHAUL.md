@@ -49,6 +49,39 @@ The alien ecosystem is its own design language (Stage 5): rope-thick vines that 
 concrete, hanging curtains from the high floors, broad fleshy leaves, shelf fungus, glowing bulbs, moss; densest at
 the canal and the tunnel (its source), thinning toward the Verge.
 
+## The edge of the route: things, not unseen walls (the owner, 2026-11-11)
+
+"allow the player to enter any buildings he can see the door ... use the buildings walls as the barrier ... rubble or
+maybe something else collapsed blocking the other side ... don't just use invisible walls."
+
+How it is built: a row of buildings beside the route IS the edge (`citykit.building(front=...)`, `rk.tower(face=...)`):
+each has a street door (and shop windows) into a ground floor with a floor, what stood in its rooms and a fall of
+rubble against its back wall; its other three sides are blind and whole for three storeys, no balcony below the
+fourth, nothing lower than 7 m to climb to. Every gap between two of them is closed by something that was put or
+fell there (`tools/blender/boundskit.py`, all over 7.7 m: a double jump and a clamber reach about six): freight boxes
+stacked three and four high, the quarantine's and the army's wall sections with wire, floors that slid into an
+alley and stand on edge, a palisade the Altered grew, a steel palisade that is seen through. What is left of the
+unseen walls is a NET behind those things (`MR_blockers`, laid last): a player who touches it has found a way out,
+and the game logs where (`Boundary net touched at E .. N ..`). Check a district's edge on a plan without the game:
+`SO_BOUNDS_DEBUG=<file.json> blender -b -P tools/blender/meridian.py -- --noexport --zones=<zones>,blockers`.
+
+| District | Edge now | Still an unseen wall where a player walks |
+|---|---|---|
+| Ashfall Verge | both rows walked into (26 buildings), freight boxes between them, across the road out behind the pad and on the ring road's deck | none known |
+| The Stacks | the street's rows and quarantine wall, the gatehouse's forecourt walled, the yard's two blocks walked into (six doors), a row of ground-floor rooms behind the alley's walls | none known |
+| Galleria | its own walls; forecourt and loading yard flanks 8.4 m; the station's head wall over the stair | none known |
+| Deepline | underground: its own walls | none |
+| The Sluice | the banks are walked now: rows walked into, grown palisades and collapses between, the annex walked into, a steel palisade round the cooling plant's yard, the portal house and the dam's gate house at the ends | none known |
+| Causeway | the rows walked into, the army's wall and collapses between, the wall across the step where its rows meet the Approach's; the stage's energy wall now stands across the Causeway past the spillway's apron (at the ramp's foot it was walked round along the bank) | none known |
+| Approach | rows walked into, the army's wall between them up to the city wall; freight boxes on the viaduct's deck | none known |
+| Meridian Gate | the city wall; the court's flanks walked into, collapses between | none known |
+| Boulevard | the lots' towers walked into, every alley closed by a collapse or a grown palisade | none known |
+| Concord Ring | its thirteen towers walked into from the plaza, the breaches between them grown shut (north and west) or fallen in, grown palisades from the two by the ramp to its side walls | none on the ground |
+| Ramp, High Terraces, Crown Bridge, the Crown | NOT converted: a 1 m balustrade with an unseen wall over it, so nobody falls off | all of it. It needs the owner's word on falling: either a fall kills (the Crown as the cap over the root's shaft, the decks over a drop) or the ground under the decks becomes walked ground with ways back up |
+
+Not checked by anyone playing. Upper storeys: a lid at about 9 m still stops a climber over the estate, the alley, the
+mall and its yards.
+
 ## Stages and status
 
 | Stage | What | Status |
@@ -58,7 +91,7 @@ the canal and the tunnel (its source), thinning toward the Verge.
 | 3 | Buildings and landmarks | first pass in: `tools/blender/citykit.py` (complete buildings, then damaged; six styles chosen per district in `meridian.ZONE_STYLES`; furnished rooms behind breaches; roof plant; a textured skyline) replaces every bare frame; the gatehouse, mall and station are re-clad (ceramic, composite, tile, plaster, bronze). Second pass: a landmark per district (`meridian_landmarks.py`): the Verge's control tower and the sign gantry over the jam, the Stacks' three housing slabs tied by sky bridges, the Galleria's entrance arch, pylon and atrium vault, Deepline's stair canopy and ring sign, the research annex with its silo, pipe bridge and two cooling towers on the Sluice's west bank, the gunship down across the Causeway, the Assembly's dome over the Ring. The skyline's low blocks are textured facades. To do: the wall's bunkers, more facade variety inside a style, signage, landmarks seen from further down the route |
 | 4 | Destruction, debris, abandoned human infrastructure | first pass in: `streetkit.py` + `meridian_story.py` (the evacuation jam and the bus at the Verge, quarantine at the Stacks, the shelter's cots in the Galleria, bedding and the stranded train in Deepline, the annex's containment tanks at the Sluice, the army's emplacements, carriers and floodlights on the Causeway and Approach, the Boulevard stopped mid-afternoon). To do: the downed gunship, the Ring and Terraces, bigger collapses Second pass: a rubble mound is one material with its broken pieces lying in and on it (lumps, blocks, floor slabs laid to the slope; the two materials split face by face drew a sawtooth), the road's flat polygon potholes are washes of grit with no edge, the cooling plant's yard on the Sluice's east bank |
 | 5 | The alien vegetation ecosystem | first pass in: `alienflora.py` + `meridian_flora.py` (climbers up the buildings from recorded anchors, growth over the rubble, hanging strands, roots, trees through the rotunda and the yard's fountain, fungus and lanterns in the tunnel, pads and wall growth in the canal; denser toward its sources; textures `ru_bark`, `ru_leaf`, `ru_moss`, `ru_fungus`, light `ru_bio`). Second pass: buildings consumed where the growth is densest (`alienflora.consume`: trunks up the corners, curtains off the roof edge, moss over the walls; up to 16, from `citykit.BUILDINGS`), moss sheets on walls and ground, flowers (`ru_petal`), creepers strung across the streets, trees through the paving (alley, boulevard, verge, causeway), a grove in the canal bed, more in the Galleria. Moss is colonies of small cushions lying on the surface under them (a mound gives its own height: `rk.HEAPS[..][3]`), lanterns are smooth drops, flowers are hanging bells with separate petals. To do: still thinner than the brief in the Verge and the Stacks; no wind; leaves are flat cards |
-| 6 | Streets, interiors, small props | streets: lane lines, curbs, pavements, drains, manholes, potholes, signals, signs, shelters, bollards (in). Interiors: finished materials (in); to do: ceilings services, doors, more furniture, the mall's shops |
+| 6 | Streets, interiors, small props | streets: lane lines, curbs, pavements, drains, manholes, washes of grit, signals, signs, shelters, bollards (in). Interiors, second pass: `tools/blender/interiorkit.py`. The Galleria's 100 shops each have a front (glazed with its doors parked open, shutter down, shutter stuck, shutter forced), a name in bars of light, a suspended ceiling with fallen tiles and the duct over it, and a fit-out by trade (clothing, market, cafe, electronics, books, pharmacy, shops the shelter spread into, stripped ones); the bays the hold's waves come out of are always open and clear (a shuttered one used to be able to trap its wave); ducts, trays, the sprinkler main and strip lights hang under both gallery slabs; directories and bins on the concourse. Seven new texture sets (wood, cloth, ceiling tile, shutter, carpet, stocked shelves, book spines). Every building on the route's edge now has a ground floor to walk into (below). To do: ceilings and doors in the gatehouse rooms, the ticket hall and the pump house; shop interiors are lit only by a lamp in one of four; the enterable buildings' rooms are sparsely furnished |
 | 7 | Lighting, fog, materials, atmosphere | first pass in: a low sun under the storm's edge (long shafts between the towers), brighter sky fill and exposure, plant light (`bio`), lamps, moonlight shafts. To do: per-district grading, light shafts tuned by eye in the editor, puddles and wet reflections |
 | 8 | Mission route and boss arena | not started (the route is unchanged and still passes its checks) |
 | 9 | Gameplay, navigation, collision, multiplayer test | re-run after every stage: `SOCaptureSeries 1 9` on L_Meridian (13 nav legs, 250 spawns), the automation suite. Not played by a person; multiplayer not tested |

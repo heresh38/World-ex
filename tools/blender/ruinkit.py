@@ -26,7 +26,8 @@ TAU = 2 * math.pi
 TEXTURED = ("ru_concrete", "ru_fracture", "ru_asphalt", "ru_stone", "ru_metal", "ru_panel", "ru_rubble", "ru_banner", "ru_hive",
             "ru_ceramic", "ru_composite", "ru_sandstone", "ru_corrugate", "ru_tile", "ru_plaster", "ru_brass", "ru_far_a", "ru_far_b",
             "ru_bark", "ru_leaf", "ru_moss", "ru_fungus",
-            "ru_wood", "ru_fabric", "ru_ceiling", "ru_shutter", "ru_carpet", "ru_goods", "ru_books")
+            "ru_wood", "ru_fabric", "ru_ceiling", "ru_shutter", "ru_carpet", "ru_goods", "ru_books",
+            "ru_box_red", "ru_box_green", "ru_box_ochre")
 # The zone being built (meridian.py sets it) and every rubble heap that collides, by zone: the plants grow over them.
 ZONE = None
 HEAPS = []
@@ -91,7 +92,7 @@ def material(name):
     elif name == "ru_lightpanel":                                     # a ceiling light that still works
         m = bl.mat(name, '#fff0d8', 0.0, .4, emit='#ffe9c4', strength=4.0)
     elif name == "ru_sign_white":
-        m = bl.mat(name, '#f4f1e6', 0.0, .4, emit='#f4f1e6', strength=3.0)
+        m = bl.mat(name, '#f4f1e6', 0.0, .4, emit='#f4f1e6', strength=1.5)
     elif name == "ru_sign_red":
         m = bl.mat(name, '#ff4a3a', 0.0, .4, emit='#ff4a3a', strength=4.0)
     elif name == "ru_sign_green":
@@ -710,10 +711,11 @@ def cable(gd, a, b, sag, seed=0):
 
 # ------------------------------------------------------------------ the ruined tower
 def tower(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="panel", top=(.45, 1.0), holes=2, rebar=True,
-          base_z=0.0, heaps=True, detail=True, cell_target=3.0, intact_below=0, col_top=None, heap_res=.4):
+          base_z=0.0, heaps=True, detail=True, cell_target=3.0, intact_below=0, col_top=None, heap_res=.4, face=None):
     """A ruined tower centred at c (x, y), width w along its local x, depth d along local y, turned by yaw (radians).
     g gets the structure (collides), gd the fine detail (rebar, glass, mullions). col_top: how far above its foot it
-    collides (None = COL_TOP; 0 = not at all: a ruin behind the route's invisible walls)."""
+    collides (None = COL_TOP; 0 = not at all: a ruin nobody reaches). face = (E, N) toward the route: the building
+    is part of the route's edge (citykit.building(front=...): walked into from the street, sealed behind)."""
     if CITY:
         import citykit
         if CITY.get("far"):
@@ -725,7 +727,7 @@ def tower(g, gd, c, w, d, floors, yaw=0.0, seed=0, style="panel", top=(.45, 1.0)
         # some stand almost whole, others are half gone: the district's damage, spread
         dmg = min(.92, max(.06, (1.0 - top[0]) * r0.uniform(.25, 1.25)))
         lod = 1 if (not detail or col_top == 0) else 0
-        return citykit.building(g, gd, c, w, d, floors, yaw, seed, style, dmg, base_z, heaps, lod, col_top, intact_below)
+        return citykit.building(g, gd, c, w, d, floors, yaw, seed, style, dmg, base_z, heaps, lod, col_top, intact_below, face)
     rnd = random.Random(seed)
     T = _rz(yaw)
     first_face = len(g.F)

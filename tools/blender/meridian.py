@@ -31,6 +31,7 @@ import meridian_south as south
 import meridian_flora as flora
 import meridian_story as story
 import meridian_landmarks as landmarks
+import boundskit as bk
 
 TAU = rk.TAU
 ART = os.path.join(P.ROOT, "unreal", "ShatteredOrbit", "Data", "op_meridian_art.json")
@@ -125,22 +126,13 @@ def zone_approach(G):
     ground_slab(g, "ru_asphalt", -A["road"], A["road"], n0 - 20, n1 + 10, .03)
     rnd = random.Random(11)
     # low ruins down both sides (the corridor's walls) and higher ones behind
+    # (the rows are the road's edge: walked into from the street, sealed behind, the army's wall sections between
+    # them, up to the city wall itself)
+    south.ruin_rows(g, gd, rnd, n0 - 14, P.WALL["n"] - P.WALL["thick"] / 2 + .2, half + 2, 100, plug="twall")
     for side in (-1, 1):
-        n = n0 - 14
-        k = 0
-        while n < n1 - 8:
-            L = rnd.uniform(16, 26)
-            e = side * (half + rnd.uniform(8, 12))
-            rk.tower(g, gd, (e, n + L / 2), rnd.uniform(14, 18), L, rnd.randint(2, 5), yaw=math.pi / 2 + rnd.uniform(-.05, .05),
-                     seed=100 + k * 2 + (side > 0), style=rnd.choice(("panel", "concrete")), top=(.3, 1.0), holes=2)
-            rk.tower(g, gd, (side * (half + 34 + rnd.uniform(0, 10)), n + L / 2), rnd.uniform(16, 22), L, rnd.randint(6, 12),
-                     yaw=rnd.uniform(-.1, .1), seed=200 + k * 2 + (side > 0), style=rnd.choice(("panel", "concrete")),
-                     top=(.4, 1.0), holes=2, rebar=False)
-            n += L + rnd.uniform(3, 6)
-            k += 1
         # rubble banks against them
         for i in range(6):
-            rk.heap(g, (side * (half - rnd.uniform(1, 5)), rnd.uniform(n0, n1 - 10), 0), rnd.uniform(4, 8), rnd.uniform(1.5, 3.5),
+            rk.heap(g, (side * (half - rnd.uniform(1, 5)), rnd.uniform(n0, n1 - 10), 0), rnd.uniform(4, 8), rnd.uniform(1.2, 2.2),
                     300 + i + (side > 0) * 10, ry=rnd.uniform(5, 9))
     # the broken viaduct crossing overhead (diagonal), its east span down on the road
     a, b = Vector((-80, -292, 9.0)), Vector((80, -250, 9.0))
@@ -152,6 +144,10 @@ def zone_approach(G):
         for s in (-1, 1):
             off = Vector((-d.y, d.x, 0)) * s * 5.8
             rk.wall_path(g, "ru_concrete", [tuple(p0 + off), tuple(p1 + off)], .35, 1.0, rnd=rnd, broken=.4)
+    # the deck is closed with freight boxes where it runs out over the east row (the fallen span is a way up onto it)
+    pm = a.lerp(b, (29.0 - a.x) / (b.x - a.x))
+    sd = Vector((-d.y, d.x, 0))
+    bk.containers(g, gd, tuple((pm - sd * 6.0).to_2d()), tuple((pm + sd * 6.0).to_2d()), (d.x, d.y), 96, tall=3, z=9.0, loose=False)
     # the fallen span: one end on the deck's break, the other on the road
     top = a.lerp(b, cut1) - d * .5
     foot = a.lerp(b, cut0 + .02) + Vector((0, 0, -9.0 + .7))
@@ -229,15 +225,7 @@ def zone_gate(G):
     # the court: cracked asphalt, buildings on both flanks, cover
     C = P.COURT
     ground_slab(g, "ru_asphalt", -C["half"], C["half"], C["n0"], C["n1"], .03)
-    for side in (-1, 1):
-        nn = C["n0"] + 2
-        i = 0
-        while nn < C["n1"] - 4:
-            L = rnd.uniform(16, 22)
-            rk.tower(g, gd, (side * (C["half"] + 10), nn + L / 2), 18, L, rnd.randint(4, 9), yaw=math.pi / 2, seed=120 + i * 2 + (side > 0),
-                     style="concrete" if i % 2 else "panel", top=(.35, 1.0), holes=2)
-            nn += L + 2
-            i += 1
+    south.ruin_rows(g, gd, rnd, n + t / 2 - .2, C["n1"], C["half"], 120, low=(4, 9), plug="collapse")
     cover = [(-14, -186, .3), (12, -183, -.4), (-22, -170, 1.4), (20, -168, 1.6), (-6, -160, .1), (8, -155, -.2),
              (-26, -150, 1.5), (25, -152, 1.7)]
     for i, (e, nn, y) in enumerate(cover):
@@ -266,16 +254,22 @@ def zone_boulevard(G):
         x0, x1 = sorted((side * road, side * walk))
         ground_slab(g, "ru_stone", x0, x1, n0, n1, .18)
         # tall towers along the lots
-        nn = n0 + 1
+        nn = n0
         i = 0
-        while nn < n1 - 6:
-            L = rnd.uniform(18, 28)
+        end = -62.0                                               # as far as the ring's own towers (the two that flank the mouth)
+        while nn < end - 1.0:
+            L = min(rnd.uniform(18, 28), end - nn)
             depth = lots - walk - 2
             rk.tower(g, gd, (side * (walk + 1 + depth / 2), nn + L / 2), depth, L, rnd.randint(8, 14), yaw=0.0,
-                     seed=300 + i * 2 + (side > 0), style="panel" if (i + (side > 0)) % 2 else "concrete", top=(.45, 1.0), holes=3)
-            # the alley between lots, choked with rubble
-            rk.heap(g, (side * (walk + 6), nn + L + 2.0, 0), 4.5, 3.0, 320 + i + (side > 0) * 20, ry=3.0)
-            nn += L + 4
+                     seed=300 + i * 2 + (side > 0), style="panel" if (i + (side > 0)) % 2 else "concrete", top=(.45, 1.0), holes=3,
+                     face=(-side, 0))
+            # the alley between lots: closed by what fell into it, or what grew there
+            if nn + L + 4 < end - 1.0:
+                e = side * (walk + 1.9)
+                bk.seal(g, gd, (e, nn + L - .4), (e, nn + L + 4.4), (side, 0), ("collapse", "growth")[i % 2], 320 + i + (side > 0) * 20)
+                nn += L + 4
+            else:
+                nn += L
             i += 1
         for k in range(6):
             lamp_post(g, gd, (side * (road + .8), n0 + 8 + k * 16, .18), math.pi if side > 0 else 0.0, 330 + k + (side > 0) * 10, broken=k % 3 == 1)
@@ -351,15 +345,31 @@ def zone_ring(G):
             jersey(g, (p[0] + math.cos(math.radians(a) + math.pi / 2) * 3.3, p[1] + math.sin(math.radians(a) + math.pi / 2) * 3.3, .04), math.radians(a) + math.pi / 2 + .2, 3.2)
     # the towers round the ring (gaps south for the boulevard and east for the ramp; the north and west breaches
     # are where the Altered come from: rubble slopes between the towers)
+    # They ARE the plaza's edge: each is walked into from the plaza and sealed behind; every breach between two of
+    # them is closed by what the Altered grew there (north and west, where they came from) or by what fell.
     angles = [22, 47, 72, 97, 122, 147, 172, 197, 222, 247, 293, 318, 338]
+    ends = []                                                     # (angle, the inner face's clockwise end, its other end)
     for i, a in enumerate(angles):
         r = 58 + rnd.uniform(-2, 2)
-        c = (math.cos(math.radians(a)) * r, math.sin(math.radians(a)) * r)
-        rk.tower(g, gd, c, rnd.uniform(16, 20), 22, rnd.randint(7, 15), yaw=math.radians(a) + math.pi / 2, seed=450 + i,
-                 style="panel" if i % 2 else "concrete", top=(.4, 1.0), holes=3)
+        ar = math.radians(a)
+        c = (math.cos(ar) * r, math.sin(ar) * r)
+        w = rnd.uniform(16, 20)
+        rk.tower(g, gd, c, w, 22, rnd.randint(7, 15), yaw=ar + math.pi / 2, seed=450 + i,
+                 style="panel" if i % 2 else "concrete", top=(.4, 1.0), holes=3, face=(-math.cos(ar), -math.sin(ar)))
+        f = Vector((math.cos(ar), math.sin(ar))) * (r - 11.0 + .9)
+        t = Vector((-math.sin(ar), math.cos(ar)))
+        ends.append((a, f - t * (w / 2), f + t * (w / 2)))
+    for i, ((a0, _, p0), (a1, p1, _)) in enumerate(zip(ends, ends[1:])):
+        if a1 - a0 > 30 or (p1 - p0).length < .6:                  # (the boulevard's mouth; two that touch)
+            continue
+        am = math.radians((a0 + a1) / 2)
+        bk.seal(g, gd, tuple(p0), tuple(p1), (math.cos(am), math.sin(am)), "growth" if 80 < (a0 + a1) / 2 < 215 else "collapse", 470 + i)
+    for s_, (a_, pc, pcc) in ((1, ends[0]), (-1, ends[-1])):          # the two by the ramp: closed to its side walls
+        q = pc if s_ > 0 else pcc
+        bk.run(g, gd, [tuple(q), (P.RAMP["e0"] + 2.5, s_ * (P.RAMP["half"] + .2))], "growth", 476 + (s_ > 0), (70.0, s_ * 30.0), own_net=False)
     for i, a in enumerate((85, 110, 160, 185, 210)):
-        p = (math.cos(math.radians(a)) * 47, math.sin(math.radians(a)) * 47)
-        rk.heap(g, (p[0], p[1], 0), 6.5, 4.0, 480 + i, ry=4.5)
+        p = (math.cos(math.radians(a)) * 41, math.sin(math.radians(a)) * 41)
+        rk.heap(g, (p[0], p[1], 0), 5.5, 1.5, 480 + i, ry=4.0)
     rk.chunks(gd, (0, 0), 34, 90, 490)
     for i, a in enumerate((35, 135, 225, 315)):
         p = (math.cos(math.radians(a)) * 40, math.sin(math.radians(a)) * 40, 0)
@@ -702,22 +712,27 @@ def zone_blockers(G):
         rk.box(g, "ru_block", (m.x, m.y, (z0 + z1) / 2), (d.length / 2 + .3, .3, (z1 - z0) / 2), math.atan2(d.y, d.x))
     A, Cc, B, R, Rm, T, Br, C = P.APPROACH, P.COURT, P.BOULEVARD, P.PLAZA, P.RAMP, P.TERRACE, P.BRIDGE, P.CROWN
     h = A["half"] + 1
+    # From the Causeway to the ring the edge is things (rows walked into, the army's wall, the city wall, what fell
+    # into the alleys). This is the net behind them.
+    wn = P.WALL["n"]
     for s in (-1, 1):
-        wall((s * h, A["n0"] - 2), (s * 10.0, A["n0"] - 2))            # (the causeway comes in between these)
-        wall((s * h, A["n0"] - 2), (s * h, P.WALL["n"] - 3))
-        wall((s * (Cc["half"] - 1), Cc["n0"]), (s * (Cc["half"] - 1), Cc["n1"]))
-        wall((s * (Cc["half"] - 1), Cc["n1"]), (s * (B["walk"] + .5), Cc["n1"]))
-        wall((s * (B["walk"] + .5), B["n0"]), (s * (B["walk"] + .5), -math.sqrt(R["ring_in"] ** 2 - B["walk"] ** 2) + 1))
+        line = [(s * 58.0, A["n0"] - 16.0), (s * 58.0, wn - 4.0), (s * (Cc["half"] + 25.0), wn + 4.0), (s * (Cc["half"] + 25.0), Cc["n1"] + 1.0),
+                (s * (B["lots"] + 2.0), Cc["n1"] + 1.0), (s * (B["lots"] + 2.0), -math.sqrt(R["ring_in"] ** 2 - B["walk"] ** 2) + 4.0)]
+        for p0, p1 in zip(line, line[1:]):
+            wall(p0, p1)
     south.blockers(g)
-    # the ring: a circle at the inner face of the towers, open south (boulevard) and east (ramp)
+    # the ring: its towers and what closes the breaches between them are the plaza's edge; the net is a circle
+    # behind their backs (not across the boulevard's mouth, nor east where the ramp and the decks have their own)
     seg = 48
     for i in range(seg):
         a0, a1 = TAU * i / seg, TAU * (i + 1) / seg
         am = math.degrees((a0 + a1) / 2)
-        rr = R["ring_in"]
-        if abs(am - 270) < math.degrees(math.asin((B["walk"] + .5) / rr)) or am < math.degrees(math.asin((Rm["half"] + .5) / rr)) or am > 360 - math.degrees(math.asin((Rm["half"] + .5) / rr)):
+        rr = 73.0
+        if 236 < am < 304 or am < 12 or am > 348:
             continue
         wall((math.cos(a0) * rr, math.sin(a0) * rr), (math.cos(a1) * rr, math.sin(a1) * rr))
+    for s in (-1, 1):                                             # from the ramp's side nets round to that circle, under the deck's edge
+        wall((T["east_e"] - T["w"] / 2, s * (Rm["half"] + .4)), (math.cos(math.radians(15)) * 73.0, s * math.sin(math.radians(15)) * 73.0), -1, 7.5)
     # the ramp's sides, then both edges of the deck loop (the inner one open to the ramp, the outer to the bridge)
     for s in (-1, 1):
         wall((math.sqrt(R["ring_in"] ** 2 - Rm["half"] ** 2), s * (Rm["half"] + .4)), (T["east_e"] - T["w"] / 2, s * (Rm["half"] + .4)), -1, T["z"] + 9)
@@ -805,6 +820,8 @@ def main():
     want = flags.get('--zones', '').split(',') if isinstance(flags.get('--zones'), str) else list(ZONES)
     bl.reset()
     G = {z: (rk.Geo(f"MR_{z}"), rk.Geo(f"MR_{z}_detail")) for z in ZONES}
+    # (the net is laid last: it runs behind the barriers the districts build)
+    want = [z for z in want if z != "blockers"] + [z for z in want if z == "blockers"]
     for z in want:
         log("zone", z)
         rk.COL_TOP = 34.0 if z in HIGH_DECKS else 16.0
@@ -831,6 +848,16 @@ def main():
         with open(ART, 'w', encoding='utf-8') as f:
             json.dump(dict(lights=LIGHTS, ambience=AMBIENCE), f, indent=1)
         log("wrote", ART, len(LIGHTS), "lights")
+    if os.environ.get("SO_BOUNDS_DEBUG"):                            # a plan of the route's edge, to check it is closed
+        import boundskit, citykit
+        gb = G["blockers"][0] if "blockers" in G else None
+        net = []
+        if gb:                                                       # every wall of the net, from its box's footprint
+            for k in range(0, len(gb.V), 8):
+                net.append([[round(gb.V[k + q][0], 2), round(gb.V[k + q][1], 2)] for q in range(4)] + [round(gb.V[k][2], 1), round(gb.V[k + 4][2], 1)])
+        with open(os.environ["SO_BOUNDS_DEBUG"], "w") as f:
+            json.dump(dict(net=net, plugs=boundskit.PLUGS, enterable=[[z, list(c), w, d, yaw, list(door)] for z, door, inn, c, w, d, yaw in citykit.ENTERABLE],
+                           buildings=[[z, list(c), w, d, yaw] for z, c, w, d, yaw, hh, bz in citykit.BUILDINGS]), f)
     if '--noexport' not in flags:
         bl.export("meridian.glb")
 

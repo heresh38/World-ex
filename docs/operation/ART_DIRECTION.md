@@ -488,6 +488,24 @@ environment.
 
 ---
 
+## ADDED BY THE OWNER, 2026-11-11 (his words)
+
+> "we need a reason for the player to do this operation, like why is the player taking the risk, what importance does
+> this mission have to the world, to humans or is it important to the aliens, is it their hive/airport/teleport
+> station/military base/ etc give a reason for this mission for the player to do this and for the aliens to be here
+> protecting it."
+
+> "allow the player to enter any buildings he can see the door, so instead of invisible barrier let be cleaver and
+> use the buildings walls as the barrier the player can't cross, so the building is open from one side but rubble or
+> maybe something else collapsed blocking the other side so you can't go out of bounds, be creative and don't just
+> use inviable walls."
+
+How these are kept (Claude's notes): the reason is `docs/story/MERIDIAN_FALL.md` and the plan's `BRIEFING` / `INTEL` /
+`OUTCOME`; the edge of the route is made of things (`tools/blender/boundskit.py`, `citykit.building(front=...)`), a
+door a player can see is a door a player can use unless something he can also see has shut it (a shutter down, a
+quarantine wall, a collapse), and what is left of the unseen walls runs BEHIND those things as a net that reports
+any touch (`Boundary net touched` in the log). Status per district: `docs/operation/MERIDIAN_OVERHAUL.md`.
+
 ## How this meets the project's other hard rules (Claude's notes, not the owner's text)
 
 - The brief as received has no section 10 (it goes from 9 to 11): nothing was dropped here.

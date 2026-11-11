@@ -34,6 +34,7 @@ Interiors (interiorkit.py: what the shops, halls and rooms were fitted out with)
   ru_goods      a stocked shelf seen from the front, four shelf rows a tile: packets, tins and bottles, gaps where
                 things were taken (own UVs: a face shows a window of one row)
   ru_books      the same for a bookcase: spines
+  ru_box_red / _green / _ochre   freight boxes: the corrugated sheet in three more paints (boundskit.containers)
 
 Each set: <name>_c.jpg colour, <name>_n.png tangent normal (OpenGL), <name>_m.png (R unused, G roughness, B metal).
 
@@ -49,7 +50,7 @@ TILE = {"ru_concrete": 2.5, "ru_fracture": 1.5, "ru_asphalt": 6.0, "ru_stone": 4
         "ru_rubble": 4.0, "ru_banner": 1.0, "ru_hive": 2.0,
         "ru_ceramic": 2.4, "ru_composite": 2.4, "ru_sandstone": 3.0, "ru_corrugate": 2.0, "ru_tile": 2.4, "ru_plaster": 3.0,
         "ru_brass": 1.5, "ru_far_a": 14.0, "ru_far_b": 14.0, "ru_bark": 1.0, "ru_leaf": .8, "ru_moss": 1.5, "ru_fungus": .8,
-        "ru_wood": 1.2, "ru_fabric": 1.0, "ru_ceiling": 2.4, "ru_shutter": 1.0, "ru_carpet": 2.0, "ru_goods": 1.2, "ru_books": 1.2}
+        "ru_box_red": 2.0, "ru_box_green": 2.0, "ru_box_ochre": 2.0, "ru_wood": 1.2, "ru_fabric": 1.0, "ru_ceiling": 2.4, "ru_shutter": 1.0, "ru_carpet": 2.0, "ru_goods": 1.2, "ru_books": 1.2}
 N = 1024
 
 
@@ -353,7 +354,7 @@ def sandstone():
     write("ru_sandstone", c, h, 4.5, .84 + j * .1)
 
 
-def corrugate():
+def corrugate(name="ru_corrugate", lo='#42505b', hi='#63727c', seed=0):
     n = N
     xx = (np.arange(n) + .5)[None, :] / n
     wave = (.5 + .5 * np.cos(xx * 26 * 2 * np.pi)).astype(F32) * np.ones((n, 1), F32)
@@ -367,14 +368,14 @@ def corrugate():
     for gy in (.02, .52):
         for gx in np.arange(1 / 52, 1, 1 / 6.5):
             rivets = np.maximum(rivets, np.clip(1 - np.hypot(xr - gx * n, yy - gy * n) / 3.5, 0, 1))
-    paint = ramp(v, '#42505b', '#63727c')
+    paint = ramp(v, lo, hi)
     rust_c = ramp(fbm(n, 16, 235), '#3b2114', '#70421f')
     c = paint * (.8 + .2 * wave[..., None])
     c = c * (1 - rust[..., None]) + rust_c * rust[..., None]
     c = c * (1 - runs[..., None] * .35) + col('#5b3319') * runs[..., None] * .3
     c *= (1 - lap[..., None] * .3)
     h = wave * .9 + rivets * .5 - lap * .3 + rust * .15
-    write("ru_corrugate", c, h, 5.0, .5 + rust * .4, metal=.3 * (1 - rust))
+    write(name, c, h, 5.0, .5 + rust * .4, metal=.3 * (1 - rust))
 
 
 def tile():
@@ -664,7 +665,8 @@ def books():
     _rows("ru_books", 461, True)
 
 
-JOBS = dict(ru_wood=wood, ru_fabric=fabric, ru_ceiling=ceiling, ru_shutter=shutter, ru_carpet=carpet, ru_goods=goods, ru_books=books,
+JOBS = dict(ru_box_red=lambda: corrugate("ru_box_red", '#4f1f17', '#7a3526'), ru_box_green=lambda: corrugate("ru_box_green", '#24392e', '#3d5a47'),
+            ru_box_ochre=lambda: corrugate("ru_box_ochre", '#6b5524', '#94793a'), ru_wood=wood, ru_fabric=fabric, ru_ceiling=ceiling, ru_shutter=shutter, ru_carpet=carpet, ru_goods=goods, ru_books=books,
             ru_bark=bark, ru_leaf=leafy, ru_moss=mossy, ru_fungus=fungal, ru_hive=hive, ru_concrete=concrete, ru_fracture=fracture, ru_asphalt=asphalt, ru_stone=stone, ru_metal=metal,
             ru_panel=panel, ru_rubble=rubble, ru_banner=banner,
             ru_ceramic=ceramic, ru_composite=composite, ru_sandstone=sandstone, ru_corrugate=corrugate, ru_tile=tile,

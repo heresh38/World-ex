@@ -237,6 +237,35 @@ void ASOHUD::DrawOperation(float W, float H, float S)
 		return TW;
 	};
 
+	// text broken into lines no wider than MaxW, centred, from Y down; returns the Y under the last line
+	auto Wrapped = [&](const FString& Text, float Y, float MaxW, UFont* F, float Scale, FLinearColor C)
+	{
+		TArray<FString> Words;
+		Text.ParseIntoArray(Words, TEXT(" "));
+		FString Line;
+		float TW = 0.0f, TH = 0.0f;
+		for (int32 i = 0; i <= Words.Num(); ++i)
+		{
+			const FString Try = i < Words.Num() ? (Line.IsEmpty() ? Words[i] : Line + TEXT(" ") + Words[i]) : FString();
+			if (i < Words.Num())
+			{
+				GetTextSize(Try, TW, TH, F, Scale);
+			}
+			if (i == Words.Num() || (TW > MaxW && !Line.IsEmpty()))
+			{
+				Centred(Line, Y, F, Scale, C);
+				GetTextSize(Line, TW, TH, F, Scale);
+				Y += TH + 3.0f * S;
+				Line = i < Words.Num() ? Words[i] : FString();
+			}
+			else
+			{
+				Line = Try;
+			}
+		}
+		return Y;
+	};
+
 	// the end screen: what every player earned
 	if (Op->GetState() == ESOOperationState::Complete)
 	{
@@ -248,6 +277,10 @@ void ASOHUD::DrawOperation(float W, float H, float S)
 			DrawRect(FLinearColor(Void.R, Void.G, Void.B, 0.8f * A), 0.0f, H * 0.24f + 228.0f * S, W, 2.0f * S);
 			Centred(Op->OperationName.ToString().ToUpper(), H * 0.24f + 22.0f * S, Font, 1.1f * S, FLinearColor(Void.R, Void.G, Void.B, A));
 			Centred(TEXT("OPERATION COMPLETE"), H * 0.24f + 52.0f * S, Big, 2.0f * S, FLinearColor(1, 1, 1, A));
+			if (!Op->Outcome.IsEmpty())
+			{
+				Wrapped(Op->Outcome.ToString(), H * 0.24f + 240.0f * S, W * 0.6f, Font, 1.0f * S, FLinearColor(Dim.R, Dim.G, Dim.B, A));
+			}
 			float Y = H * 0.24f + 130.0f * S;
 			const APlayerState* Mine = GetOwningPlayerController() ? GetOwningPlayerController()->PlayerState : nullptr;
 			for (const FSOOperationReward& R : Op->GetRewards())
@@ -282,6 +315,30 @@ void ASOHUD::DrawOperation(float W, float H, float S)
 		const float TW = Centred(Stage->Title.ToString().ToUpper(), H * 0.16f, Big, 1.7f * S, FLinearColor(1, 1, 1, A));
 		DrawRect(FLinearColor(Void.R, Void.G, Void.B, A * 0.9f), W * 0.5f - TW * 0.35f, H * 0.16f + 50.0f * S, TW * 0.7f, 2.0f * S);
 		Centred(Stage->Objective.ToString(), H * 0.16f + 60.0f * S, Font, 1.1f * S, FLinearColor(Dim.R, Dim.G, Dim.B, A));
+	}
+
+	// why anyone goes: as the operation begins, a line at a time over the lower third (then the first stage's radio line)
+	const bool bOpening = Op->GetStageIndex() == 0 && Op->Briefing.Num() > 0;
+	const float Per = 5.5f, BriefEnd = bOpening ? Per * Op->Briefing.Num() : 0.0f;
+	if (bOpening && Age < BriefEnd)
+	{
+		const int32 Line = FMath::Min(Op->Briefing.Num() - 1, FMath::FloorToInt(Age / Per));
+		const float T = Age - Line * Per;
+		const float A = FMath::Clamp(T * 2.0f, 0.0f, 1.0f) * FMath::Clamp((Per - T) * 2.0f, 0.0f, 1.0f);
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f * A), 0.0f, H * 0.70f, W, 112.0f * S);
+		Centred(Op->OperationName.ToString().ToUpper(), H * 0.70f + 10.0f * S, Small, 1.3f * S, FLinearColor(Void.R, Void.G, Void.B, A));
+		Wrapped(Op->Briefing[Line].ToString(), H * 0.70f + 34.0f * S, W * 0.7f, Font, 1.7f * S, FLinearColor(1, 1, 1, A));
+	}
+	// the radio as a stage begins: who, and what this place means
+	const float RadioAge = Age - BriefEnd - 1.0f, RadioTime = 11.0f;
+	if (!Stage->Intel.IsEmpty() && RadioAge > 0.0f && RadioAge < RadioTime)
+	{
+		const float A = FMath::Clamp(RadioAge * 2.0f, 0.0f, 1.0f) * FMath::Clamp(RadioTime - RadioAge, 0.0f, 1.0f);
+		const float Y = H * 0.76f;
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f * A), W * 0.17f, Y - 8.0f * S, W * 0.66f, 96.0f * S);
+		DrawRect(FLinearColor(Void.R, Void.G, Void.B, 0.9f * A), W * 0.17f, Y - 8.0f * S, 2.5f * S, 96.0f * S);
+		Centred(Stage->IntelWho.ToString(), Y - 2.0f * S, Small, 1.3f * S, FLinearColor(Void.R, Void.G, Void.B, A));
+		Wrapped(Stage->Intel.ToString(), Y + 20.0f * S, W * 0.62f, Font, 1.4f * S, FLinearColor(1, 1, 1, A));
 	}
 
 	// a marker on the goal (where to go), with the distance

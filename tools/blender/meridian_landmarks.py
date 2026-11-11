@@ -168,7 +168,7 @@ def zone_landmarks(G, H):
     far(g)
     half, pn = L["half"], L["pump_n"]
     rk.ZONE = "sluice"
-    citykit.building(g, gd, (-half - 36.0, pn - 34.0), 30.0, 44.0, 6, 0.0, 8300, "lab", .4, 0.0, True, 1, 0)
+    citykit.building(g, gd, (-half - 36.0, pn - 34.0), 30.0, 44.0, 6, 0.0, 8300, "lab", .4, 0.0, True, 0, 10.5, front=(1, 0))
     sc = (-half - 40.0, pn + 12.0)
     lathe(g, "ru_composite", sc, [(8.0, 0), (8.0, 20), (7.2, 23), (4.5, 25.5), (0.4, 26.5)], n=20)
     for k in range(4):
@@ -195,11 +195,7 @@ def zone_landmarks(G, H):
     g.col = True
     # the plant's yard between the bank and the towers: a fence line, transformers, tanks on their sides, the growth
     yard_n = (pn - 100.0, pn + 10.0)
-    for k in range(12):
-        n = yard_n[0] + (yard_n[1] - yard_n[0]) * k / 11
-        rk.tube(gd, "ru_metal", [(half + 8.0, n, 0), (half + 8.0, n, 2.6), (half + 8.4, n, 3.0)], .05, 5)
-        if k and k not in (4, 9):                                    # the mesh panels, two torn out
-            rk.box(gd, "ru_metal", (half + 8.0, n - (yard_n[1] - yard_n[0]) / 22, 1.3), (.015, (yard_n[1] - yard_n[0]) / 22 - .05, 1.2))
+    # (its fence is the canal's edge there: boundskit.palisade, from meridian_south.zone_sluice)
     for (e, n, yaw) in ((half + 22.0, pn - 84.0, .1), (half + 27.0, pn - 84.5, .1), (half + 20.0, pn - 22.0, -.2)):
         Rz = Matrix.Rotation(yaw, 3, 'Z')
         rk.box(g, "ru_metal", (e, n, 1.3), (1.5, 1.1, 1.3), R=Rz)                               # transformers, finned

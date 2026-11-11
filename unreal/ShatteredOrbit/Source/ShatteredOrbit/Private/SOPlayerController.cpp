@@ -201,6 +201,15 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 16)
+	{
+		// Meridian (L_Meridian): the operation's opening as a player sees it (files o*): why anyone goes, a line at a
+		// time, then what comes over the radio at the first stage.
+		for (int32 i = 1; i <= 8; ++i)
+		{
+			Snap(i == 1 ? 6.0f : 5.5f, FString::Printf(TEXT("o%d_opening"), i));
+		}
+	}
 	if (Set == 9)
 	{
 		// Meridian (L_Meridian): a camera tour of the route, then each of the Altered posed in the plaza and the
@@ -270,6 +279,21 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{ TEXT("l9_dome"), FVector(26, -22, 1.7), FVector(-98, 16, 46) },
 			{ TEXT("l10_grove"), FVector(9, -646, -3.3), FVector(-4, -668, 0) },
 			{ TEXT("l11_moss"), FVector(40, -522, 1.7), FVector(31, -513, 0.3) },
+			// the mall's shops (files i*), the things that stop the player and the buildings that can be walked into (files b*)
+			{ TEXT("i1_concourse"), FVector(-4, -1594, 1.7), FVector(10, -1540, 2.4) },
+			{ TEXT("i2_shop"), FVector(17, -1570, 1.7), FVector(30, -1570, 1.4) },
+			{ TEXT("i3_books"), FVector(-17, -1474, 1.7), FVector(-30, -1474, 1.4) },
+			{ TEXT("i4_cafe"), FVector(17, -1426, 1.7), FVector(30, -1426, 1.4) },
+			{ TEXT("i5_inside"), FVector(24.5, -1543, 1.7), FVector(33, -1549, 1.2) },
+			{ TEXT("i6_gallery"), FVector(-14, -1590, 6.7), FVector(-16, -1540, 7.2) },
+			{ TEXT("b1_boxes"), FVector(7, -2298, 2.2), FVector(14, -2322, 5) },
+			{ TEXT("b2_row"), FVector(-6, -2260, 1.7), FVector(44, -2236, 5) },
+			{ TEXT("b3_door"), FVector(-28, -2290, 1.7), FVector(-39, -2292.2, 1.5) },
+			{ TEXT("b4_inside"), FVector(-41.5, -2292.2, 1.7), FVector(-52, -2286, 1.3) },
+			{ TEXT("b5_quarantine"), FVector(0, -1990, 1.7), FVector(-40, -1973, 5) },
+			{ TEXT("b6_yard_block"), FVector(10, -1880, 1.7), FVector(-46, -1868, 5) },
+			{ TEXT("b7_alley_room"), FVector(0, -1760, 1.7), FVector(9.5, -1750, 1.6) },
+			{ TEXT("b8_forecourt"), FVector(0, -1625, 1.7), FVector(37, -1630, 5) },
 			{ TEXT("m1_approach"), FVector(2, -306, 1.7), FVector(0, -200, 9) },
 			{ TEXT("m2_gate"), FVector(-6, -228, 1.7), FVector(0, -200, 10) },
 			{ TEXT("m3_court"), FVector(10, -192, 2.0), FVector(-4, -140, 4) },
@@ -314,6 +338,21 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			}
 		});
 		Do(5.0f, []() {});
+		// (the nav mesh is built as the level runs, and there is a lot of walked ground: wait for it to finish, up to two
+		// minutes, or a leg in the last district to be built reads as broken)
+		for (int32 i = 0; i < 14; ++i)
+		{
+			Do(1.0f, []() {}, [this]()
+			{
+				UNavigationSystemV1* N = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+				return !N || !N->IsNavigationBuildInProgress();
+			});
+		}
+		Act([this]()
+		{
+			const UNavigationSystemV1* N = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+			UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: %d build tasks left when the legs are checked"), N ? N->GetNumRemainingBuildTasks() : -1);
+		});
 		Act([this]()
 		{
 			UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
@@ -338,6 +377,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				{ TEXT("canal -> spillway top"), FVector(-86000, 0, -450), FVector(-55500, 4500, 50) },
 				{ TEXT("spillway -> old approach"), FVector(-55500, 4500, 50), FVector(-31000, 0, 50) },
 				{ TEXT("old approach -> crown"), FVector(-30600, 200, 50), FVector(15000, 0, 1050) },
+				// (the last one in pieces, so a break names its place)
+				{ TEXT("ring -> ramp top"), FVector(-2000, 0, 50), FVector(0, 7600, 1050) },
+				{ TEXT("ramp top -> north deck"), FVector(0, 8000, 1050), FVector(11400, 4000, 1050) },
+				{ TEXT("north deck -> bridge"), FVector(11400, 4000, 1050), FVector(15000, 0, 1050) },
 			};
 			for (const FLeg& Leg : Legs)
 			{
@@ -345,6 +388,12 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				const bool bWhole = Path && Path->IsValid() && !Path->IsPartial();
 				UE_LOG(LogShatteredOrbit, Log, TEXT("Nav: %s %s (%d points, %.0f m%s)"), Leg.Name, bWhole ? TEXT("found") : TEXT("NOT FOUND"),
 					Path ? Path->PathPoints.Num() : 0, Path ? Path->GetPathLength() / 100.0f : 0.0f, Path && Path->IsPartial() ? TEXT(", partial") : TEXT(""));
+				if (!bWhole && Path && Path->PathPoints.Num() > 0)
+				{
+					// where it stops (plan metres): the break is just past this
+					const FVector End = Path->PathPoints.Last();
+					UE_LOG(LogShatteredOrbit, Warning, TEXT("Nav:   it stops at E %.1f N %.1f z %.1f"), End.Y / 100.0f, End.X / 100.0f, End.Z / 100.0f);
+				}
 			}
 			int32 On = 0, Total = 0;
 			for (float N = -229000.0f; N <= 22000.0f; N += 2000.0f)

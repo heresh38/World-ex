@@ -214,6 +214,25 @@ three slabs with sky bridges, the Galleria's arch and vault, the station canopy,
 the downed gunship, the Assembly's dome). Zones run in the order
 districts, landmarks, story, flora. Look at the geometry before importing: build with `--noexport --save=x.blend`, then
 `blender -b x.blend -P tools/blender/meridian_preview.py -- <outdir>` (workbench views along the route).
+**Why the operation exists** is written before it is built (`docs/story/WORLD.md` = the adopted story bible in our words,
+`docs/story/MERIDIAN_FALL.md` = this operation's reason): the beam over Meridian is calling home the Keystones in Nexus
+Prime's wall, the wall has nights left, nothing flies through the storm, a team walks in to cut the beam and bring the
+capital's Keystone home; for the Altered the Crown is the root's voice and its wound. The plan carries what the game
+says: `BRIEFING` (a line at a time as the operation begins), `INTEL` (who and what over the radio as each stage begins:
+what the place means, never how to play it), `OUTCOME` (the end screen): `FSOStage::Intel`, `ASOOperation::Briefing`.
+**Interiors** (`interiorkit.py`): a `Local` frame per shop / room; what a piece of furniture stops is ONE hidden box
+(`solid`), everything drawn is detail; no whole glass where it can be shot at (collision is all-or-nothing: a creature
+could not see through it); stocked shelves and bookcases are blocks with a window of `ru_goods` / `ru_books` on the
+front, cloth picks one of the four bands of `ru_fabric` (explicit UVs: `Geo.add(..., uvs=)`); signs are bars of light,
+never words. A bay a wave is put down in keeps its front open and its middle clear.
+**The route's edge is made of things** (the owner: "don't just use invisible walls"): `citykit.building(front=)` /
+`rk.tower(face=)` = a building walked into from the street and sealed behind (blind and whole for three storeys on
+its other sides), `boundskit.py` = what closes every gap (`containers`, `twall`, `collapse`, `growth`, `palisade`; all
+over 7.7 m, no ledge under that; `run` for a polyline). `MR_blockers` is only a net BEHIND them, laid last, tagged
+`SONet`: `ASOCharacter::MoveBlockedBy` logs `Boundary net touched at ...` (every touch is a leak to close). Draw a
+district's edge as a plan before importing: `SO_BOUNDS_DEBUG=x.json` on a `--noexport` build (status per district in
+MERIDIAN_OVERHAUL.md; the ramp, the terraces' decks, the bridge and the Crown still have an unseen wall over their
+balustrades: that waits on the owner's word about falling).
 **What is drawn is not what collides** (the cause of "the enemy can shoot through walls / get stuck in walls and
 rocks"): a Nanite mesh's collision is built from its simplified fallback (the Crown kept 3% of its triangles, even
 the invisible walls lost half), so shots, creatures and the nav mesh went through what was drawn. Every zone now

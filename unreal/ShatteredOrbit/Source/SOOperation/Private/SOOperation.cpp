@@ -85,6 +85,17 @@ bool ASOOperation::LoadPlan(const FString& JsonText)
 	}
 	OperationName = FText::FromString(Root->GetStringField(TEXT("name")));
 	Tagline = FText::FromString(Root->GetStringField(TEXT("tagline")));
+	Briefing.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
+	if (Root->TryGetArrayField(TEXT("briefing"), Lines))
+	{
+		for (const TSharedPtr<FJsonValue>& L : *Lines)
+		{
+			Briefing.Add(FText::FromString(L->AsString()));
+		}
+	}
+	FString Out;
+	Outcome = Root->TryGetStringField(TEXT("outcome"), Out) ? FText::FromString(Out) : FText::GetEmpty();
 
 	Groups.Reset();
 	if (const TSharedPtr<FJsonObject>* G = nullptr; Root->TryGetObjectField(TEXT("groups"), G))
@@ -132,6 +143,12 @@ bool ASOOperation::LoadPlan(const FString& JsonText)
 		FSOStage S;
 		S.Id = FName(O->GetStringField(TEXT("id")));
 		S.Title = FText::FromString(O->GetStringField(TEXT("title")));
+		const TSharedPtr<FJsonObject>* Intel = nullptr;
+		if (O->TryGetObjectField(TEXT("intel"), Intel))
+		{
+			S.IntelWho = FText::FromString((*Intel)->GetStringField(TEXT("who")));
+			S.Intel = FText::FromString((*Intel)->GetStringField(TEXT("text")));
+		}
 		S.Objective = FText::FromString(O->GetStringField(TEXT("objective")));
 		S.Kind = KindOf(O->GetStringField(TEXT("kind")));
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;

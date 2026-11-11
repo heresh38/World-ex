@@ -354,6 +354,10 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void Landed(const FHitResult& Hit) override;
+	/** Walked into something: if it is a level's unseen net (an actor tagged SONet, behind the real barriers), say where:
+	 * nobody should ever reach it, so every touch is a way out of the map that needs closing. */
+	virtual void MoveBlockedBy(const FHitResult& Impact) override;
+	double LastNetReport = -100.0;
 	virtual void OnJumped_Implementation() override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;

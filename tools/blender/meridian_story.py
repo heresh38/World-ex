@@ -21,6 +21,7 @@ import random
 from mathutils import Vector
 import ruinkit as rk
 import streetkit as sk
+import citykit
 import meridian_plan as P
 
 PI = math.pi
@@ -213,3 +214,12 @@ def zone_story(G, H):
     for i, (e, yaw) in enumerate(((-12.6, 0.0), (12.6, PI))):
         sk.signal(g, gd, (e, -48.0, .18), yaw, 7840 + i)
     sk.luggage(gd, (-3.0, -108.0, .04), 7850, 6)
+
+    # ---------------- inside the buildings a player can walk into: light
+    for k, (zone, door, inn, c, w, d, yaw) in enumerate(citykit.ENTERABLE):
+        # (every one of them: a room nobody can see into is a room nobody goes into. A working fitting, emergency
+        # lighting, or what grows in there)
+        kind = ("lamp", "bio", "lamp")[k % 3]
+        H.light(kind, (door[0] + inn[0] * 5.0, door[1] + inn[1] * 5.0, 2.8), 1300, 30.0 if kind == "lamp" else 24.0)
+    print("[meridian] enterable buildings: %d; first doors %s" % (len(citykit.ENTERABLE), [(z, tuple(round(v, 1) for v in d), tuple(round(v, 2) for v in i))
+                                                                                         for z, d, i, *_ in citykit.ENTERABLE[:4]]))

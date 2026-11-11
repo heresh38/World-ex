@@ -82,12 +82,14 @@ def main():
             if name == "SM_MR_backdrop":
                 comp.set_editor_property("cast_shadow", True)
         else:
-            # invisible walls: they stop players and creatures, never shots, sight or the camera
+            # the unseen net: it stops players and creatures, never shots, sight or the camera
             a.set_actor_hidden_in_game(True)
             comp.set_cast_shadow(False)
             comp.set_collision_profile_name("BlockAllDynamic")
             comp.set_collision_response_to_all_channels(unreal.CollisionResponseType.ECR_IGNORE)
             comp.set_collision_response_to_channel(unreal.CollisionChannel.ECC_PAWN, unreal.CollisionResponseType.ECR_BLOCK)
+            # (the net BEHIND the things that stop a player: a touch of it is a leak, and the character reports it)
+            a.set_editor_property("tags", [unreal.Name("SONet")])
             comp.set_editor_property("can_ever_affect_navigation", True)
     log(f"{len(meshes)} city pieces")
 
