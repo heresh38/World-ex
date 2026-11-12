@@ -170,13 +170,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Landing", meta = (Units = "s"))
 	float LandStateTime = 0.2f;
 
-	/** Fall damage hook: landing faster than this hurts (0 = no fall damage, the default). */
+	/** Fall damage (the owner, 2026-11-11: as in the game he names for it, and an air jump before the ground saves you):
+	 * landing faster than this hurts (0 = none). 1650 cm/s is a drop of about 7 m at this gravity: a storey or two is
+	 * free, a 10 m deck costs a third of a full bar, 24 m kills. An air jump throws the fall away (DoJump sets the
+	 * vertical speed), so the landing after it is only as hard as the little way down from there. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Landing", meta = (Units = "cm/s"))
-	float FallDamageMinSpeed = 0.0f;
+	float FallDamageMinSpeed = 1650.0f;
 
 	/** Damage per cm/s above FallDamageMinSpeed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Landing")
-	float FallDamagePerSpeed = 0.06f;
+	float FallDamagePerSpeed = 0.11f;
 
 	/** What a landing at ImpactSpeed costs (0 while fall damage is off). */
 	float GetFallDamage(float ImpactSpeed) const;
@@ -250,13 +253,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Vault", meta = (Units = "cm"))
 	FVector2D VaultTuck = FVector2D(58.0f, 32.0f);
 
+	/** Through an opening (a window, a hole in a wall): how far the body folds when the head of the opening is lower
+	 * than a plain vault needs. With 80 a body goes through anything a little over a metre high. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Vault", meta = (Units = "cm"))
+	float VaultDiveTuck = 80.0f;
+
 	/** Sprinting into a vaultable obstacle vaults it without pressing jump. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Vault")
 	bool bAutoVault = true;
 
 	// --- Mantle / climb ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "cm"))
-	float MantleMinHeight = 50.0f;
+	float MantleMinHeight = 46.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Mantle", meta = (Units = "cm"))
 	float MantleMaxHeight = 245.0f;

@@ -48,6 +48,8 @@ void ASOEnemyAIController::OnPossess(APawn* InPawn)
 	Super::OnPossess(InPawn);
 	Home = InPawn ? InPawn->GetActorLocation() : FVector::ZeroVector;
 	NoiseHandle = USOCombatStatics::OnNoise().AddUObject(this, &ASOEnemyAIController::OnNoise);
+	HitHandle = USOCombatStatics::OnCharacterHit().AddUObject(this, &ASOEnemyAIController::OnHit);
+	DiedHandle = USOCombatStatics::OnCharacterDied().AddUObject(this, &ASOEnemyAIController::OnDied);
 	NextThink = GetWorld()->GetTimeSeconds() + FMath::FRandRange(0.0f, ThinkInterval);
 	LastThink = GetWorld()->GetTimeSeconds();
 	bFlanker = InPawn && (InPawn->GetUniqueID() % 3) == 0;
@@ -60,6 +62,8 @@ void ASOEnemyAIController::OnPossess(APawn* InPawn)
 void ASOEnemyAIController::OnUnPossess()
 {
 	USOCombatStatics::OnNoise().Remove(NoiseHandle);
+	USOCombatStatics::OnCharacterHit().Remove(HitHandle);
+	USOCombatStatics::OnCharacterDied().Remove(DiedHandle);
 	Super::OnUnPossess();
 }
 
@@ -96,6 +100,59 @@ void ASOEnemyAIController::OnNoise(UWorld* World, const FVector& Location, AActo
 	{
 		Awareness = FMath::Min(1.0f, Awareness + 0.35f * (1.0f - Dist / Radius) + 0.1f);
 	}
+}
+
+bool ASOEnemyAIController::Notices(const AActor* Mate) const
+{
+	const ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
+	if (!Me || !Mate || Mate == Me)
+	{
+		return false;
+	}
+	const FVector To = Mate->GetActorLocation() - Me->GetActorLocation();
+	const float Dist = static_cast<float>(To.Size());
+	if (Dist < MateFeelRadius)
+	{
+		return true;                                              // close by: the cry, the body going down
+	}
+	// further off: only what it is looking toward, with nothing in between
+	return Dist < Me->SightRange * 1.25f
+		&& FVector::DotProduct(Me->GetActorForwardVector().GetSafeNormal2D(), To.GetSafeNormal2D()) >= FMath::Cos(FMath::DegreesToRadians(PeripheralHalfAngle))
+		&& Clear(GetWorld(), Me->GetPawnViewLocation(), Mate->GetActorLocation() + FVector(0, 0, 50.0f), Me, Mate);
+}
+
+void ASOEnemyAIController::OnHit(ASOCombatCharacter* Victim, AActor* Source, float Amount, UWorld* World)
+{
+	ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
+	ASOCombatCharacter* Shooter = Cast<ASOCombatCharacter>(Source);
+	if (World != GetWorld() || !Me || Me->IsDead() || !Victim || !Shooter || Shooter->IsDead() || !USOCombatStatics::AreHostile(Me, Shooter)
+		|| USOCombatStatics::AreHostile(Me, Victim))
+	{
+		return;
+	}
+	if (Victim == Me)
+	{
+		// It is the one hit: it knows it is in a fight and roughly where the shot came from, from any distance.
+		LastHurtTime = World->GetTimeSeconds();
+		if (!bInCombat)
+		{
+			EnterCombat(Shooter, true);
+			LastSeenTime = FMath::Max(LastSeenTime, World->GetTimeSeconds() - LoseTargetTime * 0.5f);
+		}
+		return;
+	}
+	// A mate was hit (or went down): whoever is close enough to feel it, or is looking that way, is warned. They in
+	// turn are seen reacting by the next (EnterCombat), so it runs through a group in a second or two and stops where
+	// nobody sees anybody.
+	if (!bInCombat && Notices(Victim))
+	{
+		Alert(Shooter, Shooter->GetActorLocation());
+	}
+}
+
+void ASOEnemyAIController::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)
+{
+	OnHit(Victim, Killer, -1.0f, World);                          // (a kill in one shot is still a mate going down in front of them)
 }
 
 float ASOEnemyAIController::SightRate(const ASOCombatCharacter* Other) const
@@ -224,18 +281,24 @@ void ASOEnemyAIController::EnterCombat(ASOCombatCharacter* Other, bool bCryOut)
 	Me->SetAlert(true);
 	bHasCover = false;
 	NextCoverSearch = 0.0f;
-	if (bWasCalm && bCryOut)
+	if (bWasCalm)
 	{
-		Me->Voice(TEXT("alert"), 1.0f);
-		// the squad hears it and joins
+		if (bCryOut)
+		{
+			Me->Voice(TEXT("alert"), 1.0f);
+		}
+		// The squad joins: everyone in earshot when it cries out; when it only turns and raises its gun, whoever
+		// sees it do that (or stands beside it). Each of those is seen in turn, a beat later.
 		for (TActorIterator<ASOEnemy> It(GetWorld()); It; ++It)
 		{
-			if (*It != Me && !It->IsDead() && FVector::Dist(It->GetActorLocation(), Me->GetActorLocation()) < AlertRadius)
+			if (*It == Me || It->IsDead())
 			{
-				if (ASOEnemyAIController* Mate = Cast<ASOEnemyAIController>(It->GetController()))
-				{
-					Mate->Alert(Other, LastKnownLocation);
-				}
+				continue;
+			}
+			ASOEnemyAIController* Mate = Cast<ASOEnemyAIController>(It->GetController());
+			if (Mate && ((bCryOut && FVector::Dist(It->GetActorLocation(), Me->GetActorLocation()) < AlertRadius) || Mate->Notices(Me)))
+			{
+				Mate->Alert(Other, LastKnownLocation);
 			}
 		}
 	}
@@ -243,7 +306,7 @@ void ASOEnemyAIController::EnterCombat(ASOCombatCharacter* Other, bool bCryOut)
 
 void ASOEnemyAIController::Alert(ASOCombatCharacter* Other, const FVector& At)
 {
-	if (bInCombat || !Other)
+	if (bInCombat || !Other || PendingAlertAt >= 0.0f)
 	{
 		return;
 	}
@@ -332,10 +395,12 @@ void ASOEnemyAIController::Think()
 	if (PendingAlertAt >= 0.0f && T >= PendingAlertAt)
 	{
 		PendingAlertAt = -1.0f;
-		if (ASOCombatCharacter* Who = PendingAlertTarget.Get(); Who && !Who->IsDead() && !bInCombat)
+			if (ASOCombatCharacter* Who = PendingAlertTarget.Get(); Who && !Who->IsDead() && !bInCombat)
 		{
 			EnterCombat(Who, false);
 			LastKnownLocation = PendingAlertLocation;
+			// (warned, not yet seeing it: it takes cover from that way and looks, before it goes searching)
+			LastSeenTime = FMath::Max(LastSeenTime, T - LoseTargetTime * 0.5f);
 		}
 	}
 
@@ -661,13 +726,16 @@ void ASOEnemyAIController::ThinkCoverFight(float Dist)
 	const bool bThere = FVector::Dist2D(Me->GetActorLocation(), bPeeking ? PeekPoint : CoverPoint) < 70.0f;
 	if (State == ESOEnemyState::Cover && !bThere)
 	{
-		// moving to cover: shoots on the move if it can
-		Me->SetWantsFire(Me->HasLineOfFire(Foe));
+		// moving to cover: it runs for it. It fires on the way only at something right on top of it (the owner: "they
+		// should ... move from cover to cover then sneak and shoot not just stay in the open or run straight at the user")
+		Me->SetWantsFire(Dist < 700.0f && Me->HasLineOfFire(Foe));
 		return;
 	}
 	State = ESOEnemyState::Fight;
-	// held long enough: move on to another spot (keeps the fight moving, and the flankers swing wider)
-	if (T - CoverTaken > FMath::FRandRange(9.0f, 15.0f))
+	// held long enough: move on to another spot (keeps the fight moving, and the flankers swing wider). Still far
+	// from the range it likes, it holds only a few bursts before the next bound.
+	const bool bFar = !bRetreating && Dist > Me->PreferredRange * RangeBias * 1.2f;
+	if (T - CoverTaken > (bFar ? FMath::FRandRange(3.0f, 5.5f) : FMath::FRandRange(9.0f, 15.0f)))
 	{
 		bHasCover = false;
 		NextCoverSearch = T;
@@ -693,8 +761,30 @@ void ASOEnemyAIController::ThinkAssault(float Dist)
 	const float Range = Me->PreferredRange * RangeBias;
 	if (Dist > Range || !bLine)
 	{
-		// close in (to a line of fire, then the range it likes: each its own, so a squad is not a clump)
-		const EPathFollowingRequestResult::Type R = MoveToActor(Foe, FMath::Max(Range * 0.7f, Me->MeleeRange * 0.5f), true, true, true, nullptr, true);
+		// Close in (to a line of fire, then the range it likes: each its own, so a squad is not a clump), but not
+		// down the line of the gun pointed at it: to a point at that range off to this one's side of the target, so
+		// it comes round in an arc and stops there.
+		EPathFollowingRequestResult::Type R = EPathFollowingRequestResult::Failed;
+		if (UNavigationSystemV1* Nav = NavOf(GetWorld()); Nav && Me->bUsesCover)
+		{
+			if (T < NextRepath)
+			{
+				return;
+			}
+			NextRepath = T + 0.8f;
+			const FVector Away = (Me->GetActorLocation() - Foe->GetActorLocation()).GetSafeNormal2D();
+			const FVector Stand = Foe->GetActorLocation() + Away.RotateAngleAxis(SideBias * 38.0f, FVector::UpVector) * Range * 0.9f;
+			FNavLocation P;
+			if (Nav->ProjectPointToNavigation(Stand, P, FVector(250.0f, 250.0f, 400.0f)))
+			{
+				R = MoveToLocation(P.Location, 60.0f, true, true, false, true);
+				Me->SetWantsFire(bLine && Dist < Range * 1.3f);     // (it shoots once it is nearly there, not the whole way in)
+			}
+		}
+		if (R == EPathFollowingRequestResult::Failed)
+		{
+			R = MoveToActor(Foe, FMath::Max(Range * 0.7f, Me->MeleeRange * 0.5f), true, true, true, nullptr, true);
+		}
 		bUsedNav |= R != EPathFollowingRequestResult::Failed;
 		bDirectChase = R == EPathFollowingRequestResult::Failed;
 		return;
@@ -746,7 +836,12 @@ bool ASOEnemyAIController::FindCover(const FVector& ThreatEye, FVector& OutPoint
 			const FVector Floor = N.Location;
 			const float ToThreat = FVector::Dist2D(Floor, ThreatEye);
 			const float Liked = Me->PreferredRange * RangeBias * (bRetreating ? 1.6f : 1.0f);
-			if (ToThreat < (bRetreating ? 900.0f : 450.0f) || ToThreat > Me->PreferredRange * (bRetreating ? 3.0f : 2.0f))
+			// (far from the range it likes it works its way in: any spot nearer the target than it stands now will do,
+			// so a fight that starts at eighty metres is closed bound by bound, not in one run down the street)
+			const float Here = static_cast<float>(FVector::Dist2D(From, ThreatEye));
+			const bool bAdvance = !bRetreating && Here > Liked * 1.2f;
+			if (ToThreat < (bRetreating ? 900.0f : 450.0f)
+				|| ToThreat > FMath::Max(Me->PreferredRange * (bRetreating ? 3.0f : 2.0f), bAdvance ? Here - 150.0f : 0.0f))
 			{
 				continue;
 			}
@@ -776,7 +871,11 @@ bool ASOEnemyAIController::FindCover(const FVector& ThreatEye, FVector& OutPoint
 					}
 				}
 			}
-			float Score = 6.0f - FMath::Abs(ToThreat - Liked) / 800.0f - FVector::Dist2D(Floor, From) / 700.0f + (bPeek ? 3.0f : -1.5f);
+			float Score = 6.0f - FMath::Min(FMath::Abs(ToThreat - Liked) / 800.0f, 6.0f) - FVector::Dist2D(Floor, From) / 700.0f + (bPeek ? 3.0f : -1.5f);
+			if (bAdvance)
+			{
+				Score += FMath::Clamp((Here - ToThreat) / 500.0f, -2.0f, 3.0f);     // ground made toward it
+			}
 			// falling back: away from the threat, not across its sights
 			if (bRetreating && FVector::Dist2D(From, ThreatEye) > ToThreat)
 			{

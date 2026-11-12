@@ -423,13 +423,27 @@ def zone_terraces(G):
             for s in (-1, 1):
                 o = Vector((-(b - a).y, (b - a).x, 0)).normalized() * s * (w / 2 - 1.5)
                 rk.box(g, "ru_concrete", (p.x + o.x, p.y + o.y, (z - .9) / 2), (.6, .6, (z - .9) / 2))
-    # towers on the outer side, their upper floors flanking the deck
+    # Towers on the outer side, their upper floors flanking the deck. Nothing unseen stops a fall off a deck any
+    # more (the owner, 2026-11-11: a fall costs what it costs, and a jump before the ground saves it): what is under
+    # and round the decks is ground to land on, and these towers, walked into from it, are its edge; what fell or
+    # grew between two of them closes the gaps. The way back up is the ramp (its side walls are low enough to climb
+    # from the yard), or the rubble under the north deck.
+    fe, fn = E + w / 2 + 4.0, Nn + w / 2 + 4.0                        # their fronts: 4 m outside the decks' outer edges
     for i, nn in enumerate(range(-6, 112, 24)):
-        rk.tower(g, gd, (E + w / 2 + 14, nn + 10), 20, 20, rnd.randint(9, 15), yaw=math.pi / 2, seed=520 + i,
-                 style="panel" if i % 2 else "concrete", top=(.55, 1.0), holes=2)
+        rk.tower(g, gd, (fe + 10.0, nn + 10), 20, 20, rnd.randint(9, 15), yaw=math.pi / 2, seed=520 + i,
+                 style="panel" if i % 2 else "concrete", top=(.55, 1.0), holes=2, face=(-1, 0))
+        if i:
+            bk.seal(g, gd, (fe + .9, nn - 4.4), (fe + .9, nn + .4), (1, 0), ("collapse", "growth")[i % 2], 525 + i)
     for i, ee in enumerate(range(26, 92, 24)):
-        rk.tower(g, gd, (ee, Nn + w / 2 + 14), 20, 20, rnd.randint(9, 15), yaw=0.0, seed=540 + i,
-                 style="concrete" if i % 2 else "panel", top=(.55, 1.0), holes=2)
+        rk.tower(g, gd, (ee, fn + 10.0), 20, 20, rnd.randint(9, 15), yaw=0.0, seed=540 + i,
+                 style="concrete" if i % 2 else "panel", top=(.55, 1.0), holes=2, face=(0, -1))
+        if i:
+            bk.seal(g, gd, (ee - 14.4, fn + .9), (ee - 9.6, fn + .9), (0, 1), ("growth", "collapse")[i % 2], 545 + i)
+    # the corner between the two rows, and the yard's south end (from the first tower round to the back of the ring's)
+    bk.run(g, gd, [(fe + .9, 109.6), (fe + .9, fn + .9), (83.6, fn + .9)], "collapse", 550, (130.0, 150.0))
+    bk.run(g, gd, [(fe + .9, -5.6), (fe + .9, -15.0), (66.5, -23.0)], "growth", 552, (110.0, -70.0))
+    # its west side, north of the plaza: from the back of the ring's towers up to the ribs round the Crown
+    bk.run(g, gd, [(-36.0, 58.0), (-41.0, 84.0), (-36.0, 112.0), (-30.6, 146.4)], "growth", 554, (-120.0, 100.0))
     # the city below, inside the loop: low ruins and rubble
     for i in range(8):
         c = (rnd.uniform(52, 66), rnd.uniform(-30, 100))
@@ -494,8 +508,8 @@ def zone_crown(G):
     # the rim balustrade, broken in places, open to the bridge
     for i in range(72):
         a = TAU * i / 72
-        if abs(math.degrees(a) - 270) < 12 or rnd.random() < .12:
-            continue
+        if abs(math.degrees(a) - 270) < 12 or rnd.random() < .12 or min(abs(math.degrees(a) - 216), abs(math.degrees(a) - 324)) < 5.5:
+            continue                                                 # (open to the bridge, and where the two plates lie against it)
         p = (cx + math.cos(a) * (r - .5), cy + math.sin(a) * (r - .5))
         hh = 1.1 if rnd.random() > .15 else rnd.uniform(.3, .8)
         rk.box(g, "ru_concrete", (p[0], p[1], z + hh / 2), (r * TAU / 72 / 2 + .02, .25, hh / 2), a + math.pi / 2, top_mat="ru_metal")
@@ -537,7 +551,28 @@ def zone_crown(G):
     # the ground round the pedestal, far below: scorched rubble
     for i in range(10):
         a = TAU * i / 10 + .3
-        rk.heap(g, (cx + math.cos(a) * (r + 9), cy + math.sin(a) * (r + 9), 0), rnd.uniform(5, 9), rnd.uniform(2, 5), 670 + i)
+        rk.heap(g, (cx + math.cos(a) * (r + 9), cy + math.sin(a) * (r + 9), 0), rnd.uniform(5, 9), rnd.uniform(1.6, 2.6), 670 + i)
+    # A fall off the platform or the bridge lands down here. The hive has closed the place in: ribs of chitin grown
+    # in a ring round the Crown, like a cage round a heart (open to the south, where the ground runs back under the
+    # bridge to the yard below the terraces). Two plates of the broken ring lie against the rim: ways back up.
+    rr = r + 22.0
+    a0, a1 = math.radians(-75.0), math.radians(241.0)
+    n = 40
+    for i in range(n):
+        b0, b1 = a0 + (a1 - a0) * i / n, a0 + (a1 - a0) * (i + 1) / n
+        am = (b0 + b1) / 2
+        bk.growth(g, gd, (cx + math.cos(b0) * rr, cy + math.sin(b0) * rr), (cx + math.cos(b1) * rr, cy + math.sin(b1) * rr),
+                  (math.cos(am), math.sin(am)), 680 + i)
+    for i, deg in enumerate((216.0, 324.0)):
+        a = math.radians(deg)
+        top = (cx + math.cos(a) * (r - 1.0), cy + math.sin(a) * (r - 1.0), z)
+        foot = (cx + math.cos(a) * (r + 17.0), cy + math.sin(a) * (r + 17.0), .25)
+        rk.path_deck(g, "ru_metal", "ru_concrete", [foot, top], 5.2, .7, end_mat="ru_fracture")
+        side = (-math.sin(a), math.cos(a))
+        for sgn in (-1, 1):                                          # a lip each side: what is left of the plate's frame
+            rk.tube(g, "ru_metal", [(foot[0] + side[0] * sgn * 2.6, foot[1] + side[1] * sgn * 2.6, foot[2] + .1),
+                                    (top[0] + side[0] * sgn * 2.6, top[1] + side[1] * sgn * 2.6, top[2] + .1)], .16, 6)
+        rk.heap(g, (foot[0], foot[1], 0), 4.0, 1.0, 690 + i)
 
 
 AMBIENCE = []
@@ -722,41 +757,21 @@ def zone_blockers(G):
             wall(p0, p1)
     south.blockers(g)
     # the ring: its towers and what closes the breaches between them are the plaza's edge; the net is a circle
-    # behind their backs (not across the boulevard's mouth, nor east where the ramp and the decks have their own)
+    # behind their backs, only on the west and south-east (east and north of them is the yard under the terraces)
     seg = 48
     for i in range(seg):
         a0, a1 = TAU * i / seg, TAU * (i + 1) / seg
         am = math.degrees((a0 + a1) / 2)
         rr = 73.0
-        if 236 < am < 304 or am < 12 or am > 348:
+        if am < 127 or 236 < am < 304 or am > 336:
             continue
         wall((math.cos(a0) * rr, math.sin(a0) * rr), (math.cos(a1) * rr, math.sin(a1) * rr))
-    for s in (-1, 1):                                             # from the ramp's side nets round to that circle, under the deck's edge
-        wall((T["east_e"] - T["w"] / 2, s * (Rm["half"] + .4)), (math.cos(math.radians(15)) * 73.0, s * math.sin(math.radians(15)) * 73.0), -1, 7.5)
-    # the ramp's sides, then both edges of the deck loop (the inner one open to the ramp, the outer to the bridge)
-    for s in (-1, 1):
-        wall((math.sqrt(R["ring_in"] ** 2 - Rm["half"] ** 2), s * (Rm["half"] + .4)), (T["east_e"] - T["w"] / 2, s * (Rm["half"] + .4)), -1, T["z"] + 9)
-    E, Nn, w, z = T["east_e"], T["north_n"], T["w"], T["z"]
-    zt = z + 9.0
-    wall((E - w / 2 - .3, T["n0"]), (E - w / 2 - .3, -Rm["half"] - .4), z - 2, zt)
-    wall((E - w / 2 - .3, Rm["half"] + .4), (E - w / 2 - .3, Nn - w / 2 - .3), z - 2, zt)
-    wall((E - w / 2 - .3, Nn - w / 2 - .3), (T["west_e"] - .3, Nn - w / 2 - .3), z - 2, zt)
-    wall((T["west_e"] - .3, Nn - w / 2 - .3), (T["west_e"] - .3, Nn + w / 2 + .3), z - 2, zt)
-    wall((E + w / 2 + .3, T["n0"] - .3), (E + w / 2 + .3, Nn + w / 2 + .3), z - 2, zt)
-    wall((E + w / 2 + .3, Nn + w / 2 + .3), (Br["e"] + Br["half"] + .4, Nn + w / 2 + .3), z - 2, zt)
-    wall((E - w / 2 - .3, T["n0"] - .3), (E + w / 2 + .3, T["n0"] - .3), z - 2, zt)
-    wall((T["west_e"] - .3, Nn + w / 2 + .3), (Br["e"] - Br["half"] - .4, Nn + w / 2 + .3), z - 2, zt)
-    for s in (-1, 1):
-        wall((Br["e"] + s * (Br["half"] + .4), Nn + w / 2 + .3), (Br["e"] + s * (Br["half"] + .4), C["c"][1] - math.sqrt((C["r"] + .4) ** 2 - (Br["half"] + .4) ** 2)), z - 2, zt)
-    # the crown's rim, open to the bridge
-    cx, cy = C["c"]
-    for i in range(seg):
-        a0, a1 = TAU * i / seg, TAU * (i + 1) / seg
-        am = math.degrees((a0 + a1) / 2)
-        if abs(am - 270) < math.degrees(math.asin((Br["half"] + .4) / (C["r"] + .4))):
-            continue
-        rr = C["r"] + .4
-        wall((cx + math.cos(a0) * rr, cy + math.sin(a0) * rr), (cx + math.cos(a1) * rr, cy + math.sin(a1) * rr), z - 2, z + 9)
+    # The ramp, the decks, the bridge and the Crown have NO unseen wall over their balustrades any more: a fall is a
+    # fall. What is left is the net behind the towers that close in the ground under them (their own barriers and
+    # the ribs round the Crown lay theirs).
+    E, Nn, w = T["east_e"], T["north_n"], T["w"]
+    wall((E + w / 2 + 26.5, T["n0"] - 12.0), (E + w / 2 + 26.5, Nn + w / 2 + 26.5))
+    wall((E + w / 2 + 26.5, Nn + w / 2 + 26.5), (14.0, Nn + w / 2 + 26.5))
 
 
 # ------------------------------------------------------------------ actor pieces

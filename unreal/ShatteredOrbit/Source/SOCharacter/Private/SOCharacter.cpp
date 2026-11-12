@@ -167,13 +167,16 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	Flashlight->SetUsingAbsoluteLocation(true);
 	Flashlight->SetUsingAbsoluteRotation(true);
 	Flashlight->SetIntensityUnits(ELightUnits::Candelas);
-	Flashlight->SetIntensity(1400.0f);
-	Flashlight->SetAttenuationRadius(4000.0f);
-	Flashlight->SetInnerConeAngle(12.0f);
-	Flashlight->SetOuterConeAngle(27.0f);
+	// A torch: a hot spot thrown a long way and a soft spill round it (it was a short wide cone hung by the eye, and
+	// read as a bulb carried about).
+	Flashlight->SetIntensity(5200.0f);
+	Flashlight->SetAttenuationRadius(6500.0f);
+	Flashlight->SetInnerConeAngle(7.0f);
+	Flashlight->SetOuterConeAngle(23.0f);
+	Flashlight->SetSourceRadius(1.5f);
 	Flashlight->SetLightColor(FLinearColor(1.0f, 0.95f, 0.86f));
 	Flashlight->SetCastShadows(true);
-	Flashlight->SetVolumetricScatteringIntensity(0.5f);
+	Flashlight->SetVolumetricScatteringIntensity(0.3f);
 	Flashlight->SetVisibility(false);
 }
 
@@ -936,12 +939,27 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	}
 	if (bFlashlightOn)
 	{
-		// from the chest (third person) or just below the eye (first person), along the aim
-		const FRotator Aim = GetControlRotation();
-		const FVector Eye = FirstPersonCamera->GetComponentLocation();
-		const FVector From = IsFirstPersonView() ? Eye + Aim.RotateVector(FVector(10.0f, 14.0f, -16.0f))
-			: GetActorLocation() + GetActorRotation().RotateVector(FVector(22.0f, -14.0f, 42.0f));
-		Flashlight->SetWorldLocationAndRotation(From, Aim);
+		// The torch is on the gun: the beam leaves just ahead of the muzzle, so it lights what the gun points at and
+		// never the gun or the hands holding it (by the eye, the gun stood in its own beam: white, with its shadow over
+		// everything). It is turned onto what the aim is on, so the hot spot sits under the crosshair. No gun in the
+		// hands (stowed on a ledge): from just ahead of the chest.
+		const FRotator Aim = IsLocallyControlled() ? GetControlRotation() : GetBaseAimRotation();
+		const bool bFirst = IsFirstPersonView();
+		const FVector Eye = bFirst ? FirstPersonCamera->GetComponentLocation() : GetPawnViewLocation();
+		const USOGunRigComponent* Rig = Weapon && !bHeldStowed ? (bFirst ? Weapon->GetFirstPersonRig() : Weapon->GetThirdPersonRig()) : nullptr;
+		const FVector From = Rig ? Rig->GetMuzzleLocation() + Aim.RotateVector(FVector(8.0f, 0.0f, -4.0f))
+			: (bFirst ? Eye + Aim.RotateVector(FVector(34.0f, 10.0f, -14.0f)) : GetActorLocation() + GetActorRotation().RotateVector(FVector(34.0f, -14.0f, 42.0f)));
+		FVector On = Eye + Aim.Vector() * 3000.0f;
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOTorch), false, this);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Eye + Aim.Vector() * 60.0f, On, ECC_Visibility, Params))
+		{
+			On = Hit.ImpactPoint;
+		}
+		// (close to a wall the two lines cross steeply: never turn the beam more than a little off the aim)
+		const FVector Dir = (On - From).GetSafeNormal();
+		const FVector Blend = FVector::DotProduct(Dir, Aim.Vector()) > 0.94f ? Dir : Aim.Vector();
+		Flashlight->SetWorldLocationAndRotation(From, Blend.Rotation());
 	}
 	Super::Tick(DeltaSeconds);
 

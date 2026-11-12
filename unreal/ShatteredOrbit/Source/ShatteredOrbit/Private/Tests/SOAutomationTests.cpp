@@ -44,7 +44,7 @@ bool FSOMovementDefaultsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("crouch speed"), Move->MaxWalkSpeedCrouched, 270.0f);
 	TestEqual(TEXT("coyote time"), Move->CoyoteTime, 0.12f);
 	TestEqual(TEXT("jump buffer"), Move->JumpBufferTime, 0.12f);
-	TestEqual(TEXT("mantle min"), Move->MantleMinHeight, 50.0f);
+	TestEqual(TEXT("mantle min"), Move->MantleMinHeight, 46.0f);
 	TestEqual(TEXT("mantle max"), Move->MantleMaxHeight, 245.0f);
 
 	const ASOCharacter* Character = GetDefault<ASOCharacter>();

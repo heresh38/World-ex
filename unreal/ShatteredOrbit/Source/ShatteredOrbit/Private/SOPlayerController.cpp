@@ -294,6 +294,11 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{ TEXT("b6_yard_block"), FVector(10, -1880, 1.7), FVector(-46, -1868, 5) },
 			{ TEXT("b7_alley_room"), FVector(0, -1760, 1.7), FVector(9.5, -1750, 1.6) },
 			{ TEXT("b8_forecourt"), FVector(0, -1625, 1.7), FVector(37, -1630, 5) },
+			// the ground under the terraces and round the Crown, where a fall lands (files e*)
+			{ TEXT("e1_yard"), FVector(58, 44, 1.7), FVector(84, 70, 8) },
+			{ TEXT("e2_under_bridge"), FVector(4, 122, 1.7), FVector(0, 190, 9) },
+			{ TEXT("e3_plate"), FVector(-52, 158, 1.7), FVector(-30, 180, 9) },
+			{ TEXT("e4_ribs"), FVector(20, 236, 11.7), FVector(48, 250, 14) },
 			{ TEXT("m1_approach"), FVector(2, -306, 1.7), FVector(0, -200, 9) },
 			{ TEXT("m2_gate"), FVector(-6, -228, 1.7), FVector(0, -200, 10) },
 			{ TEXT("m3_court"), FVector(10, -192, 2.0), FVector(-4, -140, 4) },

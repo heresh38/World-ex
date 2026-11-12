@@ -257,6 +257,35 @@ bool FSOVaultTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOWindowTest, "ShatteredOrbit.Movement.ThroughAWindow", SOTest::Flags)
+bool FSOWindowTest::RunTest(const FString& Parameters)
+{
+	// A window: a sill with a head over it. Nobody can stand on the sill, so with the jump held it is gone through,
+	// from a walk as well as a run, and whether the opening is tall or only a little over a metre.
+	struct FWindow { float Sill, Head; };
+	for (const FWindow& Win : { FWindow{ 55.0f, 230.0f }, FWindow{ 110.0f, 255.0f }, FWindow{ 125.0f, 245.0f }, FWindow{ 90.0f, 205.0f } })
+	{
+		for (const bool bSprint : { false, true })
+		{
+			SOTest::FTestWorld W;
+			SOTest::Floor(W);
+			W.AddBox(FVector(320, -300, 0), FVector(350, 300, Win.Sill));              // the wall under the sill
+			W.AddBox(FVector(320, -300, Win.Head), FVector(350, 300, 420));              // the wall over the head
+			W.AddBox(FVector(320, -300, 0), FVector(350, -90, 420));                    // and each side of the opening
+			W.AddBox(FVector(320, 90, 0), FVector(350, 300, 420));
+			ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 0));
+			const SOTest::FTraversalRun R = SOTest::RunAt(W, C, bSprint, true, 2.2f);
+			const FString Name = FString::Printf(TEXT("sill %.0f, head %.0f, %s"), Win.Sill, Win.Head, bSprint ? TEXT("at a sprint") : TEXT("at a walk"));
+			if (!TestTrue(Name + TEXT(": gone through as a vault"), R.Kind == ESOTraversal::VaultLow || R.Kind == ESOTraversal::VaultMedium))
+			{
+				continue;
+			}
+			TestTrue(FString::Printf(TEXT("%s: standing inside (x %.0f, feet %.0f)"), *Name, R.EndX, R.EndFeet), R.EndX > 384.0f && FMath::Abs(R.EndFeet) < 4.0f && R.bOnGround);
+		}
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOMovingPlatformTest, "ShatteredOrbit.Movement.MovingPlatform", SOTest::Flags)
 bool FSOMovingPlatformTest::RunTest(const FString& Parameters)
 {
@@ -307,21 +336,55 @@ bool FSOMovingPlatformTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOFallDamageTest, "ShatteredOrbit.Movement.FallDamage", SOTest::Flags)
+bool FSOFallDamageTest::RunTest(const FString& Parameters)
+{
+	// As shipped: a storey costs nothing, a long fall costs a lot, and a jump in the air just before the ground
+	// throws the fall away (the owner: "players can just fall down from anywhere then jump before hitting the ground
+	// so they get no fall damage").
+	float Lost[3] = { 0.0f, 0.0f, 0.0f };
+	float Impact[3] = { 0.0f, 0.0f, 0.0f };
+	const float Heights[3] = { 500.0f, 1600.0f, 1600.0f };
+	for (int32 Case = 0; Case < 3; ++Case)
+	{
+		SOTest::FTestWorld W;
+		SOTest::Floor(W);
+		ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, Heights[Case]));
+		USOCharacterMovementComponent* Move = C->GetSOMovement();
+		Move->OnMovementEvent.AddLambda([&](ESOMovementEvent E, float Strength) { if (E == ESOMovementEvent::Landed && Impact[Case] <= 0.0f) { Impact[Case] = Strength; } });
+		const float Before = C->GetHealth() + C->GetShield();
+		bool bJumped = false;
+		int32 Guard = 0;
+		while (!Move->IsMovingOnGround() && Guard++ < 900)
+		{
+			if (Case == 2 && !bJumped && SOTest::Feet(C) < 280.0f && Move->Velocity.Z < -900.0f)
+			{
+				C->Jump();
+				bJumped = true;
+			}
+			W.Step();
+		}
+		C->StopJumping();
+		Lost[Case] = Before - (C->GetHealth() + C->GetShield());
+	}
+	TestEqual(FString::Printf(TEXT("a 4 m drop (%.0f cm/s) costs nothing"), Impact[0]), Lost[0], 0.0f, 0.01f);
+	TestTrue(FString::Printf(TEXT("a 15 m fall (%.0f cm/s) costs %.0f"), Impact[1], Lost[1]), Lost[1] > 55.0f && Lost[1] < 120.0f);
+	TestEqual(FString::Printf(TEXT("the same fall with an air jump near the ground lands at %.0f cm/s and costs nothing"), Impact[2]), Lost[2], 0.0f, 0.01f);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLandingTest, "ShatteredOrbit.Movement.Landing", SOTest::Flags)
 bool FSOLandingTest::RunTest(const FString& Parameters)
 {
-	// A long fall lands hard: the impact speed is known (camera, sound, the fall damage hook) and the legs take a
-	// moment to get back to speed. Fall damage is off unless a threshold is set.
+	// A long fall lands hard: the impact speed is known (camera, sound, fall damage) and the legs take a moment to get
+	// back to speed. With the threshold at 0 a fall costs nothing; with one set it costs what GetFallDamage says.
 	for (int32 Damage = 0; Damage < 2; ++Damage)
 	{
 		SOTest::FTestWorld W;
 		SOTest::Floor(W);
 		ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 900));
 		USOCharacterMovementComponent* Move = C->GetSOMovement();
-		if (Damage)
-		{
-			Move->FallDamageMinSpeed = 1200.0f;
-		}
+		Move->FallDamageMinSpeed = Damage ? 1200.0f : 0.0f;
 		float Impact = -1.0f;
 		Move->OnMovementEvent.AddLambda([&](ESOMovementEvent E, float Strength) { if (E == ESOMovementEvent::Landed && Impact < 0.0f) { Impact = Strength; } });
 		const float Before = C->GetHealth() + C->GetShield();
@@ -345,7 +408,7 @@ bool FSOLandingTest::RunTest(const FString& Parameters)
 		}
 		else
 		{
-			TestEqual(TEXT("no fall damage by default"), Lost, 0.0f, 0.01f);
+			TestEqual(TEXT("no fall damage with the threshold off"), Lost, 0.0f, 0.01f);
 		}
 	}
 	// an ordinary jump is not a hard landing

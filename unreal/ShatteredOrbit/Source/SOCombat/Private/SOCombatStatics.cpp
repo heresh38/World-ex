@@ -62,6 +62,10 @@ float USOCombatStatics::ApplyDamage(AActor* Source, AActor* Target, float Amount
 	Spec.Data->SetSetByCallerMagnitude(SOTags::SetByCaller_Damage, Amount);
 	Spec.Data->SetSetByCallerMagnitude(SOTags::SetByCaller_Crit, bCrit ? 1.0f : 0.0f);
 	Maker->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
+	if (ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Target); Victim && Source && Source != Target)
+	{
+		OnCharacterHit().Broadcast(Victim, Source, Amount, Target->GetWorld());
+	}
 	return Amount;
 }
 
@@ -79,6 +83,12 @@ bool USOCombatStatics::AreHostile(const AActor* A, const AActor* B)
 FSOOnCharacterDied& USOCombatStatics::OnCharacterDied()
 {
 	static FSOOnCharacterDied Delegate;
+	return Delegate;
+}
+
+FSOOnCharacterHit& USOCombatStatics::OnCharacterHit()
+{
+	static FSOOnCharacterHit Delegate;
 	return Delegate;
 }
 

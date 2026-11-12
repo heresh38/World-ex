@@ -68,6 +68,45 @@ bool FSOSneakTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSquadAlertTest, "ShatteredOrbit.AI.AHitAlertsTheSquad", SOTest::Flags)
+bool FSOSquadAlertTest::RunTest(const FString& Parameters)
+{
+	// One of them is shot from far outside anyone's sight (the owner: "if one is sniped then rest don't do anything").
+	// The one hit knows; a mate that is looking at it is warned, and so is one standing close by with its back turned;
+	// one a long way off looking elsewhere is not. The same when the shot kills outright.
+	for (const bool bKill : { false, true })
+	{
+		SOTest::FTestWorld W;
+		W.AddBox(FVector(-16000, -16000, -100), FVector(16000, 16000, 0));
+		ASOCharacter* Player = W.SpawnCharacter(FVector(-12000, 0, 0));
+		ASORemnant* Hit = SOTest::SpawnCreature<ASORemnant>(W, FVector(0, 0, 0), 0.0f);
+		ASORemnant* Watching = SOTest::SpawnCreature<ASORemnant>(W, FVector(2400, 0, 0), 180.0f);     // 24 m off, facing it
+		ASORemnant* Beside = SOTest::SpawnCreature<ASORemnant>(W, FVector(0, 800, 0), 90.0f);         // 8 m off, back turned
+		ASORemnant* Far = SOTest::SpawnCreature<ASORemnant>(W, FVector(0, -9000, 0), -90.0f);         // 90 m off, back turned
+		if (!TestTrue(TEXT("four remnants"), Hit && Watching && Beside && Far))
+		{
+			return false;
+		}
+		W.Run(1.0f);
+		TestFalse(TEXT("nobody has noticed a player 120 m away"), SOTest::Brain(Hit)->IsInCombat() || SOTest::Brain(Watching)->IsInCombat() || SOTest::Brain(Beside)->IsInCombat());
+		USOCombatStatics::ApplyDamage(Player, Hit, bKill ? 100000.0f : 5.0f, false);
+		W.Run(2.0f);
+		const FString Name = bKill ? TEXT("killed outright") : TEXT("hit");
+		if (bKill)
+		{
+			TestTrue(Name + TEXT(": it is dead"), Hit->IsDead());
+		}
+		else
+		{
+			TestTrue(Name + TEXT(": the one hit is in the fight"), SOTest::Brain(Hit)->IsInCombat() && SOTest::Brain(Hit)->GetTarget() == Player);
+		}
+		TestTrue(Name + TEXT(": the one watching it is in the fight"), SOTest::Brain(Watching)->IsInCombat() && SOTest::Brain(Watching)->GetTarget() == Player);
+		TestTrue(Name + TEXT(": the one beside it is in the fight"), SOTest::Brain(Beside)->IsInCombat());
+		TestFalse(Name + TEXT(": the one 90 m off with its back turned is not"), SOTest::Brain(Far)->IsInCombat());
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOFlashlightTest, "ShatteredOrbit.AI.FlashlightAndFootsteps", SOTest::Flags)
 bool FSOFlashlightTest::RunTest(const FString& Parameters)
 {

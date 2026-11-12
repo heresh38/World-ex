@@ -18,6 +18,7 @@ public:
 };
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FSOOnCharacterDied, ASOCombatCharacter* /*Victim*/, AActor* /*Killer*/, UWorld* /*World*/);
+DECLARE_MULTICAST_DELEGATE_FourParams(FSOOnCharacterHit, ASOCombatCharacter* /*Victim*/, AActor* /*Source*/, float /*Amount*/, UWorld* /*World*/);
 DECLARE_MULTICAST_DELEGATE_FourParams(FSOOnNoise, UWorld* /*World*/, const FVector& /*Location*/, AActor* /*Instigator*/, float /*Radius*/);
 
 UCLASS()
@@ -35,6 +36,9 @@ public:
 
 	/** Fired on the server when a combat character dies (game mode respawns, spawners refill, AI loses targets). */
 	static FSOOnCharacterDied& OnCharacterDied();
+
+	/** Fired on the server whenever a combat character takes damage from someone (whoever saw or felt it reacts). */
+	static FSOOnCharacterHit& OnCharacterHit();
 
 	/** Loud events (gunshots); creatures within Radius hear them. */
 	static FSOOnNoise& OnNoise();

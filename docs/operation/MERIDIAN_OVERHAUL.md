@@ -77,7 +77,7 @@ and the game logs where (`Boundary net touched at E .. N ..`). Check a district'
 | Meridian Gate | the city wall; the court's flanks walked into, collapses between | none known |
 | Boulevard | the lots' towers walked into, every alley closed by a collapse or a grown palisade | none known |
 | Concord Ring | its thirteen towers walked into from the plaza, the breaches between them grown shut (north and west) or fallen in, grown palisades from the two by the ramp to its side walls | none on the ground |
-| Ramp, High Terraces, Crown Bridge, the Crown | NOT converted: a 1 m balustrade with an unseen wall over it, so nobody falls off | all of it. It needs the owner's word on falling: either a fall kills (the Crown as the cap over the root's shaft, the decks over a drop) or the ground under the decks becomes walked ground with ways back up |
+| Ramp, High Terraces, Crown Bridge, the Crown | no unseen wall over any balustrade (the owner: a fall costs what it costs, and a jump before the ground saves it). A fall lands in the yard under the terraces (closed in by eight towers walked into from it, what fell or grew between them, and the backs of the ring's towers) or on the ground round the Crown (a ring of grown ribs, open south to the yard). Ways back up: the ramp's low side walls, the rubble under the north deck, two plates of the broken ring lying against the Crown's rim | none known |
 
 Not checked by anyone playing. Upper storeys: a lid at about 9 m still stops a climber over the estate, the alley, the
 mall and its yards.

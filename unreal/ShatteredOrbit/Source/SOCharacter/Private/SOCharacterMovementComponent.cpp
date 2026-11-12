@@ -694,18 +694,49 @@ bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 		return false;
 	}
 
-	// 2. The top of the ledge: a sphere swept down just beyond the wall face.
+	// 2. The top of the ledge. First how high the face goes: the lowest height above the hit at which the way ahead is
+	//    open (the top of a wall, or a window in one: a probe dropped from above the tallest ledge started inside a
+	//    window's head and found nothing). Then a small sphere dropped from there just beyond the face; a wall can be
+	//    thinner than a body (a building's is 30 cm), so the first few centimetres in are tried before the full depth.
 	const FVector WallNormal2D = WallHit.ImpactNormal.GetSafeNormal2D();
 	const FVector TopXY = WallHit.ImpactPoint - WallNormal2D * (Radius + 6.0f);
-	const FVector DownStart(TopXY.X, TopXY.Y, FeetZ + MaxLedge + Radius + 2.0f);
-	const FVector DownEnd(TopXY.X, TopXY.Y, FeetZ + MantleMinHeight - 2.0f);
+	float OpenZ = -1.0f;
+	for (float Z = static_cast<float>(WallHit.ImpactPoint.Z) + 8.0f; Z <= FeetZ + MaxLedge + 24.0f; Z += 8.0f)
+	{
+		FHitResult Ahead;
+		const FVector Start(Location.X, Location.Y, Z);
+		if (!World->LineTraceSingleByChannel(Ahead, Start, Start + Forward * (WallHit.Distance + 30.0f), Channel, Params, Response))
+		{
+			OpenZ = Z;
+			break;
+		}
+	}
+	if (OpenZ < 0.0f)
+	{
+		return false;                                              // a wall all the way up
+	}
 	FHitResult TopHit;
-	if (!World->SweepSingleByChannel(TopHit, DownStart, DownEnd, FQuat::Identity, Channel, FCollisionShape::MakeSphere(Radius * 0.6f), Params, Response)
-		|| TopHit.bStartPenetrating || !IsWalkable(TopHit))
+	bool bTop = false;
+	for (const float In : { 6.0f, 14.0f, 24.0f, Radius + 6.0f })
+	{
+		const FVector At = WallHit.ImpactPoint - WallNormal2D * In;
+		if (World->SweepSingleByChannel(TopHit, FVector(At.X, At.Y, OpenZ + 6.0f), FVector(At.X, At.Y, FeetZ + MantleMinHeight - 2.0f), FQuat::Identity, Channel,
+				FCollisionShape::MakeSphere(4.0f), Params, Response)
+			&& !TopHit.bStartPenetrating && IsWalkable(TopHit))
+		{
+			bTop = true;
+			break;
+		}
+	}
+	if (!bTop)
 	{
 		return false;
 	}
 	const float LedgeZ = TopHit.ImpactPoint.Z;
+	// (deep enough to stand on? A sill or a thin wall is not: that is gone over or through, never climbed onto)
+	FHitResult Deep;
+	const bool bDeep = World->LineTraceSingleByChannel(Deep, FVector(TopXY.X, TopXY.Y, LedgeZ + 30.0f), FVector(TopXY.X, TopXY.Y, LedgeZ - 14.0f), Channel, Params, Response)
+		&& IsWalkable(Deep);
 	const float LedgeHeight = LedgeZ - FeetZ;
 	if (LedgeHeight < MantleMinHeight || LedgeHeight > MaxLedge)
 	{
@@ -723,7 +754,9 @@ bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 	//    the way we are going until the top ends; then the whole path (up, across, down) must be clear.
 	ESOTraversal Kind = ESOTraversal::None;
 	FVector Target = FVector::ZeroVector;
-	if (LedgeHeight <= VaultMediumMaxHeight && EntrySpeed >= VaultEntrySpeed)
+	auto TryVaultOver = [&]()
+	{
+	if (LedgeHeight <= VaultMediumMaxHeight)
 	{
 		const float Cos = FMath::Max(static_cast<float>(FVector::DotProduct(-WallNormal2D, Forward)), 0.5f);
 		const float ToFace = WallHit.Distance;
@@ -747,11 +780,9 @@ bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 		if (Depth > 0.0f && Depth <= VaultMaxDepth && IsWalkable(FarFloor))
 		{
 			const bool bLow = LedgeHeight <= VaultLowMaxHeight;
-			const float Tuck = bLow ? VaultTuck.X : VaultTuck.Y;
 			const float Approach = FMath::Max(0.0f, ToFace - Radius / Cos - 2.0f);
 			const float Clear = ToFace + Depth + Radius / Cos + 4.0f;       // the capsule is past the far face
 			const float Forth = FMath::Clamp(EntrySpeed * 0.05f, 24.0f, 46.0f); // a step on while coming down
-			const float ApexZ = FMath::Max(static_cast<float>(LedgeZ) + HalfHeight - Tuck + 6.0f, static_cast<float>(Location.Z));
 			const FVector Land = Location + Forward * (Clear + Forth);
 			FHitResult LandFloor;
 			const bool bFloor = World->LineTraceSingleByChannel(LandFloor, FVector(Land.X, Land.Y, LedgeZ + 25.0f), FVector(Land.X, Land.Y, FeetZ - VaultMaxDrop), Channel, Params, Response)
@@ -759,15 +790,28 @@ bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 			if (bFloor)
 			{
 				const FVector End(Land.X, Land.Y, LandFloor.ImpactPoint.Z + HalfHeight + 2.0f);
-				// (the legs tuck: the corridor is checked for the upper body, the landing for the whole of it)
-				const FCollisionShape Upper = FCollisionShape::MakeCapsule(Radius - 2.0f, FMath::Max(HalfHeight - Tuck * 0.5f - 2.0f, Radius));
-				const FVector Up(0.0f, 0.0f, Tuck * 0.5f);
-				const FVector Above(Location.X, Location.Y, ApexZ);
-				const FVector Past = Location + Forward * Clear;
-				const FVector PastAbove(Past.X, Past.Y, ApexZ);
-				const bool bClear = !(ApexZ > Location.Z + 1.0f && Blocked(Location + Up, Above + Up, Upper))
-					&& !Blocked(Above + Up, PastAbove + Up, Upper) && !Blocked(PastAbove + Up, End + Up, Upper)
-					&& !World->OverlapBlockingTestByChannel(End, FQuat::Identity, Channel, Shape, Params, Response);
+				// (the legs tuck: the corridor is checked for the upper body, the landing for the whole of it. An
+				// opening with a head over it, a window, takes a tighter fold: each is tried from the loosest.)
+				const float Tucks[] = { bLow ? VaultTuck.X : VaultTuck.Y, FMath::Max(VaultTuck.X, VaultTuck.Y), VaultDiveTuck };
+				bool bClear = false;
+				float ApexZ = 0.0f;
+				for (const float Tuck : Tucks)
+				{
+					// (the body rides lower through a low opening: it does not rise to a height it cannot pass at)
+					ApexZ = FMath::Max(static_cast<float>(LedgeZ) + HalfHeight - Tuck + 6.0f, FMath::Min(static_cast<float>(Location.Z), static_cast<float>(LedgeZ) + HalfHeight - Tuck + 40.0f));
+					const FCollisionShape Upper = FCollisionShape::MakeCapsule(Radius - 2.0f, FMath::Max(HalfHeight - Tuck * 0.5f - 2.0f, Radius - 2.0f));
+					const FVector Up(0.0f, 0.0f, Tuck * 0.5f);
+					const FVector Above(Location.X, Location.Y, ApexZ);
+					const FVector Past = Location + Forward * Clear;
+					const FVector PastAbove(Past.X, Past.Y, ApexZ);
+					bClear = !(FMath::Abs(ApexZ - static_cast<float>(Location.Z)) > 1.0f && Blocked(Location + Up, Above + Up, Upper))
+						&& !Blocked(Above + Up, PastAbove + Up, Upper) && !Blocked(PastAbove + Up, End + Up, Upper)
+						&& !World->OverlapBlockingTestByChannel(End, FQuat::Identity, Channel, Shape, Params, Response);
+					if (bClear)
+					{
+						break;
+					}
+				}
 				if (bClear)
 				{
 					Kind = bLow ? ESOTraversal::VaultLow : ESOTraversal::VaultMedium;
@@ -787,6 +831,15 @@ bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 			}
 		}
 	}
+	};
+	// Met at speed it is vaulted. Slower, with the button, it is climbed onto, unless there is nowhere to stand up
+	// there: an opening with a head over it (a window, a hole in a wall) is gone THROUGH at any speed (the owner:
+	// "allow the user to vault into open spaces like a opening or a window that is open").
+	const bool bFast = EntrySpeed >= VaultEntrySpeed;
+	if (bFast)
+	{
+		TryVaultOver();
+	}
 	if (Kind == ESOTraversal::None)
 	{
 		if (bVaultOnly)
@@ -794,25 +847,33 @@ bool USOCharacterMovementComponent::TryMantle(bool bVaultOnly)
 			return false;
 		}
 		// 4. Onto it: the standing capsule fits on top, and the path (in to the face, up along it, then over) is clear.
-		Kind = LedgeHeight > MantleMaxHeight ? ESOTraversal::Climb : ESOTraversal::Mantle;
-		Target = FVector(TopXY.X, TopXY.Y, LedgeZ + HalfHeight + 2.0f);
-		if (World->OverlapBlockingTestByChannel(Target, FQuat::Identity, Channel, Shape, Params, Response))
-		{
-			return false;
-		}
+		const FVector OnTop(TopXY.X, TopXY.Y, LedgeZ + HalfHeight + 2.0f);
 		// (the body closes in on the face first: the hands reach the edge and the rise is against the wall)
 		const float FaceCos = FMath::Max(static_cast<float>(FVector::DotProduct(-WallNormal2D, Forward)), 0.5f);
 		const FVector Near = Location + Forward * FMath::Max(0.0f, WallHit.Distance - Radius / FaceCos - 3.0f);
-		const FVector Raised(Near.X, Near.Y, Target.Z);
-		if (Blocked(Location, Near, Shape) || Blocked(Near, Raised, Shape) || Blocked(Raised, Target, Shape))
+		const FVector Raised(Near.X, Near.Y, OnTop.Z);
+		if (!bDeep || World->OverlapBlockingTestByChannel(OnTop, FQuat::Identity, Channel, Shape, Params, Response)
+			|| Blocked(Location, Near, Shape) || Blocked(Near, Raised, Shape) || Blocked(Raised, OnTop, Shape))
 		{
-			return false;
+			if (!bFast)
+			{
+				TryVaultOver();
+			}
+			if (Kind == ESOTraversal::None)
+			{
+				return false;
+			}
 		}
+		else
+		{
+		Kind = LedgeHeight > MantleMaxHeight ? ESOTraversal::Climb : ESOTraversal::Mantle;
+		Target = OnTop;
 		MantleNear = Near;
 		const float Fast = FMath::Clamp(EntrySpeed / FMath::Max(SprintSpeed, 1.0f), 0.0f, 1.0f);
 		MantleDuration = Kind == ESOTraversal::Climb
 			? ClamberBaseTime + ClamberTimePerMeter * (LedgeHeight / 100.0f)   // a climb: no speed carried into it
 			: (MantleBaseTime + MantleTimePerMeter * (LedgeHeight / 100.0f)) * FMath::Lerp(1.0f, MantleFastTimeScale, Fast);
+		}
 	}
 
 	if (Kind == ESOTraversal::VaultLow || Kind == ESOTraversal::VaultMedium)

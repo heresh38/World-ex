@@ -88,6 +88,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|AI")
 	float AlertRadius = 3000.0f;
 
+	/** A squad mate hit or killed this close is felt without being looked at (the cry, the body going down) (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|AI")
+	float MateFeelRadius = 1300.0f;
+
 	/** An operation's wave creature: it knows where the nearest player is and never gives up. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|AI")
 	bool bHunter = false;
@@ -149,6 +153,12 @@ protected:
 	void Wander();
 	void CheckStuck(float DeltaSeconds);
 	void OnNoise(UWorld* World, const FVector& Location, AActor* NoiseInstigator, float Radius);
+	/** Somebody was hit (or, with Amount < 0, killed). If it is this one, it knows who; if it is a mate this one sees
+	 * or stands near, it is warned; a mate that reacts is seen by the next (EnterCombat passes it on). */
+	void OnHit(ASOCombatCharacter* Victim, AActor* Source, float Amount, UWorld* World);
+	void OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World);
+	/** Does this one notice what just happened to Mate (near enough to feel it, or in view)? */
+	bool Notices(const AActor* Mate) const;
 	ASOCombatCharacter* NearestPlayer() const;
 	/** Foe has its sights on this creature (a player's aim within a few degrees). */
 	bool AimedAt(const ASOCombatCharacter* Foe) const;
@@ -210,4 +220,6 @@ protected:
 	bool bUsedNav = false;
 	bool bDirectChase = false;
 	FDelegateHandle NoiseHandle;
+	FDelegateHandle HitHandle;
+	FDelegateHandle DiedHandle;
 };

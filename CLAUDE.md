@@ -231,8 +231,9 @@ its other sides), `boundskit.py` = what closes every gap (`containers`, `twall`,
 over 7.7 m, no ledge under that; `run` for a polyline). `MR_blockers` is only a net BEHIND them, laid last, tagged
 `SONet`: `ASOCharacter::MoveBlockedBy` logs `Boundary net touched at ...` (every touch is a leak to close). Draw a
 district's edge as a plan before importing: `SO_BOUNDS_DEBUG=x.json` on a `--noexport` build (status per district in
-MERIDIAN_OVERHAUL.md; the ramp, the terraces' decks, the bridge and the Crown still have an unseen wall over their
-balustrades: that waits on the owner's word about falling).
+MERIDIAN_OVERHAUL.md). The ramp, the decks, the bridge and the Crown have NO unseen wall: a fall lands in the yard
+under the terraces or on the ground round the Crown (closed in by walked-into towers and a ring of grown ribs), and
+the ways back up are the ramp's low sides, the rubble under the north deck and two plates lying against the Crown's rim.
 **What is drawn is not what collides** (the cause of "the enemy can shoot through walls / get stuck in walls and
 rocks"): a Nanite mesh's collision is built from its simplified fallback (the Crown kept 3% of its triangles, even
 the invisible walls lost half), so shots, creatures and the nav mesh went through what was drawn. Every zone now
@@ -273,7 +274,15 @@ buffered jump, variable jump height (letting go cuts the rise: "jump held" = `Se
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
 measured from the obstacle (`ESOTraversal`: low / medium vault over a thin obstacle met at speed, automatic at a sprint;
 mantle onto a ledge; climb): one path checked for room, relative to what is climbed (moving platforms), speed kept.
-Landing keeps the impact speed (heavy landings recover, `FallDamageMinSpeed` is the fall damage hook, off by default).
+Landing keeps the impact speed (heavy landings recover). Fall damage is ON (the owner, 2026-11-11: a fall costs, and
+a jump in the air before the ground saves it): `FallDamageMinSpeed` 1650 cm/s (about 7 m: free below that, a 10 m deck
+costs a third of a bar, 24 m kills), `FallDamagePerSpeed` .11; an air jump sets the vertical speed, so the landing after
+it is only as hard as the little way down from there (`ShatteredOrbit.Movement.FallDamage`). So nothing unseen stops a
+fall anywhere: what is under a deck is ground to land on, with a way back up.
+A window is gone THROUGH (`ShatteredOrbit.Movement.ThroughAWindow`): the ledge's top is found by where the way ahead
+opens above the hit (never by a probe dropped from above: that started inside a window's head) and a few centimetres
+in (a building's wall is 30 cm, thinner than a body); a ledge nobody can stand on (a sill, a thin wall) is vaulted at
+any speed with the jump held, folding as far as `VaultDiveTuck` when the head is low (openings from about 1.05 m).
 `GetMovementState()` / `OnMovementStateChanged` / `OnMovementEvent` are the ONE place animation, sound, camera and
 effects listen to: a new ability adds a custom mode, a state and its events there. `ASOCharacter::HandleMovementEvent`
 plays the sounds (`move_*`, `footstep_<surface>_<n>` picked by `GetFloorSurface` from the floor's material names:
@@ -313,14 +322,24 @@ badly hurt it falls back to cover further off and stays down longer (`bRetreatin
 sight half the squad pushes to where it was, the flankers round its side (`Push`), the rest hold and follow; claws
 come in round the sides (`SideBias`), everyone keeps its own distance (`RangeBias`). A hunter knows where the players
 are but aims and fires only at what it sees; `HasLineOfFire` is the bullet's own trace, fat, and stops behind a mate.
-Tests `ShatteredOrbit.AI.NoShotsThroughWalls`. Shots on an unaware creature hit harder (ambush). Voices
+A hit is news (`USOCombatStatics::OnCharacterHit`, `OnCharacterDied` -> `ASOEnemyAIController::OnHit`): the one hit
+knows from any distance; a mate that is looking at it (`Notices`: in view, nothing between) or stands within
+`MateFeelRadius` is warned, and each one that reacts is noticed in turn by the next (`EnterCombat` passes it on a beat
+later), so a sniped sentry wakes its group and nobody beyond sight (the owner: "if one is sniped then rest don't do
+anything"). Every armed creature fights from cover to cover, the Remnant too: far from the range it likes it takes
+any cover nearer the target than it stands (`FindCover` bAdvance) and holds a few bursts before the next bound; it
+does not fire while running between two covers unless the target is on top of it; with nowhere to hide it comes
+round in an arc to a point at its range, never down the line of the gun (`ThinkAssault`).
+Tests `ShatteredOrbit.AI.NoShotsThroughWalls`, `ShatteredOrbit.AI.AHitAlertsTheSquad`. Shots on an unaware creature hit harder (ambush). Voices
 per creature from `sfx_synth.py` (`<set>_idle/query/alert/hurt/death_N`). Operation waves: the first of a stage is an
 unaware garrison (`hunt: false`), later ones hunt. Spawns land on the nav mesh where the capsule fits; L_Meridian's nav
 mesh is bounded to the walkable route per zone (one big volume ran out of tiles in the towers).
 The base is alive: grown chitin barricades round every post (`ruinkit.alien_barricade`, real cover), hive growths with
 egg pods (`hive_growth`, `pod`, texture `ru_hive`), the Choir's spires (`alien_spire`), cables of light; the violet glow
 breathes (`M_SOGlowPulse`); `ASOAmbience` loops (`amb_alien_hum`, `amb_hive`, `amb_alien_chorus`) and drifting spores.
-Player: flashlight (F / right stick; `ASOCharacter::SetFlashlight`), clamber (ledges 2.45-3.8 m: a hang and pull up,
+Player: flashlight (F / right stick; `ASOCharacter::SetFlashlight`: a torch on the gun: the beam leaves just ahead of
+the muzzle and is turned onto what the crosshair is on, a hot spot and a soft spill; by the eye the gun stood in its own
+beam), clamber (ledges 2.45-3.8 m: a hang and pull up,
 `ClamberMaxHeight`), footsteps the creatures hear. Loot lands on the ground (traced on the world only) and drops in.
 Tests `ShatteredOrbit.Altered.*`, `ShatteredOrbit.AI.*`; pictures `SOCaptureSeries 1 9` on L_Meridian (logs the nav path).
 Reward sets: the owner's concept sheets in `art/reference/operation/`. The Void Requiem guns (plan ids `vr_*`, set

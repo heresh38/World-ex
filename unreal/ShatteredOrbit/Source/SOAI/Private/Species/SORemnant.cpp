@@ -32,7 +32,7 @@ ASORemnant::ASORemnant(const FObjectInitializer& ObjectInitializer)
 	WeaponDamageScale = 0.3f;
 	AimError = 95.0f;
 	PreferredRange = 800.0f;
-	bUsesCover = false;
+	bUsesCover = true;                                             // (it closes fast, but from cover to cover: never in one run at the gun)
 	BurstTime = FVector2D(0.4f, 0.9f);
 	BurstPause = FVector2D(0.5f, 1.1f);
 	StartMaxHealth = 80.0f;
