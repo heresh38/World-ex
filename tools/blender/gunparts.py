@@ -887,3 +887,319 @@ def gas_block(P, y, L, zb, zt, m, r=.0135, pin_m=None):
     P.append(tube_('gas_stub', y + .004, y - L - .006, .0062, m, zt, n=20))
     P.append(lathe('gas_plug', [(y - L - .006, 0), (y - L - .006, .0052), (y - L - .012, .0052), (y - L - .014, .0036), (y - L - .014, 0)], pin_m or m, zt, 0, 6, sharp=20))
     P.append(K.cylx('gas_pin', .0022, r * 2 + .003, (0, y - L * .5, zb - r * .45), pin_m or m, 12, .0004))
+
+
+def _body_shell(self, P, name, m, ya, yb, a0, a1, t=.0026, d=0.0, mirror=True, ch=.0016, base=-.0028, ny=None, na=None, side=1, closed=False):
+    """An armour shell / raised panel over the patch ya > yb, a0 < a1: t proud of the surface (offset d), its edges
+    chamfered. Open underneath with a skirt down to `base`, or `closed` = a real plate with an inner face (a handguard
+    shell seen from inside through a vent). mirror = the same on the right flank; else `side` picks one."""
+    ny = ny or max(int((ya - yb) / .007), 2); na = na or max(int((a1 - a0) / .13), 2)
+    ys = [ya, ya - ch] + [ya - ch + (yb - ya + 2 * ch) * i / ny for i in range(1, ny)] + [yb + ch, yb]
+    ca = min(ch / .03, (a1 - a0) * .2)
+    an = [a0, a0 + ca] + [a0 + ca + (a1 - a0 - 2 * ca) * j / na for j in range(1, na)] + [a1 - ca, a1]
+    R, Cn = len(ys), len(an)
+    loop = [(0, j) for j in range(Cn)] + [(i, Cn - 1) for i in range(1, R)] + [(R - 1, j) for j in range(Cn - 2, -1, -1)] + [(i, 0) for i in range(R - 2, 0, -1)]
+    for sg in ((1, -1) if mirror else (side,)):
+        Vv = []; F = []
+        for i, y in enumerate(ys):
+            for j, a in enumerate(an):
+                x, yy, z = self.pt(y, a, d + (t * .42 if (i in (0, R - 1) or j in (0, Cn - 1)) else t))
+                Vv.append((sg * x, yy, z))
+        for i in range(R - 1):
+            for j in range(Cn - 1):
+                F.append((i * Cn + j, i * Cn + j + 1, (i + 1) * Cn + j + 1, (i + 1) * Cn + j))
+        k0 = len(Vv)
+        n = len(loop)
+        if closed:
+            for i, y in enumerate(ys):
+                for j, a in enumerate(an):
+                    x, yy, z = self.pt(y, a, d + base)
+                    Vv.append((sg * x, yy, z))
+            for i in range(R - 1):
+                for j in range(Cn - 1):
+                    F.append((k0 + i * Cn + j, k0 + i * Cn + j + 1, k0 + (i + 1) * Cn + j + 1, k0 + (i + 1) * Cn + j))
+            for q in range(n):
+                p0 = loop[q][0] * Cn + loop[q][1]; p1 = loop[(q + 1) % n][0] * Cn + loop[(q + 1) % n][1]
+                F.append((p0, p1, k0 + p1, k0 + p0))
+        else:
+            for i, j in loop:
+                x, yy, z = self.pt(ys[i], an[j], d + base)
+                Vv.append((sg * x, yy, z))
+            for q in range(n):
+                F.append((loop[q][0] * Cn + loop[q][1], loop[(q + 1) % n][0] * Cn + loop[(q + 1) % n][1], k0 + (q + 1) % n, k0 + q))
+        P.append(mk(name, Vv, F, m, 40))
+
+
+def _body_skin(self, P, m, name='skin', d=0.0, step=.006, n=36, caps=True, cuts=()):
+    """The body itself as one closed loft (offset d from its surface), a ring every `step` along it.
+    cuts = [(ya, yb, a0, a1, depth)]: grooves cut BELOW the surface on both flanks (grasping serrations): from ya
+    forward to yb, between the flank angles a0 < a1, their walls a hair off square."""
+    a, b = self.y0, self.y1
+    k = max(int(abs(b - a) / step), 2)
+    ys = [a + (b - a) * i / k for i in range(k + 1)]
+    e = .0003
+    for ya, yb, a0, a1, dep in cuts:
+        ys = [y for y in ys if not (yb - 2 * e < y < ya + 2 * e)] + [ya + e, ya, yb, yb - e]
+    ys.sort(reverse=a > b)
+
+    def off(y, ang):
+        al = ang if ang <= math.pi else ang - 2 * math.pi
+        fl = al if abs(al) <= math.pi / 2 else (math.pi - al if al > 0 else -math.pi - al)
+        for ya, yb, a0, a1, dep in cuts:
+            if yb - 1e-9 <= y <= ya + 1e-9 and a0 <= fl <= a1:
+                return d - dep
+        return d
+    Vv = []; F = []
+    for y in ys:
+        for j in range(n):
+            ang = 2 * math.pi * j / n
+            Vv.append(self.pt(y, ang, off(y, ang)))
+    k = len(ys) - 1
+    for i in range(k):
+        for j in range(n):
+            q = (j + 1) % n
+            F.append((i * n + j, i * n + q, (i + 1) * n + q, (i + 1) * n + j))
+    if caps:
+        F += [tuple(range(n)), tuple(range(k * n, (k + 1) * n))]
+    P.append(mk(name, Vv, F, m, 40))
+
+
+def _body_checker(self, P, name, m, ya, yb, a0, a1, nu=14, nv=12, h=.0007, d=0.0, mirror=True, side=1):
+    """Cut checkering lying ON the body's surface over the patch (ya..yb, a0..a1): nu x nv small pyramids on a
+    closed backing that follows the curve."""
+    rim = [(i, 0) for i in range(nu)] + [(nu, j) for j in range(nv)] + [(nu - i, nv) for i in range(nu)] + [(0, nv - j) for j in range(nv)]
+    for sg in ((1, -1) if mirror else (side,)):
+        Vv = []; F = []
+
+        def at(u, v, dd):
+            x, y, z = self.pt(ya + (yb - ya) * u, a0 + (a1 - a0) * v, dd)
+            return (sg * x, y, z)
+        for i in range(nu):
+            for j in range(nv):
+                k = len(Vv)
+                for u, v in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)):
+                    Vv.append(at(u / nu, v / nv, d))
+                Vv.append(at((i + .5) / nu, (j + .5) / nv, d + h))
+                F += [(k, k + 1, k + 4), (k + 1, k + 2, k + 4), (k + 2, k + 3, k + 4), (k + 3, k, k + 4)]
+        k0 = len(Vv)
+        for i in range(nu + 1):
+            for j in range(nv + 1):
+                Vv.append(at(i / nu, j / nv, d - .0012))
+        for i in range(nu):
+            for j in range(nv):
+                F.append((k0 + i * (nv + 1) + j, k0 + i * (nv + 1) + j + 1, k0 + (i + 1) * (nv + 1) + j + 1, k0 + (i + 1) * (nv + 1) + j))
+        k1 = len(Vv)
+        for i, j in rim:
+            Vv.append(at(i / nu, j / nv, d))
+        n = len(rim)
+        for q in range(n):
+            r = (q + 1) % n
+            F.append((k1 + q, k1 + r, k0 + rim[r][0] * (nv + 1) + rim[r][1], k0 + rim[q][0] * (nv + 1) + rim[q][1]))
+        P.append(mk(name, Vv, F, m, 30))
+
+
+def _body_af(self, f, y=None):
+    """The angle round the section at the height fraction f of its flank (-1 the belly's edge .. 1 the top's)."""
+    p = self.sec((self.y0 + self.y1) / 2 if y is None else y)[3]
+    return math.copysign(math.asin(min(abs(f), 1.0) ** (p / 2)), f)
+
+
+Body.shell = _body_shell
+Body.skin = _body_skin
+Body.checker = _body_checker
+Body.af = _body_af
+
+
+class Limb(Body):
+    """A body lofted down a raked axis (a pistol grip): secs = [(b, a_front, a_back, half width[, p])], b = the distance
+    down the grip, a = across it (+ = rear), in the frame gp(ang, y, z). A point is (b, angle, d) as on a Body: angle
+    0 = the left flank's middle, pi / 2 = the back strap, -pi / 2 = the front strap."""
+
+    def __init__(self, secs, ang, y=0.0, z=0.0):
+        Body.__init__(self, [(s[0], s[1], s[2], s[3], s[4] if len(s) > 4 else 2.8) for s in secs])
+        self.g = gp(ang, y, z)
+
+    def pt(self, b, a, d=0.0):
+        x, bb, aa = Body.pt(self, b, a, d)
+        yy, zz = self.g(aa, bb)
+        return (x, yy, zz)
+
+
+# ------------------------------------------------------------------ revolver frames, cylinders, checkering anywhere
+def _cc(A, it):
+    """Corner cutting on a CLOSED loop of rows (any dimension)."""
+    A = np.asarray(A, float)
+    for _ in range(it):
+        B = np.roll(A, -1, axis=0)
+        out = np.empty((len(A) * 2, A.shape[1]))
+        out[0::2] = A * .75 + B * .25
+        out[1::2] = A * .25 + B * .75
+        A = out
+    return A
+
+
+def ring_frame(name, st, m, it=2, coarse=False, ch=.0008, ro=.0018, segs=3, sharp=40):
+    """A revolver frame as ONE closed loft round its cylinder window: stations round the window, each
+    (yi, zi, yo, zo, hw_in[, hw_mid, hw_out, t_mid, hw_in_right]) = a point of the window edge, the point of the
+    outline it runs out to, and the half width at the window, part way out and at the outline (a recoil shield is
+    wide at the window and narrow behind; the right side may differ: a loading cut). A curve is drawn through the
+    stations (three in a line keep an edge straight, a station at a corner makes it a tight one); the window edge
+    is chamfered, the outline rounded. coarse = flat flanks (fewer rows across them)."""
+    rows_ = []
+    for s in st:
+        h0 = s[4]; h1 = s[5] if len(s) > 5 else h0; h2 = s[6] if len(s) > 6 else h1
+        rows_.append([s[0], s[1], s[2], s[3], h0, h1, h2, s[7] if len(s) > 7 else .4, s[8] if len(s) > 8 else h0])
+    A = _cc(rows_, it)
+
+    def sm(u):
+        u = min(max(u, 0.0), 1.0)
+        return u * u * (3 - 2 * u)
+    Vv = []; F = []; n = 0
+    for yi, zi, yo, zo, h0, h1, h2, tm, h0r in A:
+        L = math.hypot(yo - yi, zo - zi)
+        ct = min(ch / L, .2); r_ = min(ro, h2 * .6); rt = min(r_ / L, .35)
+
+        def half(hin):
+            pts = [(0.0, hin - ch)]
+            ta = tm * .45                                            # the width at the window holds this far (a boss)
+            for u in ((0.0, ta, tm, 1.0) if coarse else (0.0, ta, ta + (tm - ta) / 3, ta + (tm - ta) * 2 / 3, tm, (tm + 1) / 2, 1.0)):
+                hw = hin if u <= ta else hin + (h1 - hin) * sm((u - ta) / (tm - ta)) if u < tm else h1 + (h2 - h1) * sm((u - tm) / (1 - tm))
+                pts.append((ct + (1 - rt - ct) * u, hw))
+            for k in range(1, segs + 1):
+                a = math.pi / 2 * k / segs
+                pts.append((1 - rt + rt * math.sin(a), h2 - r_ + r_ * math.cos(a)))
+            return pts
+        loop = half(h0) + [(t, -x) for t, x in half(h0r)[::-1]]
+        n = len(loop)
+        Vv += [(x, yi + (yo - yi) * t, zi + (zo - zi) * t) for t, x in loop]
+    N = len(A)
+    for i in range(N):
+        i2 = (i + 1) % N
+        for j in range(n):
+            k = (j + 1) % n
+            F.append((i * n + j, i * n + k, i2 * n + k, i2 * n + j))
+    return mk(name, Vv, F, m, sharp)
+
+
+def drum(name, y0, y1, r, m, z, x=0.0, n=144, flutes=6, fl_w=.0066, fl_d=.0028, fl_end=None, fl_r=.007, notch=None, ch=.0008,
+         holes=None, hub=.0048, sharp=35, nh=20):
+    """A revolver cylinder as one closed mesh (y0 the rear face > y1 the front face): flutes milled between the
+    chambers from the front back to fl_end (fl_w half width, fl_d deep, running out over fl_r like the end of a ball
+    cutter), stop notches notch = (y rear, y front, first sample past the middle of a flute, samples wide, depth), and
+    real chambers holes = (circle radius, bore radius, depth, mouth chamfer) open at the front face. The middle of a
+    flute is at angle 0 and every 360 / flutes degrees; the chambers lie half way between."""
+    sec = n // flutes; dth = TAU / n
+    Rc = fl_w ** 2 / (2 * fl_d) if fl_d > 0 else 1.0
+    fl_end = y1 if fl_end is None else fl_end
+
+    def R(j, y):
+        rr = r
+        if fl_d > 0 and y < fl_end:
+            q = j % sec; dq = min(q, sec - q)
+            e = (y - (fl_end - fl_r)) / fl_r
+            cut = fl_d * (math.sqrt(max(1 - e * e, 0.0)) if e > 0 else 1.0) - (r * dq * dth) ** 2 / (2 * Rc)
+            if cut > 0:
+                rr -= cut
+        if notch and notch[1] - 1e-9 <= y <= notch[0] + 1e-9 and (j - notch[2]) % sec < notch[3]:
+            rr -= notch[4]
+        return rr
+    ys = [y0, y0 - ch, y1 + ch, y1]
+    if notch:
+        ys += [notch[0] + .0004, notch[0], notch[1], notch[1] - .0004]
+    if fl_d > 0:
+        ys += [fl_end - fl_r * (1 - math.cos(math.pi / 2 * k / 6)) for k in range(7)]
+    ys = sorted(set(round(v, 6) for v in ys if y1 - 1e-9 <= v <= y0 + 1e-9), reverse=True)
+    Vv = []; F = []
+    for i, y in enumerate(ys):
+        e = ch if i in (0, len(ys) - 1) else 0.0
+        for j in range(n):
+            rr = R(j, y) - e; a = j * dth
+            Vv.append((x + rr * math.cos(a), y, z + rr * math.sin(a)))
+    for i in range(len(ys) - 1):
+        for j in range(n):
+            k = (j + 1) % n
+            F.append((i * n + j, i * n + k, (i + 1) * n + k, (i + 1) * n + j))
+    F.append(tuple(range(n)))
+    base = (len(ys) - 1) * n
+    if not holes:
+        F.append(tuple(range(base, base + n)))
+        return mk(name, Vv, F, m, sharp)
+    rc, rh, depth, mouth = holes
+    hubn = flutes * 4; mr = 2
+    hub0 = len(Vv)
+    for k in range(hubn):
+        a = TAU * k / hubn
+        Vv.append((x + hub * math.cos(a), y1, z + hub * math.sin(a)))
+    F.append(tuple(range(hub0, hub0 + hubn)))
+    rad = []
+    for k in range(flutes):
+        j = k * sec; a = j * dth; ro_ = R(j, y1) - ch
+        ids = []
+        for q in range(1, mr + 1):
+            rr = hub + (ro_ - hub) * q / (mr + 1)
+            ids.append(len(Vv)); Vv.append((x + rr * math.cos(a), y1, z + rr * math.sin(a)))
+        rad.append(ids)
+    for k in range(flutes):
+        k2 = (k + 1) % flutes
+        Bd = [base + (k * sec + q) % n for q in range(sec + 1)] + rad[k2][::-1] + [hub0 + (4 * (k + 1) - q) % hubn for q in range(5)] + rad[k]
+        ac = (k + .5) * TAU / flutes
+        cx, cz = x + rc * math.cos(ac), z + rc * math.sin(ac)
+        Bf = []
+        for v in Bd:
+            a = math.atan2(Vv[v][2] - cz, Vv[v][0] - cx)
+            while Bf and a < Bf[-1] - math.pi:
+                a += TAU
+            Bf.append(a)
+        q0 = int(math.ceil((Bf[0] % TAU) / (TAU / nh))) % nh
+        H0 = len(Vv)
+        for rr, yy in ((rh + mouth, y1), (rh, y1 + mouth), (rh, y1 + depth)):
+            for q in range(nh):
+                a = TAU * (q0 + q) / nh
+                Vv.append((cx + rr * math.cos(a), yy, cz + rr * math.sin(a)))
+        for i in range(2):
+            for q in range(nh):
+                q2 = (q + 1) % nh
+                F.append((H0 + i * nh + q, H0 + i * nh + q2, H0 + (i + 1) * nh + q2, H0 + (i + 1) * nh + q))
+        F.append(tuple(range(H0 + 2 * nh, H0 + 3 * nh)))
+        Hf = []
+        for q in range(nh):
+            a = math.atan2(Vv[H0 + q][2] - cz, Vv[H0 + q][0] - cx)
+            while a < (Hf[-1] if Hf else Bf[0] - 1e-6):
+                a += TAU
+            Hf.append(a)
+        Mb = len(Bd)
+        Bf.append(Bf[0] + TAU); Hf.append(Hf[0] + TAU)
+        i = j = 0
+        while i < Mb or j < nh:
+            if j >= nh or (i < Mb and Bf[i + 1] <= Hf[j + 1]):
+                F.append((Bd[i], Bd[(i + 1) % Mb], H0 + j % nh)); i += 1
+            else:
+                F.append((Bd[i % Mb], H0 + (j + 1) % nh, H0 + j % nh)); j += 1
+    return mk(name, Vv, F, m, sharp)
+
+
+def checker3(P, name, a, b, c, d, m, nu=8, nv=6, h=.0006, back=.001, out=(0, 0, 1)):
+    """Cut checkering on any flat quad in space (a -> b along the first edge, d -> c along the opposite one), its
+    pyramids standing toward `out`, on a closed backing (a hammer spur, the top of a slide, a butt)."""
+    a, b, c, d = (np.array(v, float) for v in (a, b, c, d))
+    nr = np.cross(b - a, d - a); nr /= np.linalg.norm(nr)
+    if float(np.dot(nr, out)) < 0:
+        nr = -nr
+
+    def pt(u, v):
+        return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * u * v + d * (1 - u) * v
+    Vv = []; F = []
+    for i in range(nu):
+        for j in range(nv):
+            k = len(Vv)
+            for u, v in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)):
+                Vv.append(tuple(pt(u / nu, v / nv)))
+            Vv.append(tuple(pt((i + .5) / nu, (j + .5) / nv) + nr * h))
+            F += [(k, k + 1, k + 4), (k + 1, k + 2, k + 4), (k + 2, k + 3, k + 4), (k + 3, k, k + 4)]
+    rim = [(i / nu, 0) for i in range(nu)] + [(1, j / nv) for j in range(nv)] + [(1 - i / nu, 1) for i in range(nu)] + [(0, 1 - j / nv) for j in range(nv)]
+    k0 = len(Vv); n = len(rim)
+    Vv += [tuple(pt(u, v)) for u, v in rim] + [tuple(pt(u, v) - nr * back) for u, v in rim]
+    for q in range(n):
+        F.append((k0 + q, k0 + (q + 1) % n, k0 + n + (q + 1) % n, k0 + n + q))
+    F.append(tuple(range(k0 + n, k0 + 2 * n)))
+    P.append(mk(name, Vv, F, m, 30))

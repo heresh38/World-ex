@@ -233,6 +233,32 @@ def AF(f):
     return math.copysign(math.asin(min(abs(f), 1.0) ** 2.5), f)
 
 
+def k_grip(P, m, panel_m, ang, h, w, z, y=0.0, plug_m=None, n=28):
+    """A pistol grip lofted down its own axis on the lines the firing hand is fitted to (the back strap, front strap,
+    width and length of gunkit.grip_profile with the same numbers): a palm swell, finger grooves, checkering that
+    follows the curve, a plug in its foot. Returns the Limb."""
+    hw = w / 2
+    secs = []
+    for i in range(11):
+        b = -.006 + (h + .01) * i / 10
+        t = min(max(b / h, 0.0), 1.0)
+        back = float(np.interp(b, [-.006, .02, h * .5, h], [.03, .032, .0265, .028]))
+        front = -.0262 + .0011 * math.cos(t * 6 * math.pi) + (.002 if i == 0 else 0.0) + (.003 if i == 10 else 0.0)
+        secs.append((b, front, back, hw * (.94 + .1 * math.sin(math.pi * t)), 2.8))
+    GR = G.Limb(secs, ang, y, z)
+    GR.skin(P, m, 'grip', step=.005, n=n)
+    GR.checker(P, 'grip_checker', panel_m, h * .3, h * .86, -.8, .8, 14, 12, .0006, d=.0002)
+    P.append(G.rprism('grip_plug', [GR.g(-.0195, h + .0025), GR.g(.027, h - .001), GR.g(.0275, h + .003), GR.g(-.019, h + .007)], w * .84, plug_m or m, .003))
+    return GR
+
+
+def SL_hood(SL, m):
+    """The barrel's hood seen in a slide's ejection port (it belongs to the barrel: it stays when the slide moves)."""
+    tmp = []
+    SL.shell(tmp, 'hood', m, -.014, -.046, SL.af(.42), 1.22, t=.0007, ch=.0005, mirror=False, side=-1, base=-.001)
+    return tmp[0]
+
+
 def auto_rifle():
     """Energy auto rifle: a dark chassis swelling at the cell's well and waisted over the grip under pale armour
     shells (a cheek shell, an upper strake and a lower one with the line of light in the gap between them, a steel
@@ -364,89 +390,153 @@ def scout_rifle():
 
 
 def hand_cannon():
-    """Hand cannon (the hero handgun): a round recoil shield and a humped frame round a six-cell cylinder (banded at
-    the rear, fluted ahead of it), a heavy two-tone shroud over the barrel with a ported muzzle block, an ejector
-    housing under it, a spur hammer, a rounded guard, a knurled grip with a butt cap and a lanyard ring."""
+    """Hand cannon (the hero handgun), built in two layers like the long energy guns: a dark frame lofted round the
+    drum's window with pale shells standing proud of it and light lying in the gaps; a recoil shield of two pale
+    discs with a ring of light between; an energy cell drum (six cells clipped in milled cradles, each with a slit of
+    light, the feed ports clustered round the axis in line with the emitter); a heavy shroud that is a cage of shells
+    (the emitter's coil seen through its vents, a dark spine above it); a broad hammer in the frame's cut with a gold
+    chequered spur, under the sight line; a guard undercut at the front strap; a grip on its lines with a flared butt."""
     bl.reset(); M = K.energy_mats(); P = []
     zc, zb = .058, .07
     BD, MT, DK, TR, GL = M['body'], M['metal'], M['dark'], M['trim'], M['glow']
+    # ---- the grip on the committed lines, a flared butt below its length, a lanyard ring
     g = G.hand_grip(P, M['grip'], .38, .12, .034, z=.004)
-    P.append(prism('gripcap', [g(-.023, .118), g(.029, .114), g(.031, .126), g(-.021, .129)], .036, TR, .0015))
-    c = g(.004, .133)
+    BT = G.Limb([(.113, -.0203, .0273, .0156, 3.2), (.1245, -.0205, .0283, .0166, 3.2), (.131, -.0245, .0318, .0196, 3.2), (.137, -.0262, .0332, .021, 3.4),
+                 (.141, -.0252, .0322, .0198, 3.6)], .38, 0, .004)                 # the flare begins BELOW the length the hand is fitted to
+    BT.skin(P, MT, 'butt', step=.0045, n=24)
+    bb = []
+    for b in (.1282, .13, .1318):
+        s = BT.sec(b); bb.append((b, s[0] - .0009, s[1] + .0009, s[2] + .0009, s[3]))
+    G.Limb(bb, .38, 0, .004).skin(P, TR, 'butt_band', step=.0018, n=24)
+    c = g(.004, .1435)
     P.append(K.ring('lanyard', .0055, .0014, (0, c[0], c[1]), MT, axis='x', maj=20, mn=8))
     c = g(.002, .034)
     for s in (1, -1):
         P.append(lathe_x('medallion', [(0, .0062), (.0012, .0062), (.002, .005), (.002, 0)], (s * .0168, c[0], c[1]), TR, 18, s))
-    G.guard(P, DK, [(-.076, .016), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.01, -.029)], .014, .0062)
+    G.checker(P, 'grip_checker', [g(-.008, .046), g(.012, .044), g(.012, .108), g(-.008, .11)], .017, M['grip'], 8, 19, .0005)
+    # ---- the guard (undercut where it meets the front strap) and the trigger
+    P.append(G.rprism('trigguard', G.ribbon(G.smooth([(-.074, .02), (-.078, -.006), (-.07, -.024), (-.054, -.0325), (-.034, -.0325), (-.022, -.029),
+                                                      (-.0165, -.0215)], 2), [.0064, .0062, .006, .0056, .005, .0046]), .014, DK, .002, 2))
     G.trigger(P, TR, -.03, .014, L=.034, w=.0075)
-    # the frame: a round shield behind the cylinder, the hump that carries the hammer, the top strap, the standing breech
-    P.append(G.disc('recoil_shield', .014, .004, .0415, BD, zc, n=48, ch=.0025))
-    P.append(G.rprism('frame_rear', G.chaikin([(.006, .016), (.006, .103), (.03, .103), (.044, .096), (.05, .08), (.066, .064), (.065, .055), (.054, .05),
-                                               (.05, .03), (.044, .014)], 1, sharp=(0, 1, 9)), .034, BD, .005))
-    P.append(plate('frame_inlay', [(.018, .03), (.018, .084), (.034, .084), (.044, .07), (.044, .04), (.038, .03)], MT, .0165, .0188, .0014))
-    P.append(G.loft('frame_top', [(.012, .1005, .11, .015, (.0045, .0008)), (-.1, .1005, .11, .015, (.0045, .0008))], BD))
-    P.append(prism('frame_low', [(.006, .008), (.006, .018), (-.084, .018), (-.084, .012), (-.03, .008)], .03, BD, .002))
-    P.append(G.rprism('frame_front', [(-.082, .012), (-.082, .11), (-.1, .11), (-.1, .03), (-.092, .012)], .04, BD, .004))
-    P.append(plate('crane', [(-.06, .012), (-.06, .024), (-.084, .024), (-.09, .016), (-.084, .012)], MT, .014, .0172, .001, sym=False, side=1))
-    P.append(lathe_x('crane_pin', [(0, .0042), (.0016, .0042), (.0022, .003), (.0022, 0)], (.0172, -.078, .018), TR, 14, 1))
-    P.append(plate('latch', [(.04, .074), (.04, .062), (.022, .06), (.02, .072)], DK, .017, .0212, .001, sym=False, side=1))
-    G.serrations(P, 'latch_grip', .037, 4, .004, .063, .072, .0212, MT, t=.0016, sym=False, side=1)
-    G.hexbolts(P, [(.03, .022), (-.091, .09), (-.091, .03)], .0202, TR, .0026)
-    # the cylinder: a banded rear with the stop notches, six lands ahead of it (the flutes are the gaps), the cells
-    P.append(lathe('cylinder', [(-.002, 0), (-.002, .032), (-.004, .0335), (-.076, .0335), (-.078, .032), (-.078, 0)], MT, zc, 0, 36))
-    P.append(G.band('cyl_band', -.003, .027, .0386, MT, zc, 0, .0056, 48, .001))
+    # ---- the frame: ONE dark loft round the drum's window (top strap, barrel boss, belly, the hump with its horn and
+    # the cut the hammer sits in); stations = window edge -> outline, half widths
+    P.append(G.ring_frame('frame', [
+        (.006, .0985, .012, .1085, .0135), (-.03, .0985, -.03, .1085, .0135), (-.076, .0985, -.086, .1085, .0135),
+        (-.082, .0985, -.0995, .108, .0145), (-.082, .0925, -.1, .098, .0155),
+        (-.082, .058, -.1, .058, .016), (-.082, .0235, -.1, .024, .0155),
+        (-.082, .0175, -.097, .012, .015), (-.076, .0175, -.088, .008, .015),
+        (-.035, .0175, -.04, .006, .015), (.006, .0175, -.012, .0005, .015),
+        (.012, .0175, .012, .0105, .015), (.012, .0235, .03, .019, .015),
+        (.012, .034, .043, .035, .015, .015, .0128, .6),
+        (.012, .048, .058, .05, .015, .015, .0125, .6),
+        (.012, .058, .067, .059, .015, .015, .0125, .6),                       # the horn over the hand's web
+        (.012, .068, .056, .07, .015, .015, .0125, .6),
+        (.012, .082, .047, .083, .015, .015, .0125, .6),
+        (.012, .0925, .0425, .097, .015, .015, .0128, .6),
+        (.012, .0985, .04, .1075, .0138, .0138, .0132, .6)], DK, ro=.0022, coarse=True, segs=2))
+    # the top strap's second layer: a steel spine, pale shells over the edges
+    FT = G.Body([(.014, .1, .11, .013, 4.0), (.0, .1, .11, .015, 5.0), (-.04, .1, .11, .015, 5.0), (-.08, .1, .11, .015, 5.0), (-.1, .1, .11, .015, 5.0)])
+    FT.chassis(P, DK, inset=.0016, step=.02, n=20, name='frame_top')
+    FT.shell(P, 'top_spine', MT, .012, -.098, 1.0, math.pi - 1.0, t=.0004, mirror=False)
+    for ya, yb in ((.01, -.04), (-.048, -.098)):
+        FT.shell(P, 'top_shell', BD, ya, yb, -.9, .8, t=.0016, ch=.0012, base=-.0018, na=7)
+    # pale shells on the frame's flanks, the dark frame and a line of light in the gaps between them
+    P.append(plate('frame_shell', [(.019, .03), (.019, .09), (.034, .09), (.04, .078), (.047, .066), (.05, .056), (.043, .046), (.033, .034), (.027, .028)],
+                   BD, .013, .0176, .0012))
+    P.append(plate('frame_shell', [(-.004, .0148), (-.074, .0148), (-.074, .0105), (-.04, .0088), (-.012, .0048), (-.004, .0062)], BD, .013, .0176, .001))
+    P.append(plate('frame_shell', [(-.0865, .03), (-.0865, .093), (-.0965, .093), (-.0965, .03)], BD, .013, .0176, .0012))
+    P.append(plate('frame_light', [(-.008, .0158), (-.07, .0158), (-.07, .0168), (-.008, .0168)], GL, .014, .0154, .0002))
+    P.append(plate('crane', [(-.079, .0135), (-.079, .0255), (-.0955, .0255), (-.0955, .018), (-.09, .0135)], MT, .013, .0172, .001, sym=False, side=1))
+    P.append(lathe_x('crane_pin', [(0, .0036), (.0016, .0036), (.0022, .0026), (.0022, 0)], (.0172, -.087, .0195), TR, 14, 1))
+    P.append(plate('latch', [(.039, .074), (.039, .063), (.024, .061), (.022, .072)], DK, .016, .0198, .001, sym=False, side=1))
+    G.serrations(P, 'latch_grip', .0365, 4, .0036, .0635, .0725, .0198, MT, t=.0015, sym=False, side=1)
+    G.hexbolts(P, [(-.0915, .086), (-.0915, .037), (.044, .06)], .0176, TR, .0024)
+    # ---- the recoil shield: two pale discs on a dark core, a ring of light between them
+    P.append(lathe('shield_core', [(.0145, 0), (.0145, .039), (.0035, .039), (.0035, 0)], DK, zc, 0, 48))
+    P.append(G.disc('recoil_shield', .0148, .0106, .0415, BD, zc, n=48, ch=.0012))
+    P.append(G.disc('recoil_shield', .0076, .0032, .0415, BD, zc, n=48, ch=.0012))
+    P.append(G.band('shield_light', .0104, .0026, .0398, GL, zc, 0, .002, 48, .0002))
+    # ---- the drum: six cells clipped in milled cradles (a slit of light along each), stop notches in the rear band,
+    # the feed ports round the axis: the top one in line with the emitter
+    P.append(G.drum('cylinder', -.002, -.078, .0345, BD, zc, n=96, fl_w=.0095, fl_d=.006, fl_end=-.014, fl_r=.006,
+                    notch=(-.0045, -.0105, 7, 3, .0012), holes=(.012, .0048, .022, .0008), hub=.005, nh=16))
+    P.append(G.band('cyl_ring', -.0118, .002, .0351, TR, zc, 0, .002, 48, .0004))
     for k in range(6):
         a = k * math.pi / 3
-        P.append(G.bar('cyl_land', -.03, -.077, .033, .0386, a - .37, a + .37, MT, zc, 0, 4))
-        P.append(G.bar('cyl_notch', -.012, -.021, .0382, .039, a + .5 - .055, a + .5 + .055, DK, zc, 0, 1))
+        cx, cz = math.cos(a) * .0327, zc + math.sin(a) * .0327
+        P.append(lathe('cell', [(-.02, 0), (-.02, .003), (-.0215, .004), (-.0705, .004), (-.072, .003), (-.072, 0)], DK, cz, cx, 14))
+        for y in (-.0225, -.0665):
+            P.append(lathe('cell_cap', [(y, 0), (y, .0047), (y - .003, .0047), (y - .003, 0)], TR, cz, cx, 10))
+        P.append(G.bar('cell_light', -.032, -.06, .0364, .0371, a - .024, a + .024, GL, zc, 0, 1))
         b = a + math.pi / 6
-        P.append(lathe('cell_face', [(-.0012, 0), (-.0012, .0048), (-.0022, .0048), (-.0022, 0)], GL, zc + math.sin(b) * .0235, math.cos(b) * .0235, 10))
-        P.append(G.band('cell_rim', -.0008, .0018, .0064, DK, zc + math.sin(b) * .0235, math.cos(b) * .0235, .0018, 12, .0003))
-    P.append(G.band('cyl_ring', -.0295, .003, .0392, TR, zc, 0, .003, 48, .0005))
-    P.append(G.tube_('cylaxis', .008, -.086, .007, DK, zc, n=14))
-    # the barrel under its shroud: ceramic over a steel lower flat, a ported muzzle block, the ejector housing
-    V.barrel('barrel', M, -.09, -.306, zb, .0135, P, m=MT, bore=.0075)
+        P.append(lathe('cell_face', [(-.066, 0), (-.066, .0046), (-.065, .0046), (-.065, 0)], GL, zc + math.sin(b) * .012, math.cos(b) * .012, 12))
+    P.append(G.tube_('cylaxis', .008, -.086, .0045, DK, zc, n=14))
+    P.append(lathe('breech_hub', [(.0035, 0), (.0035, .024), (-.002, .024), (-.002, 0)], DK, zc, 0, 40))
+    P.append(G.band('breech_light', .0018, .002, .0246, GL, zc, 0, .0015, 48, .0002))
+    P.append(G.tube_('breech', -.0785, -.1, .011, MT, zb, n=24))
+    # ---- the shroud: a cage of shells round the emitter (rear and front blocks, a pale top and cheeks, vents, posts,
+    # a steel keel), a dark spine above the emitter with a line of light along it
     SH = G.Body([(-.098, .05, .11, .0195, 5.0), (-.12, .049, .11, .021, 5.0), (-.15, .049, .11, .0215, 5.0), (-.18, .049, .11, .021, 5.0), (-.21, .05, .11, .0205, 5.0),
                  (-.235, .05, .11, .0205, 5.0), (-.255, .051, .11, .02, 4.8), (-.265, .052, .1095, .0195, 4.6), (-.272, .053, .109, .019, 4.4)])
-    SH.chassis(P, DK, name='shroud')                                   # the shroud in two layers: the light between its shells
-    SH.shell(P, 'shroud_spine', MT, -.1, -.268, 1.05, math.pi - 1.05, t=.0004, mirror=False)
-    SH.shell(P, 'shroud_upper', BD, -.102, -.15, AF(.14), .8)
-    SH.slats(P, 'shroud_louvre', BD, -.156, -.216, AF(.14), .8, 5, share=.6)
-    SH.shell(P, 'shroud_upper', BD, -.222, -.264, AF(.14), .8)
-    SH.shell(P, 'shroud_lower', MT, -.102, -.26, -.9, -AF(.14), t=.0022)
-    SH.light(P, 'seam', GL, -.106, -.256, -AF(.05), AF(.05))
-    SH.studs(P, TR, [(-.112, .5), (-.254, .5), (-.18, -.6)], r=.002)
+    af = SH.af
+    for nm, ya, yb in (('shroud', -.098, -.121), ('shroud', -.249, -.272)):
+        secs = []
+        for y in np.linspace(ya, yb, 5):
+            z0, z1, hw, p = SH.sec(y)
+            secs.append((y, z0 + .0026, z1 - .0026, hw - .0026, p))
+        P.append(G.rloft(nm, secs, DK, 24))
+        SH.shell(P, 'shroud_block', BD, ya - .002, yb + .002, af(-.82), af(.4))
+    SH.shell(P, 'shroud_top', BD, -.1, -.268, af(.5), math.pi - af(.5), t=.0026, d=-.002, mirror=False, base=-.002, closed=True, ny=10, na=12)
+    for ya, yb in ((-.123, -.158), (-.214, -.247)):
+        SH.shell(P, 'shroud_cheek', BD, ya, yb, af(-.1), af(.4), closed=True)
+    SH.slats(P, 'shroud_louvre', BD, -.164, -.2085, af(-.1), af(.4), 5, share=.6, closed=True)
+    for y in (-.1535, -.1845, -.2155):
+        SH.shell(P, 'shroud_post', MT, y, y - .005, af(-.58), af(-.07), t=.002, closed=True)
+    SH.shell(P, 'shroud_keel', MT, -.123, -.247, -math.pi - af(-.55), af(-.55), t=.0022, mirror=False, closed=True, ny=8, na=10)
+    P.append(G.rloft('shroud_core', [(-.118, .087, .1066, .0165, 4.5), (-.185, .087, .1066, .0165, 4.5), (-.252, .087, .1066, .0165, 4.5)], DK, 28))
+    P.append(prism('seam', [(-.125, .0929), (-.125, .0941), (-.245, .0941), (-.245, .0929)], .0338, GL, .0002))
+    SH.studs(P, TR, [(-.1095, .2), (-.2605, .2), (-.1095, -.5), (-.2605, -.5)], r=.002)
+    # the emitter inside the cage: a coil of steel rings on a core of light
+    P.append(G.tube_('emitter_core', -.121, -.249, .0086, GL, zb, n=16, ch=0))
+    step = .128 / 8
+    for i in range(8):
+        y = -.121 - step * (i + .08)
+        P.append(lathe('emitter_ring', [(y, .008), (y, .0115), (y - .001, .0125), (y - step * .84 + .001, .0125), (y - step * .84, .0115), (y - step * .84, .008)],
+                       MT, zb, 0, 14, closed=True))
+        if i % 2 == 0:
+            ym = y - step * .42
+            P.append(lathe('emitter_lip', [(ym + .0012, .012), (ym + .0012, .0136), (ym - .0012, .0136), (ym - .0012, .012)], TR, zb, 0, 14, closed=True))
+    # the muzzle block, ported, and a crowned bore
     P.append(G.loft('muzzleblock', [(-.268, .0515, .109, .0188, (.0075, .004)), (-.29, .0515, .109, .0188, (.0075, .004)), (-.3, .056, .105, .0162, (.006, .004))], MT))
     G.slots(P, 'comp', [(-.276 - i * .009, .092, .014, .0036, math.pi / 2 - .35) for i in range(2)], .0188, DK)
     P.append(G.band('crown', -.3005, .005, .0162, TR, zb, 0, .0042, 28, .0006))
+    G.muzzle(P, 'barrel', -.296, -.306, zb, .0128, MT, .0075, dark_m=DK)
     P.append(prism('rib', [(.008, .11), (.008, .1114), (-.292, .1114), (-.296, .11)], .0105, DK, .0006))
-    P.append(G.rprism('ejshroud', [(-.1, .034), (-.1, .052), (-.236, .052), (-.246, .046), (-.246, .039), (-.24, .034)], .017, DK, .005))
-    P.append(lathe('ejrod_tip', [(-.244, 0), (-.244, .0046), (-.252, .0046), (-.254, .0034), (-.254, 0)], TR, .043, 0, 14))
-    G.hexbolts(P, [(-.118, .044), (-.222, .044)], .0085, MT, .0022)
-    # the hammer: a curved spur with a chequered pad
-    P.append(G.rprism('hammer', G.ribbon(G.smooth([(.03, .078), (.04, .097), (.054, .11), (.07, .1165)], 2), [.015, .013, .0105, .008]), .013, MT, .0018, 2))
-    P.append(prism('hammer_pad', [(.056, .1125), (.071, .1195), (.073, .1165), (.059, .1095)], .0145, TR, .0008))
+    # the housing under the shroud, lofted to a nose, its rod's tip in gold
+    P.append(G.sloft('underlug', [(-.098, .03, .054, .0095, 3.5), (-.16, .032, .054, .009, 3.5), (-.22, .034, .054, .0085, 3.2), (-.243, .038, .054, .007, 2.8),
+                                  (-.252, .044, .054, .0045, 2.4)], MT, 16, 4))
+    P.append(lathe('ejrod_tip', [(-.249, 0), (-.249, .0042), (-.2565, .0042), (-.2585, .003), (-.2585, 0)], TR, .0475, 0, 14))
+    G.hexbolts(P, [(-.118, .043), (-.215, .043)], .0086, TR, .002)
+    # ---- the hammer in the frame's cut (under the sight line): a broad sculpted body, a gold spur, cut checkering
+    P.append(G.rprism('hammer', G.chaikin([(.034, .064), (.0375, .078), (.038, .098), (.041, .1045), (.048, .106), (.06, .1025), (.074, .0965), (.0745, .0935),
+                                           (.064, .097), (.057, .0935), (.0555, .082), (.06, .072), (.052, .06)], 2, sharp=(6, 7)), .013, MT, .0022, 2))
+    P.append(plate('hammer_slot', [(.0425, .08), (.0425, .098), (.05, .1), (.0505, .084), (.047, .078)], DK, .005, .0068, .0005))
+    P.append(prism('hammer_spur', [(.0585, .1012), (.0592, .1035), (.0748, .0972), (.0744, .0946), (.064, .0985)], .017, TR, .0008))
+    G.checker3(P, 'spur_checker', (-.0075, .06, .10328), (.0075, .06, .10328), (.0075, .074, .09762), (-.0075, .074, .09762), DK, 9, 9, .0006, .0008)
+    P.append(K.cylx('hammer_pin', .003, .0306, (0, .0445, .07), TR, 14, .0005))
+    # ---- the sights and the plate for an optic
     sz = .112
     P.append(prism('optic_plate', [(-.018, .11), (-.018, .1116), (-.072, .1116), (-.072, .11)], .026, DK, .0006))
     for yy in (-.026, -.064):
         for xx in (.009, -.009):
             P.append(lathe_z('plate_screw', [(0, 0), (0, .0018), (.0004, .0018), (.0004, 0)], (xx, yy, .1116), MT, 10))
-    P.append(prism('rear_base', [(.038, .1095), (.038, sz - .004), (.02, sz - .004), (.016, .1095)], .024, DK, .001))
+    P.append(prism('rear_base', [(.038, .1075), (.038, sz - .004), (.02, sz - .004), (.016, .1085)], .024, DK, .001))
     for s, nm in ((1, 'rear_earL'), (-1, 'rear_earR')):
         P.append(prism(nm, [(.037, sz - .006), (.037, sz + .003), (.027, sz + .003), (.025, sz - .006)], .0075, DK, .001, x=s * .0085))
         P.append(lathe('postdot', [(.0372, 0), (.0372, .0018), (.0368, .0018), (.0368, 0)], M['green'], sz - .0015, s * .0085, 8))
     P.append(prism('front_base', [(-.262, .1105), (-.268, .1145), (-.29, .1145), (-.294, .1105)], .011, DK, .0008))
     P.append(prism('post', [(-.272, .114), (-.277, sz + .0045), (-.2835, sz + .0045), (-.286, .114)], .0036, DK, .0005))
     P.append(lathe('postdot', [(-.2768, 0), (-.2768, .0014), (-.2772, .0014), (-.2772, 0)], M['green'], sz + .0026, 0, 8))
-    # ---- the hero's finish: cut checkering on the grip, chamber mouths, a second row of studs, shroud keel plates
-    G.checker(P, 'grip_checker', [g(-.008, .046), g(.012, .044), g(.012, .108), g(-.008, .11)], .017, M['grip'], 10, 24, .0005)
-    for k in range(6):
-        b = k * math.pi / 3 + math.pi / 6
-        P.append(G.band('chamber_mouth', -.0776, .0014, .0066, TR, zc + math.sin(b) * .0235, math.cos(b) * .0235, .0014, 16, .0003))
-    SH.shell(P, 'shroud_keel', BD, -.11, -.176, -1.25, -1.02, t=.002)
-    SH.shell(P, 'shroud_keel', BD, -.188, -.256, -1.25, -1.02, t=.002)
-    SH.studs(P, TR, [(-.14, -.6), (-.226, -.6), (-.112, -.3), (-.254, -.3)], r=.0018)
-    G.rivets(P, [(.012, .03), (.036, .09), (-.091, .06)], .0202, TR, .0018)
     finish('gun_handcannon', P, (0, -.31, .07), (0, -.02, -.02), (0, .1, sz), rail=(0, -.045, .1116))
 
 
@@ -488,14 +578,15 @@ def shotgun():
         y = -.296 - i * .021
         P.append(G.rloft('pumprib', [(y, .0055, .0615, .0412, 4.0), (y - .009, .0055, .0615, .0412, 4.0)], DK, n=24))
     G.stock_soft(P, BD, MT, M['grip'], .09, .066, .24, .102, .046, .024, mode='open', cheek=False, bolt_m=TR, fall=.012, top0=.094)
-    sz = .1
-    P.append(prism('rear_base', [(.06, .097), (.06, sz - .002), (.046, sz - .002), (.042, .097)], .026, DK, .001))
-    for s, nm in ((1, 'rear_earL'), (-1, 'rear_earR')):
-        P.append(prism(nm, [(.059, sz - .0025), (.059, sz + .0028), (.049, sz + .0028), (.047, sz - .0025)], .0055, DK, .0008, x=s * .009))
-    P.append(prism('post', [(-.537, .095), (-.537, sz - .003), (-.543, sz - .003), (-.543, .095)], .004, DK, .0006))
-    P.append(lathe('postdot', [(-.536, 0), (-.536, .0036), (-.544, .0036), (-.544, 0)], M['green'], sz, 0, 12))
+    # raised sights: a ghost ring on a stem at the receiver's rear, a post on a ramp at the muzzle (2.4 cm over the
+    # cartridge rack, 4 cm over the receiver); the `sight` point is the ring's centre
+    sz = .1375
+    G.iron_rear(P, .07, sz, DK, base_z=.0965, w=.018)
+    P.append(prism('front_base', [(-.492, .095), (-.524, .131), (-.542, .131), (-.547, .095)], .008, DK, .001))
+    P.append(prism('post', [(-.529, .13), (-.531, sz), (-.537, sz), (-.539, .13)], .0026, DK, .0004))
+    P.append(lathe('postdot', [(-.5288, 0), (-.5288, .0012), (-.5292, .0012), (-.5292, 0)], M['green'], sz - .0022, 0, 8))
     P += K.rail(M, .036, -.008, .0895, .022, DK)
-    finish('gun_shotgun', P, (0, -.56, .072), (0, -.35, -.005), (0, .14, sz), rail=(0, .014, .099))   # (the sight point stays
+    finish('gun_shotgun', P, (0, -.56, .072), (0, -.35, -.005), (0, .07, sz), rail=(0, .014, .099))   # (the sight point stays
     # out over the wrist: on the receiver the eye, 9 cm behind it, was level with the receiver's top and its rear face
     # filled the aimed view. To do: a raised rear sight and front post, as the rifles have.)
 
@@ -661,8 +752,11 @@ def sidearm():
     P.append(G.rprism('grip_base', [g(.0282, .1085), g(-.0202, .1125), g(-.0206, .1215), g(.0288, .1175)], .034, MT, .004))
     G.guard(P, DK, [(-.076, .018), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.012, -.029)], .014, .006)
     G.trigger(P, TR, -.03, .014, L=.033, w=.007)
-    P.append(G.rprism('frame', G.chaikin([(.034, .047), (.054, .0462), (.053, .041), (.042, .033), (.0355, .016), (.033, .004), (-.026, .006), (-.03, .016),
-                                          (-.1, .016), (-.108, .024), (-.165, .024), (-.165, .047)], 1, sharp=(0, 5, 6, 7, 8, 9, 10, 11)), .032, MT, .0035))
+    FR = G.Body([(.057, .039, .0468, .0078, 3.0), (.046, .03, .047, .0136, 4.5), (.034, .012, .047, .0158, 5.0), (.0, .006, .047, .016, 5.0), (-.026, .008, .047, .016, 5.0),
+                 (-.033, .016, .047, .016, 5.0), (-.098, .016, .047, .016, 5.5), (-.107, .012, .047, .016, 5.5), (-.158, .012, .047, .0158, 5.5), (-.166, .016, .047, .015, 4.5)])
+    FR.skin(P, MT, 'frame', step=.005, n=32)                           # the frame: ten sections, tang to dust cover
+    FR.shell(P, 'frame_panel', MT, .02, -.095, FR.af(-.3), FR.af(.6), t=.0009, ch=.001)
+    FR.slats(P, 'rail_tooth', DK, -.112, -.158, -1.48, -1.08, 4, share=.6, t=.002, base=-.001)
     # the slide shell: the body, a dark rail along its foot, a steel panel, the serrations, the port
     SL = G.Body([(.038, .05, .088, .0165, 5.0), (.02, .05, .088, .0172, 5.0), (-.01, .05, .088, .0175, 5.0), (-.04, .05, .088, .0175, 5.0), (-.07, .05, .088, .0175, 5.0),
                  (-.1, .05, .088, .0175, 5.0), (-.13, .05, .088, .0172, 5.0), (-.15, .051, .0875, .0165, 4.8), (-.164, .053, .0855, .0152, 4.4), (-.172, .057, .0825, .0132, 4.0)])
@@ -690,8 +784,6 @@ def sidearm():
     P.append(lathe_x('stop_pin', [(0, .0034), (.0014, .0034), (.002, .0024), (.002, 0)], (.0184, -.07, .0428), TR, 12, 1))
     G.selector(P, .024, .038, .016, TR, 1, ang=.25, L=.017, r=.0045)
     P.append(lathe_x('cellrelease', [(0, .0044), (.003, .0044), (.0036, .0034), (.0036, 0)], (.016, -.017, .012), DK, 14, 1))
-    P.append(prism('railbox', [(-.108, .024), (-.108, .012), (-.16, .012), (-.164, .024)], .028, DK, .002))
-    G.slots(P, 'railcut', [(-.122 - i * .014, .0175, .006, .008, 0) for i in range(3)], .014, MT)
     G.hexbolts(P, [(-.09, .034)], .016, TR, .0024)
     sz = .1
     P.append(prism('rear_base', [(.036, .0895), (.036, sz - .004), (.022, sz - .004), (.018, .0895)], .026, DK, .001))
@@ -837,538 +929,667 @@ def curved_mag(name, y_rear, z_top, R, depth, theta, w, m, ribs=2, rib_m=None):
 
 
 def assault_rifle():
-    """Assault rifle (our own pattern): a milled steel receiver under a flat, fluted cover with an aperture sight at
-    its rear; a walnut forend with a finger groove under a pierced steel heat shield; the gas block carries the hooded
-    front sight at the forend's nose, the bare barrel runs on to a pronged flash hider; a straight, forward-raked
-    magazine with pressed ribs; a walnut stock with a steel butt plate and a lightening slot."""
+    """Assault rifle (our own pattern), every body a loft. The receiver runs through thirteen sections: a tang that
+    tapers into the stock, a rear trunnion swell, a pressed waist over the magazine well, a front trunnion that is
+    thick and squared; raised trunnion blocks with rivets, a seat rail for the cover along each top edge, a pressed
+    rib, the bolt's slot between two guide rails on the right. The top cover is its own arch with pressed ribs, a
+    front tab under the trunnion's block and a rear catch. The magazine well and trigger housing are one shaped part
+    with a flared mouth and a paddle catch; the guard is a steel strap. The handguard is walnut shells with real
+    vents (the barrel and the gas tube show through), a ferrule and a retaining cap. The stock is walnut through ten
+    sections (oval wrist, a comb that rolls over, heel and toe), a ribbed steel butt plate, a swivel. The grip is
+    lofted down its own axis with a palm swell, finger grooves and cut checkering. A curved magazine with pressed
+    ribs, a floor plate with its catch, feed lips and the top round."""
     bl.reset(); M = K.kinetic_mats(); S, PK, W, PO, RB, OD = M['steel'], M['park'], M['wood'], M['poly'], M['rubber'], M['odg']
     zb = .06; P = []
-    P.append(prism('receiver', [(.165, .03), (.165, .084), (-.215, .084), (-.215, .026), (-.166, .026), (-.166, .006), (-.078, .006), (-.078, .026), (.02, .026),
-                                (.02, .03)], .044, S, .0022))
-    P.append(G.loft('topcover', [(.168, .084, .092, .0205, (.005, .0005)), (.11, .084, .099, .0205, (.006, .0005)), (.055, .084, .1045, .0205, (.006, .0005)),
-                                (.03, .084, .106, .0205, (.006, .0005)), (-.2, .084, .106, .0205, (.006, .0005)), (-.215, .084, .1, .0195, (.005, .0005))], PK))
-    G.slots(P, 'cover_flute', [(-.01, .0945, .27, .0042, 0)], .0205, RB)
-    P.append(prism('cover_latch', [(.176, .084), (.176, .091), (.166, .093), (.166, .084)], .016, S, .0015))
-    P.append(plate('side_step', [(.152, .036), (.152, .078), (.04, .078), (.024, .064), (-.2, .064), (-.2, .036)], S, .021, .0242, .0012))
-    P.append(plate('magwell_flare', [(-.08, .004), (-.08, .024), (-.164, .024), (-.168, .004)], S, .021, .0246, .001))
-    G.seamline(P, [(.02, .036), (.02, .078)], .0242, RB)
-    G.hexbolts(P, [(-.205, .032), (-.205, .076), (-.186, .032), (.156, .04), (.156, .078), (-.06, .032)], .0222, S, .0024, n=14)
-    G.cross_pins(P, [(.1, .046), (.064, .046), (-.034, .046)], .044, S, .0024)
-    G.selector(P, .046, .052, .0242, S, 1, ang=.55, L=.024, r=.006)
-    # the bolt carrier seen in its slot on the right, the charging handle
-    P.append(plate('boltslot', [(.01, .066), (.01, .08), (-.132, .08), (-.132, .066)], RB, .0195, .0246, .0006, sym=False, side=-1))
-    BOLT = [plate('carrier', [(.005, .0675), (.005, .0785), (-.127, .0785), (-.127, .0675)], PK, .012, .0238, .0012, sym=False, side=-1),
+    pi = math.pi
+
+    # ---------------------------------------------------------------- receiver: thirteen sections that change
+    R = G.Body([(.194, .03, .06, .0125, 3.2), (.174, .033, .073, .0156, 4.0), (.152, .031, .084, .0195, 5.0), (.125, .028, .084, .0216, 6.0), (.095, .028, .084, .0222, 6.0), (.06, .028, .084, .0212, 6.0),
+                (.02, .028, .084, .0206, 6.0), (-.02, .027, .084, .0204, 6.0), (-.06, .026, .084, .02, 6.0), (-.1, .026, .084, .02, 6.0), (-.14, .026, .084, .0206, 6.0),
+                (-.168, .024, .084, .0222, 6.5), (-.192, .021, .084, .0238, 7.0), (-.216, .021, .084, .0242, 7.0)])
+    R.skin(P, S, 'receiver', step=.008, n=36)
+    R.shell(P, 'cover_rail', S, .15, -.2, .56, 1.0, t=.0016, ch=.001)                 # the rail the cover seats between
+    R.shell(P, 'trunnion_r', S, .148, .1, -.66, .5, t=.0022)                           # rear trunnion block
+    R.shell(P, 'trunnion_f', S, -.168, -.214, -.66, .5, t=.0026)                       # front trunnion block
+    # the flank in three bands, each a real step: a raised belt along the lower half (in three lengths, a flute
+    # between them), a recessed channel through the middle with a pressed rib in it, raised panels above on the left
+    lo, hi = R.af(-.86), R.af(-.24)
+    for ya, yb in ((.092, .03), (.02, -.07), (-.08, -.16)):
+        R.shell(P, 'belt', S, ya, yb, lo, hi, t=.002, ch=.0014)
+    R.shell(P, 'press_rib', S, .08, -.15, R.af(-.13), R.af(.03), t=.001, ch=.001, na=2)
+    for ya, yb in ((.09, -.02), (-.032, -.155)):
+        R.shell(P, 'side_panel', S, ya, yb, R.af(.2), R.af(.72), t=.0014, ch=.0012, mirror=False, side=1)
+    R.shell(P, 'slot_rail', S, .018, -.14, .05, .088, t=.0014, ch=.001, mirror=False, side=-1)    # right: the bolt's slot
+    R.shell(P, 'boltslot', RB, .012, -.134, .095, .5, t=.0003, ch=.0005, mirror=False, side=-1)
+    for y, a in ((.136, -.45), (.136, .3), (.112, -.45), (.112, .3), (-.18, -.45), (-.18, .3), (-.204, -.45), (-.204, .3)):
+        x = R.pt(y, a, .0024)
+        G.rivets(P, [(y, x[2])], x[0], S, .0021)
+    for y, z in ((.1, .046), (.064, .046), (-.034, .046)):                             # axis pins through the receiver
+        P.append(K.cylx('pin', .0026, 2 * R.pt(y, 0, 0)[0] + .003, (0, y, z), S, 14, .0005))
+    xs = R.pt(.046, -.03, .0002)[0]
+    G.selector(P, .046, .052, xs, S, 1, ang=.55, L=.024, r=.006)
+    for y, z in ((.07, .06), (.024, .046)):
+        P.append(lathe_x('sel_stop', [(0, .0018), (.0016, .0018), (.002, .001), (.002, 0)], (xs, y, z), S, 10, 1))
+    G.dust_cover(P, .008, -.13, .0668, .0204, PK, .016)
+    BOLT = [plate('carrier', [(.005, .0685), (.005, .0778), (-.127, .0778), (-.127, .0685)], PK, .012, .0214, .0012, sym=False, side=-1),
             rod('charging', (RIGHT * .02, -.128, .074), (RIGHT * .046, -.128, .074), .0048, S),
-            lathe_x('chknob', [(0, .0048), (.003, .0072), (.011, .0072), (.013, .0048), (.013, 0)], (RIGHT * .043, -.128, .074), S, 12, -1)]
-    # sights: an aperture at the cover's rear, a hooded post on the gas block
+            lathe_x('chknob', [(0, .0048), (.003, .0072), (.011, .0072), (.013, .0048), (.013, 0)], (RIGHT * .043, -.128, .074), S, 16, -1)]
+
+    # ---------------------------------------------------------------- top cover: an arch with pressed ribs
+    C = G.Body([(.166, .076, .092, .0185, 2.6), (.14, .076, .0955, .019, 2.6), (.11, .076, .099, .0192, 2.6), (.08, .076, .102, .0192, 2.6), (.055, .076, .1045, .0192, 2.6),
+                (.03, .076, .106, .0192, 2.6), (-.04, .076, .106, .0192, 2.6), (-.12, .076, .106, .0192, 2.6), (-.185, .076, .106, .0192, 2.6), (-.2, .078, .104, .018, 2.6),
+                (-.208, .08, .098, .014, 2.6)])
+    C.skin(P, PK, 'topcover', step=.008, n=28)
+    for y in (-.02, -.055, -.09, -.125, -.16):
+        C.shell(P, 'cover_rib', PK, y, y - .008, -.3, pi + .3, t=.0014, mirror=False, ch=.001, base=-.0005, na=16)
+    P.append(prism('cover_tab', [(-.198, .086), (-.198, .094), (-.222, .094), (-.222, .086)], .012, PK, .001))
+    P.append(G.rprism('cover_block', [(-.205, .084), (-.205, .103), (-.219, .103), (-.226, .096), (-.226, .084)], .032, S, .003))
+    P.append(G.rprism('cover_catch', [(.178, .078), (.178, .089), (.167, .091), (.167, .078)], .014, S, .003))
+    P.append(lathe('catch_button', [(.181, 0), (.181, .0032), (.177, .0036), (.177, 0)], S, .083, 0, 12))
+
+    # ---------------------------------------------------------------- magazine well and trigger housing
+    Wl = G.Body([(.04, .02, .032, .0125, 4.0), (.01, .017, .032, .0155, 5.0), (-.03, .015, .032, .0165, 5.0), (-.06, .012, .032, .0175, 5.5), (-.076, .004, .032, .0196, 6.0),
+                 (-.1, .0, .032, .0204, 6.0), (-.13, .0, .032, .0206, 6.0), (-.16, .001, .032, .0206, 6.0), (-.174, .006, .032, .0192, 5.0), (-.182, .014, .032, .017, 4.0)])
+    Wl.skin(P, S, 'well', step=.008, n=32)
+    Wl.shell(P, 'well_mouth', S, -.08, -.17, -1.5, -.72, t=.0024, base=-.002)           # the flared mouth
+    Wl.shell(P, 'well_panel', S, -.09, -.162, -.45, .25, t=.001, ch=.0012)
+    P.append(G.rprism('magcatch', [(-.062, .012), (-.058, -.012), (-.066, -.022), (-.078, -.02), (-.08, .012)], .014, S, .003))
+    P.append(K.cylx('catch_pin', .002, .036, (0, -.07, .008), S, 10, .0004))
+    G.guard(P, S, [(-.082, .02), (-.083, -.006), (-.074, -.018), (-.058, -.0225), (-.03, -.0225), (-.014, -.018)], .013, .0046, r=.0019)
+    G.trigger(P, S, -.046, .024, L=.03)
+
+    # ---------------------------------------------------------------- sights, barrel group (kept)
     G.iron_rear(P, .09, .1195, S, base_z=.1005, w=.03)
-    P.append(prism('gasblock', [(-.434, .044), (-.434, .106), (-.468, .106), (-.478, .09), (-.478, .044)], .03, S, .003))
+    P.append(G.rprism('gasblock', [(-.434, .044), (-.434, .106), (-.468, .106), (-.478, .09), (-.478, .044)], .03, S, .004))
     G.hexbolts(P, [(-.456, .052)], .015, S, .0026, sym=False, side=1, n=14)
     G.iron_front(P, -.455, .1195, S, base_z=.104, w=.024)
-    # the forend: walnut below with a finger groove, a pierced steel shield over the gas tube, steel ferrules
-    P.append(G.sloft('hg_lower', [(-.262, .03, .078, .027, 4.5), (-.3, .026, .08, .0295, 4.5), (-.38, .026, .08, .0295, 4.5), (-.43, .034, .078, .026, 4.5)], W, n=20, sub=3))
-    G.slots(P, 'hg_groove', [(-.345, .052, .12, .0065, 0)], .0293, RB, lift=.0008)
-    # the heat shield: real vents (the gas tube shows through them)
-    G.cage(P, 'hg_shield', -.264, -.43, .093, .0146, PK, t=.0024, bars=14, fill=.62, frames=((-.264, .008), (-.345, .005), (-.424, .008)), phase=0.0,
-           skip=(8, 9, 10, 11, 12, 13))
-    P += [prism('ferrule_r', [(-.256, .024), (-.256, .088), (-.268, .088), (-.268, .024)], .06, S, .002),
-          prism('ferrule_f', [(-.424, .03), (-.424, .084), (-.436, .084), (-.436, .03)], .056, S, .002),
-          G.tube_('gastube', -.262, -.44, .0085, S, .093, n=16)]
-    # barrel and its pronged hider
+    P.append(G.tube_('gastube', -.218, -.44, .0085, S, .093, n=24))
     G.barrel_stepped(P, 'barrel', [(-.215, .0128), (-.262, .0108), (-.44, .0097), (-.56, .0088), (-.64, .0088)], zb, S, .0045)
     P.append(G.band('barrel_collar', -.524, .012, .0115, S, zb, 0, .003, 32, .001))
     G.hider(P, 'hider', -.63, zb, .0128, .06, S, 4, bore=.0056)
     P.append(G.band('hider_nut', -.632, .008, .0138, PK, zb, 0, .003, 6, .0006))
-    # grip, guard, trigger, magazine catch
-    G.grip(P, OD, RB, None, ang=.32, h=.115, w=.031, z=.024, swell=.005)
-    G.guard(P, PO, [(-.082, .02), (-.083, -.006), (-.074, -.018), (-.058, -.0225), (-.03, -.0225), (-.014, -.018)], .012, .005)
-    G.trigger(P, S, -.046, .024, L=.03)
-    P.append(prism('magcatch', [(-.066, .016), (-.066, -.004), (-.078, -.008), (-.08, .016)], .012, S, .002))
-    # the magazine: straight, raked forward, pressed ribs, a polymer floor
-    mp = [(-.085, .02), (-.119, -.125), (-.185, -.125), (-.149, .02)]
-    MAG = G.box_mag('magbody', mp, .03, S, floor_m=PO,
-                    floor=[(-.116, -.121), (-.188, -.121), (-.192, -.136), (-.12, -.136)],
-                    ribs=[[(-.094 - k * .0078, -.012 - k * .033), (-.142 - k * .0078, -.012 - k * .033), (-.1435 - k * .0078, -.019 - k * .033),
-                           (-.0955 - k * .0078, -.019 - k * .033)] for k in range(3)])
-    MAG.append(plate('magspine', [(-.112, -.004), (-.122, -.004), (-.151, -.118), (-.141, -.118)], S, .014, .0162, .0005))
-    G.feed_lips(MAG, -.085, -.149, .02, .03, S, M['brass'])
-    # the stock: walnut, a straight comb, a lightening slot, a steel butt plate
-    P.append(G.sloft('stock', [(.163, .03, .082, .02, 4.5), (.2, .024, .074, .019, 3.2), (.3, .0, .07, .0195, 3.0), (.41, -.046, .064, .021, 3.2),
-                               (.445, -.06, .06, .021, 3.6)], W, n=24, sub=4))
-    G.slots(P, 'stock_slot', [(.335, .022, .09, .016, -.3)], .0188, RB, lift=.0012)
-    P.append(G.rloft('buttplate', [(.444, -.061, .061, .0215, 3.6), (.452, -.06, .06, .0212, 3.6), (.455, -.056, .056, .0195, 3.2)], S, n=24))
-    P.append(prism('tang', [(.2, .0765), (.2, .0805), (.165, .087), (.165, .083)], .026, S, .002))
-    P.append(prism('tang_low', [(.2, .022), (.2, .028), (.165, .03), (.165, .024)], .024, S, .0015))
-    P += K.sling_loop(.36, -.034, S) + K.sling_loop(-.43, .024, S, x=.03)
+
+    # ---------------------------------------------------------------- handguard: walnut shells with real vents
+    HG = G.Body([(-.262, .03, .1075, .0245, 3.0), (-.28, .027, .1075, .0275, 3.2), (-.305, .025, .1075, .0295, 3.4), (-.335, .024, .1075, .0305, 3.4),
+                 (-.365, .024, .1075, .0302, 3.4), (-.39, .026, .1075, .0288, 3.2), (-.41, .029, .1075, .027, 3.2), (-.424, .032, .1075, .0252, 3.0),
+                 (-.432, .034, .1075, .024, 3.0)])
+    kw = dict(t=.003, d=-.003, base=-.0046, closed=True)
+    HG.shell(P, 'hg_belly', W, -.27, -.422, -pi + .8, -.8, mirror=False, **kw)
+    HG.shell(P, 'hg_lower', W, -.27, -.422, -.72, -.22, **kw)
+    HG.slats(P, 'hg_vent_bar', W, -.272, -.42, -.16, .2, 8, share=.56, **kw)
+    HG.shell(P, 'hg_upper', W, -.27, -.422, .26, .84, **kw)
+    HG.slats(P, 'hg_top_bar', PK, -.272, -.42, .92, 1.2, 8, share=.56, **kw)
+    HG.shell(P, 'hg_top', PK, -.27, -.422, 1.28, pi - 1.28, mirror=False, **kw)
+    HG.checker(P, 'fore_checker', W, -.3, -.4, -.64, -.32, 28, 5, .0007, d=.0001)
+    HG.collar(P, 'ferrule', S, -.256, .014, .0012)
+    HG.collar(P, 'hg_cap', S, -.42, .014, .0012)
     P += K.rail(M, -.278, -.392, .1075, .02, PK)
-    # ---- what makes it a made thing: trunnion and rivets, pressed ribs, the dust cover, cover ribs, the well's mouth,
-    # the selector's stops, cut checkering on the grip and the forend, a ribbed butt plate
-    P.append(plate('trunnion', [(-.168, .03), (-.168, .082), (-.213, .082), (-.213, .03)], S, .0215, .0262, .0012))
-    G.rivets(P, [(-.178, .04), (-.178, .072), (-.203, .04), (-.203, .072)], .0262, S)
-    G.rivets(P, [(.14, .042), (.14, .072), (.06, .042)], .0242, S, .002)
-    G.stamp(P, 'press_rib', [(.095, .058, .07, .008), (-.075, .05, .13, .008)], .0242, S)
-    G.dust_cover(P, .008, -.13, .0655, .0246, PK, .017)
-    for y in (-.03, -.07, -.11, -.15):
-        P.append(prism('cover_rib', [(y, .1055), (y, .1078), (y - .012, .1078), (y - .012, .1055)], .032, PK, .0009))
-    P.append(prism('well_mouth', [(-.076, .008), (-.076, .002), (-.17, .002), (-.17, .008)], .05, S, .002))
-    for y, z in ((.07, .06), (.024, .046)):
-        P.append(lathe_x('sel_stop', [(0, .0018), (.0016, .0018), (.002, .001), (.002, 0)], (.0242, y, z), S, 10, 1))
-    g = G.gp(.32, 0, .024)
-    G.checker(P, 'grip_checker', [g(-.012, .03), g(.014, .027), g(.013, .09), g(-.01, .094)], .0169, RB, 12, 16, .0007)
-    G.checker(P, 'fore_checker', [(-.3, .034), (-.39, .034), (-.39, .046), (-.3, .046)], .0296, W, 22, 4, .0007)
+
+    # ---------------------------------------------------------------- stock: walnut through ten sections
+    # the wrist grows out of the tang with a palm swell, the comb rolls over and drops to the heel, a cheek flat on the left
+    P.append(G.sloft('stock', [(.166, .034, .0765, .0165, 4.0, 1.0), (.185, .03, .073, .017, 3.2, .95), (.205, .022, .0715, .0178, 2.5, .9),
+                               (.235, .012, .0705, .0166, 2.5, .85), (.27, .002, .0695, .0172, 2.6, .8), (.31, -.014, .0675, .0184, 2.8, .8),
+                               (.35, -.03, .065, .0195, 2.9, .82), (.39, -.045, .061, .0205, 3.0, .86), (.42, -.056, .057, .021, 3.2, .9),
+                               (.445, -.066, .052, .0212, 3.6, .95)], W, n=28, sub=4))
+    P.append(G.sloft('cheek_flat', [(.262, .03, .062, .0042, 3.0, 1.0, .0152), (.3, .016, .0625, .0052, 3.0, 1.0, .0158), (.36, -.006, .0595, .0056, 3.0, 1.0, .0172),
+                                    (.405, -.022, .055, .0046, 3.0, 1.0, .0184)], W, 14, 4))
+    P.append(G.rloft('buttplate', [(.444, -.067, .053, .0215, 3.6), (.452, -.066, .052, .0212, 3.6), (.455, -.062, .048, .0195, 3.2)], S, n=32))
     for i in range(5):
-        z = .048 - i * .022
+        z = .038 - i * .022
         P.append(G.rloft('butt_rib', [(.4555, z - .006, z + .006, .0185, 3.0), (.4585, z - .004, z + .004, .016, 3.0)], S, n=16))
+    for s_ in (1, -1):
+        P.append(lathe_x('stock_bolt', [(0, .0055), (.0012, .0055), (.002, .004), (.002, 0)], (s_ * .0168, .205, .048), S, 16, s_))
+    G.swivel(P, .36, -.0355, S)
+    P += K.sling_loop(-.43, .024, S, x=.031)
+
+    # ---------------------------------------------------------------- pistol grip: lofted down its own axis
+    # (its back strap, front strap, width and length are the ones the firing hand is fitted to)
+    GR = G.Limb([(-.006, -.024, .03, .0145, 3.0), (.01, -.0255, .0318, .0152, 2.8), (.025, -.0268, .0316, .0156, 2.7), (.04, -.0258, .0296, .016, 2.7),
+                 (.055, -.0272, .0268, .0163, 2.7), (.07, -.026, .0262, .016, 2.7), (.085, -.0272, .0266, .0156, 2.7), (.1, -.0262, .0274, .0154, 2.8),
+                 (.112, -.024, .028, .0152, 3.0), (.119, -.021, .0275, .0146, 3.2)], .32, 0.0, .024)
+    GR.skin(P, OD, 'grip', step=.005, n=32)
+    GR.checker(P, 'grip_checker', RB, .034, .098, -.8, .8, 15, 12, .0006, d=.0002)
+    c = GR.pt(.016, .1, .0002)
+    P.append(lathe_x('grip_screw', [(0, .0034), (.0012, .0034), (.0018, .0024), (.0018, 0)], c, S, 12, 1))
+    P.append(G.rprism('grip_plug', [GR.g(-.02, .118), GR.g(.027, .1145), GR.g(.0275, .1185), GR.g(-.0195, .1225)], .026, PO, .003))
+
+    # ---------------------------------------------------------------- magazine: curved, pressed ribs, floor plate, lips
+    prof = G.arc_profile(-.085, .02, .5, .064, .29, 14)
+    MAG = [G.rprism('magbody', prof, .03, S, .004, 3)]
+    for dr in (.013, .032, .051):
+        MAG.append(plate('magrib', G.arc_strip(-.085, .02, .5, .5 - dr + .0036, .5 - dr - .0036, .035, .27), S, .0142, .0172, .001))
+    for t0 in (.09, .19):                                             # two pressed bands across it
+        MAG.append(plate('magband', G.arc_strip(-.085, .02, .5, .497, .439, t0, t0 + .012, 3), S, .0142, .0166, .0006))
+    MAG.append(prism('floorplate', G.arc_floor(-.085, .02, .5, .064, .29, .009), .034, S, .002))
+    fl = G.arc_floor(-.085, .02, .5, .064, .29, .009)
+    MAG.append(prism('floor_catch', [fl[3], (fl[3][0] + .006, fl[3][1] + .003), (fl[0][0] + .006, fl[0][1] + .012), (fl[0][0] + .001, fl[0][1] + .01)], .01, PK, .001))
+    G.feed_lips(MAG, -.085, -.149, .02, .03, S, M['brass'])
     sz = .1195
     finish('gun_rifle', P, (0, -.69, zb), (0, -.345, .012), (0, .06, sz), rail=(0, -.335, .117),
            moving=[('mag', MAG, (0, -.149, .02)), ('bolt', BOLT, (RIGHT * .049, -.128, .074))])
 
 
 def carbine():
-    """Carbine: a flat-top upper on a slab-sided lower, an eight-bar free-float handguard, a collapsing stock, a
-    pronged flash hider, folding irons."""
+    """Carbine (a modern alloy gun, our own pattern): an upper and a lower lofted as two halves that meet in a
+    parting line; the magazine well forged as its own deep form with a fence and a flared mouth; a free-floating
+    handguard tube of ten bars; a stepped barrel with its gas block and tube, a pronged hider; a collapsing stock on
+    a buffer tube with a shaped cheek piece and a ribbed pad; a lofted grip; a curved magazine; folding irons."""
     bl.reset(); M = K.kinetic_mats(); S, PK, PO, RB = M['steel'], M['park'], M['poly'], M['rubber']
     zb = .066; P = []
-    P.append(prism('lower', [(.1, .046), (.1, .022), (.074, .014), (.03, .014), (.03, .018), (-.04, .018), (-.046, -.006), (-.05, -.03), (-.124, -.036),
-                             (-.128, -.004), (-.138, .02), (-.138, .046)], .034, PK, .002))
-    P.append(plate('well_flare', [(-.05, -.014), (-.052, -.034), (-.125, -.04), (-.128, -.018)], PK, .016, .0196, .001))
-    P.append(G.loft('upper', [(.1, .046, .09, .0165, (.005, .001)), (-.136, .046, .09, .0165, (.005, .001))], PK))
-    P.append(plate('upper_cheek', [(.092, .052), (.092, .084), (.01, .084), (-.006, .074), (-.128, .074), (-.128, .052)], PK, .015, .0182, .0012))
-    G.port(P, -.004, -.056, .06, .0765, .0182, M['rubber'], None, side=-1, door_m=PK)
-    BOLT = [plate('boltface', [(-.006, .0615), (-.006, .075), (-.054, .075), (-.054, .0615)], S, .008, .0172, .0008, sym=False, side=-1)]
-    P += [prism('deflector', [(.05, .062), (.03, .078), (.022, .078), (.026, .06)], .008, PK, .001, x=RIGHT * .019),
-          lathe_x('fwdassist', [(0, .0075), (.008, .0075), (.0095, .006), (.0095, 0)], (RIGHT * .0165, .075, .07), PK, 16, -1)]
+    pi = math.pi
+    # ---------------------------------------------------------------- upper half
+    U = G.Body([(.102, .05, .088, .0145, 4.0), (.085, .047, .09, .016, 5.0), (.05, .046, .09, .0165, 5.5), (.01, .046, .09, .0165, 5.5), (-.02, .046, .09, .0172, 5.5),
+                (-.06, .046, .09, .0172, 5.5), (-.09, .046, .09, .0165, 5.5), (-.115, .047, .09, .0165, 5.0), (-.13, .05, .09, .0172, 3.4), (-.139, .052, .088, .0178, 2.4)])
+    U.skin(P, PK, 'upper', step=.007, n=36)
+    U.shell(P, 'upper_cheek', PK, .09, .012, U.af(.1), U.af(.8), t=.0014, ch=.0012)
+    U.shell(P, 'upper_boss', PK, -.07, -.124, U.af(-.2), U.af(.8), t=.0016, ch=.0012)
+    U.shell(P, 'upper_strake', PK, .0, -.062, U.af(.1), U.af(.8), t=.0014, ch=.0012, mirror=False, side=1)
+    xp = U.pt(-.03, .3, .0004)[0]
+    G.port(P, -.004, -.056, .06, .0765, xp, RB, None, side=-1, door_m=PK)
+    BOLT = [plate('boltface', [(-.006, .0615), (-.006, .075), (-.054, .075), (-.054, .0615)], S, .008, xp - .001, .0008, sym=False, side=-1)]
+    P += [G.rprism('deflector', [(.05, .062), (.03, .078), (.022, .078), (.026, .06)], .008, PK, .002, x=RIGHT * .0185),
+          lathe_x('fwdassist', [(0, .0075), (.008, .0075), (.0095, .006), (.0095, 0)], (RIGHT * .016, .075, .07), PK, 20, -1)]
     CHARGE = [prism('chandle', [(.128, .0815), (.128, .0905), (.1, .0905), (.096, .0815)], .03, PK, .0015),
               prism('chlatch', [(.124, .083), (.124, .089), (.108, .089), (.108, .083)], .04, S, .001)]
-    # the stock on its tube
-    G.stock_tube(P, PK, PO, RB, S, .1, .065, L=.25, r=.0155, w=.036)
-    P += K.sling_loop(.31, .05, S, x=.02)
-    # grip, trigger, controls
-    G.grip(P, PO, RB, None, ang=.33, h=.11, w=.03, z=.016, swell=.004)
-    G.guard(P, PK, [(-.05, .014), (-.052, -.01), (-.044, -.024), (-.03, -.03), (-.014, -.03), (-.006, -.026)], .012, .005)
+    # ---------------------------------------------------------------- lower half and the forged magazine well
+    Lw = G.Body([(.102, .026, .049, .0145, 4.0), (.085, .017, .049, .016, 5.0), (.05, .014, .049, .0165, 5.5), (.02, .015, .049, .0165, 5.5), (-.01, .016, .049, .0165, 5.5),
+                 (-.04, .017, .049, .0168, 5.5), (-.075, .018, .049, .0172, 5.5), (-.11, .018, .049, .0172, 5.5), (-.13, .02, .049, .017, 5.0), (-.142, .026, .049, .0162, 4.0)])
+    Lw.skin(P, PK, 'lower', step=.007, n=36)
+    Lw.shell(P, 'lower_step', PK, .092, -.034, Lw.af(-.7), Lw.af(.55), t=.0014, ch=.0012)
+    Wl = G.Body([(-.042, -.002, .03, .0162, 5.0), (-.05, -.02, .03, .0178, 6.0), (-.066, -.03, .03, .0186, 6.0), (-.086, -.035, .03, .0188, 6.0), (-.106, -.038, .03, .0188, 6.0),
+                 (-.122, -.038, .03, .0186, 6.0), (-.131, -.024, .03, .018, 5.0), (-.138, -.002, .03, .0166, 4.0)])
+    Wl.skin(P, PK, 'well', step=.006, n=36)
+    Wl.shell(P, 'well_mouth', PK, -.052, -.128, -1.5, -.7, t=.0022, base=-.002)
+    Wl.shell(P, 'well_fence', PK, -.058, -.124, Wl.af(-.45), Wl.af(.1), t=.0013, ch=.0012)
+    for y, z in ((.082, .034), (-.122, .034)):                         # pivot and takedown pins in their bosses
+        x = Lw.pt(y, 0, .0002)[0]
+        G.rivets(P, [(y, z)], x, PK, .0058)
+        P.append(K.cylx('pin', .0026, 2 * x + .0034, (0, y, z), S, 14, .0005))
+    xs = Lw.pt(.05, 0, .0016)[0]
+    G.selector(P, .05, .032, xs, S, 1, ang=.4, L=.02)
+    for y, z in ((.066, .04), (.036, .022)):
+        P.append(lathe_x('sel_stop', [(0, .0016), (.0016, .0016), (.002, .0009), (.002, 0)], (xs, y, z), S, 10, 1))
+    P += [lathe_x('magrelease', [(0, .0046), (.003, .0046), (.0038, .0036), (.0038, 0)], (RIGHT * (Wl.pt(-.05, .2, 0)[0] + .0002), -.049, .024), S, 16, -1),
+          plate('boltcatch', [(-.03, .047), (-.03, .034), (-.05, .034), (-.05, .047)], S, .0162, .0196, .0008, sym=False, side=1)]
+    G.guard(P, PK, [(-.05, .014), (-.052, -.01), (-.044, -.024), (-.03, -.03), (-.014, -.03), (-.006, -.026)], .012, .0046, r=.0018)
     G.trigger(P, S, -.024, .016, L=.03)
-    P.append(plate('lower_step', [(.09, .018), (.09, .042), (-.034, .042), (-.04, .024), (.03, .022)], PK, .016, .0188, .001))
-    G.seamline(P, [(-.046, -.004), (-.046, .044)], .0172, RB)
-    P.append(plate('brass_deflect_pad', [(.046, .064), (.034, .076), (.026, .076), (.03, .062)], S, .0182, .0196, .0005, sym=False, side=-1))
-    for i in range(3):
-        P.append(G.band('buffer_groove', .125 + i * .02, .003, .0162, S, .065, 0, .0025, 24, .0005))
-    G.cross_pins(P, [(.08, .035), (-.118, .035)], .034, S, .0026)
-    G.selector(P, .05, .032, .017, S, 1, ang=.4, L=.02)
-    P += [lathe_x('magrelease', [(0, .0046), (.003, .0046), (.0038, .0036), (.0038, 0)], (RIGHT * .017, -.045, .032), S, 14, -1),
-          plate('boltcatch', [(-.03, .046), (-.03, .034), (-.05, .034), (-.05, .046)], S, .016, .0195, .0008, sym=False, side=1)]
-    G.hexbolts(P, [(.06, .068), (-.1, .062)], .0182, S, .0024)
-    # the handguard: eight bars on three frames, a rail down the top
-    G.cage(P, 'handguard', -.136, -.432, zb, .029, PK, t=.004, bars=8, fill=.6, frames=((-.134, .018), (-.276, .008), (-.42, .012)), phase=math.pi / 2)
-    P.append(lathe('barrelnut', [(-.128, 0), (-.128, .022), (-.142, .022), (-.142, 0)], S, zb, 0, 12, sharp=20))
+    k_grip(P, PO, RB, .33, .11, .03, .016)
+    # ---------------------------------------------------------------- buffer tube and the collapsing stock
+    P.append(G.tube_('buffer', .33, .1, .0155, PK, .065, n=36))
+    P.append(lathe('castlenut', [(.116, 0), (.116, .02), (.102, .02), (.102, 0)], S, .065, 0, 12, sharp=20))
+    P.append(G.rprism('endplate', [(.1, .04), (.1, .09), (.105, .09), (.105, .04)], .034, S, .003))
+    for i in range(4):
+        P.append(G.band('buffer_groove', .135 + i * .014, .003, .0162, S, .065, 0, .0022, 36, .0005))
+    P.append(G.sloft('stock_body', [(.19, .044, .0865, .0185, 3.0, 1.0), (.215, .03, .0885, .019, 2.8, 1.12), (.25, .006, .0895, .0188, 2.8, 1.18), (.29, -.02, .089, .019, 3.0, 1.12),
+                                    (.325, -.04, .0865, .0196, 3.2, 1.02), (.35, -.048, .082, .0196, 3.6, 1.0)], PO, 28, 4))
+    G.slots(P, 'stock_cut', [(.3, .03, .04, .012, -.5)], .0188, RB, lift=.0006)
+    P.append(G.rprism('stock_latch', [(.2, .04), (.25, .016), (.246, .01), (.2, .03)], .012, S, .003))
+    G.ribbed_pad(P, RB, .35, .082, -.048, .04, 6, .014)
+    P += K.sling_loop(.31, -.046, S)
+    # ---------------------------------------------------------------- the free-floating handguard tube, barrel group
+    G.cage(P, 'handguard', -.14, -.432, zb, .029, PK, t=.004, bars=10, fill=.7, frames=((-.14, .016), (-.236, .007), (-.33, .007), (-.42, .012)), phase=pi / 2)
+    P.append(lathe('barrelnut', [(-.128, 0), (-.128, .0225), (-.146, .0225), (-.146, 0)], S, zb, 0, 12, sharp=20))
+    for y in (-.148, -.24, -.334, -.426):
+        G.hexbolts(P, [(y, zb - .012), (y, zb + .012)], .0298, S, .002)
     P += K.rail(M, .1, -.43, .09, .022, PK)
-    # barrel, gas block and tube, flash hider
     G.barrel_stepped(P, 'barrel', [(-.13, .0118), (-.19, .0092), (-.372, .0085), (-.49, .0098), (-.51, .0085), (-.535, .0085)], zb, S, .004)
     G.gas_block(P, -.348, .024, zb, zb + .017, S, r=.0128)
-    P.append(G.tube_('gastube', -.14, -.36, .003, S, zb + .017, n=10))
+    P.append(G.tube_('gastube', -.14, -.36, .003, S, zb + .017, n=12))
     G.hider(P, 'flashhider', -.53, zb, .0112, .056, S, 4)
-    # magazine
-    MAG = G.box_mag('magbody', [(-.058, .012), (-.06, -.08), (-.074, -.17), (-.088, -.205), (-.152, -.198), (-.136, -.162), (-.122, -.08), (-.118, .012)],
-                    .022, PK, floor_m=PO, floor=[(-.085, -.2), (-.156, -.193), (-.158, -.206), (-.088, -.214)],
-                    ribs=[[(-.07, -.01), (-.078, -.01), (-.094, -.185), (-.086, -.185)], [(-.092, -.01), (-.1, -.01), (-.12, -.185), (-.112, -.185)],
-                          [(-.108, -.01), (-.114, -.01), (-.14, -.18), (-.134, -.18)]])
-    MAG.append(G.tube_('magtop', -.064, -.09, .0042, M['brass'], .015, n=12))
+    # ---------------------------------------------------------------- magazine
+    MAG = [G.rprism('magbody', [(-.058, .012), (-.06, -.08), (-.074, -.17), (-.088, -.205), (-.152, -.198), (-.136, -.162), (-.122, -.08), (-.118, .012)], .022, PK, .003, 3)]
+    for rp in ([(-.07, -.01), (-.078, -.01), (-.094, -.185), (-.086, -.185)], [(-.092, -.01), (-.1, -.01), (-.12, -.185), (-.112, -.185)],
+               [(-.108, -.01), (-.114, -.01), (-.14, -.18), (-.134, -.18)]):
+        MAG.append(plate('magrib', rp, PK, .0098, .0122, .0006))
+    MAG.append(G.rprism('magfloor', [(-.085, -.2), (-.156, -.193), (-.158, -.206), (-.088, -.214)], .027, PO, .003))
+    G.feed_lips(MAG, -.062, -.114, .012, .022, PK, M['brass'])
     sz = .1335
     optic = []
     G.iron_rear(optic, .07, sz, PK, base_z=.0995)
     G.iron_front(optic, -.41, sz, PK, base_z=.0995)
-    # ---- made and used: pivot bosses, pressed ribs on the well, a rib along the upper, feed lips, cut checkering,
-    # handguard screws
-    G.rivets(P, [(.08, .035), (-.118, .035)], .017, PK, .0058)
-    G.stamp(P, 'well_rib', [(-.072, -.008, .034, .0052, math.pi / 2 - .12), (-.1, -.01, .034, .0052, math.pi / 2 - .12)], .0196, PK)
-    G.stamp(P, 'upper_rib', [(.05, .0795, .07, .0042), (-.09, .0685, .06, .0042)], .0182, PK)
-    P.append(prism('well_mouth', [(-.048, -.03), (-.05, -.036), (-.126, -.042), (-.126, -.036)], .04, PK, .0015))
-    for y, z in ((.066, .04), (.036, .022)):
-        P.append(lathe_x('sel_stop', [(0, .0016), (.0016, .0016), (.002, .0009), (.002, 0)], (.017, y, z), S, 10, 1))
-    G.feed_lips(MAG, -.062, -.114, .012, .022, PK, M['brass'])
-    g = G.gp(.33, 0, .016)
-    G.checker(P, 'grip_checker', [g(-.012, .03), g(.014, .027), g(.013, .086), g(-.01, .09)], .0164, RB, 12, 16, .0007)
-    for y in (-.143, -.28, -.426):
-        G.hexbolts(P, [(y, zb - .012), (y, zb + .012)], .0298, S, .002)
-    P.append(G.band('barrel_nut_knurl', -.142, .006, .0235, PK, zb, 0, .003, 24, .0008))
     finish('gun_carbine', P, (0, -.585, zb), (0, -.3, .028), (0, .1, sz), optic=optic, rail=(0, -.02, .0995),
            moving=[('mag', MAG, (0, -.088, .012)), ('charge', CHARGE, (0, .112, .086)), ('bolt', BOLT, (RIGHT * .01, -.03, .068))])
 
 
 def bolt_rifle():
-    """Bolt-action precision rifle: a round steel action bedded in a moulded stock (a deep forend with the barrel
-    floating in its channel, a thumbhole butt with an adjustable cheek piece and a spaced pad), bottom metal with a
-    detachable box, a heavy fluted barrel with a three-port brake, a folded bipod."""
+    """Bolt-action precision rifle: a round action (a turned receiver with its ring and bridge, the port between
+    them, a bolt with a knurled knob, shroud and cocking piece) bedded in a chassis stock lofted from the action's
+    tail to the forend's tip; the heavy fluted barrel floats over the forend with a visible gap; bottom metal with a
+    detachable box; a thumbhole butt through ten sections with an adjustable cheek piece; a folded bipod."""
     bl.reset(); M = K.kinetic_mats(); S, PK, OD, RB = M['steel'], M['park'], M['odg'], M['rubber']
     zb = .077; P = []
-    # the stock: forend and action bed in one, the butt, the limb that closes the thumbhole
-    P.append(G.sloft('forend', [(-.53, .04, .066, .019, 4.0), (-.5, .032, .0715, .0245, 4.5), (-.32, .028, .0725, .0275, 4.5), (-.16, .022, .0725, .0285, 4.5),
-                                (-.05, .018, .066, .0285, 4.5), (.06, .018, .062, .027, 4.5), (.13, .026, .062, .0245, 4.0)], OD, n=24, sub=4))
-    P.append(prism('channel', [(-.142, .069), (-.142, .0742), (-.526, .0742), (-.526, .069)], .034, RB, .0005))
-    G.slots(P, 'forendslot', [(-.24 - i * .06, .05, .036, .009, 0) for i in range(5)], .0283, PK, lift=.0008)
-    P.append(G.sloft('butt', [(.11, .03, .064, .024, 4.0), (.16, .03, .086, .0225, 3.4), (.22, .028, .094, .022, 3.2), (.34, -.02, .0945, .0225, 3.2),
-                              (.44, -.078, .094, .0235, 3.6), (.472, -.094, .09, .0235, 4.0)], OD, n=24, sub=4))
-    P.append(G.rprism('limb', [(.044, -.076), (.07, -.074), (.42, -.07), (.456, -.086), (.45, -.1), (.07, -.094), (.044, -.092)], .03, OD, .008))
-    P.append(G.rprism('cheek', [(.2, .09), (.212, .098), (.39, .098), (.4, .09)], .04, RB, .004))
-    for yy in (.24, .36):
-        P.append(lathe_z('cheekpost', [(-.016, 0), (-.016, .004), (0, .004), (0, 0)], (0, yy, .092), S, 10))
-    P.append(lathe_x('cheekknob', [(0, .0105), (.007, .0105), (.009, .0085), (.009, 0)], (.0215, .3, .07), PK, 16, 1))
-    P.append(G.rloft('buttspacer', [(.4715, -.095, .091, .0242, 4.0), (.4765, -.095, .091, .0242, 4.0)], S, n=24))
-    P.append(G.rloft('buttpad', [(.4765, -.094, .09, .0245, 4.0), (.49, -.09, .086, .024, 4.0), (.494, -.084, .08, .022, 3.5)], RB, n=24))
-    P.append(lathe_z('monopod', [(-.04, 0), (-.04, .009), (-.034, .009), (-.032, .006), (0, .006), (0, 0)], (0, .41, -.096), PK, 12))
-    G.hexbolts(P, [(-.06, .042), (.09, .042), (-.2, .042)], .0284, S, .003)
-    # the action: receiver, port, lug, rail; the bolt with its shroud, bent handle and knob
-    P.append(lathe('receiver', [(.13, 0), (.13, .019), (.126, .021), (-.136, .021), (-.14, .019), (-.14, 0)], S, zb, 0, 28))
-    P.append(plate('port', [(.03, zb - .002), (.03, zb + .014), (-.04, zb + .014), (-.04, zb - .002)], RB, .0165, .0214, .0008, sym=False, side=-1))
-    P.append(prism('recoillug', [(-.124, .04), (-.124, .07), (-.136, .07), (-.136, .04)], .03, S, .002))
-    P.append(plate('boltstop', [(.085, zb - .004), (.085, zb + .006), (.06, zb + .006), (.056, zb - .004)], S, .0195, .0232, .0008, sym=False, side=1))
-    BOLT = [G.tube_('bolt', .05, -.05, .0125, PK, zb, n=16), G.tube_('shroud', .16, .125, .016, S, zb, n=20),
-            G.band('shroudring', .13, .005, .0172, S, zb, 0, .003, 20, .0006),
-            lathe('cockpiece', [(.172, 0), (.172, .006), (.16, .009), (.16, 0)], PK, zb, 0, 12),
+    # ---------------------------------------------------------------- the chassis: twelve sections; the barrel floats
+    CH = G.Body([(.14, .03, .06, .022, 4.0), (.1, .02, .062, .026, 4.5), (.04, .016, .062, .0275, 4.8), (-.03, .016, .064, .0285, 4.8), (-.1, .018, .064, .0285, 4.8),
+                 (-.16, .022, .062, .0285, 4.8), (-.2, .026, .058, .028, 4.6), (-.3, .028, .057, .0272, 4.4), (-.4, .03, .056, .026, 4.4), (-.48, .032, .056, .0245, 4.2),
+                 (-.515, .036, .055, .022, 4.0), (-.532, .042, .054, .018, 3.4)])
+    CH.skin(P, OD, 'chassis', step=.008, n=36)
+    CH.shell(P, 'bed_panel', OD, .09, -.15, CH.af(-.5, 0), CH.af(.6, 0), t=.0016, ch=.0014)
+    for ya, yb in ((-.21, -.3), (-.312, -.402), (-.414, -.5)):
+        CH.shell(P, 'fore_panel', OD, ya, yb, CH.af(-.55, -.3), CH.af(.55, -.3), t=.0016, ch=.0014)
+    CH.checker(P, 'fore_checker', OD, -.23, -.48, CH.af(-.95, -.3), CH.af(-.68, -.3), 44, 4, .0006)
+    for y in (-.06, .09, -.2):
+        x = CH.pt(y, 0, .0018)
+        G.rivets(P, [(y, x[2])], x[0], S, .003)
+    for y in (-.05, .1):
+        P.append(lathe_z('pillar_screw', [(-.003, 0), (-.003, .0045), (-.001, .0052), (0, .0052), (0, 0)], (0, y, CH.sec(y)[0] + .0005), S, 6))
+    # ---------------------------------------------------------------- the action: ring, port, bridge; rail; bolt
+    P.append(lathe('receiver', [(.13, 0), (.13, .0205), (.127, .022), (.062, .022), (.058, .0198), (-.083, .0198), (-.087, .0225), (-.137, .0225), (-.14, .0205), (-.14, 0)],
+                   S, zb, 0, 44))
+    P.append(plate('port', [(.03, zb - .002), (.03, zb + .014), (-.04, zb + .014), (-.04, zb - .002)], RB, .0165, .0202, .0008, sym=False, side=-1))
+    P.append(G.rprism('recoillug', [(-.124, .04), (-.124, .07), (-.138, .07), (-.138, .04)], .03, S, .004))
+    P.append(plate('boltstop', [(.085, zb - .004), (.085, zb + .006), (.06, zb + .006), (.056, zb - .004)], S, .0195, .0236, .0008, sym=False, side=1))
+    P.append(lathe_x('safety', [(0, .0048), (.003, .0048), (.0038, .0036), (.0038, 0)], (RIGHT * .0205, .14, zb + .006), S, 16, -1))
+    P.append(plate('safety_lever', [(.142, zb + .004), (.158, zb + .016), (.154, zb + .019), (.138, zb + .008)], S, .0236, .0262, .0007, sym=False, side=-1))
+    kc = (RIGHT * .054, .1205, zb - .0305)
+    BOLT = [G.tube_('bolt', .05, -.05, .0125, PK, zb, n=24), G.tube_('shroud', .16, .125, .016, S, zb, n=28),
+            G.band('shroudring', .13, .005, .0172, S, zb, 0, .003, 28, .0006), G.band('bolt_collar', .121, .008, .0185, PK, zb, 0, .003, 28, .0008),
+            lathe('cockpiece', [(.172, 0), (.172, .006), (.16, .009), (.16, 0)], PK, zb, 0, 16),
             rod('boltroot', (RIGHT * .01, .112, zb + .002), (RIGHT * .03, .114, zb - .006), .0062, S),
             rod('boltarm', (RIGHT * .03, .114, zb - .006), (RIGHT * .058, .12, zb - .03), .0048, S),
-            lathe_x('boltknob', [(0, .0045), (.004, .0098), (.012, .012), (.019, .0105), (.023, .0055), (.023, 0)], (RIGHT * .054, .1205, zb - .0305), PK, 16, -1)]
+            lathe_x('boltknob', [(0, .0045), (.004, .0098), (.012, .012), (.019, .0105), (.023, .0055), (.023, 0)], kc, PK, 24, -1)]
+    for dx in (.007, .011, .015):                                    # the knob's knurl: three raised rings
+        BOLT.append(lathe_x('knob_knurl', [(dx, .0114), (dx, .0126), (dx + .002, .0126), (dx + .002, .0114)], kc, PK, 24, -1, closed=True))
     P += K.rail(M, .12, -.13, .097, .022, PK)
-    # the barrel: heavy, six lands, the brake
+    # ---------------------------------------------------------------- the barrel: heavy, six lands, the brake
     V.barrel('barrel', M, -.14, -.78, zb, .0148, P, m=S, rings=[(-.165, .0185, .03)])
     for k in range(6):
         a = math.pi / 6 + k * math.pi / 3
-        P.append(G.bar('land', -.2, -.72, .0142, .017, a - .22, a + .22, S, zb, 0, 1))
+        P.append(G.bar('land', -.2, -.72, .0142, .017, a - .22, a + .22, S, zb, 0, 2))
     G.brake(P, 'brake', -.775, zb, .021, .09, S, RB, 3, bore=.008)
-    P.append(G.band('brakering', -.778, .006, .0222, PK, zb, 0, .003, 24, .0006))
-    # bottom metal: the guard, the trigger, the box and its release
-    P.append(prism('bottommetal', [(.0, .0125), (.0, .0205), (-.2, .0205), (-.21, .0165), (-.2, .0125)], .037, S, .0015))
-    G.guard(P, S, [(-.08, .016), (-.081, -.008), (-.072, -.022), (-.056, -.028), (-.024, -.028), (-.008, -.022)], .012, .0052)
+    P.append(G.band('brakering', -.778, .006, .0222, PK, zb, 0, .003, 32, .0006))
+    P.append(G.band('muzzle_thread', -.768, .008, .0162, PK, zb, 0, .0025, 32, .0006))
+    # ---------------------------------------------------------------- bottom metal, guard, box, bipod
+    P.append(G.rprism('bottommetal', [(.0, .0115), (.0, .0205), (-.2, .0205), (-.21, .0165), (-.2, .0115)], .037, S, .003))
+    G.guard(P, S, [(-.08, .016), (-.081, -.008), (-.072, -.022), (-.056, -.028), (-.024, -.028), (-.008, -.022)], .012, .0048, r=.0018)
     G.trigger(P, S, -.04, .02, L=.03)
-    P += G.box_mag('mag', [(-.086, .02), (-.086, -.035), (-.094, -.045), (-.152, -.045), (-.158, -.035), (-.158, .02)], .033, M['poly'], floor_m=PK,
-                   floor=[(-.09, -.042), (-.154, -.042), (-.155, -.05), (-.091, -.05)],
-                   ribs=[[(-.1, .008), (-.106, .008), (-.106, -.036), (-.1, -.036)], [(-.132, .008), (-.138, .008), (-.138, -.036), (-.132, -.036)]])
-    P.append(prism('magrel', [(-.074, .006), (-.074, -.006), (-.086, -.006), (-.086, .006)], .012, S, .002))
-    P.append(prism('bipodclamp', [(-.485, .014), (-.485, .034), (-.515, .034), (-.515, .014)], .044, PK, .003))
+    P.append(G.rprism('mag', [(-.086, .02), (-.086, -.035), (-.094, -.045), (-.152, -.045), (-.158, -.035), (-.158, .02)], .033, M['poly'], .004, 3))
+    for yy in (-.1, -.132):
+        P.append(plate('magrib', [(yy, .008), (yy - .006, .008), (yy - .006, -.036), (yy, -.036)], M['poly'], .0155, .0177, .0006))
+    P.append(G.rprism('magfloor', [(-.09, -.042), (-.154, -.042), (-.155, -.051), (-.091, -.051)], .037, PK, .003))
+    P.append(G.rprism('magrel', [(-.074, .006), (-.074, -.008), (-.086, -.008), (-.086, .006)], .012, S, .003))
+    P.append(G.rprism('bipodclamp', [(-.485, .014), (-.485, .034), (-.515, .034), (-.515, .014)], .044, PK, .005))
     for s in (1, -1):
-        P += [G.tube_('bipodleg', -.49, -.69, .0055, PK, .012, s * .014, n=10), G.tube_('bipodext', -.68, -.74, .0042, S, .012, s * .014, n=10),
-              lathe('bipodfoot', [(-.737, 0), (-.737, .008), (-.752, .008), (-.752, 0)], RB, .012, s * .014, 10)]
-    # the grip
-    G.grip(P, OD, RB, PK, ang=.2, h=.118, w=.034, z=.022, swell=.005)
+        P += [G.tube_('bipodleg', -.49, -.69, .0055, PK, .012, s * .014, n=16), G.tube_('bipodext', -.68, -.74, .0042, S, .012, s * .014, n=12),
+              lathe('bipodfoot', [(-.737, 0), (-.737, .008), (-.752, .008), (-.752, 0)], RB, .012, s * .014, 14)]
+    # ---------------------------------------------------------------- grip and the thumbhole butt
+    k_grip(P, OD, RB, .2, .118, .034, .022, plug_m=PK)
+    P.append(G.sloft('butt', [(.11, .03, .062, .024, 4.0, 1.0), (.14, .03, .074, .0232, 3.6, 1.0), (.17, .03, .086, .0225, 3.4, .95), (.22, .028, .094, .022, 3.2, .9),
+                              (.28, .006, .0945, .0222, 3.2, .88), (.34, -.02, .0945, .0225, 3.2, .88), (.39, -.05, .0945, .023, 3.4, .9),
+                              (.44, -.078, .094, .0235, 3.6, .95), (.46, -.088, .092, .0235, 3.8, 1.0), (.472, -.094, .09, .0235, 4.0, 1.0)], OD, 28, 4))
+    P.append(G.rprism('limb', [(.044, -.076), (.07, -.074), (.42, -.07), (.456, -.086), (.45, -.1), (.07, -.094), (.044, -.092)], .03, OD, .009, 4))
+    P.append(G.rprism('cheek', [(.2, .09), (.212, .098), (.39, .098), (.4, .09)], .04, RB, .004))
+    for yy in (.24, .36):
+        P.append(lathe_z('cheekpost', [(-.016, 0), (-.016, .004), (0, .004), (0, 0)], (0, yy, .092), S, 12))
+    P.append(lathe_x('cheekknob', [(0, .0105), (.007, .0105), (.009, .0085), (.009, 0)], (.0215, .3, .07), PK, 20, 1))
+    P.append(G.rloft('buttspacer', [(.4715, -.095, .091, .0242, 4.0), (.4765, -.095, .091, .0242, 4.0)], S, n=28))
+    G.ribbed_pad(P, RB, .4765, .09, -.094, .049, 7, .016)
+    P.append(lathe_z('monopod', [(-.04, 0), (-.04, .009), (-.034, .009), (-.032, .006), (0, .006), (0, 0)], (0, .41, -.096), PK, 14))
     P += K.sling_loop(.3, -.104, S) + K.sling_loop(-.5, .02, S, x=.03)
     ROUND = [lathe('rd_case', [(.03, 0), (.03, .0058), (.028, .0062), (-.02, .0062), (-.032, .0042), (-.032, 0)], M['brass'], .3, 0, 12),
              lathe('rd_nose', [(-.032, 0), (-.032, .0042), (-.044, .003), (-.05, .0012), (-.05, 0)], M['steel'], .3, 0, 12)]
-    # ---- made and used: a three-position safety on the tang, the bolt's root collar, stippled checkering on the grip
-    # and the forend, pillar screws, swivel studs
-    P.append(lathe_x('safety', [(0, .0048), (.003, .0048), (.0038, .0036), (.0038, 0)], (RIGHT * .0205, .14, zb + .006), S, 16, -1))
-    P.append(plate('safety_lever', [(.142, zb + .004), (.158, zb + .016), (.154, zb + .019), (.138, zb + .008)], S, .0236, .0262, .0007, sym=False, side=-1))
-    P.append(G.band('bolt_collar', .121, .008, .0185, PK, zb, 0, .003, 24, .0008))
-    g = G.gp(.2, 0, .022)
-    G.checker(P, 'grip_checker', [g(-.013, .03), g(.015, .027), g(.014, .096), g(-.011, .1)], .0184, RB, 12, 18, .0007)
-    G.checker(P, 'fore_checker', [(-.24, .0325), (-.46, .0325), (-.46, .0425), (-.24, .0425)], .0284, OD, 44, 4, .0006)
-    for y in (-.05, .1):
-        P.append(lathe_z('pillar_screw', [(-.003, 0), (-.003, .0045), (-.001, .0052), (0, .0052), (0, 0)], (0, y, .0125), S, 6))
-    P.append(G.band('muzzle_thread', -.768, .008, .0162, PK, zb, 0, .0025, 32, .0006))
     finish('gun_bolt', P, (0, -.865, zb), (0, -.36, .02), (0, .2, .14), rail=(0, -.005, .1065),
            moving=[('bolt', BOLT, (0, .05, zb))], loose=[('x_round', ROUND, (0, 0, .3))])
 
 
 def service_pistol():
-    """Service pistol: a polymer frame with a tang, an undercut and a rounded guard, a railed dust cover; a steel
-    slide in stepped flats with cut serrations front and rear, an ejection port over the barrel hood, an extractor; a
-    crowned barrel and guide rod; a slide stop, take-down lever and magazine release; three-dot sights; a magazine
-    with a toe on its base plate."""
+    """Service pistol, slide and frame as lofts. The polymer frame runs through ten sections from the tang over the
+    hand to the dust cover, whose rail is real teeth; an undercut guard with section. The steel slide (the part
+    `slide`) through eight sections with grasping serrations front and rear cut below the surface, a flat along each
+    flank, the ejection port wrapped over the top with the barrel's hood in it, an extractor, an optic plate, three-
+    dot sights, a striker plate. A crowned barrel and guide rod; slide stop, take-down lever, thumb safety, magazine
+    release; a checkered grip panel with its screws; a magazine with witness holes and a toe on its base."""
     bl.reset(); M = K.kinetic_mats(); S, PK, PO, PA, RB = M['steel'], M['park'], M['poly'], M['paint'], M['rubber']
     P = []
     g = G.hand_grip(P, PO, .3, .1, .03, z=.022, ext=.01)
     P.append(plate('grip_panel', [g(-.015, .03), g(.017, .026), g(.019, .058), g(.016, .1), g(-.013, .103), g(-.017, .06)], RB, .01, .0158, .001))
-    P.append(G.rprism('frame', G.chaikin([(.036, .05), (.056, .0492), (.055, .044), (.044, .037), (.0375, .03), (.036, .018), (-.022, .018), (-.028, .022),
-                                          (-.1, .022), (-.106, .03), (-.158, .03), (-.16, .05)], 1, sharp=(0, 5, 6, 7, 8, 9, 10, 11)), .03, PO, .0035))
-    G.slots(P, 'railcut', [(-.116 - i * .013, .032, .005, .006, 0) for i in range(3)], .015, PK)
+    G.checker(P, 'grip_checker', [g(-.014, .032), g(.016, .028), g(.015, .098), g(-.012, .101)], .016, RB, 14, 24, .0006)
+    for b in (.03, .1):
+        c = g(.018, b)
+        G.rivets(P, [c], .0158, S, .0016)
+    # ---------------------------------------------------------------- the frame: ten sections
+    F = G.Body([(.057, .041, .0495, .0075, 3.0), (.046, .032, .05, .0128, 4.5), (.034, .02, .05, .0146, 5.0), (.0, .018, .05, .015, 5.0), (-.026, .019, .05, .015, 5.0),
+                (-.032, .022, .05, .015, 5.0), (-.098, .022, .05, .015, 5.5), (-.106, .03, .05, .015, 5.5), (-.15, .03, .05, .0148, 5.5), (-.16, .032, .05, .014, 4.5)])
+    F.skin(P, PO, 'frame', step=.005, n=32)
+    F.shell(P, 'frame_panel', PO, .02, -.09, F.af(-.5), F.af(.45), t=.0009, ch=.001)
+    F.slats(P, 'rail_tooth', PO, -.112, -.154, -1.48, -1.08, 4, share=.6, t=.002, base=-.001)
     G.guard(P, PO, [(-.086, .026), (-.088, .002), (-.078, -.012), (-.06, -.018), (-.03, -.018), (-.012, -.013)], .0135, .0058)
     G.trigger(P, PK, -.044, .024, L=.03)
-    SLIDE = [G.loft('slide', [(.04, .048, .079, .0142, (.0055, .001)), (-.146, .048, .079, .0142, (.0055, .001)), (-.16, .05, .0765, .0128, (.005, .001))], S),
-             plate('slide_rail', [(.039, .0485), (.039, .0575), (-.152, .0575), (-.158, .053), (-.158, .0485)], S, .0135, .0153, .0008),
-             plate('slide_flat', [(.039, .0595), (.039, .073), (-.104, .073), (-.118, .0595)], S, .0135, .0152, .0009)]
-    G.serrations(SLIDE, 'serration', .034, 7, .0042, .0605, .072, .0152, PK, rake=.003)
-    G.serrations(SLIDE, 'serration', -.072, 4, .0042, .0605, .072, .0152, PK, rake=.003)
-    SLIDE.append(plate('ejport', [(-.01, .0635), (-.01, .0775), (-.05, .0775), (-.05, .0635)], RB, .011, .0156, .0004, sym=False, side=-1))
-    SLIDE.append(prism('ejport_top', [(-.012, .0786), (-.012, .0793), (-.048, .0793), (-.048, .0786)], .012, RB, .0003, x=RIGHT * .004))
-    SLIDE.append(plate('extractor', [(-.002, .066), (-.002, .0705), (-.03, .0705), (-.034, .068), (-.03, .066)], PK, .0146, .0164, .0005, sym=False, side=-1))
-    P += [prism('hood', [(-.014, .065), (-.014, .0785), (-.046, .0785), (-.046, .065)], .016, PK, .001, x=RIGHT * .003),
-          G.tube_('guiderod', -.15, -.1605, .0042, PK, .0545, n=12),
-          plate('slidestop', [(-.004, .0475), (-.05, .0465), (-.064, .0405), (-.058, .0385), (-.046, .0425), (-.008, .0425)], S, .0148, .0172, .0006, sym=False, side=1),
-          plate('takedown', [(-.079, .045), (-.079, .039), (-.092, .039), (-.092, .045)], S, .0148, .0172, .0006, sym=False, side=1),
-          lathe_x('magrelease', [(0, .0044), (.003, .0044), (.0036, .0034), (.0036, 0)], (.015, -.012, .017), PK, 12, 1)]
-    G.muzzle(P, 'crown', -.14, -.163, .062, .0068, PK, .0045, dark_m=RB)
-    G.serrations(P, 'stop_grip', -.006, 4, .003, .0432, .0468, .0172, PK, t=.0012, sym=False, side=1)
-    G.cross_pins(P, [(-.016, .04), (.02, .04)], .03, S, .0024)
-    sz = .0835
-    SLIDE.append(prism('rear_base', [(.037, .079), (.037, .0815), (.024, .0815), (.02, .079)], .026, S, .001))
+    xf = F.pt(-.04, .1, .0002)[0]
+    P += [plate('slidestop', [(-.004, .0475), (-.05, .0465), (-.064, .0405), (-.058, .0385), (-.046, .0425), (-.008, .0425)], S, xf - .0008, xf + .0022, .0006, sym=False, side=1),
+          plate('takedown', [(-.079, .045), (-.079, .039), (-.092, .039), (-.092, .045)], S, xf - .0008, xf + .0022, .0006, sym=False, side=1),
+          lathe_x('magrelease', [(0, .0044), (.003, .0044), (.0036, .0034), (.0036, 0)], (xf, -.012, .017), PK, 16, 1)]
+    G.selector(P, .03, .041, xf, S, 1, ang=.3, L=.014, r=.0034)
+    G.rivets(P, [(-.094, .04), (.02, .04), (-.016, .04)], xf, S, .0018)
+    # ---------------------------------------------------------------- the slide: eight sections, serrations cut into it
+    SLIDE = []
+    SL = G.Body([(.041, .05, .0785, .0132, 4.5), (.036, .048, .079, .0142, 5.5), (.0, .048, .079, .0142, 5.5), (-.05, .048, .079, .0142, 5.5), (-.1, .048, .079, .0142, 5.5),
+                 (-.14, .048, .079, .0142, 5.5), (-.152, .049, .078, .0136, 5.0), (-.16, .051, .076, .0125, 4.0)])
+    cuts = []                                                          # grasping serrations: real grooves cut below the surface
+    for y0_, y1_, k_ in ((.035, .006, 7), (-.102, -.13, 6)):
+        pitch = (y0_ - y1_) / k_
+        cuts += [(y0_ - (i + .3) * pitch, y0_ - (i + .75) * pitch, SL.af(-.5), SL.af(.86), .001) for i in range(k_)]
+    SL.skin(SLIDE, S, 'slide', step=.005, n=48, cuts=cuts)
+    SL.shell(SLIDE, 'slide_flat', S, .002, -.096, SL.af(-.55), SL.af(.3), t=.0009, ch=.001)
+    SL.shell(SLIDE, 'ejport', RB, -.01, -.05, SL.af(.35), 1.3, t=.0003, ch=.0005, mirror=False, side=-1)
+    SL.shell(SLIDE, 'extractor', PK, -.002, -.034, SL.af(.05), SL.af(.3), t=.0012, ch=.0006, mirror=False, side=-1)
     SLIDE.append(prism('optic_plate', [(-.028, .0786), (-.028, .0796), (-.072, .0796), (-.072, .0786)], .022, PK, .0004))
     for yy in (-.034, -.066):
         for xx in (.0075, -.0075):
             SLIDE.append(lathe_z('plate_screw', [(0, 0), (0, .0016), (.0003, .0016), (.0003, 0)], (xx, yy, .0796), S, 10))
+    for i in range(22):
+        y = .016 - i * .0068
+        if -.076 < y < -.022:
+            continue
+        SLIDE.append(prism('top_serration', [(y, .0789), (y, .0795), (y - .003, .0795), (y - .003, .0789)], .011, PK, .0002))
+    SLIDE.append(G.rprism('striker_plate', [(.0412, .053), (.0412, .074), (.0398, .074), (.0398, .053)], .02, PK, .002))
+    SLIDE.append(lathe('striker', [(.0418, 0), (.0418, .0022), (.0408, .0022), (.0408, 0)], S, .066, 0, 12))
+    P.append(SL_hood(SL, PK))
+    P.append(G.tube_('guiderod', -.15, -.1605, .0042, PK, .0545, n=16))
+    G.muzzle(P, 'crown', -.14, -.163, .062, .0068, PK, .0045, dark_m=RB)
+    sz = .0835
+    SLIDE.append(prism('rear_base', [(.037, .079), (.037, .0815), (.024, .0815), (.02, .079)], .026, S, .001))
     for s, nm in ((1, 'rearL'), (-1, 'rearR')):
         SLIDE.append(prism(nm, [(.0365, sz - .0045), (.0365, sz + .002), (.027, sz + .002), (.025, sz - .0045)], .0085, S, .0008, x=s * .0078))
         SLIDE.append(lathe('rdot', [(.0367, 0), (.0367, .0017), (.0363, .0017), (.0363, 0)], PA, sz - .0015, s * .0078, 8))
     SLIDE.append(prism('frontpost', [(-.138, .079), (-.142, sz + .002), (-.149, sz + .002), (-.153, .079)], .0036, S, .0006))
     SLIDE.append(lathe('fdot', [(-.1418, 0), (-.1418, .0016), (-.1422, .0016), (-.1422, 0)], PA, sz, 0, 8))
-    # the magazine: steel body inside the grip, a polymer base with a toe, the top round
+    # ---------------------------------------------------------------- the magazine
     MAG = [prism('magbody', [g(-.0105, .01), g(.0185, .01), g(.0185, .116), g(-.0105, .118)], .021, S, .0015),
            G.rprism('magbase', [g(-.0202, .1145), g(.0282, .1105), g(.029, .121), g(-.0245, .1265)], .03, PO, .0035)]
     t = g(-.002, .012)
-    MAG.append(G.tube_('magtop', t[0] + .012, t[0] - .012, .0045, M['brass'], t[1], n=10))
-    top = g(.004, .01)
-    # ---- cut checkering on the grip, serrations along the slide's top, a striker plate, a thumb safety, pins
-    G.checker(P, 'grip_checker', [g(-.014, .032), g(.016, .028), g(.015, .098), g(-.012, .101)], .016, RB, 14, 24, .0006)
-    for i in range(22):
-        y = .016 - i * .0068
-        if -.076 < y < -.022:
-            continue                                                 # the optic plate lies here
-        SLIDE.append(prism('top_serration', [(y, .0789), (y, .0795), (y - .003, .0795), (y - .003, .0789)], .011, PK, .0002))
-    SLIDE.append(prism('striker_plate', [(.0405, .053), (.0405, .074), (.0392, .074), (.0392, .053)], .02, PK, .0005))
-    SLIDE.append(lathe('striker', [(.0412, 0), (.0412, .0022), (.0402, .0022), (.0402, 0)], S, .066, 0, 12))
-    G.selector(P, .03, .041, .015, S, 1, ang=.3, L=.014, r=.0034)
-    G.rivets(P, [(-.094, .04), (.02, .04), (-.016, .04)], .015, S, .0018)
-    for k in range(5):                                               # witness holes down the magazine's back
+    MAG.append(G.tube_('magtop', t[0] + .012, t[0] - .012, .0045, M['brass'], t[1], n=12))
+    for k in range(5):
         c = g(.0186, .03 + k * .016)
         MAG.append(lathe('witness', [(c[0] + .0004, 0), (c[0] + .0004, .0016), (c[0] - .0002, .0016), (c[0] - .0002, 0)], RB, c[1], 0, 8))
+    top = g(.004, .01)
     finish('gun_pistol', P, (0, -.165, .062), (0, -.02, -.035), (0, .07, sz), rail=(0, -.05, .078),
            moving=[('mag', MAG, (0, top[0], top[1])), ('slide', SLIDE, (0, -.06, .062))])
 
 
 def pump_shotgun():
-    """Pump shotgun: a steel receiver with its ejection port and the loading port and lifter underneath; a barrel
-    under a vent rib over the magazine tube, a barrel band and a knurled magazine cap; a walnut fore-end with ribs
-    all round on two action bars; a walnut stock with a slim wrist, a falling comb, a pistol grip and a spaced pad;
-    a saddle of shells."""
+    """Pump shotgun: a round-topped steel receiver lofted through ten sections (the ejection port with the bolt in
+    it, the loading port and lifter underneath, a milled flat low on each flank); a barrel under a vent rib over the
+    magazine tube, a barrel band and a knurled cap; a corncob fore-end that wraps the tube; a walnut stock with real
+    drop through ten sections, its pistol grip, a spacer and a pad; a saddle of shells. Raised sights: a ghost ring
+    on a stem at the receiver's rear and a post on a ramp at the muzzle, 3.1 cm over the receiver."""
     bl.reset(); M = K.kinetic_mats(); S, PK, W, RB, BR = M['steel'], M['park'], M['wood'], M['rubber'], M['brass']
     shell = bl.mat('gun_shell', '#8c1a1a', 0, .55)
     zb = .08; P = []
-    P.append(G.loft('receiver', [(.09, .03, .1, .021, (.007, .003)), (-.15, .03, .1, .021, (.007, .003)), (-.172, .034, .096, .0185, (.006, .003))], PK))
-    P.append(plate('receiver_flat', [(.082, .038), (.082, .09), (-.146, .09), (-.152, .084), (-.152, .038)], PK, .0195, .0222, .0012))
-    G.seamline(P, [(.034, .038), (.034, .09)], .0222, RB)
-    G.port(P, -.012, -.088, .061, .088, .0222, RB, S, side=-1)
-    P.append(prism('loadport', [(-.028, .0285), (-.028, .0315), (-.112, .0315), (-.112, .0285)], .03, RB, .0006))
+    R = G.Body([(.092, .034, .096, .0185, 3.2), (.075, .03, .1, .0205, 3.4), (.04, .03, .1, .021, 3.6), (.0, .03, .1, .021, 3.6), (-.04, .03, .1, .0214, 3.6),
+                (-.08, .03, .1, .0214, 3.6), (-.115, .03, .1, .021, 3.6), (-.145, .031, .1, .0205, 3.4), (-.162, .034, .098, .0195, 3.0), (-.172, .038, .094, .018, 2.6)])
+    R.skin(P, PK, 'receiver', step=.007, n=36)
+    R.shell(P, 'receiver_flat', PK, .078, -.14, R.af(-.72), R.af(-.05), t=.0014, ch=.0014)
+    R.shell(P, 'receiver_brow', PK, .078, .0, R.af(.25), R.af(.75), t=.0012, ch=.0012, mirror=False, side=1)
+    xr = R.pt(-.05, .25, .0004)[0]
+    G.port(P, -.012, -.088, .061, .088, xr, RB, S, side=-1)
+    P.append(prism('loadport', [(-.028, .0285), (-.028, .0315), (-.112, .0315), (-.112, .0285)], .028, RB, .0006))
     P.append(prism('lifter', [(-.036, .0272), (-.036, .0296), (-.1, .0296), (-.106, .0272)], .022, S, .0005))
-    P.append(prism('topgroove', [(.085, .1), (.085, .102), (-.145, .102), (-.145, .1)], .012, S, .0006))
-    P.append(G.tube_('barrel', -.16, -.72, .0115, S, zb, bore=.0095, n=24))
-    P.append(G.band('muzzle_ring', -.708, .012, .0125, S, zb, 0, .003, 24, .0008))
+    for y, z in ((.022, .045), (-.05, .045)):
+        P.append(K.cylx('pin', .0026, 2 * R.pt(y, 0, 0)[0] + .003, (0, y, z), S, 14, .0005))
+    for y, a in ((.07, .5), (-.138, .5)):
+        x = R.pt(y, a, .0002)
+        G.rivets(P, [(y, x[2])], x[0], S, .002)
+    P.append(plate('shell_latch', [(-.03, .034), (-.03, .0385), (-.07, .0385), (-.074, .034)], S, .0195, .0226, .0007, sym=False, side=-1))
+    # ---------------------------------------------------------------- barrel group
+    P.append(G.tube_('barrel', -.16, -.72, .0115, S, zb, bore=.0095, n=32))
+    P.append(G.band('muzzle_ring', -.708, .012, .0125, S, zb, 0, .003, 32, .0008))
     P.append(prism('ventrib', [(-.165, .0945), (-.165, .0975), (-.715, .0975), (-.715, .0945)], .008, S, .0006))
     for i in range(10):
         P.append(prism('ribpost', [(-.188 - i * .05, .0895), (-.188 - i * .05, .0945), (-.193 - i * .05, .0945), (-.193 - i * .05, .0895)], .004, S, .0004))
-    P.append(G.tube_('magtube', -.16, -.66, .0125, S, .046, n=20))
-    P.append(lathe('magcap', [(-.655, 0), (-.655, .0145), (-.684, .0145), (-.69, .011), (-.69, 0)], S, .046, 0, 20))
+    P.append(G.tube_('magtube', -.16, -.66, .0125, S, .046, n=28))
+    P.append(lathe('magcap', [(-.655, 0), (-.655, .0145), (-.684, .0145), (-.69, .011), (-.69, 0)], S, .046, 0, 28))
     for i in range(3):
-        P.append(G.band('capring', -.66 - i * .007, .003, .0153, PK, .046, 0, .002, 20, .0004))
-    # the barrel band: a ring on the barrel, a ring on the tube, the web and its screw
-    P.append(G.band('band_barrel', -.6, .018, .0146, S, zb, 0, .0032, 24, .001))
-    P.append(G.band('band_tube', -.6, .018, .0156, S, .046, 0, .0032, 24, .001))
+        P.append(G.band('capring', -.66 - i * .007, .003, .0153, PK, .046, 0, .002, 28, .0004))
+    P.append(G.band('band_barrel', -.6, .018, .0146, S, zb, 0, .0032, 28, .001))
+    P.append(G.band('band_tube', -.6, .018, .0156, S, .046, 0, .0032, 28, .001))
     P.append(prism('band_web', [(-.6, .058), (-.6, .069), (-.618, .069), (-.618, .058)], .013, S, .001))
     P.append(lathe_x('band_screw', [(0, .003), (.0015, .003), (.0022, .002), (.0022, 0)], (.0065, -.609, .0635), PK, 12, 1))
-    # the fore-end on its bars: a swelled walnut sleeve, ribs that run all round it
+    # ---------------------------------------------------------------- the corncob fore-end on its bars
     PUMP = [G.sloft('forend', [(-.268, .03, .064, .024, 3.5), (-.285, .022, .068, .029, 4.0), (-.36, .02, .068, .03, 4.0), (-.44, .022, .068, .029, 4.0),
-                               (-.456, .03, .064, .024, 3.5)], W, n=20, sub=3)]
+                               (-.456, .03, .064, .024, 3.5)], W, n=24, sub=3)]
     for i in range(9):
         y = -.297 - i * .0165
-        PUMP.append(G.rloft('forend_rib', [(y, .0188, .0692, .0312, 4.0), (y - .0075, .0188, .0692, .0312, 4.0)], W, n=20))
+        PUMP.append(G.rloft('forend_rib', [(y, .0188, .0692, .0312, 4.0), (y - .0075, .0188, .0692, .0312, 4.0)], W, n=24))
     for s in (1, -1):
         PUMP.append(prism('actionbar', [(-.14, .047), (-.14, .053), (-.27, .053), (-.27, .047)], .003, S, .0006, x=s * .0165))
-    # the stock: wrist, comb, butt; the pistol grip under the receiver's tail; spacer and pad
-    P.append(G.sloft('stock', [(.084, .032, .099, .0205, 5.0), (.098, .03, .083, .0195, 3.8), (.13, .026, .06, .0185, 3.0), (.2, .012, .055, .0185, 2.7),
-                               (.3, -.02, .048, .0195, 2.7), (.4, -.056, .038, .0205, 3.0), (.432, -.066, .034, .0205, 3.6)], W, n=24, sub=4))
+    PUMP.append(G.band('forend_nut', -.458, .008, .0155, S, .046, 0, .003, 24, .0008))
+    # ---------------------------------------------------------------- the stock: real drop, ten sections; grip, pad
+    P.append(G.sloft('stock', [(.084, .032, .099, .0205, 4.6, 1.0), (.098, .03, .084, .0195, 3.8, 1.0), (.115, .028, .07, .0188, 3.2, .95), (.14, .024, .06, .0182, 2.8, .9),
+                               (.18, .016, .056, .018, 2.6, .88), (.24, .0, .052, .0186, 2.6, .85), (.3, -.022, .047, .0195, 2.7, .85), (.36, -.044, .041, .0202, 2.9, .88),
+                               (.41, -.06, .036, .0206, 3.2, .92), (.432, -.068, .032, .0206, 3.6, .95)], W, n=28, sub=4))
     P.append(G.rprism('stock_grip', G.chaikin([(.03, .034), (.004, -.03), (.012, -.088), (.04, -.1), (.07, -.09), (.098, -.02), (.128, .032), (.09, .045)], 2,
                                               sharp=(0, 7)), .037, W, .012, 4))
-    P.append(plate('grip_checker', [(.024, -.038), (.06, -.042), (.052, -.08), (.03, -.082)], PK, .0145, .0189, .001))
-    P.append(prism('gripcap', [(.013, -.0885), (.041, -.1005), (.069, -.0905), (.068, -.0965), (.041, -.1065), (.011, -.0945)], .03, S, .0015))
-    P.append(G.rloft('buttspacer', [(.4315, -.067, .035, .0212, 3.6), (.4355, -.067, .035, .0212, 3.6)], S, n=24))
-    P.append(G.rloft('buttpad', [(.4355, -.066, .034, .0215, 3.6), (.447, -.064, .032, .0212, 3.6), (.451, -.059, .027, .0195, 3.2)], RB, n=24))
-    G.guard(P, PK, [(-.094, .032), (-.096, .004), (-.086, -.012), (-.066, -.019), (-.02, -.019), (-.004, -.012)], .012, .0052)
+    G.checker(P, 'grip_checker', [(.026, -.04), (.058, -.044), (.051, -.078), (.031, -.08)], .0186, W, 10, 11, .0007)
+    P.append(G.rprism('gripcap', [(.013, -.0885), (.041, -.1005), (.069, -.0905), (.068, -.0965), (.041, -.1065), (.011, -.0945)], .03, S, .003))
+    P.append(G.rloft('buttspacer', [(.4315, -.069, .033, .0212, 3.6), (.4355, -.069, .033, .0212, 3.6)], S, n=28))
+    G.ribbed_pad(P, RB, .4355, .032, -.068, .041, 5, .015)
+    G.guard(P, PK, [(-.094, .032), (-.096, .004), (-.086, -.012), (-.066, -.019), (-.02, -.019), (-.004, -.012)], .012, .0048, r=.0018)
     G.trigger(P, S, -.04, .03, L=.032)
+    xs = R.pt(.052, 0, .0004)[0]
     for s in (1, -1):
-        P.append(lathe_x('crossbolt', [(0, .0042), (.002, .0042), (.0028, .003), (.0028, 0)], (s * .0222, .052, .05), S, 12, s))
-    P += [lathe_z('safety', [(0, 0), (0, .0045), (.004, .0045), (.005, .0035), (.005, 0)], (0, .07, .1), S, 12),
+        P.append(lathe_x('crossbolt', [(0, .0042), (.002, .0042), (.0028, .003), (.0028, 0)], (s * xs, .052, .05), S, 12, s))
+    P += [lathe_z('safety', [(0, 0), (0, .0045), (.004, .0045), (.005, .0035), (.005, 0)], (0, .078, .0985), S, 12),
           plate('slidelever', [(-.066, .028), (-.066, .02), (-.084, .02), (-.084, .028)], S, .005, .0075, .0006, sym=False, side=1)]
-    G.hexbolts(P, [(-.12, .044), (.06, .05)], .0222, S, .0028, n=14)
-    P += K.sling_loop(.37, -.052, S) + K.sling_loop(-.64, .028, S)
-    # the saddle of four shells on the left
-    P.append(plate('saddle', [(-.01, .044), (-.01, .09), (-.11, .09), (-.11, .044)], M['poly'], .0222, .0262, .0012, sym=False, side=1))
+    G.swivel(P, .37, -.0465, S)
+    P += K.sling_loop(-.64, .028, S)
+    P.append(plate('saddle', [(-.01, .044), (-.01, .09), (-.11, .09), (-.11, .044)], M['poly'], .0205, .0262, .0012, sym=False, side=1))
     for i in range(4):
         y = -.03 - i * .02
-        P += [lathe_z('shell', [(0, 0), (0, .0092), (.044, .0092), (.046, .0086), (.046, 0)], (.035, y, .048), shell, 14),
-              lathe_z('shellbase', [(-.012, 0), (-.012, .0098), (0, .0098), (0, 0)], (.035, y, .048), BR, 14)]
-    sz = .1
-    P += [lathe('bead', [(-.708, 0), (-.708, .0028), (-.713, .0028), (-.713, 0)], BR, .0992, 0, 10),
-          lathe('midbead', [(-.428, 0), (-.428, .0018), (-.432, .0018), (-.432, 0)], M['paint'], .0984, 0, 8)]
+        P += [lathe_z('shell', [(0, 0), (0, .0092), (.044, .0092), (.046, .0086), (.046, 0)], (.035, y, .048), shell, 16),
+              lathe_z('shellbase', [(-.012, 0), (-.012, .0098), (0, .0098), (0, 0)], (.035, y, .048), BR, 16)]
+    P += K.rail(M, .056, -.026, .0925, .02, PK)
+    # ---------------------------------------------------------------- raised sights: a ghost ring and a post on a ramp
+    sz = .131
+    G.iron_rear(P, .075, sz, S, base_z=.0985, w=.018)
+    P.append(prism('front_base', [(-.652, .0975), (-.688, .1245), (-.708, .1245), (-.714, .0975)], .008, S, .001))
+    P.append(prism('post', [(-.693, .1235), (-.695, sz), (-.701, sz), (-.703, .1235)], .0026, S, .0004))
+    P.append(lathe('postdot', [(-.6928, 0), (-.6928, .0012), (-.6932, .0012), (-.6932, 0)], BR, sz - .0022, 0, 8))
     SHELL = [lathe('sh_hull', [(.02, 0), (.02, .0092), (-.03, .0092), (-.032, .0086), (-.032, 0)], shell, .3, 0, 14),
              lathe('sh_base', [(.032, 0), (.032, .0098), (.02, .0098), (.02, 0)], BR, .3, 0, 14)]
-    P += K.rail(M, .056, -.026, .0925, .02, PK)
-    # ---- made and used: trigger-plate pins, a milled flute and a rivet line on the receiver, the shell latch, cut
-    # checkering on the wrist, vents in the pad
-    G.cross_pins(P, [(.022, .045), (-.05, .045)], .0444, S, .0026)
-    G.stamp(P, 'receiver_flute', [(-.115, .05, .05, .006)], .0222, PK)
-    G.rivets(P, [(.07, .084), (-.138, .084)], .0222, S, .002)
-    P.append(plate('shell_latch', [(-.03, .034), (-.03, .0385), (-.07, .0385), (-.074, .034)], S, .0195, .0232, .0007, sym=False, side=-1))
-    G.checker(P, 'grip_checker2', [(.026, -.04), (.058, -.044), (.051, -.078), (.031, -.08)], .019, W, 10, 11, .0007)
-    G.slots(P, 'pad_vent', [(.4435, -.04 + i * .022, .009, .007, 0) for i in range(4)], .0212, PK, lift=.0006)
-    PUMP.append(G.band('forend_nut', -.458, .008, .0155, S, .046, 0, .003, 24, .0008))
-    finish('gun_pump', P, (0, -.72, zb), (0, -.36, .012), (0, .1, sz), rail=(0, .015, .102),   # (sight point: see gun_shotgun)
+    finish('gun_pump', P, (0, -.72, zb), (0, -.36, .012), (0, .075, sz), rail=(0, .015, .102),
            moving=[('pump', PUMP, (0, -.36, .046))], loose=[('x_shell', SHELL, (0, 0, .3))])
 
 
 def compact_smg():
-    """Compact SMG: a steel upper on a polymer lower, a slotted handguard, a charging tube with a forward handle along
-    the top left, a side-folding wire stock, a straight magazine, a stubby fore grip."""
+    """Compact SMG: a stamped tube receiver with pressed stiffening rings; the magazine housing welded under it (the
+    weld's bead shows), a polymer trigger housing behind; a ventilated barrel shroud of eight bars over a ribbed hand
+    panel; a charging tube with a forward handle along the top left; a stock of two rods that lies folded along the
+    right side, its plate flat against the shroud, clear of the sight line; a straight magazine; a stubby fore grip."""
     bl.reset(); M = K.kinetic_mats(); S, PK, PO, RB = M['steel'], M['park'], M['poly'], M['rubber']
     zb = .068; P = []
-    P.append(G.loft('upper', [(.075, .05, .092, .018, (.005, .001)), (-.17, .05, .092, .018, (.005, .001))], S))
-    P.append(plate('upper_cheek', [(.066, .056), (.066, .086), (.0, .086), (-.016, .074), (-.162, .074), (-.162, .056)], S, .0165, .0198, .0012))
-    P.append(prism('lower', [(.075, .05), (.075, .026), (.03, .022), (-.04, .022), (-.042, -.012), (-.096, -.014), (-.098, .022), (-.17, .026), (-.17, .05)],
-                   .034, PO, .003))
-    P.append(plate('well_flare', [(-.042, -.002), (-.043, -.016), (-.097, -.018), (-.098, -.004)], PO, .016, .0196, .001))
-    G.port(P, -.016, -.064, .061, .08, .0198, M['rubber'], None, side=-1)
-    BOLT = [plate('boltface', [(-.018, .0625), (-.018, .0785), (-.062, .0785), (-.062, .0625)], PK, .008, .0188, .0008, sym=False, side=-1)]
+    T = G.Body([(.078, .054, .088, .017, 2.2), (.07, .05, .092, .021, 2.2), (.03, .05, .092, .021, 2.2), (-.02, .05, .092, .021, 2.2), (-.07, .05, .092, .021, 2.2),
+                (-.12, .05, .092, .021, 2.2), (-.16, .05, .092, .021, 2.2), (-.172, .052, .09, .019, 2.2)])
+    T.skin(P, S, 'receiver', step=.007, n=40)
+    for y in (.064, .0, -.108, -.156):
+        T.collar(P, 'press_ring', S, y, .006, .0011)
+    T.shell(P, 'weld_bead', S, -.036, -.104, -1.2, -1.04, t=.0013, ch=.0006)
+    T.shell(P, 'side_press', S, .05, -.01, -.3, .35, t=.001, ch=.0012, mirror=False, side=1)
+    xp = T.pt(-.04, .1, .0004)[0]
+    G.port(P, -.016, -.064, .061, .08, xp, RB, None, side=-1)
+    G.dust_cover(P, -.016, -.064, .0605, xp, S, .012)
+    BOLT = [plate('boltface', [(-.018, .0625), (-.018, .0785), (-.062, .0785), (-.062, .0625)], PK, .008, xp - .001, .0008, sym=False, side=-1)]
+    P.append(lathe('endcap', [(.092, 0), (.092, .014), (.088, .018), (.078, .019), (.078, 0)], S, .071, 0, 32))
+    # ---------------------------------------------------------------- trigger housing (polymer) and the welded magazine housing (steel)
+    Lw = G.Body([(.078, .03, .056, .0135, 4.0), (.06, .024, .056, .016, 5.0), (.02, .022, .056, .0168, 5.5), (-.02, .022, .056, .0168, 5.5), (-.04, .024, .056, .0165, 5.0)])
+    Lw.skin(P, PO, 'lower', step=.007, n=32)
+    Lw.shell(P, 'lower_panel', PO, .066, -.03, Lw.af(-.6), Lw.af(.3), t=.0012, ch=.0012)
+    H = G.Body([(-.036, -.004, .056, .0158, 5.0), (-.046, -.014, .056, .0172, 6.0), (-.07, -.016, .056, .0176, 6.0), (-.094, -.016, .056, .0172, 6.0), (-.104, -.004, .056, .016, 5.0)])
+    H.skin(P, S, 'mag_housing', step=.006, n=32)
+    H.shell(P, 'well_mouth', S, -.044, -.098, -1.5, -.72, t=.002, base=-.002)
+    H.shell(P, 'housing_press', S, -.05, -.092, H.af(-.4), H.af(.3), t=.001, ch=.001)
+    xs = Lw.pt(.04, 0, .0014)[0]
+    G.selector(P, .04, .036, xs, S, 1, ang=.4, L=.018)
+    for y, z in ((.054, .044), (.026, .03)):
+        P.append(lathe_x('sel_stop', [(0, .0016), (.0016, .0016), (.002, .0009), (.002, 0)], (xs, y, z), S, 10, 1))
+    for y, z in ((.05, .035), (-.03, .035)):
+        P.append(K.cylx('pin', .002, 2 * Lw.pt(y, 0, 0)[0] + .003, (0, y, z), S, 12, .0004))
+    G.guard(P, PO, [(-.044, -.008), (-.043, -.022), (-.036, -.03), (-.022, -.032), (-.012, -.028)], .012, .0048, r=.0018)
+    G.trigger(P, S, -.03, .022, L=.028)
+    k_grip(P, PO, RB, .25, .108, .03, .022)
+    # ---------------------------------------------------------------- shroud, hand panel, barrel, charging tube
     G.cage(P, 'handguard', -.168, -.328, zb, .0235, PK, t=.004, bars=8, fill=.6, frames=((-.168, .014), (-.246, .007), (-.316, .014)), phase=math.pi / 8)
     P.append(G.tube_('heatshield', -.17, -.324, .0135, RB, zb, n=24))
-    P.append(G.sloft('hg_panel', [(-.176, .03, .05, .019, 4.0), (-.2, .024, .05, .0235, 4.4), (-.296, .024, .05, .0235, 4.4), (-.322, .03, .05, .019, 4.0)], PO, 20, 3))
+    P.append(G.sloft('hg_panel', [(-.176, .03, .05, .019, 4.0), (-.2, .024, .05, .0235, 4.4), (-.296, .024, .05, .0235, 4.4), (-.322, .03, .05, .019, 4.0)], PO, 24, 3))
     for i in range(5):
         y = -.206 - i * .02
-        P.append(G.rloft('hg_panel_rib', [(y, .0228, .046, .0246, 4.4), (y - .008, .0228, .046, .0246, 4.4)], PO, n=20))
-    G.seamline(P, [(.0, .052), (.0, .09)], .0198, RB)
-    V.barrel('barrel', M, -.32, -.37, zb, .0085, P, m=S)
-    G.brake(P, 'brake', -.36, zb, .0125, .052, S, M['rubber'], 3, bore=.005)
-    P.append(G.tube_('chtube', -.15, -.32, .0075, S, .102, n=14))
-    P.append(G.band('chtube_cap', -.314, .008, .0088, PK, .102, 0, .0088, 14, .001))
-    CHARGE = [prism('chhandle', [(-.264, .096), (-.264, .108), (-.276, .108), (-.276, .096)], .008, S, .001, x=.015),
+        P.append(G.rloft('hg_panel_rib', [(y, .0228, .046, .0246, 4.4), (y - .008, .0228, .046, .0246, 4.4)], PO, n=24))
+    G.barrel_stepped(P, 'barrel', [(-.172, .0105), (-.32, .0085), (-.37, .0085)], zb, S, .0045)
+    G.brake(P, 'brake', -.36, zb, .0125, .052, S, RB, 3, bore=.005)
+    P.append(G.tube_('chtube', -.15, -.32, .0075, S, .102, n=20))
+    P.append(G.band('chtube_cap', -.314, .008, .0088, PK, .102, 0, .0088, 20, .001))
+    CHARGE = [G.rprism('chhandle', [(-.264, .096), (-.264, .108), (-.276, .108), (-.276, .096)], .008, S, .002, x=.015),
               prism('chstem', [(-.267, .099), (-.267, .105), (-.273, .105), (-.273, .099)], .014, S, .001, x=.007)]
     P += K.rail(M, .07, -.16, .092, .02, PK)
-    # the folding stock: a hinge block, three rods, a ribbed pad. It rides LOW (the pad's top 5 cm under the sight
-    # line): aiming, the eye is behind it and must not look through its rods
-    P.append(G.rprism('hinge', [(.076, .028), (.076, .074), (.1, .074), (.1, .028)], .03, PK, .005))
-    P.append(lathe_z('hinge_pin', [(-.05, 0), (-.05, .0046), (.003, .0046), (.004, .0036), (.004, 0)], (.0105, .088, .074), S, 12))
-    for x, z in ((.013, .062), (-.013, .062)):
-        P.append(G.tube_('stockrod', .3, .1, .0045, S, z, x, n=16))
-    P.append(G.tube_('stockrod', .29, .1, .0045, S, .018, 0, n=16))
-    P.append(G.rprism('stock_yoke', [(.284, .076), (.298, .074), (.298, .004), (.284, .002)], .04, PK, .005))
-    G.ribbed_pad(P, RB, .298, .076, .002, .042, 5, .016)
-    G.grip(P, PO, RB, None, ang=.25, h=.108, w=.03, z=.022, swell=.004)
-    G.guard(P, PO, [(-.044, -.008), (-.043, -.022), (-.036, -.03), (-.022, -.032), (-.012, -.028)], .012, .0048)
-    G.trigger(P, S, -.03, .022, L=.028)
-    MAG = G.box_mag('magbody', [(-.047, .018), (-.049, -.17), (-.091, -.17), (-.089, .018)], .024, PO, floor_m=PO,
-                    floor=[(-.045, -.166), (-.094, -.166), (-.095, -.178), (-.046, -.178)],
-                    ribs=[[(-.052, -.03 - k * .035), (-.086, -.03 - k * .035), (-.0862, -.036 - k * .035), (-.0522, -.036 - k * .035)] for k in range(4)])
-    MAG.append(G.tube_('magtop', -.052, -.074, .0036, M['brass'], .021, n=10))
-    P.append(lathe_z('vgrip', [(-.07, 0), (-.07, .013), (-.062, .015), (-.02, .0145), (-.004, .012), (0, .012), (0, 0)], (0, -.255, .03), RB, 16))
-    P.append(lathe_z('vgripcap', [(-.078, 0), (-.078, .014), (-.07, .0165), (-.068, .0165), (-.068, 0)], (0, -.255, .03), PO, 16))
-    G.cross_pins(P, [(.05, .035), (-.15, .035)], .034, S, .002)
-    G.selector(P, .04, .036, .017, S, 1, ang=.4, L=.018)
-    G.hexbolts(P, [(.06, .068), (-.15, .066)], .0198, S, .0022)
-    # ---- made and used: pressed ribs and rivets on the sheet-steel upper, a dust cover, the well's mouth, feed lips,
-    # cut checkering
-    G.stamp(P, 'press_rib', [(.03, .066, .05, .006), (-.115, .066, .07, .006)], .0198, S)
-    G.rivets(P, [(.066, .058), (.066, .084), (-.16, .058), (-.16, .084)], .0198, S, .002)
-    G.dust_cover(P, -.016, -.064, .0605, .0198, S, .012)
-    P.append(prism('well_mouth', [(-.04, -.011), (-.04, -.017), (-.1, -.019), (-.1, -.013)], .04, PO, .0015))
+    # ---------------------------------------------------------------- the stock, folded along the right side
+    P.append(G.rprism('hinge', [(.078, .05), (.078, .09), (.1, .09), (.1, .05)], .03, PK, .006))
+    P.append(lathe_z('hinge_pin', [(-.044, 0), (-.044, .0046), (.003, .0046), (.004, .0036), (.004, 0)], (RIGHT * .012, .09, .09), S, 12))
+    for z, x in ((.09, .0285), (.036, .0235)):
+        P.append(rod('stock_knuckle', (RIGHT * .01, .094, z), (RIGHT * x, .094, z), .0046, S))
+        P.append(G.tube_('stockrod', .096, -.128, .0045, S, z, RIGHT * x, n=16))
+    P.append(G.rprism('stock_plate', [(-.116, .026), (-.116, .1), (-.15, .1), (-.15, .026)], .007, PK, .003, x=RIGHT * .031))
+    for i in range(4):
+        z = .09 - i * .018
+        P.append(G.rprism('plate_rib', [(-.119, z + .006), (-.119, z - .006), (-.147, z - .006), (-.147, z + .006)], .004, RB, .0015, x=RIGHT * .0362))
+    # ---------------------------------------------------------------- magazine, fore grip
+    MAG = [G.rprism('magbody', [(-.047, .018), (-.049, -.17), (-.091, -.17), (-.089, .018)], .024, PO, .003, 3)]
+    for k in range(4):
+        MAG.append(plate('magrib', [(-.052, -.03 - k * .035), (-.086, -.03 - k * .035), (-.0862, -.037 - k * .035), (-.0522, -.037 - k * .035)], PO, .011, .0132, .0006))
+    MAG.append(G.rprism('magfloor', [(-.045, -.166), (-.094, -.166), (-.095, -.178), (-.046, -.178)], .028, PO, .003))
     G.feed_lips(MAG, -.05, -.086, .018, .024, S, M['brass'])
-    g = G.gp(.25, 0, .022)
-    G.checker(P, 'grip_checker', [g(-.012, .03), g(.014, .027), g(.013, .084), g(-.01, .088)], .0164, RB, 12, 16, .0007)
-    for y, z in ((.054, .044), (.026, .03)):
-        P.append(lathe_x('sel_stop', [(0, .0016), (.0016, .0016), (.002, .0009), (.002, 0)], (.017, y, z), S, 10, 1))
+    P.append(lathe_z('vgrip', [(-.07, 0), (-.07, .013), (-.062, .015), (-.02, .0145), (-.004, .012), (0, .012), (0, 0)], (0, -.255, .03), RB, 20))
+    P.append(lathe_z('vgripcap', [(-.078, 0), (-.078, .014), (-.07, .0165), (-.068, .0165), (-.068, 0)], (0, -.255, .03), PO, 20))
     finish('gun_ksmg', P, (0, -.415, zb), (0, -.255, -.02), (0, .08, .125), rail=(0, -.04, .1015),
            moving=[('mag', MAG, (0, -.069, .018)), ('charge', CHARGE, (.013, -.27, .102)), ('bolt', BOLT, (RIGHT * .01, -.04, .07))])
 
 
 def battle_rifle():
-    """Battle rifle: a one-piece walnut stock with a pressed grip panel, a steel receiver with an operating rod down
-    its right side, a gas cylinder under the barrel, a pronged flash hider, aperture sights."""
-    bl.reset(); M = K.kinetic_mats(); S, PK, W, BR = M['steel'], M['park'], M['wood'], M['brass']
+    """Battle rifle (our own pattern): the walnut stock IS the body: one loft from the butt through the wrist and the
+    action bed to a hand-filling forend, raised strakes on the forend with the finger groove between them, a
+    pistol-grip wrist on the lines the hand is fitted to. A milled steel receiver sits in it (heel, bridge, rail
+    step, the port and the operating rod on the right); a walnut upper handguard with real vents over the barrel; a
+    gas cylinder under the barrel ahead of the forend's band; a ribbed box magazine; aperture sights."""
+    bl.reset(); M = K.kinetic_mats(); S, PK, W, BR, RB = M['steel'], M['park'], M['wood'], M['brass'], M['rubber']
     zb = .072; P = []
-    # the stock in walnut, shaped: a forend that swells for the hand, the action bed, the pistol-grip wrist (its
-    # lines are the ones the firing hand is fitted to), a butt that deepens to the plate
-    P.append(G.sloft('forend', [(-.46, .038, .068, .016, 3.4), (-.43, .03, .07, .0205, 4.0), (-.3, .026, .07, .0225, 4.0), (-.16, .026, .07, .0225, 4.2),
-                                (-.12, .03, .064, .022, 4.4), (.0, .03, .06, .022, 4.4), (.1, .03, .06, .022, 4.2), (.15, .02, .07, .021, 3.8)], W, 22, 4))
-    G.slots(P, 'fore_groove', [(-.3, .05, .2, .007, 0)], .0222, PK, lift=.0006)
-    P.append(G.rprism('stock_grip', G.chaikin([(-.01, .034), (-.004, .0), (.004, -.068), (.035, -.118), (.085, -.11), (.12, -.062), (.16, -.04), (.16, .05), (.0, .05)],
-                                              2, sharp=(0, 6, 7, 8)), .044, W, .011))
-    P.append(G.sloft('butt', [(.13, -.036, .074, .0205, 4.0), (.18, -.026, .079, .0185, 3.0), (.26, -.022, .077, .0185, 2.7), (.36, -.044, .072, .02, 2.8),
-                              (.43, -.066, .067, .0212, 3.2), (.462, -.074, .064, .0215, 3.6)], W, 24, 4))
-    P.append(plate('grip_panel', [(.022, -.06), (.062, -.064), (.058, -.104), (.036, -.108)], PK, .019, .0228, .0012))
-    P.append(G.loft('receiver', [(.11, .058, .1, .018, (.005, .001)), (-.15, .058, .1, .018, (.005, .001))], S))
-    P.append(plate('receiver_rail', [(.1, .064), (.1, .072), (-.14, .072), (-.14, .064)], S, .0165, .0196, .0008))
-    G.port(P, .005, -.066, .076, .094, .0182, M['rubber'], None, side=-1)
-    BOLT = [plate('boltface', [(.004, .0775), (.004, .0925), (-.064, .0925), (-.064, .0775)], PK, .008, .0172, .0008, sym=False, side=-1),
-            plate('oprod', [(-.04, .066), (-.04, .078), (-.34, .078), (-.34, .066)], S, .018, .024, .0012, sym=False, side=-1),
-            prism('ophandle', [(-.033, .074), (-.033, .086), (-.047, .086), (-.047, .074)], .018, S, .002, x=RIGHT * .03)]
-    P.append(G.loft('hg_upper', [(-.15, .072, .096, .016, (.007, .0005)), (-.36, .072, .096, .016, (.007, .0005))], W))
-    G.slots(P, 'hg_vent', [(-.2 - i * .04, .084, .024, .005, 0) for i in range(4)], .016, PK)
-    P += [G.tube_('gascyl', -.3, -.46, .0105, S, .045, n=16),
-          lathe('gasplug', [(-.46, 0), (-.46, .0118), (-.47, .0118), (-.474, .008), (-.474, 0)], S, .045, 0, 6, sharp=20),
-          prism('frontband', [(-.355, .03), (-.355, .09), (-.37, .09), (-.37, .03)], .046, S, .002)]
-    G.barrel_stepped(P, 'barrel', [(-.15, .0135), (-.2, .0112), (-.37, .0105), (-.47, .0095), (-.695, .0095)], zb, S, .0048)
-    P.append(G.band('gas_port_band', -.455, .014, .0128, S, zb, 0, .0035, 32, .001))
-    G.hider(P, 'flashhider', -.69, zb, .0122, .064, S, 5)
-    P.append(prism('fsb', [(-.667, zb + .006), (-.667, zb + .035), (-.683, zb + .035), (-.683, zb + .006)], .014, S, .002))
-    G.iron_front(P, -.675, .125, S, base_z=zb + .03, w=.022)
-    G.guard(P, S, [(-.054, .028), (-.056, .004), (-.048, -.012), (-.034, -.02), (-.012, -.02), (-.002, -.016)], .012, .005)
-    G.trigger(P, S, -.022, .03, L=.032)
-    P.append(prism('floorplate', [(-.05, .0195), (-.05, .0235), (-.14, .0235), (-.14, .0195)], .03, S, .001))
-    P.append(G.loft('receiver_heel', [(.112, .06, .092, .0165, (.006, .001)), (.132, .064, .084, .014, (.005, .001))], S))
-    P.append(plate('receiver_bridge', [(.1, .078), (.1, .096), (.05, .096), (.04, .086), (.04, .078)], S, .0165, .0198, .001))
-    G.seamline(P, [(-.02, .06), (-.02, .099)], .0182, M['rubber'])
-    P.append(lathe_x('safety', [(0, .0046), (.003, .0046), (.0038, .0036), (.0038, 0)], (.0222, .012, .04), S, 14, 1))
-    for i in range(3):
-        P.append(G.band('gascyl_ring', -.32 - i * .05, .006, .0122, S, .045, 0, .003, 20, .0006))
-    P.append(plate('grip_cap_plate', [(.03, -.112), (.086, -.104), (.088, -.11), (.032, -.118)], S, .014, .0185, .001))
-    MAG = G.box_mag('magbody', [(-.058, .03), (-.062, -.12), (-.132, -.13), (-.132, .03)], .028, S, floor_m=S,
-                    floor=[(-.059, -.117), (-.135, -.127), (-.136, -.137), (-.06, -.127)],
-                    ribs=[[(-.066, -.01 - k * .035), (-.126, -.01 - k * .035), (-.1262, -.016 - k * .035), (-.0662, -.016 - k * .035)] for k in range(3)])
-    MAG.append(G.tube_('magtop', -.065, -.095, .0046, BR, .033, n=10))
-    P.append(G.rloft('buttplate', [(.461, -.075, .065, .022, 3.6), (.47, -.074, .064, .0218, 3.6), (.474, -.07, .06, .02, 3.2)], S, n=24))
-    G.hexbolts(P, [(.2, .02), (.44, -.01)], .0192, S, .003, n=14)
-    P += K.sling_loop(.38, -.056, S) + K.sling_loop(-.4, .03, S)
-    G.iron_rear(P, .085, .125, S, base_z=.1)
-    P += K.rail(M, .095, -.12, .1, .022, PK)
-    # ---- made and used: heel rivets, an op-rod guide, feed lips, cut checkering on the wrist and the forend, a
-    # ribbed butt plate, the stock's cross bolts
-    G.rivets(P, [(.1, .066), (.1, .09), (-.14, .09)], .0182, S, .002)
-    P.append(plate('oprod_guide', [(-.15, .064), (-.15, .08), (-.17, .08), (-.17, .064)], S, .0182, .0256, .001, sym=False, side=-1))
-    G.feed_lips(MAG, -.062, -.128, .03, .028, S, BR)
-    G.checker(P, 'grip_checker', [(.024, -.062), (.06, -.066), (.056, -.102), (.038, -.106)], .0229, W, 12, 12, .0007)
-    G.checker(P, 'fore_checker', [(-.2, .034), (-.4, .034), (-.4, .0455), (-.2, .0455)], .0226, W, 40, 4, .0007)
+    pi = math.pi
+    # ---------------------------------------------------------------- the stock: sixteen sections, butt to forend tip
+    ST = G.Body([(.462, -.074, .064, .0215, 3.6), (.43, -.066, .067, .0212, 3.2), (.36, -.044, .072, .02, 2.8), (.28, -.026, .0765, .0188, 2.7), (.2, -.028, .079, .0186, 2.8),
+                 (.15, .006, .071, .0205, 3.4), (.1, .02, .062, .0215, 4.0), (.03, .026, .06, .022, 4.2), (-.05, .028, .06, .0222, 4.2), (-.12, .028, .064, .0222, 4.2),
+                 (-.16, .026, .07, .0228, 4.0), (-.24, .022, .071, .0246, 3.6), (-.32, .022, .071, .025, 3.6), (-.37, .025, .07, .0238, 3.6), (-.4, .03, .069, .0215, 3.4),
+                 (-.42, .037, .067, .017, 3.0)])
+    ST.skin(P, W, 'stock', step=.008, n=32)
+    ST.shell(P, 'fore_strake', W, -.175, -.385, ST.af(.05, -.3), ST.af(.7, -.3), t=.0018, ch=.0016)         # the finger groove lies between
+    ST.shell(P, 'fore_belly', W, -.175, -.385, ST.af(-.9, -.3), ST.af(-.2, -.3), t=.0018, ch=.0016)          # these two strakes
+    ST.checker(P, 'fore_checker', W, -.2, -.36, ST.af(-.82, -.3), ST.af(-.3, -.3), 36, 5, .0007, d=.0019)
+    ST.shell(P, 'cheek', W, .4, .25, ST.af(.15, .3), ST.af(.8, .3), t=.002, ch=.002, mirror=False, side=1)
+    P.append(G.rprism('stock_grip', G.chaikin([(-.01, .034), (-.004, .0), (.004, -.068), (.035, -.118), (.085, -.11), (.12, -.062), (.16, -.03), (.16, .05), (.0, .05)],
+                                              2, sharp=(0, 6, 7, 8)), .043, W, .0125, 4))
+    G.checker(P, 'grip_checker', [(.024, -.062), (.06, -.066), (.056, -.102), (.038, -.106)], .0216, W, 12, 12, .0007)
+    P.append(G.rprism('grip_cap', [(.03, -.113), (.086, -.105), (.088, -.111), (.032, -.119)], .034, S, .003))
+    P.append(G.rloft('buttplate', [(.461, -.075, .065, .022, 3.6), (.47, -.074, .064, .0218, 3.6), (.474, -.07, .06, .02, 3.2)], S, n=28))
     for i in range(6):
         z = .05 - i * .022
         P.append(G.rloft('butt_rib', [(.4735, z - .006, z + .006, .0185, 3.0), (.4765, z - .004, z + .004, .016, 3.0)], S, n=16))
-    G.rivets(P, [(.1, .036), (-.1, .04), (-.42, .046)], .0225, S, .0032)
-    P.append(lathe_x('bolt_roller', [(0, .0052), (.004, .0052), (.005, .0042), (.005, 0)], (RIGHT * .0246, -.04, .072), S, 16, -1))
+    for y, z in ((.1, .036), (-.1, .04)):
+        x = ST.pt(y, 0, .0002)[0]
+        G.rivets(P, [(y, z)], x, S, .0034)
+    G.swivel(P, .38, -.051, S)
+    P += K.sling_loop(-.39, .02, S, x=.028)
+    # ---------------------------------------------------------------- the receiver, milled steel, set in the wood
+    R = G.Body([(.134, .064, .084, .013, 4.0), (.118, .06, .096, .0165, 5.0), (.095, .058, .1, .0178, 6.0), (.05, .058, .1, .018, 6.0), (.0, .058, .1, .018, 6.0),
+                (-.05, .058, .1, .0183, 6.0), (-.1, .058, .1, .0183, 6.0), (-.135, .059, .1, .0186, 6.0), (-.15, .061, .098, .0182, 4.5), (-.158, .064, .094, .017, 3.0)])
+    R.skin(P, S, 'receiver', step=.007, n=36)
+    R.shell(P, 'receiver_rail', S, .1, -.14, R.af(-.75), R.af(-.3), t=.0016, ch=.0012)
+    R.shell(P, 'bridge', S, .1, .04, R.af(.15), R.af(.82), t=.0018, ch=.0014)
+    R.shell(P, 'ring', S, -.1, -.15, R.af(-.2), R.af(.82), t=.0018, ch=.0014)
+    xr = R.pt(-.03, .3, .0004)[0]
+    G.port(P, .005, -.066, .076, .094, xr, RB, None, side=-1)
+    BOLT = [plate('boltface', [(.004, .0775), (.004, .0925), (-.064, .0925), (-.064, .0775)], PK, .008, xr - .001, .0008, sym=False, side=-1),
+            plate('oprod', [(-.04, .066), (-.04, .078), (-.34, .078), (-.34, .066)], S, .018, .024, .0012, sym=False, side=-1),
+            G.rprism('ophandle', [(-.033, .074), (-.033, .086), (-.047, .086), (-.047, .074)], .018, S, .003, x=RIGHT * .03)]
+    P.append(plate('oprod_guide', [(-.15, .064), (-.15, .08), (-.17, .08), (-.17, .064)], S, .0182, .0256, .001, sym=False, side=-1))
+    P.append(lathe_x('safety', [(0, .0046), (.003, .0046), (.0038, .0036), (.0038, 0)], (ST.pt(.012, 0, 0)[0], .012, .04), S, 14, 1))
+    P.append(G.rprism('floorplate', [(-.05, .019), (-.05, .0245), (-.14, .0245), (-.14, .019)], .03, S, .002))
+    G.guard(P, S, [(-.054, .028), (-.056, .004), (-.048, -.012), (-.034, -.02), (-.012, -.02), (-.002, -.016)], .012, .0046, r=.0018)
+    G.trigger(P, S, -.022, .03, L=.032)
+    # ---------------------------------------------------------------- upper handguard: walnut shells with real vents
+    UH = G.Body([(-.152, .064, .098, .0165, 2.6), (-.2, .064, .099, .0172, 2.6), (-.26, .064, .099, .0172, 2.6), (-.32, .064, .0985, .0168, 2.6), (-.358, .064, .097, .016, 2.6)])
+    kw = dict(t=.0028, d=-.0028, base=-.004, closed=True)
+    UH.shell(P, 'hg_crown', W, -.158, -.354, 1.08, pi - 1.08, mirror=False, **kw)
+    UH.slats(P, 'hg_vent_bar', W, -.166, -.348, .5, .98, 9, share=.56, **kw)
+    UH.shell(P, 'hg_side', W, -.158, -.354, -.1, .42, **kw)
+    UH.collar(P, 'hg_ferrule', S, -.15, .01, .001)
+    # ---------------------------------------------------------------- barrel group
+    G.barrel_stepped(P, 'barrel', [(-.15, .0135), (-.2, .0112), (-.37, .0105), (-.47, .0095), (-.695, .0095)], zb, S, .0048)
+    P.append(G.band('gas_port_band', -.455, .014, .0128, S, zb, 0, .0035, 32, .001))
+    P += [G.tube_('gascyl', -.36, -.5, .0105, S, .045, n=24),
+          lathe('gasplug', [(-.5, 0), (-.5, .0118), (-.51, .0118), (-.514, .008), (-.514, 0)], S, .045, 0, 6, sharp=20),
+          G.rprism('frontband', [(-.395, .03), (-.395, .09), (-.412, .09), (-.412, .03)], .05, S, .006),
+          prism('gas_lug', [(-.45, .045), (-.45, .064), (-.47, .064), (-.47, .045)], .012, S, .002)]
+    for i in range(3):
+        P.append(G.band('gascyl_ring', -.43 - i * .025, .006, .0122, S, .045, 0, .003, 20, .0006))
+    G.hider(P, 'flashhider', -.69, zb, .0122, .064, S, 5)
+    P.append(G.rprism('fsb', [(-.667, zb + .006), (-.667, zb + .035), (-.683, zb + .035), (-.683, zb + .006)], .014, S, .003))
+    G.iron_front(P, -.675, .125, S, base_z=zb + .03, w=.022)
+    G.iron_rear(P, .085, .125, S, base_z=.1)
+    P += K.rail(M, .095, -.12, .1, .022, PK)
+    # ---------------------------------------------------------------- magazine
+    MAG = [G.rprism('magbody', [(-.058, .03), (-.062, -.12), (-.132, -.13), (-.132, .03)], .028, S, .0035, 3)]
+    for k in range(3):
+        MAG.append(plate('magrib', [(-.066, -.01 - k * .035), (-.126, -.01 - k * .035), (-.1262, -.017 - k * .035), (-.0662, -.017 - k * .035)], S, .013, .0152, .0007))
+    MAG.append(plate('magspine', [(-.092, .01), (-.1, .01), (-.102, -.112), (-.094, -.112)], S, .013, .0152, .0006))
+    MAG.append(G.rprism('magfloor', [(-.057, -.116), (-.135, -.126), (-.136, -.137), (-.058, -.127)], .032, S, .003))
+    G.feed_lips(MAG, -.062, -.128, .03, .028, S, BR)
     finish('gun_dmr', P, (0, -.755, zb), (0, -.32, .022), (0, .11, .125), rail=(0, -.01, .1095),
            moving=[('mag', MAG, (0, -.095, .03)), ('bolt', BOLT, (RIGHT * .03, -.04, .08))])
 
 
 def revolver():
-    """Revolver: a round recoil shield and a humped frame under a grooved top strap, a six-shot cylinder (a band with
-    the stop notches, flutes ahead of it) on a swing-out crane, a barrel with a rounded ejector shroud and a vent rib,
-    a spur hammer with a chequered pad, a rounded guard, a walnut grip with brass medallions, an orange front blade."""
+    """Revolver: ONE frame lofted round a real cylinder window (a top strap, the barrel boss, the belly, a round recoil
+    shield with a loading cut on the right, the hump the hammer comes out of), a fluted cylinder with stop notches and
+    bored chambers on a swing-out crane whose yoke fills the front of the window, the ejector rod lying in the open
+    channel of a half lug under the barrel, a vent rib, a spur hammer with a chequered pad, a guard undercut at the
+    front strap, walnut panels on a steel grip frame with medallions and an escutcheoned screw, an orange front blade."""
     bl.reset(); M = K.kinetic_mats(); S, PK, W, BR, OR = M['steel'], M['park'], M['wood'], M['brass'], M['orange']
     zc = .062; zb = zc + .013; P = []
     rc = .0135                                                       # the chambers' circle
-    P.append(G.disc('recoilshield', .038, .0285, .0246, S, zc, n=40, ch=.002))
-    P.append(G.rprism('frame_rear', G.chaikin([(.03, .018), (.03, .099), (.04, .099), (.048, .093), (.053, .078), (.062, .06), (.061, .052), (.054, .046),
-                                               (.056, .03), (.05, .018)], 1, sharp=(0, 1, 9)), .022, S, .004))
-    P.append(G.loft('topstrap', [(.04, .089, .1, .011, (.003, .0005)), (-.062, .089, .1, .011, (.003, .0005))], S))
-    P.append(prism('topgroove', [(.018, .0998), (.018, .1004), (-.056, .1004), (-.056, .0998)], .004, PK, .0002))
-    P.append(prism('frame_low', [(.03, .016), (.03, .0355), (-.036, .0355), (-.04, .03), (-.02, .02), (.0, .016)], .028, S, .002))
-    P.append(G.rprism('frame_front', [(-.034, .03), (-.034, .09), (-.062, .09), (-.062, .04), (-.04, .03)], .034, S, .005))
-    CYL = [lathe('cylinder', [(.0265, 0), (.0265, .0195), (.0245, .0205), (-.0295, .0205), (-.0315, .0195), (-.0315, 0)], S, zc, 0, 36),
-           G.band('cyl_band', .0255, .021, .0223, S, zc, 0, .0022, 36, .0007),
-           lathe('ratchet', [(.031, 0), (.031, .008), (.0265, .008), (.0265, 0)], S, zc, 0, 6, sharp=20)]
+    Rs = .0228                                                       # the recoil shield, round like the cylinder
+
+    def sh(z):
+        return max(math.sqrt(max(Rs * Rs - (z - zc) ** 2, 0.0)), .0112)
+    # ---- the frame: stations round the window (window edge -> outline, half widths at the window / part way / outline)
+    P.append(G.ring_frame('frame', [
+        (.0225, .0868, .027, .1, .0105), (-.006, .0868, -.008, .1, .0105), (-.036, .0868, -.040, .1, .0107),      # top strap
+        (-.042, .0868, -.0505, .0995, .011), (-.042, .0808, -.051, .09, .0118),
+        (-.042, .064, -.0515, .064, .0126), (-.042, .0445, -.0505, .046, .0124),                                  # the barrel boss
+        (-.042, .0385, -.046, .0335, .0122), (-.036, .0385, -.037, .0275, .0124),
+        (-.012, .0385, -.016, .0195, .013), (.0225, .0385, .006, .013, .013),                                     # the belly
+        (.0285, .0385, .022, .021, .013, .013, .0128, .4),
+        (.0285, .0445, .04, .029, sh(.0445), .013, .0126, .45),
+        (.0285, .054, .051, .0375, sh(.054), .0128, .0108, .5),                                                   # the recoil shield
+        (.0285, .062, .057, .05, sh(.062), .0125, .0105, .5, .0168),
+        (.0285, .072, .05, .0625, sh(.072), .0122, .0105, .55, .015),                                             # (its loading cut)
+        (.0285, .0808, .0435, .078, sh(.0808), .0118, .0105, .5),
+        (.0285, .0868, .041, .0965, .011, .011, .0105, .5)], S))
+    P.append(prism('topgroove', [(.018, .0998), (.018, .1004), (-.046, .1004), (-.046, .0998)], .004, PK, .0002))
+    # ---- the cylinder: flutes, stop notches, bored chambers; the ratchet behind it, the gas ring ahead
+    CYL = [G.drum('cylinder', .0265, -.0315, .0218, S, zc, n=144, fl_w=.0066, fl_d=.003, fl_end=.004, fl_r=.008,
+                  notch=(.021, .0135, 15, 3, .0009), holes=(rc, .0052, .029, .0006), hub=.0052),
+           lathe('ratchet', [(.031, 0), (.031, .005), (.0265, .0062), (.0265, 0)], S, zc, 0, 24),
+           G.tube_('gasring', -.0315, -.0338, .0048, S, zc, n=20, ch=.0005)]
     ROUNDS = []
     for i in range(6):
         a = i * math.pi / 3 + math.pi / 6
         x, z = math.cos(a) * rc, zc + math.sin(a) * rc
-        CYL.append(G.bar('cyl_land', .0045, -.0285, .0202, .0223, a - .35, a + .35, S, zc, 0, 3))
-        CYL.append(G.bar('cyl_notch', .019, .012, .022, .0227, a + .5 - .06, a + .5 + .06, M['rubber'], zc, 0, 1))
-        CYL.append(lathe('chamber', [(-.0316, 0), (-.0316, .0052), (-.0312, .0052), (-.0312, 0)], M['rubber'], z, x, 10))
+        CYL.append(G.bar('ratchet_tooth', .0308, .0265, .0048, .0088, a - .17, a + .17, S, zc, 0, 1, .7))
         ROUNDS += [lathe('rim', [(.0284, 0), (.0284, .0062), (.0266, .0062), (.0266, 0)], BR, z, x, 12),
                    lathe('primer', [(.0288, 0), (.0288, .0021), (.0284, .0021), (.0284, 0)], M['steel'], z, x, 8)]
+    # ---- the crane: its yoke fills the front of the window, the ejector rod runs out under the barrel
     hx, hz = .004, zc - .025
-    CRANE = [G.tube_('ejrod', -.031, -.061, .0034, S, zc, n=10), lathe('ejknob', [(-.058, 0), (-.058, .0044), (-.064, .0044), (-.065, .0036), (-.065, 0)], S, zc, 0, 12),
-             prism('yoke', [(-.031, zc - .026), (-.031, zc + .002), (-.037, zc + .002), (-.037, zc - .026)], .008, S, .001, x=.002),
-             G.tube_('yokepin', .0, -.05, .0036, S, hz, hx, n=8)]
+    CRANE = [G.tube_('ejrod', -.031, -.0985, .0032, S, zc, n=14),
+             lathe('ejknob', [(-.094, 0), (-.094, .0042), (-.1035, .0042), (-.1048, .0034), (-.1048, 0)], S, zc, 0, 16),
+             lathe('ejknurl', [(-.0955, 0), (-.0955, .00465), (-.1022, .00465), (-.1022, 0)], PK, zc, 0, 12, sharp=20),
+             G.rprism('yoke', [(-.0342, .0392), (-.0342, .0658), (-.0412, .0658), (-.0412, .0392)], .0236, S, .0022, 2),
+             G.tube_('yokepin', .0, -.05, .0024, S, hz, hx, n=8)]
     LOADER = [lathe('sl_body', [(.016, 0), (.016, .019), (.004, .019), (.004, 0)], S, 0, 0, 24),
               lathe('sl_knob', [(.03, 0), (.03, .007), (.028, .008), (.016, .008), (.016, 0)], S, 0, 0, 12),
               G.band('sl_grip', .012, .004, .0198, PK, 0, 0, .002, 24, .0004)]
@@ -1378,46 +1599,77 @@ def revolver():
         LOADER += [lathe('sl_case', [(.004, 0), (.004, .0054), (-.026, .0054), (-.026, 0)], BR, z, x, 10),
                    lathe('sl_nose', [(-.026, 0), (-.026, .0046), (-.032, .0036), (-.034, .0018), (-.034, 0)], M['steel'], z, x, 10)]
     CASING = [lathe('cs_case', [(.0155, .0045), (.0155, .0062), (.014, .0062), (.014, .0054), (-.015, .0054), (-.015, .0045)], BR, .2, 0, 12, closed=True)]
-    # barrel, the ejector shroud under it, the vent rib
-    V.barrel('barrel', M, -.06, -.182, zb, .0088, P, m=S, bore=.0048)
-    P.append(G.rprism('underlug', [(-.06, .05), (-.06, .068), (-.176, .068), (-.181, .062), (-.176, .053), (-.12, .047), (-.075, .048)], .019, S, .006))
-    P.append(prism('ventrib', [(-.06, .0885), (-.06, .094), (-.178, .094), (-.181, .0885)], .0085, S, .001))
+    # ---- the barrel: the forcing cone in the window, a shoulder at the frame, a taper to a crowned muzzle
+    P.append(lathe('barrel', [(-.033, 0), (-.033, .0066), (-.0345, .0078), (-.0512, .0078), (-.0512, .0099), (-.056, .0099), (-.0572, .0093),
+                              (-.18, .0086), (-.1838, .0086), (-.1855, .0072), (-.1855, .0064), (-.1836, .0054), (-.1836, .0048),
+                              (-.155, .0048), (-.155, 0)], S, zb, 0, 36))
+    # the half lug under it: closed on the right, an open channel on the left the ejector rod lies in (and swings out of)
+    zt, zl, hwl, rb = .0712, .0505, .0072, .006
+
+    def lug(pocket, sx=1.0, sz_=1.0):
+        pts = [(hwl, zt), (-hwl, zt)]
+        pts += [(hwl * math.cos(math.pi + math.pi * k / 10), zl + rb + rb * math.sin(math.pi + math.pi * k / 10)) for k in range(11)]
+        if pocket:
+            pts += [(.0006, .0572)] + [(.0006 - .0048 * math.sin(math.pi * k / 8), zc - .0048 * math.cos(math.pi * k / 8)) for k in range(1, 8)] + [(.0006, .0668)]
+        else:
+            pts += [(hwl, .0572 + .0096 * k / 8) for k in range(9)]
+        pts += [(hwl, .0668 + .0002)] if pocket else [(hwl, .0672)]
+        return [(x * sx, zt - (zt - z) * sz_) for x, z in pts]
+    P.append(G._skin('lug', [(-.0512, lug(True)), (-.1074, lug(True)), (-.1078, lug(False)), (-.119, lug(False)), (-.1255, lug(False, .93, .9)),
+                             (-.1295, lug(False, .78, .7)), (-.132, lug(False, .5, .42))], S, 40))
+    P.append(prism('ventrib', [(-.0512, .0885), (-.0512, .094), (-.178, .094), (-.181, .0885)], .0085, S, .001))
     for i in range(6):
         P.append(prism('ribpost', [(-.066 - i * .02, .0835), (-.066 - i * .02, .0885), (-.072 - i * .02, .0885), (-.072 - i * .02, .0835)], .006, S, .0004))
-    # hammer, latch, screws
-    P.append(G.rprism('hammer', G.ribbon(G.smooth([(.036, .072), (.042, .09), (.05, .1015), (.061, .1065)], 2), [.012, .0105, .0085, .0065]), .009, S, .0014, 2))
-    P.append(prism('hammer_pad', [(.05, .1035), (.062, .1092), (.0635, .1066), (.052, .101)], .011, PK, .0007))
-    P.append(plate('latch', [(.05, .081), (.05, .07), (.036, .068), (.033, .079)], S, .009, .0138, .0008, sym=False, side=1))
-    G.serrations(P, 'latch_grip', .0475, 4, .0034, .0705, .0795, .0138, PK, t=.0013, sym=False, side=1)
-    G.hexbolts(P, [(.004, .026), (-.03, .033)], .014, S, .0024, sym=False, side=-1, n=14)
-    G.guard(P, S, [(-.05, .024), (-.052, .0), (-.044, -.014), (-.03, -.021), (-.004, -.021), (.014, -.015)], .012, .0056)
-    G.trigger(P, S, -.012, .022, L=.03)
-    # the walnut grip on the committed grip's lines, its medallions and screw
-    g = G.hand_grip(P, W, .42, .105, .036, y=.024, z=.02, r=.0115, round_butt=True)
+    for i in range(14):
+        P.append(prism('ribline', [(-.058 - i * .0085, .0938), (-.058 - i * .0085, .0943), (-.062 - i * .0085, .0943), (-.062 - i * .0085, .0938)], .0062, PK, .0002))
+    # ---- the hammer in the cut behind the top strap (under the sight line): a broad body, a spur with a chequered pad
+    P.append(G.rprism('hammer', G.chaikin([(.04, .064), (.0405, .088), (.0425, .0945), (.047, .096), (.056, .0935), (.0665, .0885), (.067, .0862),
+                                           (.058, .0885), (.0525, .0855), (.0515, .076), (.0545, .066), (.049, .057)], 2, sharp=(5, 6)), .009, S, .0016, 2))
+    P.append(prism('hammer_spur', [(.0552, .0932), (.0558, .0952), (.0672, .0898), (.0668, .0876), (.059, .0905)], .0125, S, .0007))
+    G.checker3(P, 'spur_checker', (-.0056, .0564, .09502), (.0056, .0564, .09502), (.0056, .0666, .0902), (-.0056, .0666, .0902), PK, 8, 8, .0005, .0008)
+    P.append(K.cylx('hammer_pin', .0026, .0236, (0, .046, .066), PK, 12, .0004))
+    # the cylinder latch on the left, behind the shield
+    P.append(plate('latch', [(.0465, .0575), (.0465, .0495), (.0385, .0485), (.0375, .0565)], S, .009, .0138, .0008, sym=False, side=1))
+    G.serrations(P, 'latch_grip', .0452, 3, .0026, .0505, .0558, .0138, PK, t=.0011, sym=False, side=1)
+    # the side plate on the right with its screws
+    P.append(plate('sideplate', [(.018, .0235), (.018, .0345), (-.03, .0345), (-.036, .0305), (-.014, .0225), (.0, .0195)], S, .011, .0137, .0006, sym=False, side=-1))
+    G.hexbolts(P, [(.011, .0285), (-.027, .0315)], .0137, S, .0022, sym=False, side=-1, n=14)
+    G.rivets(P, [(-.006, .0235)], .0137, PK, .0016, sym=False, side=-1)
+    # ---- the guard: up into the frame at the front, undercut where it meets the front strap
+    P.append(G.rprism('trigguard', G.ribbon(G.smooth([(-.041, .03), (-.0455, .012), (-.044, -.002), (-.037, -.0125), (-.026, -.017), (-.006, -.017),
+                                                      (.0045, -.0135), (.0105, -.0065)], 2), [.0058, .0056, .0054, .005, .0046, .0042]), .012, S, .0018, 2))
+    G.trigger(P, S, -.012, .022, L=.027)
+    G.cross_pins(P, [(-.008, .0285), (-.024, .034), (.012, .031)], .0262, PK, .0016)
+    # ---- the grip on the committed grip's lines: a steel frame (the straps), walnut panels rounding down to it
+    g = G.gp(.42, .024, .02); h = .105
+    outline = G.chaikin([g(.03, -.004), g(.032, .02), g(.0265, h * .5), g(.028, h), g(-.02, h + .004), g(-.026, h * .72), g(-.0265, h * .5),
+                         g(-.0265, .034), g(-.024, -.004)], 2, sharp=(0, 8))
+    P.append(G.rprism('grip_frame', outline, .0156, S, .0016, 2))
+    P.append(G.rprism('grip', G.poly_offset(outline, .0007), .036, W, .0115, 4))
     c = g(.002, .03)
     for s in (1, -1):
         P.append(lathe_x('medallion', [(0, .0058), (.0012, .0058), (.0018, .0046), (.0018, 0)], (s * .0178, c[0], c[1]), BR, 16, s))
-    c = g(.0, .078)
-    P.append(lathe_x('gripscrew', [(0, .003), (.001, .003), (.0016, .002), (.0016, 0)], (-.0178, c[0], c[1]), S, 12, -1))
+    c = g(.0, .074)
+    for s in (1, -1):
+        P.append(lathe_x('escutcheon', [(0, .0048), (.0009, .0048), (.0013, .004), (.0013, .0026), (.0006, .0024), (.0006, 0)], (s * .0178, c[0], c[1]), BR, 16, s))
+        P.append(lathe_x('gripscrew', [(0, .0024), (.0011, .0024), (.0015, .0016), (.0015, 0)], (s * .0178, c[0], c[1]), S, 12, s))
+    P.append(plate('screwslot', [(c[0] - .002, c[1] + .0004), (c[0] + .002, c[1] + .0004), (c[0] + .002, c[1] - .0004), (c[0] - .002, c[1] - .0004)],
+                   PK, .019, .01945, .0001, sym=False, side=1))
+    G.checker(P, 'grip_checker', [g(-.01, .04), g(.013, .038), g(.013, .066), g(-.01, .067)], .0181, W, 11, 13, .0006)
+    G.checker(P, 'grip_checker', [g(-.01, .081), g(.013, .081), g(.012, .096), g(-.009, .097)], .0181, W, 11, 7, .0006)
+    # ---- the sights: a square notch on the top strap, a plate for an optic ahead of it, a pinned blade
     sz = .102
-    P += [prism('rearblock', [(.04, .0995), (.04, .104), (.022, .104), (.018, .0995)], .017, S, .001)]
-    P.append(prism('optic_plate', [(.008, .1), (.008, .1012), (-.046, .1012), (-.046, .1)], .02, PK, .0005))
+    P += [prism('rearblock', [(.041, .097), (.041, .104), (.022, .104), (.017, .0985)], .017, S, .001)]
+    P.append(prism('optic_plate', [(.008, .1), (.008, .1012), (-.046, .1012), (-.046, .1)], .019, PK, .0005))
     for yy in (.0, -.038):
-        for xx in (.0065, -.0065):
+        for xx in (.0062, -.0062):
             P.append(lathe_z('plate_screw', [(0, 0), (0, .0016), (.0004, .0016), (.0004, 0)], (xx, yy, .1012), S, 10))
     for s, nm in ((1, 'rear_earL'), (-1, 'rear_earR')):
         P.append(prism(nm, [(.03, sz - .0055), (.03, sz + .0015), (.023, sz + .0015), (.023, sz - .0055)], .005, S, .0006, x=s * .0055))
     P += [prism('front_base', [(-.15, .094), (-.158, .098), (-.176, .098), (-.18, .094)], .0085, S, .0006),
           prism('frontpost', [(-.16, .0975), (-.163, sz), (-.172, sz), (-.176, .0975)], .0035, S, .0006),
           prism('postdot', [(-.165, sz - .0035), (-.165, sz - .0005), (-.171, sz - .0005), (-.171, sz - .0035)], .0037, OR, .0004)]
-    # ---- cut checkering on the walnut, a side plate with its screws, a pinned front sight, chamber mouths
-    G.checker(P, 'grip_checker', [g(-.008, .04), g(.012, .038), g(.012, .088), g(-.008, .09)], .0181, W, 10, 20, .0006)
-    P.append(plate('sideplate', [(.026, .02), (.026, .036), (.01, .05), (-.03, .05), (-.036, .036), (-.016, .022), (.0, .018)], S, .012, .0152, .0008, sym=False, side=-1))
-    G.rivets(P, [(.018, .026), (-.026, .04), (.004, .044)], .0152, PK, .0018, sym=False, side=-1)
     P.append(K.cylx('sight_pin', .001, .0092, (0, -.166, .0965), PK, 8, .0002))
-    for i in range(6):
-        a = i * math.pi / 3 + math.pi / 6
-        CYL.append(G.band('chamber_mouth', -.0312, .0012, .0064, S, zc + math.sin(a) * rc, math.cos(a) * rc, .0012, 16, .0003))
     finish('gun_revolver', P, (0, -.185, zb), (0, -.02, -.035), (0, .07, sz), rail=(0, -.02, .1012),
            moving=[('crane', CRANE, (hx, -.0025, hz)), ('cylinder', CYL, (0, -.0025, zc), 'crane'),
                    ('rounds', ROUNDS, (0, -.0025, zc), 'cylinder')],

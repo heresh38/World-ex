@@ -120,14 +120,14 @@ def main():
 
     def poly_m(g):
         return mr(g, g.math('ADD', .66, g.math('MULTIPLY', g.noise(8, 3, .5, 13), .14)), 0.0)
-    bake_set(p, 'wpn_poly', poly_c, poly_n, poly_m, .5)
+    bake_set(p, 'wpn_poly', poly_c, poly_n, poly_m, .16)     # a fine stipple: at .5 a frame looked hammered
 
     # ------------------------------------------------ olive-drab painted polymer (precision-rifle stocks), scuffed to black
     def odg_c(g):
         a = g.ramp(g.noise(6, 4, .5, 37), [(.3, '#3d4630'), (.7, '#4d573c')])
         scuff = g.math('GREATER_THAN', g.noise(5, 6, .62, 38), .68)
         return g.mix(a, (.1, .1, .1), g.math('MULTIPLY', scuff, .8))
-    bake_set(p, 'wpn_odg', odg_c, poly_n, poly_m, .5)
+    bake_set(p, 'wpn_odg', odg_c, poly_n, poly_m, .16)
 
     # ------------------------------------------------ walnut: grain streaks along U with figure, oil sheen, handling wear
     def grain(g):

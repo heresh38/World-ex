@@ -55,6 +55,13 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
   Every copy is worn its own way (`USOGunRigComponent::Dress`: edge wear, scratches, grime and the mask's tiling from
   the copy's uid). Pictures: `SOCaptureSeries 1 18` (first person: hip, aimed, firing, every sight; files `SO_v_*`;
   run captures with `-ForceRes`).
+  The kinetic guns and the handguns were rebuilt body by body on 2026-11-12 (the owner: "Yes, rebuild them"; the
+  earlier passes had only added parts to flat extrusions): each receiver, cover, handguard, stock, grip and magazine
+  is its own loft through changing sections (`gunparts.Body.skin` / `shell` / `checker`, `Limb` for grips,
+  `ring_frame` and `drum` for the revolvers), no side face flat for more than 5 cm, each gun its own kind of body
+  (stamped rifle, two-piece alloy carbine, walnut-stocked battle rifle, turned bolt action in a chassis, round-topped
+  pump, tube-receiver SMG). Both shotguns aim through a raised ghost ring and front post (their `sight` is the
+  ring's centre): a bead on the receiver's top put the stock in the middle of the aimed view.
   Reload parts are own objects with their origin at the pivot (node names are an API): `mag`, `bolt`, `charge`,
   `slide`, `pump`, `crane` > `cylinder` > `rounds`, `hatch` + `biomass`; loose props `x_shell`, `x_round`,
   `x_casing`, `x_speedloader`. Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.

@@ -87,8 +87,8 @@ def kinetic_mats():
     """Real-material line: never tinted by rarity or shader."""
     return dict(steel=tmat('gun_steel', 'wpn_steel'),
                 park=tmat('gun_parkerized', 'wpn_park'),
-                poly=tmat('gun_polymer', 'wpn_poly'),
-                odg=tmat('gun_polymer_od', 'wpn_odg'),
+                poly=tmat('gun_polymer', 'wpn_poly', nstr=.3),      # a fine stipple (at full strength a frame looked hammered)
+                odg=tmat('gun_polymer_od', 'wpn_odg', nstr=.3),
                 wood=tmat('gun_wood', 'wpn_wood'),
                 rubber=tmat('gun_rubber', 'wpn_knurl', metal=0, rough=.8),
                 brass=bl.mat('gun_brass', '#b8893a', 1.0, .3),
