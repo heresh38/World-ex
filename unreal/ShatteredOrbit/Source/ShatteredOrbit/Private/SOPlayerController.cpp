@@ -201,6 +201,31 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 17)
+	{
+		// Meridian (L_Meridian): the torch in a dark shop of the mall, first person then third (files t*). The
+		// operation is held so nothing walks in.
+		for (TActorIterator<ASOOperation> It(GetWorld()); It; ++It)
+		{
+			It->SetActorTickEnabled(false);
+		}
+		Act([this, Hero, View]()
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				H->SetActorLocation(FVector(-146200.0f, 2500.0f, 100.0f));      // plan E 25, N -1462: just inside a shop
+				SetControlRotation(FRotator(-4.0f, 80.0f, 0.0f));
+				H->SetFlashlight(true);
+				View(ESOViewMode::FirstPerson);
+				SetViewTarget(H);
+			}
+		});
+		Snap(5.0f, TEXT("t1_torch_first"));
+		Act([this]() { SetControlRotation(FRotator(-10.0f, 125.0f, 0.0f)); });
+		Snap(1.5f, TEXT("t2_torch_first_side"));
+		Act([this, View]() { View(ESOViewMode::ThirdPerson); SetControlRotation(FRotator(-6.0f, 80.0f, 0.0f)); });
+		Snap(2.0f, TEXT("t3_torch_third"));
+	}
 	if (Set == 16)
 	{
 		// Meridian (L_Meridian): the operation's opening as a player sees it (files o*): why anyone goes, a line at a
@@ -295,9 +320,9 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{ TEXT("b7_alley_room"), FVector(0, -1760, 1.7), FVector(9.5, -1750, 1.6) },
 			{ TEXT("b8_forecourt"), FVector(0, -1625, 1.7), FVector(37, -1630, 5) },
 			// the ground under the terraces and round the Crown, where a fall lands (files e*)
-			{ TEXT("e1_yard"), FVector(58, 44, 1.7), FVector(84, 70, 8) },
+			{ TEXT("e1_yard"), FVector(74, 30, 1.7), FVector(88, 64, 9) },
 			{ TEXT("e2_under_bridge"), FVector(4, 122, 1.7), FVector(0, 190, 9) },
-			{ TEXT("e3_plate"), FVector(-52, 158, 1.7), FVector(-30, 180, 9) },
+			{ TEXT("e3_plate"), FVector(-22, 150, 1.7), FVector(-40, 172, 6) },
 			{ TEXT("e4_ribs"), FVector(20, 236, 11.7), FVector(48, 250, 14) },
 			{ TEXT("m1_approach"), FVector(2, -306, 1.7), FVector(0, -200, 9) },
 			{ TEXT("m2_gate"), FVector(-6, -228, 1.7), FVector(0, -200, 10) },
@@ -317,7 +342,17 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			const FView Copy = V;
 			Act([=]() { Cam(Copy.Eye, Copy.At); });
 			// (a view far from the last one hitches while its district comes in: a still taken sooner showed the next view)
-			Snap(3.0f, Copy.Name);
+			Snap(2.6f, Copy.Name);
+			// how fast this view draws: frames counted over the second after the still (the engine's running average
+			// carried the hitch of arriving somewhere new, and read 2 fps for views that draw at 90)
+			static uint64 PerfFrame = 0;
+			static double PerfTime = 0.0;
+			Act([]() { PerfFrame = GFrameCounter; PerfTime = FPlatformTime::Seconds(); });
+			Do(1.0f, [Copy]()
+			{
+				const double Took = FPlatformTime::Seconds() - PerfTime;
+				UE_LOG(LogShatteredOrbit, Log, TEXT("Perf: %s %.1f fps"), Copy.Name, Took > 0.0 ? double(GFrameCounter - PerfFrame) / Took : 0.0);
+			});
 		}
 		// the Altered, lined up in the plaza; the Colossus on the Crown
 		Act([=]()

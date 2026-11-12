@@ -95,6 +95,6 @@ mall and its yards.
 | 7 | Lighting, fog, materials, atmosphere | first pass in: a low sun under the storm's edge (long shafts between the towers), brighter sky fill and exposure, plant light (`bio`), lamps, moonlight shafts. To do: per-district grading, light shafts tuned by eye in the editor, puddles and wet reflections |
 | 8 | Mission route and boss arena | not started (the route is unchanged and still passes its checks) |
 | 9 | Gameplay, navigation, collision, multiplayer test | re-run after every stage: `SOCaptureSeries 1 9` on L_Meridian (13 nav legs, 250 spawns), the automation suite. Not played by a person; multiplayer not tested |
-| 10 | Performance profile, visual consistency | not started (Meridian's loaded size and frame rate are not yet measured after the overhaul) |
+| 10 | Performance profile, visual consistency | first measurement only (2026-11-12): `SOCaptureSeries 1 9` logs `Perf: <view> <fps>` (frames counted over the second after each still), 1920 x 1080, offscreen, on an RTX 4070 Ti + i7-13700KF, with 440 unshadowed lights and 100 walked-into buildings. Two runs: the slowest view drew at 172 fps (median 198) in one, and 84-128 fps in an earlier run read from the engine's running average while another job was using the same GPU. Either way above 60 here; a mid-range card has about half this one's speed, so the margin there is unproven. Not done: a run on a mid-range PC, a GPU profile per district, memory |
 
 How to see it before importing: `blender -b <saved build> -P tools/blender/meridian_preview.py -- <outdir> [shot ...]`.

@@ -33,7 +33,10 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
   and effect cards (`fx_kit.py`). Then `bash tools/blender/export_unreal.sh` builds the players and turns everything into
   `unreal/ShatteredOrbit/SourceArt` (FBX + textures + json), and `Content/Python/import_assets.py` imports it.
 - `bl.py` helpers (materials, primitives, loft, export). Blender is Z-up, -Y forward; glTF is Y-up, +Z forward.
-- Weapons (`weapons.py` + `gunkit.py`, textures `weapon_textures.py`): every archetype in `Data/game_data.json` has a
+- Weapons (`weapons.py` on `gunparts.py` (the hard-surface kit: lofts through chamfered sections, turned parts, vented
+  cages, stocks, magazines, muzzle devices, sights; direct meshes on `voidkit.py`, no booleans) + `gunkit.py`, textures
+  `weapon_textures.py`; rebuilt 2026-11-12 toward the Requiem guns' standard, sheets `Saved/Screenshots/guns_*`): every
+  archetype in `Data/game_data.json` has a
   class: `energy`, `kinetic` (real projectiles with muzzle velocity and drop) and `horror` (living biomass). Sights
   (`gun_attach.glb`: reflex, holo, 2x/4x/8x) mount per copy; magnified optics use the object name `scope` + `gun_lens`.
   Reload parts are own objects with their origin at the pivot (node names are an API): `mag`, `bolt`, `charge`,
