@@ -9,6 +9,8 @@ class APointLight;
 class UBorder;
 class UButton;
 class UCanvasPanel;
+class UCanvasPanelSlot;
+class UHorizontalBox;
 class UImage;
 class UScrollBox;
 class UTextBlock;
@@ -74,6 +76,8 @@ struct FSOTileInfo
 	FString Title;
 	FString Sub;
 	FString Badge;
+	/** a slot card's third line: what kind of thing is there (ENERGY SUBMACHINE GUN, 17 ARMOUR) */
+	FString Tag;
 	int32 Power = 0;
 	bool bActive = false;
 	bool bEquipped = false;
@@ -112,11 +116,13 @@ protected:
 
 /**
  * The loadout screen (I / Tab / View). Left: the three weapon slots and the outer layers (coat, rig); right: the
- * armour slots (head, chest, arms, legs, feet); middle: the player as they stand, turnable by dragging. A slot opens
- * its grid of everything owned for it (icon squares in rarity colours, NEW and locked marks) next to the slot, with
- * the hovered or selected item's details: stats against the equipped one, perks, armour, and the actions Equip (E),
- * Lock (L) and Dismantle (X, twice). Power, armour, level, credits and alloy across the top; the body (male / female)
- * under the character. Built in C++ (no widget blueprint).
+ * armour slots (head, chest, arms, legs, feet); middle: the player as they stand, turnable by dragging, in front of
+ * the broken orbit (M_UI_Orbit). A slot opens its bay beside its own column (everything owned for it: plates washed
+ * in their rarity, NEW and locked marks) and the details of the hovered or selected item on the far side, where the
+ * other column was: the character steps aside into the gap and is never covered. Details: name, rarity, the gun,
+ * stats against the equipped one, perks, and the actions Equip (E), Lock (L) and Dismantle (X, twice). Power, armour,
+ * level, credits and alloy across the top; the body (male / female) under the character. Every panel is the game's
+ * plate (M_UI_Plate: two cut corners, a hairline, a rarity bar). Built in C++ (no widget blueprint).
  */
 UCLASS()
 class SOUI_API USOInventoryWidget : public UUserWidget
@@ -206,7 +212,17 @@ protected:
 	TObjectPtr<UTextBlock> PowerText;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> StatsText;
+	TObjectPtr<UHorizontalBox> StatsRow;
+
+	/** The details of the item under the cursor, on the far side from the open slot's bay. */
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> DetailPanel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanelSlot> StageSlot;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanelSlot> OrbitSlot;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> BodyLabel;
@@ -234,5 +250,8 @@ protected:
 	FString HoverKey;
 	double DismantleArmedAt = -100.0;
 	bool bDragging = false;
+	/** The character steps aside while a bay is open (canvas units from the middle). */
+	float StageShift = 0.0f;
+	float StageShiftTarget = 0.0f;
 	FDelegateHandle ChangedHandle;
 };

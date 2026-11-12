@@ -102,30 +102,38 @@ int32 USOFxSubsystem::GetNumDecals() const
 
 // --- Effects -------------------------------------------------------------------------------------
 
-void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel)
+void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope)
 {
 	const FVector D = Dir.GetSafeNormal();
+	if (bThroughScope)
+	{
+		// down a scope the muzzle is a hand's width from the glass and magnified with everything else: nothing is drawn
+		// there (the shot is felt in the kick and seen in the tracer)
+		return;
+	}
+	// Tongues of flame: the card is five thin blades about the bore (the shader shapes each to a point and tears
+	// it), a different length and turn every shot, gone in three frames.
 	FSOFxParticle Star;
 	Star.Kind = ESOFxKind::Star;
 	Star.Position = Muzzle;
 	Star.Axis = D;
-	Star.Life = 0.05f;
-	Star.Length = Random.FRandRange(32.0f, 46.0f) * Scale;
-	Star.Size0 = Star.Size1 = Random.FRandRange(18.0f, 26.0f) * Scale;
-	Star.Intensity0 = 40.0f;
+	Star.Life = Random.FRandRange(0.035f, 0.055f);
+	Star.Length = Random.FRandRange(20.0f, 34.0f) * Scale;
+	Star.Size0 = Star.Size1 = Random.FRandRange(9.0f, 14.0f) * Scale;
+	Star.Intensity0 = 13.0f;                  // (more than this burns every colour to white)
 	Star.Intensity1 = 0.0f;
-	Star.Color = Fire;
+	Star.Color = Color;
 	Star.Spin = Random.FRandRange(0.0f, 360.0f);
 	Spawn(Star);
 
 	FSOFxParticle Core;
 	Core.Kind = ESOFxKind::Glow;
-	Core.Position = Muzzle + D * 4.0f * Scale;
-	Core.Life = 0.045f;
-	Core.Size0 = 26.0f * Scale;
-	Core.Size1 = 12.0f * Scale;
-	Core.Intensity0 = 30.0f;
-	Core.Color = Fire;
+	Core.Position = Muzzle + D * 3.0f * Scale;
+	Core.Life = 0.04f;
+	Core.Size0 = 15.0f * Scale;
+	Core.Size1 = 6.0f * Scale;
+	Core.Intensity0 = 11.0f;
+	Core.Color = FMath::Lerp(Color, FLinearColor::White, 0.25f);
 	Spawn(Core);
 
 	for (int32 i = 0; i < 2; ++i)
@@ -145,10 +153,13 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 	}
 	// The flash lights the surroundings; for the gun in your own hands it sits well ahead of the muzzle and gentler,
 	// so the gun itself does not flare white on every shot.
-	FlashLight(Muzzle + D * (bViewmodel ? 80.0f : 10.0f), 220.0f * Scale * (bViewmodel ? 0.25f : 1.0f), Fire, 0.05f);
+	// the light of the flash, in its own colour. In first person it stands well ahead of the muzzle and under the
+	// bore: beside the muzzle it raked along the top of the gun and every grain of its finish sparkled.
+	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 220.0f * Scale * (bViewmodel ? 0.25f : 1.0f),
+		FMath::Lerp(Color, Fire, 0.35f), 0.05f);
 }
 
-void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Width)
+void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Width, float Length, bool bBolt)
 {
 	const FVector Path = To - From;
 	const float Distance = Path.Size();
@@ -162,11 +173,24 @@ void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed,
 	T.Axis = Path / Distance;
 	T.Velocity = T.Axis * Speed;
 	T.Life = Distance / Speed;
-	T.Length = 380.0f;
+	T.Length = Length;
 	T.Size0 = T.Size1 = Width;
 	T.Intensity0 = T.Intensity1 = 22.0f;
 	T.Color = Color;
 	Spawn(T);
+	if (bBolt)
+	{
+		// a bolt of light has a head: a bead of its own colour riding at the front of the streak
+		FSOFxParticle Head;
+		Head.Kind = ESOFxKind::Glow;
+		Head.Position = From + T.Axis * Length;
+		Head.Velocity = T.Velocity;
+		Head.Life = FMath::Max(0.0f, (Distance - Length) / Speed);
+		Head.Size0 = Head.Size1 = Width * 3.4f;
+		Head.Intensity0 = Head.Intensity1 = 16.0f;
+		Head.Color = FMath::Lerp(Color, FLinearColor::White, 0.3f);
+		Spawn(Head);
+	}
 }
 
 void USOFxSubsystem::Trail(const FVector& From, const FVector& Velocity, float Gravity, float FlightTime, ETrail Kind, const FLinearColor& Color)

@@ -117,21 +117,24 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// Irons: the rear sight AdsSightDistance ahead. Optics: their own eye point at the eye, so the window frames the
 	// view (about a quarter of it) with the dot in the middle and only the top of the receiver below.
 	FVector AdsOffset(AdsSightDistance, 0.0f, 0.0f);
+	FVector SightPivot = FVector::ZeroVector;
 	if (Data)
 	{
 		const USOGunRigComponent* Rig = Weapon->GetFirstPersonRig();
-		const float Distance = Rig && Rig->IsOpticMounted() ? AdsOpticEyeDistance
-			: (Rig && Rig->HasBuiltInOptic() ? AdsBuiltInOpticDistance : AdsSightDistance);
+		const float Distance = Rig && Rig->IsOpticMounted() ? (Data->MuzzleLocation.Y < 35.0f ? AdsHandgunOpticDistance : AdsOpticEyeDistance)
+			: (Rig && Rig->HasBuiltInOptic() ? AdsBuiltInOpticDistance : (Data->MuzzleLocation.Y < 35.0f ? AdsHandgunSightDistance : AdsSightDistance));
 		const FVector SightRig = USOGunRigComponent::MeshToRig(Weapon->GetSightLocation());
 		AdsOffset = FVector(Distance - SightRig.X, -SightRig.Y, -SightRig.Z);
+		SightPivot = SightRig;
 	}
-	const float Lift = 1.0f - Ads * 0.8f;
+	const float Lift = 1.0f - Ads * 0.95f;
 	// view-space metres (x right, y up, z back) accumulated like viewmodel.js, then converted
 	// Sprint: the gun is carried across the chest, muzzle up and to the left, canted, still in view (like every
 	// shooter keeps it), and comes back to the hip in the gun's sprint-to-fire time.
 	const float VX = BobX + SwayX * Lift + RunT * 0.01f + G[0] + InX + RlX;
 	const float VY = BobY + SwayY * Lift - Lower * 0.35f + RunT * 0.035f + G[1] + InY + RlY;
-	const float VZ = KickBack * (1.0f - Ads * 0.5f) + RunT * 0.03f + G[2] + RlZ;
+	// (on the sights the gun comes back only a little: the rear sight is 9 cm from the eye, and a kick of 5 cm doubled it)
+	const float VZ = KickBack * (1.0f - Ads * 0.85f) + RunT * 0.03f + G[2] + RlZ;
 	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
 	// Bulky guns (launchers, the living guns) sit further out to the right and lower at the hip, so the body of
 	// the gun stays in the corner of the view instead of filling it.
@@ -143,13 +146,18 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		Bulk = FVector(0.0f, FMath::Max(0.0f, HalfWidth - 3.5f) * 0.9f, -FMath::Max(0.0f, B.Max.Z - 13.0f) * 0.6f);
 	}
 	const FVector Base = FMath::Lerp((bHandgun ? HandgunHipOffset : HipOffset) + Bulk, AdsOffset, Ads);
-	const FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
+	FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
 	// The muzzle flip stays small on the sights so the front post settles back on the target.
 	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch + RlPitch;
-	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.5f) + RunT * 0.55f + G[4] + RlYaw;
+	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.85f) + RunT * 0.55f + G[4] + RlYaw;
 	const float EZ = G[5] + RunT * 0.5f + InRoll + RlRoll;
-	const FTransform Local(FRotator(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ)), Offset);
+	const FRotator Turn(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ));
+	// On the sights the gun turns about its SIGHT, not its own origin (the owner: "the bullets don't even hit where the
+	// scope is"): the rounds leave along the eye's axis, so whatever the muzzle does (the flip of each shot, the sway
+	// of a turn, the cycling of the action) the reticle stays on the point they hit.
+	Offset += (SightPivot - Turn.RotateVector(SightPivot)) * Ads;
+	const FTransform Local(Turn, Offset);
 
 	// First person: locked to the kicked eye, exactly what the camera shows.
 	const FTransform Eye = Character->GetEyeTransform(true);

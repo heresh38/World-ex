@@ -172,6 +172,9 @@ protected:
 	bool bDropped = false;
 	float NextShotTime = 0.0f;
 	float LastShotTime = -100.0f;
+	/** The barrel cluster of a rotary gun (rig part `spin`): its angle and how fast it turns (rad, rad/s). */
+	float BarrelSpin = 0.0f;
+	float BarrelSpinRate = 0.0f;
 	float LastDryFireTime = -100.0f;
 	int32 ShotsFired = 0;
 	FRandomStream SpreadStream;

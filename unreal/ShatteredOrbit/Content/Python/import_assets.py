@@ -1034,7 +1034,7 @@ def optics(master, clear):
     materials = load_json(os.path.join(src, "materials.json"))
     instances = gun_instances(master, src, dest, materials, clear)
     out = {}
-    for sight_id in ("reflex", "holo", "x2", "x4", "x8"):
+    for sight_id in [k for k in load_json(GAME_DATA)["sights"] if k != "default"]:
         name = f"ATT_{sight_id}"
         if not os.path.exists(os.path.join(src, name + ".fbx")):
             continue
@@ -1163,7 +1163,13 @@ float across = saturate(1.0 - abs(d.y) * 2.0);
 across *= across;
 float head = UV.x * saturate((1.0 - UV.x) * 6.0);
 float root = saturate(1.0 - UV.x) * saturate(UV.x * 8.0 + 0.25);
-float s = Mode < 0.5 ? dotS : (Mode < 1.5 ? across * head : across * root);
+// 3: a tongue of flame from the muzzle (U = 0) to its tip (U = 1): widest a fifth of the way out, drawn to a point,
+// torn along its length, a different tear on every card (Seed)
+float w = saturate(UV.x * 8.0) * pow(saturate(1.0 - UV.x), 0.75);
+float body = saturate(1.0 - abs(d.y) * 2.0 / max(w, 0.02));
+float tear = 0.6 + 0.4 * sin(d.y * 37.0 + Seed * 40.0 + UV.x * 11.0) * sin(UV.x * (19.0 + Seed * 9.0) + Seed * 23.0);
+float tongue = body * body * tear * saturate((1.0 - UV.x) * 2.5);
+float s = Mode < 0.5 ? dotS : (Mode < 1.5 ? across * head : (Mode < 2.5 ? across * root : tongue));
 return pow(s, Softness);
 """
 
@@ -1216,12 +1222,14 @@ def fx_master():
     shape.set_editor_property("code", FX_SHAPE_HLSL)
     shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
     inputs = []
-    for name in ("UV", "Mode", "Softness"):
+    for name in ("UV", "Mode", "Softness", "Seed"):
         ci = unreal.CustomInput()
         ci.set_editor_property("input_name", name)
         inputs.append(ci)
     shape.set_editor_property("inputs", inputs)
     mel.connect_material_expressions(uv, "", shape, "UV")
+    seed = mel.create_material_expression(mat, unreal.MaterialExpressionPerInstanceRandom, -900, 580)
+    mel.connect_material_expressions(seed, "", shape, "Seed")
     mel.connect_material_expressions(scalar("Mode", 0.0, -900, 420), "", shape, "Mode")
     mel.connect_material_expressions(scalar("Softness", 1.0, -900, 500), "", shape, "Softness")
 
@@ -1255,7 +1263,7 @@ def fx_master():
 
     instance("MI_FxGlow", 0.0, 1.5, False)
     instance("MI_FxStreak", 1.0, 1.0, False)
-    instance("MI_FxFlash", 2.0, 0.8, False)
+    instance("MI_FxFlash", 3.0, 0.9, False)
     instance("MI_FxSmoke", 0.0, 1.2, True)
     log("effect materials ready")
 
@@ -1907,7 +1915,111 @@ def ui_materials():
     mel.connect_material_property(inv, "", unreal.MaterialProperty.MP_OPACITY)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    ui_shape("M_UI_Plate", UI_PLATE_HLSL, dict(Fill=(.035, .045, .07, .92), FillLow=(.02, .026, .045, .94), Edge=(1, 1, 1, .14),
+                                              Accent=(0, 0, 0, 0), Shape=(12, 1, 0, 0), Look=(0, 0, 0, 0)))
+    ui_shape("M_UI_Orbit", UI_ORBIT_HLSL, dict(Tint=(.42, .55, 1.0, 1.0), Glow=(.36, .22, .9, 1.0), Centre=(.5, .56, 0, 0)), time=True)
     log("UI materials ready")
+
+
+# The screens' own shapes, drawn by the material (no textures): sizes come from the UV derivatives, so one material
+# draws a panel of any size with the same corner cut and hairline in pixels.
+UI_PLATE_HLSL = """
+// A plate: a rectangle with its top-right and bottom-left corners cut (the game's panel shape), a hairline round
+// it, a fill that deepens downwards, an accent bar (left and / or bottom), a wash of the accent rising from the
+// bottom, fine hatching in the lower right corner, a line of light under the top edge.
+// Shape = (cut px, edge px, left bar px, bottom bar px); Look = (wash, hatch, top light, -)
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float2 p = UV * px;
+float d = min(min(p.x, p.y), min(px.x - p.x, px.y - p.y));
+d = min(d, ((px.x - p.x) + p.y - Shape.x) * 0.70711);
+d = min(d, (p.x + (px.y - p.y) - Shape.x) * 0.70711);
+float inside = saturate(d + 0.5);
+float edge = saturate(Shape.y - d + 0.5) * step(0.01, Shape.y);
+float3 c = lerp(Fill.rgb, FillLow.rgb, UV.y);
+float a = lerp(Fill.a, FillLow.a, UV.y);
+float wash = Look.x * pow(UV.y, 1.8);
+c = lerp(c, Accent.rgb, wash * 0.5);
+a = saturate(a + wash * 0.3);
+float h = step(frac((p.x + p.y) / 7.0), 0.15) * Look.y * saturate((UV.x + UV.y - 1.05) * 1.8);
+c += h * 0.05;
+float bar = max(step(p.x, Shape.z) * step(0.01, Shape.z), step(px.y - p.y, Shape.w) * step(0.01, Shape.w));
+c = lerp(c, Accent.rgb, bar * Accent.a);
+a = lerp(a, 1.0, bar * Accent.a);
+c += Look.z * Edge.rgb * saturate(1.0 - p.y / 22.0) * 0.1;
+c = lerp(c, Edge.rgb, edge * Edge.a);
+a = lerp(a, 1.0, edge * Edge.a);
+return float4(c, a * inside);
+"""
+
+UI_ORBIT_HLSL = """
+// The backdrop behind the character: the broken orbit. Thin rings about a centre, each in pieces with gaps, each
+// turning at its own slow pace; a ring of fine ticks; a soft light where the character stands.
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float m = min(px.x, px.y);
+float2 q = (UV - Centre.xy) * px / m;
+float r = length(q);
+float ang = atan2(q.y, q.x) / 6.2831853 + 0.5;
+float unit = 1.0 / m;
+static const float4 R[6] = { float4(0.205, 3.0, 0.62, 0.010), float4(0.262, 5.0, 0.42, -0.016), float4(0.335, 2.0, 0.78, 0.006),
+                             float4(0.405, 7.0, 0.30, -0.011), float4(0.49, 4.0, 0.52, 0.004), float4(0.60, 9.0, 0.22, 0.003) };
+float al = 0.0;
+for (int i = 0; i < 6; i++)
+{
+    float w = unit * (i == 2 ? 2.0 : 1.1);
+    float ring = saturate(1.0 - abs(r - R[i].x) / w);
+    float seg = step(frac(ang * R[i].y + Time * R[i].w + i * 0.37), R[i].z);
+    al += ring * seg * (i == 2 ? 0.5 : 0.28);
+}
+float ticks = step(frac(ang * 96.0 + Time * 0.48), 0.1) * saturate(1.0 - abs(r - 0.349) / (unit * 4.0)) * step(0.335, r);
+al += ticks * 0.22;
+float glow = exp(-r * r * 11.0) * 0.2;
+float3 c = lerp(Tint.rgb, Glow.rgb, saturate(glow * 4.0));
+return float4(c, saturate(al * Tint.a + glow * Glow.a));
+"""
+
+
+def ui_shape(name, code, vectors, time=False):
+    """A UI material whose whole picture is one Custom node: vector parameters in, colour + opacity out."""
+    path = "/Game/UI/" + name
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset(name, "/Game/UI", unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_UI)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -900, 0)
+    shape = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -450, 0)
+    shape.set_editor_property("code", code)
+    shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+    names = ["UV"] + list(vectors) + (["Time"] if time else [])
+    inputs = []
+    for n in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    shape.set_editor_property("inputs", inputs)
+    mel.connect_material_expressions(uv, "", shape, "UV")
+    for k, (n, value) in enumerate(vectors.items()):
+        v = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -900, 120 + k * 200)
+        v.set_editor_property("parameter_name", n)
+        v.set_editor_property("default_value", unreal.LinearColor(*value))
+        mel.connect_material_expressions(v, "RGBA", shape, n)
+    if time:
+        t = mel.create_material_expression(mat, unreal.MaterialExpressionTime, -900, -150)
+        mel.connect_material_expressions(t, "", shape, "Time")
+    rgb = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, -150, -60)
+    for ch, on in (("r", True), ("g", True), ("b", True), ("a", False)):
+        rgb.set_editor_property(ch, on)
+    alpha = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, -150, 120)
+    for ch, on in (("r", False), ("g", False), ("b", False), ("a", True)):
+        alpha.set_editor_property(ch, on)
+    mel.connect_material_expressions(shape, "", rgb, "")
+    mel.connect_material_expressions(shape, "", alpha, "")
+    mel.connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.connect_material_property(alpha, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
 
 
 def decal_material():

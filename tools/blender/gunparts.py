@@ -267,10 +267,10 @@ def stock_tube(P, tube_m, body_m, pad_m, metal_m, y0, z, L=.24, r=.0155, w=.036,
     P.append(tube_('buffer', y0, y0 + L - .03, r, tube_m, z, n=24))
     P.append(lathe('castlenut', [(y0 + .016, 0), (y0 + .016, r + .0045), (y0 + .002, r + .0045), (y0 + .002, 0)], metal_m, z, 0, 12, sharp=20))
     a = y0 + .09 + pos; b = y0 + L
-    P.append(prism('stock_body', [(a, z + r + .006), (b - .014, z + r + .006), (b, z + r - .002), (b, z - .11), (b - .016, z - .118), (b - .05, z - .086),
-                                  (b - .095, z - .03), (a, z - r - .006)], w, body_m, .004))
+    P.append(rprism('stock_body', [(a, z + r + .006), (b - .014, z + r + .006), (b, z + r - .002), (b, z - .11), (b - .016, z - .118), (b - .05, z - .086),
+                                  (b - .095, z - .03), (a, z - r - .006)], w, body_m, .008, 4))
     slots(P, 'stock_cut', [[(b - .06, z - .04), (b - .028, z - .04), (b - .028, z - .092), (b - .04, z - .084)]], w / 2, tube_m)
-    P.append(rprism('stock_pad', [(b, z + r), (b + .013, z + r - .004), (b + .014, z - .112), (b, z - .118)], w + .005, pad_m, .004))
+    ribbed_pad(P, pad_m, b, z + r, z - .118, w + .004, 6, .014)
     P.append(prism('stock_latch', [(a + .02, z - r - .006), (a + .07, z - r - .006), (a + .062, z - r - .016), (a + .026, z - r - .014)], .012, metal_m, .001))
 
 
@@ -408,25 +408,27 @@ def cell(P, name, c, r, h, M, n=6, glow=True):
     P.append(lathe_z(name + '_foot', [(-h - .006, 0), (-h - .006, r * .7), (-h - .002, r * .92), (-h, r * .92), (-h, 0)], (x, y, z), M['dark'], n, 24, phase=math.pi / n))
 
 
-def iron_rear(P, y, z, m, dot_m=None, base_z=None, w=.03):
-    """A protected aperture rear sight (the names are the irons' API: finish() folds them under a rail optic)."""
+def iron_rear(P, y, z, m, dot_m=None, base_z=None, w=.03, r=.0085, wall=.0013):
+    """An open rear sight (the names are the irons' API: finish() folds them under a rail optic): a large, thin ghost
+    ring on a slim stem over a low, narrow base. Nothing stands beside the ring: the target area stays clear."""
     bz = z - .03 if base_z is None else base_z
-    P.append(prism('rear_base', [(y + .014, bz), (y + .014, bz + .008), (y - .014, bz + .008), (y - .014, bz)], w, m, .0015))
-    for s, nm in ((1, 'rear_earL'), (-1, 'rear_earR')):
-        P.append(prism(nm, [(y + .012, bz + .006), (y + .008, z + .009), (y - .006, z + .009), (y - .012, bz + .006)], .0045, m, .001, x=s * (w / 2 - .003)))
-    P.append(lathe('rear_ring', [(y + .003, .0032), (y + .003, .0072), (y - .003, .0072), (y - .003, .0032)], m, z, 0, 16, closed=True))
-    P.append(prism('rear_base', [(y + .003, bz + .006), (y + .003, z - .0065), (y - .003, z - .0065), (y - .003, bz + .006)], .006, m, .0008))
+    P.append(prism('rear_base', [(y + .012, bz), (y + .012, bz + .004), (y + .006, bz + .006), (y - .006, bz + .006), (y - .012, bz + .004), (y - .012, bz)],
+                   min(w, .018), m, .0012))
+    P.append(lathe('rear_ring', [(y + .002, r), (y + .002, r + wall), (y - .002, r + wall), (y - .002, r)], m, z, 0, 48, closed=True))
+    if z - r - .0004 > bz + .005:
+        P.append(prism('rear_base', [(y + .002, bz + .005), (y + .002, z - r - .0004), (y - .002, z - r - .0004), (y - .002, bz + .005)], .003, m, .0005))
 
 
 def iron_front(P, y, z, m, dot_m=None, base_z=None, w=.024):
-    """A hooded front post with its tip at (0, y, z)."""
+    """A thin front post with its tip at (0, y, z) between two thin wings (open above)."""
     bz = z - .032 if base_z is None else base_z
-    P.append(prism('front_base', [(y + .011, bz), (y + .011, bz + .008), (y - .011, bz + .008), (y - .011, bz)], w, m, .0015))
+    P.append(prism('front_base', [(y + .01, bz), (y + .01, bz + .004), (y + .005, bz + .006), (y - .005, bz + .006), (y - .01, bz + .004), (y - .01, bz)],
+                   min(w, .018), m, .0012))
     for s in (1, -1):
-        P.append(prism('front_ear', [(y + .009, bz + .006), (y + .005, z + .008), (y - .005, z + .008), (y - .009, bz + .006)], .004, m, .001, x=s * (w / 2 - .003)))
-    P.append(prism('post', [(y + .0018, bz + .006), (y + .0014, z), (y - .0014, z), (y - .0018, bz + .006)], .0032, m, .0005))
+        P.append(prism('front_ear', [(y + .006, bz + .004), (y + .003, z + .004), (y - .003, z + .004), (y - .006, bz + .004)], .0016, m, .0005, x=s * (w / 2 - .001)))
+    P.append(prism('post', [(y + .0016, bz + .005), (y + .0012, z), (y - .0012, z), (y - .0016, bz + .005)], .0024, m, .0004))
     if dot_m is not None:
-        P.append(lathe('postdot', [(y + .0019, 0), (y + .0019, .0013), (y + .0015, .0013), (y + .0015, 0)], dot_m, z - .0026, 0, 8))
+        P.append(lathe('postdot', [(y + .0017, 0), (y + .0017, .001), (y + .0013, .001), (y + .0013, 0)], dot_m, z - .002, 0, 8))
 
 
 # ------------------------------------------------------------------ second pass: strips, guards, triggers, windows
@@ -613,3 +615,275 @@ def stock_stub(P, m, m2, pad_m, y0, z, L=.13, r=.02, w=.06, h=.11):
         P.append(band('buffer_ring', y0 + .036 + i * .024, .008, r + .0035, m, z, 0, .0045, 28, .001))
     P.append(prism('stock_plate', [(y1 - .026, z + h * .46), (y1 - .008, z + h * .42), (y1 - .008, z - h * .56), (y1 - .026, z - h * .6)], w, m, .004))
     P.append(rprism('stock_pad', [(y1 - .008, z + h * .42), (y1 + .008, z + h * .37), (y1 + .009, z - h * .51), (y1 - .008, z - h * .56)], w + .004, pad_m, .005))
+
+
+def dress(P, M, x, fin=None, line=None, bolts=None, name='dress'):
+    """Layer a flank at x: a heat sink of real fins on a bolted base plate (fin = (y0, y1, z0, z1)); a pair of power /
+    coolant lines along the side-view points `line` held by clamps; a row of inset fasteners (`bolts`)."""
+    if fin:
+        y0, y1, z0, z1 = fin
+        P.append(plate(name + '_sink', [(y0 + .004, z0 - .003), (y0 + .004, z1 + .003), (y1 - .004, z1 + .003), (y1 - .004, z0 - .003)], M['dark'], x - .001, x + .0012,
+                       .0008))
+        fins(P, name + '_fin', y0, y1, z0, z1, x + .0012, M['metal'], n=max(int((y0 - y1) / .0075), 3), t=.0017, lift=.0042)
+        hexbolts(P, [(y0 + .0015, z1 + .0006), (y1 - .0015, z0 - .0006)], x + .0012, M['trim'], .0013)
+    if line:
+        for k, dz in enumerate((0.0, -.0052)):
+            for s in (1, -1):
+                P.append(cable(name + '_line', [(s * (x + .0022), y, z + dz) for y, z in line], .0019 - k * .0004, M['dark'] if k == 0 else M['metal'], 8,
+                               max(len(line) * 6, 12)))
+        for t in (.1, .5, .9):
+            f = t * (len(line) - 1); i = min(int(f), len(line) - 2); u = f - i
+            yy = line[i][0] + (line[i + 1][0] - line[i][0]) * u; zz = line[i][1] + (line[i + 1][1] - line[i][1]) * u
+            P.append(plate(name + '_clamp', [(yy + .003, zz + .0032), (yy + .003, zz - .0085), (yy - .003, zz - .0085), (yy - .003, zz + .0032)], M['metal'], x - .0005,
+                           x + .0046, .0006))
+    if bolts:
+        hexbolts(P, bolts, x, M['trim'], .0016)
+
+
+class Body:
+    """A receiver in two layers, lofted through soft sections that CHANGE along the gun (a swell at the chamber, a
+    waist over the grip, a taper into the stock and the handguard): a dark chassis, and armour shells standing proud
+    of it with chamfered edges. The chassis and the light inside show in the gaps between the shells.
+
+    secs = [(y, z0, z1, half width[, p])] from the rear forward (p: 2 an ellipse, 4-5 a rounded octagon); a curve is
+    drawn through them. A point on the body is (y, a, d): a = the angle round the section (0 the left flank's middle,
+    pi/2 the top, -pi/2 the belly), d = how far off the surface."""
+
+    def __init__(self, secs):
+        A = np.array([[s[0], s[1], s[2], s[3], s[4] if len(s) > 4 else 4.0] for s in secs], float)
+        C, _ = spl(A, max(len(secs) * 10, 80))
+        C = C[np.argsort(C[:, 0])]
+        self.Y = C[:, 0]; self.C = C; self.y0 = float(A[0, 0]); self.y1 = float(A[-1, 0])
+
+    def sec(self, y):
+        return [float(np.interp(y, self.Y, self.C[:, k])) for k in (1, 2, 3, 4)]
+
+    def pt(self, y, a, d=0.0):
+        z0, z1, hw, p = self.sec(y)
+        c, s = math.cos(a), math.sin(a); ex = 2.0 / max(p, 2.0)
+        return (math.copysign(abs(c) ** ex, c) * (hw + d), y, (z0 + z1) / 2 + math.copysign(abs(s) ** ex, s) * ((z1 - z0) / 2 + d))
+
+    def chassis(self, P, m, inset=.0026, step=.008, n=36, name='chassis'):
+        ys = list(np.arange(self.y0, self.y1, -step)) + [self.y1]
+        secs = []
+        for y in ys:
+            z0, z1, hw, p = self.sec(y)
+            secs.append((y, z0 + inset, z1 - inset, max(hw - inset, .003), p))
+        P.append(rloft(name, secs, m, n))
+
+    def shell(self, P, name, m, ya, yb, a0, a1, t=.0026, d=0.0, mirror=True, ch=.0016, base=-.0028, ny=None, na=None):
+        """An armour shell over the patch ya > yb, a0 < a1: t proud of the surface, its edges chamfered, a skirt down to
+        the chassis all round (mirror = the same on the right flank)."""
+        ny = ny or max(int((ya - yb) / .007), 2); na = na or max(int((a1 - a0) / .13), 2)
+        ys = [ya, ya - ch] + [ya - ch + (yb - ya + 2 * ch) * i / ny for i in range(1, ny)] + [yb + ch, yb]
+        ca = min(ch / .03, (a1 - a0) * .2)
+        an = [a0, a0 + ca] + [a0 + ca + (a1 - a0 - 2 * ca) * j / na for j in range(1, na)] + [a1 - ca, a1]
+        R, Cn = len(ys), len(an)
+        loop = [(0, j) for j in range(Cn)] + [(i, Cn - 1) for i in range(1, R)] + [(R - 1, j) for j in range(Cn - 2, -1, -1)] + [(i, 0) for i in range(R - 2, 0, -1)]
+        for sg in ((1, -1) if mirror else (1,)):
+            Vv = []; F = []
+            for i, y in enumerate(ys):
+                for j, a in enumerate(an):
+                    x, yy, z = self.pt(y, a, d + (t * .42 if (i in (0, R - 1) or j in (0, Cn - 1)) else t))
+                    Vv.append((sg * x, yy, z))
+            for i in range(R - 1):
+                for j in range(Cn - 1):
+                    F.append((i * Cn + j, i * Cn + j + 1, (i + 1) * Cn + j + 1, (i + 1) * Cn + j))
+            k0 = len(Vv)
+            for i, j in loop:
+                x, yy, z = self.pt(ys[i], an[j], d + base)
+                Vv.append((sg * x, yy, z))
+            n = len(loop)
+            for q in range(n):
+                F.append((loop[q][0] * Cn + loop[q][1], loop[(q + 1) % n][0] * Cn + loop[(q + 1) % n][1], k0 + (q + 1) % n, k0 + q))
+            P.append(mk(name, Vv, F, m, 40))
+
+    def slats(self, P, name, m, ya, yb, a0, a1, n, share=.55, **kw):
+        """A row of louvres: n narrow shells from ya forward to yb, the gaps between them open onto the chassis."""
+        pitch = (ya - yb) / n
+        for i in range(n):
+            self.shell(P, name, m, ya - i * pitch, ya - i * pitch - pitch * share, a0, a1, ch=.001, **kw)
+
+    def light(self, P, name, m, ya, yb, a0, a1, mirror=True):
+        """Light lying ON the chassis (seen in a gap between shells, never on the outside)."""
+        self.shell(P, name, m, ya, yb, a0, a1, t=.0007, d=-.0024, mirror=mirror, ch=.0005, base=-.0006)
+
+    def collar(self, P, name, m, y, L, d=.003, n=40):
+        """A raised band all round the body from y forward L."""
+        secs = []
+        for yy, dd in ((y, d * .35), (y - .0016, d), (y - L + .0016, d), (y - L, d * .35)):
+            z0, z1, hw, p = self.sec(yy)
+            secs.append((yy, z0 - dd, z1 + dd, hw + dd, p))
+        P.append(rloft(name, secs, m, n))
+
+    def studs(self, P, m, pts, r=.0022, d=.0026, n=6):
+        """Inset fasteners at (y, a) on both flanks, their heads at the shells' height."""
+        for y, a in pts:
+            x, yy, z = self.pt(y, a, d - .0006)
+            for sg in (1, -1):
+                P.append(lathe_x('stud', [(-.001, r), (.0012, r), (.0016, r * .8), (.0016, r * .5), (.0008, r * .46), (.0008, 0)], (sg * x, yy, z), m, n, sg, phase=.5))
+
+
+def ribbed_pad(P, m, y, z_top, z_bot, w, n=6, t=.014, name='stock_pad'):
+    """A ribbed butt pad from y rearward: n rounded ribs with grooves between them."""
+    h = (z_top - z_bot) / n
+    for i in range(n):
+        a = z_top - i * h; b = a - h * .82
+        P.append(rprism(name, [(y, a), (y + t, a - .0015), (y + t, b + .0015), (y, b)], w, m, .0045, 3))
+    P.append(prism(name + '_core', [(y - .001, z_top - .003), (y + t * .6, z_top - .004), (y + t * .6, z_bot + .004), (y - .001, z_bot + .003)], w - .008, m, .002))
+
+
+def stock_soft(P, m, m2, pad_m, y0, zt, L, drop, w, zb, mode='open', grip_pt=None, cheek=True, bolt_m=None, fall=0.0, top0=None):
+    """A shaped stock (never a plate): an oval comb that swells to the butt, a cheek rest lying on it, a lower limb (to
+    the receiver: 'open'; to the foot of the pistol grip: 'thumb'), an upright rounded butt, a spacer and a ribbed
+    pad. The openings between the limbs are real."""
+    y1 = y0 + L; zl = zt - drop; hw = w / 2
+    t0 = zt if top0 is None else top0                                # the comb leaves the receiver at its height and drops under the sight line
+    P.append(sloft('stock_comb', [(y0 - .006, t0 - .046, t0, hw, 4.4), (y0 + L * .16, zt - .04, zt - .001, hw * .84, 3.0), (y0 + L * .55, zt - .042 - fall * .5, zt - .007 - fall * .5, hw * .88, 2.7),
+                                  (y1 - .014, zt - .054 - fall, zt - .014 - fall, hw * 1.02, 3.2)], m, 22, 5))
+    if cheek:
+        P.append(sloft('stock_cheek', [(y0 + L * .2, zt - .008, zt + .006, hw * .7, 2.5), (y0 + L * .42, zt - .008, zt + .0125, hw * .93, 2.6),
+                                       (y0 + L * .7, zt - .012, zt + .0105, hw * .93, 2.6), (y0 + L * .86, zt - .016, zt + .001, hw * .76, 2.5)], m2, 18, 5))
+    if mode == 'thumb':
+        gy, gz = grip_pt
+        P.append(sloft('stock_limb', [(gy - .008, gz - .004, gz + .016, hw * .62, 3.0), (gy + .03, gz - .004, gz + .016, hw * .66, 2.8),
+                                      (y1 - L * .4, (gz + zl) / 2 - .002, (gz + zl) / 2 + .02, hw * .64, 2.6), (y1 - .03, zl - .002, zl + .03, hw * .9, 3.0)], m, 18, 5))
+    else:
+        P.append(sloft('stock_limb', [(y0 - .006, zb, zb + .03, hw * .8, 3.6), (y0 + L * .25, zb - (zb - zl) * .2, zb - (zb - zl) * .2 + .024, hw * .62, 2.6),
+                                      (y1 - L * .35, zl + (zb - zl) * .32, zl + (zb - zl) * .32 + .022, hw * .64, 2.6), (y1 - .03, zl - .002, zl + .03, hw * .9, 3.0)], m, 18, 5))
+    P.append(rprism('stock_butt', chaikin([(y1 - .034, zt - .01 - fall), (y1, zt - .016 - fall), (y1, zl), (y1 - .036, zl - .004), (y1 - .05, zl + .03), (y1 - .034, zl + .05),
+                                           (y1 - .028, zt - .056 - fall)], 1, sharp=(1, 2)), w + .002, m, .008, 4))
+    P.append(prism('stock_spacer', [(y1, zt - .015 - fall), (y1 + .004, zt - .016 - fall), (y1 + .004, zl + .001), (y1, zl)], w + .003, m2, .001))
+    ribbed_pad(P, pad_m, y1 + .004, zt - .016 - fall, zl + .001, w + .004)
+    if bolt_m:
+        hexbolts(P, [(y1 - .018, zt - .03 - fall), (y1 - .02, zl + .02)], (w + .002) / 2, bolt_m, .0026)
+
+
+def stock_body(P, M, y0, zt, L, drop, w, zb, name='stock'):
+    """A solid stock in the receiver's own two layers: a dark core waisted at the wrist, pale shells on its flanks
+    with a chamfered lightening cut between them, a comb shell with a cheek swell, spacer and ribbed pad."""
+    y1 = y0 + L; zl = zt - drop; hw = w / 2
+    S = Body([(y0 - .006, zb, zt, hw, 4.4), (y0 + L * .14, zb - .002, zt - .002, hw * .78, 3.4), (y0 + L * .34, zb - (zb - zl) * .3, zt - .004, hw * .8, 3.2),
+              (y0 + L * .6, zb - (zb - zl) * .62, zt - .008, hw * .9, 3.2), (y0 + L * .86, zl + .008, zt - .013, hw, 3.4), (y1, zl, zt - .016, hw, 3.8)])
+    S.chassis(P, M['dark'], name=name + '_core')
+    S.shell(P, name + '_comb', M['body'], y0 + L * .12, y1 - .006, .95, math.pi - .95, t=.003, mirror=False)
+    S.shell(P, name + '_shell', M['body'], y0 + L * .1, y0 + L * .5, -.75, .7)
+    S.shell(P, name + '_shell', M['body'], y0 + L * .56, y1 - .006, -.95, .7)
+    S.shell(P, name + '_keel', M['metal'], y0 + L * .2, y1 - .01, -math.pi + 1.05, -1.05, t=.0022, mirror=False)
+    S.studs(P, M['trim'], [(y0 + L * .16, 0.0), (y1 - .02, .3), (y1 - .02, -.6)])
+    P.append(prism('stock_spacer', [(y1, zt - .017), (y1 + .004, zt - .018), (y1 + .004, zl + .001), (y1, zl)], w + .003, M['metal'], .001))
+    ribbed_pad(P, M['grip'], y1 + .004, zt - .018, zl + .001, w + .004)
+    return S
+
+
+def hoop(name, y, z, w, h, r, t, depth, m, x=0.0, n=6):
+    """A window frame standing across the gun: a rounded rectangle w x h (inside) centred at (x, z), corner radius r,
+    its members t thick and `depth` deep, from y forward."""
+    def loop(d):
+        pts = []
+        hw, hh, rr = w / 2 + d, h / 2 + d, r + d
+        for cx, cz, a0 in ((hw - rr, hh - rr, 0), (-(hw - rr), hh - rr, math.pi / 2), (-(hw - rr), -(hh - rr), math.pi), (hw - rr, -(hh - rr), 1.5 * math.pi)):
+            for i in range(n + 1):
+                a = a0 + math.pi / 2 * i / n
+                pts.append((x + cx + rr * math.cos(a), z + cz + rr * math.sin(a)))
+        return pts
+    inner, outer = loop(0.0), loop(t)
+    N = len(inner)
+    Vv = [(px, y, pz) for px, pz in inner] + [(px, y, pz) for px, pz in outer] + [(px, y - depth, pz) for px, pz in inner] + [(px, y - depth, pz) for px, pz in outer]
+    F = []
+    for i in range(N):
+        j = (i + 1) % N
+        F += [(i, j, N + j, N + i), (2 * N + i, 2 * N + j, 3 * N + j, 3 * N + i), (i, j, 2 * N + j, 2 * N + i), (N + i, N + j, 3 * N + j, 3 * N + i)]
+    return mk(name, Vv, F, m, 40)
+
+
+def checker(P, name, quad, x, m, nu=16, nv=9, h=.0008, sym=True, side=1):
+    """Cut checkering as geometry: nu x nv small pyramids over the flank quad [(y, z) x 4] (a -> b along the first
+    edge, d -> c along the opposite one) at x, on a thin closed backing."""
+    a, b, c, d = quad
+
+    def pt(u, v):
+        return (a[0] * (1 - u) * (1 - v) + b[0] * u * (1 - v) + c[0] * u * v + d[0] * (1 - u) * v,
+                a[1] * (1 - u) * (1 - v) + b[1] * u * (1 - v) + c[1] * u * v + d[1] * (1 - u) * v)
+    for sg in ((1, -1) if sym else (side,)):
+        Vv = []; F = []
+        for i in range(nu):
+            for j in range(nv):
+                k = len(Vv)
+                for u, v in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)):
+                    y, z = pt(u / nu, v / nv); Vv.append((sg * x, y, z))
+                y, z = pt((i + .5) / nu, (j + .5) / nv); Vv.append((sg * (x + h), y, z))
+                F += [(k, k + 1, k + 4), (k + 1, k + 2, k + 4), (k + 2, k + 3, k + 4), (k + 3, k, k + 4)]
+        rim = [(i / nu, 0) for i in range(nu)] + [(1, j / nv) for j in range(nv)] + [(1 - i / nu, 1) for i in range(nu)] + [(0, 1 - j / nv) for j in range(nv)]
+        k0 = len(Vv); n = len(rim)
+        for u, v in rim:
+            y, z = pt(u, v); Vv.append((sg * x, y, z))
+        for u, v in rim:
+            y, z = pt(u, v); Vv.append((sg * (x - .0012), y, z))
+        for q in range(n):
+            F.append((k0 + q, k0 + (q + 1) % n, k0 + n + (q + 1) % n, k0 + n + q))
+        F.append(tuple(range(k0 + n, k0 + 2 * n)))
+        P.append(mk(name, Vv, F, m, 30))
+
+
+def stamp(P, name, items, x, m, lift=.0009, sym=True, side=1):
+    """Pressed strengthening ribs on a sheet-steel flank: raised capsules (y, z, L, h[, ang]) in the flank's own metal."""
+    for it in items:
+        P.append(plate(name, capsule(*it), m, x - .0005, x + lift, lift * .75, sym=sym, side=side))
+
+
+def rivets(P, pts, x, m, r=.0022, sym=True, side=1):
+    """Domed rivet heads on a flank."""
+    for y, z in pts:
+        for s in ((1, -1) if sym else (side,)):
+            P.append(lathe_x('rivet', [(-.0005, r), (.0004, r), (.0009, r * .82), (.0013, r * .5), (.0015, 0)], (s * x, y, z), m, 12, s))
+
+
+def barrel_stepped(P, name, steps, z, m, bore, x=0.0, n=48):
+    """A turned barrel in steps: steps = [(y, r), ...] from the breech forward, each radius holding to the next
+    station; the last station is the muzzle's face. Shoulders are chamfered, the crown is recessed round a real bore."""
+    prof = [(steps[0][0], 0), (steps[0][0], steps[0][1])]
+    for (y, r), (y2, r2) in zip(steps, steps[1:-1]):
+        c = min(.0014, abs(r - r2) * .9)
+        prof += [(y2 + c, r), (y2 - c, r2)]
+    ye, rl = steps[-1][0], steps[-2][1]
+    prof += [(ye + .0012, rl), (ye, rl - .0012), (ye, bore + .002), (ye + .002, bore + .0006), (ye + .002, bore), (ye + .03, bore), (ye + .03, 0)]
+    P.append(lathe(name, prof, m, z, x, n))
+
+
+def dust_cover(P, y0, y1, z, x, m, h=.0165, side=-1, rib_m=None):
+    """A port's dust cover hanging open under it: the hinge rod along the port's lower edge, the leaf with a pressed
+    rib and its latch nub."""
+    P.append(tube_('cover_hinge', y0, y1, .0019, m, z, side * (x + .0012), n=10))
+    P.append(plate('cover_leaf', [(y0 - .002, z - .001), (y0 - .002, z - h), (y1 + .002, z - h), (y1 + .002, z - .001)], m, x, x + .0016, .0007, sym=False, side=side))
+    P.append(plate('cover_rib', capsule((y0 + y1) / 2, z - h * .55, (y0 - y1) * .7, h * .32), rib_m or m, x + .0012, x + .0026, .0007, sym=False, side=side))
+    P.append(lathe_x('cover_latch', [(0, .0022), (.0012, .0022), (.0018, .0012), (.0018, 0)], (side * (x + .0016), (y0 + y1) / 2, z - h + .003), m, 10, side))
+
+
+def feed_lips(MAG, y_rear, y_front, z, w, m, brass, rake=0.0):
+    """The top of a box magazine: two feed lips bent over the top round, the follower's edge behind it."""
+    for s in (1, -1):
+        MAG.append(prism('feed_lip', [(y_rear - .004, z - .004), (y_rear - .004, z + .0045), (y_front + .012, z + .0045 + rake), (y_front + .008, z - .004 + rake)], .0022, m, .0006,
+                         x=s * (w * .5 - .0022)))
+        MAG.append(prism('feed_lip_roll', [(y_rear - .008, z + .0035), (y_rear - .008, z + .0052), (y_front + .016, z + .0052 + rake), (y_front + .016, z + .0035 + rake)], .0052, m, .0005,
+                         x=s * (w * .5 - .0042)))
+    MAG.append(tube_('top_round', y_rear - .006, y_front + .004, min(w * .26, .0052), brass, z + .0012 + rake * .5, n=16))
+    MAG.append(prism('follower', [(y_rear - .002, z - .006), (y_rear - .002, z - .001), (y_rear - .012, z - .001), (y_rear - .012, z - .006)], w * .6, m, .0006))
+
+
+def swivel(P, y, z, m, x=0.0, down=True):
+    """A sling swivel: a stud screwed into the wood, the loop hanging from it."""
+    s = -1 if down else 1
+    P.append(lathe_z('swivel_stud', [(0, 0), (0, .0042), (s * .003, .0042), (s * .005, .0026), (s * .009, .0026), (s * .009, 0)] if s > 0 else
+                     [(-.009, 0), (-.009, .0026), (-.005, .0026), (-.003, .0042), (0, .0042), (0, 0)], (x, y, z), m, 12))
+    P += K.sling_loop(y, z + s * .014, m, x=x, r=.0085)
+
+
+def gas_block(P, y, L, zb, zt, m, r=.0135, pin_m=None):
+    """A gas block clamped on the barrel from y forward L: the collar round the barrel, the port tower up to the gas
+    tube at height zt, the tube's stub and plug, a cross pin."""
+    P.append(band('gasblock', y, L, r, m, zb, 0, r - .006, 32, .0012))
+    P.append(prism('gas_tower', [(y - .002, zb + r * .5), (y - .002, zt + .006), (y - L + .004, zt + .006), (y - L + .002, zb + r * .5)], r * 1.1, m, .0015))
+    P.append(tube_('gas_stub', y + .004, y - L - .006, .0062, m, zt, n=20))
+    P.append(lathe('gas_plug', [(y - L - .006, 0), (y - L - .006, .0052), (y - L - .012, .0052), (y - L - .014, .0036), (y - L - .014, 0)], pin_m or m, zt, 0, 6, sharp=20))
+    P.append(K.cylx('gas_pin', .0022, r * 2 + .003, (0, y - L * .5, zb - r * .45), pin_m or m, 12, .0004))

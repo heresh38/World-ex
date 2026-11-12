@@ -1,4 +1,5 @@
 #include "SOOperation.h"
+#include "SOAreaSubsystem.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Dom/JsonObject.h"
@@ -430,6 +431,11 @@ void ASOOperation::Tick(float DeltaSeconds)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
+	if (AdvanceAt >= 0.0f && State == ESOOperationState::Waiting && USOAreaSubsystem::IsArriving(this))
+	{
+		AdvanceAt += DeltaSeconds;            // the briefing begins when the players can see it
+		return;
+	}
 	if (AdvanceAt >= 0.0f)
 	{
 		if (Now >= AdvanceAt)

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
+#include "Engine/StreamableManager.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SOAreaSubsystem.generated.h"
 
@@ -96,6 +97,21 @@ public:
 	 *  Saved/area_tour.json; bQuitAfter closes the game when done. */
 	void StartTour(bool bQuitAfter, const TArray<FName>& Only = TArray<FName>());
 
+	/**
+	 * Arriving: from the moment a level is in until the area STANDS (the owner: "make a loading screen that loads all
+	 * assets then lets us play": entering the operation froze, and sometimes the graphics card gave up in the first
+	 * frames). The dark screen stays up while, in this order: everything the area can use is loaded and held (every
+	 * asset of the game but the other areas' own folders: species, guns, effects, sounds, both bodies), the garbage of
+	 * the place just left is collected, the navigation mesh is built, and then the world is drawn BEHIND the screen
+	 * until its shaders are compiled and its textures are in. Nothing is drawn of the new world before its assets are
+	 * in, the players cannot move or fire, an operation's clock does not run. Then the screen fades.
+	 */
+	bool IsArriving() const { return Arrival != EArrival::None; }
+	static bool IsArriving(const UObject* WorldContext);
+
+	/** 0..1 through the arrival, and what is being done (for anything that wants to show it). */
+	float GetArrivalProgress() const { return ArrivalProgress; }
+
 	/** Reads Data/areas.json again. */
 	void Reload() { LoadAreas(); }
 
@@ -112,6 +128,28 @@ private:
 	void OnPostLoadMap(UWorld* World);
 	bool Settle(float DeltaSeconds);
 	void TourStep();
+
+	enum class EArrival : uint8 { None, Loading, Building, Warming, Lifting };
+	void BeginArrival(UWorld* World);
+	bool TickArrival(float DeltaSeconds);
+	void SetArrival(EArrival Phase);
+	void EndArrival();
+	void HoldPlayers(UWorld* World, bool bHold);
+	/** Every asset the area may use: all of the game's content but the other areas' own folders and the maps. */
+	TArray<FSoftObjectPath> AssetsFor(const FSOArea* Area) const;
+
+	EArrival Arrival = EArrival::None;
+	TWeakObjectPtr<UWorld> ArrivalWorld;
+	double PhaseAt = 0.0;
+	int32 PhaseFrames = 0;
+	int32 NavTasksAtStart = 0;
+	float ArrivalProgress = 0.0f;
+	/** What is held for the area being played: let go of when it is left. */
+	TSharedPtr<FStreamableHandle> HeldAssets;
+	TSharedPtr<class SWidget> ArrivalScreen;
+	TSharedPtr<class SProgressBar> ArrivalBar;
+	TSharedPtr<class STextBlock> ArrivalStep;
+	FTSTicker::FDelegateHandle ArrivalHandle;
 
 	TArray<FSOArea> Areas;
 	/** Packages (prefixes) every area may use although they live in one area's folder (Data/areas.json: "shared"). */

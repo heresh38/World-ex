@@ -25,11 +25,11 @@ public:
 
 	/** Hip position of the gun origin (top of the pistol grip) in eye space; within reach of both arms. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FVector HipOffset = FVector(30.0f, 13.0f, -22.0f);
+	FVector HipOffset = FVector(27.0f, 11.5f, -15.5f);          // (it sat 22 cm under the eye: too low, not enough of the gun showed)
 
 	/** Handguns (short barrel, support hand on the grip) are held out at arm's length, higher and nearer the middle. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FVector HandgunHipOffset = FVector(42.0f, 9.0f, -14.0f);
+	FVector HandgunHipOffset = FVector(40.0f, 8.5f, -10.5f);
 
 	/** First person, while reloading: the gun comes up (cm: X forward, Y right, Z up) ... */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
@@ -41,12 +41,23 @@ public:
 
 	/** ADS: the sight sits this far in front of the eye, on the line of sight. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float AdsSightDistance = 30.0f;
+	float AdsSightDistance = 9.0f;                               // (long guns. At 30, then 19, the eye sat over the stock: the comb filled the
+	                                                             // lower half of the picture and the rear sight was a pinhole. This close the
+	                                                             // stock is under and behind the eye, out of the view, and the ring is wide.)
+
+	/** The same for a handgun, held out at arm's length. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float AdsHandgunSightDistance = 24.0f;
 
 	/** ADS through a rail optic: its eye point (set per optic in gun_attach.glb so the window fills about a quarter of
 	 *  the view) sits this far in front of the eye. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float AdsOpticEyeDistance = 0.0f;
+
+	/** The same for an optic on a handgun: held out at arm's length, its window is a small frame ahead of the eye
+	 *  (at the eye it hid the whole pistol and half the view). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewmodel")
+	float AdsHandgunOpticDistance = 12.0f;
 
 	/** ADS through a gun's built-in optic: its sight point sits this far in front of the eye. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")

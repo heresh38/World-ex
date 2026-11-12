@@ -1,4 +1,5 @@
 #include "SOPlayerController.h"
+#include "SOAreaSubsystem.h"
 
 #include "SOLocomotionAnimInstance.h"
 
@@ -24,6 +25,8 @@
 #include "SOInventoryComponent.h"
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
+#include "SOFxSubsystem.h"
+#include "SOWeaponData.h"
 #include "SOHUD.h"
 #include "SOTimeOfDaySubsystem.h"
 #include "SOWeather.h"
@@ -201,6 +204,113 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 19)
+	{
+		// The loadout screen alone (files u*): as it opens, a weapon slot's bay with the details, an armour slot's
+		// (mirrored), a hovered item against the equipped one.
+		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
+		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
+		Do(5.0f, [=, this]() { ConsoleCommand(TEXT("DisableAllScreenMessages")); if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
+		Snap(2.0f, TEXT("u1_loadout"));
+		Act([=]() { OpenSlot(TEXT("0")); });
+		Snap(1.2f, TEXT("u2_loadout_primary"));
+		Act([=]() { OpenSlot(TEXT("2")); });
+		Snap(1.2f, TEXT("u3_loadout_heavy"));
+		Act([=]() { OpenSlot(TEXT("head")); });
+		Snap(1.2f, TEXT("u4_loadout_head"));
+		Act([=]() { OpenSlot(TEXT("")); });
+		Snap(1.2f, TEXT("u5_loadout_closed"));
+	}
+	if (Set == 18)
+	{
+		// The gun in first person (files v_<gun>_<sight>_<view>): at the hip, on the sights, and firing on the sights,
+		// with every sight the gun may carry. For checking the sight pictures, the flash, the tracer and how much of the
+		// gun shows.
+		static const TCHAR* Guns[] = { TEXT("rifle"), TEXT("auto"), TEXT("hmg"), TEXT("scout"), TEXT("shotgun"), TEXT("sidearm"),
+			TEXT("energy"), TEXT("spitter"), TEXT("smg"), TEXT("pump"), TEXT("dmr"), TEXT("handcannon"), TEXT("pistol"), TEXT("carbine") };
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (ASOCharacter* H = Hero())
+			{
+				SetControlRotation(FRotator(0.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f));   // the open side of the range
+				View(ESOViewMode::FirstPerson);
+				SetViewTarget(H);
+			}
+		});
+		// the flash by itself, in front of the eye: a round's, a bolt of light's, a living gun's; from the side (top row)
+		// and three quarters on (bottom row), time nearly stopped
+		Do(1.0f, [=, this]()
+		{
+			USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>();
+			FVector Eye;
+			FRotator Look;
+			GetPlayerViewPoint(Eye, Look);
+			const FVector F = Look.Vector(), R = FRotationMatrix(Look).GetUnitAxis(EAxis::Y), U = FRotationMatrix(Look).GetUnitAxis(EAxis::Z);
+			const FLinearColor Colors[] = { FLinearColor(1.0f, 0.74f, 0.4f), FLinearColor(0.44f, 0.91f, 1.0f), FLinearColor(0.61f, 1.0f, 0.29f) };
+			for (int32 i = 0; Fx && i < 3; ++i)
+			{
+				Fx->MuzzleFlash(Eye + F * 160.0f + R * (i - 1) * 62.0f - R * 14.0f + U * 22.0f, R, 1.0f, false, Colors[i]);
+				Fx->MuzzleFlash(Eye + F * 160.0f + R * (i - 1) * 62.0f - U * 24.0f, (R * 0.5f - F * 0.86f).GetSafeNormal(), 1.0f, false, Colors[i]);
+			}
+			UGameplayStatics::SetGlobalTimeDilation(this, 0.02f);
+		});
+		Snap(0.0f, TEXT("v_0_flashes"));
+		Act([=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.0f); });
+		// (a shot's still is taken the moment the round leaves, with time nearly stopped from there: the flash lives
+		// three frames)
+		TSharedRef<int32> Shots = MakeShared<int32>(0);
+		TFunction<bool()> Fired = [=, this]()
+		{
+			const ASOCharacter* H = Hero();
+			if (H && H->GetWeapon() && H->GetWeapon()->GetShotsFired() != *Shots)
+			{
+				UGameplayStatics::SetGlobalTimeDilation(this, 0.02f);
+				return true;
+			}
+			return false;
+		};
+		const USOLootTables* Tables = USOLootLibrary::GetTables();
+		for (const TCHAR* G : Guns)
+		{
+			const FString A = G;
+			const FSOArchetypeEntry* Entry = Tables ? Tables->Archetypes.FindByPredicate([&](const FSOArchetypeEntry& E) { return E.Id == FName(*A); }) : nullptr;
+			const USOWeaponData* Data = Entry ? Entry->Data.LoadSynchronous() : nullptr;
+			if (!Data)
+			{
+				continue;
+			}
+			bool bFirst = true;
+			for (const FName SightId : Data->Sights)
+			{
+				const FString S = SightId.ToString();
+				Do(0.3f, [=]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						FRandomStream Rng(FCrc::StrCrc32(*A));
+						FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(*A, 2, 20, Rng);
+						Copy.Sight = SightId;
+						H->EquipInstance(Copy);
+					}
+				});
+				if (bFirst)
+				{
+					Snap(0.9f, FString::Printf(TEXT("v_%s_%s_1_hip"), *A, *S));
+					// (time nearly stopped as the round leaves: the flash lives three frames)
+					Act([=]() { if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { *Shots = H->GetWeapon()->GetShotsFired(); H->GetWeapon()->StartFire(); } });
+					Snap(0.0f, FString::Printf(TEXT("v_%s_%s_2_hipfire"), *A, *S), Fired);
+					Act([=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.0f); if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { H->GetWeapon()->StopFire(); } });
+				}
+				Do(bFirst ? 0.5f : 0.9f, [=]() { if (ASOCharacter* H = Hero()) { H->HandleAimPressed(); } });
+				Snap(0.9f, FString::Printf(TEXT("v_%s_%s_3_aim"), *A, *S));
+				Act([=]() { if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { *Shots = H->GetWeapon()->GetShotsFired(); H->GetWeapon()->StartFire(); } });
+				Snap(0.0f, FString::Printf(TEXT("v_%s_%s_4_aimfire"), *A, *S), Fired);
+				Act([=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.0f); if (ASOCharacter* H = Hero()) { if (H->GetWeapon()) { H->GetWeapon()->StopFire(); } H->HandleAimReleased(); } });
+				bFirst = false;
+			}
+		}
+	}
 	if (Set == 17)
 	{
 		// Meridian (L_Meridian): the torch in a dark shop of the mall, first person then third (files t*). The
@@ -1381,6 +1491,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 
 void ASOPlayerController::CaptureStep()
 {
+	if (USOAreaSubsystem::IsArriving(this))
+	{
+		return;                                 // (the travelling screen is still up)
+	}
 	CaptureWait += 0.02f;
 	if (!CaptureCues.IsValidIndex(CaptureIndex))
 	{

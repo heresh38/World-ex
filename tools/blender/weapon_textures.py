@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import bl
 from textures import bake, G, setup   # noqa: F401
 
-SIZE = 512
+SIZE = 2048         # holds up at 4K in first person (was 512)
 
 
 def aniso(g, fu, fv, detail=4, rough=.55, seed=0.0, kind='noise'):
@@ -84,26 +84,26 @@ def main():
         return g.math('GREATER_THAN', aniso(g, 3, 70, 2, .5, seed), .71)
 
     def steel_c(g):
-        brush = g.ramp(aniso(g, 2, 160, 3, .5, 2), [(.3, '#22262d'), (.7, '#363b45')])
-        bare = g.ramp(g.noise(30, 4, .5, 3), [(.3, '#5d6168'), (.8, '#7e8289')])
+        brush = g.ramp(aniso(g, 2, 160, 3, .5, 2), [(.3, '#292d34'), (.7, '#30343c')])
+        bare = g.ramp(g.noise(30, 4, .5, 3), [(.3, '#3f4349'), (.8, '#4d5158')])
         c = g.mix(brush, bare, wear_steel(g))
-        return g.mix(c, (.42, .44, .47), scratch(g, 4))
+        return g.mix(c, (.25, .26, .28), scratch(g, 4))
 
     def steel_n(g):
         return g.math('ADD', g.math('MULTIPLY', aniso(g, 2, 200, 2, .5, 5), .4), g.math('MULTIPLY', scratch(g, 4), -.5))
 
     def steel_m(g):
         w = wear_steel(g)
-        return mr(g, g.math('ADD', g.math('MULTIPLY', w, -.14), g.math('ADD', .36, g.math('MULTIPLY', aniso(g, 2, 90, 2, .5, 6), .1))),
+        return mr(g, g.math('ADD', g.math('MULTIPLY', w, -.14), g.math('ADD', .24, g.math('ADD', g.math('MULTIPLY', aniso(g, 2, 160, 3, .5, 2), .26), g.math('MULTIPLY', scratch(g, 4), -.08)))),
                   g.math('ADD', .78, g.math('MULTIPLY', w, .2)))
     bake_set(p, 'wpn_steel', steel_c, steel_n, steel_m, .35)
 
     # ------------------------------------------------ parkerized / anodized: matte phosphate speckle, rubbed patches
     def park_c(g):
         base = g.ramp(g.noise(90, 2, .5, 7), [(.35, '#262829'), (.65, '#34373a')])
-        rub = g.ramp(g.noise(4, 5, .6, 8), [(.62, (0, 0, 0)), (.8, (.45, .45, .45))])
+        rub = g.ramp(g.noise(4, 5, .6, 8), [(.62, (0, 0, 0)), (.8, (.2, .2, .2))])
         sep = g.n('ShaderNodeSeparateColor'); g.nt.links.new(rub, sep.inputs[0])
-        return g.mix(base, (.3, .31, .32), sep.outputs[0])
+        return g.mix(base, (.27, .28, .29), sep.outputs[0])
 
     def park_m(g):
         return mr(g, g.math('ADD', .62, g.math('MULTIPLY', g.noise(60, 2, .5, 9), .14)), .45)
@@ -167,7 +167,7 @@ def main():
         a = g.ramp(g.noise(40, 3, .5, 18), [(.3, '#e6e6e6'), (.7, '#f6f6f6')])
         chip = g.math('GREATER_THAN', g.noise(7, 7, .66, 19), .7)
         b = g.brick(.5, .25, offset=.5, mortar=.004, c1=(1, 1, 1), c2=(1, 1, 1))
-        a = g.mix(a, (.62, .62, .62), b.outputs['Fac'])
+        a = g.mix(a, (.8, .8, .8), b.outputs['Fac'])
         return g.mix(a, (.55, .56, .58), chip)
 
     def paint_n(g):
@@ -181,13 +181,13 @@ def main():
 
     # ------------------------------------------------ energy line: machined gunmetal with milling arcs
     def metal_c(g):
-        brush = g.ramp(aniso(g, 2, 120, 3, .5, 20), [(.3, '#2a2e34'), (.7, '#3a3f47')])
+        brush = g.ramp(aniso(g, 2, 120, 3, .5, 20), [(.3, '#2f3339'), (.7, '#363a41')])
         edge = g.math('GREATER_THAN', g.noise(6, 6, .6, 21), .67)
-        return g.mix(brush, (.5, .52, .55), edge)
+        return g.mix(brush, (.4, .42, .45), edge)
 
     def metal_m(g):
         edge = g.math('GREATER_THAN', g.noise(6, 6, .6, 21), .67)
-        return mr(g, g.math('ADD', .3, g.math('MULTIPLY', aniso(g, 2, 120, 3, .5, 20), .12)), g.math('ADD', .82, g.math('MULTIPLY', edge, .16)))
+        return mr(g, g.math('ADD', .23, g.math('MULTIPLY', aniso(g, 2, 120, 3, .5, 20), .28)), g.math('ADD', .82, g.math('MULTIPLY', edge, .16)))
     bake_set(p, 'wpn_metal', metal_c, lambda g: g.math('MULTIPLY', aniso(g, 2, 160, 2, .5, 22), .5), metal_m, .3)
 
     # ------------------------------------------------ horror line: flesh with a vein network and pale pustules

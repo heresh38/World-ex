@@ -65,6 +65,12 @@ void ASOWeapon::SetInstance(const FSOWeaponInstance& InInstance)
 	const USOLootTables* Tables = USOLootLibrary::GetTables();
 	Data = Tables ? Tables->LoadArchetype(InInstance.Archetype) : nullptr;
 	Instance = InInstance;
+	// (a gun rolled before the optics had rules can carry one its kind no longer takes: a long scope on an assault
+	// rifle. It gets its factory sight back.)
+	if (Data && !Data->Sights.Contains(Instance.Sight))
+	{
+		Instance.Sight = Data->DefaultSight;
+	}
 	Stats = USOLootLibrary::ComputeStatsFor(Data, Instance);
 	Mag = Instance.Mag >= 0 ? FMath::Min(Instance.Mag, Stats.Mag) : Stats.Mag;
 	Reserve = Instance.Reserve >= 0 ? Instance.Reserve : Stats.Reserve;
@@ -404,7 +410,12 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 	USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>();
 	if (Fx)
 	{
-		Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.7f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f), bFirstPerson);
+		// in the gun's own colour: a kinetic round burns orange, a bolt of light flashes the colour it flies in
+		const bool bLight = Data->WeaponClass == ESOWeaponClass::Energy || Data->WeaponClass == ESOWeaponClass::Horror;
+		const FLinearColor FlashColor = bLight ? FMath::Lerp(Data->TracerColor, FLinearColor::White, 0.25f) : FLinearColor(1.0f, 0.74f, 0.4f);
+		const bool bThroughScope = bFirstPerson && IsScoped() && Holder->IsAimingDownSights();
+		Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.6f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f), bFirstPerson,
+			FlashColor, bThroughScope);
 	}
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOShotFx), true, Holder);
@@ -462,7 +473,8 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			const bool bEnergy = Kind == ESOProjectileKind::Bolt;
 			if (Pellet < 4 || Pellet % 2 == 0) // shotguns: not every pellet needs its own tracer
 			{
-				Fx->Tracer(Muzzle, End, Speed, Data->TracerColor, bEnergy ? 3.2f : 2.2f);
+				// (a round is a thin short line; a bolt of light is longer, thicker and has a head)
+				Fx->Tracer(Muzzle, End, Speed, Data->TracerColor, bEnergy ? 3.4f : 2.0f, bEnergy ? 520.0f : 340.0f, bEnergy);
 			}
 			if (bHit)
 			{
@@ -764,9 +776,20 @@ void ASOWeapon::Tick(float DeltaSeconds)
 		bReloading = false;
 	}
 
+	// A gun with a cluster of barrels (a part named `spin`) turns it while it fires: up to speed in a few shots, and
+	// it runs down on its own afterwards.
+	if (World)
+	{
+		const bool bFiring = World->GetTimeSeconds() - LastShotTime < 0.14f;
+		BarrelSpinRate = FMath::FInterpTo(BarrelSpinRate, bFiring ? 26.0f : 0.0f, DeltaSeconds, bFiring ? 9.0f : 1.6f);
+		BarrelSpin = FMath::Fmod(BarrelSpin + BarrelSpinRate * DeltaSeconds, UE_TWO_PI);
+	}
 	const FSOReloadPose& Pose = Reload.GetPose();
-	FirstPersonRig->ApplyPose(Pose);
-	ThirdPersonRig->ApplyPose(Pose);
+	for (USOGunRigComponent* Rig : { FirstPersonRig.Get(), ThirdPersonRig.Get() })
+	{
+		Rig->SetBarrelSpin(BarrelSpin);
+		Rig->ApplyPose(Pose);
+	}
 }
 
 void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)

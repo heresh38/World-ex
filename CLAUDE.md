@@ -38,7 +38,23 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
   `weapon_textures.py`; rebuilt 2026-11-12 toward the Requiem guns' standard, sheets `Saved/Screenshots/guns_*`): every
   archetype in `Data/game_data.json` has a
   class: `energy`, `kinetic` (real projectiles with muzzle velocity and drop) and `horror` (living biomass). Sights
-  (`gun_attach.glb`: reflex, holo, 2x/4x/8x) mount per copy; magnified optics use the object name `scope` + `gun_lens`.
+  (`gun_attach.glb`: reflex, holo, 2x/4x/8x and the compact 4x `prism`; the importer takes every sight the data's
+  `sights` table names) mount per copy; magnified optics use the object name `scope` + `gun_lens`. What a gun may
+  carry follows its kind (the owner, 2026-11-12: "a sniper scope on a shotgun makes no sense"): rifles default /
+  reflex / holo / 4x, scout and battle rifles 4x / prism / 8x, sniper 4x / 8x, handguns, SMGs, shotguns and launchers
+  irons / reflex / holo, the heavy machine guns up to 2x, living guns their own; a copy with a sight its gun may not
+  carry gets the gun's own (`ASOWeapon::SetInstance`). `ShatteredOrbit.Aim.EverySightOnTheEyeLine` holds every gun
+  with every allowed sight to it: the sight's point on the eye's axis as each round leaves, an optic's glass centred
+  on it, windows wide enough to look through. Rounds leave along the eye's axis, so on the sights the gun turns about
+  its SIGHT (`USOViewmodelComponent`: `SightPivot`), aimed spread is x0.25, a long gun's irons sit 9 cm ahead of the eye (further back the eye is over the stock and its comb fills the
+  picture; a handgun's 24, `AdsHandgunSightDistance`)
+  (`AdsSightDistance`), an optic on a handgun 12 cm (`AdsHandgunOpticDistance`). A rotary gun's barrel cluster is the
+  part `spin` (origin on its axis): `ASOWeapon::Tick` turns it while firing. Tracers and flashes take the gun's own
+  colour (`tracer` in the data: kinetic warm, light guns cyan / blue / gold, living green and violet; a bolt of light
+  is longer with a head), the flash is five torn blades (`FX_Star`, shader mode 3), nothing is drawn through a scope.
+  Every copy is worn its own way (`USOGunRigComponent::Dress`: edge wear, scratches, grime and the mask's tiling from
+  the copy's uid). Pictures: `SOCaptureSeries 1 18` (first person: hip, aimed, firing, every sight; files `SO_v_*`;
+  run captures with `-ForceRes`).
   Reload parts are own objects with their origin at the pivot (node names are an API): `mag`, `bolt`, `charge`,
   `slide`, `pump`, `crane` > `cylinder` > `rounds`, `hatch` + `biomass`; loose props `x_shell`, `x_round`,
   `x_casing`, `x_speedloader`. Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.
@@ -186,6 +202,11 @@ spawn groups, checkpoints (the game mode respawns there) and boss adds keyed to 
 `ASOOperationBarrier` energy walls keep the route linear until their stage; finishing grants every player ONE random
 piece of the reward sets (`AddArmorPiece` for armour: wardrobe items with a `Set` are earned, never handed out).
 HUD: objective panel, stage banner, goal marker, boss bar, end screen. Tests `ShatteredOrbit.Operation.*`.
+The loadout screen (`USOInventoryWidget`, C++ only; redesigned 2026-11-12): every panel is the game's plate
+(`/Game/UI/M_UI_Plate`: two cut corners, a hairline, a rarity bar and wash, all drawn by one Custom node from the UV
+derivatives: `import_assets.ui_shape`), the character stands in front of the broken orbit (`M_UI_Orbit`), a slot's
+bay opens beside its own column with the details where the other column was, and the character steps into the gap
+between them (never covered). Pictures `SOCaptureSeries 1 19` (files `SO_u*`).
 The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
 `art/reference/operation/first_operation_map.png` made linear, our own names, and (owner, 2026-11-10: "at least 4x
 longer ... spawn at the very edge of the city and fight through ruined buildings / maybe a mall ... like a strike")
@@ -263,7 +284,13 @@ with the console: `SOCensus` (what is loaded by folder + anything of another are
 (visits every area and back, `Saved/area_tour.json`; run it with `-game -nullrhi -nosound -unattended`). A prop every
 area uses lives in `/Game/Shared` (listed under `"shared"` in areas.json): `Shared/Operation` (the barrier panel, the
 conduit, `M_SOEnergy`, `M_SOGlowPulse`, their own material instances) and `Shared/Map` (the beacon). Travel shows a
-loading screen (`USOAreaSubsystem::TravelToLevel`, the engine's movie player: the area's name on a dark screen). Never keep
+loading screen (`USOAreaSubsystem::TravelToLevel`, the engine's movie player: the area's name on a dark screen), and
+the same screen stays up while the area ARRIVES (`BeginArrival` / `TickArrival`, the owner 2026-11-12: "a loading
+screen that loads all assets then lets us play"; entering the operation froze and once the graphics card hung in
+Nanite's shadow culling three seconds in): every asset the area can use is loaded and held (all of `/Game` but the
+other areas' folders and the maps; let go on leaving), the garbage of the last place collected, the nav mesh built,
+then the world drawn BEHIND the screen until shaders and textures are in; nothing of the new world is drawn before
+its assets are in, players cannot move or fire, an operation's clock and captures wait (`IsArriving`). Never keep
 a bare pointer to a loaded asset across a timer or a level change (nothing holds it: it is collected). Test
 `ShatteredOrbit.Area.OneAtATime`.
 The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own

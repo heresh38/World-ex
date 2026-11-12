@@ -5,7 +5,7 @@ materials (soft dots, streaks), so they are plain UV'd quads.
 
 FX_Quad   1 x 1 m card facing -Y (Blender), UVs 0..1      sparks, dust, smoke, blood puffs
 FX_Streak 1 m long card along -Y, 1 m wide (scaled thin)  tracers, spark streaks (U runs tail -> head)
-FX_Star   three cards: two crossed along -Y + one facing -Y  muzzle flash (the long cards fade along U)
+FX_Star   five blades about -Y at uneven turns              muzzle flash (the material shapes each to a torn point)
 Blender -Y is the forward axis everywhere (Unreal +Y in mesh space, +X after the usual -90 degree yaw).
 """
 import os
@@ -34,12 +34,16 @@ def main():
     card("FX_Quad", [(-h, 0, -h), (h, 0, -h), (h, 0, h), (-h, 0, h)], m)
     # Streak: from the origin (tail, U=0) to 1 m along -Y (head, U=1), lying in the YZ plane.
     card("FX_Streak", [(0, 0, -h), (0, -1, -h), (0, -1, h), (0, 0, h)], m)
-    # Star: two crossed long cards along -Y plus a front card (U=0 at the muzzle on the long ones).
-    parts = [
-        card("star_v", [(0, 0, -h), (0, -1, -h), (0, -1, h), (0, 0, h)], m),
-        card("star_h", [(-h, 0, 0), (-h, -1, 0), (h, -1, 0), (h, 0, 0)], m),
-        card("star_f", [(-h * 0.8, 0, -h * 0.8), (h * 0.8, 0, -h * 0.8), (h * 0.8, 0, h * 0.8), (-h * 0.8, 0, h * 0.8)], m),
-    ]
+    # Star (the muzzle flash): five long blades about -Y at uneven turns, each from the origin (the muzzle, U=0) to its
+    # tip (U=1). No card across the bore: two crossed cards and a square read as a cross and a diamond from in front.
+    # The effect material shapes each blade to a point and tears it (FX_SHAPE_HLSL mode 3).
+    import math
+    parts = []
+    for k, deg in enumerate((0.0, 31.0, 74.0, 108.0, 151.0)):
+        a = math.radians(deg)
+        c, sn = math.cos(a) * h, math.sin(a) * h
+        L = (1.0, 0.82, 0.94, 0.7, 0.88)[k]
+        parts.append(card("star_%d" % k, [(-c, 0, -sn), (-c, -L, -sn), (c, -L, sn), (c, 0, sn)], m))
     bl.join(parts, "FX_Star")
     bl.export("fx_kit.glb")
 

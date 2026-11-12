@@ -112,16 +112,100 @@ namespace
 		Button->SetStyle(Style);
 	}
 
-	/** A thin cyan rule with a diamond: the section headers. */
+	FLinearColor Alpha(const FLinearColor& C, float A)
+	{
+		return FLinearColor(C.R, C.G, C.B, A);
+	}
+
+	/** The game's panel (M_UI_Plate): a rectangle with two cut corners, a hairline, a fill that deepens downwards, an
+	 *  accent bar on the left and / or along the bottom, a wash of the accent rising from the bottom. */
+	struct FPlate
+	{
+		FLinearColor Fill = FLinearColor(0.035f, 0.045f, 0.07f, 0.92f);
+		FLinearColor FillLow = FLinearColor(0.02f, 0.026f, 0.045f, 0.94f);
+		FLinearColor Edge = FLinearColor(1.0f, 1.0f, 1.0f, 0.13f);
+		FLinearColor Accent = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+		float Cut = 12.0f;
+		float EdgeWidth = 1.0f;
+		float AccentLeft = 0.0f;
+		float AccentBottom = 0.0f;
+		float Wash = 0.0f;
+		float Hatch = 0.0f;
+		float TopLight = 0.0f;
+	};
+
+	FSlateBrush PlateBrush(UObject* Outer, const FPlate& P)
+	{
+		UMaterialInterface* Base = Cast<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/UI/M_UI_Plate.M_UI_Plate")).TryLoad());
+		UMaterialInstanceDynamic* MID = Base ? UMaterialInstanceDynamic::Create(Base, Outer) : nullptr;
+		if (!MID)
+		{
+			return FSlateRoundedBoxBrush(P.Fill, 3.0f, P.Edge, P.EdgeWidth);
+		}
+		MID->SetVectorParameterValue(TEXT("Fill"), P.Fill);
+		MID->SetVectorParameterValue(TEXT("FillLow"), P.FillLow);
+		MID->SetVectorParameterValue(TEXT("Edge"), P.Edge);
+		MID->SetVectorParameterValue(TEXT("Accent"), P.Accent);
+		MID->SetVectorParameterValue(TEXT("Shape"), FLinearColor(P.Cut, P.EdgeWidth, P.AccentLeft, P.AccentBottom));
+		MID->SetVectorParameterValue(TEXT("Look"), FLinearColor(P.Wash, P.Hatch, P.TopLight, 0.0f));
+		FSlateBrush Brush;
+		Brush.SetResourceObject(MID);
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		Brush.ImageSize = FVector2D(32.0f, 32.0f);
+		Brush.TintColor = FSlateColor(FLinearColor::White);
+		return Brush;
+	}
+
+	/** A section header: a short bar of light, the title, a hairline to the edge. */
 	UWidget* Header(UWidgetTree* T, const FString& Title)
 	{
 		UHorizontalBox* Row = Make<UHorizontalBox>(T);
-		Row->AddChildToHorizontalBox(Text(T, TEXT("◆"), 10, Cyan))->SetVerticalAlignment(VAlign_Center);
-		Row->AddChildToHorizontalBox(Text(T, Title, 12, Ink, true, 260))->SetPadding(FMargin(8, 0, 10, 0));
-		UHorizontalBoxSlot* Line = Row->AddChildToHorizontalBox(Sized(T, Box(T, FSlateColorBrush(Cyan * FLinearColor(1, 1, 1, 0.35f)), FMargin(0)), 0.0f, 1.0f));
+		Row->AddChildToHorizontalBox(Sized(T, Box(T, FSlateColorBrush(Cyan), FMargin(0)), 3.0f, 12.0f))->SetVerticalAlignment(VAlign_Center);
+		Row->AddChildToHorizontalBox(Text(T, Title, 11, Ink, true, 300))->SetPadding(FMargin(9, 0, 12, 0));
+		UHorizontalBoxSlot* Line = Row->AddChildToHorizontalBox(Sized(T, Box(T, FSlateColorBrush(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f)), FMargin(0)), 0.0f, 1.0f));
 		Line->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		Line->SetVerticalAlignment(VAlign_Center);
 		return Row;
+	}
+
+	/** A small filled tag (the rarity's name on its own colour). */
+	UWidget* Chip(UWidgetTree* T, const FString& Label, const FLinearColor& Color)
+	{
+		UBorder* C = Box(T, FSlateRoundedBoxBrush(Alpha(Color, 1.0f), 2.0f), FMargin(7, 2, 7, 2));
+		C->SetContent(Text(T, Label, 9, FLinearColor(0.02f, 0.025f, 0.04f), true, 160));
+		return C;
+	}
+
+	/** A key cap and what the key does. */
+	UWidget* Hint(UWidgetTree* T, const FString& Key, const FString& Label)
+	{
+		UHorizontalBox* Row = Make<UHorizontalBox>(T);
+		UBorder* Cap = Box(T, FSlateRoundedBoxBrush(FLinearColor(1.0f, 1.0f, 1.0f, 0.05f), 3.0f, FLinearColor(1.0f, 1.0f, 1.0f, 0.3f), 1.0f), FMargin(7, 1, 7, 2));
+		Cap->SetContent(Text(T, Key, 10, Ink, true));
+		Row->AddChildToHorizontalBox(Cap)->SetVerticalAlignment(VAlign_Center);
+		UHorizontalBoxSlot* L = Row->AddChildToHorizontalBox(Text(T, Label, 10, Dim, false, 60));
+		L->SetVerticalAlignment(VAlign_Center);
+		L->SetPadding(FMargin(8, 0, 26, 0));
+		return Row;
+	}
+
+	/** A number under its label (the top bar's figures). */
+	UWidget* Figure(UWidgetTree* T, const FString& Label, const FString& Value, const FLinearColor& Color, int32 Size = 16)
+	{
+		UVerticalBox* Box = Make<UVerticalBox>(T);
+		Box->AddChildToVerticalBox(Text(T, Label, 9, Dim, true, 240));
+		Box->AddChildToVerticalBox(Text(T, Value, Size, Color, true));
+		return Box;
+	}
+
+	/** A thin flat bar (stats). */
+	void FlatBar(UProgressBar* Bar)
+	{
+		FProgressBarStyle Style;
+		Style.SetBackgroundImage(FSlateColorBrush(FLinearColor(1.0f, 1.0f, 1.0f, 0.09f)));
+		Style.SetFillImage(FSlateColorBrush(FLinearColor::White));
+		Style.SetMarqueeImage(FSlateColorBrush(FLinearColor::Transparent));
+		Bar->SetWidgetStyle(Style);
 	}
 
 	const USOWeaponData* ArchetypeOf(const FSOWeaponInstance& W)
@@ -326,24 +410,36 @@ TSharedRef<SWidget> USOInventoryTile::RebuildWidget()
 	{
 		UWidgetTree* T = WidgetTree;
 		const bool bSlot = Info.Kind == TEXT("wslot") || Info.Kind == TEXT("aslot");
+		const FLinearColor Rarity = Alpha(Info.Rarity, 1.0f);
 		UButton* Button = Make<UButton>(T);
-		const FLinearColor Edge = Info.bActive ? Cyan : Info.Rarity * FLinearColor(1, 1, 1, 0.55f);
-		StyleButton(Button, Rounded(TileFill, Edge, Info.bActive ? 2.0f : 1.2f), Rounded(TileFill * 1.6f, Cyan, 2.0f), Rounded(TileFill * 2.0f, Cyan, 2.5f));
+		// the plate: a slot card carries its rarity as a bar down its left edge, an owned item as a bar along its foot
+		// and a wash rising behind the picture; the one that is open / selected is framed in light
+		FPlate Plate;
+		Plate.Cut = bSlot ? 14.0f : 10.0f;
+		Plate.Accent = Info.Icon ? Rarity : Alpha(Dim, 0.5f);
+		Plate.AccentLeft = bSlot ? 4.0f : 0.0f;
+		Plate.AccentBottom = bSlot ? 0.0f : 3.0f;
+		Plate.Wash = Info.Icon ? (bSlot ? 0.2f : 0.55f) : 0.0f;
+		Plate.Hatch = bSlot ? 1.0f : 0.0f;
+		Plate.Edge = Info.bActive ? Cyan : FLinearColor(1.0f, 1.0f, 1.0f, 0.13f);
+		Plate.EdgeWidth = Info.bActive ? 2.0f : 1.0f;
+		FPlate Hover = Plate;
+		Hover.Fill = FLinearColor(0.07f, 0.09f, 0.14f, 0.96f);
+		Hover.Edge = Cyan;
+		Hover.EdgeWidth = FMath::Max(Plate.EdgeWidth, 1.5f);
+		Hover.TopLight = 1.0f;
+		Hover.Wash = Plate.Wash + 0.15f;
+		FPlate Down = Hover;
+		Down.Fill = FLinearColor(0.1f, 0.13f, 0.2f, 1.0f);
+		Down.EdgeWidth = 2.5f;
+		StyleButton(Button, PlateBrush(this, Plate), PlateBrush(this, Hover), PlateBrush(this, Down));
 		Button->OnClicked.AddDynamic(this, &USOInventoryTile::OnClicked);
 		Button->OnHovered.AddDynamic(this, &USOInventoryTile::OnHovered);
 		Button->OnUnhovered.AddDynamic(this, &USOInventoryTile::OnUnhovered);
 
-		// the icon square: rarity glow from below, the rendered icon, power in the corner, NEW / equipped marks
-		const FVector2D IconSize = bSlot ? (Info.bWide ? FVector2D(190.0f, 95.0f) : FVector2D(92.0f, 92.0f)) : Info.Size;
+		// the picture, with power in the corner and the NEW / equipped / locked mark on an owned item
+		const FVector2D IconSize = bSlot ? (Info.bWide ? FVector2D(176.0f, 88.0f) : FVector2D(84.0f, 84.0f)) : Info.Size;
 		UOverlay* Square = Make<UOverlay>(T);
-		UBorder* Wash = Box(T, Rounded(Info.Rarity * FLinearColor(0.28f, 0.28f, 0.28f, 0.55f), FLinearColor::Transparent, 0.0f, 2.0f), FMargin(0));
-		UOverlaySlot* WashSlot = Square->AddChildToOverlay(Wash);
-		WashSlot->SetHorizontalAlignment(HAlign_Fill);
-		WashSlot->SetVerticalAlignment(VAlign_Fill);
-		UBorder* Strip = Box(T, FSlateColorBrush(Info.Rarity), FMargin(0));
-		UOverlaySlot* StripSlot = Square->AddChildToOverlay(Sized(T, Strip, 0.0f, 3.0f));
-		StripSlot->SetHorizontalAlignment(HAlign_Fill);
-		StripSlot->SetVerticalAlignment(VAlign_Bottom);
 		if (Info.Icon)
 		{
 			UImage* Icon = Make<UImage>(T);
@@ -351,48 +447,65 @@ TSharedRef<SWidget> USOInventoryTile::RebuildWidget()
 			UOverlaySlot* IconSlot = Square->AddChildToOverlay(Icon);
 			IconSlot->SetHorizontalAlignment(HAlign_Fill);
 			IconSlot->SetVerticalAlignment(VAlign_Fill);
-			IconSlot->SetPadding(FMargin(4));
+			IconSlot->SetPadding(FMargin(bSlot ? 0.0f : 5.0f));
 		}
 		else
 		{
-			UOverlaySlot* Empty = Square->AddChildToOverlay(Text(T, Info.Kind == TEXT("aslot") || Info.Kind == TEXT("armor") ? TEXT("◇") : TEXT("—"), 22, Dim));
+			UOverlaySlot* Empty = Square->AddChildToOverlay(Text(T, TEXT("EMPTY"), 9, Alpha(Dim, 0.7f), true, 300));
 			Empty->SetHorizontalAlignment(HAlign_Center);
 			Empty->SetVerticalAlignment(VAlign_Center);
 		}
-		if (Info.Power > 0 && !bSlot)
+		if (!bSlot)
 		{
-			UOverlaySlot* P = Square->AddChildToOverlay(Text(T, FString::FromInt(Info.Power), 11, Ink, true));
-			P->SetHorizontalAlignment(HAlign_Right);
-			P->SetVerticalAlignment(VAlign_Top);
-			P->SetPadding(FMargin(0, 3, 5, 0));
-		}
-		if (Info.bNew || Info.bEquipped || !Info.Badge.IsEmpty())
-		{
-			const FString Mark = Info.bEquipped ? TEXT("◆") : (Info.bNew ? TEXT("NEW") : Info.Badge);
-			UOverlaySlot* M = Square->AddChildToOverlay(Text(T, Mark, 10, Info.bEquipped ? Cyan : Gold, true));
-			M->SetHorizontalAlignment(HAlign_Left);
-			M->SetVerticalAlignment(VAlign_Top);
-			M->SetPadding(FMargin(5, 3, 0, 0));
+			if (Info.Power > 0)
+			{
+				UOverlaySlot* P = Square->AddChildToOverlay(Text(T, FString::FromInt(Info.Power), 11, Ink, true));
+				P->SetHorizontalAlignment(HAlign_Right);
+				P->SetVerticalAlignment(VAlign_Top);
+				P->SetPadding(FMargin(0, 4, 14, 0));          // (clear of the cut corner)
+			}
+			if (Info.bNew || Info.bEquipped || !Info.Badge.IsEmpty())
+			{
+				const FString Mark = Info.bEquipped ? TEXT("IN USE") : (Info.bNew ? TEXT("NEW") : Info.Badge);
+				UOverlaySlot* M = Square->AddChildToOverlay(Text(T, Mark, 8, Info.bEquipped ? Cyan : Gold, true, 160));
+				M->SetHorizontalAlignment(HAlign_Left);
+				M->SetVerticalAlignment(VAlign_Top);
+				M->SetPadding(FMargin(7, 5, 0, 0));
+			}
 		}
 		UWidget* Content = Sized(T, Square, IconSize.X, IconSize.Y);
 		if (bSlot)
 		{
-			// slots: the icon with the slot name, what is there and its power / armour beside it
+			// a slot card: the picture, then which slot it is, what is in it and what kind of thing that is, its power
+			// at the far end
 			UHorizontalBox* Row = Make<UHorizontalBox>(T);
-			Row->AddChildToHorizontalBox(Content)->SetPadding(FMargin(6));
+			UHorizontalBoxSlot* Pic = Row->AddChildToHorizontalBox(Content);
+			Pic->SetPadding(FMargin(14, 8, 2, 8));
+			Pic->SetVerticalAlignment(VAlign_Center);
 			UVerticalBox* Lines = Make<UVerticalBox>(T);
-			Lines->AddChildToVerticalBox(Text(T, Info.Sub, 10, Dim, true, 180));
-			UTextBlock* Name = Text(T, Info.Title, 15, Info.Title.IsEmpty() ? Dim : Info.Rarity, true);
+			Lines->AddChildToVerticalBox(Text(T, Info.Sub, 9, Dim, true, 220));
+			UTextBlock* Name = Text(T, Info.Title, 14, Info.Icon ? Ink : Dim, true);
 			Name->SetAutoWrapText(true);
-			Lines->AddChildToVerticalBox(Name)->SetPadding(FMargin(0, 2, 0, 2));
-			if (!Info.Badge.IsEmpty())
+			Lines->AddChildToVerticalBox(Name)->SetPadding(FMargin(0, 3, 0, 3));
+			if (!Info.Tag.IsEmpty())
 			{
-				Lines->AddChildToVerticalBox(Text(T, Info.Badge, 12, Gold, true));
+				UTextBlock* Tag = Text(T, Info.Tag, 9, Rarity, true, 120);
+				Tag->SetAutoWrapText(true);
+				Lines->AddChildToVerticalBox(Tag);
 			}
 			UHorizontalBoxSlot* LinesSlot = Row->AddChildToHorizontalBox(Lines);
 			LinesSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 			LinesSlot->SetVerticalAlignment(VAlign_Center);
-			LinesSlot->SetPadding(FMargin(8, 4, 10, 4));
+			LinesSlot->SetPadding(FMargin(10, 6, 6, 6));
+			if (Info.Power > 0)
+			{
+				UVerticalBox* Power = Make<UVerticalBox>(T);
+				Power->AddChildToVerticalBox(Text(T, FString::FromInt(Info.Power), 22, Gold, true))->SetHorizontalAlignment(HAlign_Right);
+				Power->AddChildToVerticalBox(Text(T, TEXT("POWER"), 8, Dim, true, 240))->SetHorizontalAlignment(HAlign_Right);
+				UHorizontalBoxSlot* PowerSlot = Row->AddChildToHorizontalBox(Power);
+				PowerSlot->SetVerticalAlignment(VAlign_Center);
+				PowerSlot->SetPadding(FMargin(0, 0, 18, 0));
+			}
 			Content = Row;
 		}
 		if (UButtonSlot* Fill = Cast<UButtonSlot>(Button->SetContent(Content)))
@@ -489,6 +602,16 @@ void USOInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	{
 		Preview->Tick(InDeltaTime);
 	}
+	// the character steps into the gap between an open bay and the details (and back to the middle)
+	if (StageSlot && !FMath::IsNearlyEqual(StageShift, StageShiftTarget, 0.25f))
+	{
+		StageShift = FMath::FInterpTo(StageShift, StageShiftTarget, FMath::Min(InDeltaTime, 0.05f), 10.0f);
+		StageSlot->SetOffsets(FMargin(-330.0f + StageShift, 96.0f, 660.0f, 60.0f));
+		if (OrbitSlot)
+		{
+			OrbitSlot->SetOffsets(FMargin(-700.0f + StageShift, 0.0f, 1400.0f, 0.0f));
+		}
+	}
 }
 
 void USOInventoryWidget::BuildTree()
@@ -498,21 +621,31 @@ void USOInventoryWidget::BuildTree()
 	WidgetTree->RootWidget = Root;
 	SetIsFocusable(true);
 
-	// the world behind, blurred and darkened to night blue
+	// the world behind, blurred and sunk into night blue
 	UBackgroundBlur* Blur = Make<UBackgroundBlur>(T);
-	Blur->SetBlurStrength(10.0f);
-	Blur->SetContent(Box(T, FSlateColorBrush(FLinearColor(0.01f, 0.015f, 0.035f, 0.82f)), FMargin(0)));
+	Blur->SetBlurStrength(14.0f);
+	Blur->SetContent(Box(T, FSlateColorBrush(FLinearColor(0.008f, 0.011f, 0.026f, 0.86f)), FMargin(0)));
 	UCanvasPanelSlot* BlurSlot = Root->AddChildToCanvas(Blur);
 	BlurSlot->SetAnchors(FAnchors(0, 0, 1, 1));
 	BlurSlot->SetOffsets(FMargin(0));
 
-	// the character, centre stage, on a glowing ring
+	// the broken orbit, turning slowly behind the character (it goes where the character goes)
+	UImage* Orbit = Make<UImage>(T);
+	if (UMaterialInterface* Rings = Cast<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/UI/M_UI_Orbit.M_UI_Orbit")).TryLoad()))
+	{
+		Orbit->SetBrushFromMaterial(Rings);
+		Orbit->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	else
+	{
+		Orbit->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	OrbitSlot = Root->AddChildToCanvas(Orbit);
+	OrbitSlot->SetAnchors(FAnchors(0.5f, 0.0f, 0.5f, 1.0f));
+	OrbitSlot->SetOffsets(FMargin(-700.0f, 0.0f, 1400.0f, 0.0f));
+
+	// the character, centre stage
 	UOverlay* Stage = Make<UOverlay>(T);
-	UBorder* Halo = Box(T, Rounded(FLinearColor(0.08f, 0.05f, 0.2f, 0.35f), Violet * FLinearColor(1, 1, 1, 0.25f), 1.0f, 300.0f), FMargin(0));
-	UOverlaySlot* HaloSlot = Stage->AddChildToOverlay(Sized(T, Halo, 520.0f, 70.0f));
-	HaloSlot->SetHorizontalAlignment(HAlign_Center);
-	HaloSlot->SetVerticalAlignment(VAlign_Bottom);
-	HaloSlot->SetPadding(FMargin(0, 0, 0, 40));
 	PreviewImage = Make<UImage>(T);
 	PreviewImage->SetColorAndOpacity(FLinearColor::White);
 	UOverlaySlot* ImageSlot = Stage->AddChildToOverlay(PreviewImage);
@@ -520,68 +653,97 @@ void USOInventoryWidget::BuildTree()
 	ImageSlot->SetVerticalAlignment(VAlign_Fill);
 	UVerticalBox* Under = Make<UVerticalBox>(T);
 	UButton* BodyButton = Make<UButton>(T);
-	StyleButton(BodyButton, Rounded(Glass, Cyan * FLinearColor(1, 1, 1, 0.4f), 1.0f), Rounded(Glass * 1.8f, Cyan, 1.5f), Rounded(Glass * 2.2f, Cyan, 2.0f));
-	BodyLabel = Text(T, TEXT("BODY"), 11, Ink, true, 200);
-	BodyButton->SetContent(Box(T, FSlateColorBrush(FLinearColor::Transparent), FMargin(16, 6, 16, 6)));
+	FPlate BodyPlate;
+	BodyPlate.Cut = 8.0f;
+	BodyPlate.Edge = Alpha(Cyan, 0.4f);
+	FPlate BodyHover = BodyPlate;
+	BodyHover.Edge = Cyan;
+	BodyHover.EdgeWidth = 1.5f;
+	BodyHover.TopLight = 1.0f;
+	StyleButton(BodyButton, PlateBrush(this, BodyPlate), PlateBrush(this, BodyHover), PlateBrush(this, BodyHover));
+	BodyLabel = Text(T, TEXT("BODY"), 10, Ink, true, 240);
+	BodyButton->SetContent(Box(T, FSlateColorBrush(FLinearColor::Transparent), FMargin(18, 6, 18, 6)));
 	Cast<UBorder>(BodyButton->GetContent())->SetContent(BodyLabel);
 	BodyButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnBody);
 	Under->AddChildToVerticalBox(BodyButton)->SetHorizontalAlignment(HAlign_Center);
-	Under->AddChildToVerticalBox(Text(T, TEXT("drag to turn"), 10, Dim))->SetHorizontalAlignment(HAlign_Center);
 	UOverlaySlot* UnderSlot = Stage->AddChildToOverlay(Under);
 	UnderSlot->SetHorizontalAlignment(HAlign_Center);
 	UnderSlot->SetVerticalAlignment(VAlign_Bottom);
-	UCanvasPanelSlot* StageSlot = Root->AddChildToCanvas(Stage);
+	StageSlot = Root->AddChildToCanvas(Stage);
 	StageSlot->SetAnchors(FAnchors(0.5f, 0.0f, 0.5f, 1.0f));
 	StageSlot->SetOffsets(FMargin(-330.0f, 96.0f, 660.0f, 60.0f));
 
-	// top bar: title, power and the purse
+	// top bar: what this is, the figures, power on its own plate
 	UHorizontalBox* Top = Make<UHorizontalBox>(T);
 	UVerticalBox* Title = Make<UVerticalBox>(T);
-	Title->AddChildToVerticalBox(Text(T, TEXT("LOADOUT"), 30, Ink, true, 420));
-	Title->AddChildToVerticalBox(Text(T, TEXT("WAYFARER  ·  SHATTERED ORBIT"), 10, Cyan, true, 300));
+	Title->AddChildToVerticalBox(Text(T, TEXT("LOADOUT"), 30, Ink, true, 460));
+	Title->AddChildToVerticalBox(Text(T, TEXT("WAYFARER  ·  SHATTERED ORBIT"), 9, Cyan, true, 340));
 	Top->AddChildToHorizontalBox(Title);
 	UHorizontalBoxSlot* Spacer = Top->AddChildToHorizontalBox(Make<USpacer>(T));
 	Spacer->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	StatsText = Text(T, TEXT(""), 13, Dim, true, 80);
-	Top->AddChildToHorizontalBox(StatsText)->SetVerticalAlignment(VAlign_Center);
-	UHorizontalBox* PowerBox = Make<UHorizontalBox>(T);
-	PowerBox->AddChildToHorizontalBox(Text(T, TEXT("◆"), 22, Gold))->SetVerticalAlignment(VAlign_Center);
-	PowerText = Text(T, TEXT("0"), 38, Gold, true);
-	PowerBox->AddChildToHorizontalBox(PowerText)->SetPadding(FMargin(6, 0, 0, 0));
-	Top->AddChildToHorizontalBox(PowerBox)->SetPadding(FMargin(28, 0, 0, 0));
+	StatsRow = Make<UHorizontalBox>(T);
+	Top->AddChildToHorizontalBox(StatsRow)->SetVerticalAlignment(VAlign_Center);
+	FPlate PowerPlate;
+	PowerPlate.Cut = 12.0f;
+	PowerPlate.Edge = Alpha(Gold, 0.55f);
+	PowerPlate.Accent = Gold;
+	PowerPlate.AccentLeft = 3.0f;
+	PowerPlate.Wash = 0.16f;
+	UBorder* PowerBox = Box(T, PlateBrush(this, PowerPlate), FMargin(18, 5, 22, 5));
+	UVerticalBox* PowerLines = Make<UVerticalBox>(T);
+	PowerLines->AddChildToVerticalBox(Text(T, TEXT("POWER"), 8, Gold, true, 320));
+	PowerText = Text(T, TEXT("0"), 30, Gold, true);
+	PowerLines->AddChildToVerticalBox(PowerText);
+	PowerBox->SetContent(PowerLines);
+	UHorizontalBoxSlot* PowerSlot = Top->AddChildToHorizontalBox(PowerBox);
+	PowerSlot->SetVerticalAlignment(VAlign_Center);
 	UCanvasPanelSlot* TopSlot = Root->AddChildToCanvas(Top);
 	TopSlot->SetAnchors(FAnchors(0, 0, 1, 0));
-	TopSlot->SetOffsets(FMargin(56.0f, 26.0f, 56.0f, 70.0f));
-	UBorder* Rule = Box(T, FSlateColorBrush(Cyan * FLinearColor(1, 1, 1, 0.3f)), FMargin(0));
+	TopSlot->SetOffsets(FMargin(56.0f, 24.0f, 56.0f, 72.0f));
+	UBorder* Rule = Box(T, FSlateColorBrush(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f)), FMargin(0));
 	UCanvasPanelSlot* RuleSlot = Root->AddChildToCanvas(Rule);
 	RuleSlot->SetAnchors(FAnchors(0, 0, 1, 0));
-	RuleSlot->SetOffsets(FMargin(56.0f, 100.0f, 56.0f, 1.0f));
+	RuleSlot->SetOffsets(FMargin(56.0f, 102.0f, 56.0f, 1.0f));
+	UBorder* RuleLit = Box(T, FSlateColorBrush(Cyan), FMargin(0));
+	UCanvasPanelSlot* RuleLitSlot = Root->AddChildToCanvas(RuleLit);
+	RuleLitSlot->SetAnchors(FAnchors(0, 0, 0, 0));
+	RuleLitSlot->SetOffsets(FMargin(56.0f, 101.0f, 150.0f, 2.0f));
 
 	// the columns
 	LeftColumn = Make<UVerticalBox>(T);
 	UCanvasPanelSlot* LeftSlot = Root->AddChildToCanvas(LeftColumn);
 	LeftSlot->SetAnchors(FAnchors(0, 0, 0, 1));
-	LeftSlot->SetOffsets(FMargin(56.0f, 118.0f, 390.0f, 60.0f));
+	LeftSlot->SetOffsets(FMargin(56.0f, 122.0f, 390.0f, 60.0f));
 	RightColumn = Make<UVerticalBox>(T);
 	UCanvasPanelSlot* RightSlot = Root->AddChildToCanvas(RightColumn);
 	RightSlot->SetAnchors(FAnchors(1, 0, 1, 1));
-	RightSlot->SetOffsets(FMargin(-396.0f, 118.0f, 340.0f, 60.0f));
+	RightSlot->SetOffsets(FMargin(-396.0f, 122.0f, 340.0f, 60.0f));
 
-	// the flyout: a slot's grid and the details of the item under the cursor
-	Flyout = Box(T, Rounded(FLinearColor(0.02f, 0.03f, 0.055f, 0.97f), Cyan * FLinearColor(1, 1, 1, 0.45f), 1.2f, 4.0f), FMargin(18, 14, 18, 14));
-	UHorizontalBox* FlyRow = Make<UHorizontalBox>(T);
+	// a slot's bay: everything owned for it, beside its own column
+	FPlate BayPlate;
+	BayPlate.Cut = 18.0f;
+	BayPlate.Fill = FLinearColor(0.02f, 0.028f, 0.05f, 0.95f);
+	BayPlate.FillLow = FLinearColor(0.012f, 0.016f, 0.03f, 0.96f);
+	BayPlate.Edge = Alpha(Cyan, 0.35f);
+	BayPlate.Hatch = 1.0f;
+	Flyout = Box(T, PlateBrush(this, BayPlate), FMargin(18, 14, 8, 16));
 	UVerticalBox* GridColumn = Make<UVerticalBox>(T);
-	GridTitle = Text(T, TEXT(""), 12, Ink, true, 240);
-	GridColumn->AddChildToVerticalBox(GridTitle)->SetPadding(FMargin(0, 0, 0, 10));
+	GridTitle = Text(T, TEXT(""), 11, Ink, true, 300);
+	GridColumn->AddChildToVerticalBox(GridTitle)->SetPadding(FMargin(0, 0, 0, 12));
 	UScrollBox* GridScroll = Make<UScrollBox>(T);
 	Grid = Make<UWrapBox>(T);
 	Grid->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
 	GridScroll->AddChild(Grid);
 	UVerticalBoxSlot* GridScrollSlot = GridColumn->AddChildToVerticalBox(GridScroll);
 	GridScrollSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	FlyRow->AddChildToHorizontalBox(Sized(T, GridColumn, 420.0f, 0.0f));
-	UBorder* Divider = Box(T, FSlateColorBrush(Cyan * FLinearColor(1, 1, 1, 0.2f)), FMargin(0));
-	FlyRow->AddChildToHorizontalBox(Sized(T, Divider, 1.0f, 0.0f))->SetPadding(FMargin(16, 0, 16, 0));
+	Flyout->SetContent(GridColumn);
+	Flyout->SetVisibility(ESlateVisibility::Collapsed);
+	Root->AddChildToCanvas(Flyout);
+
+	// the details of the item under the cursor, on the far side
+	FPlate DetailPlate = BayPlate;
+	DetailPlate.Edge = FLinearColor(1.0f, 1.0f, 1.0f, 0.14f);
+	DetailPanel = Box(T, PlateBrush(this, DetailPlate), FMargin(24, 18, 22, 18));
 	UVerticalBox* DetailColumn = Make<UVerticalBox>(T);
 	UScrollBox* DetailScroll = Make<UScrollBox>(T);
 	Details = Make<UVerticalBox>(T);
@@ -592,10 +754,22 @@ void USOInventoryWidget::BuildTree()
 	auto Action = [&](TObjectPtr<UButton>& Out, TObjectPtr<UTextBlock>& Label, const TCHAR* Caption, const FLinearColor& Color)
 	{
 		Out = Make<UButton>(T);
-		StyleButton(Out, Rounded(Color * FLinearColor(0.3f, 0.3f, 0.3f, 0.9f), Color * FLinearColor(1, 1, 1, 0.6f), 1.0f),
-			Rounded(Color * FLinearColor(0.5f, 0.5f, 0.5f, 1.0f), Color, 1.5f), Rounded(Color * FLinearColor(0.7f, 0.7f, 0.7f, 1.0f), Color, 2.0f));
-		Label = Text(T, Caption, 12, Ink, true, 120);
-		Out->SetContent(Box(T, FSlateColorBrush(FLinearColor::Transparent), FMargin(14, 8, 14, 8)));
+		FPlate Normal;
+		Normal.Cut = 9.0f;
+		Normal.Accent = Alpha(Color, 1.0f);
+		Normal.Wash = 0.5f;
+		Normal.Edge = Alpha(Color, 0.55f);
+		FPlate Over = Normal;
+		Over.Wash = 0.95f;
+		Over.Edge = Alpha(Color, 1.0f);
+		Over.EdgeWidth = 1.5f;
+		Over.TopLight = 1.0f;
+		FPlate Down = Over;
+		Down.Wash = 1.3f;
+		Down.EdgeWidth = 2.0f;
+		StyleButton(Out, PlateBrush(this, Normal), PlateBrush(this, Over), PlateBrush(this, Down));
+		Label = Text(T, Caption, 11, Ink, true, 140);
+		Out->SetContent(Box(T, FSlateColorBrush(FLinearColor::Transparent), FMargin(16, 9, 16, 9)));
 		Cast<UBorder>(Out->GetContent())->SetContent(Label);
 		Actions->AddChildToHorizontalBox(Out)->SetPadding(FMargin(0, 0, 8, 0));
 	};
@@ -605,19 +779,24 @@ void USOInventoryWidget::BuildTree()
 	EquipButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnEquip);
 	LockButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnLock);
 	DismantleButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnDismantle);
-	DetailColumn->AddChildToVerticalBox(Actions)->SetPadding(FMargin(0, 12, 0, 0));
-	FlyRow->AddChildToHorizontalBox(Sized(T, DetailColumn, 470.0f, 0.0f));
-	Flyout->SetContent(FlyRow);
-	Flyout->SetVisibility(ESlateVisibility::Collapsed);
-	Root->AddChildToCanvas(Flyout);
+	DetailColumn->AddChildToVerticalBox(Actions)->SetPadding(FMargin(0, 14, 0, 0));
+	DetailPanel->SetContent(DetailColumn);
+	DetailPanel->SetVisibility(ESlateVisibility::Collapsed);
+	Root->AddChildToCanvas(DetailPanel);
 
-	// key hints
-	UTextBlock* Hints = Text(T, TEXT("Click a slot to open it   ·   E equip   ·   L lock   ·   X dismantle (twice)   ·   drag the character to turn   ·   Esc back / close"), 11, Dim);
+	// what the keys do
+	UHorizontalBox* Hints = Make<UHorizontalBox>(T);
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("CLICK"), TEXT("OPEN A SLOT")));
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("E"), TEXT("EQUIP")));
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("L"), TEXT("LOCK")));
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("X"), TEXT("DISMANTLE (TWICE)")));
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("DRAG"), TEXT("TURN")));
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("ESC"), TEXT("BACK")));
 	UCanvasPanelSlot* HintSlot = Root->AddChildToCanvas(Hints);
 	HintSlot->SetAnchors(FAnchors(0.5f, 1.0f, 0.5f, 1.0f));
 	HintSlot->SetAlignment(FVector2D(0.5f, 1.0f));
 	HintSlot->SetAutoSize(true);
-	HintSlot->SetOffsets(FMargin(0.0f, -18.0f, 0.0f, 0.0f));
+	HintSlot->SetOffsets(FMargin(0.0f, -20.0f, 0.0f, 0.0f));
 	Refresh();
 }
 
@@ -645,14 +824,15 @@ FSOTileInfo USOInventoryWidget::WeaponTile(const FSOWeaponInstance& W, bool bSlo
 	Tile.Rarity = RarityColor(W.Rarity);
 	Tile.Title = W.Name;
 	Tile.Sub = Data ? FString::Printf(TEXT("%s %s"), *ClassName(Data).ToUpper(), *Data->DisplayName.ToString().ToUpper()) : FString();
+	Tile.Tag = Tile.Sub;
 	Tile.Power = W.Power;
 	Tile.bEquipped = Inventory && Inventory->IsEquipped(W.Uid) && !bSlot;
 	Tile.bNew = W.bNew;
 	Tile.bWide = true;
-	Tile.Size = FVector2D(196.0f, 98.0f);
+	Tile.Size = FVector2D(190.0f, 95.0f);
 	if (!bSlot && W.bKeep && !Tile.bEquipped && !Tile.bNew)
 	{
-		Tile.Badge = TEXT("■");
+		Tile.Badge = TEXT("LOCKED");
 	}
 	return Tile;
 }
@@ -671,10 +851,10 @@ FSOTileInfo USOInventoryWidget::ArmorTile(const FSOArmorInstance& A, bool bSlot)
 	Tile.Power = A.Power;
 	Tile.bEquipped = A.bEquipped && !bSlot;
 	Tile.bNew = A.bNew;
-	Tile.Size = FVector2D(98.0f, 98.0f);
+	Tile.Size = FVector2D(91.0f, 91.0f);
 	if (bSlot && Item)
 	{
-		Tile.Badge = FString::Printf(TEXT("◇ %d armour"), Item->Armor);
+		Tile.Tag = FString::Printf(TEXT("%d ARMOUR"), Item->Armor);
 	}
 	return Tile;
 }
@@ -690,9 +870,16 @@ void USOInventoryWidget::Refresh()
 		Preview->Sync(Inventory);
 	}
 	PowerText->SetText(FText::AsNumber(Inventory->GetPower()));
-	StatsText->SetText(FText::FromString(FString::Printf(TEXT("ARMOUR %d     LEVEL %d     %d CREDITS     %d ALLOY     VAULT %d / %d"), Inventory->GetArmorRating(),
-		Inventory->GetLevel(), Inventory->GetCredits(), Inventory->GetAlloy(), Inventory->GetItems().Num(), USOLootLibrary::VaultCap)));
-	BodyLabel->SetText(FText::FromString(Inventory->GetBody() == TEXT("female") ? TEXT("BODY  ◂  FEMALE  ▸") : TEXT("BODY  ◂  MALE  ▸")));
+	StatsRow->ClearChildren();
+	const TPair<const TCHAR*, FString> Figures[] = {
+		{ TEXT("ARMOUR"), FString::FromInt(Inventory->GetArmorRating()) }, { TEXT("LEVEL"), FString::FromInt(Inventory->GetLevel()) },
+		{ TEXT("CREDITS"), FText::AsNumber(Inventory->GetCredits()).ToString() }, { TEXT("ALLOY"), FText::AsNumber(Inventory->GetAlloy()).ToString() },
+		{ TEXT("VAULT"), FString::Printf(TEXT("%d / %d"), Inventory->GetItems().Num(), USOLootLibrary::VaultCap) } };
+	for (const TPair<const TCHAR*, FString>& F : Figures)
+	{
+		StatsRow->AddChildToHorizontalBox(Figure(WidgetTree, F.Key, F.Value, Ink))->SetPadding(FMargin(0, 0, 38, 0));
+	}
+	BodyLabel->SetText(FText::FromString(Inventory->GetBody() == TEXT("female") ? TEXT("BODY   /   FEMALE") : TEXT("BODY   /   MALE")));
 	FillColumns();
 	FillFlyout();
 }
@@ -744,7 +931,7 @@ void USOInventoryWidget::FillColumns()
 		}
 		const FString Name = Tables && Tables->SlotNames.IsValidIndex(SlotId) ? Tables->SlotNames[SlotId].ToString().ToUpper() : FString::Printf(TEXT("SLOT %d"), SlotId + 1);
 		Info.Sub = FString::Printf(TEXT("%d  %s%s"), SlotId + 1, *Name, SlotId == Inventory->GetActiveSlot() ? TEXT("  ·  IN HAND") : TEXT(""));
-		Info.Badge = Info.Power > 0 ? FString::Printf(TEXT("◆ %d"), Info.Power) : FString();
+		Info.Badge.Reset();
 		Info.Key = FString::FromInt(SlotId);
 		Info.bActive = OpenSlotId == Info.Key;
 		AddTile(LeftColumn, Info);
@@ -796,16 +983,31 @@ void USOInventoryWidget::FillFlyout()
 	if (OpenSlotId.IsEmpty() || !Inventory)
 	{
 		Flyout->SetVisibility(ESlateVisibility::Collapsed);
+		DetailPanel->SetVisibility(ESlateVisibility::Collapsed);
+		LeftColumn->SetVisibility(ESlateVisibility::Visible);
+		RightColumn->SetVisibility(ESlateVisibility::Visible);
+		StageShiftTarget = 0.0f;
 		return;
 	}
 	Flyout->SetVisibility(ESlateVisibility::Visible);
-	// beside the slot's column, over the stage
+	DetailPanel->SetVisibility(ESlateVisibility::Visible);
+	// The bay beside the slot's own column, the details where the other column was, the character in the gap
+	// between them (1920 wide: column 56-446, bay 462-910, gap, details 1364-1864; mirrored for the right column).
 	const bool bLeft = IsWeaponSlot(OpenSlotId) || OpenSlotId == TEXT("outer") || OpenSlotId == TEXT("vest");
+	LeftColumn->SetVisibility(bLeft ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	RightColumn->SetVisibility(bLeft ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	StageShiftTarget = bLeft ? 177.0f : -177.0f;
 	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Flyout->Slot))
 	{
 		S->SetAnchors(bLeft ? FAnchors(0, 0, 0, 1) : FAnchors(1, 0, 1, 1));
 		S->SetAlignment(FVector2D(bLeft ? 0.0f : 1.0f, 0.0f));
-		S->SetOffsets(bLeft ? FMargin(404.0f, 118.0f, 960.0f, 60.0f) : FMargin(-410.0f, 118.0f, 960.0f, 60.0f));
+		S->SetOffsets(bLeft ? FMargin(462.0f, 122.0f, 448.0f, 60.0f) : FMargin(-412.0f, 122.0f, 448.0f, 60.0f));
+	}
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(DetailPanel->Slot))
+	{
+		S->SetAnchors(bLeft ? FAnchors(1, 0, 1, 1) : FAnchors(0, 0, 0, 1));
+		S->SetAlignment(FVector2D(bLeft ? 1.0f : 0.0f, 0.0f));
+		S->SetOffsets(bLeft ? FMargin(-56.0f, 122.0f, 500.0f, 60.0f) : FMargin(56.0f, 122.0f, 500.0f, 60.0f));
 	}
 	Grid->ClearChildren();
 	TArray<FSOTileInfo> Tiles;
@@ -850,6 +1052,10 @@ void USOInventoryWidget::FillFlyout()
 		}
 		Tiles.Sort([](const FSOTileInfo& A, const FSOTileInfo& B) { return A.bEquipped != B.bEquipped ? A.bEquipped : A.Title < B.Title; });
 		GridTitle->SetText(FText::FromString(FString::Printf(TEXT("%s  ·  %d"), *USOWardrobeData::SlotLabel(SlotId).ToString().ToUpper(), Tiles.Num())));
+	}
+	if (SelectedKey.IsEmpty() && Tiles.Num() > 0)
+	{
+		SelectedKey = Tiles[0].Key;                 // (nothing in the slot yet: the first thing owned for it is shown)
 	}
 	for (FSOTileInfo& Info : Tiles)
 	{
@@ -897,27 +1103,40 @@ void USOInventoryWidget::FillWeaponDetails(const FSOWeaponInstance& W)
 	const USOLootTables* Tables = USOLootLibrary::GetTables();
 	const USOWeaponData* Data = ArchetypeOf(W);
 	const FLinearColor Rarity = RarityColor(W.Rarity);
-	Details->AddChildToVerticalBox(Text(T, W.Name.ToUpper(), 24, Rarity, true, 60));
-	Details->AddChildToVerticalBox(Text(T, FString::Printf(TEXT("%s  ·  %s %s"), *RarityName(W.Rarity).ToUpper(), *ClassName(Data).ToUpper(),
-		Data ? *Data->DisplayName.ToString().ToUpper() : TEXT("")), 11, Ink, true, 140));
+	UTextBlock* GunName = Text(T, W.Name.ToUpper(), 24, Ink, true, 60);
+	GunName->SetAutoWrapText(true);
+	Details->AddChildToVerticalBox(GunName);
+	UHorizontalBox* Kind = Make<UHorizontalBox>(T);
+	Kind->AddChildToHorizontalBox(Chip(T, RarityName(W.Rarity).ToUpper(), Rarity))->SetVerticalAlignment(VAlign_Center);
+	UHorizontalBoxSlot* KindSlot = Kind->AddChildToHorizontalBox(Text(T, FString::Printf(TEXT("%s %s"), *ClassName(Data).ToUpper(),
+		Data ? *Data->DisplayName.ToString().ToUpper() : TEXT("")), 10, Dim, true, 180));
+	KindSlot->SetVerticalAlignment(VAlign_Center);
+	KindSlot->SetPadding(FMargin(10, 0, 0, 0));
+	Details->AddChildToVerticalBox(Kind)->SetPadding(FMargin(0, 6, 0, 0));
 	if (UTexture2D* Icon = Data ? Data->Icon.LoadSynchronous() : nullptr)
 	{
 		UImage* Big = Make<UImage>(T);
 		Big->SetBrushFromTexture(Icon, false);
 		UOverlay* Frame = Make<UOverlay>(T);
-		Frame->AddChildToOverlay(Box(T, Rounded(Rarity * FLinearColor(0.18f, 0.18f, 0.18f, 0.5f), Rarity * FLinearColor(1, 1, 1, 0.35f), 1.0f), FMargin(0)));
+		FPlate Shown;
+		Shown.Cut = 16.0f;
+		Shown.Accent = Alpha(Rarity, 1.0f);
+		Shown.AccentBottom = 2.0f;
+		Shown.Wash = 0.5f;
+		Shown.Hatch = 1.0f;
+		Frame->AddChildToOverlay(Box(T, PlateBrush(this, Shown), FMargin(0)));
 		UOverlaySlot* BigSlot = Frame->AddChildToOverlay(Big);
 		BigSlot->SetHorizontalAlignment(HAlign_Fill);
 		BigSlot->SetVerticalAlignment(VAlign_Fill);
-		Details->AddChildToVerticalBox(Sized(T, Frame, 440.0f, 210.0f))->SetPadding(FMargin(0, 8, 0, 8));
+		Details->AddChildToVerticalBox(Sized(T, Frame, 440.0f, 200.0f))->SetPadding(FMargin(0, 12, 0, 12));
 	}
 	UHorizontalBox* PowerRow = Make<UHorizontalBox>(T);
-	PowerRow->AddChildToHorizontalBox(Text(T, FString::Printf(TEXT("◆ %d"), W.Power), 26, Gold, true));
+	PowerRow->AddChildToHorizontalBox(Figure(T, TEXT("POWER"), FString::FromInt(W.Power), Gold, 26));
 	const FSOSightInfo* Sight = Tables ? Tables->FindSight(W.Sight) : nullptr;
 	UHorizontalBoxSlot* InfoSlot = PowerRow->AddChildToHorizontalBox(Text(T, FString::Printf(TEXT("Rolls %d %%   %s%s"), USOLootLibrary::RollQuality(W),
 		Sight ? *Sight->Name.ToString() : TEXT(""), W.Source.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("   ·   %s"), *W.Source)), 12, Dim));
-	InfoSlot->SetVerticalAlignment(VAlign_Center);
-	InfoSlot->SetPadding(FMargin(14, 0, 0, 0));
+	InfoSlot->SetVerticalAlignment(VAlign_Bottom);
+	InfoSlot->SetPadding(FMargin(18, 0, 0, 6));
 	Details->AddChildToVerticalBox(PowerRow)->SetPadding(FMargin(0, 0, 0, 10));
 
 	// stats against the equipped copy of the same slot
@@ -942,6 +1161,7 @@ void USOInventoryWidget::FillWeaponDetails(const FSOWeaponInstance& W)
 		Line->AddChildToHorizontalBox(Sized(T, Text(T, R.Name, 12, Dim), 90.0f, 0.0f));
 		UProgressBar* Bar = Make<UProgressBar>(T);
 		const float Fill = R.bLowerBetter ? 1.0f - FMath::Clamp(R.Value / R.Max, 0.0f, 0.95f) : FMath::Clamp(R.Value / R.Max, 0.03f, 1.0f);
+		FlatBar(Bar);
 		Bar->SetPercent(Fill);
 		bool bBetter = false, bWorse = false;
 		if (bCompare && !FMath::IsNearlyEqual(R.Value, R.Other, FMath::Abs(R.Other) * 0.005f + 0.001f))
@@ -950,7 +1170,7 @@ void USOInventoryWidget::FillWeaponDetails(const FSOWeaponInstance& W)
 			bWorse = !bBetter;
 		}
 		Bar->SetFillColorAndOpacity(bBetter ? Good : bWorse ? Bad : Ink * 0.85f);
-		UHorizontalBoxSlot* BarSlot = Line->AddChildToHorizontalBox(Sized(T, Bar, 0.0f, 7.0f));
+		UHorizontalBoxSlot* BarSlot = Line->AddChildToHorizontalBox(Sized(T, Bar, 0.0f, 4.0f));
 		BarSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		BarSlot->SetVerticalAlignment(VAlign_Center);
 		Line->AddChildToHorizontalBox(Sized(T, Text(T, R.Shown, 12, Ink, true), 92.0f, 0.0f))->SetPadding(FMargin(10, 0, 0, 0));
@@ -973,7 +1193,7 @@ void USOInventoryWidget::FillWeaponDetails(const FSOWeaponInstance& W)
 		if (const FSOPerkInfo* Perk = Tables ? Tables->FindPerk(PerkId) : nullptr)
 		{
 			UHorizontalBox* Row = Make<UHorizontalBox>(T);
-			Row->AddChildToHorizontalBox(Text(T, TEXT("◈"), 16, Violet))->SetPadding(FMargin(0, 0, 10, 0));
+			Row->AddChildToHorizontalBox(Sized(T, Box(T, FSlateColorBrush(Violet), FMargin(0)), 3.0f, 0.0f))->SetPadding(FMargin(0, 2, 12, 2));
 			UVerticalBox* Lines = Make<UVerticalBox>(T);
 			Lines->AddChildToVerticalBox(Text(T, Perk->Name.ToString(), 13, Ink, true));
 			UTextBlock* Desc = Text(T, Perk->Description.ToString(), 11, Dim);
@@ -1000,15 +1220,27 @@ void USOInventoryWidget::FillArmorDetails(const FSOArmorInstance& A)
 	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Inventory->GetBody());
 	const FSOWardrobeItem* Item = Wardrobe ? Wardrobe->Find(A.Slot, A.Item) : nullptr;
 	const FLinearColor Rarity = RarityColor(A.Rarity);
-	Details->AddChildToVerticalBox(Text(T, (Item ? Item->Label.ToString() : A.Item.ToString()).ToUpper(), 22, Rarity, true, 60));
-	Details->AddChildToVerticalBox(Text(T, FString::Printf(TEXT("%s  ·  %s ARMOUR"), *RarityName(A.Rarity).ToUpper(),
-		*USOWardrobeData::SlotLabel(A.Slot).ToString().ToUpper()), 11, Ink, true, 140));
+	UTextBlock* PieceName = Text(T, (Item ? Item->Label.ToString() : A.Item.ToString()).ToUpper(), 22, Ink, true, 60);
+	PieceName->SetAutoWrapText(true);
+	Details->AddChildToVerticalBox(PieceName);
+	UHorizontalBox* Kind = Make<UHorizontalBox>(T);
+	Kind->AddChildToHorizontalBox(Chip(T, RarityName(A.Rarity).ToUpper(), Rarity))->SetVerticalAlignment(VAlign_Center);
+	UHorizontalBoxSlot* KindSlot = Kind->AddChildToHorizontalBox(Text(T, FString::Printf(TEXT("%s ARMOUR"), *USOWardrobeData::SlotLabel(A.Slot).ToString().ToUpper()), 10, Dim, true, 180));
+	KindSlot->SetVerticalAlignment(VAlign_Center);
+	KindSlot->SetPadding(FMargin(10, 0, 0, 0));
+	Details->AddChildToVerticalBox(Kind)->SetPadding(FMargin(0, 6, 0, 0));
 	if (UTexture2D* Icon = Item ? Item->Icon.LoadSynchronous() : nullptr)
 	{
 		UImage* Big = Make<UImage>(T);
 		Big->SetBrushFromTexture(Icon, false);
 		UOverlay* Frame = Make<UOverlay>(T);
-		Frame->AddChildToOverlay(Box(T, Rounded(Rarity * FLinearColor(0.18f, 0.18f, 0.18f, 0.5f), Rarity * FLinearColor(1, 1, 1, 0.35f), 1.0f), FMargin(0)));
+		FPlate Shown;
+		Shown.Cut = 16.0f;
+		Shown.Accent = Alpha(Rarity, 1.0f);
+		Shown.AccentBottom = 2.0f;
+		Shown.Wash = 0.5f;
+		Shown.Hatch = 1.0f;
+		Frame->AddChildToOverlay(Box(T, PlateBrush(this, Shown), FMargin(0)));
 		UOverlaySlot* BigSlot = Frame->AddChildToOverlay(Big);
 		BigSlot->SetHorizontalAlignment(HAlign_Fill);
 		BigSlot->SetVerticalAlignment(VAlign_Fill);
@@ -1022,7 +1254,16 @@ void USOInventoryWidget::FillArmorDetails(const FSOArmorInstance& A)
 	{
 		Compare = FString::Printf(TEXT("   %s%d against what is worn"), Armor > WornItem->Armor ? TEXT("+") : TEXT(""), Armor - WornItem->Armor);
 	}
-	Details->AddChildToVerticalBox(Text(T, FString::Printf(TEXT("◆ %d     ◇ %d armour%s"), A.Power, Armor, *Compare), 14, Gold, true))->SetPadding(FMargin(0, 0, 0, 10));
+	UHorizontalBox* Figures = Make<UHorizontalBox>(T);
+	Figures->AddChildToHorizontalBox(Figure(T, TEXT("POWER"), FString::FromInt(A.Power), Gold, 26))->SetPadding(FMargin(0, 0, 30, 0));
+	Figures->AddChildToHorizontalBox(Figure(T, TEXT("ARMOUR"), FString::FromInt(Armor), Ink, 26));
+	if (!Compare.IsEmpty())
+	{
+		UHorizontalBoxSlot* CompareSlot = Figures->AddChildToHorizontalBox(Text(T, Compare, 11, Armor > (WornItem ? WornItem->Armor : 0) ? Good : Bad, true));
+		CompareSlot->SetVerticalAlignment(VAlign_Bottom);
+		CompareSlot->SetPadding(FMargin(6, 0, 0, 6));
+	}
+	Details->AddChildToVerticalBox(Figures)->SetPadding(FMargin(0, 0, 0, 10));
 	Details->AddChildToVerticalBox(Header(T, TEXT("PERKS")))->SetPadding(FMargin(0, 8, 0, 8));
 	UTextBlock* Note = Text(T, TEXT("Armour perks come with the world's later chapters: for now every piece is its look and its armour."), 11, Dim);
 	Note->SetAutoWrapText(true);

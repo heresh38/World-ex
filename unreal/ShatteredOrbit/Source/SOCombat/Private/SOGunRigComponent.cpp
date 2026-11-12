@@ -417,12 +417,33 @@ void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
 			const FString SlotName = Slots[i].ToString();
 			const bool bGlow = SlotName.StartsWith(TEXT("gun_glow"));
 			const bool bBody = bPaint && SlotName.StartsWith(TEXT("gun_body"));
-			if (!bGlow && !bBody)
+			const bool bLens = SlotName.StartsWith(TEXT("gun_lens"));
+			UMaterialInstanceDynamic* MID = bLens ? nullptr : Mesh->CreateDynamicMaterialInstance(i);
+			if (!MID)
 			{
 				continue;
 			}
-			UMaterialInstanceDynamic* MID = Mesh->CreateDynamicMaterialInstance(i);
-			if (!MID)
+			if (!bGlow)
+			{
+				// No two copies are worn alike (the owner: "every gun that drops should have a slightly different wear in
+				// the look so it's not just plastic looking"): how hard this copy was used comes from its own id (the same
+				// copy always looks the same), and nothing is left factory-clean.
+				FRandomStream Use(GetTypeHash(Instance.Uid) ^ GetTypeHash(Slots[i]));
+				const float Used = Use.FRandRange(0.0f, 1.0f);                  // 0 = looked after, 1 = dragged through a war
+				// (each layer: the least it may be, and how far this copy's use takes the material's own amount; a scratch
+				// layer near 1 stripes the whole gun, so it stays the smallest)
+				struct FLayer { const TCHAR* Name; float Least, Lo, Hi; };
+				const FLayer Layers[] = { { TEXT("EdgeWear"), 0.3f, 0.65f, 1.3f }, { TEXT("Scratches"), 0.1f, 0.5f, 1.45f }, { TEXT("Grime"), 0.18f, 0.55f, 1.5f } };
+				for (const FLayer& Layer : Layers)
+				{
+					const float Base = FMath::Max(MID->K2_GetScalarParameterValue(Layer.Name), Layer.Least);
+					const float Own = FMath::Lerp(Layer.Lo, Layer.Hi, FMath::Clamp(Used + Use.FRandRange(-0.2f, 0.2f), 0.0f, 1.0f));
+					MID->SetScalarParameterValue(Layer.Name, Base * Own);
+				}
+				// (the shared mask lands somewhere else on each copy)
+				MID->SetScalarParameterValue(TEXT("WearTiling"), MID->K2_GetScalarParameterValue(TEXT("WearTiling")) * Use.FRandRange(0.82f, 1.24f));
+			}
+			if (!bGlow && !bBody)
 			{
 				continue;
 			}
@@ -625,6 +646,8 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 	// revolver: crane swings out, cylinder spins, rounds leave and return
 	Place(TEXT("crane"), FVector::ZeroVector, GltfEulerToMesh(0.0f, 0.0f, Pose.Crane));
 	Place(TEXT("cylinder"), FVector::ZeroVector, GltfEulerToMesh(0.0f, 0.0f, Pose.Spin));
+	// a rotary gun: the barrel cluster about the bore
+	Place(TEXT("spin"), FVector::ZeroVector, GltfEulerToMesh(0.0f, 0.0f, BarrelSpin));
 	if (UStaticMeshComponent* Rounds = GetPart(TEXT("rounds")))
 	{
 		Rounds->SetVisibility(bShown && Pose.bRounds);

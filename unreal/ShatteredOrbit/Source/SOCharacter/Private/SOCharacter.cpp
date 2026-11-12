@@ -590,8 +590,9 @@ FVector ASOCharacter::GetAimDirection() const
 
 float ASOCharacter::GetSpreadScale() const
 {
-	// weapons.js spreadDir: aiming x0.45, moving x1.35, airborne x1.6.
-	float Scale = FMath::Lerp(1.0f, 0.45f, AimProgress);
+	// Aiming x0.25 (on the sights a gun shoots where its sight is: at x0.45 a machine gun's cone was a quarter of a
+	// scope's picture), moving x1.35, airborne x1.6.
+	float Scale = FMath::Lerp(1.0f, 0.25f, AimProgress);
 	if (GetVelocity().Size2D() > 50.0f)
 	{
 		Scale *= 1.35f;

@@ -82,6 +82,8 @@ public:
 	void SetShown(bool bInShown);
 
 	void ApplyPose(const FSOReloadPose& Pose);
+	/** The turn of a rotary gun's barrel cluster (the part named `spin`), radians about the bore. */
+	void SetBarrelSpin(float Radians) { BarrelSpin = Radians; }
 
 	/** World-space muzzle position. */
 	FVector GetMuzzleLocation() const;
@@ -120,6 +122,8 @@ public:
 
 	/** A rail optic is mounted (the gun's irons fold away, aiming looks through the optic). */
 	bool IsOpticMounted() const { return bOpticMounted; }
+	/** The optic on the rail (null with factory sights). */
+	const UStaticMeshComponent* GetOptic() const { return bOpticMounted ? Optic.Get() : nullptr; }
 
 	/** The gun carries its own optic (the energy line's built-in red dots) and no rail optic replaces it. */
 	bool HasBuiltInOptic() const;
@@ -167,6 +171,7 @@ private:
 	FName Archetype;
 	bool bShown = true;
 	bool bOpticMounted = false;
+	float BarrelSpin = 0.0f;
 	bool bHandgun = false;
 
 	/** A part's current transform in mesh space (nested parts included). */

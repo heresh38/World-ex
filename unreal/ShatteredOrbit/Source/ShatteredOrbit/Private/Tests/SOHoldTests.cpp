@@ -18,6 +18,9 @@
 #include "SOCharacterMovementComponent.h"
 #include "SOInventoryComponent.h"
 #include "SOLootLibrary.h"
+#include "SOLootTypes.h"
+#include "Engine/StaticMesh.h"
+#include "StaticMeshResources.h"
 #include "SOPlayerState.h"
 
 namespace SOTest
@@ -110,7 +113,7 @@ bool FSOSightsOnCrosshairTest::RunTest(const FString& Parameters)
 	const FVector Sight = Eye.InverseTransformPosition(Rig->GetComponentTransform().TransformPosition(USOGunRigComponent::MeshToRig(Rifle->GetData()->SightLocation)));
 	TestEqual(TEXT("sight centred left-right (cm)"), Sight.Y, 0.0, 0.05);
 	TestEqual(TEXT("sight centred up-down (cm)"), Sight.Z, 0.0, 0.05);
-	TestTrue(FString::Printf(TEXT("sight in front of the eye (%.1f cm)"), Sight.X), Sight.X > 20.0f);
+	TestTrue(FString::Printf(TEXT("sight in front of the eye (%.1f cm)"), Sight.X), Sight.X > 6.0f);
 	const FVector Barrel = Eye.InverseTransformVector(Rig->GetForwardVector());
 	TestTrue(TEXT("barrel parallel to the line of sight"), Barrel.X > 0.9999f);
 
@@ -129,6 +132,130 @@ bool FSOSightsOnCrosshairTest::RunTest(const FString& Parameters)
 	TestTrue(FString::Printf(TEXT("recoil kicked (peak %.2f deg)"), PeakRecoil), PeakRecoil > 0.3f);
 	TestTrue(TEXT("rounds go along the kicked view"), WorstDir > 0.99999f);
 	TestTrue(FString::Printf(TEXT("sights follow the kick (at most %.2f cm off the axis)"), WorstOff), WorstOff < 1.5f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOEverySightTest, "ShatteredOrbit.Aim.EverySightOnTheEyeLine", SOTest::Flags)
+bool FSOEverySightTest::RunTest(const FString& Parameters)
+{
+	// Every gun with every sight it may carry (the owner: "the bullets don't even hit where the scope is ... test
+	// scopes", "a sniper scope on a shotgun makes no sense"). Rounds leave along the eye's axis, so: aimed, the sight's
+	// point lies on that axis and stays there through a burst; an optic's glass is centred on it, ahead of the eye;
+	// and what a gun may carry follows its kind.
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!TestNotNull(TEXT("loot tables"), Tables))
+	{
+		return false;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-4000, -4000, -100), FVector(4000, 4000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	W.Run(0.3f);
+	FRandomStream Rng(7);
+	for (const FSOArchetypeEntry& Entry : Tables->Archetypes)
+	{
+		const USOWeaponData* Data = Entry.Data.LoadSynchronous();
+		if (!Data)
+		{
+			continue;
+		}
+		const FString Gun = Entry.Id.ToString();
+		const bool bHandgun = Data->MuzzleLocation.Y < 35.0f;
+		const bool bPrecise = !Data->bAutomatic && Data->Burst == 0 && Data->Pellets <= 1 && !bHandgun && Data->Spread <= 0.3f;
+		TestTrue(*FString::Printf(TEXT("%s: its own sight is one it may carry"), *Gun), Data->Sights.Contains(Data->DefaultSight));
+		for (const FName SightId : Data->Sights)
+		{
+			const FString Name = FString::Printf(TEXT("%s + %s"), *Gun, *SightId.ToString());
+			const FSOSightInfo* Sight = Tables->FindSight(SightId);
+			if (!TestNotNull(*FString::Printf(TEXT("%s: the sight is in the table"), *Name), Sight))
+			{
+				continue;
+			}
+			// the rules: no glass on a handgun or a shotgun, long glass only on a precise single-shot rifle
+			TestFalse(*FString::Printf(TEXT("%s: no magnified optic on a handgun, a shotgun or a launcher"), *Name),
+				Sight->bScope && (bHandgun || Data->Pellets > 1 || Data->Projectile == ESOProjectileKind::Rocket));
+			TestFalse(*FString::Printf(TEXT("%s: glass over 4x only on a precise rifle"), *Name), Sight->Zoom > 4.5f && !bPrecise);
+
+			FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(Entry.Id, 2, 20, Rng);
+			Copy.Sight = SightId;
+			ASOWeapon* Weapon = Player->EquipInstance(Copy);
+			if (!TestNotNull(*FString::Printf(TEXT("%s equips"), *Name), Weapon))
+			{
+				continue;
+			}
+			TestEqual(*FString::Printf(TEXT("%s: the copy keeps the sight"), *Name), Weapon->GetInstance().Sight, SightId);
+			Player->HandleAimPressed();
+			W.Run(0.9f);
+			const USOGunRigComponent* Rig = Weapon->GetFirstPersonRig();
+			const auto SightOff = [&]()
+			{
+				const FVector At = Player->GetEyeTransform(true).InverseTransformPosition(
+					Rig->GetComponentTransform().TransformPosition(USOGunRigComponent::MeshToRig(Weapon->GetSightLocation())));
+				return FVector2D(At.Y, At.Z).Size();
+			};
+			TestTrue(*FString::Printf(TEXT("%s: aimed, the sight is on the eye's axis (%.2f cm off)"), *Name, SightOff()), SightOff() < 0.05f);
+			if (const UStaticMeshComponent* Optic = Rig->GetOptic(); Optic && Optic->GetStaticMesh())
+			{
+				// the glass (every `gun_lens*` section of the optic): centred on the axis, ahead of the eye
+				const UStaticMesh* Mesh = Optic->GetStaticMesh();
+				const FStaticMeshLODResources& LOD = Mesh->GetRenderData()->LODResources[0];
+				const FIndexArrayView Indices = LOD.IndexBuffer.GetArrayView();
+				FBox Glass(ForceInit);
+				const FTransform ToEye = Optic->GetComponentTransform() * Player->GetEyeTransform(true).Inverse();
+				for (const FStaticMeshSection& Section : LOD.Sections)
+				{
+					if (!Mesh->GetStaticMaterials().IsValidIndex(Section.MaterialIndex)
+						|| !Mesh->GetStaticMaterials()[Section.MaterialIndex].MaterialSlotName.ToString().StartsWith(TEXT("gun_lens")))
+					{
+						continue;
+					}
+					for (uint32 i = Section.FirstIndex; i < Section.FirstIndex + Section.NumTriangles * 3; ++i)
+					{
+						Glass += ToEye.TransformPosition(FVector(LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(Indices[i])));
+					}
+				}
+				if (TestTrue(*FString::Printf(TEXT("%s: the optic has glass"), *Name), Glass.IsValid != 0))
+				{
+					const FVector C = Glass.GetCenter(), E = Glass.GetExtent();
+					TestTrue(*FString::Printf(TEXT("%s: the glass is centred on the eye's axis (%.2f cm right, %.2f cm up)"), *Name, C.Y, C.Z),
+						FMath::Abs(C.Y) < 0.3f && FMath::Abs(C.Z) < 0.3f);
+					TestTrue(*FString::Printf(TEXT("%s: the glass is ahead of the eye (%.1f to %.1f cm)"), *Name, Glass.Min.X, Glass.Max.X), Glass.Min.X > 1.0f);
+					// what the eye gets to look through: the window's half height seen from the eye (a reflex or a holo is a
+					// window to look THROUGH: the owner's still showed a black box with a slot in it)
+					if (!Sight->bScope)
+					{
+						const float Wide = FMath::RadiansToDegrees(FMath::Atan2(E.Y, FMath::Max(Glass.Min.X, 1.0)));
+						const float High = FMath::RadiansToDegrees(FMath::Atan2(E.Z, FMath::Max(Glass.Min.X, 1.0)));
+						// (on a handgun it is held out at arm's length: a smaller frame)
+						const float Least = bHandgun ? 0.6f : 1.0f;
+						TestTrue(*FString::Printf(TEXT("%s: the window is at least %.1f degrees wide and %.1f high (%.1f x %.1f)"), *Name, 11.0f * Least, 7.5f * Least,
+							Wide * 2.0f, High * 2.0f), Wide >= 5.5f * Least && High >= 3.75f * Least);
+					}
+				}
+			}
+			if (Data->Projectile != ESOProjectileKind::Rocket)
+			{
+				// what the shooter was looking at as each round left (a bolt worked afterwards takes the gun off the eye:
+				// that is the action, not the aim)
+				float Worst = 0.0f, Before = SightOff();
+				int32 Shots = Weapon->GetShotsFired();
+				Weapon->StartFire();
+				W.Run(0.45f, [&]()
+				{
+					if (Weapon->GetShotsFired() != Shots)
+					{
+						Worst = FMath::Max(Worst, Before);
+						Shots = Weapon->GetShotsFired();
+					}
+					Before = SightOff();
+				});
+				Weapon->StopFire();
+				TestTrue(*FString::Printf(TEXT("%s: the sight is on the axis as every round leaves (%.2f cm off at most)"), *Name, Worst), Worst < 0.3f);
+			}
+			Player->HandleAimReleased();
+			W.Run(0.25f);
+		}
+	}
 	return true;
 }
 

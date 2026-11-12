@@ -5,7 +5,7 @@
 Options:
   --single           the whole file as one FBX named after the GLB (default: one FBX per root object)
   --keep-location    keep each asset's GLB position (default: exported at the origin)
-  --split-parts      guns: the reload parts (mag, bolt, charge, slide, pump, crane, cylinder, rounds, hatch, biomass), the
+  --split-parts      guns: the moving parts (mag, bolt, charge, slide, pump, crane, cylinder, rounds, hatch, biomass, spin), the
                      built-in sight a mounted optic replaces (OPTIC) and the loose reload props (x_*)
                      become their own FBX files with the origin at their pivot; <asset>.parts.json gives their rest
                      transforms and the gun's empties (muzzle, sight, rail, foregrip, ...) in Unreal mesh space
@@ -48,7 +48,7 @@ from mathutils import Matrix
 
 LOD_RE = re.compile(r"^(?P<base>.+?)_(?:(?P<mid>mid)|(?:lod|LOD)(?P<n>\d*))$")
 COL_RE = re.compile(r"^(UCX_.+|.+_(?:col|collision)(?:\.\d+)?)$", re.I)
-PARTS = ("mag", "bolt", "charge", "slide", "pump", "crane", "cylinder", "rounds", "hatch", "biomass", "OPTIC", "irons")
+PARTS = ("mag", "bolt", "charge", "slide", "pump", "crane", "cylinder", "rounds", "hatch", "biomass", "spin", "OPTIC", "irons")
 
 
 def parse_args():
