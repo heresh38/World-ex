@@ -120,6 +120,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float HeadCant = 0.0f;   // degrees: aiming a long gun in third person, the head leans onto the stock
 	FTransform RightTarget;
 	FTransform LeftTarget;
+	bool bSupportOnPost = false;   // (the support hand is round a vertical fore grip: it may reach nearly straight)
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
 	/** Eye position in component space (first person: the shoulders turn with the view about it). */
@@ -344,6 +345,8 @@ public:
 	bool HasFittedGrip() const { return bFitDone; }
 	/** The support hand was turned to another hold than the rig's own (a vertical fore grip): its basis in the gun's frame. */
 	bool GetFittedTurn(FQuat& OutBasis) const { OutBasis = FitBasis; return bFitTurn; }
+	/** The support hand holds a vertical fore grip now (fitted round one, and not reloading). */
+	bool IsSupportOnPost() const { return bFitTurn && FitWeight > 0.5f; }
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
 	 *  Mantle, Climb, Crouch, CrouchWalk, Stop. */

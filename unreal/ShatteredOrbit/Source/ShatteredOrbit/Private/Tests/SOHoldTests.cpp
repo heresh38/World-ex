@@ -31,7 +31,7 @@ namespace SOTest
 	 *  Never add a gun to it to make a failure go away. */
 	bool HoldNotYet(const FString& Arch)
 	{
-		static const TCHAR* Guns[] = { TEXT("hmg"), TEXT("ksmg"), TEXT("spitter"), TEXT("brood"), TEXT("vr_sniper"), TEXT("vr_lmg") };
+		static const TCHAR* Guns[] = { TEXT("hmg"), TEXT("ksmg"), TEXT("brood"), TEXT("vr_sniper"), TEXT("vr_lmg") };
 		return Algo::Find(Guns, Arch) != nullptr;
 	}
 

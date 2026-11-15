@@ -397,9 +397,13 @@ and in `MeasureHold` alike (carried straight on from the middle bone, a bent tip
 A gun may bring its own hold instead (`Data/holds/<archetype>.json`, `FSOGunHold`: both wrists, hand directions and
 every finger; read as the rig is built, nothing fitted; none written yet). Measured by `MeasureHold` (wrist bend, reach,
 finger bones in the gun, the palm's gap at its middle and 2.5 cm on); tests `ShatteredOrbit.Hold.*` (`TheGunIsSolid`,
-`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: hmg (a finger bone on the grip's
-front), vr_lmg (a support fingertip), brood (fingers sink into its thick post), ksmg (a palm bone on the post),
-spitter, vr_sniper (support hands). A gun's own shape can make a grip impossible: the heavy machine gun's drum
+`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: hmg (the trigger finger's first
+bone starts in the frame: the hand sits too high on that grip for it), ksmg (its first-person gun finds no post where
+the third-person one does: that hand takes the handguard grip, sunk), vr_lmg (a support fingertip), vr_sniper (palm
+bones on its finned fore end in third person), brood (third person: palm off the gun). A post is wrapped with the
+hand running along its side (angled 30 % into it, the palm's bones crossed it), and only where the arm reaches it:
+the arm's rule slides a support hand back along the gun past 93 % of its reach, off the post with the fingers still
+curled for it, so a hand round a post may reach to 98.5 % (`bSupportOnPost`) and a post beyond reach is not taken. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
 **Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
