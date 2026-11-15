@@ -214,7 +214,9 @@ still embeds the 4096 px tiling maps: the exporter should stop).
   onto UV 1 (`gun_rifle_u_n`); the master material turns the surface onto them (`UniqueNormalTex`, no tangent frame
   on UV 1 needed). In the game: rounded, lit edges, no facet bands on the turned parts, nothing inverted. Not yet: a
   high-poly SCULPTED beyond the game model (castings' draft and fillets, the stamped receiver's radii, wood grain
-  relief): what is baked now is the rounding of the game model's own edges.
+  relief): what is baked now is the rounding of the game model's own edges. Rolled out to all eleven light guns
+  the same day (auto, pulse, scout, handcannon, shotgun, sniper, rocket, smg, sidearm, hmg, energy: each passes the
+  gate, high-poly 47k to 95k faces against game models of 21k to 45k; `SO_r_<gun>_*` reviewed in the game).
 - 37 % of the UV 1 atlas is spent on faces that lie under other parts (measured by the gate). It goes away
   only with a welded model (one skin, the panels cut into it), which is the high-poly / low-poly step below.
 - Neutral-light pictures are Blender's; in the engine the review stands in the range's daylight only. Dark

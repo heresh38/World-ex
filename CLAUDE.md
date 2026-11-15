@@ -166,8 +166,8 @@ existing classes, never second systems.
   `SO_IMPORT_ONLY=weapons,guntextures SO_WEAPONS_ONLY=rifle`. Known cost: a gun's GLB now carries the 4096 px
   tiling maps (the rifle's is 130 MB): the exporter should stop embedding them. Look at ONE gun in the game:
   `SOCaptureSeries 1 29 -SOGuns=<archetype>` (the gun alone from each flank, three quarters, close on the receiver,
-  the markings, the muzzle: files `SO_r_<gun>_*`). **The high-poly** (`bakekit.bake_highpoly_normals`, the rifle first; `SO_GUN_HIGHPOLY=all` or a list for
-  the others): the game model with its hard edges rounded (0.7 mm bevel, three steps, weighted normals), its normals baked
+  the markings, the muzzle: files `SO_r_<gun>_*`). **The high-poly** (`bakekit.bake_highpoly_normals`, every gun with own maps: the rifle and all
+  eleven light guns; `SO_GUN_HIGHPOLY=none` skips it, a list bakes only those): the game model with its hard edges rounded (0.7 mm bevel, three steps, weighted normals), its normals baked
   in OBJECT space onto UV 1 (`<gun>_u_n`, imported BC7 linear as `T_<gun>_u_n`); `M_SOStandard` decodes it (Blender
   X left, Y back, Z up -> mesh X, -Y, Z), takes it to world space and turns the surface normal (tiling and detail on
   it) from the game model's own normal onto it (`UniqueNormalTex`, `UniqueNormalAmount`). The rifle's report (cost, met, not met) is `ASSET_AUDIT.md`

@@ -123,12 +123,14 @@ def own_maps(name, info=None):
     size = int(os.environ.get("SO_GUN_BAKE_SIZE", "4096"))
     maps = bakekit.bake(objs, size)
     gunpaint.paint(name, maps, spec, bl.TEXTURES)
-    # the high-poly's normals (the rifle first; SO_GUN_HIGHPOLY=all or a list reaches the others): <gun>_u_n
-    hp = os.environ.get("SO_GUN_HIGHPOLY", "gun_rifle")
+    # the high-poly's normals, for every gun with own maps (the rifle and the light guns so far): <gun>_u_n
+    # (SO_GUN_HIGHPOLY=none skips them, a list of names bakes only those)
+    hp = os.environ.get("SO_GUN_HIGHPOLY", "all")
     if hp == "all" or name in hp.split(","):
         n, cover = bakekit.bake_highpoly_normals(objs, size)
         if n is not None:
-            gunpaint.save_normals(os.path.join(bl.TEXTURES, f"{name}_u_n.png"), n, cover, maps["nrm"])
+            # (what the gun covers on its map: the first bake's, exact; the normal bake marks every texel)
+            gunpaint.save_normals(os.path.join(bl.TEXTURES, f"{name}_u_n.png"), n, maps["cover"], maps["nrm"])
 
 
 def scale_tree(root, s):
