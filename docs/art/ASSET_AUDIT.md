@@ -208,9 +208,13 @@ still embeds the 4096 px tiling maps: the exporter should stop).
 - Import clean (0 materials failed), the reload parts and pivots as they were.
 
 **Not met, or not yet checked.**
-- **No high-poly model and no baked normal map.** The low model is the only model: its bevels are real geometry,
-  its small relief (markings, welds, seam) is a painted height bent into the normal. The specification's
-  high-to-low bake has nothing to bake from until a detailed model is made.
+- **High-poly and baked normals: a first pass (2026-11-15).** `bakekit.bake_highpoly_normals` makes the high-poly
+  from the game model (every edge sharper than 35 degrees rounded by a 0.7 mm bevel in three steps, normals weighted
+  by face area so flats stay flat: 106k faces against the game model's 47k) and bakes its normals in object space
+  onto UV 1 (`gun_rifle_u_n`); the master material turns the surface onto them (`UniqueNormalTex`, no tangent frame
+  on UV 1 needed). In the game: rounded, lit edges, no facet bands on the turned parts, nothing inverted. Not yet: a
+  high-poly SCULPTED beyond the game model (castings' draft and fillets, the stamped receiver's radii, wood grain
+  relief): what is baked now is the rounding of the game model's own edges.
 - 37 % of the UV 1 atlas is spent on faces that lie under other parts (measured by the gate). It goes away
   only with a welded model (one skin, the panels cut into it), which is the high-poly / low-poly step below.
 - Neutral-light pictures are Blender's; in the engine the review stands in the range's daylight only. Dark

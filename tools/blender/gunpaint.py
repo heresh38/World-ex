@@ -164,6 +164,15 @@ def _fill(a, cover, rounds=6, rest=0.0):
     return np.where(c > .5, out, rest)
 
 
+def save_normals(path, n, cover, low):
+    """The high-poly's object-space normals as a map: where nothing was baked, the game model's own normal (so the
+    smaller mips and the islands' edges carry no stray directions)."""
+    base = low if low is not None else np.dstack([np.zeros_like(cover, F32)] * 2 + [np.ones_like(cover, F32)])
+    out = np.where(cover[..., None], n, base)
+    out /= np.maximum(np.linalg.norm(out, axis=2, keepdims=True), 1e-6)
+    _save(path, out * .5 + .5)
+
+
 def _save(path, rgb):
     H, W = rgb.shape[:2]
     if rgb.ndim == 2:

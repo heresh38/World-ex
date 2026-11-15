@@ -92,6 +92,10 @@ def import_texture(file_path, dest, name, kind):
     elif kind == "mask":
         tex.set_editor_property("srgb", False)
         tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
+    elif kind == "objnormal":
+        # a high-poly's normals in the asset's own frame (bakekit.bake_highpoly_normals): linear, BC7, never flipped
+        tex.set_editor_property("srgb", False)
+        tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
     if "_skin_" in name.lower():
         # the players' skin maps are written at 4K; the game holds them at 2K (three per body: video memory)
         tex.set_editor_property("max_texture_size", 2048)
@@ -113,11 +117,13 @@ def default_textures():
     write_png(os.path.join(folder, "T_WhiteMask.png"), (255, 255, 255, 255))
     write_png(os.path.join(folder, "T_FlatNormal.png"), (128, 128, 255, 255))
     write_png(os.path.join(folder, "T_Clear.png"), (255, 255, 255, 0))
+    write_png(os.path.join(folder, "T_FlatObjNormal.png"), (128, 128, 255, 255))
     return {
         "clear": import_texture(os.path.join(folder, "T_Clear.png"), "/Game/Materials", "T_Clear", "color"),
         "white": import_texture(os.path.join(folder, "T_White.png"), "/Game/Materials", "T_White", "color"),
         "mask": import_texture(os.path.join(folder, "T_WhiteMask.png"), "/Game/Materials", "T_WhiteMask", "mask"),
         "normal": import_texture(os.path.join(folder, "T_FlatNormal.png"), "/Game/Materials", "T_FlatNormal", "normal"),
+        "objnormal": import_texture(os.path.join(folder, "T_FlatObjNormal.png"), "/Game/Materials", "T_FlatObjNormal", "objnormal"),
     }
 
 
@@ -158,6 +164,25 @@ return lerp(r, 0.5, saturate((U2.b - 0.35) * 3.0) * UA);
 }
 # The relief of an asset's own height map (UV 1), bent into the normal without a tangent frame of its own (the
 # surface's own derivatives): N the world normal, WP the world position, H the height, K centimetres to the unit.
+# The high-poly's normal (an asset's own map UniqueNormalTex on UV 1, in the asset's frame, turned to world space): the
+# surface normal so far N (tiling set + detail, world) is turned by the rotation that takes the game model's own
+# normal V onto the high-poly's O, by UNA. The tiling detail rides on the rounded edges; with UNA = 0 nothing changes.
+HIGHPOLY_HLSL = """
+float3 v = normalize(V);
+float3 h = normalize(lerp(v, normalize(O), UNA));
+float3 ax = cross(v, h);
+float s = length(ax);
+if (s < 1e-5) return N;
+ax /= s;
+float c = dot(v, h);
+return normalize(N * c + cross(ax, N) * s + ax * dot(ax, N) * (1.0 - c));
+"""
+# the map's colour to a normal in the mesh's own frame (Blender X left, Y back, Z up -> the imported mesh: X, -Y, Z)
+OBJNORMAL_HLSL = """
+float3 o = T * 2.0 - 1.0;
+return float3(o.x, -o.y, o.z);
+"""
+
 BUMP_HLSL = """
 float3 dpx = ddx(WP);
 float3 dpy = ddy(WP);
@@ -272,6 +297,9 @@ def master_material(defaults):
         mel.connect_material_expressions(uv1, "", t, "UVs")
         own.append(t)
     uamt = scalar("UniqueAmount", 0.0, -1000, 3800)
+    hpn_tex = tex_param("UniqueNormalTex", S.SAMPLERTYPE_LINEAR_COLOR, defaults["objnormal"], -1000, 3950)
+    mel.connect_material_expressions(uv1, "", hpn_tex, "UVs")
+    hpn_amt = scalar("UniqueNormalAmount", 0.0, -1000, 4180)
 
     def wear_node(kind, inputs, out_type, y):
         node = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -250, y)
@@ -334,10 +362,23 @@ def master_material(defaults):
         to_world.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_TANGENT)
         to_world.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
         mel.connect_material_expressions(fn, "", to_world, "")
+        # the high-poly's normal: decoded, its frame to world, the surface turned onto it
+        hp_obj = _custom(mat, OBJNORMAL_HLSL, ("T",), F.CMOT_FLOAT3, 380, 1180)
+        mel.connect_material_expressions(hpn_tex, "RGB", hp_obj, "T")
+        hp_world = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, 560, 1180)
+        hp_world.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL)
+        hp_world.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+        mel.connect_material_expressions(hp_obj, "", hp_world, "")
+        vnormal = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, 560, 1320)
+        turned = _custom(mat, HIGHPOLY_HLSL, ("N", "V", "O", "UNA"), F.CMOT_FLOAT3, 560, 760)
+        mel.connect_material_expressions(to_world, "", turned, "N")
+        mel.connect_material_expressions(vnormal, "", turned, "V")
+        mel.connect_material_expressions(hp_world, "", turned, "O")
+        mel.connect_material_expressions(hpn_amt, "", turned, "UNA")
         wpos = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, 380, 900)
         bump_k = mul(scalar("UniqueBump", 0.40, 380, 1040), "", uamt, "", 560, 1040)
         relief = _custom(mat, BUMP_HLSL, ("N", "WP", "H", "K"), F.CMOT_FLOAT3, 720, 800)
-        mel.connect_material_expressions(to_world, "", relief, "N")
+        mel.connect_material_expressions(turned, "", relief, "N")
         mel.connect_material_expressions(wpos, "", relief, "WP")
         mel.connect_material_expressions(own[2], "R", relief, "H")
         mel.connect_material_expressions(bump_k, "", relief, "K")
@@ -1131,6 +1172,8 @@ def gun_instances(master, src, dest, materials, clear, model=None):
             own[k] = import_texture(f, dest, f"T_{model}_u_{k}", "mask")
             own[k].set_editor_property("max_texture_size", hold)
             eal.save_loaded_asset(own[k], only_if_is_dirty=False)
+    hp_file = os.path.join(REPO_TEXTURES, f"{model}_u_n.png") if model else ""
+    hp_normals = import_texture(hp_file, dest, f"T_{model}_u_n", "objnormal") if hp_file and os.path.exists(hp_file) else None
     for k, v in materials.items():
         key = base_slot(k)
         m = dict(v)
@@ -1148,6 +1191,10 @@ def gun_instances(master, src, dest, materials, clear, model=None):
                 mel.set_material_instance_texture_parameter_value(mi, f"UniqueTex{i + 1}", own[k])
                 sampled(mi, own[k], 1, 1.0)                    # (on UV 1, once across the gun: the streamer must be told)
             mel.set_material_instance_scalar_parameter_value(mi, "UniqueAmount", 1.0)
+            if hp_normals:
+                mel.set_material_instance_texture_parameter_value(mi, "UniqueNormalTex", hp_normals)
+                sampled(mi, hp_normals, 1, 1.0)
+                mel.set_material_instance_scalar_parameter_value(mi, "UniqueNormalAmount", 1.0)
             mel.update_material_instance(mi)
             eal.save_loaded_asset(mi, only_if_is_dirty=False)
         amounts = next((a for name, a in GUN_WEAR.items() if key == name or key.startswith(name + "__")), None)

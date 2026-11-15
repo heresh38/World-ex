@@ -357,6 +357,107 @@ def bake(objs, size=4096, samples=48, reach=.06, log=print):
     return out
 
 
+def bake_highpoly_normals(objs, size=4096, bevel=.0007, segments=3, angle=35.0, log=print):
+    """The high-poly model and its normals baked onto the game model (the art-production specification: a high-poly
+    and a game-ready model with the details BAKED). The high-poly is the game model with every hard edge rounded as a
+    machined or moulded part's is (a bevel of `bevel` metres in `segments` steps on edges sharper than `angle`), its
+    normals weighted by face area so the flats stay flat and only the rounding turns. Its normals are baked in OBJECT
+    space (the gun's own frame: X left, Y back, Z up) onto the unique UV set: the game turns the surface's normal onto
+    them (M_SOStandard UniqueNormalTex, on UV 1, no tangent frame needed). Returns (size, size, 3) normals, rows from
+    the top, and the cover mask; (None, None) if it could not be baked."""
+    sc = bpy.context.scene
+    objs = [o for o in objs if o.type == 'MESH' and len(o.data.polygons)]
+    bpy.ops.object.select_all(action='DESELECT')
+    copies = []
+    for o in objs:
+        c = o.copy()
+        c.data = o.data.copy()
+        sc.collection.objects.link(c)
+        c.select_set(True)
+        copies.append(c)
+    bpy.context.view_layer.objects.active = copies[0]
+    bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    bpy.ops.object.join()
+    low = bpy.context.view_layer.objects.active
+    low.name = "BakeLow"
+    low.data.uv_layers.active = low.data.uv_layers[UV]
+    # the high-poly: rounded edges, weighted normals
+    high = low.copy()
+    high.data = low.data.copy()
+    high.name = "BakeHigh"
+    sc.collection.objects.link(high)
+    for p in high.data.polygons:
+        p.use_smooth = True
+    b = high.modifiers.new("Round", 'BEVEL')
+    b.width = bevel
+    b.segments = segments
+    b.limit_method = 'ANGLE'
+    b.angle_limit = math.radians(angle)
+    b.use_clamp_overlap = True
+    b.harden_normals = False
+    w = high.modifiers.new("Weighted", 'WEIGHTED_NORMAL')
+    w.mode = 'FACE_AREA'
+    w.weight = 50
+    w.keep_sharp = True
+    bpy.ops.object.select_all(action='DESELECT')
+    high.select_set(True)
+    bpy.context.view_layer.objects.active = high
+    try:
+        for m in list(high.modifiers):
+            bpy.ops.object.modifier_apply(modifier=m.name)
+    except Exception as e:
+        log(f"[bakekit] the high-poly could not be made: {e}")
+        bpy.data.objects.remove(high)
+        bpy.data.objects.remove(low)
+        return None, None
+    log(f"[bakekit] high-poly: {len(high.data.polygons)} faces (the game model {len(low.data.polygons)})")
+    for o in objs:
+        o.hide_render = True
+    img = bpy.data.images.new("BakeNormals", size, size, alpha=True, float_buffer=True)
+    img.colorspace_settings.name = 'Non-Color'
+    m = bpy.data.materials.new("Bake_hpn")
+    m.use_nodes = True
+    t = m.node_tree.nodes.new("ShaderNodeTexImage")
+    t.image = img
+    m.node_tree.nodes.active = t
+    for s in low.material_slots:
+        s.material = m
+    if not low.material_slots:
+        low.data.materials.append(m)
+    sc.render.engine = 'CYCLES'
+    dev = _gpu(sc)
+    sc.cycles.samples = 1
+    bk = sc.render.bake
+    bk.use_selected_to_active = True
+    bk.cage_extrusion = .003
+    bk.max_ray_distance = .006
+    bk.normal_space = 'OBJECT'
+    bk.normal_r, bk.normal_g, bk.normal_b = 'POS_X', 'POS_Y', 'POS_Z'
+    bk.margin = 8
+    bk.use_clear = True
+    bpy.ops.object.select_all(action='DESELECT')
+    high.select_set(True)
+    low.select_set(True)
+    bpy.context.view_layer.objects.active = low
+    bpy.ops.object.bake(type='NORMAL')
+    a = np.empty(size * size * 4, F32)
+    img.pixels.foreach_get(a)
+    a = a.reshape(size, size, 4)[::-1].copy()
+    cover = a[..., 3] > .5
+    n = a[..., :3] * 2 - 1
+    n /= np.maximum(np.linalg.norm(n, axis=2, keepdims=True), 1e-6)
+    bk.use_selected_to_active = False
+    log(f"[bakekit] high-poly normals baked {size} px on {dev}: {int(cover.mean() * 100)} % of the map")
+    bpy.data.objects.remove(high)
+    bpy.data.objects.remove(low)
+    bpy.data.images.remove(img)
+    bpy.data.materials.remove(m)
+    for o in objs:
+        o.hide_render = False
+    return n.astype(F32), cover
+
+
 def _blur(a, r):
     for axis in (0, 1):
         c = np.cumsum(np.concatenate([a.take(range(a.shape[axis] - r - 1, a.shape[axis]), axis=axis), a, a.take(range(0, r), axis=axis)], axis=axis),
