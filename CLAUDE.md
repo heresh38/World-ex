@@ -99,7 +99,10 @@ existing classes, never second systems.
   `ESOProjectileKind::Bolt` draws `USOFxSubsystem::PlasmaFlash` (a bloom of its light, no flame or smoke),
   `PlasmaBolt` (a white-hot core in a corona of the gun's colour at the FRONT of a short tail, and the air along
   its path glowing a length at a time behind it for a tenth of a second: a streak's position is its front, the tail
-  grows out behind it) and `PlasmaImpact` (a flare, drops thrown out along the surface, vapour, a glow that cools; no
+  grows out behind it; the whole shot is drawn in the SHOOTER's frame: bolt, trail and glowing air carry the
+  shooter's velocity and the bolt is aimed to land where the round hits: fixed in the world, a player firing on the
+  move left every trail hanging beside the barrel, the owner's "bullets don't come out of the barrel"; capture set
+  33) and `PlasmaImpact` (a flare, drops thrown out along the surface, vapour, a glow that cools; no
   bullet hole; a pattern of pellets lights the place once); the bolt's size follows the gun's damage. A bolt is SEEN
   to fly: the energy archetypes' `vel` in `Data/game_data.json` is 170-380 m/s (the sniper's lance 900) against a
   bullet's 700+, so a light gun is led at range and creatures lead a moving target with it (`ASOEnemy::ShotLead`,
@@ -372,8 +375,11 @@ free way and closed toward the palm, they stood out under the grip and curled up
 A gun may bring its own hold instead (`Data/holds/<archetype>.json`, `FSOGunHold`: both wrists, hand directions and
 every finger; read as the rig is built, nothing fitted; none written yet). Measured by `MeasureHold` (wrist bend, reach,
 finger bones in the gun, the palm's gap at its middle and 2.5 cm on); tests `ShatteredOrbit.Hold.*` (`TheGunIsSolid`,
-`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: hmg, vr_lmg (their firing grips),
-brood, ksmg, spitter, vr_sniper (support hands)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: hmg (a finger bone on the grip's
+front), vr_lmg (a support fingertip), brood (fingers sink into its thick post), ksmg (a palm bone on the post),
+spitter, vr_sniper (support hands). A gun's own shape can make a grip impossible: the heavy machine gun's drum
+reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
+model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
 **Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
 screen ... shouldn't be at the center of the screen, better to be on the right ... on running we lower the gun for
 rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): at rest in the lower right (`HipOffset`,
@@ -382,7 +388,9 @@ rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): at 
 still in the corner of the view; `SprintLow*`), `short` (SMGs: up part of the way, `SprintShort*`; higher, the support
 arm crossed the view), `high` (handguns: up by the face, muzzle to the sky, `SprintHigh*`). A gun's length does not
 tell (the heavy machine gun is shorter than the SMG). Pictures `SOCaptureSeries 1 32 -SOGuns=<arch>,<arch>` (files
-`SO_vm_<gun>_hip` / `_sprint`). Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
+`SO_vm_<gun>_hip` / `_sprint`). **Third person**: the shoulder camera is over the LEFT shoulder (`HipSocketOffset` Y
+-70, `AimSocketOffset` -58), so the player stands right of the middle of the screen as the gun does in first person
+(the owner, 2026-11-15). Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
 screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`,
 kit + baked tiles `tools/blender/nexus_city.py`, built at runtime by `ASONexusCity`. Inventory icons:
 `tools/blender/icons.py`. Sounds: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis).

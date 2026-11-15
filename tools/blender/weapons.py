@@ -866,19 +866,21 @@ def heavy_mg():
             SPIN.append(G.bar('spoke', y - .004, y - .018, .012, r - .006, a - .1, a + .1, m, zb, 0, 1))
     SPIN.append(G.band('clamp_glow', -.553, .004, .0508, GL, zb, 0, .003, 48, .0004))
     SPIN.append(lathe('spin_hub', [(-.6, 0), (-.6, .016), (-.612, .016), (-.62, .009), (-.62, 0)], TR, zb, 0, 24))
-    # the drum under the housing
+    # the drum under the housing, AHEAD of the grip: a hand closes round the grip with room in front of it (centred 6
+    # cm ahead of the grip with a 9 cm radius, it reached behind the grip and the firing hand lay flat on its side)
+    DY, DZ = -.155, -.07
     for s in (1, -1):
-        P.append(lathe_x('drum', [(0, .09), (.03, .09), (.036, .084), (.036, .062), (.04, .058), (.04, 0)], (0, -.06, -.07), MT, 56, s))
-        P.append(lathe_x('drumcap', [(.04, .056), (.044, .052), (.044, .02), (.047, .016), (.047, 0)], (0, -.06, -.07), TR, 32, s))
+        P.append(lathe_x('drum', [(0, .078), (.03, .078), (.036, .073), (.036, .054), (.04, .05), (.04, 0)], (0, DY, DZ), MT, 56, s))
+        P.append(lathe_x('drumcap', [(.04, .049), (.044, .045), (.044, .018), (.047, .014), (.047, 0)], (0, DY, DZ), TR, 32, s))
         for k in range(8):
             a = k * math.pi / 4
-            G.hexbolts(P, [(-.06 + math.cos(a) * .073, -.07 + math.sin(a) * .073)], .036, DK, .0034, sym=False, side=s)
-    P.append(lathe_x('drumglow', [(-.0018, .0912), (.0018, .0912), (.0018, .088), (-.0018, .088)], (0, -.06, -.07), GL, 56, 1, closed=True))
-    P.append(lathe_x('drumband', [(-.008, .0905), (.008, .0905), (.008, .086), (-.008, .086)], (0, -.06, -.07), DK, 56, 1, closed=True))
-    P.append(prism('drum_hanger', [(-.02, .01), (-.02, -.0), (-.1, -.0), (-.1, .01)], .06, DK, .003))
+            G.hexbolts(P, [(DY + math.cos(a) * .0635, DZ + math.sin(a) * .0635)], .036, DK, .0034, sym=False, side=s)
+    P.append(lathe_x('drumglow', [(-.0018, .0792), (.0018, .0792), (.0018, .0764), (-.0018, .0764)], (0, DY, DZ), GL, 56, 1, closed=True))
+    P.append(lathe_x('drumband', [(-.008, .0786), (.008, .0786), (.008, .0748), (-.008, .0748)], (0, DY, DZ), DK, 56, 1, closed=True))
+    P.append(prism('drum_hanger', [(-.115, .01), (-.115, -.0), (-.195, -.0), (-.195, .01)], .06, DK, .003))
     # a pintle socket ahead of the drum, the carry handle as a bent tube on two posts
-    P.append(lathe_z('pintle', [(-.03, 0), (-.03, .016), (-.024, .02), (-.006, .02), (0, .026), (0, 0)], (0, -.19, .012), MT, 24))
-    P.append(lathe_z('pintle_pin', [(-.04, 0), (-.04, .008), (-.03, .008), (-.03, 0)], (0, -.19, .012), TR, 12))
+    P.append(lathe_z('pintle', [(-.03, 0), (-.03, .016), (-.024, .02), (-.006, .02), (0, .026), (0, 0)], (0, -.245, .012), MT, 24))
+    P.append(lathe_z('pintle_pin', [(-.04, 0), (-.04, .008), (-.03, .008), (-.03, 0)], (0, -.245, .012), TR, 12))
     P.append(G.cable('carry', [(0, -.02, .122), (0, -.03, .165), (0, -.07, .18), (0, -.17, .18), (0, -.21, .165), (0, -.22, .122)], .0085, DK, 14, 40))
     P.append(G.rloft('carry_wrap', [(-.075, .168, .192, .012, 2.4), (-.165, .168, .192, .012, 2.4)], M['grip'], n=20))
     G.stock_stub(P, BD, DK, M['grip'], .1, .062, L=.14, r=.024, w=.064, h=.11)

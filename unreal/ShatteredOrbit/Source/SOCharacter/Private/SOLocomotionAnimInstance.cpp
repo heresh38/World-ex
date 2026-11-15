@@ -638,8 +638,10 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 					// (the post lies across the root of the fingers: the knuckles at its front, so the fingers close round
 					// it; with the palm's middle on the post's middle, a thin post ended under the palm and the fingers
 					// closed on the air ahead of it)
+					// (and a centimetre out from its left side: the hand runs a little inward, so with the palm on the
+					// post's side line the knuckles of the middle and ring fingers stood inside it)
 					const float PalmX = FMath::Min(MidX, FrontX - 4.3f);
-					const FSOHandGrip Wrap = FSOHandGrip::AtPalm(FVector(PalmX, LeftY, ForeR.Z + 3.5f), FVector(0.92f, 0.3f, -0.2f), FVector(0.0f, 0.0f, 1.0f), true);
+					const FSOHandGrip Wrap = FSOHandGrip::AtPalm(FVector(PalmX, LeftY - 1.0f, ForeR.Z + 3.5f), FVector(0.92f, 0.3f, -0.2f), FVector(0.0f, 0.0f, 1.0f), true);
 					FitOffset[Side] = Wrap.Wrist - RigT.InverseTransformPosition(Wrist);
 					FitBasis = Wrap.Basis;
 					bFitTurn = true;
