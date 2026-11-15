@@ -453,8 +453,11 @@ def traced(name):
     outside = T['outside'] * px
     sd = np.where(mask, -inside, outside)                            # signed distance to the outline, metres
     wmax = spec['width'] * .5
-    hw = wmax * np.clip(inside / .020, 0, 1) ** .50                   # the pillow: half the width at each point
-    hw = hw + np.where(cls == 2, .0040, 0) + np.where(cls >= 3, -.0012, 0) + (lum - .25).clip(-.15, .5) * .0025
+    # the body rounds out with its height (a barrel is round, a blade thin), reaching its full width only in the thick core
+    hw = wmax * np.clip(inside / .034, 0, 1) ** .50
+    # every pale region a plate of its own, standing 4.5 mm proud of the dark with a chamfered edge (the sheet's layering)
+    pale_in = T['pale_in'] * px
+    hw = hw + .0045 * np.clip(pale_in / .0025, 0, 1) + np.where(cls >= 3, -.0012, 0) + (lum - .25).clip(-.15, .5) * .0018
     hw = np.maximum(hw, .0012)
     if spec.get('round'):                                             # the grenade is round: its width follows its height
         hw = np.maximum(hw, wmax * np.sqrt(np.clip(inside / (.5 * H * px), 0, 1)))

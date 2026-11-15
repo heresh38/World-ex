@@ -127,7 +127,7 @@ def main(out):
         inside = nd.distance_transform_edt(m)
         outside = nd.distance_transform_edt(~m)
         px = LENGTHS[nm] / max(m.shape[1], 1) if nm != 'skr_grenade' else LENGTHS[nm] / m.shape[0]
-        np.savez_compressed(os.path.join(out, nm + '.npz'), mask=m, cls=cls, lum=L.astype(np.float32), inside=inside.astype(np.float32), outside=outside.astype(np.float32), px=px)
+        np.savez_compressed(os.path.join(out, nm + '.npz'), mask=m, cls=cls, lum=L.astype(np.float32), inside=inside.astype(np.float32), outside=outside.astype(np.float32), pale_in=nd.distance_transform_edt(cls == 2).astype(np.float32), px=px)
         vis = np.zeros(m.shape + (3,), np.uint8)
         pal = {0: (30, 30, 34), 1: (60, 60, 90), 2: (200, 196, 186), 3: (255, 170, 60), 4: (210, 230, 255)}
         for k, col in pal.items():
