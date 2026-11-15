@@ -3,13 +3,16 @@
 
 #include "SOTestWorld.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
+#include "Rendering/SkeletalMeshRenderData.h"
 #include "SOAltered.h"
 #include "SOCombatStatics.h"
+#include "SOCombatTypes.h"
+#include "SOProjectileSubsystem.h"
 #include "SOEnemyAIController.h"
 
 namespace SOTest
@@ -157,4 +160,116 @@ bool FSOColossusTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOBodiesFollowTest, "ShatteredOrbit.Altered.BodiesFollowTheBody", SOTest::Flags)
+bool FSOBodiesFollowTest::RunTest(const FString& Parameters)
+{
+	// What a round lands on is the body that is drawn. Every creature is shot at from four sides, on a grid over its
+	// height and width, with the bullet's own trace; where each shot meets its collision is compared with the nearest
+	// point of the drawn (skinned) surface. The engine's automatic bodies stood up to a metre and a half off the
+	// Colossus; bodies fitted per bone by the import (import_assets.fit_bodies) stay close. And a shot at the head
+	// lands on the head.
+	const float Allowed = 20.0f; // cm: a convex hull over a bone's part bridges its hollows (measured worst: 18.5 on the Colossus's chest)
+	struct FKind { UClass* Class; const TCHAR* Name; };
+	const FKind Kinds[] = { { ASOEnemy::StaticClass(), TEXT("stalker") }, { ASORemnant::StaticClass(), TEXT("remnant") },
+		{ ASOVeilborn::StaticClass(), TEXT("veilborn") }, { ASOBulwark::StaticClass(), TEXT("bulwark") }, { ASOColossus::StaticClass(), TEXT("colossus") },
+		{ ASOBearer::StaticClass(), TEXT("bearer") } };
+	for (const FKind& Kind : Kinds)
+	{
+		SOTest::FTestWorld W;
+		W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		const float Half = Cast<ASOEnemy>(Kind.Class->GetDefaultObject())->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		ASOEnemy* E = W.World->SpawnActor<ASOEnemy>(Kind.Class, FVector(0, 0, Half + 2.0f), FRotator::ZeroRotator, P);
+		if (!TestNotNull(Kind.Name, E))
+		{
+			continue;
+		}
+		if (AController* Brain = E->GetController())
+		{
+			Brain->UnPossess();
+			Brain->Destroy();
+		}
+		W.Run(0.4f);
+		USkeletalMeshComponent* Mesh = E->GetMesh();
+		const FSkeletalMeshRenderData* Data = Mesh->GetSkeletalMeshRenderData();
+		TArray<FVector3f> Local;
+		if (Data && Data->LODRenderData.Num() > 0 && Mesh->GetSkinWeightBuffer(0))
+		{
+			TArray<FMatrix44f> RefToLocals;
+			Mesh->CacheRefToLocalMatrices(RefToLocals);
+			USkinnedMeshComponent::ComputeSkinnedPositions(Mesh, Local, RefToLocals, Data->LODRenderData[0], *Mesh->GetSkinWeightBuffer(0));
+		}
+		if (!TestTrue(FString::Printf(TEXT("%s: its drawn surface can be read"), Kind.Name), Local.Num() > 100))
+		{
+			continue;
+		}
+		TArray<FVector> Surface;
+		Surface.Reserve(Local.Num());
+		FBox Box(ForceInit);
+		for (const FVector3f& V : Local)
+		{
+			Surface.Add(Mesh->GetComponentTransform().TransformPosition(FVector(V)));
+			Box += Surface.Last();
+		}
+		auto OffSurface = [&Surface](const FVector& At)
+		{
+			float Best = TNumericLimits<float>::Max();
+			for (const FVector& V : Surface)
+			{
+				Best = FMath::Min(Best, static_cast<float>(FVector::DistSquared(V, At)));
+			}
+			return FMath::Sqrt(Best);
+		};
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOTest), true);
+		int32 Shots = 0, Landed = 0, Wide = 0;
+		float Worst = 0.0f, Sum = 0.0f;
+		FVector WorstAt = FVector::ZeroVector;
+		FName WorstBone;
+		const FVector Mid = Box.GetCenter(), Ext = Box.GetExtent();
+		const FVector Dirs[] = { FVector(1, 0, 0), FVector(-1, 0, 0), FVector(0, 1, 0), FVector(0, -1, 0) };
+		for (const FVector& Dir : Dirs)
+		{
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, Dir);
+			const float Width = FMath::Abs(FVector::DotProduct(Across, Ext)) + 60.0f; // (past the body's sides too: nothing may be hit out there)
+			for (int32 iz = 0; iz <= 12; ++iz)
+			{
+				for (int32 iy = -6; iy <= 6; ++iy)
+				{
+					const FVector Through = Mid + FVector(0, 0, Ext.Z * (iz / 6.0f - 1.0f) * 0.98f) + Across * Width * (iy / 6.0f);
+					FHitResult Hit;
+					++Shots;
+					if (W.World->LineTraceSingleByChannel(Hit, Through - Dir * 900.0f, Through + Dir * 900.0f, SO_TRACE_BULLET, Params) && Hit.GetActor() == E)
+					{
+						++Landed;
+						const float Off = OffSurface(Hit.ImpactPoint);
+						Sum += Off;
+						Wide += Off > Allowed;
+						if (Off > Worst)
+						{
+							Worst = Off;
+							WorstAt = Hit.ImpactPoint - E->GetActorLocation();
+							WorstBone = Hit.BoneName;
+						}
+					}
+				}
+			}
+		}
+		AddInfo(FString::Printf(TEXT("%s: %d bodies; %d of %d shots landed, on average %.1f cm from the drawn surface, at worst %.1f cm (bone '%s', at %s from its middle), %d further than %.0f cm"),
+			Kind.Name, Mesh->Bodies.Num(), Landed, Shots, Landed > 0 ? Sum / Landed : 0.0f, Worst, *WorstBone.ToString(), *WorstAt.ToCompactString(), Wide, Allowed));
+		TestTrue(FString::Printf(TEXT("%s: shots land on it"), Kind.Name), Landed > 20);
+		TestTrue(FString::Printf(TEXT("%s: what a round lands on is within %.0f cm of what is drawn (worst %.1f cm, on '%s')"), Kind.Name, Allowed, Worst, *WorstBone.ToString()), Worst <= Allowed);
+		// the head
+		if (Mesh->DoesSocketExist(TEXT("head")))
+		{
+			const FVector Head = Mesh->GetSocketLocation(TEXT("head")) + FVector(0, 0, 6.0f);
+			FHitResult Hit;
+			const bool bHit = W.World->LineTraceSingleByChannel(Hit, Head + E->GetActorForwardVector() * 600.0f, Head - E->GetActorForwardVector() * 200.0f, SO_TRACE_BULLET, Params) && Hit.GetActor() == E;
+			TestTrue(FString::Printf(TEXT("%s: a shot at the head lands on the head (it landed on '%s')"), Kind.Name, bHit ? *Hit.BoneName.ToString() : TEXT("nothing")),
+				bHit && USOProjectileSubsystem::IsPrecisionBone(Hit.BoneName));
+		}
+	}
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS

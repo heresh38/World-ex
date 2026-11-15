@@ -37,7 +37,8 @@ public:
 	USOInventoryWidget* GetInventoryWidget() const { return InventoryWidget; }
 
 private:
-	void OnRoundHit(const FSOProjectile& Round, const FHitResult& Hit, float Damage);
+	/** A round of this player's went in (ASOCombatCharacter::OnHitConfirmed: on this machine, host or joined). */
+	void OnHitConfirmed(bool bCrit, bool bKilled);
 	void DrawBar(float X, float Y, float W, float H, float Fraction, const FLinearColor& Color);
 	void DrawScope(float W, float H);
 	void BindInventory();
@@ -64,6 +65,19 @@ private:
 	 *  the goal, the boss's health across the top, and the end screen with what every player earned. */
 	void DrawOperation(float W, float H, float S);
 
+	/** A boss's health across the top: its name, a notch where each phase of its table begins, the phase's name,
+	 *  why nothing hurts it (the shield) or that it reels. The operation's boss, or one met outside an operation. */
+	void DrawBossBar(const class ASOEnemy* Boss, float W, float S);
+
+	/** The AI debug view (console: SOAIDebug; not in a shipping build): over every creature within 60 m what its
+	 *  brain is doing (state, awareness, target, cover, role flags, its kit's readiness), a line to its cover and to
+	 *  where it last knew its target to be, and at the top what the brains cost. Brains run on the server only, so
+	 *  a joined player sees nothing here. */
+	void DrawAIDebug(float W, float H, float S);
+	float AIDebugReadAt = 0.0f;
+	int32 AIDebugThinks = 0;
+	float AIDebugMs = 0.0f;
+
 	TWeakObjectPtr<USOInventoryComponent> FeedInventory;
 	FDelegateHandle FeedHandle;
 	TWeakObjectPtr<APawn> BoundPawn;
@@ -76,4 +90,5 @@ private:
 	bool bLastHitCrit = false;
 	bool bLastHitKill = false;
 	FDelegateHandle HitHandle;
+	TWeakObjectPtr<const class ASOCombatCharacter> HitPawn;
 };

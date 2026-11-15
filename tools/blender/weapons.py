@@ -83,6 +83,7 @@ def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, 
     if keys:
         keys(g)
     scale_tree(g, GUN_SCALE.get(name, 1.0))
+    own_maps(name, dict(scale=GUN_SCALE.get(name, 1.0), muzzle=muzzle, fore=fore, moving=[(s[0], s[2]) for s in moving]))
     K.export(name + '.glb')
 
 
@@ -98,6 +99,29 @@ IRON_PARTS = {'post', 'postL', 'postR', 'postdot', 'front_base', 'front_ear', 'f
 
 GUN_SCALE = {'gun_rifle': .82, 'gun_carbine': .9, 'gun_auto': .9, 'gun_scout': .92, 'gun_dmr': .9, 'gun_bolt': .85,
              'gun_sniper': .88, 'gun_pump': .86, 'gun_handcannon': .9}
+
+
+def own_maps(name, info=None):
+    """A gun's OWN maps (the art-production specification, docs/art/ASSET_PIPELINE.md; the approved benchmark is the
+    assault rifle): a second, unique UV set on the gun and its moving parts (bakekit.unwrap), occlusion / position /
+    normal baked from the model (bakekit.bake), and what has happened to this gun and what was made on it painted from
+    them (gunpaint.paint): assets/textures/<gun>_u_m1 / _m2 / _m3. Which guns: gunpaint.spec_for (the rifle's spec is
+    written by hand; a light gun's is made from `info`, what its builder says: muzzle, fore end, moving parts;
+    SO_GUN_OWN=all or a list reaches the others). The tiling sets on UV 0 are untouched. SO_GUN_BAKE_SIZE: the maps'
+    size (4096); SO_GUN_NO_BAKE=1 skips it."""
+    import os
+    import bpy
+    import gunpaint
+    spec = None if os.environ.get("SO_GUN_NO_BAKE") else gunpaint.spec_for(name, info)
+    if spec is None:
+        return
+    import bakekit
+    bpy.context.view_layer.update()
+    objs = [o for o in bpy.data.objects if o.type == 'MESH']
+    print(f"[bakekit] {name}: {bakekit.clean(objs)} faces with no area removed")
+    bakekit.unwrap_fit(objs)
+    maps = bakekit.bake(objs, int(os.environ.get("SO_GUN_BAKE_SIZE", "4096")))
+    gunpaint.paint(name, maps, spec, bl.TEXTURES)
 
 
 def scale_tree(root, s):
@@ -1000,8 +1024,16 @@ def assault_rifle():
 
     # ---------------------------------------------------------------- sights, barrel group (kept)
     G.iron_rear(P, .09, .1195, S, base_z=.1005, w=.03)
-    P.append(G.rprism('gasblock', [(-.434, .044), (-.434, .106), (-.468, .106), (-.478, .09), (-.478, .044)], .03, S, .004))
-    G.hexbolts(P, [(-.456, .052)], .015, S, .0026, sym=False, side=1, n=14)
+    # the gas block is a forging of turned and drawn forms, never one box (the art specification: real construction):
+    # a clamp ring round the barrel with its split lug and two cross bolts under it, the gas cylinder over it with
+    # the plug in its nose, a web between the two, and the saddle the front sight stands on
+    P.append(G.band('gasblock', -.434, .044, .0152, S, zb, 0, .0055, 36, .0014))
+    P.append(G.rprism('gb_lug', [(-.439, zb - .011), (-.439, zb - .0235), (-.443, zb - .0255), (-.469, zb - .0255), (-.473, zb - .0235), (-.473, zb - .011)], .0125, S, .003))
+    G.hexbolts(P, [(-.447, zb - .0185), (-.465, zb - .0185)], .00625, S, .0024)
+    P.append(G.tube_('gas_cyl', -.431, -.48, .0112, S, .093, n=28, ch=.0016))
+    P.append(G.rprism('gb_web', [(-.437, .068), (-.437, .088), (-.475, .088), (-.475, .068)], .0135, S, .003))
+    P.append(G.rprism('gb_saddle', [(-.443, .089), (-.443, .1045), (-.467, .1045), (-.467, .089)], .0245, S, .0035))
+    P.append(G.lathe('gas_plug', [(-.48, 0), (-.48, .0068), (-.4855, .0068), (-.4875, .005), (-.4875, 0)], PK, .093, 0, 6, sharp=20))
     G.iron_front(P, -.455, .1195, S, base_z=.104, w=.024)
     P.append(G.tube_('gastube', -.218, -.44, .0085, S, .093, n=24))
     G.barrel_stepped(P, 'barrel', [(-.215, .0128), (-.262, .0108), (-.44, .0097), (-.56, .0088), (-.64, .0088)], zb, S, .0045)

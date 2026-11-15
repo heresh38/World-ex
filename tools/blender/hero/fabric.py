@@ -168,19 +168,57 @@ def make(kind, colour, rough, out_dir, prefix, metal=0.0, seed=1):
         alb = col * tone[..., None] * (.92 + .10 * h)[..., None]
         r = np.clip(rough + .06 * (1 - h), .3, 1)
         nrm = _normal(h, 1.8)
-    elif kind == "polymer":                               # moulded plate: smooth satin, faint micro-scratches
-        y, x = np.mgrid[0:SIZE, 0:SIZE].astype(np.float32)
-        h = .15 * _noise((SIZE, SIZE), 6, rng, 3)
-        for _ in range(90):                                # a few fine straight scratches
+    elif kind == "polymer":
+        # an armour plate: a moulded composite with a fine cast grain, the broad unevenness of a thing that was
+        # pressed and has been knocked about, scuffs rubbed matte, a few gouges and dents with real depth. (It was a
+        # smooth satin with ninety hairlines: flat. The paint and the edge wear are the corner colour's, finish.py.)
+        # Relief in two scales: a dent is a centimetre wide, the grain a hair: one strength for both shows neither.
+        def lines(n, lmin, lmax, wmin, wmax):
+            out = np.zeros((SIZE, SIZE), np.float32)
+            for _ in range(n):
+                x0, y0 = rng.uniform(0, SIZE, 2)
+                a = rng.uniform(0, math.pi)
+                L = rng.uniform(lmin, lmax)
+                w = rng.uniform(wmin, wmax)
+                hh = int(L / 2 + 6)
+                ys = np.arange(int(y0) - hh, int(y0) + hh + 1)
+                xs = np.arange(int(x0) - hh, int(x0) + hh + 1)
+                X, Y = np.meshgrid((xs - x0).astype(np.float32), (ys - y0).astype(np.float32))
+                t = X * math.cos(a) + Y * math.sin(a)
+                d = np.abs(-X * math.sin(a) + Y * math.cos(a))
+                m = np.exp(-(d / w) ** 2) * np.clip(1 - (np.abs(t) / (L / 2)) ** 4, 0, 1) * rng.uniform(.45, 1.0)
+                idx = np.ix_(ys % SIZE, xs % SIZE)
+                out[idx] = np.maximum(out[idx], m.astype(np.float32))
+            return out
+        grain = _noise((SIZE, SIZE), 330, rng, 1)
+        grain2 = _noise((SIZE, SIZE), 150, rng, 1)
+        low = _noise((SIZE, SIZE), 3, rng, 3)
+        mid = _noise((SIZE, SIZE), 11, rng, 2)
+        sf = _noise((SIZE, SIZE), 5, rng, 4)
+        lo_, hi_ = np.percentile(sf[::4, ::4], 64), np.percentile(sf[::4, ::4], 95)
+        scuff = np.clip((sf - lo_) / (hi_ - lo_), 0, 1)
+        scuff = scuff * scuff * (3 - 2 * scuff)                 # rubbed patches: matte, a shade lighter
+        fine = lines(70, 30, 240, .6, 1.0) * .8
+        deep = lines(7, 50, 200, 1.5, 2.6)
+        dent = np.zeros((SIZE, SIZE), np.float32)
+        for _ in range(26):
             x0, y0 = rng.uniform(0, SIZE, 2)
-            a = rng.uniform(0, math.pi)
-            L = rng.uniform(20, 140)
-            d = np.abs((x - x0) * math.sin(a) - (y - y0) * math.cos(a))
-            along = (x - x0) * math.cos(a) + (y - y0) * math.sin(a)
-            h -= .25 * np.exp(-(d / .7) ** 2) * ((along > 0) & (along < L))
-        alb = col * (.97 + .04 * _noise((SIZE, SIZE), 4, rng, 3))[..., None]
-        r = np.clip(rough + .10 * np.clip(-h, 0, 1) + .03 * _noise((SIZE, SIZE), 20, rng, 2), .15, 1)
-        nrm = _normal(h, .8)
+            rr = rng.uniform(4, 11)
+            hh = int(rr * 2.5 + 2)
+            ys = np.arange(int(y0) - hh, int(y0) + hh + 1)
+            xs = np.arange(int(x0) - hh, int(x0) + hh + 1)
+            X, Y = np.meshgrid((xs - x0).astype(np.float32), (ys - y0).astype(np.float32))
+            idx = np.ix_(ys % SIZE, xs % SIZE)
+            dent[idx] = np.maximum(dent[idx], (np.exp(-(X * X + Y * Y) / (rr * rr)) * rng.uniform(.4, 1.0)).astype(np.float32))
+        alb = col * (.97 + .04 * low + .03 * grain - .05 * fine + .05 * scuff - .10 * deep)[..., None]
+        r = np.clip(rough + .08 * grain + .16 * scuff + .10 * fine + .12 * deep - .04 * mid, .15, 1)
+        broad = .32 * low + .16 * mid - .55 * dent
+        small = (.30 * grain + .18 * grain2) * (1 - .6 * scuff) - .55 * fine - 1.15 * deep
+        dx = (np.roll(broad, -1, 1) - np.roll(broad, 1, 1)) * .5 * 6.0 + (np.roll(small, -1, 1) - np.roll(small, 1, 1)) * .5 * 2.0
+        dy = (np.roll(broad, -1, 0) - np.roll(broad, 1, 0)) * .5 * 6.0 + (np.roll(small, -1, 0) - np.roll(small, 1, 0)) * .5 * 2.0
+        nrm = np.dstack([-dx, dy, np.ones_like(dx)])
+        nrm /= np.linalg.norm(nrm, axis=2, keepdims=True)
+        nrm = nrm * .5 + .5
     elif kind == "thread":                                # 3 stitches per repeat along v, the thread twisted
         S = 512
         y, x = np.mgrid[0:S, 0:S].astype(np.float32) / S

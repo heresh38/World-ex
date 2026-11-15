@@ -47,6 +47,10 @@ protected:
 	FDelegateHandle ActivationHandle;
 
 private:
+	// Developer tools (SOPlayerControllerDev.cpp: empty bodies in a shipping build)
+	void DevTick(float DeltaTime);
+	/** -SONetCheck=host|join on the command line starts the two-player check on this machine's own controller. */
+	void DevBegin();
 	void CaptureStep();
 	/** A capture cue runs Action once Delay seconds have passed since the previous cue and Ready (if any) is true. */
 	struct FCaptureCue

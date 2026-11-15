@@ -24,6 +24,10 @@
   Slide     lead leg extended with the toes pointed, the other folded beneath, back arched, one hand brushing the
             ground, the other out for balance
   Death     she crumples: the knees fold and she twists down onto her side
+  Throw / Strike / Brace / Slam   the kit's four abilities (the gun is put away while one plays): an overarm throw
+            off the right hand with the hips leading (it leaves at 0.2 s); a straight blow behind a short step (it
+            lands at 0.16 s); braced behind her forearms; a blow into the ground from full height, down on a lunge
+            with the right fist ahead of the front foot (it lands at 0.33 s)
   Fidget1-3 idle variations: the weight shifts onto the other hip and back, a look back over the right shoulder,
             a neck and shoulder stretch; each starts and ends on the idle pose
 
@@ -424,6 +428,86 @@ def clips(b):
         p.add("forearm.R", (b.elbow["R"], -20 * k))
         return p
 
+    # --- the kit's abilities: the body's own clips (the gun is put away while one plays). Hers are quicker and
+    # narrower than his: the hips turn first and far, the feet stay close under her, the free arm stays near the body.
+    HIT = dict(chest=.02, head=.035, arm=.015, forearm=.04, hand=.065)
+
+    def act(z=0.0, y=0.0, hips=0.0, spine=0.0, chest=0.0, head=0.0, twist=0.0, turn=0.0, width=.075, toe=8, fwd=(0.0, 0.0),
+            pitch=(0.0, 0.0), L=(-2, 3, 20), R=(-2, 3, 20), turnL=0.0, turnR=0.0, curlL=SOFT, curlR=SOFT, knee=0.0):
+        """a standing pose on her heels: the hips moved by (y forward is negative, z) and turned (turn + = left), the
+        chest twisted on against them (twist), each foot moved along (fwd) and pitched (pitch, - = heel up), each arm
+        as (raised forward, out, elbow)"""
+        p = Pose()
+        for s, sx in gait.SIDES:
+            a = b.ankle[s]
+            i = 0 if s == "L" else 1
+            ft = -hp + pitch[i]
+            p.feet[s] = Foot(b.planted(s, (sx * width * b.scale, a.y + fwd[i] * b.scale), ft, toe), ft, toe)
+        trunk(p, hips=hips, spine=spine, chest=chest, head=head, turn=turn, z=up + z, y=y)
+        p.add("spine", (Z, twist * .35))
+        p.add("chest", (Z, twist * .65))
+        p.add("neck", (Z, -(twist + turn * .2) * .35))    # the eyes stay on where it is going
+        p.add("head", (Z, -(twist + turn * .2) * .35))
+        arms(b, p, "L", L[0], L[1], L[2], turn=turnL, curl=curlL)
+        arms(b, p, "R", R[0], R[1], R[2], turn=turnR, curl=curlR)
+        p.knee_out = {"L": knee, "R": knee}
+        return p
+
+    def Throw(t):
+        step = (-.09, .05)
+        throw = Track([(0.0, idle_pose(b, 0.0)),
+                       (.11, act(z=-.03, y=.03, hips=-2, chest=-5, turn=-14, twist=-26, fwd=step, pitch=(0, -8),
+                                 L=(34, 10, 34), R=(-34, 48, 112), curlL=OPEN, curlR=GRIP)),     # drawn back, the hips turned away
+                       (.21, act(z=-.02, y=-.05, hips=3, chest=5, turn=16, twist=20, fwd=step, pitch=(0, -14),
+                                 L=(-14, 14, 46), R=(124, 12, 8), curlR=OPEN)),                 # the hips lead, it leaves the hand high
+                       (.36, act(z=-.03, y=-.06, hips=5, chest=9, turn=20, twist=26, fwd=step, pitch=(0, -10),
+                                 L=(-20, 12, 40), R=(48, 0, 24))),                              # the arm carries on down across
+                       (.68, idle_pose(b, 0.0))], ease=smooth)
+        return throw.at(t, HIT)
+
+    def Strike(t):
+        strike = Track([(0.0, idle_pose(b, 0.0)),
+                        (.08, act(z=-.06, y=.02, hips=4, chest=2, turn=-12, twist=-24, fwd=(-.04, .04), pitch=(0, -6),
+                                  L=(54, 14, 100), R=(-24, 16, 118), curlL=GRIP, curlR=GRIP)),  # loaded, the guard up
+                        (.16, act(z=-.055, y=-.14, hips=7, chest=10, turn=16, twist=22, fwd=(-.22, .08), pitch=(2, -22),
+                                  L=(-10, 12, 106), R=(88, 4, 4), curlL=GRIP, curlR=GRIP)),     # through the step: it lands
+                        (.30, act(z=-.045, y=-.12, hips=5, chest=8, turn=12, twist=16, fwd=(-.22, .08), pitch=(2, -18),
+                                  L=(-6, 12, 96), R=(76, 8, 18), curlL=GRIP, curlR=GRIP)),      # held a moment
+                        (.58, idle_pose(b, 0.0))], ease=smooth)
+        return strike.at(t, HIT)
+
+    def Brace(t):
+        TURN = -70                                           # the upper arms turned in: the forearms up in front of the face
+        def guard(z, hips, head):
+            return act(z=z, y=-.015, hips=hips, spine=hips * .7, chest=hips, head=head, width=.12, toe=10, fwd=(-.08, .07),
+                       pitch=(0, -10), L=(60, 6, 114), R=(54, 6, 118), turnL=TURN, turnR=TURN, curlL=GRIP, curlR=GRIP, knee=.03)
+        brace = Track([(0.0, idle_pose(b, 0.0)), (.15, guard(-.08, 6, 8)), (.23, guard(-.065, 5, 7)), (.6, guard(-.075, 6, 8)),
+                       (.9, idle_pose(b, 0.0))], ease=smooth)
+        return brace.at(t, dict(chest=.02, head=.04, arm=.02, forearm=.045, hand=.07))
+
+    def Slam(t):
+        def down(z, y, lean, reach):
+            """a lunge to the ground: the left foot flat ahead, the right back on its toes with the knee near the ground,
+            the right fist on the ground ahead of the front foot, the left arm swept back"""
+            p = Pose()
+            for s, sx in gait.SIDES:
+                a = b.ankle[s]
+                ahead = (-.28 if s == "L" else .30) * b.scale
+                ft = (4.0 if s == "L" else -42.0)             # (off her heels: the front foot flat, the back on its toes)
+                p.feet[s] = Foot(b.planted(s, (sx * .09 * b.scale, a.y + ahead), ft, 6), ft, 6)
+            trunk(p, hips=lean, spine=lean * .7, chest=lean * .6, head=-lean * 1.5, z=up + z, y=y)
+            arms(b, p, "R", reach, 3, 4, curl=GRIP)
+            arms(b, p, "L", -44, 26, 22)
+            p.knee_out = {"L": .02, "R": .0}
+            return p
+        slam = Track([(0.0, idle_pose(b, 0.0)),
+                      (.19, act(z=.01, y=.02, hips=-5, spine=-8, chest=-12, head=-10, L=(140, 12, 46), R=(168, 6, 22),
+                                curlL=SOFT, curlR=GRIP)),                                       # up tall, the fist overhead
+                      (.33, down(-.50, -.05, 26, 62)),                                          # it lands
+                      (.55, down(-.48, -.045, 24, 58)),                                         # a beat down there
+                      (1.0, idle_pose(b, 0.0))], ease=smooth)
+        return slam.at(t, HIT)
+
     def fidget(dur, extra, shift=None):
         def f(t):
             p = idle_pose(b, t, shift(t) if shift else 0.0)
@@ -459,5 +543,6 @@ def clips(b):
             "Jump": (Jump, .5, False), "Land": (Land, .5, False), "Stop": (Stop, .5, False), "Vault": (Vault, 1.0, False), "Mantle": (Mantle, 1.0, False),
             "Climb": (Climb, 1.0, False), "Crouch": (Crouch, 5.6, True), "CrouchWalk": (CrouchWalk, crouch.T, True),
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
+            "Throw": (Throw, .68, False), "Strike": (Strike, .58, False), "Brace": (Brace, .9, False), "Slam": (Slam, 1.0, False),
             "Fidget1": (fidget(4.4, none, weight), 4.4, False), "Fidget2": (fidget(4.2, look_back), 4.2, False),
             "Fidget3": (fidget(4.0, stretch), 4.0, False)}, (walk, run)

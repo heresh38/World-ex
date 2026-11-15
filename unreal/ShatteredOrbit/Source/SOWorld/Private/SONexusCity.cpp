@@ -1,4 +1,5 @@
 #include "SONexusCity.h"
+#include "SOData.h"
 
 #include "SOTimeOfDaySubsystem.h"
 
@@ -24,7 +25,7 @@ namespace
 	TSharedPtr<FJsonObject> LoadJson(const FString& Relative)
 	{
 		FString Text;
-		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectDir() / Relative)))
+		if (!SOData::LoadText(Relative, Text))
 		{
 			return nullptr;
 		}
@@ -342,7 +343,7 @@ void ASONexusCity::Build()
 
 	// ---- everything placed by tools/city/nexus_dress.py: buildings, doors, roofs, yards, trees, cars, street life
 	TArray<uint8> Bytes;
-	if (FFileHelper::LoadFileToArray(Bytes, *(FPaths::ProjectDir() / InstanceFile)) && Bytes.Num() > 8 && FMemory::Memcmp(Bytes.GetData(), "NXI1", 4) == 0)
+	if (SOData::LoadBytes(InstanceFile, Bytes) && Bytes.Num() > 8 && FMemory::Memcmp(Bytes.GetData(), "NXI1", 4) == 0)
 	{
 		uint32 HeadLen = 0;
 		FMemory::Memcpy(&HeadLen, Bytes.GetData() + 4, 4);

@@ -68,6 +68,9 @@ public:
 	/** The same with the archetype's data already at hand. */
 	static FSOWeaponStats ComputeStatsFor(const USOWeaponData* Archetype, const FSOWeaponInstance& Weapon);
 
+	/** Everything a copy's perks do, taken together (FSOPerkInfo::Add over the perks it rolled). */
+	static FSOPerkInfo PerkEffects(const FSOWeaponInstance& Weapon);
+
 	/** state.js rollQuality: how good the stat rolls are, 0..100. */
 	UFUNCTION(BlueprintPure, Category = "SO|Loot")
 	static int32 RollQuality(const FSOWeaponInstance& Weapon);

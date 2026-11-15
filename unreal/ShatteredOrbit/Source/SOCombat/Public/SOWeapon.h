@@ -79,6 +79,10 @@ public:
 	/** Tests / pickups (server). */
 	void SetAmmo(int32 InMag, int32 InReserve) { Mag = InMag; Reserve = InReserve; }
 
+	/** Server: rounds straight from the reserve into the magazine, up to Share of a full one (1 = fill it); any
+	 *  reload under way is over. A perk's: a kill, a slide. Returns how many went in. */
+	int32 RefillFromReserve(float Share = 1.0f);
+
 	const FSOReloadPose& GetPose() const { return Reload.GetPose(); }
 	USOGunRigComponent* GetFirstPersonRig() const { return FirstPersonRig; }
 	USOGunRigComponent* GetThirdPersonRig() const { return ThirdPersonRig; }
@@ -94,9 +98,13 @@ public:
 
 protected:
 	void FireShot();
+
+	/** A joined player's own machine: shows the shot as the trigger breaks (flash, kick, tracer, sound) on the same
+	 *  clock the server fires by. The round, its spread and its damage are the server's; its echo is skipped here. */
+	void PredictShot();
 	void GrantAmmo();
 	void BuildRigs();
-	void BeginReloadLocal(bool bEmpty, int32 Rounds);
+	void BeginReloadLocal(bool bEmpty, int32 Rounds, float TimeScale = 1.0f);
 	ASOCombatCharacter* GetHolder() const;
 
 	UFUNCTION(Server, Reliable)
@@ -126,7 +134,7 @@ protected:
 	void PlayEventSound(FName Event);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastReload(bool bStart, bool bEmpty, int32 Rounds);
+	void MulticastReload(bool bStart, bool bEmpty, int32 Rounds, float TimeScale);
 
 	/** A spent magazine / speedloader / husk falls from the world rig (cosmetic). */
 	void DropPart(FName Part);
@@ -172,6 +180,9 @@ protected:
 	bool bDropped = false;
 	float NextShotTime = 0.0f;
 	float LastShotTime = -100.0f;
+
+	/** When this gun last killed (server): a perk's faster reload after a kill. */
+	float LastKillTime = -100.0f;
 	/** The barrel cluster of a rotary gun (rig part `spin`): its angle and how fast it turns (rad, rad/s). */
 	float BarrelSpin = 0.0f;
 	float BarrelSpinRate = 0.0f;

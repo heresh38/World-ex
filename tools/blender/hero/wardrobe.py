@@ -778,11 +778,16 @@ def dress(body, arm, T, log=print):
     pieces = [top(info), legs(info), feet(info), hands(info), hands(info, armoured=True), vest(info), outer(info),
               hair_mod.build(info, T, tex_dir, log=log)]
     pieces += headgear.build(info, log=log)
+    import void_sentinel                                    # the first operation's reward set (earned, never handed out)
+    pieces += void_sentinel.build(info, log=log)
     info.free()
     import fabric
     fabric.apply(T, tex_dir)                                # the cloth textures (fabric.py), this body's own files
+    void_sentinel.textures(T, tex_dir)
     for p in pieces:
         skin_like_body(p, body, arm)
+        if p.name.endswith("__" + void_sentinel.SET):
+            void_sentinel.after_skin(p, arm)                # its plates are rigid: each follows one bone
         if p.name.startswith("C_head__"):                   # head armour is rigid: the head bone carries all of it
             for g in list(p.vertex_groups):
                 p.vertex_groups.remove(g)
@@ -810,6 +815,8 @@ def dress(body, arm, T, log=print):
     }
     defaults = {"top": "orion", "vest": "orion", "outer": "orion", "hands": "orion", "legs": "orion", "feet": "orion",
                 "hair": hair_item}
+    for slot, items in void_sentinel.meta(m).items():
+        wardrobe.setdefault(slot, {}).update(items)
     meta = json.loads(arm.get("worldex", "{}"))
     meta.update({"wardrobe": wardrobe, "defaults": defaults})
     arm["worldex"] = json.dumps(meta)

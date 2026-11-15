@@ -15,3 +15,9 @@ DerivedDataCache/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 SourceArt/
+
+# copied in by tools/package.sh (the data files a packaged game reads)
+Content/Staged/
+
+# written by the packaging run
+Build/Windows/FileOpenOrder/

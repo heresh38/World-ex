@@ -38,6 +38,9 @@
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/PlayerState.h"
+#include "SOAbilitySystemComponent.h"
+#include "SOKitComponent.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 
@@ -62,6 +65,12 @@ namespace SOInputPaths
 	static const TCHAR* Inventory = TEXT("/Game/Input/IA_Inventory.IA_Inventory");
 	static const TCHAR* Map = TEXT("/Game/Input/IA_Map.IA_Map");
 	static const TCHAR* Flashlight = TEXT("/Game/Input/IA_Flashlight.IA_Flashlight");
+	static const TCHAR* Grenade = TEXT("/Game/Input/IA_Grenade.IA_Grenade");
+	static const TCHAR* Melee = TEXT("/Game/Input/IA_Melee.IA_Melee");
+	static const TCHAR* ClassAbility = TEXT("/Game/Input/IA_ClassAbility.IA_ClassAbility");
+	static const TCHAR* Ultimate = TEXT("/Game/Input/IA_Ultimate.IA_Ultimate");
+	static const TCHAR* PadShoulderRight = TEXT("/Game/Input/IA_PadShoulderRight.IA_PadShoulderRight");
+	static const TCHAR* PadShoulderLeft = TEXT("/Game/Input/IA_PadShoulderLeft.IA_PadShoulderLeft");
 }
 
 ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
@@ -102,6 +111,7 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 
 	// First person: the same body again, owner-only, arms only (the anim instance collapses the rest).
 	FirstPersonArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArms"));
+	FirstPersonArms->bReceivesDecals = false;
 	FirstPersonArms->SetupAttachment(Capsule);
 	FirstPersonArms->SetRelativeLocation(Body->GetRelativeLocation());
 	FirstPersonArms->SetRelativeRotation(Body->GetRelativeRotation());
@@ -162,6 +172,12 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	InventoryAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Inventory));
 	MapAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Map));
 	FlashlightAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Flashlight));
+	GrenadeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Grenade));
+	MeleeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Melee));
+	ClassAbilityAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::ClassAbility));
+	UltimateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Ultimate));
+	PadShoulderRightAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PadShoulderRight));
+	PadShoulderLeftAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PadShoulderLeft));
 	Flashlight = CreateDefaultSubobject<USpotLightComponent>(TEXT("Flashlight"));
 	Flashlight->SetupAttachment(GetCapsuleComponent());
 	Flashlight->SetUsingAbsoluteLocation(true);
@@ -262,6 +278,7 @@ void ASOCharacter::OutfitFromInventory()
 	if (const USOInventoryComponent* Inventory = GetInventory(); Inventory && HasAuthority())
 	{
 		SetOutfit(Inventory->GetOutfit());
+		SetGearAttributes(Inventory->GetAttributePoints()); // what is worn counts: the body's six attributes
 	}
 }
 
@@ -361,6 +378,7 @@ void ASOCharacter::ApplyOutfit()
 				const FName Name = MakeUniqueObjectName(this, USkeletalMeshComponent::StaticClass(),
 					*FString::Printf(TEXT("%s_%s"), bFirstPerson ? TEXT("WornFP") : TEXT("Worn"), *P.Key.ToString()));
 				Piece = NewObject<USkeletalMeshComponent>(this, Name);
+				Piece->bReceivesDecals = false;
 				Piece->SetupAttachment(Leader);
 				Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Piece->SetGenerateOverlapEvents(false);
@@ -484,6 +502,7 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 		}
 		Anim->Clips.WalkSpeed = 440.0f;
 		Anim->Clips.RunSpeed = 860.0f;
+		AbilityClips.Reset(); // another body, another clip set
 	}
 }
 
@@ -519,6 +538,10 @@ bool ASOCharacter::CanFireWeapon() const
 		return false;
 	}
 	const USOCharacterMovementComponent* Move = GetSOMovement();
+	if (bHeldStowed)
+	{
+		return false; // the gun is put away (a traversal, an ability's clip)
+	}
 	if (Move && (Move->IsSprinting() || Move->IsMantling()))
 	{
 		return false;
@@ -593,6 +616,10 @@ float ASOCharacter::GetSpreadScale() const
 	// Aiming x0.25 (on the sights a gun shoots where its sight is: at x0.45 a machine gun's cone was a quarter of a
 	// scope's picture), moving x1.35, airborne x1.6.
 	float Scale = FMath::Lerp(1.0f, 0.25f, AimProgress);
+	if (HasStatus(SOTags::Status_Suppressed))
+	{
+		Scale *= 1.3f; // (rounds passing close: the aim is not as steady)
+	}
 	if (GetVelocity().Size2D() > 50.0f)
 	{
 		Scale *= 1.35f;
@@ -693,6 +720,16 @@ void ASOCharacter::UpdateFeedbackSounds(float DeltaSeconds)
 void ASOCharacter::HandleDeath()
 {
 	StoreWeaponAmmo(); // the respawned body draws the same gun with the same rounds
+	if (HasAuthority())
+	{
+		if (const APlayerState* PS = GetPlayerState())
+		{
+			if (USOKitComponent* Kit = PS->FindComponentByClass<USOKitComponent>())
+			{
+				Kit->Remember(this); // the ultimate's charge goes to the next body
+			}
+		}
+	}
 	Super::HandleDeath();
 	bAiming = false;
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
@@ -909,10 +946,26 @@ void ASOCharacter::RefreshHolsters()
 void ASOCharacter::Tick(float DeltaSeconds)
 {
 	TickFootstepNoise(DeltaSeconds);
+	if (const USOCharacterMovementComponent* SOMove = GetSOMovement())
+	{
+		// a joined player's aim reaches the server with their moves; from here it goes on to everyone else
+		if (HasAuthority() && !IsLocallyControlled())
+		{
+			bAiming = SOMove->WantsToAim() && !bDead;
+		}
+		if (AbilitySystem)
+		{
+			AbilitySystem->SetState(SOTags::State_Aiming, bAiming);
+			AbilitySystem->SetState(SOTags::State_Sprinting, SOMove->IsSprinting());
+			AbilitySystem->SetState(SOTags::State_Traversing, SOMove->IsMantling());
+		}
+	}
 	// the hands are busy on a vault, a mantle or a climb: the gun in them goes to its holster and comes back after
 	if (const USOCharacterMovementComponent* SOMove = GetSOMovement())
 	{
-		const bool bStow = SOMove->IsMantling() && !bDead;
+		// (and while the body plays an ability's clip: a throw, a blow, a brace)
+		const USOLocomotionAnimInstance* BodyAnim = GetMesh() ? Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr;
+		const bool bStow = (SOMove->IsMantling() || (BodyAnim && BodyAnim->IsPlayingAction())) && !bDead;
 		if (bStow != bHeldStowed)
 		{
 			bHeldStowed = bStow;
@@ -968,14 +1021,15 @@ void ASOCharacter::Tick(float DeltaSeconds)
 
 	// Recoil recovers on its own; the camera shows it as an additive pitch.
 	RecoilKick = FMath::Max(0.0f, RecoilKick - DeltaSeconds * RecoilRecovery);
+	AbilityKick = FMath::FInterpTo(AbilityKick, 0.0f, DeltaSeconds, 9.0f);
 	UpdateCameraFeel(DeltaSeconds);
 	for (UCameraComponent* Camera : { FirstPersonCamera.Get(), ThirdPersonCamera.Get() })
 	{
 		Camera->ClearAdditiveOffset();
 		const float Roll = Camera == FirstPersonCamera.Get() ? CameraRoll : 0.0f;
-		if (RecoilKick > 0.0f || FMath::Abs(Roll) > 1e-3f)
+		if (RecoilKick > 0.0f || FMath::Abs(Roll) > 1e-3f || FMath::Abs(AbilityKick) > 1e-3f)
 		{
-			Camera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch(), 0.0f, Roll)), 0.0f);
+			Camera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch() + AbilityKick, 0.0f, Roll)), 0.0f);
 		}
 	}
 
@@ -1106,6 +1160,20 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (UInputAction* A = Load(InventoryAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInventory); }
 	if (UInputAction* A = Load(MapAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleMap); }
 	if (UInputAction* A = Load(FlashlightAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleFlashlight); }
+	if (UInputAction* A = Load(GrenadeAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleGrenade); }
+	if (UInputAction* A = Load(MeleeAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleMelee); }
+	if (UInputAction* A = Load(ClassAbilityAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleClassAbility); }
+	if (UInputAction* A = Load(UltimateAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleUltimate); }
+	if (UInputAction* A = Load(PadShoulderRightAction))
+	{
+		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePadRightDown);
+		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandlePadRightUp);
+	}
+	if (UInputAction* A = Load(PadShoulderLeftAction))
+	{
+		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePadLeftDown);
+		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandlePadLeftUp);
+	}
 
 	if (Missing > 0)
 	{
@@ -1244,9 +1312,14 @@ AActor* ASOCharacter::FindInteractable() const
 	const FTransform Eye = GetEyeTransform(false);
 	AActor* Best = nullptr;
 	float BestScore = 0.0f;
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	USOInteractables* Things = GetWorld() ? GetWorld()->GetSubsystem<USOInteractables>() : nullptr;
+	if (!Things)
 	{
-		const ISOInteractable* Thing = Cast<ISOInteractable>(*It);
+		return nullptr;
+	}
+	for (const TWeakObjectPtr<AActor>& It : Things->Get())
+	{
+		const ISOInteractable* Thing = Cast<ISOInteractable>(It.Get());
 		if (!Thing)
 		{
 			continue;
@@ -1262,7 +1335,7 @@ AActor* ASOCharacter::FindInteractable() const
 		if (Score > BestScore)
 		{
 			BestScore = Score;
-			Best = *It;
+			Best = It.Get();
 		}
 	}
 	return Best;
@@ -1310,6 +1383,96 @@ void ASOCharacter::HandleFireReleased()
 		Weapon->StopFire();
 	}
 }
+
+UAnimSequenceBase* ASOCharacter::GetAbilityClip(FName Name)
+{
+	if (Name.IsNone())
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UAnimSequenceBase>* Known = AbilityClips.Find(Name))
+	{
+		return *Known;
+	}
+	// once per clip and body (the arrival has loaded the body's folder already): never in a tick
+	const FString Path = ClipPathPrefix + Name.ToString() + TEXT(".") + FPaths::GetBaseFilename(ClipPathPrefix) + Name.ToString();
+	UAnimSequenceBase* Clip = FPackageName::DoesPackageExist(FSoftObjectPath(Path).GetLongPackageName())
+		? TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(Path)).LoadSynchronous() : nullptr;
+	AbilityClips.Add(Name, Clip);
+	return Clip;
+}
+
+void ASOCharacter::BeginAbilityShow(ESOAbilitySlot Slot)
+{
+	// its own player sees the hands go to it: the gun drops out of the way and comes back
+	if (Viewmodel)
+	{
+		Viewmodel->Raise();
+	}
+	const FSOAbilityGrant* Grant = GetAbilitySet() ? GetAbilitySet()->Find(Slot) : nullptr;
+	USOLocomotionAnimInstance* BodyAnim = GetMesh() ? Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr;
+	if (!Grant || !BodyAnim || bDead)
+	{
+		return;
+	}
+	// The clip is the whole body with its feet planted: standing (or nearly) it plays; on the move the legs keep
+	// their own gait and it is left out.
+	if (GetVelocity().Size2D() < 200.0f && !GetCharacterMovement()->IsFalling())
+	{
+		if (UAnimSequenceBase* Clip = GetAbilityClip(Grant->Clip))
+		{
+			BodyAnim->PlayAction(Clip, 1.0f);
+		}
+	}
+}
+
+void ASOCharacter::OnAbilityWindUp(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityWindUp(Slot);
+	BeginAbilityShow(Slot);
+}
+
+void ASOCharacter::OnAbilityUsed(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityUsed(Slot);
+	const FSOAbilityGrant* Grant = GetAbilitySet() ? GetAbilitySet()->Find(Slot) : nullptr;
+	if (!Grant || Grant->WindUp <= 0.0f)
+	{
+		BeginAbilityShow(Slot); // no wind-up: it shows as it happens
+	}
+	// the blow itself pitches the view
+	if (IsLocallyControlled())
+	{
+		AbilityKick = Slot == ESOAbilitySlot::Ultimate ? -8.0f : (Slot == ESOAbilitySlot::Melee ? -3.5f : (Slot == ESOAbilitySlot::Grenade ? 1.5f : 0.0f));
+	}
+}
+
+void ASOCharacter::HandlePadShoulder(bool bRight, bool bDown)
+{
+	// A pad has no buttons left for a fourth ability, so the two shoulders together are the ultimate. A shoulder
+	// pressed alone therefore waits PadChordWindow for the other before it counts (the keyboard's keys do not wait).
+	const int32 Side = bRight ? 1 : 0;
+	bPadShoulderDown[Side] = bDown;
+	UWorld* World = GetWorld();
+	if (!bDown || !World)
+	{
+		return;
+	}
+	FTimerManager& Timers = World->GetTimerManager();
+	if (bPadShoulderDown[1 - Side])
+	{
+		Timers.ClearTimer(PadChordTimer); // the first one's own ability is dropped: this is the pair
+		ActivateSlot(ESOAbilitySlot::Ultimate);
+		return;
+	}
+	const ESOAbilitySlot Alone = bRight ? ESOAbilitySlot::Grenade : ESOAbilitySlot::Melee;
+	Timers.SetTimer(PadChordTimer, FTimerDelegate::CreateWeakLambda(this, [this, Alone]() { ActivateSlot(Alone); }), FMath::Max(PadChordWindow, 0.01f), false);
+}
+
+void ASOCharacter::HandleGrenade() { ActivateSlot(ESOAbilitySlot::Grenade); }
+void ASOCharacter::HandleMelee() { ActivateSlot(ESOAbilitySlot::Melee); }
+void ASOCharacter::HandleClassAbility() { ActivateSlot(ESOAbilitySlot::Class); }
+void ASOCharacter::HandleUltimate() { ActivateSlot(ESOAbilitySlot::Ultimate); }
 
 void ASOCharacter::HandleAimPressed()
 {
@@ -1452,6 +1615,13 @@ void ASOCharacter::ServerTravelToArea_Implementation(const FString& Level)
 	{
 		return;
 	}
+	// Travel takes everyone along, so it is the host's to start (later: the squad's leader). A joined player's
+	// request arrives here on the server, where their controller is not a local one.
+	if (const AController* Pilot = GetController(); !Pilot || !Pilot->IsLocalController())
+	{
+		UE_LOG(LogShatteredOrbit, Log, TEXT("Travel: only the host can take the squad to another area"));
+		return;
+	}
 	StoreWeaponAmmo();
 	// one area at a time: the subsystem lets go of this one before the next is built
 	if (USOAreaSubsystem* Areas = USOAreaSubsystem::Get(this); !Areas || !Areas->TravelToLevel(Level))
@@ -1532,6 +1702,14 @@ void ASOCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	BindInventory();
+	// the kit lives with the player, the abilities on the body: a new body is given them again (server)
+	if (const APlayerState* PS = GetPlayerState())
+	{
+		if (USOKitComponent* Kit = PS->FindComponentByClass<USOKitComponent>())
+		{
+			Kit->Apply(this);
+		}
+	}
 }
 
 void ASOCharacter::BindInventory()
@@ -1728,6 +1906,10 @@ void ASOCharacter::HandleMovementEvent(ESOMovementEvent Event, float Strength)
 		KickDust(0.35f, -Flat);
 		break;
 	case ESOMovementEvent::Landed:
+		if (HasAuthority() && Strength > 550.0f)
+		{
+			USOCombatStatics::ReportNoise(this, GetActorLocation(), this, FMath::Clamp(Strength * 1.1f, 600.0f, 1800.0f)); // (the harder the landing, the further it carries)
+		}
 	{
 		// the sound of the surface, heavier with the fall; a hard one kicks up dust
 		const float Hard = FMath::Clamp((Strength - 500.0f) / 1100.0f, 0.0f, 1.0f);
@@ -1744,6 +1926,14 @@ void ASOCharacter::HandleMovementEvent(ESOMovementEvent Event, float Strength)
 		break;
 	}
 	case ESOMovementEvent::SlideStarted:
+		if (HasAuthority())
+		{
+			USOCombatStatics::ReportNoise(this, GetActorLocation(), this, 1200.0f); // (a slide scrapes: creatures hear it)
+		}
+		if (ASOWeapon* Held = GetWeapon(); Held && HasAuthority() && Held->GetStats().Perks.bSlideReload)
+		{
+			Held->RefillFromReserve(); // (Slide Feed: going into a slide fills the magazine)
+		}
 		USOSoundLibrary::PlayFor(this, TEXT("move_slide"), Feet, 0.6f, ESOSoundRange::Near, 0.05f);
 		KickDust(0.5f, Flat);
 		break;
@@ -1891,6 +2081,10 @@ void ASOCharacter::SetViewMode(ESOViewMode NewMode)
 
 void ASOCharacter::ServerSetViewMode_Implementation(ESOViewMode NewMode)
 {
+	if (NewMode != ESOViewMode::FirstPerson && NewMode != ESOViewMode::ThirdPerson)
+	{
+		return; // a value no client of ours sends
+	}
 	ViewMode = NewMode;
 	ApplyViewMode();
 }
@@ -1901,6 +2095,7 @@ void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME_CONDITION(ASOCharacter, ViewMode, COND_SkipOwner);
 	DOREPLIFETIME(ASOCharacter, Outfit);
 	DOREPLIFETIME(ASOCharacter, bFlashlightOn);
+	DOREPLIFETIME_CONDITION(ASOCharacter, bAiming, COND_SkipOwner);
 }
 
 void ASOCharacter::ToggleViewMode()

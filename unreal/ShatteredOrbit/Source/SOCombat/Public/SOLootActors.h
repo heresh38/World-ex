@@ -18,6 +18,27 @@ class USOInteractable : public UInterface
 	GENERATED_BODY()
 };
 
+/** The things in the world a player can use (ISOInteractable): each adds itself as it enters play, so finding the one
+ *  in front of a player never walks every actor in the level. */
+UCLASS()
+class SOCOMBAT_API USOInteractables : public UWorldSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	void Add(AActor* Thing) { Things.AddUnique(Thing); }
+
+	/** The ones still there. */
+	const TArray<TWeakObjectPtr<AActor>>& Get()
+	{
+		Things.RemoveAll([](const TWeakObjectPtr<AActor>& T) { return !T.IsValid(); });
+		return Things;
+	}
+
+private:
+	TArray<TWeakObjectPtr<AActor>> Things;
+};
+
 /** Something the player can use with Interact (E / Y) when close and facing it. */
 class SOCOMBAT_API ISOInteractable
 {

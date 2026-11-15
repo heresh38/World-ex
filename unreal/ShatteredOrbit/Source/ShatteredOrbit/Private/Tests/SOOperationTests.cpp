@@ -3,7 +3,7 @@
 
 #include "SOTestWorld.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "EngineUtils.h"
 #include "Misc/FileHelper.h"
@@ -13,6 +13,9 @@
 #include "SOSpecies.h"
 #include "SOEnemyAIController.h"
 #include "SOInventoryComponent.h"
+#include "SOLootLibrary.h"
+#include "SOLootTypes.h"
+#include "SOWeaponData.h"
 #include "SOOperation.h"
 #include "SOPlayerState.h"
 
@@ -85,6 +88,19 @@ bool FSOOperationPlanTest::RunTest(const FString& Parameters)
 				{
 					TestTrue(TEXT("boss has a class"), USOSpeciesLibrary::Find(S.Boss) != nullptr || Real->Variants.Contains(S.Boss));
 					TestTrue(TEXT("boss group exists"), Real->Groups.Contains(S.BossGroup));
+				}
+			}
+			// what it gives: the Sarketh own guns (the light guns), one Legendary copy of one of them; nothing of the
+			// Void Requiem set, which is the technology of another species now
+			TestTrue(TEXT("the operation has rewards"), Real->Rewards.Num() >= 8);
+			const USOLootTables* Tables = USOLootLibrary::GetTables();
+			for (const FSOOperationRewardOption& R : Real->Rewards)
+			{
+				const USOWeaponData* Gun = (!R.IsArmor() && Tables) ? Tables->LoadArchetype(R.Archetype) : nullptr;
+				if (TestNotNull(*FString::Printf(TEXT("reward %s is a gun in the game"), *R.Archetype.ToString()), Gun))
+				{
+					TestTrue(*FString::Printf(TEXT("%s is a light gun"), *R.Archetype.ToString()), Gun->WeaponClass == ESOWeaponClass::Energy);
+					TestTrue(*FString::Printf(TEXT("%s belongs to no set"), *R.Archetype.ToString()), Gun->SetId.IsNone());
 				}
 			}
 		}

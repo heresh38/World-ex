@@ -10,7 +10,9 @@ class UStaticMeshComponent;
 class ASOConduit;
 
 /**
- * The Altered (tools/blender/altered.py): people and beasts the Stillfall changed, grown through with void crystal.
+ * The Sarketh, the species that holds Meridian (docs/story/WORLD.md). The classes, ids and assets here still carry
+ * the names of the first bodies ("the Altered": Remnant, Stalker, Veilborn, Bulwark, Colossus), which are being
+ * replaced by one humanoid people ranked by what they are issued; what the player reads is each one's DisplayName.
  * The operation's enemies: the Remnant (a fast, frail husk that comes in numbers), the Veilborn (keeps its distance,
  * hurls void bolts, blinks away when pressed), the Bulwark (slow; its shield arm turns shots from the front, it slams
  * the ground when you close in), and the Hollow Colossus (the boss: slam, sweep, void barrage, and twice it kneels into
@@ -88,11 +90,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float MinRange = 800.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	float CastCooldown = 2.4f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	float BoltDamage = 15.0f;
+	// Its void bolt is an ability (the kit "veilborn", slot Grenade: the cast's length, the bolt's damage and speed
+	// and the cooldown are data).
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float BlinkCooldown = 6.0f;
@@ -106,9 +105,10 @@ public:
 protected:
 	bool Blink(const FVector& Away);
 
-	TWeakObjectPtr<AActor> CastTarget;
+	virtual void OnAbilityWindUp(ESOAbilitySlot Slot) override;
+	virtual void OnAbilityUsed(ESOAbilitySlot Slot) override;
+
 	float NextCast = 0.0f;
-	float PendingCast = -1.0f;
 	float NextBlink = 0.0f;
 	float HealthAtBlink = -1.0f;
 	int32 BoltsFired = 0;
@@ -129,24 +129,52 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float FrontDamageScale = 0.25f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	float SlamRadius = 520.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	float SlamDamage = 34.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	float SlamCooldown = 7.0f;
+	// Its ground slam is an ability (the kit "bulwark", slot Class: wind-up, radius, damage, cooldown are data).
 
 	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
 	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target) override;
-	virtual void Tick(float DeltaSeconds) override;
 	/** The left arm is the shield: the gun is held in the right hand. */
 	virtual bool HoldsWithOneHand() const override { return true; }
+	/** Its plate is up between it and From: not while it reels, and not while a gunner holds the trigger. */
+	bool PlateFaces(const FVector& From) const;
+	virtual bool TurnsBlow(const FVector& From) const override { return PlateFaces(From); }
+	/** Behind its plate it is not pinned down by rounds passing close. */
+	virtual bool ResistsStatus(const FGameplayTag& Status) const override { return Status == SOTags::Status_Suppressed; }
 
 protected:
-	float NextSlam = 0.0f;
-	float PendingSlam = -1.0f;
+	virtual void OnAbilityWindUp(ESOAbilitySlot Slot) override;
+	virtual void OnAbilityUsed(ESOAbilitySlot Slot) override;
+};
+
+/** The Bearer: the gun carrier. A broad plated husk with a drum of crystal-fused bone on its back that feeds the
+ *  heavy gun it carries at the hip in both hands. Slow; it does not take cover: it plants itself and keeps the place
+ *  its target went to ground under fire while the others move up. Its plates turn half of what hits it from the
+ *  front, but they part round the gun while it holds the trigger, and they are down while it reels. */
+UCLASS()
+class SOAI_API ASOBearer : public ASOEnemy
+{
+	GENERATED_BODY()
+
+public:
+	ASOBearer(const FObjectInitializer& ObjectInitializer);
+
+	/** Share of the damage it takes from in front while its plates are closed. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float FrontDamageScale = 0.5f;
+
+	/** Its plates are closed between it and From: not while it fires, not while it reels. */
+	bool PlateFaces(const FVector& From) const;
+
+	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
+	virtual bool TurnsBlow(const FVector& From) const override { return PlateFaces(From); }
+	virtual bool HoldsAtHip() const override { return true; }
+	/** Behind its plates it is not pinned down by rounds passing close. */
+	virtual bool ResistsStatus(const FGameplayTag& Status) const override { return Status == SOTags::Status_Suppressed; }
+	virtual void Tick(float DeltaSeconds) override;
+
+protected:
+	bool bWasFiring = false;
+	float NextBrace = 0.0f;
 };
 
 /** A conduit feeding the Colossus's shield: it stands on its socket and tethers a beam to the boss's heart. */
@@ -156,6 +184,9 @@ class SOAI_API ASOConduit : public ASOEnemy
 	GENERATED_BODY()
 
 public:
+	/** A thing, not a creature. */
+	virtual bool ResistsStatus(const FGameplayTag& Status) const override { return Status == SOTags::Status_Stagger || Status == SOTags::Status_Slow || Status == SOTags::Status_Suppressed; }
+
 	ASOConduit(const FObjectInitializer& ObjectInitializer);
 
 	/** What the tether reaches for. */
@@ -178,10 +209,13 @@ protected:
 };
 
 /**
- * The Hollow Colossus: the operation's boss (~8 m). Close in it slams the ground (a shock ring) or sweeps an arm across
- * its front; at range it throws a barrage of void bolts from its heart. At two thirds and one third of its health it
- * kneels into the beam, immune, while three conduits rise on their sockets (actors tagged "SOConduit", or a ring round
- * where it stands); destroying them breaks the shield and staggers it (it takes half again as much damage for a while).
+ * The Hollow Colossus: the operation's boss. What it is lives here (its body, its gun, how it closes and when it
+ * moves); how its fight goes is data: the boss table "colossus" (three phases by health; the second and third begin
+ * behind a shield fed by three conduits on the level's sockets, actors tagged "SOConduit", or in a ring round it;
+ * breaking them makes it reel; the heart in its hollow chest is its weak point and can be broken once a phase) and
+ * the kits its phases name (a sweep across its front, a slam into the ground, a barrage of void bolts from the
+ * heart, from the second phase the ground breaking open under those it fights). Every one of its attacks is an
+ * ability with a wind-up, and those that land on the ground draw where.
  */
 UCLASS()
 class SOAI_API ASOColossus : public ASOEnemy
@@ -189,46 +223,32 @@ class SOAI_API ASOColossus : public ASOEnemy
 	GENERATED_BODY()
 
 public:
+	/** Too big to be knocked about or slowed by anyone: it reels only when its shield or its heart breaks
+	 *  (USOBossComponent::Stagger). */
+	virtual bool ResistsStatus(const FGameplayTag& Status) const override { return Status == SOTags::Status_Stagger || Status == SOTags::Status_Slow || Status == SOTags::Status_Suppressed; }
+
 	ASOColossus(const FObjectInitializer& ObjectInitializer);
 
-	/** Health fractions where it raises its shield. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	TArray<float> ShieldAt;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
-	TSubclassOf<ASOConduit> ConduitClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy", meta = (Units = "s"))
-	float StaggerTime = 5.0f;
-
-	bool IsShielded() const { return bShielded; }
+	/** Its fight's state (the boss table's: see USOBossComponent). */
+	bool IsShielded() const;
 	bool IsStaggered() const;
-	const TArray<TWeakObjectPtr<ASOConduit>>& GetConduits() const { return Conduits; }
-
-	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
-	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target) override;
-	virtual void Tick(float DeltaSeconds) override;
+	const TArray<TWeakObjectPtr<ASOConduit>>& GetConduits() const;
 
 	/** Server: raises the shield and the conduits now (exposed for tests). */
 	void StartShield();
 
+	/** What it casts leaves it from the heart. */
+	virtual FVector GetCastOrigin() const override { return Heart(); }
+	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target) override;
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	virtual void HandleDeath() override;
 
-	enum class EMove : uint8 { None, Slam, Sweep, Barrage };
-	void Begin(EMove Move, FName Clip, float ImpactAfter, float Rate = 1.0f);
 	FVector Heart() const;
 
-	TArray<TWeakObjectPtr<ASOConduit>> Conduits;
 	TWeakObjectPtr<ASOCombatCharacter> Foe;
-	EMove Pending = EMove::None;
-	float ImpactAt = 0.0f;
-	float MoveEnd = 0.0f;
 	float NextMove = 0.0f;
-	float NextShot = 0.0f;
-	int32 ShotsLeft = 0;
-	int32 NextShield = 0;
-	float StaggerUntil = -1.0f;
-	bool bShielded = false;
 	bool bApproach = false;
+	bool bInMove = false;
 };

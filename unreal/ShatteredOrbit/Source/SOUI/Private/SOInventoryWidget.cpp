@@ -682,7 +682,11 @@ void USOInventoryWidget::BuildTree()
 	UHorizontalBoxSlot* Spacer = Top->AddChildToHorizontalBox(Make<USpacer>(T));
 	Spacer->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	StatsRow = Make<UHorizontalBox>(T);
-	Top->AddChildToHorizontalBox(StatsRow)->SetVerticalAlignment(VAlign_Center);
+	AttributeRow = Make<UHorizontalBox>(T);
+	UVerticalBox* StatsBlock = Make<UVerticalBox>(T);
+	StatsBlock->AddChildToVerticalBox(StatsRow);
+	StatsBlock->AddChildToVerticalBox(AttributeRow)->SetPadding(FMargin(0, 6, 0, 0));
+	Top->AddChildToHorizontalBox(StatsBlock)->SetVerticalAlignment(VAlign_Center);
 	FPlate PowerPlate;
 	PowerPlate.Cut = 12.0f;
 	PowerPlate.Edge = Alpha(Gold, 0.55f);
@@ -776,10 +780,15 @@ void USOInventoryWidget::BuildTree()
 	Action(EquipButton, EquipLabel, TEXT("EQUIP  [E]"), Cyan);
 	Action(LockButton, LockLabel, TEXT("LOCK  [L]"), Gold);
 	Action(DismantleButton, DismantleLabel, TEXT("DISMANTLE  [X]"), Bad);
+	DetailColumn->AddChildToVerticalBox(Actions)->SetPadding(FMargin(0, 14, 0, 0));
+	// (a row of its own: its caption carries the cost)
+	Actions = Make<UHorizontalBox>(T);
+	Action(UpgradeButton, UpgradeLabel, TEXT("UPGRADE  [U]"), Good);
+	UpgradeButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnUpgrade);
 	EquipButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnEquip);
 	LockButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnLock);
 	DismantleButton->OnClicked.AddDynamic(this, &USOInventoryWidget::OnDismantle);
-	DetailColumn->AddChildToVerticalBox(Actions)->SetPadding(FMargin(0, 14, 0, 0));
+	DetailColumn->AddChildToVerticalBox(Actions)->SetPadding(FMargin(0, 8, 0, 0));
 	DetailPanel->SetContent(DetailColumn);
 	DetailPanel->SetVisibility(ESlateVisibility::Collapsed);
 	Root->AddChildToCanvas(DetailPanel);
@@ -790,6 +799,7 @@ void USOInventoryWidget::BuildTree()
 	Hints->AddChildToHorizontalBox(Hint(T, TEXT("E"), TEXT("EQUIP")));
 	Hints->AddChildToHorizontalBox(Hint(T, TEXT("L"), TEXT("LOCK")));
 	Hints->AddChildToHorizontalBox(Hint(T, TEXT("X"), TEXT("DISMANTLE (TWICE)")));
+	Hints->AddChildToHorizontalBox(Hint(T, TEXT("U"), TEXT("RAISE")));
 	Hints->AddChildToHorizontalBox(Hint(T, TEXT("DRAG"), TEXT("TURN")));
 	Hints->AddChildToHorizontalBox(Hint(T, TEXT("ESC"), TEXT("BACK")));
 	UCanvasPanelSlot* HintSlot = Root->AddChildToCanvas(Hints);
@@ -878,6 +888,17 @@ void USOInventoryWidget::Refresh()
 	for (const TPair<const TCHAR*, FString>& F : Figures)
 	{
 		StatsRow->AddChildToHorizontalBox(Figure(WidgetTree, F.Key, F.Value, Ink))->SetPadding(FMargin(0, 0, 38, 0));
+	}
+	// what is worn adds up to the character's six attributes (full at the table's Max: shown brighter there)
+	AttributeRow->ClearChildren();
+	const USOAttributeTable& Rules = USOAttributeTable::Get();
+	const FSOAttributePoints Have = Inventory->GetAttributePoints();
+	for (int32 i = 0; i < static_cast<int32>(ESOAttribute::Count); ++i)
+	{
+		const ESOAttribute A = static_cast<ESOAttribute>(i);
+		UWidget* Cell = Figure(WidgetTree, Rules.Rule(A).Name.ToString().ToUpper(), FString::FromInt(Have.Get(A)), Have.Get(A) >= Rules.Max ? Gold : Cyan, 13);
+		Cell->SetToolTipText(Rules.Rule(A).Effect);
+		AttributeRow->AddChildToHorizontalBox(Cell)->SetPadding(FMargin(0, 0, 26, 0));
 	}
 	BodyLabel->SetText(FText::FromString(Inventory->GetBody() == TEXT("female") ? TEXT("BODY   /   FEMALE") : TEXT("BODY   /   MALE")));
 	FillColumns();
@@ -1091,6 +1112,7 @@ void USOInventoryWidget::FillDetails()
 	else
 	{
 		Details->AddChildToVerticalBox(Text(WidgetTree, TEXT("Nothing selected"), 14, Dim));
+		ShowUpgrade(FString());
 		EquipButton->SetIsEnabled(false);
 		LockButton->SetIsEnabled(false);
 		DismantleButton->SetIsEnabled(false);
@@ -1204,6 +1226,7 @@ void USOInventoryWidget::FillWeaponDetails(const FSOWeaponInstance& W)
 		}
 	}
 	const bool bEquipped = Inventory->IsEquipped(W.Uid);
+	ShowUpgrade(W.Uid);
 	EquipButton->SetIsEnabled(!bEquipped);
 	EquipLabel->SetText(FText::FromString(bEquipped ? TEXT("EQUIPPED") : TEXT("EQUIP  [E]")));
 	LockButton->SetIsEnabled(true);
@@ -1264,10 +1287,35 @@ void USOInventoryWidget::FillArmorDetails(const FSOArmorInstance& A)
 		CompareSlot->SetPadding(FMargin(6, 0, 0, 6));
 	}
 	Details->AddChildToVerticalBox(Figures)->SetPadding(FMargin(0, 0, 0, 10));
+	// what the piece gives: its points in each attribute, against the piece worn in its slot
+	Details->AddChildToVerticalBox(Header(T, TEXT("GIVES")))->SetPadding(FMargin(0, 4, 0, 6));
+	const USOAttributeTable& Rules = USOAttributeTable::Get();
+	const FSOAttributePoints Gives = Inventory->GetArmorPoints(A);
+	const FSOAttributePoints WornGives = Worn && Worn->Uid != A.Uid ? Inventory->GetArmorPoints(*Worn) : Gives;
+	for (int32 i = 0; i < static_cast<int32>(ESOAttribute::Count); ++i)
+	{
+		const ESOAttribute Which = static_cast<ESOAttribute>(i);
+		const int32 Mine = Gives.Get(Which), Theirs = WornGives.Get(Which);
+		if (Mine == 0 && Theirs == 0)
+		{
+			continue;
+		}
+		UHorizontalBox* Line = Make<UHorizontalBox>(T);
+		Line->AddChildToHorizontalBox(Sized(T, Text(T, Rules.Rule(Which).Name.ToString().ToUpper(), 11, Ink, true, 160), 120.0f, 0.0f));
+		Line->AddChildToHorizontalBox(Sized(T, Text(T, FString::Printf(TEXT("+%d"), Mine), 13, Cyan, true), 54.0f, 0.0f));
+		if (Mine != Theirs)
+		{
+			Line->AddChildToHorizontalBox(Text(T, FString::Printf(TEXT("%s%d"), Mine > Theirs ? TEXT("+") : TEXT(""), Mine - Theirs), 11, Mine > Theirs ? Good : Bad, true));
+		}
+		UTextBlock* What = Text(T, Rules.Rule(Which).Effect.ToString(), 10, Dim);
+		Line->AddChildToHorizontalBox(What)->SetPadding(FMargin(14, 0, 0, 0));
+		Details->AddChildToVerticalBox(Line)->SetPadding(FMargin(0, 0, 0, 3));
+	}
 	Details->AddChildToVerticalBox(Header(T, TEXT("PERKS")))->SetPadding(FMargin(0, 8, 0, 8));
-	UTextBlock* Note = Text(T, TEXT("Armour perks come with the world's later chapters: for now every piece is its look and its armour."), 11, Dim);
+	UTextBlock* Note = Text(T, TEXT("Armour perks come with the world's later chapters: for now a piece is its look and what it gives."), 11, Dim);
 	Note->SetAutoWrapText(true);
 	Details->AddChildToVerticalBox(Note);
+	ShowUpgrade(A.Uid);
 	// a required slot can be swapped but never emptied: what is worn there shows as WORN
 	const bool bRequired = !USOWardrobeData::IsOptionalSlot(A.Slot);
 	EquipButton->SetIsEnabled(!(A.bEquipped && bRequired));
@@ -1331,6 +1379,42 @@ void USOInventoryWidget::OnEquip()
 		Inventory->ServerEquipArmor(A->Uid);
 		USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.7f, 0.0f);
 	}
+}
+
+void USOInventoryWidget::ShowUpgrade(const FString& Uid)
+{
+	int32 NewPower = 0, CostCredits = 0, CostAlloy = 0;
+	if (Uid.IsEmpty() || !Inventory)
+	{
+		UpgradeButton->SetIsEnabled(false);
+		UpgradeLabel->SetText(FText::FromString(TEXT("UPGRADE  [U]")));
+	}
+	else if (!Inventory->GetUpgrade(Uid, NewPower, CostCredits, CostAlloy))
+	{
+		// as far as this level lets it go
+		UpgradeButton->SetIsEnabled(false);
+		UpgradeLabel->SetText(FText::FromString(FString::Printf(TEXT("AT THE MOST FOR LEVEL %d  (%d)"), Inventory->GetLevel(), Inventory->GetPowerCap())));
+	}
+	else
+	{
+		const bool bCanPay = Inventory->GetCredits() >= CostCredits && Inventory->GetAlloy() >= CostAlloy;
+		UpgradeButton->SetIsEnabled(bCanPay);
+		UpgradeLabel->SetText(FText::FromString(FString::Printf(TEXT("%s TO %d  [U]   %d CREDITS  ·  %d ALLOY"), bCanPay ? TEXT("RAISE") : TEXT("CANNOT PAY: RAISE"),
+			NewPower, CostCredits, CostAlloy)));
+	}
+}
+
+void USOInventoryWidget::OnUpgrade()
+{
+	int32 NewPower = 0, CostCredits = 0, CostAlloy = 0;
+	if (!Inventory || SelectedKey.IsEmpty() || !Inventory->GetUpgrade(SelectedKey, NewPower, CostCredits, CostAlloy)
+		|| Inventory->GetCredits() < CostCredits || Inventory->GetAlloy() < CostAlloy)
+	{
+		USOSoundLibrary::Play2D(this, TEXT("ui_deny"), 0.6f, 0.0f);
+		return;
+	}
+	Inventory->ServerUpgrade(SelectedKey);
+	USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.7f, 0.0f);
 }
 
 void USOInventoryWidget::OnLock()
@@ -1443,6 +1527,11 @@ FReply USOInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FK
 	if (Key == EKeys::X || Key == EKeys::Gamepad_FaceButton_Left)
 	{
 		OnDismantle();
+		return FReply::Handled();
+	}
+	if (Key == EKeys::U || Key == EKeys::Gamepad_LeftShoulder)
+	{
+		OnUpgrade();
 		return FReply::Handled();
 	}
 	if (Key == EKeys::One || Key == EKeys::Two || Key == EKeys::Three)

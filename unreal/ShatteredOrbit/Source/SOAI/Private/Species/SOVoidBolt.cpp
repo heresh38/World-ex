@@ -1,4 +1,5 @@
 #include "SOAltered.h"
+#include "SOCue.h"
 
 #include "SOAlteredCommon.h"
 
@@ -122,9 +123,9 @@ void ASOVoidBolt::Burst(const FVector& At, const FVector& Normal)
 	bSpent = true;
 	if (USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>())
 	{
-		Fx->Blast(At, Normal, 70.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
+		USOCue::Blast(this, At, Normal, 70.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
 	}
-	USOSoundLibrary::PlayAt(this, TEXT("bolt_impact"), At, 0.8f, 0.1f, ESOSoundRange::Mid);
+	USOCue::Sound(this, TEXT("bolt_impact"), At, 0.8f, 0.1f, ESOSoundRange::Mid);
 	SetLifeSpan(0.05f);
 	Core->SetVisibility(false);
 }

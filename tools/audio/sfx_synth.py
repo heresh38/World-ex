@@ -1651,7 +1651,7 @@ SOUNDS.update({"amb_wind": amb_wind, "amb_rain": amb_rain, "amb_gust": amb_gust,
 
 
 # ---------------------------------------------------------------------------- the Altered's voices and the alien base
-# Five voice sets (remnant, veilborn, bulwark, stalker, colossus), each: idle_1..4 (mutters and chitters it makes on
+# Six voice sets (remnant, veilborn, bulwark, stalker, colossus, bearer), each: idle_1..4 (mutters and chitters it makes on
 # its own: the player hears it before seeing it), query_1..2 (it heard something), alert_1..3 (it saw you), hurt_1..3,
 # death_1..2. Built from the creature voice (glottal source through swept formants), wet clicks, throat gurgles,
 # ring modulation for the stranger ones.
@@ -1663,6 +1663,9 @@ VOICE_SETS = {
     "bulwark": dict(f=(70, 170), fs=0.62, rough=0.9, ring=0.0, click=0.2, verb=0.32, seed=4300),
     "stalker": dict(f=(220, 520), fs=0.95, rough=0.5, ring=0.0, click=0.8, verb=0.28, seed=4400),
     "colossus": dict(f=(48, 120), fs=0.5, rough=0.95, ring=11.0, click=0.15, verb=0.5, seed=4500),
+    # the gun carrier: low and slow like the Bulwark, but hollow (it speaks from inside its plates) and with the
+    # drum's rattle in it
+    "bearer": dict(f=(58, 138), fs=0.55, rough=0.8, ring=5.0, click=0.45, verb=0.4, seed=4600),
 }
 
 
@@ -2076,11 +2079,228 @@ SOUNDS.update({"move_land_soft": lambda: move_land(False), "move_land_hard": lam
 MOVEMENT = [n for n in SOUNDS if n.startswith("move_") or (n.startswith("footstep_") and n.count("_") == 2)]
 
 
+# ============================================================================ abilities (the kits)
+# One sound per ability, played where it is used (the grant's "sound" in Data/game_data.json "kits"), and the
+# thrown charge's burst. Build just these with:  python tools/audio/sfx_synth.py <out> abilities
+
+def ability_throw():
+    """An arm thrown forward: cloth, the pin's click, the charge arming as it leaves the hand."""
+    out = silence(0.55)
+    out = place(out, click(3101, 4200.0, 0.5, 0.02), 0.0)                                                       # the pin
+    out = place(out, svf_sweep(noise(0.26, 3103), "band", 500, 2600, 1.2) * env_ad(0.26, 0.06, 0.07), 0.03, 0.8)  # the swing
+    out = place(out, rustle(0.24, 3105, 1600, 7000, 30, 0.3), 0.02)                                             # sleeve and straps
+    out = place(out, tone(1500, 2300, 0.12, 0.05) * 0.25, 0.2)                                                  # armed
+    return finish(room(out, 0.12), -10)
+
+
+def ability_charge_burst():
+    """The breach charge going off: a hard crack, a low body, torn air, grit coming down."""
+    out = silence(1.9)
+    out = place(out, click(3111, 2400.0, 1.0, 0.03), 0.0)
+    out = place(out, thump(110, 30, 0.6, 0.12, 2.4), 0.0, 1.0)
+    out = place(out, filt(noise(0.6, 3113), "low", 3200) * env_ad(0.6, 0.001, 0.1), 0.0, 0.9)
+    out = place(out, fm_zap(0.3, 1100, 160, 1.41, 5.0, 0.05, 0.07, 3115), 0.0, 0.4)                             # the charge's own snap
+    out = place(out, crackle(1.1, 3117, 80, 1500, 9000, 0.3), 0.06, 0.45)                                       # grit
+    out = place(out, filt(noise(1.2, 3119, "pink"), "low", 500) * env_ad(1.2, 0.02, 0.35), 0.03, 0.5)           # the air rolling off
+    return finish(room(out, 0.3), -3)
+
+
+def ability_strike():
+    """A blow with the whole body: the rush of the arm, then weight landing on armour."""
+    out = silence(0.6)
+    out = place(out, svf_sweep(noise(0.16, 3121), "band", 300, 1800, 1.0) * env_ad(0.16, 0.05, 0.04), 0.0, 0.7)  # the rush
+    out = place(out, thump(150, 48, 0.2, 0.05, 2.0), 0.12, 1.0)                                                 # it lands
+    out = place(out, filt(noise(0.08, 3123), "band", (900, 3600)) * env_ad(0.08, 0.001, 0.016), 0.12, 0.8)      # plate
+    out = place(out, crackle(0.2, 3125, 60, 2000, 8000, 0.06), 0.13, 0.3)
+    out = place(out, rustle(0.2, 3127, 1500, 6000, 24, 0.2), 0.16)
+    return finish(room(out, 0.16), -6)
+
+
+def ability_brace():
+    """Bracing: plates locking, a field coming up round the body and holding."""
+    out = silence(1.3)
+    out = place(out, click(3131, 1800.0, 0.8, 0.03), 0.0)
+    out = place(out, click(3133, 2600.0, 0.6, 0.03), 0.07)                                                      # two latches
+    out = place(out, tone(90, 180, 0.9, 0.5, 0.25) * 0.5, 0.05)                                                 # the field rising
+    out = place(out, fm_zap(0.7, 240, 420, 2.0, 2.5, 0.3, 0.4, 3135, 0.15), 0.1, 0.3)
+    out = place(out, bell(660.0, 0.9, 0.35) * 0.18, 0.35)                                                       # it settles
+    return finish(room(out, 0.2), -9)
+
+
+def ability_slam():
+    """A blow into the ground: the hit, the ground answering, the wave going out, stone coming down."""
+    out = silence(2.6)
+    out = place(out, svf_sweep(noise(0.2, 3141), "band", 250, 1400, 1.0) * env_ad(0.2, 0.08, 0.05), 0.0, 0.6)   # the wind-up through the air
+    out = place(out, thump(85, 22, 1.0, 0.24, 2.8), 0.17, 1.0)                                                  # the ground
+    out = place(out, thump(46, 18, 1.2, 0.4, 1.6), 0.19, 0.8)                                                   # under it
+    out = place(out, filt(noise(0.5, 3143), "low", 2400) * env_ad(0.5, 0.001, 0.09), 0.17, 0.9)
+    out = place(out, fm_zap(0.6, 700, 90, 0.5, 6.0, 0.12, 0.16, 3145), 0.17, 0.45)                              # the wave
+    out = place(out, crackle(1.6, 3147, 70, 900, 7000, 0.5), 0.25, 0.5)                                         # stone
+    out = place(out, filt(noise(1.8, 3149, "pink"), "low", 300) * env_ad(1.8, 0.05, 0.6), 0.2, 0.6)             # it rolls away
+    return finish(room(out, 0.34), -2)
+
+
+SOUNDS.update({"ability_throw": ability_throw, "ability_charge_burst": ability_charge_burst, "ability_strike": ability_strike,
+               "ability_brace": ability_brace, "ability_slam": ability_slam})
+ABILITIES = [n for n in SOUNDS if n.startswith("ability_")]
+
+
+# --- A boss's attacks (build with: sfx_synth.py <out> boss). A boss is heard before it is felt: every attack has a
+# sound for its wind-up (the warning, about as long as the wind-up) and one for the blow. Low, slow and wide: nothing
+# a player's own kit makes sounds like these.
+
+def boss_windup():
+    """A great weight being raised: a groan that climbs, air drawn in, plates grinding (about 1.1 s)."""
+    out = silence(1.25)
+    out = place(out, saturate(osc(sweep(38, 74, 1.1), "saw") * env_ad(1.1, 0.5, 0.25), 1.6) * 0.5, 0.0)            # the groan
+    out = place(out, formants(noise(1.1, 3201, "pink"), [(220, 520, 4.0, 1.0), (700, 1300, 5.0, 0.5)]) * env_ad(1.1, 0.7, 0.12), 0.0, 0.5)  # breath
+    out = place(out, scrape(0.9, 180, 420, 3203, 0.5), 0.1)                                                       # plate on plate
+    out = place(out, tone(520, 880, 0.35, 0.2, 0.25) * 0.12, 0.8)                                                 # the peak: it is about to come down
+    return finish(room(out, 0.28), -6)
+
+
+def boss_windup_heavy():
+    """The same drawn out for a heavy attack (about 1.9 s): lower, and the air shakes before it lands."""
+    out = silence(2.05)
+    out = place(out, saturate(osc(sweep(30, 66, 1.9), "saw") * env_ad(1.9, 1.1, 0.3), 1.8) * 0.55, 0.0)
+    out = place(out, formants(noise(1.9, 3211, "pink"), [(180, 460, 4.0, 1.0), (600, 1200, 5.0, 0.5)]) * env_ad(1.9, 1.3, 0.14), 0.0, 0.5)
+    out = place(out, scrape(1.5, 150, 380, 3213, 0.5), 0.15)
+    trem = 0.5 + 0.5 * np.sin(2 * np.pi * 13.0 * np.arange(secs(0.9)) / SR)
+    out = place(out, tone(46, 52, 0.9, 0.6, 0.4) * trem * 0.5, 1.0)                                               # the shake
+    out = place(out, tone(440, 780, 0.4, 0.22, 0.3) * 0.12, 1.5)
+    return finish(room(out, 0.3), -5)
+
+
+def boss_slam():
+    """Both arms into the ground: the hit, the ground giving, the wave rolling out, stone falling for a long time."""
+    out = silence(3.4)
+    out = place(out, thump(70, 18, 1.4, 0.34, 3.2), 0.0, 1.0)
+    out = place(out, thump(38, 14, 1.8, 0.6, 1.8), 0.02, 0.9)
+    out = place(out, filt(noise(0.7, 3221), "low", 1800) * env_ad(0.7, 0.001, 0.12), 0.0, 0.9)
+    out = place(out, fm_zap(0.9, 520, 60, 0.5, 7.0, 0.16, 0.22, 3223), 0.0, 0.4)                                  # the void in it
+    out = place(out, crackle(2.2, 3225, 60, 700, 6000, 0.7), 0.1, 0.5)                                            # stone
+    out = place(out, filt(noise(2.6, 3227, "pink"), "low", 220) * env_ad(2.6, 0.08, 0.9), 0.05, 0.7)              # it rolls away
+    return finish(room(out, 0.4), -1.5)
+
+
+def boss_sweep():
+    """An arm as long as a body through the air, and what it meets."""
+    out = silence(1.5)
+    out = place(out, svf_sweep(noise(0.42, 3231), "band", 160, 900, 0.9) * env_ad(0.42, 0.2, 0.08), 0.0, 1.0)     # the air
+    out = place(out, svf_sweep(noise(0.42, 3233, "pink"), "low", 300, 90, 0.8) * env_ad(0.42, 0.22, 0.1), 0.0, 0.7)
+    out = place(out, thump(120, 40, 0.5, 0.12, 2.4), 0.2, 0.9)                                                    # it lands
+    out = place(out, filt(noise(0.12, 3235), "band", (600, 2800)) * env_ad(0.12, 0.001, 0.025), 0.2, 0.6)
+    out = place(out, crackle(0.6, 3237, 50, 1200, 7000, 0.2), 0.22, 0.3)
+    return finish(room(out, 0.3), -4)
+
+
+def boss_charge():
+    """Light gathering in the hollow chest before a volley: a tone that climbs and tightens (about 0.7 s)."""
+    out = silence(0.95)
+    out = place(out, fm_zap(0.75, 140, 620, 2.0, 1.0, 0.6, 0.5, 3241, 0.5) * 0.6, 0.0)
+    out = place(out, tone(70, 150, 0.75, 0.5, 0.45) * 0.5, 0.0)
+    out = place(out, crackle(0.7, 3243, 90, 2500, 11000) * env_ad(0.7, 0.55, 0.08), 0.0, 0.35)                    # arcing, more as it fills
+    out = place(out, bell(987.8, 0.5, 0.2) * 0.14, 0.55)                                                          # full
+    return finish(room(out, 0.22), -8)
+
+
+def boss_call():
+    """It calls something up from under the ground: a low voice of many, and the ground answering (about 0.8 s)."""
+    out = silence(1.5)
+    voice = np.zeros(secs(1.0))
+    for i, f in enumerate((73.4, 110.0, 146.8, 174.6)):                                                           # D minor, low
+        voice += osc(sweep(f * 0.97, f, 1.0), "saw", i * 1.3) * (1.0 - 0.15 * i)
+    voice = formants(voice, [(380, 620, 6.0, 1.0), (900, 1300, 7.0, 0.5), (2300, 2600, 8.0, 0.2)]) * env_ad(1.0, 0.45, 0.25)
+    out = place(out, voice * 0.35, 0.0)
+    out = place(out, filt(noise(1.3, 3251, "pink"), "low", 160) * env_ad(1.3, 0.6, 0.3), 0.1, 0.9)                # the ground
+    out = place(out, crackle(0.9, 3253, 40, 500, 4000, 0.4), 0.45, 0.4)
+    return finish(room(out, 0.36), -6)
+
+
+def boss_mark_burst():
+    """A mark bursting: the ground splitting, void light coming up through it, grit."""
+    out = silence(1.7)
+    out = place(out, click(3261, 1900.0, 1.0, 0.03), 0.0)
+    out = place(out, thump(95, 26, 0.7, 0.16, 2.6), 0.0, 1.0)
+    out = place(out, fm_zap(0.5, 900, 110, 1.41, 6.0, 0.08, 0.12, 3263), 0.0, 0.5)
+    out = place(out, svf_sweep(noise(0.5, 3265), "band", 400, 3200, 1.2) * env_ad(0.5, 0.02, 0.1), 0.0, 0.5)      # up through the crack
+    out = place(out, crackle(1.0, 3267, 70, 1500, 9000, 0.3), 0.05, 0.4)
+    out = place(out, filt(noise(1.1, 3269, "pink"), "low", 400) * env_ad(1.1, 0.02, 0.3), 0.03, 0.5)
+    return finish(room(out, 0.3), -4)
+
+
+def boss_phase():
+    """A phase begins: the whole creature sounding, a chord that opens downward, heard across the field."""
+    out = silence(3.2)
+    chord = np.zeros(secs(2.6))
+    for i, (f, g) in enumerate(((36.7, 1.0), (55.0, 0.8), (73.4, 0.7), (87.3, 0.5), (110.0, 0.4))):               # D, A, D, F, A
+        chord += saturate(osc(sweep(f * 1.06, f, 2.6), "saw", i * 0.9) * g, 1.3)
+    chord = formants(chord, [(300, 480, 5.0, 1.0), (760, 1040, 6.0, 0.6), (2100, 2500, 8.0, 0.25)]) * env_ad(2.6, 0.25, 0.9)
+    out = place(out, chord * 0.3, 0.0)
+    out = place(out, thump(52, 20, 1.2, 0.4, 2.2), 0.0, 0.8)
+    out = place(out, fm_zap(1.2, 300, 70, 0.5, 5.0, 0.3, 0.4, 3271), 0.05, 0.35)
+    out = place(out, bell(293.7, 2.2, 0.9) * 0.2, 0.1)
+    return finish(room(out, 0.42), -2)
+
+
+def boss_reel():
+    """Something in it breaks (its shield, its heart): crystal going, the power falling out of it, a groan."""
+    out = silence(2.6)
+    out = place(out, click(3281, 5200.0, 1.0, 0.02), 0.0)
+    for f, at in ((2093.0, 0.0), (1568.0, 0.05), (2637.0, 0.09), (1174.7, 0.16)):                                 # shards
+        out = place(out, bell(f, 0.9, 0.25) * 0.22, at)
+    out = place(out, crackle(0.8, 3283, 140, 3000, 12000, 0.2), 0.0, 0.5)
+    out = place(out, fm_zap(1.4, 520, 48, 0.5, 4.0, 0.5, 0.6, 3285), 0.05, 0.5)                                   # the power falling away
+    out = place(out, saturate(osc(sweep(96, 40, 1.8), "saw") * env_ad(1.8, 0.15, 0.6), 1.5) * 0.4, 0.2)            # the groan
+    out = place(out, thump(60, 22, 0.9, 0.3, 2.0), 0.02, 0.7)
+    return finish(room(out, 0.38), -3)
+
+
+SOUNDS.update({"boss_windup": boss_windup, "boss_windup_heavy": boss_windup_heavy, "boss_slam": boss_slam, "boss_sweep": boss_sweep,
+               "boss_charge": boss_charge, "boss_call": boss_call, "boss_mark_burst": boss_mark_burst, "boss_phase": boss_phase,
+               "boss_reel": boss_reel})
+BOSS = [n for n in SOUNDS if n.startswith("boss_")]
+
+
+# --- A marksman's shot (build with: sfx_synth.py <out> marksman): the aim is heard before the shot is felt.
+
+def marksman_aim():
+    """A marksman taking aim: a thin tone that climbs and tightens for a second, then one hard tick as it locks."""
+    out = silence(1.6)
+    out = place(out, tone(520, 1480, 1.1, 0.9, 0.25) * 0.6, 0.0)
+    out = place(out, fm_zap(1.1, 260, 900, 3.0, 0.8, 0.9, 0.9, 3301, 0.6) * 0.16, 0.0)
+    out = place(out, crackle(1.0, 3303, 30, 4000, 12000) * env_ad(1.0, 0.8, 0.1), 0.05, 0.12)
+    out = place(out, click(3305, 5200.0, 0.9, 0.02), 1.1)                                                          # locked
+    out = place(out, bell(1975.5, 0.4, 0.12) * 0.2, 1.1)
+    return finish(room(out, 0.16), -3)
+
+
+def marksman_shot():
+    """One heavy round from far off: a crack, a low body, and the air torn along its path."""
+    out = silence(1.9)
+    out = place(out, click(3311, 3000.0, 1.0, 0.02), 0.0)
+    out = place(out, thump(140, 34, 0.5, 0.1, 2.6), 0.0, 1.0)
+    out = place(out, fm_zap(0.4, 1500, 180, 1.41, 6.0, 0.05, 0.09, 3313), 0.0, 0.55)
+    out = place(out, svf_sweep(noise(0.7, 3315), "band", 3000, 500, 1.0) * env_ad(0.7, 0.01, 0.16), 0.01, 0.5)   # the air along it
+    out = place(out, filt(noise(1.4, 3317, "pink"), "low", 420) * env_ad(1.4, 0.03, 0.4), 0.03, 0.5)             # rolling off
+    return finish(room(out, 0.34), -2.5)
+
+
+SOUNDS.update({"marksman_aim": marksman_aim, "marksman_shot": marksman_shot})
+MARKSMAN = [n for n in SOUNDS if n.startswith("marksman_")]
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unreal", "ShatteredOrbit", "SourceArt", "Audio")
     only = set(sys.argv[2:])  # optional: build just these names
     if only == {"movement"}:
         only = set(MOVEMENT)
+    if only == {"abilities"}:
+        only = set(ABILITIES)
+    if only == {"boss"}:
+        only = set(BOSS)
+    if only == {"marksman"}:
+        only = set(MARKSMAN)
     os.makedirs(out_dir, exist_ok=True)
     for name, fn in SOUNDS.items():
         if only and name not in only:

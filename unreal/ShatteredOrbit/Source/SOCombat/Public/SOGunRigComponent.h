@@ -38,6 +38,9 @@ struct SOCOMBAT_API FSOFingerPose
 	/** The thumb swung round the hand's long axis toward the palm's side, degrees: it lies on the far side of what
 	 *  the fingers hold (a grip between thumb and fingers), instead of through it. */
 	float ThumbSpread = 0.0f;
+	/** The thumb drawn in toward the fingers, degrees about the palm's normal: it lies ALONG what the hand holds (a
+	 *  thumb forward along a handguard) instead of standing off from it. */
+	float ThumbIn = 0.0f;
 
 	static FSOFingerPose Make(const float Index[3], const float Middle[3], const float Ring[3], const float Pinky[3], const float Thumb[3]);
 	/** Firing hand on a pistol grip: three fingers wrapped, the index finger on the trigger, the thumb over the top. */
@@ -51,6 +54,33 @@ struct SOCOMBAT_API FSOFingerPose
 	/** Relaxed, half closed. */
 	static FSOFingerPose Relaxed();
 	static FSOFingerPose Lerp(const FSOFingerPose& A, const FSOFingerPose& B, float Alpha);
+};
+
+/**
+ * A gun's OWN hold: where both hands rest on it and how every finger closes, in the gun's frame (+X barrel, +Y right,
+ * +Z up, cm from the top of the pistol grip; degrees). Each gun brings its own in a file of its own,
+ * Data/holds/<archetype>.json (the owner, 2026-11-15: "the resting arm numbers should be in a file with the gun so
+ * player switches to that gun and the new numbers are applied ... 100 guns means 100 probably different gun positions
+ * that should come with the gun"). The rig reads it as it is built; the hands go where it says. A gun with no file is
+ * fitted as it is picked up (USOLocomotionAnimInstance::FitGrip, which finds the grip, the handguard or a vertical
+ * fore grip on the gun's own shape): that fit is also the tool that WRITES the files (`SOCaptureSeries 1 31`), and a
+ * file may then be changed by hand: the file is what holds.
+ */
+struct SOCOMBAT_API FSOGunHold
+{
+	FSOHandGrip Firing;
+	FSOHandGrip Support;
+	FSOFingerPose FiringFingers;
+	FSOFingerPose SupportFingers;
+
+	/** The file of a gun's hold, relative to the project. */
+	static FString File(FName Archetype) { return FString::Printf(TEXT("Data/holds/%s.json"), *Archetype.ToString()); }
+	/** Reads the gun's file. False: it has none (or it does not parse): the gun is fitted as it is picked up. */
+	static bool Load(FName Archetype, FSOGunHold& Out);
+	/** The file's text for this hold (`About`: a line saying where it came from and how it measured). */
+	FString ToJson(FName Archetype, const FString& About) const;
+	/** Developer: while the files are being written, none is read (the fit works every hold out afresh). */
+	static bool bIgnoreFiles;
 };
 
 /**
@@ -119,6 +149,9 @@ public:
 	bool IsBuilt() const { return bBuilt; }
 	/** A handgun (short barrel, held out in both hands). */
 	bool IsHandgun() const { return bHandgun; }
+	/** This gun brought its own hold (Data/holds/<archetype>.json): the hands go where it says, nothing is fitted. */
+	bool HasHold() const { return bHasHold; }
+	FName GetArchetype() const { return Archetype; }
 
 	/** A rail optic is mounted (the gun's irons fold away, aiming looks through the optic). */
 	bool IsOpticMounted() const { return bOpticMounted; }
@@ -165,6 +198,9 @@ private:
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
 	FSOFingerPose CurFingers;
+	/** The gun's own hold, when it brought one. */
+	FSOGunHold Hold;
+	bool bHasHold = false;
 	/** Where the off hand was when the current reload segment began (anchor "cur"). */
 	FSOHandGrip CurGrip;
 	int32 LastSegment = -1;

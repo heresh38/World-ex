@@ -126,10 +126,25 @@ public:
 
 	/** Badly hurt: falling back to cover further off. */
 	bool IsRetreating() const { return bRetreating; }
+	/** The pack it belongs to is being cut down and it has broken off for a moment. */
+	bool IsScattering() const;
+	/** How often it has leapt out of the line of fire. */
+	int32 GetJukes() const { return Jukes; }
 	/** Pushing to where the target went out of sight. */
 	bool IsPushing() const { return bPushing; }
 	/** How many times it has stepped out of the way of a shot or a levelled gun (for tests). */
 	int32 GetDodges() const { return Dodges; }
+
+	/** What the brains cost: thinks done and the time they took since something last read and cleared them (the AI
+	 *  debug view does, once a second). Only counted in builds that have the view. */
+	static int32 ThinksCounted;
+	static double ThinkSecondsCounted;
+
+	/** Gives up the cover it has and looks for another at once (a marksman after a few shots). */
+	void Relocate();
+	FVector GetLastKnownLocation() const { return LastKnownLocation; }
+	bool HasCover() const { return bHasCover; }
+	FVector GetCoverPoint() const { return CoverPoint; }
 
 	//~ AAIController
 	virtual void OnPossess(APawn* InPawn) override;
@@ -138,6 +153,14 @@ public:
 
 protected:
 	void Think();
+
+	/** In a fight: every second or so, is someone else the better target? One it can see that is much nearer than
+	 *  the one it has (or that it cannot see any more), or the one who just hurt it. Switching costs it its cover. */
+	void ReconsiderTarget(float T);
+
+	/** How much less often it thinks than ThinkInterval: 1 in a fight or near a player, 2 further off, 5 where
+	 *  nobody is (a level's far garrisons cost a fifth of what they did). */
+	float ThinkPace() const;
 	/** Updates Awareness from sight; returns who it sees best (or null). */
 	ASOCombatCharacter* Perceive(float Dt);
 	/** How fast awareness of Other fills (per second); 0 = not seen. */
@@ -150,6 +173,41 @@ protected:
 	void ThinkCoverFight(float Dist);
 	void ThinkAssault(float Dist);
 	void ChaseTarget();
+
+	/** The pack's rule (a clawed creature with others of its kind round the same target): true once the pack goes
+	 *  in. It goes when three of it (or all of it, if fewer) are within reach of the ring, when the target has come
+	 *  to one of them, when this one has been hurt, or when it has waited long enough; and when one goes, all go. */
+	bool PackGoes(ASOEnemy* Me, ASOCombatCharacter* Foe, float T);
+
+	/** Holding off: to a point on the ring round the target, on this one's own side, moving round. */
+	void HoldRing(ASOEnemy* Me, ASOCombatCharacter* Foe, float T);
+
+	/** A pack that is being cut down breaks off: when a second of its kind dies near this one within PackLossWindow
+	 *  seconds of the last, it runs out to its own side and away for a few seconds, then the pack forms its ring
+	 *  again (no more often than every ScatterEvery seconds: it is a flinch, not a rout). */
+	float ScatterUntil = 0.0f;
+	float NextScatter = 0.0f;
+	float LastPackLoss = -100.0f;
+	static constexpr float PackLossWindow = 4.0f;
+	static constexpr float ScatterEvery = 14.0f;
+
+	/** A clawed creature that has been badly hurt on its way in breaks off once (out to its side and away, as when
+	 *  its pack is cut down) and comes again from somewhere else. */
+	bool bBrokeOff = false;
+	float NextJuke = 0.0f;
+	int32 Jukes = 0;
+
+	/** The target cannot shoot back this moment (it is loading its gun) and this one saw it a moment ago: an opening
+	 *  (not taken on the easiest level). In cover it comes out and fires at once; a pack on its ring goes in. */
+	bool TargetIsOpen(const ASOCombatCharacter* Foe, float T) const;
+	float NextOpportunity = 0.0f;
+
+	/** The pack goes in until this time (set on every one of it when one decides). */
+	float PackGoUntil = 0.0f;
+	float PackWaitSince = -1.0f;
+	/** Without a nav mesh the hold steers straight at its spot every frame (as the chase does at its target). */
+	bool bDirectHold = false;
+	FVector HoldSpot = FVector::ZeroVector;
 	void Wander();
 	void CheckStuck(float DeltaSeconds);
 	void OnNoise(UWorld* World, const FVector& Location, AActor* NoiseInstigator, float Radius);
@@ -166,6 +224,8 @@ protected:
 	bool Sidestep(const ASOCombatCharacter* Foe);
 	/** The target is out of sight: go and find it (flankers round its side). */
 	void Push();
+	/** One of its own side near it is keeping the target's last place under fire (so it can move up). */
+	bool SquadSuppressing() const;
 	/** Out of the world's geometry, onto free nav ground near here. */
 	bool Rescue();
 
@@ -203,6 +263,8 @@ protected:
 
 	// reactions
 	float LastHurtTime = -100.0f;
+	float NextTargetCheck = 0.0f;
+	TWeakObjectPtr<ASOCombatCharacter> LastAttacker;
 	float NextDodge = 0.0f;
 	/** Until then a move it has committed to (a sidestep) is not replaced by the next thought. */
 	float MoveCommitUntil = 0.0f;

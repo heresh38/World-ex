@@ -1,13 +1,13 @@
 {
  "name": "Meridian Fall",
- "tagline": "A beam has lit over the old capital, and Nexus Prime's wall is failing. Walk in and put it out.",
+ "tagline": "A beam has lit over Meridian. The Sarketh are calling for a fleet. Walk in and put it out.",
  "briefing": [
-  "Eleven nights ago a beam lit over Meridian, the old capital, silent since the Stillfall.",
-  "Every night it burns, the Keystones in Nexus Prime's wall lose ground. Two districts are sealed. The wall has about nineteen nights.",
-  "The storm over the city takes anything that flies. The only way in is on foot, from the edge.",
-  "Reach the Crown. Kill what feeds the beam and what guards it. Bring the capital's Keystone home."
+  "Eleven nights ago a beam lit over Meridian, the city the station fell on. The Sarketh have held it ever since.",
+  "It is a call. In about nineteen nights it reaches the relay at the edge of the system, and their own people hear that Sol is open.",
+  "The storm round the beam takes anything that flies. The only way in is on foot, from the city's edge.",
+  "Reach the Crown. Kill what feeds the beam and the one who commands it. Bring out their command core."
  ],
- "outcome": "The beam is dark. The capital's Keystone is going home to the wall. Whatever it was calling has stopped answering. For now.",
+ "outcome": "The beam is dark. The Sarketh command core is coming home. If anything heard the call, it has not answered. Yet.",
  "groups": {
   "verge_toll": {
    "yaw": 180.0,
@@ -1208,7 +1208,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "The Stacks were sealed from outside in the first week. Whoever was inside is still inside."
+    "text": "The Stacks were still standing when the station came down. The Sarketh billeted their foot soldiers in them and never moved them out."
    }
   },
   {
@@ -1293,7 +1293,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "Those were the residents. They kept what they were holding. Clear the yard."
+    "text": "Levies. The lowest of them, with the least. There are always more. Clear the yard."
    }
   },
   {
@@ -1478,7 +1478,7 @@
   {
    "id": "warden",
    "title": "Meridian Galleria",
-   "objective": "Bring down the Warden at the service gate",
+   "objective": "Bring down the Gatekeeper at the service gate",
    "kind": "boss",
    "boss": "warden",
    "bossGroup": "mall_gate",
@@ -1522,7 +1522,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "Something has kept that gate shut for years. It is coming to see who opened it."
+    "text": "One of their officers has kept that gate shut for years. Powered armour, and a shield. He is coming to see who opened it."
    }
   },
   {
@@ -1556,7 +1556,7 @@
    ],
    "intel": {
     "who": "INSTITUTE",
-    "text": "The beam is fed from under the station. The hive there has three hearts."
+    "text": "The beam is fed from under the station. Their machines are grown, not built, and what they grew down there has three hearts."
    }
   },
   {
@@ -1691,7 +1691,7 @@
    ],
    "intel": {
     "who": "INSTITUTE",
-    "text": "The beam just dimmed. It felt that. Keep moving."
+    "text": "The beam just dimmed. They felt that. Keep moving."
    }
   },
   {
@@ -1716,7 +1716,12 @@
      "spawn": [
       [
        "veilborn",
-       4,
+       2,
+       "sluice_watch"
+      ],
+      [
+       "veilborn_marksman",
+       2,
        "sluice_watch"
       ],
       [
@@ -1771,7 +1776,7 @@
    ],
    "intel": {
     "who": "INSTITUTE",
-    "text": "The annex on the west bank was ours, three years ago. They coupled the root to the capital's uplink so it could be heard. They wanted to listen. They taught it to speak."
+    "text": "The annex on the west bank was ours, three years ago. We went in to strip the fallen station's array, and we woke it to read it. We wanted to take it apart. We gave them a transmitter."
    }
   },
   {
@@ -1849,7 +1854,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "The army held this wall for six days in 2189. Past it, everything is the root's ground."
+    "text": "The army held this wall until the station came down behind it. Past it, everything is Sarketh ground."
    }
   },
   {
@@ -1924,7 +1929,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "They guard gates. They always have. Break the hold on this one."
+    "text": "Their officers hold the gates. Powered armour does not tire. Break the hold on this one."
    }
   },
   {
@@ -1951,13 +1956,18 @@
        "remnant",
        3,
        "boulevard_mid"
+      ],
+      [
+       "bearer",
+       1,
+       "boulevard_mid"
       ]
      ]
     }
    ],
    "intel": {
     "who": "INSTITUTE",
-    "text": "Look at the plan of it. Rings round a middle. The capital was built on top of a root and never knew."
+    "text": "Everything from here up grew out of the wreck. The station's heart came down at the top of the city, and they made their stronghold round it."
    }
   },
   {
@@ -1997,8 +2007,13 @@
        "plaza_west"
       ],
       [
+       "stalker_hunter",
+       1,
+       "plaza_north"
+      ],
+      [
        "stalker",
-       2,
+       1,
        "plaza_north"
       ]
      ]
@@ -2024,7 +2039,7 @@
      "maxAlive": 3,
      "spawn": [
       [
-       "bulwark",
+       "bearer",
        1,
        "plaza_north"
       ],
@@ -2060,7 +2075,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "Those banners are the Still Choir's. They came here to hear it speak. Most of them never left."
+    "text": "Those banners are theirs. It is a claim: this ground, this world, this system, for the Sarketh."
    }
   },
   {
@@ -2135,7 +2150,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "Some of what is up here wears their red. Clear the terraces."
+    "text": "Their Speakers are up here, tending the beam. Clear the terraces."
    }
   },
   {
@@ -2157,13 +2172,13 @@
    ],
    "intel": {
     "who": "INSTITUTE",
-    "text": "The beam is not a weapon, Orion. It is a call. The Keystones in our wall were cut from the stone under that light, and they are answering."
+    "text": "The beam is not a weapon, Orion. It is a call. They are not asking to be taken home. They are telling their own people that Sol is open."
    }
   },
   {
    "id": "crown",
    "title": "The Crown",
-   "objective": "Bring down the Hollow Colossus and take the Keystone",
+   "objective": "Bring down the Colossus and take the command core",
    "kind": "boss",
    "boss": "colossus",
    "bossGroup": "crown_boss",
@@ -2222,7 +2237,7 @@
    ],
    "intel": {
     "who": "RAMPART",
-    "text": "It slept under the Crown longer than the city stood. Break its three conduits, bring it down, and take the stone."
+    "text": "Their commander has not left the Crown since the day they landed, and he does not fight on foot. Break the three conduits, bring the suit down, and take the core."
    }
   }
  ],
@@ -2672,75 +2687,87 @@
  ],
  "rewards": {
   "rarity": 3,
-  "armor": [
-   [
-    "head",
-    "void_sentinel"
-   ],
-   [
-    "vest",
-    "void_sentinel"
-   ],
-   [
-    "hands",
-    "void_sentinel"
-   ],
-   [
-    "legs",
-    "void_sentinel"
-   ],
-   [
-    "feet",
-    "void_sentinel"
-   ],
-   [
-    "outer",
-    "void_sentinel"
-   ]
-  ],
+  "armor": [],
   "weapons": [
-   "vr_rifle",
-   "vr_sniper",
-   "vr_smg",
-   "vr_shotgun",
-   "vr_lmg",
-   "vr_handcannon",
-   "vr_pistol",
-   "vr_fusion",
-   "vr_rocket"
+   "auto",
+   "pulse",
+   "scout",
+   "handcannon",
+   "shotgun",
+   "sniper",
+   "smg",
+   "sidearm",
+   "energy",
+   "hmg",
+   "rocket"
   ]
  },
  "variants": {
   "warden": {
    "species": "bulwark",
-   "name": "The Warden",
+   "name": "The Gatekeeper",
    "health": 5.0,
    "damage": 1.35,
    "speed": 1.08,
-   "sight": 1.5
+   "sight": 1.5,
+   "boss": "warden"
   },
   "remnant_captain": {
    "species": "remnant",
-   "name": "Remnant Captain",
+   "name": "Levy Captain",
    "health": 2.8,
    "damage": 1.25,
    "aim": 0.75,
-   "sight": 1.25
+   "sight": 1.25,
+   "kit": "commander"
   },
   "veilborn_seer": {
    "species": "veilborn",
-   "name": "Veilborn Seer",
+   "name": "Senior Speaker",
    "health": 2.4,
    "damage": 1.3,
    "aim": 0.7,
-   "sight": 1.4
+   "sight": 1.4,
+   "kit": "disruptor"
   },
   "stalker_alpha": {
    "species": "stalker_feral",
-   "name": "Pack Alpha",
+   "name": "Lead Runner",
    "health": 3.0,
    "damage": 1.4,
-   "speed": 1.12
+   "speed": 1.12,
+   "kit": "alpha"
+  },
+  "stalker_hunter": {
+   "species": "stalker",
+   "name": "Veteran Hunter",
+   "health": 2.2,
+   "damage": 1.2,
+   "aim": 0.7,
+   "sight": 1.3,
+   "kit": "hunter"
+  },
+  "veilborn_marksman": {
+   "species": "veilborn",
+   "name": "Speaker Marksman",
+   "health": 0.9,
+   "aim": 0.8,
+   "sight": 1.9,
+   "range": 1.8,
+   "kit": "marksman",
+   "high": true
+  },
+  "bulwark_gunner": {
+   "species": "bulwark",
+   "name": "Warden Gunner",
+   "health": 1.3,
+   "speed": 0.85,
+   "weapon": "hmg",
+   "range": 2.4,
+   "burst": 3.0,
+   "burstPause": 0.7,
+   "aim": 1.25,
+   "suppressor": true
   }
  }
 }

@@ -12,7 +12,11 @@
 #include "SOInventoryWidget.h"
 #include "SOMapWidget.h"
 #include "SOMap.h"
+#include "SOBoss.h"
+#include "SODifficulty.h"
 #include "SOEnemy.h"
+#include "SOEnemyAIController.h"
+#include "HAL/IConsoleManager.h"
 #include "SOOperation.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -40,10 +44,6 @@ ASOHUD::ASOHUD()
 void ASOHUD::BeginPlay()
 {
 	Super::BeginPlay();
-	if (USOProjectileSubsystem* Rounds = GetWorld()->GetSubsystem<USOProjectileSubsystem>())
-	{
-		HitHandle = Rounds->OnHit.AddUObject(this, &ASOHUD::OnRoundHit);
-	}
 }
 
 void ASOHUD::BindInventory()
@@ -359,7 +359,139 @@ void ASOHUD::DrawOperation(float W, float H, float S)
 	}
 
 	// the boss across the top
-	if (const ASOEnemy* Boss = Op->GetBoss(); Boss && !Boss->IsDead())
+	DrawBossBar(Op->GetBoss(), W, S);
+}
+
+namespace
+{
+	bool bSOAIDebug = false;
+#if !UE_BUILD_SHIPPING
+	FAutoConsoleCommand SOAIDebugCommand(TEXT("SOAIDebug"), TEXT("Shows what every creature near the player is thinking, and what the brains cost (on / off)."),
+		FConsoleCommandDelegate::CreateLambda([]() { bSOAIDebug = !bSOAIDebug; }));
+#endif
+}
+
+void ASOHUD::DrawAIDebug(float W, float H, float S)
+{
+#if !UE_BUILD_SHIPPING
+	const APawn* Pawn = GetOwningPawn();
+	UFont* Small = GEngine ? GEngine->GetSmallFont() : nullptr;
+	if (!bSOAIDebug || !Pawn || !Small)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - AIDebugReadAt >= 1.0f || Now < AIDebugReadAt)
+	{
+		// what the brains cost over the last second
+		AIDebugThinks = ASOEnemyAIController::ThinksCounted;
+		AIDebugMs = static_cast<float>(ASOEnemyAIController::ThinkSecondsCounted * 1000.0);
+		ASOEnemyAIController::ThinksCounted = 0;
+		ASOEnemyAIController::ThinkSecondsCounted = 0.0;
+		AIDebugReadAt = Now;
+	}
+	static const TCHAR* States[] = { TEXT("idle"), TEXT("wander"), TEXT("chase"), TEXT("attack"), TEXT("dead"), TEXT("suspicious"), TEXT("search"), TEXT("to cover"), TEXT("in cover") };
+	int32 Alive = 0, Fighting = 0, Shown = 0;
+	for (TActorIterator<ASOEnemy> It(GetWorld()); It; ++It)
+	{
+		const ASOEnemy* E = *It;
+		const ASOEnemyAIController* Brain = Cast<ASOEnemyAIController>(E->GetController());
+		if (E->IsDead())
+		{
+			continue;
+		}
+		++Alive;
+		Fighting += Brain && Brain->IsInCombat() ? 1 : 0;
+		const FVector Head = E->GetActorLocation() + FVector(0.0f, 0.0f, E->GetSimpleCollisionHalfHeight() + 30.0f);
+		if (!Brain || FVector::Dist(Head, Pawn->GetActorLocation()) > 6000.0f)
+		{
+			continue;
+		}
+		const FVector Screen = Project(Head, true);
+		if (Screen.Z <= 0.0f)
+		{
+			continue;
+		}
+		++Shown;
+		const int32 StateIndex = static_cast<int32>(Brain->GetState());
+		const ASOCombatCharacter* Target = Brain->GetTarget();
+		FString Flags;
+		Flags += Brain->IsFlanker() ? TEXT(" flanker") : TEXT("");
+		Flags += Brain->IsRetreating() ? TEXT(" falling-back") : TEXT("");
+		Flags += Brain->IsScattering() ? TEXT(" SCATTERING") : TEXT("");
+		Flags += E->bSuppressor ? TEXT(" suppressor") : TEXT("");
+		Flags += E->IsSuppressing() ? TEXT(" SUPPRESSING") : TEXT("");
+		Flags += E->HasStatus(SOTags::Status_Suppressed) ? TEXT(" PINNED") : TEXT("");
+		Flags += E->HasStatus(SOTags::Status_Stagger) ? TEXT(" REELING") : TEXT("");
+		Flags += E->bLikesHigh ? TEXT(" high-ground") : TEXT("");
+		FString Kit;
+		if (const USOAbilitySet* Set = E->GetAbilitySet())
+		{
+			Kit = Set->KitId.ToString() + TEXT(":");
+			for (const FSOAbilityGrant& Grant : Set->Abilities)
+			{
+				int32 Charges = 0, Max = 0;
+				float Left = 0.0f, Cooldown = 0.0f;
+				E->GetAbilityState(Grant.Slot, Charges, Max, Left, Cooldown);
+				Kit += E->IsAbilityActive(Grant.Slot) ? TEXT(" [using]") : (Charges > 0 ? TEXT(" [ready]") : *FString::Printf(TEXT(" [%.0fs]"), Left));
+			}
+		}
+		const FString Lines[] = {
+			FString::Printf(TEXT("%s  %s"), E->GetVariantId().IsNone() ? *E->SpeciesId.ToString() : *E->GetVariantId().ToString(),
+				States[FMath::Clamp(StateIndex, 0, static_cast<int32>(UE_ARRAY_COUNT(States)) - 1)]),
+			FString::Printf(TEXT("aware %.0f%%  target %s%s"), Brain->GetAwareness() * 100.0f, Target ? (Target->IsPlayerControlled() ? TEXT("player") : *Target->GetName()) : TEXT("none"),
+				Brain->HasCover() ? TEXT("  has cover") : TEXT("")),
+			Flags.TrimStart(), Kit };
+		float Y = Screen.Y - 44.0f * S;
+		for (const FString& Line : Lines)
+		{
+			if (!Line.IsEmpty())
+			{
+				DrawText(Line, Brain->IsInCombat() ? FLinearColor(1.0f, 0.85f, 0.5f) : FLinearColor(0.7f, 0.9f, 1.0f), Screen.X - 60.0f * S, Y, Small, 0.9f * S);
+				Y += 11.0f * S;
+			}
+		}
+		// where it means to stand (cyan) and where it last knew its target to be (yellow)
+		if (Brain->HasCover())
+		{
+			const FVector Cover = Project(Brain->GetCoverPoint(), true);
+			if (Cover.Z > 0.0f)
+			{
+				DrawLine(Screen.X, Screen.Y, Cover.X, Cover.Y, FLinearColor(0.2f, 0.9f, 1.0f, 0.8f), 1.5f);
+				DrawRect(FLinearColor(0.2f, 0.9f, 1.0f, 0.9f), Cover.X - 3.0f, Cover.Y - 3.0f, 6.0f, 6.0f);
+			}
+		}
+		if (Brain->IsInCombat())
+		{
+			const FVector Last = Project(Brain->GetLastKnownLocation() + FVector(0.0f, 0.0f, 40.0f), true);
+			if (Last.Z > 0.0f)
+			{
+				DrawLine(Screen.X, Screen.Y, Last.X, Last.Y, FLinearColor(1.0f, 0.9f, 0.2f, 0.5f), 1.0f);
+				DrawRect(FLinearColor(1.0f, 0.9f, 0.2f, 0.9f), Last.X - 3.0f, Last.Y - 3.0f, 6.0f, 6.0f);
+			}
+		}
+	}
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), W * 0.5f - 250.0f * S, 96.0f * S, 500.0f * S, 18.0f * S);
+	DrawText(FString::Printf(TEXT("AI  %d alive, %d fighting, %d shown  |  %d thinks/s, %.2f ms/s  |  level %s"), Alive, Fighting, Shown, AIDebugThinks, AIDebugMs,
+		*USODifficultySubsystem::Get(this).Id.ToString()), FLinearColor(0.8f, 1.0f, 0.8f), W * 0.5f - 244.0f * S, 99.0f * S, Small, 1.0f * S);
+#endif
+}
+
+void ASOHUD::DrawBossBar(const ASOEnemy* Boss, float W, float S)
+{
+	if (!Boss || Boss->IsDead())
+	{
+		return;
+	}
+	UFont* Small = GEngine ? GEngine->GetSmallFont() : nullptr;
+	UFont* Font = GEngine ? GEngine->GetMediumFont() : nullptr;
+	const FLinearColor Void(0.66f, 0.42f, 1.0f, 0.95f);
+	auto Centred = [&](const FString& Text, float Y, UFont* F, float Scale, FLinearColor C)
+	{
+		float TW = 0.0f, TH = 0.0f;
+		GetTextSize(Text, TW, TH, F, Scale);
+		DrawText(Text, C, W * 0.5f - TW * 0.5f, Y, F, Scale);
+	};
 	{
 		const float BW = 640.0f * S, BX = W * 0.5f - BW * 0.5f, BY = 62.0f * S;
 		Centred(Boss->DisplayName.ToString().ToUpper(), BY - 26.0f * S, Font, 1.05f * S, FLinearColor(1, 1, 1, 0.95f));
@@ -369,9 +501,26 @@ void ASOHUD::DrawOperation(float W, float H, float S)
 		{
 			DrawRect(Shield, BX, BY + 13.0f * S, BW * Boss->GetShield() / Boss->GetMaxShield(), 3.0f * S);
 		}
+		// its fight: a notch on the bar where each phase begins, the phase's name, and when it reels
+		const USOBossComponent* Fight = Boss->GetBoss();
+		const USOBossData* Table = Fight ? Fight->GetData() : nullptr;
+		for (int32 i = 1; Table && i < Table->Phases.Num(); ++i)
+		{
+			const float Notch = BX + BW * FMath::Clamp(Table->Phases[i].FromHealth, 0.0f, 1.0f);
+			DrawRect(FLinearColor(0, 0, 0, 0.85f), Notch - 1.5f * S, BY - 2.0f * S, 3.0f * S, 16.0f * S);
+			DrawRect(FLinearColor(1, 1, 1, i > Fight->GetPhase() ? 0.9f : 0.3f), Notch - 0.5f * S, BY - 2.0f * S, 1.0f * S, 16.0f * S);
+		}
 		if (Boss->IsImmune())
 		{
 			Centred(Boss->ImmuneReason.ToString(), BY + 22.0f * S, Small, 1.0f * S, FLinearColor(1.0f, 0.75f, 0.35f, 0.95f));
+		}
+		else if (Boss->HasStatus(SOTags::Status_Stagger))
+		{
+			Centred(NSLOCTEXT("SO", "BossReels", "REELING").ToString(), BY + 22.0f * S, Small, 1.0f * S, FLinearColor(1.0f, 0.95f, 0.6f, 0.6f + 0.4f * FMath::Abs(FMath::Sin(GetWorld()->GetTimeSeconds() * 6.0f))));
+		}
+		else if (const FSOBossPhase* Phase = Fight ? Fight->GetPhaseData() : nullptr; Phase && !Phase->Name.IsEmpty())
+		{
+			Centred(Phase->Name.ToString().ToUpper(), BY + 22.0f * S, Small, 0.95f * S, FLinearColor(0.8f, 0.7f, 1.0f, 0.8f));
 		}
 	}
 }
@@ -416,6 +565,10 @@ void ASOHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		FeedInventory->OnFeed.Remove(FeedHandle);
 	}
+	if (HitPawn.IsValid())
+	{
+		HitPawn->OnHitConfirmed.Remove(HitHandle);
+	}
 	if (UWorld* World = GetWorld())
 	{
 		if (USOProjectileSubsystem* Rounds = World->GetSubsystem<USOProjectileSubsystem>())
@@ -426,16 +579,11 @@ void ASOHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-void ASOHUD::OnRoundHit(const FSOProjectile& Round, const FHitResult& Hit, float Damage)
+void ASOHUD::OnHitConfirmed(bool bCrit, bool bKilled)
 {
-	if (Damage <= 0.0f || Round.Instigator.Get() != GetOwningPawn())
-	{
-		return;
-	}
 	LastHitTime = GetWorld()->GetTimeSeconds();
-	bLastHitCrit = USOProjectileSubsystem::IsPrecisionBone(Hit.BoneName);
-	const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Hit.GetActor());
-	bLastHitKill = Victim && Victim->IsDead();
+	bLastHitCrit = bCrit;
+	bLastHitKill = bKilled;
 	USOSoundLibrary::Play2D(this, bLastHitKill ? TEXT("hit_kill") : (bLastHitCrit ? TEXT("hit_crit") : TEXT("hit_tick")), 0.55f, 0.02f);
 }
 
@@ -483,6 +631,16 @@ void ASOHUD::DrawHUD()
 	{
 		return;
 	}
+	if (HitPawn.Get() != Player)
+	{
+		// the body changes with every respawn: listen to the one in play
+		if (HitPawn.IsValid())
+		{
+			HitPawn->OnHitConfirmed.Remove(HitHandle);
+		}
+		HitPawn = Player;
+		HitHandle = Player->OnHitConfirmed.AddUObject(this, &ASOHUD::OnHitConfirmed);
+	}
 	if (!InventoryWidget && !MapWidget && !Player->IsScopeView())
 	{
 		DrawMinimap(S);
@@ -514,10 +672,26 @@ void ASOHUD::DrawHUD()
 
 	// Bars over hurt creatures in view (within 40 m); an operation's boss has its own bar across the top.
 	const ASOOperation* Operation = ASOOperation::Get(this);
+	const ASOEnemy* LoneBoss = nullptr;
 	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
 	{
 		const ASOCombatCharacter* Other = *It;
-		if ((Operation && Other == Operation->GetBoss()) || Other == Player || Other->IsDead() || Other->Faction == Player->Faction || Other->GetHealth() >= Other->GetMaxHealth())
+		if ((Operation && Other == Operation->GetBoss()) || Other == Player || Other->IsDead() || Other->Faction == Player->Faction)
+		{
+			continue;
+		}
+		// a boss met outside an operation (a level's variant with a boss table) has the bar across the top too,
+		// once the fight is on
+		if (const ASOEnemy* Creature = Cast<ASOEnemy>(Other); Creature && Creature->GetBoss())
+		{
+			if (!(Operation && Operation->GetBoss()) && (Creature->GetHealth() < Creature->GetMaxHealth() || Creature->IsImmune())
+				&& FVector::Dist(Creature->GetActorLocation(), Player->GetActorLocation()) < 7000.0f)
+			{
+				LoneBoss = Creature;
+			}
+			continue;
+		}
+		if (Other->GetHealth() >= Other->GetMaxHealth())
 		{
 			continue;
 		}
@@ -530,8 +704,23 @@ void ASOHUD::DrawHUD()
 		if (Screen.Z > 0.0f)
 		{
 			DrawBar(Screen.X - 40.0f * S, Screen.Y, 80.0f * S, 6.0f * S, Other->GetHealth() / FMath::Max(Other->GetMaxHealth(), 1.0f), Hurt);
+			// what is on it: a pip per condition under the bar (burning, slowed, staggered)
+			float PipX = Screen.X - 40.0f * S;
+			const TPair<FGameplayTag, FLinearColor> Pips[] = { { SOTags::Status_Burn, FLinearColor(1.0f, 0.5f, 0.1f) },
+				{ SOTags::Status_Slow, FLinearColor(0.4f, 0.7f, 1.0f) }, { SOTags::Status_Stagger, FLinearColor(1.0f, 0.9f, 0.4f) },
+				{ SOTags::Status_Haste, FLinearColor(0.7f, 0.4f, 1.0f) } };
+			for (const TPair<FGameplayTag, FLinearColor>& Pip : Pips)
+			{
+				if (Other->HasStatus(Pip.Key))
+				{
+					DrawRect(Pip.Value, PipX, Screen.Y + 8.0f * S, 12.0f * S, 4.0f * S);
+					PipX += 15.0f * S;
+				}
+			}
 		}
 	}
+	DrawBossBar(LoneBoss, W, S);
+	DrawAIDebug(W, H, S);
 
 	if (Player->IsDead())
 	{
@@ -593,6 +782,73 @@ void ASOHUD::DrawHUD()
 	}
 	const float HealthFraction = Player->GetHealth() / FMath::Max(Player->GetMaxHealth(), 1.0f);
 	DrawBar(BX, BY, BW, 14.0f * S, HealthFraction, HealthFraction < 0.35f ? Hurt : Health);
+
+	// Conditions on the player: a frame of light round the view while braced, a word over the bars for the rest.
+	{
+		if (Player->HasStatus(SOTags::Status_Guard))
+		{
+			const FLinearColor Frame(0.45f, 0.9f, 1.0f, 0.5f);
+			const float T = 4.0f * S;
+			DrawRect(Frame, 0.0f, 0.0f, W, T);
+			DrawRect(Frame, 0.0f, H - T, W, T);
+			DrawRect(Frame, 0.0f, T, T, H - 2.0f * T);
+			DrawRect(Frame, W - T, T, T, H - 2.0f * T);
+		}
+		float ChipX = BX;
+		const TPair<FGameplayTag, const TCHAR*> Chips[] = { { SOTags::Status_Guard, TEXT("BRACED") }, { SOTags::Status_Burn, TEXT("BURNING") },
+			{ SOTags::Status_Slow, TEXT("SLOWED") }, { SOTags::Status_Stagger, TEXT("STAGGERED") }, { SOTags::Status_Jam, TEXT("JAMMED") },
+			{ SOTags::Status_Suppressed, TEXT("UNDER FIRE") } };
+		for (const TPair<FGameplayTag, const TCHAR*>& Chip : Chips)
+		{
+			if (Player->HasStatus(Chip.Key))
+			{
+				float TW = 0.0f, TH = 0.0f;
+				GetTextSize(Chip.Value, TW, TH, Font, 0.85f * S);
+				DrawRect(Back, ChipX, BY - 44.0f * S, TW + 14.0f * S, TH + 6.0f * S);
+				DrawText(Chip.Value, Chip.Key == SOTags::Status_Guard ? FLinearColor(0.45f, 0.9f, 1.0f) : Hurt, ChipX + 7.0f * S, BY - 41.0f * S, Font, 0.85f * S);
+				ChipX += TW + 20.0f * S;
+			}
+		}
+	}
+
+	// Abilities (under the health bar): a cell per slot the kit fills, bright when a charge is ready, with the next
+	// charge's progress along its foot; the ultimate's charge as a line between the bars and the cells.
+	{
+		static const TCHAR* Keys[] = { TEXT("G"), TEXT("V"), TEXT("Q"), TEXT(""), TEXT("X") };
+		const FLinearColor Ready(0.45f, 0.9f, 1.0f, 0.95f);
+		const FLinearColor Waiting(0.45f, 0.9f, 1.0f, 0.3f);
+		const float Cell = 30.0f * S, Y = BY + 26.0f * S;
+		float X = BX;
+		for (int32 i = 0; i < static_cast<int32>(ESOAbilitySlot::Count); ++i)
+		{
+			const ESOAbilitySlot Slot = static_cast<ESOAbilitySlot>(i);
+			int32 Charges = 0, MaxCharges = 0;
+			float Left = 0.0f, Cooldown = 0.0f;
+			if (!Player->GetAbilityState(Slot, Charges, MaxCharges, Left, Cooldown))
+			{
+				continue;
+			}
+			const bool bUltimate = Slot == ESOAbilitySlot::Ultimate;
+			const bool bReady = Charges > 0 && (!bUltimate || Player->GetUltimate() >= Player->GetMaxUltimate() - 0.5f);
+			DrawRect(Back, X, Y, Cell, Cell);
+			DrawRect(bReady ? (bUltimate ? FLinearColor(1.0f, 0.82f, 0.3f, 0.95f) : Ready) : Waiting, X, Y, Cell, Cell);
+			if (Charges < MaxCharges && Cooldown > 0.0f)
+			{
+				DrawRect(Ink, X, Y + Cell - 3.0f * S, Cell * FMath::Clamp(1.0f - Left / Cooldown, 0.0f, 1.0f), 3.0f * S);
+			}
+			DrawText(Keys[i], bReady ? FLinearColor::Black : Ink, X + 9.0f * S, Y + 6.0f * S, Font, 0.9f * S);
+			if (MaxCharges > 1)
+			{
+				DrawText(FString::FromInt(Charges), Ink, X + Cell + 4.0f * S, Y + 8.0f * S, Font, 0.85f * S);
+			}
+			X += Cell + (MaxCharges > 1 ? 24.0f : 8.0f) * S;
+		}
+		if (Player->GetAbilitySet() && Player->GetAbilitySet()->Find(ESOAbilitySlot::Ultimate) && Player->GetMaxUltimate() > 0.0f)
+		{
+			const float Charge = Player->GetUltimate() / Player->GetMaxUltimate();
+			DrawBar(BX, BY + 17.0f * S, BW, 3.0f * S, Charge, Charge >= 0.995f ? FLinearColor(1.0f, 0.82f, 0.3f, 1.0f) : Ready);
+		}
+	}
 
 	// Ammo (bottom right) + reload progress.
 	if (Weapon)

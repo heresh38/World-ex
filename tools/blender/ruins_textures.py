@@ -51,7 +51,12 @@ TILE = {"ru_concrete": 2.5, "ru_fracture": 1.5, "ru_asphalt": 6.0, "ru_stone": 4
         "ru_ceramic": 2.4, "ru_composite": 2.4, "ru_sandstone": 3.0, "ru_corrugate": 2.0, "ru_tile": 2.4, "ru_plaster": 3.0,
         "ru_brass": 1.5, "ru_far_a": 14.0, "ru_far_b": 14.0, "ru_bark": 1.0, "ru_leaf": .8, "ru_moss": 1.5, "ru_fungus": .8,
         "ru_box_red": 2.0, "ru_box_green": 2.0, "ru_box_ochre": 2.0, "ru_wood": 1.2, "ru_fabric": 1.0, "ru_ceiling": 2.4, "ru_shutter": 1.0, "ru_carpet": 2.0, "ru_goods": 1.2, "ru_books": 1.2}
-N = 1024
+# These painters were written for 1024 px and do NOT hold above it (tried at 4096 for the owner's texture rules: the
+# cracks, which are a noise's contour lines, become wandering loops, and there is nothing in them finer than a
+# thousandth of a tile, so they are a blur up close). The sets a player walks up to are DRAWN anew at 4096 in
+# ruins_maps.py (same names: it runs after this script and overwrites them); what is left here still goes through
+# the texture engine for its ambient occlusion and height.
+N = int(os.environ.get("RU_SIZE", "1024"))
 
 
 def srgb(c):
@@ -61,6 +66,14 @@ def srgb(c):
 
 
 def write(name, c, h, strength, rough, metal=None):
+    """Through the texture engine (pbr.py): the height the painter made becomes metres (what its old normal strength
+    meant at 1024 px), and from it come the normal, the ambient occlusion (the mask's red), the height map, and the
+    dirt that lies in what is low. A set that is not square (the banner) is written the old way."""
+    if c.shape[0] == c.shape[1]:
+        import pbr
+        T = pbr.Tile(name, TILE.get(name, 2.0), size=c.shape[0])
+        T.write(srgb(c), [(h.astype(F32), strength * T.m / 1024.0)], rough, 0.0 if metal is None else metal, relief=1.8, cavity=.28)
+        return
     save(name + "_c", srgb(c), jpg=True)
     save(name + "_n", normal_from(h, strength), srgb=False)
     m = np.zeros(c.shape, F32)

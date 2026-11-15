@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "SOProjectileSubsystem.generated.h"
 
@@ -64,6 +65,20 @@ struct SOCOMBAT_API FSOProjectile
 	/** Horror goo: seconds the poison lies on the ground where it lands (a pool hurting anyone hostile standing in it). */
 	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
 	float Pool = 0.0f;
+
+	/** On its damage to a target whose shield is up / whose shield is down (a perk's: 1 = unchanged). */
+	float ShieldScale = 1.0f;
+	float HealthScale = 1.0f;
+
+	/** A condition left on everyone it damages (USOCombatStatics::ApplyStatus), with its duration and magnitude. */
+	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
+	FGameplayTag Status;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
+	float StatusDuration = 0.0f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
+	float StatusMagnitude = 0.0f;
 };
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FSOOnProjectileHit, const FSOProjectile& /*Round*/, const FHitResult& /*Hit*/, float /*DamageApplied*/);
@@ -86,11 +101,20 @@ public:
 	/** Damage a round deals at this distance (cm) before precision multipliers. */
 	static float DamageAtDistance(const FSOProjectile& Round, float Distance);
 
+	TArray<TWeakObjectPtr<class ASOCombatCharacter>> NearMissList;
+	float NearMissListAt = -100.0f;
+
+	/** Server: tells every hostile character the round passed close to on this stretch of its flight. */
+	void NoteNearMisses(const FSOProjectile& Round, const FVector& From, const FVector& To, const AActor* Struck);
+
 	/** True for bones that count as a precision hit. */
 	static bool IsPrecisionBone(FName Bone);
 
 	int32 GetNumInFlight() const { return Rounds.Num(); }
-	int32 GetNumBurning() const { return Burns.Num(); }
+
+	/** A round within this of a hostile character's middle (cm), without hitting it, is a near miss
+	 *  (ASOCombatCharacter::NoteNearMiss): being shot at counts, not only being hit. */
+	static constexpr float NearMissRadius = 130.0f;
 	int32 GetNumPools() const { return Pools.Num(); }
 
 	/** Seconds poison stays on the ground. */
@@ -110,7 +134,7 @@ public:
 	 *  total applied. Hit actors are added to OutVictims. */
 	float ApplySplash(AActor* Instigator, const FVector& Center, float Radius, float Damage, AActor* Ignore = nullptr, TArray<AActor*>* OutVictims = nullptr);
 
-	/** Acid / parasites: Total damage over Duration seconds to Victim (server). */
+	/** Acid / parasites: Total damage over Duration seconds to Victim (server), as the Status.Burn condition. */
 	void AddBurn(AActor* Instigator, AActor* Victim, float Total, float Duration = 3.0f);
 
 	FSOOnProjectileHit OnHit;
@@ -124,15 +148,6 @@ protected:
 
 private:
 	void OnImpact(const FSOProjectile& Round, const FHitResult& Hit, float Applied);
-
-	struct FBurn
-	{
-		TWeakObjectPtr<AActor> Instigator;
-		TWeakObjectPtr<AActor> Victim;
-		float PerSecond = 0.0f;
-		float Left = 0.0f;
-		float Tick = 0.0f;
-	};
 
 	struct FSwarm
 	{
@@ -159,7 +174,6 @@ private:
 	void ApplyGround(AActor* Instigator, const FVector& Center, float Radius, float Damage);
 
 	TArray<FSOProjectile> Rounds;
-	TArray<FBurn> Burns;
 	TArray<FSwarm> Swarms;
 	TArray<FPool> Pools;
 };

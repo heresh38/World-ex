@@ -1,5 +1,10 @@
 #include "SOGunRigComponent.h"
 
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "SOData.h"
+
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -48,20 +53,31 @@ namespace
 	// Firing hand: palm on the right of the grip, fingers round its front, thumb on top.
 	FSOHandGrip RifleGrip()
 	{
-		return FSOHandGrip::AtPalm(FVector(-2.2f, 1.6f, -4.5f), FVector(0.93f, 0.0f, -0.37f), FVector(0.37f, 0.0f, 0.93f), false);
+		// (the hand runs forward and only a little down: square to a raked grip, 22 degrees down, it left the wrist
+		// that much more to make up from a forearm that comes up to the grip from below)
+		return FSOHandGrip::AtPalm(FVector(-2.2f, 1.6f, -4.5f), FVector(0.975f, 0.0f, -0.22f), FVector(0.22f, 0.0f, 0.975f), false);
 	}
 
 	// Handguns: the support hand wraps the firing hand from the left (palm on the grip's left side, fingers round the
 	// front below the trigger guard, thumb forward along the frame).
 	FSOHandGrip HandgunSupportGrip()
 	{
-		return FSOHandGrip::AtPalm(FVector(-1.5f, -2.4f, -5.5f), FVector(0.35f, 0.45f, -0.8f), FVector(0.9f, 0.0f, 0.4f), true);
+		// (the hand runs forward and round the front of the grip, hardly down: pointing down the grip as it did, the
+		// wrist was bent over a right angle. The palm stands a finger's thickness off the grip: the firing hand's
+		// fingertips lie under it.)
+		return FSOHandGrip::AtPalm(FVector(-1.5f, -3.6f, -5.0f), FVector(0.72f, 0.62f, -0.3f), FVector(0.6f, 0.0f, 0.8f), true);
 	}
 
-	// Support hand under the handguard: palm up, fingers wrapping the right side, thumb along the left pointing forward.
+	// Support hand on the handguard, a C grip: the palm on its lower LEFT, facing up and in; the fingers go under it and
+	// up its right side; the thumb lies forward along its left side. The hand runs forward and to the right, so the
+	// wrist carries on from a forearm that comes up to the gun from behind and below. (Laid flat under the gun with
+	// the fingers straight across it, the wrist was turned through a right angle and the thumb had nowhere to go but
+	// up over the top.)
 	FSOHandGrip SupportGrip(const FVector& Foregrip)
 	{
-		return FSOHandGrip::AtPalm(Foregrip + FVector(0.0f, 0.0f, 1.2f), FVector(0.3f, 0.95f, 0.0f), FVector(1.0f, 0.0f, 0.0f), true);
+		// (palm normal (0, .45, .89): mostly up; the hand 35 degrees off the barrel and only a little down, so a
+		// forearm rising to it from a low elbow bends the wrist back as little as an under grip allows)
+		return FSOHandGrip::AtPalm(Foregrip + FVector(0.0f, -1.2f, 0.4f), FVector(0.82f, 0.51f, -0.26f), FVector(1.0f, 0.0f, 0.0f), true);
 	}
 
 	// Holding a magazine from its left side: palm right, fingers round the front, thumb up.
@@ -82,6 +98,93 @@ namespace
 	{
 		return FSOHandGrip::AtPalm(FVector(Handle.X, 1.0f, Handle.Z + 4.8f), FVector(0.0f, 0.8f, -0.6f), FVector(-1.0f, 0.0f, 0.0f), true);
 	}
+}
+
+// --- A gun's own hold ----------------------------------------------------------------------------
+
+bool FSOGunHold::bIgnoreFiles = false;
+
+namespace
+{
+	const TCHAR* HoldFingers[5] = { TEXT("index"), TEXT("middle"), TEXT("ring"), TEXT("little"), TEXT("thumbCurl") };
+
+	bool ReadVector(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key, FVector& Out)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* A = nullptr;
+		if (!Obj->TryGetArrayField(Key, A) || A->Num() != 3)
+		{
+			return false;
+		}
+		Out = FVector((*A)[0]->AsNumber(), (*A)[1]->AsNumber(), (*A)[2]->AsNumber());
+		return true;
+	}
+
+	bool ReadHand(const TSharedPtr<FJsonObject>& Root, const TCHAR* Key, bool bLeft, FSOHandGrip& Grip, FSOFingerPose& Fingers)
+	{
+		const TSharedPtr<FJsonObject>* Hand = nullptr;
+		FVector Wrist, Along, Thumb;
+		if (!Root->TryGetObjectField(Key, Hand) || !ReadVector(*Hand, TEXT("wrist"), Wrist) || !ReadVector(*Hand, TEXT("along"), Along) || !ReadVector(*Hand, TEXT("thumb"), Thumb)
+			|| Along.IsNearlyZero() || Thumb.IsNearlyZero())
+		{
+			return false;
+		}
+		Grip.Wrist = Wrist;
+		Grip.Basis = FSOHandGrip::MakeBasis(Along, Thumb, bLeft);
+		for (int32 F = 0; F < 5; ++F)
+		{
+			FVector Curl;
+			if (!ReadVector(*Hand, HoldFingers[F], Curl))
+			{
+				return false;
+			}
+			Fingers.Curl[F][0] = static_cast<float>(Curl.X);
+			Fingers.Curl[F][1] = static_cast<float>(Curl.Y);
+			Fingers.Curl[F][2] = static_cast<float>(Curl.Z);
+		}
+		Fingers.ThumbSpread = static_cast<float>((*Hand)->GetNumberField(TEXT("thumbSpread")));
+		Fingers.ThumbIn = static_cast<float>((*Hand)->GetNumberField(TEXT("thumbIn")));
+		return true;
+	}
+
+	FString WriteHand(const TCHAR* Key, const FSOHandGrip& Grip, const FSOFingerPose& Fingers)
+	{
+		const FVector A = Grip.Basis.GetAxisX(), T = Grip.Basis.GetAxisY();
+		FString Out = FString::Printf(TEXT("  \"%s\": {\n    \"wrist\": [%.2f, %.2f, %.2f],\n    \"along\": [%.3f, %.3f, %.3f],\n    \"thumb\": [%.3f, %.3f, %.3f],\n"),
+			Key, Grip.Wrist.X, Grip.Wrist.Y, Grip.Wrist.Z, A.X, A.Y, A.Z, T.X, T.Y, T.Z);
+		for (int32 F = 0; F < 5; ++F)
+		{
+			Out += FString::Printf(TEXT("    \"%s\": [%.0f, %.0f, %.0f],\n"), HoldFingers[F], Fingers.Curl[F][0], Fingers.Curl[F][1], Fingers.Curl[F][2]);
+		}
+		Out += FString::Printf(TEXT("    \"thumbSpread\": %.0f,\n    \"thumbIn\": %.0f\n  }"), Fingers.ThumbSpread, Fingers.ThumbIn);
+		return Out;
+	}
+}
+
+bool FSOGunHold::Load(FName Archetype, FSOGunHold& Out)
+{
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (bIgnoreFiles || Archetype.IsNone() || !SOData::LoadText(File(Archetype), Text) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+	{
+		return false;
+	}
+	FSOGunHold Read;
+	if (!ReadHand(Root, TEXT("firing"), false, Read.Firing, Read.FiringFingers) || !ReadHand(Root, TEXT("support"), true, Read.Support, Read.SupportFingers))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: the hold's file does not hold a whole hold: the gun is fitted as it is picked up"), *File(Archetype));
+		return false;
+	}
+	Out = Read;
+	return true;
+}
+
+FString FSOGunHold::ToJson(FName Archetype, const FString& About) const
+{
+	return FString::Printf(TEXT("{\n  \"gun\": \"%s\",\n  \"about\": \"%s\",\n  \"frame\": \"cm in the gun's frame: +X along the barrel, +Y to the right, +Z up, from the top of the pistol grip. "
+		"wrist: the wrist joint. along: the way the hand runs, wrist to knuckles. thumb: the hand's thumb side. "
+		"A finger's three numbers: degrees closed at the knuckle, the middle joint and the tip. thumbSpread: the thumb swung round the hand toward the palm's side. thumbIn: drawn in toward the fingers.\",\n"
+		"%s,\n%s\n}\n"),
+		*Archetype.ToString(), *About.ReplaceCharWithEscapedChar(), *WriteHand(TEXT("firing"), Firing, FiringFingers), *WriteHand(TEXT("support"), Support, SupportFingers));
 }
 
 // --- Finger poses --------------------------------------------------------------------------------
@@ -143,6 +246,7 @@ FSOFingerPose FSOFingerPose::Lerp(const FSOFingerPose& A, const FSOFingerPose& B
 		}
 	}
 	P.ThumbSpread = FMath::Lerp(A.ThumbSpread, B.ThumbSpread, Alpha);
+	P.ThumbIn = FMath::Lerp(A.ThumbIn, B.ThumbIn, Alpha);
 	return P;
 }
 
@@ -165,6 +269,7 @@ UStaticMeshComponent* USOGunRigComponent::MakeMesh(FName Name, UStaticMesh* Mesh
 	UStaticMeshComponent* Comp = NewObject<UStaticMeshComponent>(Owner, MakeUniqueObjectName(Owner, UStaticMeshComponent::StaticClass(), Name));
 	Comp->SetupAttachment(GunSpace);
 	Comp->SetStaticMesh(Mesh);
+	Comp->bReceivesDecals = false;
 	Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Comp->SetGenerateOverlapEvents(false);
 	Comp->SetMobility(EComponentMobility::Movable);
@@ -238,6 +343,15 @@ void USOGunRigComponent::Build(const USOWeaponData* Data, bool bInFirstPerson)
 	LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
 	RightFingers = FSOFingerPose::Trigger();
 	LeftFingers = FingersForAnchor(NFore);
+	// the gun's own hold, when it brought one (Data/holds/<archetype>.json): the hands rest where it says
+	bHasHold = FSOGunHold::Load(Archetype, Hold);
+	if (bHasHold)
+	{
+		RightGrip = Hold.Firing;
+		LeftGrip = Hold.Support;
+		RightFingers = Hold.FiringFingers;
+		LeftFingers = Hold.SupportFingers;
+	}
 }
 
 FBox USOGunRigComponent::GetRigBounds() const
@@ -302,6 +416,10 @@ FBox USOGunRigComponent::GetWornBounds() const
 
 FSOFingerPose USOGunRigComponent::FingersForAnchor(FName Anchor) const
 {
+	if (bHasHold && (Anchor == NFore || Anchor.IsNone()))
+	{
+		return Hold.SupportFingers;                             // (where the support hand rests: the gun's own hold)
+	}
 	if (Anchor == NFore || Anchor.IsNone() || Anchor == TEXT("pump"))
 	{
 		// handguns: the support hand wraps the firing hand; long guns: round the handguard / forend
@@ -573,7 +691,7 @@ FSOHandGrip USOGunRigComponent::GripForAnchor(FName Anchor) const
 	const FVector Point = MeshToRig(ResolveAnchor(Anchor));
 	if (Anchor == NFore || Anchor.IsNone())
 	{
-		return bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
+		return bHasHold ? Hold.Support : (bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip)));
 	}
 	if (Anchor == TEXT("pump"))
 	{
@@ -723,7 +841,7 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 	}
 	else
 	{
-		LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
+		LeftGrip = GripForAnchor(NFore);
 		LeftFingers = FingersForAnchor(NFore);
 	}
 }

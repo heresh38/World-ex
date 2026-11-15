@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataAsset.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Templates/SubclassOf.h"
 #include "SOSpecies.generated.h"
@@ -57,11 +58,40 @@ struct SOAI_API FSOSpeciesVariant
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
 	FName Weapon;
 
+	/** Another kit of abilities (Data/game_data.json "kits"; None: its own, if it has one). This is how a level
+	 *  makes a role out of a species without writing a creature: a Remnant with the commander's kit rallies its
+	 *  squad, a Veilborn with the disruptor's jams. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	FName Kit;
+
+	/** On how long it holds the trigger and how long it waits between bursts, and on the range it likes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	float Burst = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	float BurstPause = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	float Range = 1.0f;
+
+	/** A suppressor (ASOEnemy::bSuppressor) / one that looks for high ground (bLikesHigh): roles made of data. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	bool bSuppressor = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	bool bLikesHigh = false;
+
+	/** A boss table (Data/game_data.json "bosses"; None: its own, if it has one): this species fighting in phases,
+	 *  with whatever shield and weak points the table gives it. How a level makes a boss without writing one. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	FName Boss;
+
 	/** This on top of Base (a level's baseline under a variant): numbers multiply, names and guns override. */
 	FSOSpeciesVariant Over(const FSOSpeciesVariant& Base) const;
 
 	/** Reads the numbers of a plan's json object ({"species": "remnant", "name": "...", "health": 1.5, "damage": ..,
-	 *  "speed": .., "aim": .., "sight": .., "weapon": "shotgun"}). */
+	 *  "speed": .., "aim": .., "sight": .., "weapon": "shotgun", "kit": "commander", "boss": "warden", "burst": 3, "burstPause": 0.6,
+	 *  "range": 1.5, "suppressor": true, "high": true}). */
 	static FSOSpeciesVariant FromJson(FName Id, const TSharedPtr<FJsonObject>& Object);
 };
 
@@ -84,6 +114,59 @@ struct SOAI_API FSOSpawnOptions
 	bool bNeedsRoom = true;
 };
 
+/**
+ * Numbers by reflection: every number (float, int), switch (bool) and range (FVector2D, as two keys <name>Min /
+ * <name>Max) that Base, or a class below it, lets an editor set on Object. A key is the property's name with a small
+ * first letter and no "b" ("runSpeed", "usesCover"). So a number added to a species or to the brain is data the day
+ * it is declared, with no table code to write.
+ */
+struct SOAI_API FSONumbers
+{
+	static bool Key(const FProperty* Property, const UClass* Base, FString& OutKey);
+	static void Get(const UObject* Object, const UClass* Base, TMap<FName, float>& Out);
+	/** Returns how many of Numbers it set. */
+	static int32 Apply(UObject* Object, const UClass* Base, const TMap<FName, float>& Numbers);
+};
+
+/** One species' numbers (see USOSpeciesTable). */
+USTRUCT(BlueprintType)
+struct SOAI_API FSOSpeciesNumbers
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	FName Species;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	TMap<FName, float> Numbers;
+};
+
+/**
+ * Every species' numbers as data: health, shield, speeds, sight, the range it likes, aim error, bursts, its blow, how
+ * it takes a hit, its switches (uses cover, hunts in a pack, ...), and its brain's senses (view angles, how near is
+ * noticed at once, how long it keeps looking, how far an alarm carries: ASOEnemyAIController takes those from the
+ * same entry when it takes the creature over). Source: Data/species.json ->
+ * /Game/Data/DA_Species (SO_IMPORT_ONLY=species). A creature takes its numbers from here as it is made
+ * (ASOEnemy::PostActorCreated), before a level's variant scales them; what the class's constructor says is only
+ * what a species gets that the file does not name. A key is the property's name with a small first letter and no
+ * "b" ("runSpeed", "usesCover"; a switch is 0 or 1; a range is two keys, "burstTimeMin" / "burstTimeMax"); "health"
+ * and "shield" are what it starts with. The import writes a species the file lacks into it from its class.
+ * Not here: a species' body, clips, voice, capsule and its own moves (its class).
+ */
+UCLASS(BlueprintType)
+class SOAI_API USOSpeciesTable : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Species")
+	TArray<FSOSpeciesNumbers> Species;
+
+	const TMap<FName, float>* Find(FName Id) const;
+
+	static const USOSpeciesTable& Get();
+};
+
 DECLARE_MULTICAST_DELEGATE_OneParam(FSOOnEnemySpawned, ASOEnemy* /*Enemy*/);
 
 UCLASS()
@@ -98,6 +181,11 @@ public:
 	/** Every species there is, sorted. */
 	UFUNCTION(BlueprintPure, Category = "SO|Species")
 	static TArray<FName> GetSpecies();
+
+	/** A species' numbers as its CLASS and its brain's class have them (the keys of USOSpeciesTable): what the
+	 *  import writes into Data/species.json for a species the file does not have yet. */
+	UFUNCTION(BlueprintCallable, Category = "SO|Species")
+	static TMap<FName, float> GetClassNumbers(FName Species);
 
 	/**
 	 * Server: one creature of a species with its feet at (or near) Feet, facing Yaw: the same way for every level.

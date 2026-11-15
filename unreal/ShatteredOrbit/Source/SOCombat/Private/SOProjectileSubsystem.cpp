@@ -31,6 +31,38 @@ float USOProjectileSubsystem::DamageAtDistance(const FSOProjectile& Round, float
 	return Round.Damage * FMath::Lerp(1.0f, Round.MinDamageScale, Alpha);
 }
 
+void USOProjectileSubsystem::NoteNearMisses(const FSOProjectile& Round, const FVector& From, const FVector& To, const AActor* Struck)
+{
+	ASOCombatCharacter* Shooter = Cast<ASOCombatCharacter>(Round.Instigator.Get());
+	UWorld* World = GetWorld();
+	if (!Shooter || !World || Round.Damage <= 0.0f)
+	{
+		return;
+	}
+	// who there is to pass close to: looked up now and then, not for every round on every frame
+	if (World->GetTimeSeconds() - NearMissListAt > 0.5f || World->GetTimeSeconds() < NearMissListAt)
+	{
+		NearMissListAt = World->GetTimeSeconds();
+		NearMissList.Reset();
+		for (TActorIterator<ASOCombatCharacter> It(World); It; ++It)
+		{
+			NearMissList.Add(*It);
+		}
+	}
+	for (const TWeakObjectPtr<ASOCombatCharacter>& Entry : NearMissList)
+	{
+		ASOCombatCharacter* Near = Entry.Get();
+		if (!Near || Near == Shooter || Near == Struck || Near->IsDead() || !USOCombatStatics::AreHostile(Shooter, Near))
+		{
+			continue;
+		}
+		if (FMath::PointDistToSegmentSquared(Near->GetActorLocation(), From, To) <= FMath::Square(NearMissRadius))
+		{
+			Near->NoteNearMiss(Shooter);
+		}
+	}
+}
+
 bool USOProjectileSubsystem::IsPrecisionBone(FName Bone)
 {
 	const FString Name = Bone.ToString().ToLower();
@@ -62,15 +94,29 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 	}
 
 	FHitResult Hit;
-	if (World->LineTraceSingleByChannel(Hit, Start, End, SO_TRACE_BULLET, Params))
+	const bool bMet = World->LineTraceSingleByChannel(Hit, Start, End, SO_TRACE_BULLET, Params);
+	if (World->GetNetMode() != NM_Client)
+	{
+		NoteNearMisses(Round, Start, bMet ? FVector(Hit.ImpactPoint) : End, bMet ? Hit.GetActor() : nullptr);
+	}
+	if (bMet)
 	{
 		Round.Position = Hit.ImpactPoint;
 		float Applied = 0.0f;
+		// a precision hit is the victim's to call (the head; a boss's weak points, which can be worth more)
+		const ASOCombatCharacter* Struck = Cast<ASOCombatCharacter>(Hit.GetActor());
+		const float Precision = Struck ? Struck->PrecisionAt(Hit) : (IsPrecisionBone(Hit.BoneName) ? 1.0f : 0.0f);
+		const bool bCrit = Precision > 0.0f;
 		if (World->GetNetMode() != NM_Client && Hit.GetActor())
 		{
-			const bool bCrit = IsPrecisionBone(Hit.BoneName);
 			const float Distance = FVector::Dist(Round.Origin, Hit.ImpactPoint);
-			const float Amount = DamageAtDistance(Round, Distance) * (bCrit ? Round.CritMultiplier : 1.0f);
+			float Amount = DamageAtDistance(Round, Distance) * (bCrit ? Round.CritMultiplier * Precision : 1.0f);
+			if (Struck)
+			{
+				Amount *= Struck->GetShield() > 0.0f ? Round.ShieldScale : Round.HealthScale; // (a perk: harder on shields, or on flesh)
+			}
+			// (where it landed goes with the damage: the body shows the hit there)
+			const FSOHitScope Where(Hit.BoneName, Hit.ImpactPoint, Round.Velocity.GetSafeNormal(), bCrit);
 			Applied = USOCombatStatics::ApplyDamage(Round.Instigator.Get(), Hit.GetActor(), Amount, bCrit);
 		}
 		if (World->GetNetMode() != NM_Client)
@@ -78,6 +124,15 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 			OnImpact(Round, Hit, Applied);
 		}
 		OnHit.Broadcast(Round, Hit, Applied);
+		if (Applied > 0.0f)
+		{
+			// the shooter's machine marks the hit (rounds fly on the server only)
+			if (ASOCombatCharacter* Shooter = Cast<ASOCombatCharacter>(Round.Instigator.Get()))
+			{
+				const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Hit.GetActor());
+				Shooter->ConfirmHit(bCrit, Victim && Victim->IsDead());
+			}
+		}
 		if (OutHit)
 		{
 			*OutHit = Hit;
@@ -106,6 +161,13 @@ void USOProjectileSubsystem::OnImpact(const FSOProjectile& Round, const FHitResu
 		for (AActor* Victim : Victims)
 		{
 			AddBurn(Instigator, Victim, Round.Damage * Round.Dot, 3.0f);
+		}
+	}
+	if (Round.Status.IsValid() && Round.StatusDuration > 0.0f)
+	{
+		for (AActor* Victim : Victims)
+		{
+			USOCombatStatics::ApplyStatus(Instigator, Victim, Round.Status, Round.StatusDuration, Round.StatusMagnitude);
 		}
 	}
 	if (Round.Swarm > 0)
@@ -185,6 +247,10 @@ void USOProjectileSubsystem::ApplyGround(AActor* Instigator, const FVector& Cent
 
 float USOProjectileSubsystem::ApplySplash(AActor* Instigator, const FVector& Center, float Radius, float Damage, AActor* Ignore, TArray<AActor*>* OutVictims)
 {
+	if (Radius >= 200.0f)
+	{
+		USOCombatStatics::ReportNoise(this, Center, Instigator, 5000.0f); // (a blast is heard further than any gun)
+	}
 	UWorld* World = GetWorld();
 	if (!World || Radius <= 0.0f || World->GetNetMode() == NM_Client)
 	{
@@ -222,34 +288,13 @@ float USOProjectileSubsystem::ApplySplash(AActor* Instigator, const FVector& Cen
 
 void USOProjectileSubsystem::AddBurn(AActor* Instigator, AActor* Victim, float Total, float Duration)
 {
-	if (Victim && Total > 0.0f && Duration > 0.0f)
-	{
-		Burns.Add({ Instigator, Victim, Total / Duration, Duration, 0.0f });
-	}
+	// a condition on the victim (Status.Burn): half-second ticks through the damage gate, seen by every machine
+	USOCombatStatics::ApplyStatus(Instigator, Victim, SOTags::Status_Burn, Duration, Total);
 }
 
 void USOProjectileSubsystem::Tick(float DeltaTime)
 {
-	// acid and parasites deal their damage in 0.5 s ticks
-	for (int32 i = Burns.Num() - 1; i >= 0; --i)
-	{
-		FBurn& B = Burns[i];
-		const float Step = FMath::Min(DeltaTime, B.Left);
-		B.Left -= Step;
-		B.Tick += Step;
-		if (B.Tick >= 0.5f || B.Left <= 0.0f)
-		{
-			if (AActor* Victim = B.Victim.Get())
-			{
-				USOCombatStatics::ApplyDamage(B.Instigator.Get(), Victim, B.PerSecond * B.Tick, false);
-			}
-			B.Tick = 0.0f;
-		}
-		if (B.Left <= 0.0f || !B.Victim.IsValid())
-		{
-			Burns.RemoveAtSwap(i, 1, EAllowShrinking::No);
-		}
-	}
+	// parasites and poison on the ground deal their damage in 0.5 s ticks
 	for (int32 i = Swarms.Num() - 1; i >= 0; --i)
 	{
 		FSwarm& S = Swarms[i];

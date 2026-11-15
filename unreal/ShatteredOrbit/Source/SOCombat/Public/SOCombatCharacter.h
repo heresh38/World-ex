@@ -3,6 +3,11 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemInterface.h"
 #include "GameFramework/Character.h"
+#include "GameplayAbilitySpecHandle.h"
+#include "GameplayTagContainer.h"
+#include "Abilities/SOAbilitySet.h"
+#include "ActiveGameplayEffectHandle.h"
+#include "SOAttributes.h"
 #include "SOCombatTypes.h"
 #include "SOCombatCharacter.generated.h"
 
@@ -10,6 +15,8 @@ class ASOWeapon;
 class USOAbilitySystemComponent;
 class USOAttributeSet;
 class USOWeaponData;
+
+DECLARE_MULTICAST_DELEGATE_TwoParams(FSOOnHitConfirmed, bool /*bCrit*/, bool /*bKilled*/);
 
 /** Trace channel for rounds (DefaultEngine.ini: GameTraceChannel1 "SOBullet", blocks by default). */
 #define SO_TRACE_BULLET ECC_GameTraceChannel1
@@ -80,8 +87,102 @@ public:
 	/** The damage this body actually takes from Source (armour plates facing the shot, weak points); server. */
 	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const { return Amount; }
 
-	/** Server: restores health up to the maximum (Siphon). */
+	/** Is a round that landed like this a precision hit, and how much of one: 0 = no; otherwise the scale on the
+	 *  round's own precision multiplier (1 = as the gun says). The head and neck by default; a boss adds its weak
+	 *  points, which can be worth more. The one rule for everything that can be shot. */
+	virtual float PrecisionAt(const FHitResult& Hit) const;
+
+	/** Server: restores health up to the maximum (Siphon), as an effect (USOGameplayEffect_Heal). */
 	void Heal(float Amount);
+
+	// --- Abilities and conditions ---
+	/** Server: gives this character a kit's abilities, by slot (replacing any it had). Null takes them away. */
+	void GrantAbilitySet(USOAbilitySet* Set);
+
+	const USOAbilitySet* GetAbilitySet() const { return AbilitySet; }
+
+	/** Uses the ability in a slot: called on the machine that controls the character (a player's own, predicted and
+	 *  confirmed by the server) or on the server for a creature. False if there is none or it cannot be used now. */
+	bool ActivateSlot(ESOAbilitySlot Slot);
+
+	/** For the HUD: the slot's charges ready and held, the seconds until the next one is back (0 when all are) and
+	 *  the cooldown's length. False if the slot is empty. */
+	bool GetAbilityState(ESOAbilitySlot Slot, int32& OutCharges, int32& OutMaxCharges, float& OutRemaining, float& OutCooldown) const;
+
+	UFUNCTION(BlueprintPure, Category = "SO|Combat")
+	float GetUltimate() const;
+	UFUNCTION(BlueprintPure, Category = "SO|Combat")
+	float GetMaxUltimate() const;
+
+	/** Server: charge for the ultimate (negative spends it), as an effect (USOGameplayEffect_Ultimate). */
+	void AddUltimate(float Amount);
+
+	/** A blow from there lands on armour, not on the body (what it looks and sounds like: sparks and a ring, not a
+	 *  wound). The damage is the gate's business (ScaleIncomingDamage); this is only how the hit is shown. */
+	virtual bool TurnsBlow(const FVector& From) const { return false; }
+
+	/** Server: damage from someone else just went in on this character (from the damage gate; where it landed:
+	 *  USOCombatStatics::LastHit). What the body does about it. */
+	virtual void OnTookDamage(AActor* Source, float Amount, bool bCrit) {}
+
+	/** Server: this character's damage went in (from the damage gate): the kit's ultimate charges from it, and its
+	 *  passive rule looks at what was hit. */
+	void OnDealtDamage(float Amount, bool bKilled, const ASOCombatCharacter* Victim);
+
+	/** Server: shield back at once, up to the maximum, as an effect (USOGameplayEffect_Shield). */
+	void AddShield(float Amount);
+
+	/** Carries the condition (Status.*) or state (State.*) tag right now. */
+	bool HasStatus(const FGameplayTag& Tag) const;
+
+	/** Never takes this condition (a boss is not staggered by a punch). */
+	virtual bool ResistsStatus(const FGameplayTag& Status) const { return false; }
+
+	/** Scale on the movement speed (1 normally, under 1 while slowed). */
+	float GetMoveScale() const;
+
+	/** Fired on the machine of the player whose round went in (the HUD's hit marker and its tick). Rounds are
+	 *  simulated on the server only, so the server tells the shooter's machine (ConfirmHit). */
+	mutable FSOOnHitConfirmed OnHitConfirmed;
+
+	/** Server: a round of this character's did damage. */
+	void ConfirmHit(bool bCrit, bool bKilled);
+
+	/** An ability was used here: shows it on every machine exactly once (the user's own at once, the others through
+	 *  the server). Called by the ability where it ran. */
+	void ShowAbility(ESOAbilitySlot Slot, bool bWindUp = false);
+
+	/** Who this character's next ability is meant for (a creature names its target before it uses one; a player's
+	 *  abilities go where the player looks and ignore it). */
+	void SetAbilityTarget(AActor* Target) { AbilityTarget = Target; }
+	AActor* GetAbilityTarget() const { return AbilityTarget.Get(); }
+
+	/** The slot's ability is in its wind-up right now. */
+	bool IsAbilityActive(ESOAbilitySlot Slot) const;
+
+	/** Scale on the damage this character's abilities do (a creature's variant: the same blow from a Warden). */
+	virtual float GetAbilityDamageScale() const { return 1.0f; }
+
+	/** Scale on how long the slot's ability takes to come back (a player's: its Ordnance for the grenade, its Impact
+	 *  for the melee; a creature's: the difficulty level and a boss's phase). */
+	virtual float GetAbilityCooldownScale(ESOAbilitySlot Slot) const;
+
+	/** Server: a hostile round just passed close without hitting. It is under fire (Status.Suppressed for a moment):
+	 *  its shield does not start refilling, a player's aim is less steady, a creature in cover keeps its head down
+	 *  and one in the open shoots wider. At most once in a while per character, however many rounds pass. */
+	void NoteNearMiss(AActor* From);
+
+	// --- Attributes (SOAttributes.h) ---
+
+	/** Server: the points this character's gear gives, in place of whatever it gave before. */
+	void SetGearAttributes(const FSOAttributePoints& Points);
+
+	/** Its points in an attribute, and what they scale that attribute's thing by (the table's rule). */
+	float GetAttribute(ESOAttribute Attribute) const;
+	float GetAttributeScale(ESOAttribute Attribute) const;
+
+	/** The colour of this character's abilities' light (the kit's for a player, the Altered's for a creature). */
+	virtual FLinearColor GetAbilityColor() const { return FLinearColor(0.45f, 0.9f, 1.0f); }
 
 	/** Server: health reached zero. */
 	virtual void Die(AActor* Killer);
@@ -146,6 +247,25 @@ protected:
 	/** The weapon actor changed (all machines, after it attached). */
 	virtual void OnWeaponEquipped() {}
 
+	/** All machines, once per use: the sound, the body's clip, the camera. */
+	virtual void OnAbilityUsed(ESOAbilitySlot Slot);
+
+	/** All machines, once, as an ability with a wind-up begins: the warning. */
+	virtual void OnAbilityWindUp(ESOAbilitySlot Slot);
+
+	/** The move scale changed (a slow came or went): whoever sets its own walking speed applies it again. */
+	virtual void OnMoveScaleChanged() {}
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastAbility(ESOAbilitySlot Slot, bool bWindUp);
+
+	UFUNCTION(Client, Unreliable)
+	void ClientHitConfirmed(bool bCrit, bool bKilled);
+
+	/** The kit this character's abilities came from (their numbers, for the abilities and the HUD). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SO|Combat")
+	TObjectPtr<USOAbilitySet> AbilitySet;
+
 	ASOWeapon* SpawnWeapon(TFunctionRef<void(ASOWeapon*)> Setup);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Combat")
@@ -162,4 +282,17 @@ protected:
 
 	float DeathTime = 0.0f;
 	bool bDeathHandled = false;
+
+private:
+	void HandleMoveScaleChanged(const struct FOnAttributeChangeData& Change);
+
+	TArray<FGameplayAbilitySpecHandle> GrantedAbilities;
+	TWeakObjectPtr<AActor> AbilityTarget;
+	/** Ultimate charge earned over time, handed over a point at a time. */
+	float UltimateOwed = 0.0f;
+
+	float LastNearMiss = -100.0f;
+
+	/** The gear effect that is on (USOGameplayEffect_Gear). */
+	FActiveGameplayEffectHandle GearEffect;
 };

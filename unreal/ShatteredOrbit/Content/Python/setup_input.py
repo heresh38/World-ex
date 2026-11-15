@@ -33,6 +33,15 @@ ACTIONS = {
     "IA_Inventory": unreal.InputActionValueType.BOOLEAN,
     "IA_Map": unreal.InputActionValueType.BOOLEAN,
     "IA_Flashlight": unreal.InputActionValueType.BOOLEAN,
+    # the kit's abilities, one action per slot
+    "IA_Grenade": unreal.InputActionValueType.BOOLEAN,
+    "IA_Melee": unreal.InputActionValueType.BOOLEAN,
+    "IA_ClassAbility": unreal.InputActionValueType.BOOLEAN,
+    "IA_Ultimate": unreal.InputActionValueType.BOOLEAN,
+    # the pad's two shoulders: each alone is an ability (right: grenade, left: melee), both together the ultimate
+    # (ASOCharacter::HandlePadShoulder waits a moment for the second one)
+    "IA_PadShoulderRight": unreal.InputActionValueType.BOOLEAN,
+    "IA_PadShoulderLeft": unreal.InputActionValueType.BOOLEAN,
 }
 
 # (action, key, modifiers) - modifiers: "neg" negate, "swz" swizzle YXZ (so a 1D key drives Y), "dz" radial dead zone
@@ -53,7 +62,6 @@ MAPPINGS = [
     ("IA_Crouch", "LeftControl", []),
     ("IA_Crouch", "Gamepad_FaceButton_Right", []),
     ("IA_ToggleView", "T", []),
-    ("IA_ToggleView", "Gamepad_DPad_Up", []),
     ("IA_Interact", "E", []),
     ("IA_Interact", "Gamepad_FaceButton_Top", []),
     ("IA_Fire", "LeftMouseButton", []),
@@ -76,6 +84,13 @@ MAPPINGS = [
     ("IA_Map", "Gamepad_DPad_Down", []),
     ("IA_Flashlight", "F", []),
     ("IA_Flashlight", "Gamepad_RightThumbstick", []),
+    ("IA_Grenade", "G", []),
+    ("IA_Melee", "V", []),
+    ("IA_ClassAbility", "Q", []),
+    ("IA_ClassAbility", "Gamepad_DPad_Up", []),       # (the view toggle gave it up: T on the keyboard only)
+    ("IA_Ultimate", "X", []),
+    ("IA_PadShoulderRight", "Gamepad_RightShoulder", []),
+    ("IA_PadShoulderLeft", "Gamepad_LeftShoulder", []),
 ]
 
 

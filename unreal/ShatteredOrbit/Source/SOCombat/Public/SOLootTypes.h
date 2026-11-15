@@ -44,6 +44,132 @@ struct SOCOMBAT_API FSOPerkInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
 	FText Description;
+
+	// --- What it does: numbers from Data/game_data.json "perks" (a perk has only those it uses; the rest stay at
+	// "nothing"). The code reads these and never asks a perk its name, so a perk that recombines them is data alone;
+	// a perk that needs something new adds a number here and the one place that reads it.
+
+	/** Scales on the gun's own numbers (1 = unchanged). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float Magazine = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float Reload = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float Spread = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float Recoil = 1.0f;
+
+	/** On the precision multiplier. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float Precision = 1.0f;
+
+	/** On the rate of fire while its holder's shield is down. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float FireRateShieldDown = 1.0f;
+
+	/** A kill adds this share of damage, up to KillDamageStacks times, for KillDamageTime seconds (0 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float KillDamage = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	int32 KillDamageStacks = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float KillDamageTime = 0.0f;
+
+	/** A kill gives this share of the holder's health back (0 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float KillHeal = 0.0f;
+
+	/** A precision hit bursts for this share of the gun's damage within PrecisionSplashRadius cm (0 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float PrecisionSplash = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float PrecisionSplashRadius = 0.0f;
+
+	/** Put away, it reloads itself once its reload time has passed. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	bool bAutoload = false;
+
+	/** A kill puts this share of the magazine back from the reserve (0 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float KillMagazine = 0.0f;
+
+	/** A kill starts the holder's shield refilling at once. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	bool bKillShield = false;
+
+	/** A reload begun within KillReloadTime seconds of a kill takes this share of its time (1 = unchanged). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float KillReload = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float KillReloadTime = 0.0f;
+
+	/** The first shot after OpeningAfter seconds without firing: on its damage, and it flies true (1 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float OpeningDamage = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float OpeningAfter = 0.0f;
+
+	/** On the damage of the rounds in the last LowMagShare of the magazine (1 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float LowMagDamage = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float LowMagShare = 0.0f;
+
+	/** On the spread when fired from the hip. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float HipSpread = 1.0f;
+
+	/** On the damage to a target whose shield is up / whose shield is down. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float ShieldDamage = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float HealthDamage = 1.0f;
+
+	/** What it hits is slowed to this share of its speed for HitSlowTime seconds (1 = none). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float HitSlow = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float HitSlowTime = 0.0f;
+
+	/** A precision hit sets the target burning for this share of the gun's damage over PrecisionBurnTime seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float PrecisionBurn = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float PrecisionBurnTime = 0.0f;
+
+	/** Its rounds lose nothing with distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	bool bNoFalloff = false;
+
+	/** On how far its shots are heard. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	float Noise = 1.0f;
+
+	/** Sliding fills the magazine from the reserve. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Effect")
+	bool bSlideReload = false;
+
+	/** The classes of gun that can roll it (kinetic, energy, horror; none named = any). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot")
+	TArray<FName> Classes;
+
+	/** It changes something (a perk with every number at "nothing" is a mistake in the data). */
+	bool DoesAnything() const;
+
+	/** This and Other together: scales multiply, shares add, the larger count / time / radius, either's switch. */
+	void Add(const FSOPerkInfo& Other);
 };
 
 /** data.js SIGHTS: the gun's own sights or an optic from gun_attach.glb on the rail. */
@@ -273,4 +399,6 @@ struct SOCOMBAT_API FSOWeaponStats
 	/** Recoil multiplier (Gyro Stock). */
 	UPROPERTY(BlueprintReadOnly, Category = "Loot")
 	float Recoil = 1.0f;
+	/** Everything the copy's perks do, taken together (USOLootLibrary::PerkEffects): what the gun reads at runtime. */
+	FSOPerkInfo Perks;
 };

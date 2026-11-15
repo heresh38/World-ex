@@ -165,6 +165,12 @@ protected:
 	void OnDismantle();
 
 	UFUNCTION()
+	void OnUpgrade();
+
+	/** The upgrade button for the selected piece: what it would give and cost, or why not. */
+	void ShowUpgrade(const FString& Uid);
+
+	UFUNCTION()
 	void OnBody();
 
 	void BuildTree();
@@ -214,6 +220,10 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> StatsRow;
 
+	/** The character's six attributes, under the figures. */
+	UPROPERTY()
+	TObjectPtr<UHorizontalBox> AttributeRow;
+
 	/** The details of the item under the cursor, on the far side from the open slot's bay. */
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> DetailPanel;
@@ -244,6 +254,12 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DismantleLabel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> UpgradeButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> UpgradeLabel;
 
 	FString OpenSlotId;
 	FString SelectedKey;

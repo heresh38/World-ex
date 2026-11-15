@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "GameFramework/SaveGame.h"
+#include "SOAttributes.h"
 #include "SOLootTypes.h"
 #include "SOWardrobe.h"
 #include "SOInventoryComponent.generated.h"
@@ -14,6 +15,10 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
+	/** The version this build writes. Raise it with every change to what is saved, and teach
+	 *  USOProfileStore::Migrate the step from the one before. */
+	static constexpr int32 CurrentVersion = 4;
+
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
 
@@ -38,7 +43,8 @@ public:
 	UPROPERTY(SaveGame)
 	int32 Level = 1;
 
-	/** Version 2: armour pieces and the body. */
+	/** Version 2: armour pieces and the body. Version 3: a piece carries its own roll (FSOArmorInstance::Roll).
+	 *  Version 4: what is worn is kept per body (FSOArmorInstance::WornBy). */
 	UPROPERTY(SaveGame)
 	TArray<FSOArmorInstance> Armor;
 
@@ -88,13 +94,18 @@ public:
 	const FSOArmorInstance* GetEquippedArmor(FName Slot) const;
 	/** Total armour rating of what is worn. */
 	int32 GetArmorRating() const;
+	/** The attribute points one piece gives (its armour rating, rarity, power and its own roll: SOAttributes.h). */
+	FSOAttributePoints GetArmorPoints(const FSOArmorInstance& Piece) const;
+	/** What everything worn gives: the character's attributes (the body takes them: ASOCombatCharacter::SetGearAttributes). */
+	FSOAttributePoints GetAttributePoints() const;
 	FName GetBody() const { return Body; }
 	/** Body + every slot: the wardrobe's defaults (hair, underwear) with the worn armour on top. */
 	FSOOutfit GetOutfit() const;
 
 	/** Wears (or, if it is worn, takes off) an armour piece (server). */
 	bool EquipArmor(const FString& Uid);
-	/** Switches the body (male / female): the pieces that body has are owned for it too (server). */
+	/** Switches the body (male / female): the pieces that body has are owned for it too, and it wears what IT had
+	 *  on when the player last left it (its wardrobe's defaults the first time), not what the other body wears (server). */
 	bool SetBody(FName NewBody);
 	/** Server: an earned armour piece (an operation's reward); a piece already owned is raised to the better rarity /
 	 *  power instead of a second copy. */
@@ -129,6 +140,17 @@ public:
 	void AddXp(int32 Amount);
 	void AddAlloy(int32 Amount);
 
+	// --- Spending and upgrades (USOProgressionTable) ---
+	/** Pays both or neither: false (and nothing taken) if either is short. The one way anything is paid for. */
+	bool Spend(int32 InCredits, int32 InAlloy);
+	/** How far this character's gear can be upgraded (its level decides). */
+	int32 GetPowerCap() const;
+	/** What upgrading a gun or an armour piece would give and cost. False if it is not owned or already at the cap. */
+	bool GetUpgrade(const FString& Uid, int32& OutPower, int32& OutCredits, int32& OutAlloy) const;
+	/** Server: raises the piece's power one step and takes the cost; false (nothing changed) if it cannot be done or
+	 *  cannot be paid for. */
+	bool Upgrade(const FString& Uid);
+
 	/** A brand-new profile: the browser build's starters plus the one-time armoury (every kinetic and horror gun). */
 	void NewProfile();
 	bool LoadProfile();
@@ -154,6 +176,9 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerEquipArmor(const FString& Uid);
+
+	UFUNCTION(Server, Reliable)
+	void ServerUpgrade(const FString& Uid);
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetBody(FName NewBody);

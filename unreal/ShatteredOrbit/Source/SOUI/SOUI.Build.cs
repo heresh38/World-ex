@@ -5,7 +5,7 @@ public class SOUI : ModuleRules
 	public SOUI(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "CommonUI", "GameplayAbilities", "SOCore", "SOCombat", "SOCharacter", "SOWorld", "SOOperation" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "CommonUI", "GameplayAbilities", "SOCore", "SOCombat", "SOCharacter", "SOWorld", "SOAI", "SOOperation" });
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "InputCore", "RenderCore" });
 	}
 }

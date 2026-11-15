@@ -238,6 +238,37 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> FlashlightAction;
 
+	// the kit's abilities, one action per slot (ASOCombatCharacter::ActivateSlot)
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> GrenadeAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> MeleeAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> ClassAbilityAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> UltimateAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> PadShoulderRightAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> PadShoulderLeftAction;
+
+	/** How long a pad shoulder waits for the other one before it counts alone (both together = the ultimate). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Input")
+	float PadChordWindow = 0.09f;
+
+	/** A pad shoulder went down or came up: right alone is the grenade, left alone the melee, both the ultimate. */
+	void HandlePadShoulder(bool bRight, bool bDown);
+	void HandlePadRightDown() { HandlePadShoulder(true, true); }
+	void HandlePadRightUp() { HandlePadShoulder(true, false); }
+	void HandlePadLeftDown() { HandlePadShoulder(false, true); }
+	void HandlePadLeftUp() { HandlePadShoulder(false, false); }
+
+	void HandleGrenade();
+	void HandleMelee();
+	void HandleClassAbility();
+	void HandleUltimate();
+
 	/** The flashlight (F): on or off at any time. Creatures see a lit light from farther and from any side. */
 	UFUNCTION(BlueprintCallable, Category = "SO|Flashlight")
 	void SetFlashlight(bool bOn);
@@ -374,6 +405,19 @@ protected:
 	void LoadContent();
 	void LoadBody(USkeletalMeshComponent* Body);
 	virtual void OnWeaponEquipped() override;
+	virtual void OnAbilityUsed(ESOAbilitySlot Slot) override;
+	virtual void OnAbilityWindUp(ESOAbilitySlot Slot) override;
+
+	/** An ability begins to show on this body (at its wind-up, or at its use if it has none): the hands leave the
+	 *  gun, and standing still the whole body plays the ability's clip with the gun put away. Moving, the legs keep
+	 *  their own motion and no clip is played (there is no upper-body layer yet). */
+	void BeginAbilityShow(ESOAbilitySlot Slot);
+
+	/** This body's clip of that name (its own set: A_Player<Sex>_<Name>), loaded once; null if it has none. */
+	UAnimSequenceBase* GetAbilityClip(FName Name);
+
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UAnimSequenceBase>> AbilityClips;
 	void SelectSlot(int32 Slot);
 	void CycleSlot(int32 Step);
 	void StoreWeaponAmmo();
@@ -463,7 +507,10 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetViewMode(ESOViewMode NewMode);
 
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "SO|Combat")
+	/** On the sights. Set by the player's own machine from the input; the server takes it from the movement's aim
+	 *  flag (it arrives with every move) and passes it to everyone else, so the spread the server rolls and the
+	 *  pose the others see are the aimed ones. */
+	UPROPERTY(Transient, Replicated, BlueprintReadOnly, Category = "SO|Combat")
 	bool bAiming = false;
 
 private:
@@ -498,6 +545,12 @@ private:
 	bool bSprintLatched = false;
 	float AimProgress = 0.0f;
 	float RecoilKick = 0.0f;
+
+	/** Degrees of pitch an ability's use knocked the view by (down for a blow); recovers on its own. */
+	float AbilityKick = 0.0f;
+
+	bool bPadShoulderDown[2] = { false, false };   // [0] left, [1] right
+	FTimerHandle PadChordTimer;
 	float StepDistance = 0.0f;
 	float LastHealthSeen = -1.0f;
 	float LastShieldSeen = -1.0f;

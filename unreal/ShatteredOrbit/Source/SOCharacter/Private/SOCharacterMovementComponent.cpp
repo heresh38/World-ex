@@ -4,6 +4,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "SOCombatCharacter.h"
 
 // ---------------------------------------------------------------------------------------------
 // Saved moves: the client records the intents (compressed flags) and the custom state at the
@@ -263,6 +264,12 @@ bool USOCharacterMovementComponent::IsSprinting() const
 }
 
 float USOCharacterMovementComponent::GetMaxSpeed() const
+{
+	const ASOCombatCharacter* Body = Cast<ASOCombatCharacter>(CharacterOwner);
+	return GetUnscaledMaxSpeed() * (Body ? Body->GetMoveScale() : 1.0f);
+}
+
+float USOCharacterMovementComponent::GetUnscaledMaxSpeed() const
 {
 	if (IsSliding())
 	{

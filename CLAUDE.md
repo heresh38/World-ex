@@ -2,15 +2,55 @@
 
 The game is the Unreal project `unreal/ShatteredOrbit` (UE 5.8, C++). The old browser build (Three.js) was deleted on
 2026-11-08 at the owner's request: never use, rebuild or reference anything from it. Every asset comes from our own
-Blender scripts in `tools/blender` (the asset pipeline) and every number from the Unreal project's own data.
+asset pipeline (`tools/blender`: so far all of it Blender scripts; the tools the owner approved on 2026-11-14 are the
+first hard rule below) and every number from the Unreal project's own data.
+
+**"Project Orion"** is the owner's code name for this game. Its standing brief is `docs/orion/MASTER_BRIEF.md` (the
+owner's message of 2026-11-12, word for word: 33 parts, 13 phases). Read with it: `docs/orion/AUDIT.md` (what exists
+and what is missing, by the brief's parts), `ARCHITECTURE.md` (module structure, dependency map, standards, the
+decisions, and where the brief and the hard rules below differ: the stricter rule holds until the owner rules),
+`ROADMAP.md` (where each phase starts, risks, the first milestone, phase 1 as work items) and a report per phase in
+`docs/orion/reports`. The code keeps its `SO` prefix: the brief's `ProjectOrion...` class names are roles mapped onto
+existing classes, never second systems.
 
 ## Hard rules from the owner
-- **Every 3D model and texture is made in Blender by our own scripts** (`tools/blender/*.py`, run with
-  `blender --background --python <script>`). Never add third-party models/textures; Epic's sample characters may only be
-  measured side by side (tools/reference), never imported, fitted or copied.
+- **What an asset may be made with** (the owner's ruling, 2026-11-14, word for word: "Approve: Substance Painter,
+  ZBrush, Blender and AI-assisted starting models. Improve: Require a consistent, repeatable asset pipeline with
+  AAA-quality results. Keep strict: No unverified AI assets, poor topology, unfinished textures or unoptimised
+  models in the final game."). It replaced "every 3D model and texture is made in Blender by our own scripts".
+  So: Blender (our scripts in `tools/blender/*.py`, run with `blender --background --python <script>`, or by hand),
+  Substance Painter, ZBrush, and an AI-assisted model as a STARTING point only. Whatever the tool, ONE pipeline and
+  ONE gate: nothing is in the game that has not passed `tools/blender/asset_check.py` and been reviewed in the game
+  (`docs/art/ASSET_PIPELINE.md`, "The owner's ruling on tools"; `ASSET_AUDIT.md` section 11). Still never: bought
+  or downloaded third-party models / textures; Epic's sample characters may only be measured side by side
+  (tools/reference), never imported, fitted or copied. Neither Substance nor ZBrush is installed here: what is
+  built from this machine is still built by the Blender scripts.
 - No names, terms or text from other games.
 - AAA quality everywhere: nothing blocky or half-done, no lumps / ledges / bulges on any model (check silhouettes).
 - Premium presentation at 60 fps on a mid-range PC.
+- **Every texture follows `docs/art/TEXTURE_RULES.md`** (the owner, 2026-11-14, word for word there: "the rules i just
+  posted ... should be for all textures to ensure our world is truly alive"): 4K, sharp up close, no seams or visible
+  repetition; every set has albedo, normal, roughness, metallic, ambient occlusion and height (emissive where it
+  applies); micro detail, imperfections, dirt where dirt collects, edge wear, scratches, dust, weathering, colour and age
+  variation; never plastic, flat-roughness or clean. Made by our own pipeline (the tools the owner approved, the first rule above). Nothing of the old browser
+  build's textures stays: what descends from it is replaced. `docs/art/TEXTURE_STATE.md` says which sets meet it.
+- **Guns follow `docs/art/GUN_TEXTURE_RULES.md` as well** (the owner, 2026-11-14: "this rule is for gun textures so
+  remember these too and apply it"): every weapon looks manufactured (machining marks, seams, fasteners, serial
+  numbers, safety markings, a maker's mark: all ours), its wear tells how it was used (grip, magazine well, charging
+  handle, heat colour at the barrel, dust in recesses), seven materials each with its own roughness, NO flat panels,
+  no surface over 10 cm visually empty, and it holds up turned within 5 cm of the camera. The games named there are
+  a quality target only.
+- **Every asset is made to `docs/art/ASSET_PIPELINE.md`** (the owner's PERMANENT art-production specification,
+  2026-11-14, word for word there, 16 sections): fewer, exceptionally good assets first and a repeatable pipeline, then
+  scale; never remodel the whole game at once. A model that works is not a finished asset: real proportions and
+  construction, bevelled edges, a high-poly and a game-ready model with the details BAKED (normal, occlusion,
+  curvature, position) where it pays, proper unique UVs at a consistent texel density, full PBR, wear placed where
+  use puts it (never uniform random scratches), judged under NEUTRAL light as well as gameplay light, checked inside
+  Unreal, performance profiled. Every asset has a status (Concept / Blockout / Work in progress / Technically complete
+  / Art-approved / Game-ready / Shipping-approved): `docs/art/ASSET_AUDIT.md`. The owner RULED on the tools it
+  names (Substance Painter, ZBrush, AI-assisted starting models: approved, see the first rule above); where it and
+  another rule still differ, the stricter rule holds until the owner rules; the table is at the end of the
+  specification.
 - **Operations follow `docs/operation/ART_DIRECTION.md`** (the owner's art direction, 2026-11-10: "For our operation
   keep this as the rules please"). Read it before touching an operation level. In short: a once-great human city,
   destroyed, abandoned and taken over by an alien ecosystem; a playable strike, not a showcase. Buildings are COMPLETE
@@ -26,8 +66,10 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
 
 ## Asset pipeline
 - `bash tools/blender/build_all.sh` builds the Blender sources Unreal's export reads into `assets/` (generated, not
-  committed): textures (`textures.py`, `weapon_textures.py`, `wear_textures.py`, `horror_textures.py`,
-  `nexus_textures.py`, `nexus_city_textures.py`, `ruins_textures.py`), the guns and optics (`weapons.py` + `gunkit.py`),
+  committed): textures (`textures.py`, `weapon_textures.py`, `surface_maps.py`, `wear_textures.py`, `horror_textures.py`,
+  `nexus_textures.py`, `world_maps.py`, `detail_maps.py`, `nexus_city_textures.py`, `city_maps.py`, `ruins_textures.py`,
+  `ruins_maps.py`: the `*_maps.py` are the texture engine's sets and overwrite the older scripts' of the same
+  names), the guns and optics (`weapons.py` + `gunkit.py`),
   the stalker (`aliens.py`, `fleshkit.py`), the Altered (`altered.py`), Nexus Prime (`nexus.py`, `nexus_city.py` kit),
   the city trees (`city_trees.py`), loot props (`loot_props.py`), the reliquary (`vanthos.py`), Meridian (`meridian.py`)
   and effect cards (`fx_kit.py`). Then `bash tools/blender/export_unreal.sh` builds the players and turns everything into
@@ -52,6 +94,123 @@ Blender scripts in `tools/blender` (the asset pipeline) and every number from th
   part `spin` (origin on its axis): `ASOWeapon::Tick` turns it while firing. Tracers and flashes take the gun's own
   colour (`tracer` in the data: kinetic warm, light guns cyan / blue / gold, living green and violet; a bolt of light
   is longer with a head), the flash is five torn blades (`FX_Star`, shader mode 3), nothing is drawn through a scope.
+  **The light guns fire plasma, not bullets** (the owner, 2026-11-14: "more alien ... alien energy or plasma ... instead
+  of a kinetic bullet the human weapons use"; they are the Sarketh's own technology): a gun whose projectile is
+  `ESOProjectileKind::Bolt` draws `USOFxSubsystem::PlasmaFlash` (a bloom of its light, no flame or smoke),
+  `PlasmaBolt` (a white-hot core in a corona of the gun's colour at the FRONT of a short tail, and the air along
+  its path glowing a length at a time behind it for a tenth of a second: a streak's position is its front, the tail
+  grows out behind it) and `PlasmaImpact` (a flare, drops thrown out along the surface, vapour, a glow that cools; no
+  bullet hole; a pattern of pellets lights the place once); the bolt's size follows the gun's damage. A bolt is SEEN
+  to fly: the energy archetypes' `vel` in `Data/game_data.json` is 170-380 m/s (the sniper's lance 900) against a
+  bullet's 700+, so a light gun is led at range and creatures lead a moving target with it (`ASOEnemy::ShotLead`,
+  `GetAimDirection`). `SO_IMPORT_ONLY=gunnumbers` re-reads the guns' numbers without touching a mesh. Test
+  `ShatteredOrbit.Weapon.LightGunsFirePlasma`; pictures `SOCaptureSeries 1 28` (files `SO_p*`). The light guns'
+  MODELS are not changed by this.
+  **Textures are DRAWN through one engine, `tools/blender/pbr.py`** (the owner's texture rules, see the hard rules;
+  the state of every set is `docs/art/TEXTURE_STATE.md`: keep it honest). A `Tile(name, metres)` knows how many
+  metres it covers; every feature is given its real size and the height is kept in METRES, and from that one height
+  come the normal (the true slope x `relief`), the ambient occlusion (how far a point lies under its surroundings, at
+  five radii) and the height map, so the maps agree. It writes `<name>_c.jpg` (albedo), `_n.png` (OpenGL normal),
+  `_m.png` (R AMBIENT OCCLUSION, G roughness, B metallic), `_h.png` (height), `_e.jpg` (emissive, where given) at
+  4096 px, and each set's tile and depth into `assets/textures/pbr_sets.json`. Its tools: `noise`, `cells` (nearest /
+  second nearest / an id: stones, dishes), `cracks` (along warped cell borders, in patches), `grid` (courses of blocks:
+  joints, distance to the edge, an id per block), `lines`, `dents`, `brushed`, `streaks` (what runs DOWN a wall),
+  `blur`. The sets: `world_maps.py` (Nexus Prime's kit `nx_*`, the reliquary's `panel` / `concrete`: these descended
+  from the browser build), `city_maps.py` (Nexus Prime's ground `nc_*`), `ruins_maps.py` (Meridian's sixteen main
+  surfaces), `surface_maps.py` (the guns' thirteen `wpn_*`, 22 cm a tile: `wpn_paint` the light guns' ceramic coat,
+  `wpn_metal` their forged iron, `wpn_steel`, `wpn_park`, `wpn_poly` / `wpn_odg`, `wpn_wood`, `wpn_knurl`, and
+  `wpn_anod` / `wpn_brushed` / `wpn_titanium` / `wpn_carbon` / `wpn_rubber`, which no gun wears until its parts are
+  given them in weapons.py), `detail_maps.py` (`det_*`: half a metre a tile, only what is too fine for a tile's own
+  map; `macro`: a field with no small shapes). They keep the OLD sets' names, layouts and colours, so nothing that
+  uses them is built again; each runs after the script it replaces (`build_all.sh`). Lessons: the old painters do NOT
+  hold above 1024 px (their cracks are a noise's contour lines and become wandering loops; nothing in them is finer
+  than a thousandth of a tile): a set is redrawn, never upscaled. Nexus Prime's old sets saved their hex colours as
+  LINEAR values (`city_maps.lin`), Meridian's through the sRGB curve (hex as read). A map carries FEW scratches and
+  shallow relief on a gun (22 cm of gun, and the game lays its own wear on every copy: the first tries were a rink,
+  then stucco, then mail). Streaks and holes go in patches and in tens, not hundreds (a wall of even runs reads as
+  a pattern). **In the game** (`import_assets.py`): the master `M_SOStandard` takes ambient occlusion from the
+  mask's red (`AOAmount`), parallax from the height map (`HeightTex`, `Parallax` = depth / tile), a detail normal
+  (`DetailTex` at `DetailScale` repeats a tile, `DetailStrength`, `DetailCavity`) and a macro variation at a scale
+  that is not a whole number of tiles (`MacroTex`, `MacroScale`, `MacroAmount`); every one is OFF by default, so a
+  material that does not ask is as it was (an old mask's red is not occlusion). `M_SOGround` takes the detail normal
+  and the occlusion, `M_SOFacade` the detail normal. `SO_IMPORT_ONLY=worldmaps` imports every engine set the game
+  already shows, with all its maps beside it, and tells each instance on it what to use (`PBR_FINISH`: its detail
+  kind and amounts; the game holds colour and normal at 4096, the mask at 2048, the height at 1024);
+  `SO_IMPORT_ONLY=guntextures` does the guns'. The players' armour plate is fabric.py's `polymer` (1024 px, two
+  scales, not on the engine yet): `hero/remap.py -- polymer` writes a kind's maps again for both bodies without
+  building one, `SO_IMPORT_ONLY=player_textures` brings them in.
+  **An asset's OWN maps** (the art-production specification's baked workflow; the reference asset is the assault
+  rifle, `docs/art/ASSET_AUDIT.md` section 10). A tiling set says what a surface is made of; it cannot know WHERE on
+  the object it is. `bakekit.py`: `unwrap(objs)` gives the object and its moving parts a second UV set `UV1` (unique,
+  one texel density, packed together; UV 0 keeps the tiling sets), `bake(objs, size)` bakes through Cycles (OptiX)
+  from a joined copy: ambient occlusion (short reach), every texel's world position and normal, its material, what
+  is covered; `curvature()` gets how the surface turns from those. `gunpaint.py` paints a gun's maps from them by
+  its spec (`SPECS[<model>]`: its places in the gun's frame): `<gun>_u_m1` (R occlusion, G EDGE WEAR where the
+  surface turns outward and is exposed, B DIRT in hollows and inside corners, soot at the muzzle), `_u_m2` (R
+  HANDLING: grip, fore end, comb, controls; G HEAT at the muzzle and gas block; B PAINT in markings), `_u_m3`
+  (relief, .5 none: engraved below, raised above). Marks are placed in SPACE (`Marks.text` = Blender's own text
+  object filled as a mask, `stamp`, `bead` = a weld, a spec's `seams` = a mould line), so they fall on whatever
+  faces that way there; on the left flank text reads toward +Y (the stock), on the right toward -Y. Noise is taken
+  in space (`noise3`), so nothing shows at an island's edge. The rifle's: the maker ("NEXUS PRIME ARSENAL"), the
+  model, a serial number, the broken-ring mark, S / F / A at the selector, the calibre and proof marks, welds at
+  both trunnions, the grip's mould seam. `weapons.own_maps(name)` runs it in `finish()` for every gun with a spec
+  (`SO_GUN_NO_BAKE=1` skips, `SO_GUN_BAKE_SIZE`). In the game: `M_SOStandard` reads `UniqueTex1/2/3` on UV 1 when
+  `UniqueAmount` is 1 (the wear shader's edge, dirt, handling polish, heat colour and paint; occlusion; the relief
+  bent into the normal from the surface's own derivatives, `BUMP_HLSL`, `UniqueBump` cm to the unit: no tangent
+  frame on UV 1 is needed); `gun_instances` imports `T_<gun>_u_*` and sets them on every material of that gun;
+  static meshes are imported WITHOUT generated lightmap UVs (they would overwrite UV 1). One gun again:
+  `weapons.py -- rifle`, `export_fbx.py -- assets/models/gun_rifle.glb SourceArt/Weapons/Rifle --split-parts`,
+  `SO_IMPORT_ONLY=weapons,guntextures SO_WEAPONS_ONLY=rifle`. Known cost: a gun's GLB now carries the 4096 px
+  tiling maps (the rifle's is 130 MB): the exporter should stop embedding them. Look at ONE gun in the game:
+  `SOCaptureSeries 1 29 -SOGuns=<archetype>` (the gun alone from each flank, three quarters, close on the receiver,
+  the markings, the muzzle: files `SO_r_<gun>_*`). The rifle's report (cost, met, not met) is `ASSET_AUDIT.md`
+  section 10. Lessons of its review: a gun with own maps takes NO wear from the vertex colours (soft blobs) and
+  little shared grime; an own map's edge wear is CUT against the shared mask's chips (`WEAR_EDGE`: the map says how
+  much, the chips where exactly: crisp at any distance); nothing is rubbed on a flat without a cause (a patch read
+  as a stain, a stroke as a soft block); a rubbed edge is a line at the corner, not a band a chamfer wide (white
+  paint); the tiling sets carry LITTLE random rubbing and few pits (where a finish is rubbed is the own maps' work),
+  and parkerizing is a phosphate coat, not a metal. **A static mesh imported again keeps the slot names of its
+  first import**: `assign_materials` names and fills slots by `imported_material_slot_name` (filled by the old
+  names, the rifle's olive grip wore the stock's walnut); `SO_IMPORT_ONLY=gunslots` puts every gun mesh's slots
+  right without importing anything.
+  **The gate** (the owner's ruling, the first hard rule): `blender --background --python tools/blender/asset_check.py
+  -- <model.glb> --class=weapon|player|boss|enemy|vehicle|prop|building [--json=x.json]` measures the game-ready
+  model whatever made it (triangles and materials against the class's budget in `asset_check.CLASSES`, degenerate /
+  loose / wrongly wound faces, slivers, UV 1 overlap, texel density on what is seen, stretch, atlas use, every
+  material with colour + normal + roughness maps and a roughness that has a range, the own maps); exit code 1 on a
+  failure; an asset that fails or was not run stays below Technically complete (`ASSET_AUDIT.md` section 11). Run
+  it BEFORE showing an asset. What it taught the pipeline: `bakekit.clean` (cuts every face into triangles the
+  better way and deletes what has no area: an exporter's cut of a face with corners in a line makes zero-area
+  triangles), `bakekit.unwrap` lays each projected island out again with the least stretch, `unwrap(shrink=.25)`
+  cuts off and shrinks islands nobody can see (off by default: it pays for skin under clothes, not for shells laid
+  on shells), the kinetic guns' brass is a set (`wpn_brass`).
+  **The rifle is APPROVED as the benchmark** (the owner, 2026-11-14) and the pipeline goes gun by gun, the light
+  guns first. A gun needs no hand-written spec: `weapons.finish` hands the painter what the builder already says
+  (scale, muzzle, fore end, each moving part's pivot) and `gunpaint.auto_spec` makes the spec from it (grip
+  materials are handled; the off hand lies round the fore point; a moving part's pivot is a rubbed track; heat at
+  the muzzle, and what is not metal soots instead of bluing; a COAT, `gun_body` / `gun_paint`, chips a millimetre
+  in from its rims where a blue only rubs at the corner). Which guns: `gunpaint.spec_for` (the rifle's own spec,
+  every gun in `gunpaint.LIGHT`, and `SO_GUN_OWN=all` or a list for the rest). **Markings are placed where there
+  is room**: `gunpaint.clear_patch(maps, side, w, h)` finds a clear, flat, open place on the baked flank (never a
+  guessed coordinate: a mark over a vent is worse than none). **The light guns are marked the Sarketh's way**
+  (they are the Sarketh's make): their emblem (`sarketh_mark`: the brow's chevron, the lozenge with the vent's
+  slit, three dashes either side, as on their cloth) and a line of their writing (`sarketh_glyphs`: stems with
+  ticks and points; it says nothing in any tongue), cut BIG into a pale shell (a stroke under a texel of the map
+  is a smudge; on their dark iron grime in a cut is lost). No human letters on a light gun. Their gold is a set
+  (`wpn_gold`). One gun through everything: build, `asset_check.py`, `export_fbx.py --split-parts`,
+  `SO_IMPORT_ONLY=weapons,guntextures SO_WEAPONS_ONLY=<arch>[,<arch>]`, `SOCaptureSeries 1 29 -SOGuns=<arch>`.
+  A gun seen for the first time has its textures built as it is drawn: the review waits six seconds for them
+  (pictures taken at once showed the own maps at a low mip). A relief map's empty space is .5, never black
+  (`gunpaint._fill(rest=)`: black is a pit at an island's far side in the small mips).
+  **The texture streamer must be TOLD how a material reads a texture** (`import_assets.sampled` ->
+  `USOEditorLibrary::SetTextureSampling(material, texture, UV set, repeats)`): the engine works that out only in
+  an editor build step the import never runs, and otherwise takes every texture to lie once across UV 0. A gun's
+  own maps lie on UV 1 across the whole gun, so they were held several mips too small: the Sarketh's marks were
+  a smudge with a sharp 4096 map on the disk (it looked like a texture problem and was not: check the map itself
+  before redrawing it). The own maps `_u_m1` and `_u_m3` are held at 4096, `_u_m2` at 2048. `bakekit.unwrap_fit`
+  unwraps again with smaller islands (66, 50, 38 degrees) while more than 8 % of the surface is stretched (turned
+  forms: a launcher's tube, a barrel cluster). The gate lets lights, glass and sight paint be one flat value
+  (`--flat-ok`: gun_glow, gun_lens, gun_dot, gun_tritium, gun_sightpaint, gun_sightorange).
   Every copy is worn its own way (`USOGunRigComponent::Dress`: edge wear, scratches, grime and the mask's tiling from
   the copy's uid). Pictures: `SOCaptureSeries 1 18` (first person: hip, aimed, firing, every sight; files `SO_v_*`;
   run captures with `-ForceRes`).
@@ -200,10 +359,123 @@ Blender GLB -> FBX: `tools/blender/export_fbx.py` (`--per-item` writes the playe
 region) and every wardrobe piece as its own skeletal FBX; `--arms-only` cuts the first-person arms). The player is
 modular (`USOWardrobeData` per body, one follower skeletal mesh per slot, armour owned / worn through the inventory),
 both views hold the gun with arm IK onto the rig's grips and the fingers close by grip preset (`USOGunRigComponent`,
-`FSOFingerPose`, `USOLocomotionAnimInstance`). Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
+`FSOFingerPose`, `USOLocomotionAnimInstance`). **The hands are FITTED to each gun's own shape** as it is picked up
+(`USOLocomotionAnimInstance::FitGrip`, shape queries on the gun's meshes; the owner, 2026-11-15: "hands keep glitching
+or bending or wrapping in or they're in the gun ... the gun needs to be a solid object"): the firing hand seated on the
+grip's backstrap, the support hand slid along the fore end to where the whole hand has room, a vertical fore grip (a
+POST: found by its narrow sections, hanging free) wrapped like a handle with the KNUCKLES at its front (palm level with
+its middle, the fingers closed on the air ahead of a thin post), every finger closed joint by joint until it touches,
+fingers posed from the REST pose (not on top of the clip's curl). Each THUMB is placed on the gun's surface: of its free
+poses (swung, drawn in, partly closed, with a margin), the one whose tip comes nearest its place: the firing thumb round
+the back of the grip onto its far side, the support thumb forward along the left of the fore end (taken as the first
+free way and closed toward the palm, they stood out under the grip and curled up over the handguard into the sights).
+A gun may bring its own hold instead (`Data/holds/<archetype>.json`, `FSOGunHold`: both wrists, hand directions and
+every finger; read as the rig is built, nothing fitted; none written yet). Measured by `MeasureHold` (wrist bend, reach,
+finger bones in the gun, the palm's gap at its middle and 2.5 cm on); tests `ShatteredOrbit.Hold.*` (`TheGunIsSolid`,
+`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: hmg, vr_lmg (their firing grips),
+brood, ksmg, spitter, vr_sniper (support hands)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+**Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
+screen ... shouldn't be at the center of the screen, better to be on the right ... on running we lower the gun for
+rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): at rest in the lower right (`HipOffset`,
+`HandgunHipOffset`); on a sprint each gun is carried as its data says (`"carry"` in `Data/game_data.json` ->
+`USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready, canted, muzzle in and down,
+still in the corner of the view; `SprintLow*`), `short` (SMGs: up part of the way, `SprintShort*`; higher, the support
+arm crossed the view), `high` (handguns: up by the face, muzzle to the sky, `SprintHigh*`). A gun's length does not
+tell (the heavy machine gun is shorter than the SMG). Pictures `SOCaptureSeries 1 32 -SOGuns=<arch>,<arch>` (files
+`SO_vm_<gun>_hip` / `_sprint`). Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
 screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`,
 kit + baked tiles `tools/blender/nexus_city.py`, built at runtime by `ASONexusCity`. Inventory icons:
 `tools/blender/icons.py`. Sounds: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis).
+Combat core and abilities (Project Orion phase 1, begun 2026-11-12; plan and state in `docs/orion/ROADMAP.md` and
+`docs/orion/reports/PHASE_1.md`). **Damage is decided in one place, `USOAttributeSet::TakeDamage`**: whatever writes
+the `IncomingDamage` attribute (a round or a blow through `USOCombatStatics::ApplyDamage`, a burn ticking, an
+ability's effect) passes the same gate (the dead, the immune, the victim's `ScaleIncomingDamage`, friendly fire, then
+shield before health); `ApplyDamage` returns what the gate let through. Nothing else lowers health. Healing, the
+shield's refill, the ultimate's charge, conditions and cooldowns are small C++ GameplayEffects (`SOGameplayEffects.h`)
+whose numbers arrive with the application (`SetByCaller.*`): never `SetNumericAttributeBase` on health or shield.
+**Conditions**: `USOCombatStatics::ApplyStatus(Source, Target, Status.*, Duration, Magnitude)`: `Status.Burn` (the
+total over the duration in half-second ticks; the acid guns use it), `Status.Slow` (scale on the speed: the attribute
+`MoveScale`, read by `USOCharacterMovementComponent::GetMaxSpeed` and `ASOEnemy::SetRunning`), `Status.Stagger` (a
+creature's brain stops and holds fire; abilities are blocked); a boss resists (`ResistsStatus`). **State tags**
+`State.Dead / Aiming / Sprinting / Traversing` (`USOAbilitySystemComponent::SetState`, set by the server and by the
+player's own machine each from its own simulation). **Abilities**: `USOGameplayAbility` (`SOCombat/Abilities`) is the
+base for players and creatures; a character is given a kit (`USOAbilitySet`: abilities by slot `ESOAbilitySlot`
+(grenade, melee, class, movement, ultimate) with their numbers) by `ASOCombatCharacter::GrantAbilitySet`, uses one with
+`ActivateSlot`, and the HUD reads `GetAbilityState`. An ability's numbers are its grant's, never values in the class.
+Every use puts one cooldown effect tagged `Cooldown.<Slot>` on the user; the ability can be used while fewer are
+running than the grant has charges (each charge comes back on its own clock); `UltimateCost` comes off the `Ultimate`
+attribute, which the kit charges per second, per point of damage dealt and per kill. What a use looks and sounds
+like goes through `ASOCombatCharacter::ShowAbility` -> `OnAbilityUsed` (every machine, once), which calls the ability
+class's `Show(User, Grant)` (no state: it runs on the class's default object). The abilities so far: `USOAbility_Strike`
+(a blow in a cone: damage, knock, stagger), `USOAbility_Grenade` (a thrown charge on the projectile subsystem: bursts on
+what it hits, splash, slows; a round can now leave a condition: `FSOProjectile::Status`), `USOAbility_Guard`
+(`Status.Guard`: the attribute `DamageTaken` scales all damage in the gate, and no stagger meanwhile; worn armour will
+feed the same attribute), `USOAbility_Slam` (the strike all round, shown as a burst). The first kit, Vanguard (a
+working name), has all four. What they look and sound like: their own sounds (`sfx_synth.py ... abilities`:
+`ability_throw / _charge_burst / _strike / _brace / _slam`, named in the kit's data as each grant's `sound`; import
+with `SO_IMPORT_ONLY=audio SO_AUDIO_ONLY=ability_`), effects of their own in `USOFxSubsystem` (`Shockwave`: a ring
+racing out along the ground, used by the slam and under the charge's burst; `Sweep`: an arc across the strike's
+cone; `Ward`: lines of light rising round a body, the brace), and for the player who used it the gun dropping away
+and coming back with a pitch of the view. **Each body has its own clips for the four** (`hero/<sex>/motion.py`:
+`Throw`, `Strike`, `Brace`, `Slam`; a grant names its clip in `Clip`, data `"clip"`): the clip starts with the
+wind-up, so the wind-up in the data is the time into the clip at which the blow lands (throw 0.2 s, strike 0.16,
+slam 0.34); it is the whole body with its feet planted, so it plays only when the player is standing or nearly
+(`ASOCharacter::BeginAbilityShow`: on the move the legs keep their gait and no clip plays: there is no upper-body
+layer yet), and while it plays the gun is put away as on a traversal (`bHeldStowed`) and cannot fire. Look at clips
+before importing: `reclip.py ... --frames=<dir> --clips=Throw,Strike,Brace,Slam` then
+`scratchpad/sheet.py` (a contact sheet per clip); import with `SO_IMPORT_ONLY=player_clips`. In these clips a
+positive `turn` of the upper arm opens it OUTWARD on both bodies (the brace needs -70).
+The HUD shows conditions: a frame of light and a tag while braced, tags for burning / slowed / staggered, a pip per
+condition under a hurt creature's health bar. Pictures: `SOCaptureSeries 1 20` (files `SO_w1` to `SO_w6`). An ability may have a **wind-up** (the grant's
+`WindUp`: paid for at once, shown winding up (`OnAbilityWindUp`, the class's `Telegraph`), done when the time is up
+unless its user was staggered or killed meanwhile; `IsAbilityActive(Slot)` is true in between): the warning a target
+gets. **A creature's own moves are abilities too**: `ASOEnemy::KitId` names its kit (given on the server as it enters
+play), the species decides WHEN (`ThinkCombat` -> `ActivateSlot`), the kit says WHAT; its abilities' damage takes the
+variant's scale (`GetAbilityDamageScale`) and its light the Altered's violet (`GetAbilityColor`). The Bulwark's ground
+slam (kit `bulwark`, slot Class) and the Veilborn's void bolt (kit `veilborn`, slot Grenade, `USOAbility_Bolt` in SOAI:
+it goes at the user's `SetAbilityTarget`) are done, and the Colossus's with the boss framework (below).
+A kit also has ONE passive rule (`USOAbilitySet::PassiveName`, data `"passive"`): the Vanguard's Close Quarters gives
+25 shield back at once for a kill within 12 m (`CloseRange` / `CloseKillShield`, `ASOCombatCharacter::OnDealtDamage`).
+A joined player's own shots show as the trigger breaks (`ASOWeapon::PredictShot`: the same fire clock beside the
+server's, effects only; the server's echo is skipped on that machine). On a pad the two shoulders are grenade and
+melee, both together the ultimate (`ASOCharacter::HandlePadShoulder`: a shoulder alone waits `PadChordWindow`), D-pad
+up the class ability. A strike's "not through a wall" check looks for the world's static geometry only (a visibility
+trace was stopped by the player's own gun when the target was low and close).
+**What the server triggers reaches everyone** through `USOCue::Sound` / `USOCue::Blast` (`SOCue.h`: alone it plays
+here, on a server it goes to every machine through the world's relay, on a joined player's machine it does nothing
+because the server's call arrives): creature code uses them, never `USOSoundLibrary::PlayAt` or `Fx->Blast` directly.
+A hit is confirmed on the shooter's own machine (`ASOCombatCharacter::ConfirmHit` -> `OnHitConfirmed`, which the HUD's
+hit marker listens to: rounds fly on the server only). **Saving** goes through `USOProfileStore` (a game-instance
+subsystem, the one place that reads or writes a profile; an online service takes its place later): `Commit` serialises
+at once and writes off the game thread, one write at a time, the latest wins, by way of `.tmp` with the file in
+place kept as `.bak`; what is written is sealed (tag, length, checksum) because the engine's save reader ASSERTS on a
+damaged file, so a file reaches it only when the seal checks out and otherwise the backup is used; saves from before
+the seal still load; every load is migrated to `USOSaveGame::CurrentVersion` (raise it with every change to what is
+saved and teach `USOProfileStore::Migrate` the step). Things a player can use add themselves to `USOInteractables`
+(the search for the one in front of a player no longer walks every actor). Only the host may travel the server to another area (`ServerTravelToArea`). In a test, a
+controller made by hand must be told it is local (`SetAsLocalPlayerController`), or the engine sends its ability use
+to a client that is not there and reports success. Kits are data:
+`Data/game_data.json` "kits" -> `SO_IMPORT_ONLY=kits` -> `/Game/Abilities/DA_Kit_<Id>`; the ability classes are
+listed in `import_assets.ABILITY_CLASSES`. The player's kit lives on the player state (`USOKitComponent`: the kit's
+id, and the ultimate's charge between one body and the next); the ability system stays on the body, so a new body's
+cooldowns start over. Input: `IA_Grenade` (G / right shoulder), `IA_Melee` (V / left shoulder), `IA_ClassAbility` (Q),
+`IA_Ultimate` (X); the last two have no pad button yet. Aiming is known to the server (`bAiming` from the movement's
+aim flag, replicated to the others). Tests `ShatteredOrbit.Ability.*`, `ShatteredOrbit.Status.*`.
+**Developer tools are not in a shipping build**: the screenshot series, the benchmark and the two-player check live in
+`ShatteredOrbit/Private/SOPlayerControllerDev.cpp`, whose functions are empty bodies under `UE_BUILD_SHIPPING` (the
+Exec declarations stay: the header tool knows nothing of build configurations), and the area console commands
+(`SOAreas`, `SOTravel`, `SOCensus`, `SOAreaTour`) are compiled out the same way. New developer code goes there.
+**Two players** are checked with `bash tools/netcheck.sh`: it starts a host (the range with `?listen`) and a guest
+that joins it, both from the editor's binaries, and prints what each side logged (capture sets 21 and 22, started by
+`-SONetCheck=host|join` because a machine that is still joining cannot be given a console command). The automation
+tests run one world: anything about joined players is looked at this way.
+**A packaged game** (`bash tools/package.sh`; the owner, 2026-11-12: do NOT package after every phase or change, it
+wastes time: package at the final phase or when asked, and check work with the editor build, the tests and the
+capture sets run from the editor): no code reads a loose file except through `SOData` (`SOCore`): in
+development from the project's `Data/`, in a package from `Content/Staged/Data`, where the script copies what the
+game reads at runtime. All of `/Game` is cooked (assets are found by name). The automation tests are editor-only
+(`WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR`). In a `.cpp` the file's own header is included first (the package's
+build checks it).
 Operations (`SOOperation` module): `ASOOperation` runs a level as stages (travel / clear / hold / boss) with waves,
 spawn groups, checkpoints (the game mode respawns there) and boss adds keyed to the boss's health, read from a plan json;
 `ASOOperationBarrier` energy walls keep the route linear until their stage; finishing grants every player ONE random
@@ -245,10 +517,78 @@ three slabs with sky bridges, the Galleria's arch and vault, the station canopy,
 the downed gunship, the Assembly's dome). Zones run in the order
 districts, landmarks, story, flora. Look at the geometry before importing: build with `--noexport --save=x.blend`, then
 `blender -b x.blend -P tools/blender/meridian_preview.py -- <outdir>` (workbench views along the route).
-**Why the operation exists** is written before it is built (`docs/story/WORLD.md` = the adopted story bible in our words,
-`docs/story/MERIDIAN_FALL.md` = this operation's reason): the beam over Meridian is calling home the Keystones in Nexus
-Prime's wall, the wall has nights left, nothing flies through the storm, a team walks in to cut the beam and bring the
-capital's Keystone home; for the Altered the Crown is the root's voice and its wound. The plan carries what the game
+**The story** (`docs/story/WORLD.md`, the owner's own, adopted 2026-11-14; it replaced the first bible: no Stillfall,
+Pale Network, Keystones or Quiet any more, and NO dates or lengths of time for the war). Humanity had spread through
+its system; a many-species empire (the Vanthos Empire) came in from the edge and took it a world at a time; over
+Earth the empire's ships turned on each other (the emperor was murdered: nobody on Earth knows) and most left. What
+stayed holds ground by species, each wanting Sol for its own people and fighting the others for it; we reverse
+engineer their technology (void crystal) and go out to take the system back. A place held by one species has ONLY
+that species in it. Meridian's is **the Sarketh**: one humanoid people, all the same size under what they wear,
+ranked by what they are issued (every one has a gun; higher command has more armour and bigger guns): Runners
+(scouts: the `stalker_feral` role), Levies (foot soldiers: `remnant`), Veterans (`stalker`), Speakers (signals
+officers: `veilborn`), Wardens and Bearers (officers and heavy weapons in powered armour: `bulwark`, `bearer`), the
+commander in a walking war suit (the Colossus: `colossus`). The big ones are SUITS with a soldier inside, never
+bigger creatures. Ids, classes and asset folders keep the first names (an API); what the player reads is each one's
+`DisplayName` and the plan's variant names, which follow the story. The first bodies (`altered.py`: husks grown
+through with crystal) are being replaced by `tools/blender/hero/sarketh.py`: ONE body with armour and weapons in tiers,
+one soldier (a Veteran) shown to the owner before any other rank is built. Other species are designed only when
+the owner asks for the place they hold (some humanoid, some nothing like us), each with names of our own.
+**The Sarketh's bodies** (`tools/blender/hero/sarketh.py`, first look 2026-11-14, NOT in the game and NOT yet
+approved by the owner): built with the player armour's plate tools (`void_sentinel.py`: `shell` / `suit` / `Base.plate`
+/ `Base.light`, imported as a library with its material names pointed at this set's by `use_tools()`) on the saved
+rigged male build, so a Sarketh has the player's skeleton and takes the body's clips: `blender -b <saved rigged male
+build> -P tools/blender/hero/sarketh.py -- male --save=x.blend --frames=<dir> --clips=Idle,Run,Crouch --n=1` (45 s;
+frames are plain workbench looks), pieces `C_<slot>__sarketh_veteran`. The look (second pass, on the owner's word
+of 2026-11-14): nobody sees a Sarketh's skin (a sealed suit). **Their armour is made like their guns: the light
+(energy) guns are the Sarketh's own technology**, so the armour has what those guns have (`weapons.py`, energy
+class): pale shells (`sk_plate`) over a dark frame (`sk_plate_dark`, `sk_trim`), long flat panels with slanted ends
+(`leaf()`), CYAN light in rows of short dashes and in one long thin line (`sk_glow`, `sk_visor`), ribbed vents with
+the light behind them (the belly, the breastplate's slot), a little gold at a fastening (`sk_gold`); their red only
+as cloth hanging from the belt before and behind (`sk_cloth`). The helm is FLAT-FACED and hard-edged (flat planes,
+`helm_form`): no eyes, a recessed vent down the middle of the face with a column of dashes of light, a heavy dark
+brow coming down to a point over it, cheeks meeting in a pointed chin, and a thin blade of a fin built as its own
+mesh (cut from the helm's form it came out a fat ragged paddle). **Violet and the Void Requiem's look belong to
+ANOTHER species** (the owner: "the void requiem we will use for another species"): never on the Sarketh. Lessons:
+a face that is round either side of a seam reads as a backside (the owner's word for the first helm): flat planes;
+a single coloured shoulder on pale plate is somebody else's trooper: rank is how much is worn; an outline for `poly()` must be CONVEX (cut a
+notch out with `inter(poly(a), -poly(notch))`); a plate region defined by "stands off the skull" also takes the
+face: bound it. **What it is made of** (`tools/blender/hero/sarketh_surface.py`, the owner 2026-11-14: "the red piece ... should be a
+fabric not a block so it should move with the air and it should carry their emblem ... iron should look like iron not
+plastic, with scratches and so on, so make it more alive"): metal maps of our own per material (`metal()`: `shell` =
+the pale plates, enamel over forged metal with chips and gouges down to steel; `iron` = the dark frame, hammered, pitted,
+rust in the hollows; `steel` = belt and cuffs, brushed; `brass`), relief laid in TWO scales (a hammer blow is a
+centimetre wide, a scratch a hair: one strength for both gave chrome scales or nothing), one repeat every `TILE`
+0.15 m (`fabric.world_uvs` on each finished piece); wear in the corner colour `Col` (`wear()`: RGB tone / grime / dust /
+ground dirt, A = rubbed), and **edge wear lies on the chamfer's own faces** (narrow AND turning a corner on both long
+sides): a band spread in from the rim's points covers the whole of a plate with few points. Rivet heads where plates
+are fastened (`sarketh.studs`), brass studs round the belt. **The cloth** (slot `cloth`, `C_cloth__sarketh_veteran`:
+the tabard and the tail) is ONE layer cut to a pattern, gathered into folds under the belt, with UVs that are its flat
+cut in metres on a map of its own (`cloth_maps`: twill in their red, hem, a gold-thread border, lower edges frayed thread
+by thread through the alpha, burnt holes, dirt) and **their emblem** (`emblem()`: the faceless helm seen from the
+front: the brow's chevron and the lozenge in gold thread, the face as a blade with the vent's slit and three dashes
+either side in pale thread). It is simulated (`simulate`: pinned at the belt by the group `pin`, colliding with leg and
+hip solids that stand INSIDE the pinned line (pinned rows inside a collider wring the cloth into a rope), a breeze
+standing, a headwind at a run); in the game it will be the engine's cloth on that section. `--look=dir` renders the
+set lit (Cycles, OptiX when there is a card; `--quick` = workbench to tune the cloth; `--nobuild` on a saved build;
+`SK_VIEWS=name,name` picks views). The owner approved the Veteran's third look on 2026-11-14 ("This looks great") and asked for
+the other ranks. **A rank is the Veteran's set with less on, or more** (`sarketh.RANKS`, `--rank=runner | levy | veteran
+| speaker | warden | bearer | colossus`, pieces `C_<slot>__sarketh_<rank>`): `skip` = the plates it is not issued
+("piece:name", matched from the front; the plate tools are wrapped in `sarketh.Base`, which issues only those), `cloth`
+= which cloths, `fin` = the helm's blade, and for POWERED armour `bulk` (metres the whole frame stands further off
+the body: shells, the limbs' and trunk's radii the outlines scale with, the cloth and its collider), `thick` (every
+plate heavier), `pauldron`, `pack` (`carried()`: a power unit, the Bearer's drum with its feed, a Speaker's mast);
+a powered frame's boots are the same boot made as wide and long as its legs. Runner 104k triangles, Levy 117k,
+Speaker 144k, Warden 151k, Bearer 150k, the commander's suit 163k (a first pass: the heaviest powered armour, not
+yet a designed walking suit). A rank that wears ONE cloth still needs the collider's other side (mirrored about the
+hips). Still to do before any can be an enemy: proportions of its
+own, a triangle budget (the set is 142k: an enemy needs a fraction), baked curvature / occlusion maps on unique UVs
+in place of the corner colours, a structure for the under-suit, its own clips and voice, a rifle in its hands, the
+other ranks as less or more of this set.
+**Why the operation exists** is written before it is built (`docs/story/MERIDIAN_FALL.md` = this operation's
+reason): when the ring broke a station came down on Meridian and the Sarketh landing force came down after it; an
+Institute team woke the station's deep-space array, and the Sarketh have lit it to call their own people to come
+and take the system; nothing flies through the storm round the beam, so a team walks in to cut it, kill the
+commander in his Colossus and bring out the Sarketh command core. The plan carries what the game
 says: `BRIEFING` (a line at a time as the operation begins), `INTEL` (who and what over the radio as each stage begins:
 what the place means, never how to play it), `OUTCOME` (the end screen): `FSOStage::Intel`, `ASOOperation::Briefing`.
 **Interiors** (`interiorkit.py`): a `Local` frame per shop / room; what a piece of furniture stops is ONE hidden box
@@ -367,7 +707,182 @@ anything"). Every armed creature fights from cover to cover, the Remnant too: fa
 any cover nearer the target than it stands (`FindCover` bAdvance) and holds a few bursts before the next bound; it
 does not fire while running between two covers unless the target is on top of it; with nowhere to hide it comes
 round in an arc to a point at its range, never down the line of the gun (`ThinkAssault`).
-Tests `ShatteredOrbit.AI.NoShotsThroughWalls`, `ShatteredOrbit.AI.AHitAlertsTheSquad`. Shots on an unaware creature hit harder (ambush). Voices
+Tests `ShatteredOrbit.AI.NoShotsThroughWalls`, `ShatteredOrbit.AI.AHitAlertsTheSquad`. **Difficulty** (Project Orion phase 2;
+`SODifficulty.h`, `Data/game_data.json` "difficulty" -> `SO_IMPORT_ONLY=difficulty` -> `/Game/Data/DA_Difficulty`): a
+level is a set of scales on what the creatures and the brain already have (1 = as written), and a harder one makes
+them BETTER, never just tougher: `Notice` (how fast awareness fills), `Reaction` (passing an alarm on, settling the
+aim), `AimError`, `Burst` / `BurstPause`, `Patience` (how soon it pushes), `CoverHold`, `FlankShare` (how many go
+round the side), `AbilityCooldown` (their own moves), and a little `Health` / `Damage` (given at spawn by
+`USOSpeciesLibrary::Spawn`). Levels: recruit, standard (the default), veteran, lethal. A world's level is
+`USODifficultySubsystem::Get(World)`; an operation's plan names its own (`"difficulty"`). In a fight a creature
+reconsiders its target every second or so (`ReconsiderTarget`: one it can see that is clearly nearer, or the one that
+just hurt it; switching costs it its cover). A creature far from every player and not in a fight thinks less often
+(`ThinkPace`: half as often past 60 m, a fifth past 120 m). Test `ShatteredOrbit.AI.DifficultyLevels`. **Roles are kits, not creatures** (phase 2): a level makes a role out of a
+species by giving a variant a kit (`FSOSpeciesVariant::Kit`, plan key `"kit"`), and the creature uses it BY RULE:
+each time its brain thinks, `ASOEnemy::UseKit` asks every ability of its kit `WantsUse(User, Target, Grant, bSees)`
+and uses the first that says yes; while one winds up it stands, holds fire and turns with its target. A species
+with moves of its own decides those itself and ends on `Super::ThinkCombat` (the Veilborn does). The role kits
+(`Data/game_data.json` "kits"): `commander` (`USOAbility_Rally`: its own side within reach gets haste; when the
+one that carries a rally dies, those round it are staggered: kill it first), `disruptor` (`USOAbility_Pulse` with
+`"status": "jam"`: a player caught in it cannot use abilities for the duration; its wind-up is the warning),
+`hunter` (a lunge and a thrown charge: the player's own abilities with wind-ups), `alpha` (the pack's howl). In
+Meridian Fall the Remnant Captain, the Veilborn Seer and the Pack Alpha carry the first three and a Stalker Hunter
+stands in the Concord Ring. A grant names the condition it leaves (`Status`: slow, burn, stagger, jam, haste, guard:
+`USOCombatStatics::StatusTag`); guard and haste are boons (one's own side only), the rest harms (the other side
+only). These roles still wear their species' bodies: none has a silhouette of its own yet. Tests
+`ShatteredOrbit.Ability.PulseJams`, `ShatteredOrbit.AI.CommanderRalliesAndFalls`. **The pack**: a clawed creature with
+others of its kind round the same target does not go in alone (`ASOEnemy::bPack`, `PackRing`): it holds off on a
+ring round the target, moving round it (`HoldRing`), until three of the pack (or all of it) are in place, the
+target comes to one of them, it is hurt, or seven seconds pass; when one goes, all go (`PackGoes`). Without a nav
+mesh the hold steers straight at its spot every frame, as the chase does (the automation tests' worlds have none: a
+path move there does nothing). **More players, more of them**: an operation's waves are written for one player, and
+each further player adds `PerExtraPlayer` (0.5) of every group; a creature that stands alone in its wave stays alone
+(`ASOOperation::ScaledCount`). Tests `ShatteredOrbit.AI.ThePackGoesInTogether`,
+`ShatteredOrbit.Operation.MorePlayersMoreOfThem`.
+**The owner's enemy AI brief** is `docs/orion/AI_BRIEF.md` (2026-11-13, word for word); what of it exists, what is
+missing and what was tested is `docs/orion/reports/AI.md`: read it before adding to the enemies, and keep it honest.
+The brain stays C++ (no Behavior Tree, State Tree or EQS). Added for it: **suppression** (`Status.Suppressed`: a
+round passing within `NearMissRadius` 130 cm of a body of the other side pins it, `ASOCombatCharacter::NoteNearMiss`:
+a pinned creature keeps its head down and aims worse, a pinned player's spread widens and the shield's refill waits;
+the Bulwark, the Colossus and conduits are not pinned); **a suppressor** (a variant's `"suppressor"`: keeps the
+place its target went to ground under fire, `ASOEnemy::SuppressAt`, and the squad pushes sooner meanwhile); a
+variant's `burst` / `burstPause` / `range` / `high` (wants high ground); **the marksman's shot** (`USOAbility_Snipe`,
+kit `marksman`: `USOFxSubsystem::AimLine` on the target for the wind-up, locked for the last `LockTime` 0.3 s, one
+fast round at where the target was then; new cover every `Magnitude` shots); **hit reactions** (see "Every hit
+counts" below); targets spread
+between players (`ReconsiderTarget`: a crowd on one makes it less attractive); blasts, slides and hard landings are
+heard; **reinforcements arrive unseen** (`ASOOperation::SpawnPointFor`: a hunting wave's creature takes the next
+of its group's points that no player has in view, `SeenByAPlayer`; a garrison stands where the plan says); creature
+animation is budgeted (update-rate optimisation; a body nobody sees does not animate, except on a server with
+players joined, where rounds must land on it: in a test set `VisibilityBasedAnimTickOption` to always tick before
+reading a creature's pose); **a pack that is cut down breaks off** (a second of its kind dead near it within 4 s:
+out to its own side and away for about 3 s, then the ring again; `ScatterUntil`); **a target loading its gun is an
+opening** (`TargetIsOpen`: seen within 1.5 s, not on the easiest level: one in cover comes out and fires at once, a
+pack with two on its ring goes in). Who a creature aims at is the server's knowledge (`SetAbilityTarget` is not
+replicated): anything drawn from it goes out as a cue (`USOCue::AimLine`, `USOCue::Tracer`), never from an
+ability's `Telegraph` / `Show` on each machine. To the one it points at an aim line is seen end-on, almost a
+dot: what they read is the glint at its source, which keeps its size in the local view at any distance and flares
+when the line locks. **A species' numbers are data**: `Data/species.json` -> `SO_IMPORT_ONLY=species` ->
+`/Game/Data/DA_Species` (`USOSpeciesTable`: a key is the property's name with a small first letter and no `b`,
+a switch is 0 / 1, a range is `<name>Min` / `<name>Max`, `health` and `shield` are what it starts with); every
+creature takes them as it is made (`ASOEnemy::PostActorCreated` -> `ApplyNumbers`), a variant scales them after;
+tune a creature THERE, not in its constructor (the constructor's values only stand in for keys the file lacks; the
+import writes a new species into the file from its class). Not in it: body, clips, voice, capsule, own moves (the
+class) and the brain's senses. `SOAIDebug` (console, not in shipping) draws what every creature within 60 m is
+thinking and what the brains cost (`ASOEnemyAIController::ThinksCounted`). In Meridian Fall: `veilborn_marksman` on
+the Sluice's footbridges, the Bearer (below) on the Boulevard and in the Concord Ring. Tests `ShatteredOrbit.AI.NearMissesPin`,
+`SuppressorKeepsItUnderFire`, `MarksmanAimsThenShoots`, `HitsKnockTheBody`, `TargetsSpreadAndBlastsAreHeard`,
+`ThePackBreaksOffAndTakesAnOpening`, `ShatteredOrbit.Operation.ReinforcementsArriveUnseen`,
+`ShatteredOrbit.Species.NumbersAreData`; pictures `SOCaptureSeries 1 25` (files `SO_a*`).
+**Every hit counts** (the owner, 2026-11-13: "ai feels like bullet sponges ... no reaction ... continuously charge
+into my bullets ... every shot should count"). A hit does three things beside its damage (`ASOEnemy::HitReact`, called
+from `ASOCombatCharacter::OnTookDamage`, which the damage gate calls for every body; where the blow landed travels
+with it: whoever knows holds an `FSOHitScope` round `ApplyDamage`, the reaction reads `USOCombatStatics::LastHit()`;
+a round does). It CHECKS the creature (`HitSlow` of its speed for `HitSlowTime`, a leg hit longer: fire slows what
+runs at it). It UNSTEADIES it: the damage as a share of full health fills a meter (`PoiseDamage`) that drains by
+`PoiseRecover` a second; a precise hit counts `PrecisionPoise` times, a leg 1.25, and what armour turned still counts
+by `ArmourPoise`. Past `Poise` it STUMBLES: `Status.Stagger` for `StumbleTime`, the blow it was winding up lost, its
+fire stopped, knocked a metre back, then `StumbleRest` before it can stumble again (and the meter fills only half
+meanwhile). And it SHOWS where it landed (`MulticastFlinch` -> `USOLocomotionAnimInstance::HitKick(ESOHitRegion)`:
+the head thrown, a shoulder driven back turning the chest, a leg giving so the hips drop, the trunk knocked away;
+reeling is bowed and sagging). All of these are numbers in `Data/species.json`. A boss (anything with a boss table)
+and anything that resists stagger is not checked or stumbled. **The head's kick is the last thing done to the pose**
+(`FSOLocomotionProxy::ApplyHit`): the gun-hold pass sets neck and head afresh, and anything put on them earlier is
+lost. **Test the body, not the number**: a reaction can be in the anim instance's values and not on the bones (it
+was); `ShatteredOrbit.AI.AHitShowsWhereItLands` measures the bones, and `SOCaptureSeries 1 26` (files `SO_h*`) shows
+them from beside the creature. The brain: a clawed creature hit or aimed at on its way in leaps out of the line
+(`ASOEnemy::Juke`, how often is the level's `Reaction`) and comes in from the other side; badly hurt before it
+arrives it breaks off once (`bBrokeOff`); after a stumble an armed one looks for cover. **The Bulwark's plate**
+(`PlateFaces`): what it turns sparks and rings instead of bleeding (`ASOCombatCharacter::TurnsBlow`, read where the
+impact is shown), still fills the stumble meter, and the plate is down while it reels: hammering the plate opens it.
+A test whose creature has a brain and a player-controlled target must expect it to move when aimed at (remove the
+brain if the test is not about it). Tests `ShatteredOrbit.AI.FireBreaksACharge`, `AHitShowsWhereItLands`.
+**The Bearer** (the heavy gunner's own species, 2026-11-13; `altered.py` `bearer`, `ASOBearer` in
+`Species/SOBearer.cpp`, `/Game/Characters/Bearer`, voice set `bearer`): a broad plated husk (a breastplate in three
+lames with light in the seams, a collar round a small sunken head, a swept pauldron over the gun arm, a drum of
+crystal-fused bone across the back whose feed comes round to a port on the belt) that carries the heavy machine gun
+LOW AT THE RIGHT HIP in both hands (`ASOEnemy::HoldsAtHip` -> `UpdateGunHold`: the rear grip beside the hip joint,
+the barrel laid on the target from there). Slow, no cover, a suppressor; its plates turn half a blow from the front
+(`FrontDamageScale`), part while it fires and are down while it reels; it sets itself (`Brace` clip) as it opens
+fire. Meridian Fall's waves name it directly (the Boulevard, the Concord Ring); the `bulwark_gunner` variant is kept
+for a level that wants one. Sculpt lessons: thighs thicker than `legs(..., 1.5)` fuse and the hide stretches between
+them in a stride; a bracer or tasset is a shell a finger off the limb and only its outer side, never a drum round it
+(it stood out at hip height like a shelf). Build one creature: `altered.py -- bearer`, then `export_fbx.py --
+assets/models/altered_bearer.glb SourceArt/Characters/Bearer --single`, then `SO_IMPORT_ONLY=altered
+SO_ALTERED_ONLY=Bearer`. Test `ShatteredOrbit.Altered.TheBearer`; pictures `SOCaptureSeries 1 27` (files `SO_g*`).
+**A boss is a species with a table** (Project Orion phase 3; `SOBoss.h`, `Data/game_data.json` "bosses" ->
+`SO_IMPORT_ONLY=bosses` -> `/Game/Data/DA_Boss_<Id>`; report `docs/orion/reports/PHASE_3.md`): `ASOEnemy::BossId` (a
+species' own, or a variant's `"boss"`: a level makes a boss of any species with data alone) makes a `USOBossComponent`
+on every machine; the server runs it, and what the others need travels on the creature (`BossPhase`, `BossWeakBroken`,
+its immunity): the component is not replicated. The table: phases by share of health (`from`), each with the kit it
+fights with (`GrantAbilitySet` replaces the last), scales on its cooldowns / speed / the damage it takes, the pause
+between its moves, and whether it begins behind a shield fed by conduits (actors tagged `SOConduit`, or a ring round
+it; destroy them and it reels). Phases come one at a time and never while it reels (the opening is the players').
+Reeling is `Status.Stagger` put on by itself (`USOBossComponent::Stagger`: what a creature resists is what OTHERS do
+to it) and it takes the table's `staggerDamage` meanwhile. **Weak points**: a ball round a point on a bone; a round
+whose LINE passes through it on the way in is a precision hit worth `scale` on top of the gun's own. Test the line, not
+where the round met the body: a body is a convex hull, and the heart sits in a hollow behind it. `front` = only from in front; `breakDamage`
+on it within one phase breaks it (the boss reels, the point is shut until the next phase); each open point carries a
+light. Precision is the victim's call everywhere: `ASOCombatCharacter::PrecisionAt(Hit)` (head and neck by default).
+**Every boss attack is an ability with a wind-up**; the species only decides when (`UseKit(AI, Target, true)`: any of
+those that would land, the phase's pause between two) and turns slowly while it winds up. What that needed:
+`ChannelTime` (an ability that lasts: the slot stays active), a grant's `ClipLead` (the time into the creature's clip
+at which the blow lands: the clip is drawn out so that falls on the end of the wind-up; `ASOEnemy::OnAbilityWindUp`
+plays it) and `WindUpSound`, `USOAbility_Sweep` (thrown sideways), `USOAbility_Barrage` (a volley from
+`GetCastOrigin`), `USOAbility_Eruption` (marks under those it fights and more round them, a fuse, a burst; what is
+drawn is what bursts; they die with their user). **A warning on the ground**: `USOFxSubsystem::Warn` (a decal,
+`/Game/FX/M_SOWarn`, `SO_IMPORT_ONLY=warn`: a ring or a sector worked out from the world position, a fill running from
+the middle to the rim, only on faces that look up; `Follow` keeps it under a body that still turns). A strike with a
+wind-up of 0.4 s or more draws its reach itself (`USOAbility_Strike::Telegraph`), a creature's blow goes where its
+body faces (`Heading`), and a place the server chose goes to every machine with `USOCue::Warn`. Wind-ups follow the
+brief: standard 0.9-1.4 s, heavy 1.5-2.2. Bodies and guns take no decals. The Colossus is the first (table `colossus`:
+The Sentinel Wakes / The Choir Answers / The Root Screams, kits `colossus`, `colossus_choir`, `colossus_root`, the
+heart in its hollow chest; its sounds `sfx_synth.py ... boss`, import `SO_AUDIO_ONLY=boss_`), and the Galleria's
+Warden is a Bulwark with the table `warden`. The HUD's bar (`ASOHUD::DrawBossBar`: a notch per phase, the phase's
+name, REELING) is for the operation's boss or any hurt boss within 70 m. Tests `ShatteredOrbit.Boss.*`; pictures
+`SOCaptureSeries 1 23` (files `SO_b*`); `tools/netcheck.sh` puts a boss beside the guest too.
+**What a round lands on is the body that is drawn**: the import refits the physics bodies of every skeletal mesh it
+brings in, one convex hull per bone (`import_assets.fit_bodies` -> `USOEditorLibrary::FitBodies` in the editor-only
+module `SOEditor`; `SO_IMPORT_ONLY=bodies` refits what is already imported). The engine's automatic bodies are fat
+capsules, and a re-import never rebuilds them: the Colossus kept the bodies of an earlier, much bigger model (167 cm
+off its surface on average, no head). `ShatteredOrbit.Altered.BodiesFollowTheBody` measures every creature (within
+20 cm of the drawn surface, a shot at the head lands on the head).
+**Armour counts: the six attributes** (Project Orion phase 4; `SOAttributes.h`, report
+`docs/orion/reports/PHASE_4.md`). Names of our own: Plating (all damage taken), Mending (the wait before the shield
+refills, and how fast), Stride (speed), Ordnance / Impact (the grenade's / the melee's cooldown), Focus (what charges
+the ultimate). They are points, 0 to the table's `max` (100), real attributes in `USOAttributeSet` (owner-only), put
+there by ONE effect (`USOGameplayEffect_Gear`, `ASOCombatCharacter::SetGearAttributes`) whenever the outfit changes
+(`ASOCharacter::OutfitFromInventory`), so a perk or an ability can add to the same numbers. What a point is worth is
+data (`Data/game_data.json` "attributes" -> `SO_IMPORT_ONLY=attributes` -> `/Game/Data/DA_Attributes`,
+`USOAttributeTable::Scale`): read in the damage gate (beside the guard's scale), the shield's refill, `GetMoveScale`
+(where a slow already goes), `GetAbilityCooldownScale(Slot)` and where the kit charges the ultimate. An armour piece's
+points (`USOAttributeTable::ArmourPoints`, `USOInventoryComponent::GetArmorPoints`) = its armour rating x
+`pointsPerArmour` x the rarity's scale x (1 + power x `perPower`); `lean` of them go to the attribute its slot leans
+to (head Focus, top Mending, vest and outer Plating, hands Impact, legs Ordnance, feet Stride), the rest to two others
+from the copy's own seed (`FSOArmorInstance::Roll`, 0 = its uid): the same copy always gives the same. A body in a
+test that has an inventory wears armour: expect `GetAttributeScale(Plating)` on damage. **Levels and upgrades**
+(`SOProgression.h`, data "progression" -> `SO_IMPORT_ONLY=progression` -> `/Game/Data/DA_Progression`): level
+(experience, the curve and the last level are data) and power (each piece's own) are kept apart and meet in one rule:
+a level sets how far gear can be raised (`GetPowerCap`). `USOInventoryComponent::Upgrade` raises a gun or an armour
+piece one step for credits and alloy (`GetUpgrade` says what it gives and costs; `Spend` takes both currencies or
+neither: the one way anything is paid for). The loadout screen shows the attributes, what a piece gives, and the
+upgrade's price (key U). Saves are version 3. Tests `ShatteredOrbit.Attributes.*`, `ShatteredOrbit.Progression.*`.
+**What a perk does is data**: its numbers in `Data/game_data.json` "perks" (`magazine`, `reload`, `spread`, `recoil`,
+`precision`, `fireRateShieldDown`, `killDamage` / `Stacks` / `Time`, `killHeal`, `precisionSplash` / `Radius`,
+`autoload`, and the sixteen perks of 2026-11-13: `killMagazine`, `killShield`, `killReload` / `Time`, `openingDamage` / `After`,
+`lowMagDamage` / `Share`, `hipSpread`, `shieldDamage`, `healthDamage`, `hitSlow` / `Time`, `precisionBurn` / `Time`,
+`noFalloff`, `noise`, `slideReload`; `classes` = the gun classes that can roll it) -> `FSOPerkInfo`; `USOLootLibrary::PerkEffects` adds up a copy's perks into `FSOWeaponStats::Perks`, which
+is all the gun reads. Never ask a perk its name in code (`HasPerk` is for the screen); a perk that needs something new
+adds a number and the one place that reads it. `SO_IMPORT_ONLY=perks` rewrites only the perks of `DA_LootTables`. New
+perks are allowed since 2026-11-13 (25 now), with names of our own. Tests `ShatteredOrbit.Loot.PerksAreData`,
+`ShatteredOrbit.Loot.NewPerks`. **What is worn is each body's own** (`FSOArmorInstance::WornBy`,
+`USOInventoryComponent::SetBody`; saves version 4; test `ShatteredOrbit.Wardrobe.WornPerBody`). **A piece must cover
+everything it hides**: look with `blender -b <saved build> -P tools/blender/hero/repiece.py -- <sex> --look=<dir>
+--without=outer,vest` (the body as the game shows it, hidden regions gone: a hole is the background colour);
+`--pieces=top` rebuilds one piece on a saved build, `--glb` writes the game's source, then `export_fbx.py --per-item`
+and `SO_IMPORT_ONLY=player_pieces SO_PLAYER_PIECES=<sex>:<slot>:<item>` imports just that piece. Her top's armhole
+is the body's own chest / arm border (`shirt.armhole`). Pictures `SOCaptureSeries 1 24` (her base layer, files `SO_f*`).
+Shots on an unaware creature hit harder (ambush). Voices
 per creature from `sfx_synth.py` (`<set>_idle/query/alert/hurt/death_N`). Operation waves: the first of a stage is an
 unaware garrison (`hunt: false`), later ones hunt. Spawns land on the nav mesh where the capsule fits; L_Meridian's nav
 mesh is bounded to the walkable route per zone (one big volume ran out of tiles in the towers).
@@ -379,6 +894,10 @@ the muzzle and is turned onto what the crosshair is on, a hot spot and a soft sp
 beam), clamber (ledges 2.45-3.8 m: a hang and pull up,
 `ClamberMaxHeight`), footsteps the creatures hear. Loot lands on the ground (traced on the world only) and drops in.
 Tests `ShatteredOrbit.Altered.*`, `ShatteredOrbit.AI.*`; pictures `SOCaptureSeries 1 9` on L_Meridian (logs the nav path).
+**Meridian Fall rewards the Sarketh's own guns** (the owner, 2026-11-14: "change the loot from meridian to these
+guns"): one Legendary copy of one light gun (`meridian_plan.REWARDS`: every energy archetype, no armour; checked in
+`ShatteredOrbit.Operation.PlanFile`). The Void Requiem guns and the Void Sentinel armour are another species'
+technology now and no operation gives them (the set caches in the range still do).
 Reward sets: the owner's concept sheets in `art/reference/operation/`. The Void Requiem guns (plan ids `vr_*`, set
 `void_requiem`, shader `requiem`, LootWeight 0) are built by `tools/blender/requiem_guns.py` on `voidkit.py` (direct
 meshes, no booleans: `talon` swept blade plates with a gold bead / a line of light under them, `feathers` rows of

@@ -3,7 +3,7 @@
 
 #include "SOTestWorld.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "Engine/GameInstance.h"
 #include "EngineUtils.h"
@@ -71,7 +71,7 @@ bool FSOSpeciesRegistryTest::RunTest(const FString& Parameters)
 		{ TEXT("stalker_feral"), ASOEnemy::StaticClass() }, { TEXT("stalker"), ASOArmedStalker::StaticClass() },
 		{ TEXT("remnant"), ASORemnant::StaticClass() }, { TEXT("veilborn"), ASOVeilborn::StaticClass() },
 		{ TEXT("bulwark"), ASOBulwark::StaticClass() }, { TEXT("colossus"), ASOColossus::StaticClass() },
-		{ TEXT("conduit"), ASOConduit::StaticClass() } };
+		{ TEXT("conduit"), ASOConduit::StaticClass() }, { TEXT("bearer"), ASOBearer::StaticClass() } };
 	for (const TPair<FName, UClass*>& E : Expect)
 	{
 		TestTrue(FString::Printf(TEXT("species %s is %s"), *E.Key.ToString(), *E.Value->GetName()), USOSpeciesLibrary::Find(E.Key) == E.Value);

@@ -5,6 +5,7 @@
 #include "SOFxSubsystem.generated.h"
 
 class UDecalComponent;
+class UMaterialInstanceDynamic;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UPointLightComponent;
@@ -38,6 +39,7 @@ struct FSOFxParticle
 	float Spin = 0.0f;
 	bool bFlat = false;  // lies on the surface whose normal is Axis (pools) instead of facing the eye
 	bool bHold = false;  // Intensity0 held over the life with a short fade in / out (instead of Intensity0 -> 1)
+	bool bWhole = false; // a streak drawn at its whole Length from the start (it lies where it is, it does not grow out of a muzzle)
 };
 
 /**
@@ -57,6 +59,25 @@ public:
 	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f, bool bViewmodel = false,
 		const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), bool bThroughScope = false);
 
+	// --- Plasma: what a light gun fires. Not a bullet: a bolt you can see fly. -------------------------------------
+	/** A bolt of plasma from the muzzle to where it lands, at its own speed (cm/s): a white-hot core in a corona of
+	 *  the gun's colour at the FRONT of a short tail (longer the faster it flies), and what it leaves behind it: the
+	 *  air along its path glows as it passes, a length at a time, and cools within a tenth of a second.
+	 *  Size: 1 = a rifle's bolt. */
+	void PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size = 1.0f);
+
+	/** Plasma landing: it splashes: a flare, drops of it thrown out ALONG the surface, a breath of vapour, a glow on
+	 *  the place that cools over half a second, and light by its size (a pellet's is small: a shotgun's pattern must
+	 *  not flood a wall). No bullet hole, no dust: nothing solid struck. bFlesh: smaller; the blood is Impact's. */
+	void PlasmaImpact(const FVector& Point, const FVector& Normal, const FLinearColor& Color, float Size = 1.0f, float Delay = 0.0f, bool bFlesh = false);
+
+	/** The muzzle of a light gun as it fires: a bloom of its light and a few motes thrown forward. No flame, no smoke. */
+	void PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope = false);
+	int32 GetPlasmaBolts() const { return PlasmaBolts; }
+	/** (where and when plasma last lit what it struck: a pattern of pellets lights the place once) */
+	FVector LastPlasmaLightAt = FVector::ZeroVector;
+	double LastPlasmaLightTime = -1.0;
+
 	/** A tracer from the muzzle to where the round lands, at the round's speed (cm/s). */
 	void Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), float Width = 2.2f,
 		float Length = 380.0f, bool bBolt = false);
@@ -74,6 +95,31 @@ public:
 	/** An explosion / splash / energy burst of about Radius cm, Delay seconds from now. */
 	void Blast(const FVector& Point, const FVector& Normal, float Radius, EBlast Kind, const FLinearColor& Color, float Delay = 0.0f);
 
+	/** A blow into the ground: a ring of light racing out along it to Radius, dust lifting behind the ring, chips
+	 *  thrown up from the middle. */
+	void Shockwave(const FVector& Point, float Radius, const FLinearColor& Color, float Delay = 0.0f);
+
+	/** A blow through the air: an arc of light fanned across HalfAngle (degrees) in front of Origin, out to Reach. */
+	void Sweep(const FVector& Origin, const FVector& Forward, float Reach, float HalfAngle, const FLinearColor& Color);
+
+	/** A warning on the ground: where an area attack lands, Time seconds from now. A ring (HalfAngle 180) or a sector
+	 *  (opening along Yaw, HalfAngle degrees to each side) of Radius cm, drawn on whatever lies under it, filling
+	 *  from the middle outward: when the fill reaches the rim, it lands. Follow: it stays under that actor's feet and
+	 *  turns with it (a blow whose user still turns with its target). */
+	void Warn(const FVector& Point, float Radius, float HalfAngle, float Yaw, float Time, const FLinearColor& Color, const AActor* Follow = nullptr);
+
+	/** A line of sight made visible: a thin line of light from Shooter (Offset in its own frame) to Target for Time
+	 *  seconds. It follows the target until the last Lock seconds, then holds still where it was: what comes down it
+	 *  misses whoever moved after that. It thickens and brightens as the time runs out. */
+	void AimLine(const AActor* Shooter, const FVector& Offset, const AActor* Target, float Time, float Lock, const FLinearColor& Color);
+	int32 GetNumAimLines() const { return AimLines.Num(); }
+
+	/** Warnings on the ground right now. */
+	int32 GetNumWarnings() const { return Warnings.Num(); }
+
+	/** A field coming up round a body standing at Feet: lines of light rising in a ring to about Height. */
+	void Ward(const FVector& Feet, float Height, const FLinearColor& Color);
+
 	/** A round hitting something: sparks + dust + a bullet hole on hard surfaces, a mist of Blood on creatures.
 	 *  Delay = flight time. */
 	void Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay = 0.0f, bool bDecal = true);
@@ -86,6 +132,7 @@ public:
 	void Spawn(const FSOFxParticle& Particle);
 
 	int32 GetNumParticles() const { return Particles.Num(); }
+	int32 PlasmaBolts = 0;
 	int32 GetNumDecals() const;
 	int32 GetNumImpactsPlayed() const { return ImpactsPlayed; }
 
@@ -135,6 +182,28 @@ private:
 		float Until; // world time it is gone
 	};
 	TArray<FPoolMark> PoolMarks;
+
+	struct FWarning
+	{
+		TWeakObjectPtr<UDecalComponent> Decal;
+		TWeakObjectPtr<UMaterialInstanceDynamic> Material;
+		TWeakObjectPtr<const AActor> Follow;
+		FVector Point = FVector::ZeroVector;
+		FLinearColor Color = FLinearColor::White;
+		float Radius = 100.0f, CosHalf = -1.0f, Yaw = 0.0f, YawOffset = 0.0f, Age = 0.0f, Time = 1.0f;
+		bool bFollow = false;
+	};
+	struct FAimLine
+	{
+		TWeakObjectPtr<const AActor> Shooter, Target;
+		FVector Offset = FVector::ZeroVector, End = FVector::ZeroVector;
+		FLinearColor Color = FLinearColor::White;
+		float Age = 0.0f, Time = 1.0f, Lock = 0.3f;
+	};
+	TArray<FAimLine> AimLines;
+	TArray<FWarning> Warnings;
+	TArray<TWeakObjectPtr<UDecalComponent>> FreeWarnings; // (their decals, kept for the next)
+	void PlaceWarning(FWarning& W) const;
 
 	TArray<FSOFxParticle> Particles;
 	TArray<FPendingImpact> Pending;

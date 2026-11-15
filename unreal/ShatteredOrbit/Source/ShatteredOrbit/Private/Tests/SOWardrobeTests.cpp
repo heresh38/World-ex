@@ -3,7 +3,7 @@
 
 #include "SOTestWorld.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
@@ -360,6 +360,58 @@ bool FSOHeadGearTest::RunTest(const FString& Parameters)
 		World.Run(0.1f);
 		TestNull(TEXT("bare head"), Player->GetWornPiece(TEXT("head"), false));
 		TestNotNull(TEXT("hair without the helmet"), Player->GetWornPiece(TEXT("hair"), false));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOWornPerBodyTest, "ShatteredOrbit.Wardrobe.WornPerBody", SOTest::Flags)
+bool FSOWornPerBodyTest::RunTest(const FString& Parameters)
+{
+	// What is worn is each body's own (the owner, 2026-11-13: a helmet put on her was on him after the switch, and
+	// taking it off him took it off her).
+	if (SOTest::PlayerBodyMissing(*this) || ClothingMissing(*this))
+	{
+		return true;
+	}
+	USOInventoryComponent* Inv = NewObject<USOInventoryComponent>();
+	Inv->bPersist = false;
+	Inv->NewProfile();
+	auto Worn = [Inv](FName Slot) { const FSOArmorInstance* A = Inv->GetEquippedArmor(Slot); return A ? A->Item : FName(TEXT("none")); };
+	auto Piece = [Inv](FName Slot, FName Item) { const FSOArmorInstance* A = Inv->GetArmor().FindByPredicate([&](const FSOArmorInstance& X) { return X.Slot == Slot && X.Item == Item; }); return A ? A->Uid : FString(); };
+	TestEqual(TEXT("he starts bare-headed"), Worn(TEXT("head")), FName(TEXT("none")));
+	TestEqual(TEXT("he starts in his coat"), Worn(TEXT("outer")), FName(TEXT("orion")));
+
+	TestTrue(TEXT("to her"), Inv->SetBody(TEXT("female")));
+	TestEqual(TEXT("the first time she wears her wardrobe's own: bare-headed"), Worn(TEXT("head")), FName(TEXT("none")));
+	TestEqual(TEXT("and her jacket"), Worn(TEXT("outer")), FName(TEXT("orion")));
+	const FString Helmet = Piece(TEXT("head"), TEXT("orion_helmet"));
+	if (!TestFalse(TEXT("she owns the helmet"), Helmet.IsEmpty()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("she puts the helmet on"), Inv->EquipArmor(Helmet));
+	TestTrue(TEXT("and takes her jacket off"), Inv->EquipArmor(Piece(TEXT("outer"), TEXT("orion"))));
+	TestEqual(TEXT("helmet on her"), Worn(TEXT("head")), FName(TEXT("orion_helmet")));
+
+	TestTrue(TEXT("back to him"), Inv->SetBody(TEXT("male")));
+	TestEqual(TEXT("her helmet is not on him"), Worn(TEXT("head")), FName(TEXT("none")));
+	TestEqual(TEXT("and he still has his coat on"), Worn(TEXT("outer")), FName(TEXT("orion")));
+	const FString Headset = Piece(TEXT("head"), TEXT("orion_headset"));
+	if (TestFalse(TEXT("he owns the headset"), Headset.IsEmpty()))
+	{
+		TestTrue(TEXT("he puts the headset on"), Inv->EquipArmor(Headset));
+	}
+
+	TestTrue(TEXT("to her again"), Inv->SetBody(TEXT("female")));
+	TestEqual(TEXT("she still has her helmet on"), Worn(TEXT("head")), FName(TEXT("orion_helmet")));
+	TestEqual(TEXT("and her jacket still off"), Worn(TEXT("outer")), FName(TEXT("none")));
+	TestTrue(TEXT("she takes the helmet off"), Inv->EquipArmor(Helmet));
+
+	TestTrue(TEXT("to him again"), Inv->SetBody(TEXT("male")));
+	TestEqual(TEXT("his headset is still on: her taking the helmet off did nothing to him"), Worn(TEXT("head")), FName(TEXT("orion_headset")));
+	for (const FName Slot : { FName(TEXT("top")), FName(TEXT("legs")), FName(TEXT("feet")) })
+	{
+		TestTrue(*FString::Printf(TEXT("a required slot (%s) is never left empty by a switch"), *Slot.ToString()), Worn(Slot) != FName(TEXT("none")));
 	}
 	return true;
 }

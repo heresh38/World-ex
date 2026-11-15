@@ -373,6 +373,9 @@ public:
 
 	//~ UCharacterMovementComponent
 	virtual float GetMaxSpeed() const override;
+
+	/** The speed the movement asks for before any condition scales it (a slow: ASOCombatCharacter::GetMoveScale). */
+	float GetUnscaledMaxSpeed() const;
 	virtual float GetMaxAcceleration() const override;
 	virtual float GetGravityZ() const override;
 	virtual bool IsMovingOnGround() const override;

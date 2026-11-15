@@ -1,4 +1,11 @@
 #include "SOEnemy.h"
+#include "SOBoss.h"
+#include "SODifficulty.h"
+#include "SOLog.h"
+#include "Misc/ScopeExit.h"
+#include "SOAbility_Bolt.h"
+#include "Abilities/SOGameplayAbility.h"
+#include "SOCue.h"
 
 #include "Animation/AnimSequenceBase.h"
 #include "Components/CapsuleComponent.h"
@@ -26,7 +33,7 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = true;
 	Faction = ESOFaction::Alien;
 	SpeciesId = TEXT("stalker_feral");
-	DisplayName = NSLOCTEXT("SO", "Stalker", "Stalker");
+	DisplayName = NSLOCTEXT("SO", "Stalker", "Runner");
 	StartMaxHealth = 140.0f;
 	StartMaxShield = 0.0f;
 	CorpseLifeSpan = 6.0f;
@@ -42,7 +49,11 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
 	Body->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f)); // Blender -Y forward -> UE +X
 	Body->SetRelativeScale3D(FVector(1.05f));
+	// Animation is budgeted: a creature that is far off or small on the screen updates its pose every few frames
+	// and blends between (the engine's update-rate optimisation); one nobody on this machine sees does not
+	// update at all, except on a server with others joined (BeginPlay).
 	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+	Body->bEnableUpdateRateOptimizations = true;
 
 	bUseControllerRotationYaw = false;
 	UCharacterMovementComponent* Move = GetCharacterMovement();
@@ -69,6 +80,9 @@ void ASOEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(ASOEnemy, bImmune);
 	DOREPLIFETIME(ASOEnemy, ImmuneReason);
 	DOREPLIFETIME(ASOEnemy, DisplayName);
+	DOREPLIFETIME(ASOEnemy, BossId);
+	DOREPLIFETIME(ASOEnemy, BossPhase);
+	DOREPLIFETIME(ASOEnemy, BossWeakBroken);
 }
 
 namespace
@@ -78,6 +92,48 @@ namespace
 	{
 		static const TMap<FName, int32> Takes = { { TEXT("idle"), 4 }, { TEXT("query"), 2 }, { TEXT("alert"), 3 }, { TEXT("hurt"), 3 }, { TEXT("death"), 2 } };
 		return Takes;
+	}
+}
+
+void ASOEnemy::GetNumbers(TMap<FName, float>& Out) const
+{
+	FSONumbers::Get(this, ASOEnemy::StaticClass(), Out);
+	Out.Add(TEXT("health"), StartMaxHealth);
+	Out.Add(TEXT("shield"), StartMaxShield);
+}
+
+int32 ASOEnemy::ApplyNumbers(const TMap<FName, float>& Numbers)
+{
+	int32 Set = FSONumbers::Apply(this, ASOEnemy::StaticClass(), Numbers);
+	if (const float* Health = Numbers.Find(TEXT("health")))
+	{
+		StartMaxHealth = *Health;
+		++Set;
+	}
+	if (const float* Shield = Numbers.Find(TEXT("shield")))
+	{
+		StartMaxShield = *Shield;
+		++Set;
+	}
+	// what follows from them
+	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	if (IsActorInitialized() && Attributes)
+	{
+		const float Fraction = GetMaxHealth() > 0.0f ? GetHealth() / GetMaxHealth() : 1.0f;
+		Attributes->InitMaxHealth(StartMaxHealth);
+		Attributes->InitHealth(StartMaxHealth * Fraction);
+	}
+	return Set;
+}
+
+void ASOEnemy::PostActorCreated()
+{
+	Super::PostActorCreated();
+	// Its numbers are data: whatever made it (the species library, a level, a test), it takes them from the table
+	// here, before it has components running or a variant on top.
+	if (const TMap<FName, float>* Numbers = USOSpeciesTable::Get().Find(SpeciesId))
+	{
+		ApplyNumbers(*Numbers);
 	}
 }
 
@@ -108,6 +164,27 @@ void ASOEnemy::ApplyVariant(const FSOSpeciesVariant& Variant)
 	}
 	AimError *= Variant.AimError;
 	SightRange *= Variant.Sight;
+	BurstTime *= Variant.Burst;
+	BurstPause *= Variant.BurstPause;
+	PreferredRange *= Variant.Range;
+	bSuppressor |= Variant.bSuppressor;
+	bLikesHigh |= Variant.bLikesHigh;
+	if (!Variant.Kit.IsNone())
+	{
+		KitId = Variant.Kit; // (given as it begins play; a creature already in play gets it at once)
+		if (HasActorBegunPlay() && HasAuthority())
+		{
+			GrantAbilitySet(USOAbilitySet::Load(KitId));
+		}
+	}
+	if (!Variant.Boss.IsNone())
+	{
+		BossId = Variant.Boss; // a level's boss: this species, fighting by that table
+		if (HasActorBegunPlay())
+		{
+			MakeBoss();
+		}
+	}
 	if (!Variant.Weapon.IsNone() && Variant.Weapon != WeaponArchetype)
 	{
 		WeaponArchetype = Variant.Weapon;
@@ -270,7 +347,163 @@ int32 ASOEnemy::DamageAround(const FVector& Center, float Radius, float Damage, 
 
 void ASOEnemy::SetRunning(bool bRun)
 {
-	GetCharacterMovement()->MaxWalkSpeed = bRun ? RunSpeed : WalkSpeed;
+	bRunning = bRun;
+	// (checked by a hit for a moment; slower for good once it is badly hurt)
+	const float Hurt = (IsChecked() ? HitSlow : 1.0f) * (GetHealth() < GetMaxHealth() * WoundedAt ? WoundedSpeed : 1.0f);
+	GetCharacterMovement()->MaxWalkSpeed = (bRun ? RunSpeed : WalkSpeed) * GetMoveScale() * (Boss ? Boss->GetSpeedScale() : 1.0f) * Hurt;
+}
+
+bool ASOEnemy::IsUsingAbility() const
+{
+	if (const USOAbilitySet* Kit = GetAbilitySet())
+	{
+		for (const FSOAbilityGrant& Grant : Kit->Abilities)
+		{
+			if (IsAbilityActive(Grant.Slot))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+FVector ASOEnemy::GetCastOrigin() const
+{
+	return GetActorLocation() + GetActorForwardVector() * 70.0f + FVector(0.0f, 0.0f, 55.0f); // the hands
+}
+
+float ASOEnemy::PrecisionAt(const FHitResult& Hit) const
+{
+	const int32 Weak = Boss ? Boss->WeakPointAt(Hit) : INDEX_NONE;
+	return Weak != INDEX_NONE ? Boss->GetData()->WeakPoints[Weak].Scale : Super::PrecisionAt(Hit);
+}
+
+void ASOEnemy::MakeBoss()
+{
+	if (Boss || BossId.IsNone())
+	{
+		return;
+	}
+	USOBossData* Table = USOBossData::Load(BossId);
+	if (!Table)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s names the boss table '%s', which was never imported (SO_IMPORT_ONLY=bosses)"), *GetName(), *BossId.ToString());
+		return;
+	}
+	Boss = NewObject<USOBossComponent>(this, TEXT("Boss"));
+	Boss->RegisterComponent();
+	Boss->Setup(Table);
+}
+
+void ASOEnemy::OnRep_BossId()
+{
+	if (HasActorBegunPlay())
+	{
+		MakeBoss();
+	}
+}
+
+namespace
+{
+	/** The clip a grant names, at the speed that puts the blow in it on the end of the wind-up. */
+	float ClipRate(const FSOAbilityGrant& Grant)
+	{
+		return Grant.ClipLead > 0.0f && Grant.WindUp > 0.0f ? FMath::Clamp(Grant.ClipLead / Grant.WindUp, 0.25f, 3.0f) : 1.0f;
+	}
+}
+
+void ASOEnemy::OnAbilityWindUp(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityWindUp(Slot);
+	const FSOAbilityGrant* Grant = GetAbilitySet() ? GetAbilitySet()->Find(Slot) : nullptr;
+	if (HasAuthority() && Grant && Actions.Contains(Grant->Clip))
+	{
+		PlayAction(Grant->Clip, ClipRate(*Grant)); // the body going into it is the first warning
+	}
+}
+
+void ASOEnemy::OnAbilityUsed(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityUsed(Slot);
+	const FSOAbilityGrant* Grant = GetAbilitySet() ? GetAbilitySet()->Find(Slot) : nullptr;
+	if (HasAuthority() && Grant && Grant->WindUp <= 0.0f && Actions.Contains(Grant->Clip))
+	{
+		PlayAction(Grant->Clip, 1.0f);
+	}
+}
+
+bool ASOEnemy::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target)
+{
+	return UseKit(AI, Target);
+}
+
+bool ASOEnemy::UseKit(ASOEnemyAIController* AI, ASOCombatCharacter* Target, bool bAnyOrder)
+{
+	const USOAbilitySet* Kit = GetAbilitySet();
+	if (!Kit || !Target || IsDead())
+	{
+		return false;
+	}
+	if (IsUsingAbility())
+	{
+		// winding up, or in the middle of it: it stands, holds its fire and turns with whoever it is for
+		if (AI)
+		{
+			AI->StopMovement();
+		}
+		SetWantsFire(false);
+		if (const AActor* For = GetAbilityTarget())
+		{
+			const FVector To = For->GetActorLocation() - GetActorLocation();
+			SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0.0f, To.Rotation().Yaw, 0.0f), 0.1f, 10.0f));
+		}
+		return true;
+	}
+	if (IsAttacking())
+	{
+		return false;
+	}
+	// those it would use now: the first in the kit's order, or (a boss mixing its moves) any of them
+	const bool bSees = HasLineOfFire(Target);
+	TArray<const FSOAbilityGrant*, TInlineAllocator<5>> Ready;
+	for (const FSOAbilityGrant& Grant : Kit->Abilities)
+	{
+		const USOGameplayAbility* Ability = Grant.Ability ? Grant.Ability.GetDefaultObject() : nullptr;
+		int32 Charges = 0, MaxCharges = 0;
+		float Left = 0.0f, Cooldown = 0.0f;
+		if (Ability && GetAbilityState(Grant.Slot, Charges, MaxCharges, Left, Cooldown) && Charges > 0
+			&& Ability->WantsUse(this, Target, Grant, bSees))
+		{
+			Ready.Add(&Grant);
+		}
+	}
+	if (bAnyOrder)
+	{
+		for (int32 i = Ready.Num() - 1; i > 0; --i)
+		{
+			Ready.Swap(i, FMath::RandRange(0, i));
+		}
+	}
+	for (const FSOAbilityGrant* Grant : Ready)
+	{
+		SetAbilityTarget(Target);
+		if (ActivateSlot(Grant->Slot))
+		{
+			return Grant->WindUp > 0.0f || IsAbilityActive(Grant->Slot); // an instant one does not hold it up
+		}
+	}
+	return false;
+}
+
+float ASOEnemy::GetAbilityCooldownScale(ESOAbilitySlot Slot) const
+{
+	return USODifficultySubsystem::Get(this).AbilityCooldown * (Boss ? Boss->GetCooldownScale() : 1.0f);
+}
+
+void ASOEnemy::OnMoveScaleChanged()
+{
+	SetRunning(bRunning); // a slow came or went
 }
 
 float ASOEnemy::DistanceTo(const AActor* Other) const
@@ -314,7 +547,7 @@ bool ASOEnemy::TryAttack(AActor* Target)
 
 void ASOEnemy::MulticastAttack_Implementation()
 {
-	USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_attack")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.08f, ESOSoundRange::Mid);
+	USOCue::Sound(this, FName(SoundPrefix + TEXT("_attack")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.08f, ESOSoundRange::Mid);
 	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
 		const float Length = Anim->GetAttackLength();
@@ -339,9 +572,29 @@ void ASOEnemy::Tick(float DeltaSeconds)
 		if (LastHealthSeen >= 0.0f && Health < LastHealthSeen - 0.5f && W->GetTimeSeconds() - LastHurtSound > 0.35f)
 		{
 			LastHurtSound = W->GetTimeSeconds();
-			if (VoicePrefix.IsEmpty()) { USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_hurt")), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid); } else { Voice(TEXT("hurt"), 0.9f); }
+			if (VoicePrefix.IsEmpty()) { USOCue::Sound(this, FName(SoundPrefix + TEXT("_hurt")), GetActorLocation() + FVector(0, 0, 60.0f), 0.9f, 0.1f, ESOSoundRange::Mid); } else { Voice(TEXT("hurt"), 0.9f); }
 		}
 		LastHealthSeen = Health;
+		// reeling (staggered): the body shows it on every machine
+		const bool bStaggered = HasStatus(SOTags::Status_Stagger);
+		if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()))
+		{
+			Anim->bReeling = bStaggered;
+		}
+		if (HasAuthority())
+		{
+			// it steadies again; a check that has run out gives it its speed back; a blow is not struck while it reels
+			PoiseDamage = FMath::Max(0.0f, PoiseDamage - PoiseRecover * DeltaSeconds);
+			if (bHitSlowed && !IsChecked())
+			{
+				bHitSlowed = false;
+				SetRunning(bRunning);
+			}
+			if (bStaggered)
+			{
+				PendingStrikeTime = -1.0f;
+			}
+		}
 	}
 	UWorld* World = GetWorld();
 	if (!HasAuthority() || !World || PendingStrikeTime < 0.0f || World->GetTimeSeconds() < PendingStrikeTime)
@@ -369,9 +622,32 @@ void ASOEnemy::Tick(float DeltaSeconds)
 void ASOEnemy::HandleDeath()
 {
 	Super::HandleDeath();
+	if (Boss && HasAuthority())
+	{
+		Boss->OwnerDied();
+	}
+	// One that rallied the others is what held them together: with it down, those round it lose a moment
+	// (kill the leader first).
+	if (HasAuthority() && GetAbilitySet())
+	{
+		for (const FSOAbilityGrant& Grant : GetAbilitySet()->Abilities)
+		{
+			if (Grant.Ability && Grant.Ability->IsChildOf(USOAbility_Rally::StaticClass()))
+			{
+				for (TActorIterator<ASOEnemy> It(GetWorld()); It; ++It)
+				{
+					if (*It != this && !It->IsDead() && It->Faction == Faction && FVector::Dist(It->GetActorLocation(), GetActorLocation()) < Grant.Radius)
+					{
+						USOCombatStatics::ApplyStatus(nullptr, *It, SOTags::Status_Stagger, 1.5f);
+					}
+				}
+				break;
+			}
+		}
+	}
 	if (VoicePrefix.IsEmpty())
 	{
-		USOSoundLibrary::PlayAt(this, FName(SoundPrefix + TEXT("_death")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
+		USOCue::Sound(this, FName(SoundPrefix + TEXT("_death")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.06f, ESOSoundRange::Mid);
 	}
 	else
 	{
@@ -390,6 +666,12 @@ void ASOEnemy::HandleDeath()
 void ASOEnemy::BeginPlay()
 {
 	Super::BeginPlay();
+	if (GetNetMode() == NM_ListenServer || GetNetMode() == NM_DedicatedServer)
+	{
+		// A server's rounds land on the bodies as the server has them: a creature the host is not looking at must
+		// still be where a joined player sees it (its bones move, every few frames while it is not drawn here).
+		GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	}
 	if (HasAuthority() && !WeaponArchetype.IsNone())
 	{
 		if (const USOLootTables* Tables = USOLootLibrary::GetTables())
@@ -400,6 +682,11 @@ void ASOEnemy::BeginPlay()
 			}
 		}
 	}
+	if (HasAuthority() && !KitId.IsNone())
+	{
+		GrantAbilitySet(USOAbilitySet::Load(KitId));
+	}
+	MakeBoss(); // (every machine, if it names a table: after its own kit, so a phase can put another in its place)
 	NextIdleVoice = GetWorld()->GetTimeSeconds() + FMath::FRandRange(1.0f, 8.0f);
 }
 
@@ -431,8 +718,126 @@ FVector ASOEnemy::GetAimOrigin() const
 	return GetPawnViewLocation();
 }
 
+void ASOEnemy::SuppressAt(const FVector& Point, float Until)
+{
+	SuppressPoint = Point;
+	SuppressUntil = Until;
+}
+
+bool ASOEnemy::IsSuppressing() const
+{
+	return GetWorld() && GetWorld()->GetTimeSeconds() < SuppressUntil;
+}
+
+bool ASOEnemy::IsChecked() const
+{
+	const UWorld* World = GetWorld();
+	return World && World->GetTimeSeconds() < HitSlowUntil;
+}
+
+void ASOEnemy::OnTookDamage(AActor* Source, float Amount, bool bCrit)
+{
+	Super::OnTookDamage(Source, Amount, bCrit);
+	HitReact(Source, Amount, bCrit);
+}
+
+void ASOEnemy::HitReact(AActor* Source, float Amount, bool bPrecision)
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World || IsDead() || !Source || Amount <= 0.0f)
+	{
+		return;
+	}
+	const float T = World->GetTimeSeconds();
+	const FSOHitInfo& Hit = USOCombatStatics::LastHit();
+	ON_SCOPE_EXIT { AbsorbedByArmour = 0.0f; };
+	const ESOHitRegion Region = Hit.bKnown ? Hit.Region() : ESOHitRegion::Torso;
+	const bool bLeg = Region == ESOHitRegion::LegLeft || Region == ESOHitRegion::LegRight;
+	const float Share = Amount / FMath::Max(GetMaxHealth(), 1.0f);
+	// where it came from: against the way the blow was travelling if that is known, else from whoever dealt it
+	FVector Toward = Hit.bKnown && !Hit.Direction.IsNearlyZero() ? -Hit.Direction : Source->GetActorLocation() - GetActorLocation();
+	Toward = Toward.GetSafeNormal2D();
+	if (Toward.IsNearlyZero())
+	{
+		Toward = GetActorForwardVector();
+	}
+	// (anything that fights by a boss table reels by that table, never from fire: a variant made a boss too)
+	const bool bSteady = Boss != nullptr || ResistsStatus(SOTags::Status_Stagger) || HasStatus(SOTags::Status_Guard);
+	bool bStumbled = false;
+	if (!bSteady)
+	{
+		// checked: for a moment it does not move as it did
+		if (HitSlow < 1.0f && Share > 0.01f)
+		{
+			HitSlowUntil = FMath::Max(HitSlowUntil, T + HitSlowTime * (bLeg ? 1.6f : 1.0f));
+			bHitSlowed = true;
+			SetRunning(bRunning);
+		}
+		// unsteadied; and past what it can take, it stumbles
+		const float Turned = AbsorbedByArmour * ArmourPoise / FMath::Max(GetMaxHealth(), 1.0f); // (what a plate took still shakes it)
+		PoiseDamage += (Share + Turned) * (bPrecision ? PrecisionPoise : 1.0f) * (bLeg ? 1.25f : 1.0f);
+		if (T < NextStumble)
+		{
+			PoiseDamage = FMath::Min(PoiseDamage, Poise * 0.5f); // (no stumble the instant its rest is over)
+		}
+		if (Poise > 0.0f && PoiseDamage >= Poise && T >= NextStumble && USOCombatStatics::ApplyStatus(Source, this, SOTags::Status_Stagger, StumbleTime))
+		{
+			bStumbled = true;
+			++Stumbles;
+			PoiseDamage = 0.0f;
+			NextStumble = T + StumbleTime + StumbleRest;
+			PendingStrikeTime = -1.0f;                            // the blow it was winding up is lost
+			bWantsFire = false;
+			// knocked off its feet for a moment: a stagger back of a metre or so (a heavy body half that)
+			GetCharacterMovement()->StopMovementImmediately();
+			const float Weight = FMath::Clamp(FlinchScale, 0.35f, 1.0f);
+			LaunchCharacter(-Toward * 470.0f * Weight + FVector(0.0f, 0.0f, 150.0f * Weight), true, true);
+			if (VoicePrefix.IsEmpty())
+			{
+				USOCue::Sound(this, FName(SoundPrefix + TEXT("_hurt")), GetActorLocation() + FVector(0, 0, 60.0f), 1.0f, 0.1f, ESOSoundRange::Mid);
+			}
+			else
+			{
+				Voice(TEXT("hurt"), 1.0f);
+			}
+			LastHurtSound = T;
+		}
+	}
+	// shown, where it landed. A stumble always; a precise or heavy hit almost always; a light one not more than
+	// some eight times a second, so a burst reads as blows and not as a shake.
+	if (FlinchScale <= 0.0f || (!bStumbled && T - LastFlinch < (bPrecision || Share > 0.1f ? 0.07f : 0.12f)))
+	{
+		return;
+	}
+	LastFlinch = T;
+	const float Strength = bStumbled ? 1.7f : FMath::Clamp(Share / 0.1f, 0.6f, 1.0f) * (bPrecision ? 1.35f : 1.0f);
+	MulticastFlinch(Toward, Strength * FlinchScale, Region);
+}
+
+void ASOEnemy::Juke(const FVector& Direction)
+{
+	if (HasAuthority() && !IsDead() && !IsAttacking() && GetCharacterMovement()->IsMovingOnGround())
+	{
+		LaunchCharacter(Direction.GetSafeNormal2D() * 620.0f + FVector(0.0f, 0.0f, 150.0f), true, true);
+	}
+}
+
+void ASOEnemy::MulticastFlinch_Implementation(FVector_NetQuantizeNormal Toward, float Strength, ESOHitRegion Region)
+{
+	if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		// knocked away from where it came from, where it was hit
+		Anim->HitKick(Region, GetActorTransform().InverseTransformVectorNoScale(FVector(Toward)), Strength);
+	}
+}
+
 FVector ASOEnemy::GetAimDirection() const
 {
+	if (IsSuppressing())
+	{
+		// at the place, not at anyone: a loose cone over it
+		return (SuppressPoint + FMath::VRand() * FMath::FRandRange(20.0f, 150.0f) - GetAimOrigin()).GetSafeNormal();
+	}
 	const AActor* T = AimTarget.Get();
 	if (!T)
 	{
@@ -440,10 +845,21 @@ FVector ASOEnemy::GetAimDirection() const
 	}
 	// at the chest, off by an error that grows with range and a moving target and shrinks while it tracks
 	const FVector Origin = GetAimOrigin();
-	const FVector Chest = T->GetActorLocation() + FVector(0, 0, 25.0f);
+	FVector Chest = T->GetActorLocation() + FVector(0, 0, 25.0f);
 	const float Dist = FVector::Dist(Origin, Chest);
-	const float Tracked = FMath::Clamp((GetWorld()->GetTimeSeconds() - AimSince) / 2.5f, 0.0f, 1.0f);
-	const float Err = AimError * (Dist / 1000.0f) * (1.0f + T->GetVelocity().Size2D() / 450.0f) * FMath::Lerp(1.7f, 0.65f, Tracked);
+	// (the difficulty level: how fast the aim settles, how wide it is)
+	const FSODifficulty& Level = USODifficultySubsystem::Get(this);
+	const float Tracked = FMath::Clamp((GetWorld()->GetTimeSeconds() - AimSince) / FMath::Max(2.5f * Level.Reaction, 0.1f), 0.0f, 1.0f);
+	// What it fires takes time to arrive (a bolt of plasma far more than a bullet): it aims where the target will be,
+	// better the longer it has tracked it, never perfectly (ShotLead: the share of the true lead it gives).
+	const ASOWeapon* Gun = GetWeapon();
+	const float ShotSpeed = Gun && Gun->GetData() ? Gun->GetData()->MuzzleVelocity * 100.0f : 0.0f;
+	if (ShotSpeed > 1.0f)
+	{
+		Chest += T->GetVelocity() * (Dist / ShotSpeed) * ShotLead * Tracked;
+	}
+	const float Err = AimError * Level.AimError * (Dist / 1000.0f) * (1.0f + T->GetVelocity().Size2D() / 450.0f) * FMath::Lerp(1.7f, 0.65f, Tracked)
+		* (HasStatus(SOTags::Status_Suppressed) ? 1.6f : 1.0f); // (under fire itself, it shoots wider)
 	const FVector Off = FMath::VRand() * Err * FMath::Sqrt(FMath::FRand());
 	return (Chest + Off - Origin).GetSafeNormal();
 }
@@ -475,7 +891,9 @@ bool ASOEnemy::FitsAt(const FVector& Location) const
 
 float ASOEnemy::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const
 {
-	return bAlert ? Amount : Amount * AmbushDamageScale;
+	// a boss's phase (armour) and its reeling, then the ambush
+	const float Taken = Boss ? Boss->ScaleDamage(Amount) : Amount;
+	return bAlert ? Taken : Taken * AmbushDamageScale;
 }
 
 void ASOEnemy::Voice(FName Kind, float Volume)
@@ -487,7 +905,7 @@ void ASOEnemy::Voice(FName Kind, float Volume)
 	const int32 N = VoiceTakes().FindRef(Kind);
 	const FString Name = N > 1 ? FString::Printf(TEXT("%s_%s_%d"), *VoicePrefix, *Kind.ToString(), FMath::RandRange(1, N))
 		: FString::Printf(TEXT("%s_%s"), *VoicePrefix, *Kind.ToString());
-	USOSoundLibrary::PlayAt(this, FName(Name), GetActorLocation() + FVector(0, 0, 60.0f), Volume, 0.08f, ESOSoundRange::Mid);
+	USOCue::Sound(this, FName(Name), GetActorLocation() + FVector(0, 0, 60.0f), Volume, 0.08f, ESOSoundRange::Mid);
 }
 
 void ASOEnemy::UpdateGunHold(float DeltaSeconds)
@@ -511,7 +929,35 @@ void ASOEnemy::UpdateGunHold(float DeltaSeconds)
 	const FQuat Aimed = T ? (T->GetActorLocation() + FVector(0, 0, 25.0f) - Shoulder).Rotation().Quaternion() : Low;
 	const FQuat Q = FQuat::Slerp(Low, Aimed, Raise);
 	FTransform Hold;
-	if (Rig->IsHandgun())
+	if (HoldsAtHip() && !Rig->IsHandgun() && Rig->IsBuilt())
+	{
+		// Carried at the hip: the hand on the rear grip sits beside the right hip, the barrel is laid on the target
+		// from there (or hangs forward and down across the thigh when there is nothing to shoot at).
+		FVector Hip = GetActorLocation() + Facing.RotateVector(FVector(16.0f, 32.0f, 14.0f));
+		if (GetMesh()->GetBoneIndex(TEXT("thigh_R")) != INDEX_NONE)
+		{
+			Hip = GetMesh()->GetBoneLocation(TEXT("thigh_R")) + Facing.RotateVector(FVector(20.0f, 16.0f, 4.0f));
+		}
+		const FQuat Carried = FRotator(-16.0f, Facing.Yaw - 6.0f, 0.0f).Quaternion();
+		const FQuat OnTarget = T ? (T->GetActorLocation() + FVector(0, 0, 25.0f) - Hip).Rotation().Quaternion() : Carried;
+		const FQuat Lay = FQuat::Slerp(Carried, OnTarget, Raise);
+		Hold = FTransform(Lay, Hip - Lay.RotateVector(Rig->GetRightGrip().Wrist));
+		// The off hand has to reach its place on the gun too: if the fore grip is further from the left shoulder
+		// than that arm is long, the whole gun comes in toward that shoulder until it is in reach.
+		if (GetMesh()->GetBoneIndex(TEXT("upperarm_L")) != INDEX_NONE && GetMesh()->GetBoneIndex(TEXT("hand_L")) != INDEX_NONE)
+		{
+			const FVector Shoulder2 = GetMesh()->GetBoneLocation(TEXT("upperarm_L"));
+			const FVector Elbow = GetMesh()->GetBoneLocation(TEXT("forearm_L"));
+			const float ArmLength = static_cast<float>(FVector::Dist(Shoulder2, Elbow) + FVector::Dist(Elbow, GetMesh()->GetBoneLocation(TEXT("hand_L"))));
+			const FVector Fore = Hold.TransformPosition(Rig->GetLeftGrip().Wrist);
+			const float Away = static_cast<float>(FVector::Dist(Shoulder2, Fore));
+			if (Away > ArmLength * 0.93f)
+			{
+				Hold.AddToTranslation((Shoulder2 - Fore).GetSafeNormal() * (Away - ArmLength * 0.93f));
+			}
+		}
+	}
+	else if (Rig->IsHandgun())
 	{
 		// both arms out in front of the chest
 		Hold = FTransform(Q, Shoulder + Q.RotateVector(FVector(42.0f, -14.0f, -8.0f)));
@@ -541,7 +987,7 @@ void ASOEnemy::TickTrigger(float DeltaSeconds)
 		{
 			W->StopFire();
 			bFiring = false;
-			NextBurst = Now + FMath::FRandRange(BurstPause.X, BurstPause.Y);
+			NextBurst = Now + FMath::FRandRange(BurstPause.X, BurstPause.Y) * USODifficultySubsystem::Get(this).BurstPause;
 		}
 	};
 	if (IsDead())
@@ -568,8 +1014,21 @@ void ASOEnemy::TickTrigger(float DeltaSeconds)
 		return;
 	}
 	const AActor* T = AimTarget.Get();
-	bool bCan = bWantsFire && T && Raise > 0.8f && !IsAttacking() && !W->IsReloading();
-	if (bCan)
+	const bool bAtPlace = IsSuppressing();
+	bool bCan = bWantsFire && (T || bAtPlace) && Raise > 0.8f && !IsAttacking() && !W->IsReloading();
+	if (bCan && bAtPlace)
+	{
+		// at a place: it must be facing it, with nothing of its own side on the line and no wall right in front
+		const FVector Eye = GetAimOrigin();
+		const FVector To = (SuppressPoint - GetActorLocation()).GetSafeNormal2D();
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOSuppress), false, this);
+		const bool bMet = World->LineTraceSingleByChannel(Hit, Eye, SuppressPoint, SO_TRACE_BULLET, Params);
+		const ASOCombatCharacter* Met = bMet ? Cast<ASOCombatCharacter>(Hit.GetActor()) : nullptr;
+		bCan = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.85f && !(Met && Met->Faction == Faction)
+			&& !(bMet && Hit.Distance < 250.0f);
+	}
+	else if (bCan)
 	{
 		const FVector To = (T->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 		bCan = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.9f && HasLineOfFire(T);
@@ -589,6 +1048,6 @@ void ASOEnemy::TickTrigger(float DeltaSeconds)
 	{
 		W->StartFire();
 		bFiring = true;
-		TriggerUntil = Now + FMath::FRandRange(BurstTime.X, BurstTime.Y);
+		TriggerUntil = Now + FMath::FRandRange(BurstTime.X, BurstTime.Y) * USODifficultySubsystem::Get(this).Burst;
 	}
 }

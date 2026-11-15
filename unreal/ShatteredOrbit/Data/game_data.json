@@ -17,7 +17,7 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
-      "vel": 520,
+      "vel": 250,
       "grav": 0,
       "kick": 1,
       "sights": [
@@ -29,6 +29,7 @@
       "defaultSight": "default",
       "adsTime": 0.23,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Sunforge Litany",
       "tracer": "#6fe9ff"
     },
@@ -50,7 +51,7 @@
       "auto": true,
       "zoom": 1.4,
       "slot": 0,
-      "vel": 600,
+      "vel": 270,
       "grav": 0,
       "kick": 1,
       "sights": [
@@ -62,6 +63,7 @@
       "defaultSight": "default",
       "adsTime": 0.24,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Ninefold Choir",
       "tracer": "#5aa8ff"
     },
@@ -81,7 +83,7 @@
       "auto": false,
       "zoom": 2.2,
       "slot": 0,
-      "vel": 900,
+      "vel": 380,
       "grav": 0,
       "kick": 1.4,
       "sights": [
@@ -93,6 +95,7 @@
       "defaultSight": "default",
       "adsTime": 0.27,
       "sprintOut": 0.22,
+      "carry": "low",
       "title": "Farsight Herald",
       "tracer": "#8dffd0"
     },
@@ -112,7 +115,7 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 1,
-      "vel": 450,
+      "vel": 240,
       "grav": 0,
       "kick": 2.2,
       "pitch": 0.012,
@@ -124,6 +127,7 @@
       "defaultSight": "default",
       "adsTime": 0.17,
       "sprintOut": 0.16,
+      "carry": "high",
       "title": "The Undertaker",
       "tracer": "#ffd98a"
     },
@@ -144,7 +148,7 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
-      "vel": 320,
+      "vel": 170,
       "grav": 0,
       "kick": 3,
       "sights": [
@@ -155,6 +159,7 @@
       "defaultSight": "default",
       "adsTime": 0.22,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Gravedigger’s Hymn",
       "tracer": "#ff9a4a"
     },
@@ -174,7 +179,7 @@
       "auto": false,
       "zoom": 4.5,
       "slot": 1,
-      "vel": 1400,
+      "vel": 900,
       "grav": 0,
       "kick": 3,
       "pitch": 0.012,
@@ -186,6 +191,7 @@
       "defaultSight": "default",
       "adsTime": 0.42,
       "sprintOut": 0.25,
+      "carry": "low",
       "title": "Pale Horizon",
       "tracer": "#e6f4ff"
     },
@@ -205,7 +211,7 @@
       "auto": true,
       "zoom": 1.25,
       "slot": 0,
-      "vel": 450,
+      "vel": 215,
       "grav": 0,
       "kick": 0.7,
       "sights": [
@@ -216,6 +222,7 @@
       "defaultSight": "default",
       "adsTime": 0.18,
       "sprintOut": 0.16,
+      "carry": "short",
       "title": "Kestrel-X9",
       "tracer": "#7ad0ff"
     },
@@ -235,7 +242,7 @@
       "auto": false,
       "zoom": 1.2,
       "slot": 1,
-      "vel": 420,
+      "vel": 225,
       "grav": 0,
       "kick": 1,
       "sights": [
@@ -246,6 +253,7 @@
       "defaultSight": "default",
       "adsTime": 0.13,
       "sprintOut": 0.14,
+      "carry": "high",
       "title": "Helios",
       "tracer": "#9ff0ff"
     },
@@ -266,7 +274,7 @@
       "auto": false,
       "zoom": 1.6,
       "slot": 1,
-      "vel": 350,
+      "vel": 300,
       "grav": 0,
       "kick": 2.2,
       "sights": [
@@ -278,6 +286,7 @@
       "defaultSight": "default",
       "adsTime": 0.26,
       "sprintOut": 0.22,
+      "carry": "low",
       "title": "Eclipse"
     },
     "hmg": {
@@ -296,7 +305,7 @@
       "auto": true,
       "zoom": 1.3,
       "slot": 2,
-      "vel": 500,
+      "vel": 235,
       "grav": 0,
       "kick": 0.7,
       "sights": [
@@ -308,6 +317,7 @@
       "defaultSight": "default",
       "adsTime": 0.38,
       "sprintOut": 0.26,
+      "carry": "low",
       "title": "Atlas",
       "tracer": "#ff6a3a"
     },
@@ -338,6 +348,7 @@
       "defaultSight": "default",
       "adsTime": 0.4,
       "sprintOut": 0.26,
+      "carry": "low",
       "title": "Starfall Engine"
     },
     "rifle": {
@@ -368,6 +379,7 @@
       "defaultSight": "default",
       "adsTime": 0.24,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Old Winter",
       "tracer": "#ffc873"
     },
@@ -399,6 +411,7 @@
       "defaultSight": "default",
       "adsTime": 0.22,
       "sprintOut": 0.19,
+      "carry": "low",
       "title": "Dust Saint",
       "tracer": "#ffd28f"
     },
@@ -431,6 +444,7 @@
       "defaultSight": "x4",
       "adsTime": 0.3,
       "sprintOut": 0.23,
+      "carry": "low",
       "title": "Hearthfire",
       "tracer": "#ffe2a8"
     },
@@ -461,6 +475,7 @@
       "defaultSight": "reflex",
       "adsTime": 0.17,
       "sprintOut": 0.15,
+      "carry": "short",
       "title": "Alley Cat",
       "tracer": "#ffb95a"
     },
@@ -492,6 +507,7 @@
       "defaultSight": "x8",
       "adsTime": 0.42,
       "sprintOut": 0.25,
+      "carry": "low",
       "title": "Long Silence",
       "tracer": "#fff0c8"
     },
@@ -522,6 +538,7 @@
       "defaultSight": "default",
       "adsTime": 0.13,
       "sprintOut": 0.14,
+      "carry": "high",
       "title": "Gentleman’s Promise",
       "tracer": "#ffc873"
     },
@@ -553,6 +570,7 @@
       "defaultSight": "default",
       "adsTime": 0.16,
       "sprintOut": 0.15,
+      "carry": "high",
       "title": "Six Mercies",
       "tracer": "#ffab52"
     },
@@ -584,6 +602,7 @@
       "defaultSight": "default",
       "adsTime": 0.22,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Porch Light",
       "tracer": "#ff9e5c"
     },
@@ -615,6 +634,7 @@
       "defaultSight": "default",
       "adsTime": 0.22,
       "sprintOut": 0.19,
+      "carry": "low",
       "title": "The Hungering Maw",
       "tracer": "#9cff4a",
       "gooGrav": 0.1
@@ -648,6 +668,7 @@
       "defaultSight": "default",
       "adsTime": 0.22,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Mother of Rot",
       "tracer": "#c8ff3a",
       "gooGrav": 0.18
@@ -681,6 +702,7 @@
       "defaultSight": "default",
       "adsTime": 0.38,
       "sprintOut": 0.25,
+      "carry": "low",
       "title": "The Gravid Bloom",
       "gooGrav": 0.1,
       "tracer": "#e37bff"
@@ -701,7 +723,7 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
-      "vel": 520,
+      "vel": 250,
       "grav": 0,
       "kick": 1,
       "sights": [
@@ -713,6 +735,7 @@
       "defaultSight": "default",
       "adsTime": 0.23,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Last Rite",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -735,7 +758,7 @@
       "auto": false,
       "zoom": 4.5,
       "slot": 1,
-      "vel": 1400,
+      "vel": 900,
       "grav": 0,
       "kick": 3,
       "pitch": 0.012,
@@ -747,6 +770,7 @@
       "defaultSight": "default",
       "adsTime": 0.42,
       "sprintOut": 0.25,
+      "carry": "low",
       "title": "Vigil's End",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -769,7 +793,7 @@
       "auto": true,
       "zoom": 1.25,
       "slot": 0,
-      "vel": 450,
+      "vel": 215,
       "grav": 0,
       "kick": 0.7,
       "sights": [
@@ -780,6 +804,7 @@
       "defaultSight": "default",
       "adsTime": 0.18,
       "sprintOut": 0.16,
+      "carry": "short",
       "title": "Threnody",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -803,7 +828,7 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
-      "vel": 320,
+      "vel": 170,
       "grav": 0,
       "kick": 3,
       "sights": [
@@ -814,6 +839,7 @@
       "defaultSight": "default",
       "adsTime": 0.22,
       "sprintOut": 0.2,
+      "carry": "low",
       "title": "Toll of Ruin",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -836,7 +862,7 @@
       "auto": true,
       "zoom": 1.3,
       "slot": 2,
-      "vel": 500,
+      "vel": 235,
       "grav": 0,
       "kick": 0.7,
       "sights": [
@@ -848,6 +874,7 @@
       "defaultSight": "default",
       "adsTime": 0.38,
       "sprintOut": 0.26,
+      "carry": "low",
       "title": "Last Procession",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -870,7 +897,7 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 1,
-      "vel": 450,
+      "vel": 240,
       "grav": 0,
       "kick": 2.2,
       "pitch": 0.012,
@@ -882,6 +909,7 @@
       "defaultSight": "default",
       "adsTime": 0.17,
       "sprintOut": 0.16,
+      "carry": "high",
       "title": "Final Verse",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -904,7 +932,7 @@
       "auto": false,
       "zoom": 1.2,
       "slot": 1,
-      "vel": 420,
+      "vel": 225,
       "grav": 0,
       "kick": 1,
       "sights": [
@@ -915,6 +943,7 @@
       "defaultSight": "default",
       "adsTime": 0.13,
       "sprintOut": 0.14,
+      "carry": "high",
       "title": "Ashen Psalm",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -938,7 +967,7 @@
       "auto": false,
       "zoom": 1.6,
       "slot": 1,
-      "vel": 350,
+      "vel": 300,
       "grav": 0,
       "kick": 2.2,
       "sights": [
@@ -950,6 +979,7 @@
       "defaultSight": "default",
       "adsTime": 0.26,
       "sprintOut": 0.22,
+      "carry": "low",
       "title": "Eulogy",
       "set": "void_requiem",
       "weight": 0.0,
@@ -982,6 +1012,7 @@
       "defaultSight": "default",
       "adsTime": 0.4,
       "sprintOut": 0.26,
+      "carry": "low",
       "title": "Funeral Bell",
       "set": "void_requiem",
       "tracer": "#b46cff",
@@ -1029,39 +1060,160 @@
   "perks": {
     "overflow": {
       "name": "Overflow",
-      "desc": "Magazine +40%."
+      "desc": "Magazine +40%.",
+      "magazine": 1.4
     },
     "rampage": {
       "name": "Rampage",
-      "desc": "Kills grant +15% damage, stacking 3x for 4s."
+      "desc": "Kills grant +15% damage, stacking 3x for 4s.",
+      "killDamage": 0.15,
+      "killDamageStacks": 3,
+      "killDamageTime": 4
     },
     "quickdraw": {
       "name": "Quickload",
-      "desc": "Reload 35% faster."
+      "desc": "Reload 35% faster.",
+      "reload": 0.65
     },
     "explosive": {
       "name": "Shrapnel Rounds",
-      "desc": "Precision hits deal bonus splash damage."
+      "desc": "Precision hits deal bonus splash damage.",
+      "precisionSplash": 0.35,
+      "precisionSplashRadius": 250
     },
     "vampire": {
       "name": "Siphon",
-      "desc": "Kills restore 25% health."
+      "desc": "Kills restore 25% health.",
+      "killHeal": 0.25
     },
     "steady": {
       "name": "Gyro Stock",
-      "desc": "Spread and recoil reduced 40%."
+      "desc": "Spread and recoil reduced 40%.",
+      "spread": 0.6,
+      "recoil": 0.6
     },
     "deadeye": {
       "name": "Deadeye",
-      "desc": "Precision damage +25%."
+      "desc": "Precision damage +25%.",
+      "precision": 1.25
     },
     "autoload": {
       "name": "Autoloader",
-      "desc": "Stowed weapons reload themselves."
+      "desc": "Stowed weapons reload themselves.",
+      "autoload": true
     },
     "frenzy": {
       "name": "Overclock",
-      "desc": "Fire rate +20% while shields are down."
+      "desc": "Fire rate +20% while shields are down.",
+      "fireRateShieldDown": 1.2
+    },
+    "spoils": {
+      "name": "Spoils",
+      "desc": "A kill puts a fifth of the magazine back from the reserve.",
+      "killMagazine": 0.2
+    },
+    "second_skin": {
+      "name": "Second Skin",
+      "desc": "A kill starts your shield refilling at once.",
+      "killShield": true
+    },
+    "hot_hands": {
+      "name": "Hot Hands",
+      "desc": "A reload begun within 3 s of a kill is 40% faster.",
+      "killReload": 0.6,
+      "killReloadTime": 3
+    },
+    "cold_bore": {
+      "name": "Cold Bore",
+      "desc": "The first shot after 2 s of quiet hits 25% harder and flies true.",
+      "openingDamage": 1.25,
+      "openingAfter": 2
+    },
+    "last_third": {
+      "name": "Last Third",
+      "desc": "The last third of the magazine hits 15% harder.",
+      "lowMagDamage": 1.15,
+      "lowMagShare": 0.34
+    },
+    "point_shooter": {
+      "name": "Point Shooter",
+      "desc": "Half the spread from the hip.",
+      "hipSpread": 0.5
+    },
+    "light_feed": {
+      "name": "Light Feed",
+      "desc": "Reload 20% faster, magazine 10% smaller.",
+      "reload": 0.8,
+      "magazine": 0.9
+    },
+    "heavy_barrel": {
+      "name": "Heavy Barrel",
+      "desc": "Spread and recoil reduced 20%.",
+      "spread": 0.8,
+      "recoil": 0.8
+    },
+    "long_count": {
+      "name": "Long Count",
+      "desc": "Kills grant +4% damage, stacking 8x for 20s.",
+      "killDamage": 0.04,
+      "killDamageStacks": 8,
+      "killDamageTime": 20
+    },
+    "slide_feed": {
+      "name": "Slide Feed",
+      "desc": "Going into a slide fills the magazine from the reserve.",
+      "slideReload": true
+    },
+    "soft_nose": {
+      "name": "Soft Nose",
+      "desc": "+15% damage to flesh, -15% to shields.",
+      "healthDamage": 1.15,
+      "shieldDamage": 0.85,
+      "classes": [
+        "kinetic"
+      ]
+    },
+    "tracer_core": {
+      "name": "Tracer Core",
+      "desc": "Precision hits set the target burning.",
+      "precisionBurn": 0.3,
+      "precisionBurnTime": 3,
+      "classes": [
+        "kinetic"
+      ]
+    },
+    "match_grade": {
+      "name": "Match Grade",
+      "desc": "Rounds lose no damage with distance.",
+      "noFalloff": true,
+      "classes": [
+        "kinetic"
+      ]
+    },
+    "baffled_muzzle": {
+      "name": "Baffled Muzzle",
+      "desc": "Shots are heard a third as far.",
+      "noise": 0.35,
+      "classes": [
+        "kinetic"
+      ]
+    },
+    "overcharged_cell": {
+      "name": "Overcharged Cell",
+      "desc": "+30% damage to shields.",
+      "shieldDamage": 1.3,
+      "classes": [
+        "energy"
+      ]
+    },
+    "clinging_acid": {
+      "name": "Clinging Acid",
+      "desc": "What it hits is slowed for 1.5 s.",
+      "hitSlow": 0.75,
+      "hitSlowTime": 1.5,
+      "classes": [
+        "horror"
+      ]
     }
   },
   "sights": {
@@ -1268,6 +1420,640 @@
       "spitter": "The Hungering Maw",
       "bile": "Mother of Rot",
       "brood": "The Gravid Bloom"
+    }
+  },
+  "difficulty": {
+    "default": "standard",
+    "note": "scales on what the creatures and their brain already have (1 = as written): a harder level makes them better, not just tougher. notice / reaction / aimError / burst / burstPause / patience / coverHold / flankShare (0-1) / abilityCooldown / health / damage",
+    "levels": {
+      "recruit": {
+        "name": "Recruit",
+        "notice": 0.75,
+        "reaction": 1.35,
+        "aimError": 1.3,
+        "burst": 0.85,
+        "burstPause": 1.2,
+        "patience": 1.3,
+        "coverHold": 1.15,
+        "flankShare": 0.25,
+        "abilityCooldown": 1.3,
+        "health": 0.9,
+        "damage": 0.8
+      },
+      "standard": {
+        "name": "Standard",
+        "flankShare": 0.33
+      },
+      "veteran": {
+        "name": "Veteran",
+        "notice": 1.35,
+        "reaction": 0.75,
+        "aimError": 0.8,
+        "burst": 1.2,
+        "burstPause": 0.85,
+        "patience": 0.75,
+        "coverHold": 0.85,
+        "flankShare": 0.45,
+        "abilityCooldown": 0.8,
+        "health": 1.1,
+        "damage": 1.1
+      },
+      "lethal": {
+        "name": "Lethal",
+        "notice": 1.7,
+        "reaction": 0.55,
+        "aimError": 0.62,
+        "burst": 1.4,
+        "burstPause": 0.7,
+        "patience": 0.55,
+        "coverHold": 0.7,
+        "flankShare": 0.55,
+        "abilityCooldown": 0.62,
+        "health": 1.2,
+        "damage": 1.25
+      }
+    }
+  },
+  "attributes": {
+    "note": "A character's six attributes: points that worn armour gives (USOInventoryComponent::GetAttributePoints), 0 to 'max'; more than 'max' does nothing more. 'rules': what an attribute scales, as the scale it reaches at 'max' points (1 at none, a straight line between): plating = on all damage taken; mending = on the wait before the shield refills ('atMax2': on how fast it refills); stride = on movement speed; ordnance / impact = on the grenade's / the melee's cooldown; focus = on everything that charges the ultimate. 'armour': a piece's points = its armour rating x pointsPerArmour x rarityScale[rarity] x (1 + power x perPower); 'lean' of them go to the attribute its slot leans to ('slotLean'), the rest to two others the copy rolled.",
+    "max": 100,
+    "rules": {
+      "plating": {
+        "name": "Plating",
+        "effect": "Less of every damage taken",
+        "atMax": 0.75
+      },
+      "mending": {
+        "name": "Mending",
+        "effect": "The shield refills sooner and faster",
+        "atMax": 0.6,
+        "atMax2": 1.6
+      },
+      "stride": {
+        "name": "Stride",
+        "effect": "Moves faster",
+        "atMax": 1.08
+      },
+      "ordnance": {
+        "name": "Ordnance",
+        "effect": "The grenade comes back sooner",
+        "atMax": 0.65
+      },
+      "impact": {
+        "name": "Impact",
+        "effect": "The melee comes back sooner",
+        "atMax": 0.65
+      },
+      "focus": {
+        "name": "Focus",
+        "effect": "The ultimate charges faster",
+        "atMax": 1.4
+      }
+    },
+    "armour": {
+      "pointsPerArmour": 1.0,
+      "rarityScale": [
+        1.0,
+        1.15,
+        1.3,
+        1.5,
+        1.7
+      ],
+      "perPower": 0.005,
+      "lean": 0.55,
+      "slotLean": {
+        "head": "focus",
+        "top": "mending",
+        "vest": "plating",
+        "outer": "plating",
+        "hands": "impact",
+        "legs": "ordnance",
+        "feet": "stride"
+      }
+    }
+  },
+  "progression": {
+    "note": "Two things kept apart: the character's level (from experience) and each piece of gear's power (from finding better, or from upgrading). 'xp': the experience the next level takes = base + level x perLevel, up to maxLevel. 'powerCap': how far an upgrade may take a piece = base + level x perLevel (a level's worth: gear can go further). 'upgrade': one raises a piece's power by 'step' and costs (credits + power x creditsPerPower) x rarityCost[rarity] credits and (alloy + power x alloyPerPower) x the same in alloy.",
+    "xp": {
+      "base": 600,
+      "perLevel": 250,
+      "maxLevel": 40
+    },
+    "powerCap": {
+      "base": 20,
+      "perLevel": 3
+    },
+    "upgrade": {
+      "step": 2,
+      "credits": 120,
+      "creditsPerPower": 6,
+      "alloy": 3,
+      "alloyPerPower": 0.1,
+      "rarityCost": [
+        1.0,
+        1.2,
+        1.5,
+        2.0,
+        2.6
+      ]
+    }
+  },
+  "bosses": {
+    "note": "A boss is a species (or a level's variant of one) that names one of these tables (ASOEnemy::BossId, a variant's 'boss'): its phases by health ('from' = the share of its health at which the phase begins), the kit it fights with in each, scales on its cooldowns / speed / the damage it takes, the pause between its moves, whether the phase begins behind a shield fed by conduits (destroy them and it reels for 'stagger' seconds), and its weak points (a ball of 'radius' cm at 'offset' forward / right / up of the body from 'bone'; 'scale' on top of a precision hit; 'breakDamage' on it within one phase breaks it: the boss reels for 'breakStagger' seconds and the point is shut until the next phase).",
+    "colossus": {
+      "shieldText": "Shielded: destroy the conduits",
+      "staggerDamage": 1.5,
+      "phases": [
+        {
+          "name": "The Suit Wakes",
+          "from": 1.0,
+          "movePause": [
+            3.0,
+            4.2
+          ]
+        },
+        {
+          "name": "The Garrison Answers",
+          "from": 0.66,
+          "kit": "colossus_choir",
+          "shield": true,
+          "conduits": 3,
+          "stagger": 5,
+          "movePause": [
+            2.6,
+            3.8
+          ]
+        },
+        {
+          "name": "The Core Burns",
+          "from": 0.33,
+          "kit": "colossus_root",
+          "shield": true,
+          "conduits": 3,
+          "stagger": 5,
+          "cooldown": 0.8,
+          "speed": 1.15,
+          "movePause": [
+            1.8,
+            3.0
+          ]
+        }
+      ],
+      "weakPoints": [
+        {
+          "name": "heart",
+          "bone": "chest",
+          "offset": [
+            7,
+            0,
+            14
+          ],
+          "radius": 30,
+          "scale": 1.6,
+          "front": true,
+          "breakDamage": 1400,
+          "breakStagger": 3.5
+        }
+      ]
+    },
+    "warden": {
+      "staggerDamage": 1.5,
+      "phases": [
+        {
+          "name": "The Gate Holds",
+          "from": 1.0
+        },
+        {
+          "name": "The Gate Breaks",
+          "from": 0.5,
+          "kit": "warden_fury",
+          "cooldown": 0.7,
+          "speed": 1.3
+        }
+      ],
+      "weakPoints": []
+    }
+  },
+  "kits": {
+    "vanguard": {
+      "name": "Vanguard",
+      "note": "working name; the frontline kit: goes in first, takes the hits, breaks a group apart.",
+      "ultimatePerSecond": 0.33,
+      "ultimatePerDamage": 0.02,
+      "ultimatePerKill": 1.5,
+      "abilities": {
+        "grenade": {
+          "ability": "grenade",
+          "name": "Breach Charge",
+          "cooldown": 14,
+          "charges": 2,
+          "damage": 180,
+          "radius": 450,
+          "force": 2200,
+          "duration": 4,
+          "magnitude": 0.55,
+          "sound": "ability_throw",
+          "clip": "Throw",
+          "windUp": 0.2,
+          "status": "slow"
+        },
+        "melee": {
+          "ability": "strike",
+          "name": "Strike",
+          "cooldown": 9,
+          "charges": 1,
+          "damage": 160,
+          "range": 240,
+          "angle": 55,
+          "duration": 1.2,
+          "force": 420,
+          "sound": "ability_strike",
+          "clip": "Strike",
+          "windUp": 0.16
+        },
+        "class": {
+          "ability": "guard",
+          "name": "Brace",
+          "cooldown": 22,
+          "charges": 1,
+          "duration": 6,
+          "magnitude": 0.5,
+          "sound": "ability_brace",
+          "clip": "Brace"
+        },
+        "ultimate": {
+          "ability": "slam",
+          "name": "Groundbreaker",
+          "cooldown": 0,
+          "charges": 1,
+          "ultimateCost": 100,
+          "damage": 600,
+          "range": 900,
+          "angle": 180,
+          "duration": 2.5,
+          "force": 900,
+          "sound": "ability_slam",
+          "clip": "Slam",
+          "windUp": 0.34
+        }
+      },
+      "passive": {
+        "name": "Close Quarters",
+        "note": "a kill within closeRange cm gives closeKillShield of shield back at once",
+        "closeRange": 1200,
+        "closeKillShield": 25
+      }
+    },
+    "bulwark": {
+      "name": "Bulwark",
+      "note": "a creature's kit: the species decides when (ASOBulwark::ThinkCombat), this says what.",
+      "abilities": {
+        "class": {
+          "ability": "slam",
+          "name": "Ground Slam",
+          "cooldown": 7,
+          "charges": 1,
+          "windUp": 0.72,
+          "damage": 34,
+          "range": 520,
+          "angle": 180,
+          "force": 900,
+          "sound": "ability_slam"
+        }
+      }
+    },
+    "veilborn": {
+      "name": "Veilborn",
+      "note": "a creature's kit: the species decides when (ASOVeilborn::ThinkCombat), this says what.",
+      "abilities": {
+        "grenade": {
+          "ability": "bolt",
+          "name": "Void Bolt",
+          "cooldown": 9,
+          "charges": 1,
+          "windUp": 0.55,
+          "damage": 15,
+          "force": 2400,
+          "angle": 1.5
+        }
+      }
+    },
+    "commander": {
+      "name": "Commander",
+      "note": "a role: put on a species by a level's variant (\"kit\": \"commander\"). It calls its squad on; kill it first.",
+      "abilities": {
+        "class": {
+          "ability": "rally",
+          "name": "Rally",
+          "cooldown": 16,
+          "charges": 1,
+          "windUp": 0.8,
+          "radius": 1500,
+          "duration": 6,
+          "magnitude": 1.25,
+          "status": "haste"
+        }
+      }
+    },
+    "disruptor": {
+      "name": "Disruptor",
+      "note": "a role: caught in its pulse, a player's abilities are out for the duration. Its wind-up is the chance to get clear.",
+      "abilities": {
+        "grenade": {
+          "ability": "bolt",
+          "name": "Void Bolt",
+          "cooldown": 9,
+          "charges": 1,
+          "windUp": 0.55,
+          "damage": 15,
+          "force": 2400,
+          "angle": 1.5
+        },
+        "class": {
+          "ability": "pulse",
+          "name": "Jamming Pulse",
+          "cooldown": 14,
+          "charges": 1,
+          "windUp": 1.0,
+          "radius": 900,
+          "duration": 5,
+          "status": "jam",
+          "sound": "ability_brace"
+        }
+      }
+    },
+    "hunter": {
+      "name": "Hunter",
+      "note": "a role: an elite that fights the way a player does: a lunge up close, a charge thrown to move its target.",
+      "abilities": {
+        "melee": {
+          "ability": "strike",
+          "name": "Lunge",
+          "cooldown": 6,
+          "charges": 1,
+          "windUp": 0.4,
+          "damage": 45,
+          "range": 260,
+          "angle": 70,
+          "duration": 0.8,
+          "force": 500,
+          "sound": "ability_strike"
+        },
+        "grenade": {
+          "ability": "grenade",
+          "name": "Flush Charge",
+          "cooldown": 18,
+          "charges": 1,
+          "windUp": 0.5,
+          "damage": 55,
+          "radius": 380,
+          "force": 2000,
+          "duration": 3,
+          "magnitude": 0.6,
+          "status": "slow",
+          "sound": "ability_throw"
+        }
+      }
+    },
+    "alpha": {
+      "name": "Pack Alpha",
+      "note": "a role: the pack's leader. Its howl sends the pack in faster; with it down the pack falters.",
+      "abilities": {
+        "class": {
+          "ability": "rally",
+          "name": "Howl",
+          "cooldown": 14,
+          "charges": 1,
+          "windUp": 0.6,
+          "radius": 1800,
+          "duration": 5,
+          "magnitude": 1.3,
+          "status": "haste"
+        }
+      }
+    },
+    "colossus": {
+      "name": "Hollow Colossus",
+      "note": "the Colossus's first phase. A boss's attacks are abilities: the species decides when (ASOColossus::ThinkCombat, any of those that would land), this says what. windUp is the warning; clipLead is the time into the clip at which the blow lands (the clip is drawn out to the wind-up).",
+      "abilities": {
+        "melee": {
+          "ability": "sweep",
+          "name": "Sweep",
+          "cooldown": 5,
+          "windUp": 0.9,
+          "clip": "Sweep",
+          "clipLead": 0.78,
+          "damage": 40,
+          "range": 480,
+          "angle": 85,
+          "force": 900,
+          "sound": "boss_sweep",
+          "windUpSound": "boss_windup"
+        },
+        "class": {
+          "ability": "slam",
+          "name": "Slam",
+          "cooldown": 7,
+          "windUp": 1.15,
+          "clip": "Slam",
+          "clipLead": 0.82,
+          "damage": 40,
+          "range": 520,
+          "angle": 180,
+          "force": 1100,
+          "sound": "boss_slam",
+          "windUpSound": "boss_windup"
+        },
+        "grenade": {
+          "ability": "barrage",
+          "name": "Barrage",
+          "cooldown": 9,
+          "windUp": 0.7,
+          "clip": "Barrage",
+          "clipLead": 0.55,
+          "damage": 14,
+          "range": 4200,
+          "force": 2200,
+          "angle": 6,
+          "magnitude": 10,
+          "duration": 1.4,
+          "windUpSound": "boss_charge"
+        }
+      }
+    },
+    "colossus_choir": {
+      "name": "Colossus: the garrison answers",
+      "note": "second phase (boss table 'colossus'): the same, a longer barrage, and the ground breaking open under those it fights.",
+      "abilities": {
+        "melee": {
+          "ability": "sweep",
+          "name": "Sweep",
+          "cooldown": 5,
+          "windUp": 0.9,
+          "clip": "Sweep",
+          "clipLead": 0.78,
+          "damage": 40,
+          "range": 480,
+          "angle": 85,
+          "force": 900,
+          "sound": "boss_sweep",
+          "windUpSound": "boss_windup"
+        },
+        "class": {
+          "ability": "slam",
+          "name": "Slam",
+          "cooldown": 7,
+          "windUp": 1.15,
+          "clip": "Slam",
+          "clipLead": 0.82,
+          "damage": 40,
+          "range": 520,
+          "angle": 180,
+          "force": 1100,
+          "sound": "boss_slam",
+          "windUpSound": "boss_windup"
+        },
+        "grenade": {
+          "ability": "barrage",
+          "name": "Barrage",
+          "cooldown": 9,
+          "windUp": 0.7,
+          "clip": "Barrage",
+          "clipLead": 0.55,
+          "damage": 14,
+          "range": 4200,
+          "force": 2200,
+          "angle": 6,
+          "magnitude": 12,
+          "duration": 1.6,
+          "windUpSound": "boss_charge"
+        },
+        "ultimate": {
+          "ability": "eruption",
+          "name": "Upwelling",
+          "cooldown": 13,
+          "windUp": 0.8,
+          "clip": "Barrage",
+          "clipLead": 0.55,
+          "damage": 55,
+          "range": 5000,
+          "radius": 340,
+          "duration": 1.7,
+          "force": 700,
+          "magnitude": 2,
+          "windUpSound": "boss_call"
+        }
+      }
+    },
+    "colossus_root": {
+      "name": "Colossus: the core burns",
+      "note": "third phase: the slam is the Sundering (a heavy attack: nearly twice the reach, a long warning), more marks, sooner.",
+      "abilities": {
+        "melee": {
+          "ability": "sweep",
+          "name": "Sweep",
+          "cooldown": 4,
+          "windUp": 0.9,
+          "clip": "Sweep",
+          "clipLead": 0.78,
+          "damage": 40,
+          "range": 480,
+          "angle": 85,
+          "force": 900,
+          "sound": "boss_sweep",
+          "windUpSound": "boss_windup"
+        },
+        "class": {
+          "ability": "slam",
+          "name": "Sundering",
+          "cooldown": 9,
+          "windUp": 1.9,
+          "clip": "Slam",
+          "clipLead": 0.82,
+          "damage": 70,
+          "range": 950,
+          "angle": 180,
+          "force": 1400,
+          "sound": "boss_slam",
+          "windUpSound": "boss_windup_heavy"
+        },
+        "grenade": {
+          "ability": "barrage",
+          "name": "Barrage",
+          "cooldown": 9,
+          "windUp": 0.7,
+          "clip": "Barrage",
+          "clipLead": 0.55,
+          "damage": 14,
+          "range": 4200,
+          "force": 2200,
+          "angle": 6,
+          "magnitude": 14,
+          "duration": 1.7,
+          "windUpSound": "boss_charge"
+        },
+        "ultimate": {
+          "ability": "eruption",
+          "name": "Upwelling",
+          "cooldown": 10,
+          "windUp": 0.8,
+          "clip": "Barrage",
+          "clipLead": 0.55,
+          "damage": 55,
+          "range": 5000,
+          "radius": 340,
+          "duration": 1.5,
+          "force": 700,
+          "magnitude": 4,
+          "windUpSound": "boss_call"
+        }
+      }
+    },
+    "warden_fury": {
+      "name": "The Gatekeeper: the gate breaks",
+      "note": "the Warden's second phase (boss table 'warden'): the Bulwark's slam, wider and sooner.",
+      "abilities": {
+        "class": {
+          "ability": "slam",
+          "name": "Ground Slam",
+          "cooldown": 4.5,
+          "charges": 1,
+          "windUp": 0.72,
+          "damage": 40,
+          "range": 620,
+          "angle": 180,
+          "force": 1000,
+          "sound": "ability_slam"
+        }
+      }
+    },
+    "marksman": {
+      "name": "Marksman",
+      "note": "a role: a creature given this kit by a variant is a marksman. Its long shot is aimed in the open: a line of light follows the target for the wind-up and locks for the last 0.3 s; the shot goes down the line. 'radius' = it is not used on a target closer than this; 'magnitude' = after this many shots it finds another place.",
+      "abilities": {
+        "grenade": {
+          "ability": "bolt",
+          "name": "Void Bolt",
+          "cooldown": 9,
+          "charges": 1,
+          "windUp": 0.55,
+          "damage": 15,
+          "force": 2400,
+          "angle": 1.5
+        },
+        "class": {
+          "ability": "snipe",
+          "name": "Long Shot",
+          "cooldown": 4.5,
+          "windUp": 1.4,
+          "damage": 75,
+          "range": 7000,
+          "radius": 1200,
+          "magnitude": 3,
+          "sound": "marksman_shot",
+          "windUpSound": "marksman_aim"
+        }
+      }
     }
   }
 }

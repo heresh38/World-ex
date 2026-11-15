@@ -39,7 +39,7 @@ run "$M/city_trees.glb" "$OUT/NexusCity/Trees"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
 # The Altered, the operation's enemies (altered.py: own clips per creature)
-for k in remnant veilborn bulwark colossus; do
+for k in remnant veilborn bulwark colossus bearer; do
   K="$(echo "${k:0:1}" | tr a-z A-Z)${k:1}"
   run "$M/altered_$k.glb" "$OUT/Characters/$K" --single
 done

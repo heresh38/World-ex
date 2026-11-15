@@ -250,6 +250,10 @@ const TArray<FSOWeaponInstance>& ASOReliquary::GetLastRewards() const
 void ASOReliquary::BeginPlay()
 {
 	Super::BeginPlay();
+	if (USOInteractables* Things = GetWorld() ? GetWorld()->GetSubsystem<USOInteractables>() : nullptr)
+	{
+		Things->Add(this);
+	}
 	if (!Mesh->GetStaticMesh())
 	{
 		Mesh->SetStaticMesh(TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(ReliquaryMesh)).LoadSynchronous());

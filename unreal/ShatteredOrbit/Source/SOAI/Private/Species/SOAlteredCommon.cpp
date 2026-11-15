@@ -1,6 +1,7 @@
-#include "SOAltered.h"
-
 #include "SOAlteredCommon.h"
+#include "SOCue.h"
+
+#include "SOAltered.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
@@ -68,6 +69,6 @@ namespace SOAltered
 		{
 			Bolt->Launch(From, Dir, Target, Damage * From->GetDamageScale(), Speed);
 		}
-		USOSoundLibrary::PlayAt(From, TEXT("energy_shot_world"), Start, 0.8f, 0.15f, ESOSoundRange::Mid);
+		USOCue::Sound(From, TEXT("energy_shot_world"), Start, 0.8f, 0.15f, ESOSoundRange::Mid);
 	}
 }

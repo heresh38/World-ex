@@ -1,16 +1,17 @@
 """Operation: Meridian Fall, the first operation (the owner's layout sheet art/reference/operation/first_operation_map.png,
 made smaller and linear; our own names).
 
-The old capital Meridian went silent in the Stillfall. Its crown, a round platform under a broken orbital ring, now
-holds a beam into the sky and the thing that guards it. The beam is pulling down the field on Nexus Prime's wall:
-that is why anyone goes (docs/story/MERIDIAN_FALL.md; BRIEFING, INTEL and OUTCOME below are what the game says). The route runs south to north, two and a half kilometres from
-the city's edge to the crown:
+Meridian was one of Earth's great cities. When the ring of stations broke, one of them came down on it, and the
+Sarketh landing force came down after it and has held it ever since. Its crown, a round platform under the broken
+ring, now holds a beam into the sky: the Sarketh are calling their own people to come and take the system. That is
+why anyone goes (docs/story/WORLD.md, docs/story/MERIDIAN_FALL.md; BRIEFING, INTEL and OUTCOME below are what the
+game says). The route runs south to north, two and a half kilometres from the city's edge to the crown:
 
   Ashfall Verge       the city's edge: the landing pad, the dead highway and its toll plaza (first pickets)
   The Stacks          a housing estate: through the gatehouse block's rooms, the walled yard (clear), the archway
                       and the alley between the tenements
   Meridian Galleria   the mall: two storeys round a long atrium, the rotunda under the fallen skylight (hold), then
-                      the Warden at the service gate (boss)
+                      the Gatekeeper, a Warden officer, at the service gate (boss)
   Deepline            down into the transit station: the hive's hearts on the platform (destroy), then the tunnel
   The Sluice          out into the drained canal under the watch on its bridges (clear), up the spillway
   The Causeway        the road back up to the old approach
@@ -20,7 +21,7 @@ the city's edge to the crown:
   Concord Ring        the round plaza with the broken monument (hold until the terrace barrier falls)
   High Terraces       a ramp up the east side, then the elevated deck loop north and west (clear)
   Crown Bridge        the bridge north to the crown (its barrier falls when the terraces are clear)
-  The Crown           the round platform with the beam: the Hollow Colossus (boss)
+  The Crown           the round platform with the beam: the commander in his Colossus (boss)
 
 This module is the single source of the layout numbers: tools/blender/meridian.py builds the level's geometry from
 it and `python tools/operation/meridian_plan.py` writes unreal/ShatteredOrbit/Data/op_meridian.json (stages, waves,
@@ -36,37 +37,37 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "unreal", "ShatteredOrbit", "Data", "op_meridian.json")
 
 NAME = "Meridian Fall"
-TAGLINE = "A beam has lit over the old capital, and Nexus Prime's wall is failing. Walk in and put it out."
+TAGLINE = "A beam has lit over Meridian. The Sarketh are calling for a fleet. Walk in and put it out."
 # Why anyone goes (docs/story/MERIDIAN_FALL.md). Shown as the operation begins, a line at a time.
 BRIEFING = [
-    "Eleven nights ago a beam lit over Meridian, the old capital, silent since the Stillfall.",
-    "Every night it burns, the Keystones in Nexus Prime's wall lose ground. Two districts are sealed. The wall has about nineteen nights.",
-    "The storm over the city takes anything that flies. The only way in is on foot, from the edge.",
-    "Reach the Crown. Kill what feeds the beam and what guards it. Bring the capital's Keystone home.",
+    "Eleven nights ago a beam lit over Meridian, the city the station fell on. The Sarketh have held it ever since.",
+    "It is a call. In about nineteen nights it reaches the relay at the edge of the system, and their own people hear that Sol is open.",
+    "The storm round the beam takes anything that flies. The only way in is on foot, from the city's edge.",
+    "Reach the Crown. Kill what feeds the beam and the one who commands it. Bring out their command core.",
 ]
-OUTCOME = "The beam is dark. The capital's Keystone is going home to the wall. Whatever it was calling has stopped answering. For now."
+OUTCOME = "The beam is dark. The Sarketh command core is coming home. If anything heard the call, it has not answered. Yet."
 # What comes over the radio as each stage begins: (who, what). What the place means, never how to play it.
 INTEL = dict(
     verge=("RAMPART", "This is as far as anything flies, Orion. The storm starts at the toll plaza. From there you walk."),
-    gatehouse=("RAMPART", "The Stacks were sealed from outside in the first week. Whoever was inside is still inside."),
-    yard=("RAMPART", "Those were the residents. They kept what they were holding. Clear the yard."),
+    gatehouse=("RAMPART", "The Stacks were still standing when the station came down. The Sarketh billeted their foot soldiers in them and never moved them out."),
+    yard=("RAMPART", "Levies. The lowest of them, with the least. There are always more. Clear the yard."),
     alley=("RAMPART", "The Galleria was this district's shelter. Four thousand people. Its last message is a count of doors that would not hold."),
     galleria=("RAMPART", "They slept under the galleries and in the shops. The service gate at the far end is the only way on."),
     rotunda=("RAMPART", "The gate still has power. It needs eighty seconds to cycle, and everything in here can hear it."),
-    warden=("RAMPART", "Something has kept that gate shut for years. It is coming to see who opened it."),
-    descent=("INSTITUTE", "The beam is fed from under the station. The hive there has three hearts."),
+    warden=("RAMPART", "One of their officers has kept that gate shut for years. Powered armour, and a shield. He is coming to see who opened it."),
+    descent=("INSTITUTE", "The beam is fed from under the station. Their machines are grown, not built, and what they grew down there has three hearts."),
     hearts=("INSTITUTE", "Each heart pumps into the old traction mains, and the mains run to the Crown. Stop all three."),
-    tunnel=("INSTITUTE", "The beam just dimmed. It felt that. Keep moving."),
-    sluice=("INSTITUTE", "The annex on the west bank was ours, three years ago. They coupled the root to the capital's uplink so it could be heard. They wanted to listen. They taught it to speak."),
+    tunnel=("INSTITUTE", "The beam just dimmed. They felt that. Keep moving."),
+    sluice=("INSTITUTE", "The annex on the west bank was ours, three years ago. We went in to strip the fallen station's array, and we woke it to read it. We wanted to take it apart. We gave them a transmitter."),
     causeway=("RAMPART", "The wreck across the road is our gunship, nine nights old. Nothing reached the crew. That is why you are walking."),
-    approach=("RAMPART", "The army held this wall for six days in 2189. Past it, everything is the root's ground."),
-    gate=("RAMPART", "They guard gates. They always have. Break the hold on this one."),
-    boulevard=("INSTITUTE", "Look at the plan of it. Rings round a middle. The capital was built on top of a root and never knew."),
+    approach=("RAMPART", "The army held this wall until the station came down behind it. Past it, everything is Sarketh ground."),
+    gate=("RAMPART", "Their officers hold the gates. Powered armour does not tire. Break the hold on this one."),
+    boulevard=("INSTITUTE", "Everything from here up grew out of the wreck. The station's heart came down at the top of the city, and they made their stronghold round it."),
     ring=("INSTITUTE", "The veil across the ramp is grown, not built, and it is opening for something. Hold the Ring until it does."),
-    climb=("RAMPART", "Those banners are the Still Choir's. They came here to hear it speak. Most of them never left."),
-    terraces=("RAMPART", "Some of what is up here wears their red. Clear the terraces."),
-    bridge=("INSTITUTE", "The beam is not a weapon, Orion. It is a call. The Keystones in our wall were cut from the stone under that light, and they are answering."),
-    crown=("RAMPART", "It slept under the Crown longer than the city stood. Break its three conduits, bring it down, and take the stone."),
+    climb=("RAMPART", "Those banners are theirs. It is a claim: this ground, this world, this system, for the Sarketh."),
+    terraces=("RAMPART", "Their Speakers are up here, tending the beam. Clear the terraces."),
+    bridge=("INSTITUTE", "The beam is not a weapon, Orion. It is a call. They are not asking to be taken home. They are telling their own people that Sol is open."),
+    crown=("RAMPART", "Their commander has not left the Crown since the day they landed, and he does not fight on foot. Break the three conduits, bring the suit down, and take the core."),
 )
 
 # ---------------------------------------------------------------------------------------------------- layout (m)
@@ -242,7 +243,7 @@ STAGES = [
                 dict(delay=7.0, maxAlive=4, spawn=[["remnant", 4, "mall_shops_e"], ["veilborn", 2, "mall_gallery_w"]]),
                 dict(delay=8.0, maxAlive=4, spawn=[["stalker", 3, "mall_north"], ["remnant", 4, "mall_shops_w"], ["veilborn", 1, "mall_gallery_e"]]),
                 dict(delay=8.0, maxAlive=4, spawn=[["veilborn_seer", 1, "mall_gallery_w"], ["bulwark", 1, "mall_north"], ["remnant", 4, "mall_shops_e"]])]),
-    dict(id="warden", title="Meridian Galleria", objective="Bring down the Warden at the service gate", kind="boss",
+    dict(id="warden", title="Meridian Galleria", objective="Bring down the Gatekeeper at the service gate", kind="boss",
          boss="warden", bossGroup="mall_gate", goal=goal(0.0, -1320.0),
          checkpoint=checkpoint(0.0, GALLERIA["rot_n"] + 30.0, 0.0, (0.0, -1320.0)),
          waves=[dict(bossHealth=0.7, spawn=[["remnant", 5, "mall_court"]]),
@@ -265,7 +266,7 @@ STAGES = [
     dict(id="sluice", title="The Sluice", objective="Silence the watch on the canal", kind="clear",
          goal=goal(0.0, -700.0, CANAL),
          checkpoint=checkpoint(0.0, -868.0, CANAL, (0.0, -700.0)),
-         waves=[dict(hunt=False, spawn=[["veilborn", 4, "sluice_watch"], ["remnant", 5, "sluice_pump"], ["stalker", 2, "sluice_south"]]),
+         waves=[dict(hunt=False, spawn=[["veilborn", 2, "sluice_watch"], ["veilborn_marksman", 2, "sluice_watch"], ["remnant", 5, "sluice_pump"], ["stalker", 2, "sluice_south"]]),
                 dict(delay=3.0, maxAlive=4, spawn=[["remnant", 5, "sluice_north"], ["stalker", 3, "sluice_pump"]]),
                 dict(delay=3.0, maxAlive=3, spawn=[["remnant_captain", 1, "sluice_north"], ["bulwark", 2, "sluice_north"], ["veilborn_seer", 1, "sluice_pump"]])]),
     dict(id="causeway", title="The Causeway", objective="Climb the spillway to the old approach", kind="travel",
@@ -285,14 +286,14 @@ STAGES = [
                 dict(delay=2.0, maxAlive=2, spawn=[["bulwark", 1, "court_north"], ["remnant", 4, "court_flanks"]])]),
     dict(id="boulevard", title="The Boulevard", objective="Push into the central district", kind="travel",
          goal=goal(0.0, -42.0), radius=1500,
-         waves=[dict(hunt=False, spawn=[["stalker", 2, "boulevard_mid"], ["remnant", 3, "boulevard_mid"]])]),
+         waves=[dict(hunt=False, spawn=[["stalker", 2, "boulevard_mid"], ["remnant", 3, "boulevard_mid"], ["bearer", 1, "boulevard_mid"]])]),
     dict(id="ring", title="Concord Ring", objective="Hold the ring until the terrace barrier falls", kind="hold", hold=90,
          goal=goal(0.0, 0.0),
          checkpoint=checkpoint(0.0, -40.0, 0.0, (0.0, 0.0)),
          waves=[dict(spawn=[["remnant", 6, "plaza_north"]]),
-                dict(delay=6.0, maxAlive=4, spawn=[["remnant", 5, "plaza_west"], ["stalker", 2, "plaza_north"]]),
+                dict(delay=6.0, maxAlive=4, spawn=[["remnant", 5, "plaza_west"], ["stalker_hunter", 1, "plaza_north"], ["stalker", 1, "plaza_north"]]),
                 dict(delay=8.0, maxAlive=4, spawn=[["veilborn", 2, "plaza_east"], ["remnant", 4, "plaza_west"]]),
-                dict(delay=8.0, maxAlive=3, spawn=[["bulwark", 1, "plaza_north"], ["remnant", 4, "plaza_west"]])]),
+                dict(delay=8.0, maxAlive=3, spawn=[["bearer", 1, "plaza_north"], ["remnant", 4, "plaza_west"]])]),
     dict(id="climb", title="High Terraces", objective="Climb to the terraces", kind="travel",
          goal=goal(TERRACE["east_e"], 2.0, TZ), radius=1200,
          checkpoint=checkpoint(36.0, 0.0, 0.0, (RAMP["e1"], 0.0))),
@@ -305,7 +306,7 @@ STAGES = [
     dict(id="bridge", title="Crown Bridge", objective="Cross to the Crown", kind="travel",
          goal=goal(BRIDGE["e"], BRIDGE["n1"] - 2.0, TZ), radius=1000,
          checkpoint=checkpoint(56.0, TERRACE["north_n"], TZ, (0.0, TERRACE["north_n"]))),
-    dict(id="crown", title="The Crown", objective="Bring down the Hollow Colossus and take the Keystone", kind="boss",
+    dict(id="crown", title="The Crown", objective="Bring down the Colossus and take the command core", kind="boss",
          boss="colossus", bossGroup="crown_boss", goal=goal(*CROWN["c"], CROWN["z"]),
          checkpoint=checkpoint(BRIDGE["e"], BRIDGE["n1"] - 6.0, TZ, CROWN["c"]),
          waves=[dict(bossHealth=0.75, spawn=[["remnant", 6, "crown_ring"]]),
@@ -346,12 +347,14 @@ MAP_POINTS = [
     ("Shuttle to Nexus Prime", "Back to the city", "AreaTravel", (9.0, VERGE["pad"][1] - 6.0, 0.0)),
 ]
 
-# Finishing grants one random piece of these sets (the owner's concept sheets in art/reference/operation/).
+# Finishing grants one random piece: a Legendary copy of one of the Sarketh's own guns, the light guns (the owner,
+# 2026-11-14: "change the loot from meridian to these guns"): what a team brings out of a Sarketh garrison is the
+# Sarketh's arms. (The Void Requiem guns and the Void Sentinel armour were the reward here until then: they are another
+# species' technology now, docs/story/WORLD.md, and wait for the place that species holds.)
 REWARDS = dict(
     rarity=3,
-    armor=[["head", "void_sentinel"], ["vest", "void_sentinel"], ["hands", "void_sentinel"], ["legs", "void_sentinel"],
-           ["feet", "void_sentinel"], ["outer", "void_sentinel"]],
-    weapons=["vr_rifle", "vr_sniper", "vr_smg", "vr_shotgun", "vr_lmg", "vr_handcannon", "vr_pistol", "vr_fusion", "vr_rocket"],
+    armor=[],
+    weapons=["auto", "pulse", "scout", "handcannon", "shotgun", "sniper", "smg", "sidearm", "energy", "hmg", "rocket"],
 )
 
 # What this operation puts on top of the species it uses. The creatures themselves are written once in the game
@@ -363,11 +366,22 @@ REWARDS = dict(
 ENEMIES = {}
 VARIANTS = dict(
     # the gate-keeper of the Galleria (a boss stage of its own)
-    warden=dict(species="bulwark", name="The Warden", health=5.0, damage=1.35, speed=1.08, sight=1.5),
+    warden=dict(species="bulwark", name="The Gatekeeper", health=5.0, damage=1.35, speed=1.08, sight=1.5, boss="warden"),
     # the ones a squad forms round: tougher, better shots, a name over their heads
-    remnant_captain=dict(species="remnant", name="Remnant Captain", health=2.8, damage=1.25, aim=0.75, sight=1.25),
-    veilborn_seer=dict(species="veilborn", name="Veilborn Seer", health=2.4, damage=1.3, aim=0.7, sight=1.4),
-    stalker_alpha=dict(species="stalker_feral", name="Pack Alpha", health=3.0, damage=1.4, speed=1.12),
+    # Each has a ROLE, which is a kit of abilities from Data/game_data.json "kits" (the creature uses it by rule):
+    # the Captain calls its squad on (and the squad falters when it dies), the Seer's pulse jams a player's
+    # abilities, the Alpha's howl sends the pack in, the Hunter lunges and throws a charge to move its target.
+    remnant_captain=dict(species="remnant", name="Levy Captain", health=2.8, damage=1.25, aim=0.75, sight=1.25, kit="commander"),
+    veilborn_seer=dict(species="veilborn", name="Senior Speaker", health=2.4, damage=1.3, aim=0.7, sight=1.4, kit="disruptor"),
+    stalker_alpha=dict(species="stalker_feral", name="Lead Runner", health=3.0, damage=1.4, speed=1.12, kit="alpha"),
+    stalker_hunter=dict(species="stalker", name="Veteran Hunter", health=2.2, damage=1.2, aim=0.7, sight=1.3, kit="hunter"),
+    # Two more roles made of data alone. The Marksman keeps far off and high, aims in the open (a line of light
+    # that follows, locks, then the shot) and moves after three shots; close to it, it is in trouble. The heavy gunner is
+    # a species of its own now, the Bearer (the waves name it directly): this variant is kept for a level that wants
+    # a Bulwark with a machine gun.
+    veilborn_marksman=dict(species="veilborn", name="Speaker Marksman", health=0.9, aim=0.8, sight=1.9, range=1.8, kit="marksman", high=True),
+    bulwark_gunner=dict(species="bulwark", name="Warden Gunner", health=1.3, speed=0.85, weapon="hmg", range=2.4, burst=3.0, burstPause=0.7,
+                        aim=1.25, suppressor=True),
 )
 # The area map: its centre (E, N) and half size (m).
 MAP = dict(c=(20.0, -1035.0), half=1420.0)

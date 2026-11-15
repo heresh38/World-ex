@@ -155,10 +155,22 @@ FSOWeaponInstance USOLootLibrary::MakeWeapon(FName Archetype, int32 Rarity, int3
 	}
 	if (Tables)
 	{
-		const int32 Count = FMath::Min(Tables->GetRarity(W.Rarity).Perks, Tables->Perks.Num());
+		// the perks this gun's class can roll (a perk that names no class is anyone's)
+		const USOWeaponData* Kind = Tables->LoadArchetype(Archetype);
+		const FName Class = !Kind ? NAME_None : (Kind->WeaponClass == ESOWeaponClass::Kinetic ? FName(TEXT("kinetic"))
+			: (Kind->WeaponClass == ESOWeaponClass::Energy ? FName(TEXT("energy")) : FName(TEXT("horror"))));
+		TArray<FSOPerkInfo> Pool;
+		for (const FSOPerkInfo& Perk : Tables->Perks)
+		{
+			if (Perk.Classes.Num() == 0 || Perk.Classes.Contains(Class))
+			{
+				Pool.Add(Perk);
+			}
+		}
+		const int32 Count = FMath::Min(Tables->GetRarity(W.Rarity).Perks, Pool.Num());
 		while (W.Perks.Num() < Count)
 		{
-			const FName Perk = Pick(Tables->Perks, Rng).Id;
+			const FName Perk = Pick(Pool, Rng).Id;
 			if (!W.Perks.Contains(Perk))
 			{
 				W.Perks.Add(Perk);
@@ -195,6 +207,65 @@ FSOWeaponInstance USOLootLibrary::RollWeapon(int32 Power, const FSORollOptions& 
 	return W;
 }
 
+void FSOPerkInfo::Add(const FSOPerkInfo& Other)
+{
+	Magazine *= Other.Magazine;
+	Reload *= Other.Reload;
+	Spread *= Other.Spread;
+	Recoil *= Other.Recoil;
+	Precision *= Other.Precision;
+	FireRateShieldDown *= Other.FireRateShieldDown;
+	KillDamage += Other.KillDamage;
+	KillDamageStacks = FMath::Max(KillDamageStacks, Other.KillDamageStacks);
+	KillDamageTime = FMath::Max(KillDamageTime, Other.KillDamageTime);
+	KillHeal += Other.KillHeal;
+	PrecisionSplash += Other.PrecisionSplash;
+	PrecisionSplashRadius = FMath::Max(PrecisionSplashRadius, Other.PrecisionSplashRadius);
+	bAutoload |= Other.bAutoload;
+	KillMagazine += Other.KillMagazine;
+	bKillShield |= Other.bKillShield;
+	KillReload *= Other.KillReload;
+	KillReloadTime = FMath::Max(KillReloadTime, Other.KillReloadTime);
+	OpeningDamage *= Other.OpeningDamage;
+	OpeningAfter = FMath::Max(OpeningAfter, Other.OpeningAfter);
+	LowMagDamage *= Other.LowMagDamage;
+	LowMagShare = FMath::Max(LowMagShare, Other.LowMagShare);
+	HipSpread *= Other.HipSpread;
+	ShieldDamage *= Other.ShieldDamage;
+	HealthDamage *= Other.HealthDamage;
+	HitSlow = FMath::Min(HitSlow, Other.HitSlow);
+	HitSlowTime = FMath::Max(HitSlowTime, Other.HitSlowTime);
+	PrecisionBurn += Other.PrecisionBurn;
+	PrecisionBurnTime = FMath::Max(PrecisionBurnTime, Other.PrecisionBurnTime);
+	bNoFalloff |= Other.bNoFalloff;
+	Noise *= Other.Noise;
+	bSlideReload |= Other.bSlideReload;
+}
+
+bool FSOPerkInfo::DoesAnything() const
+{
+	return Magazine != 1.0f || Reload != 1.0f || Spread != 1.0f || Recoil != 1.0f || Precision != 1.0f || FireRateShieldDown != 1.0f
+		|| KillDamage > 0.0f || KillHeal > 0.0f || PrecisionSplash > 0.0f || bAutoload || KillMagazine > 0.0f || bKillShield
+		|| KillReload != 1.0f || OpeningDamage != 1.0f || LowMagDamage != 1.0f || HipSpread != 1.0f || ShieldDamage != 1.0f
+		|| HealthDamage != 1.0f || HitSlow != 1.0f || PrecisionBurn > 0.0f || bNoFalloff || Noise != 1.0f || bSlideReload;
+}
+
+FSOPerkInfo USOLootLibrary::PerkEffects(const FSOWeaponInstance& W)
+{
+	FSOPerkInfo All;
+	if (const USOLootTables* Tables = GetTables())
+	{
+		for (const FName& Id : W.Perks)
+		{
+			if (const FSOPerkInfo* Perk = Tables->FindPerk(Id))
+			{
+				All.Add(*Perk);
+			}
+		}
+	}
+	return All;
+}
+
 FSOWeaponStats USOLootLibrary::ComputeStats(const FSOWeaponInstance& W)
 {
 	const USOLootTables* Tables = GetTables();
@@ -214,13 +285,15 @@ FSOWeaponStats USOLootLibrary::ComputeStatsFor(const USOWeaponData* A, const FSO
 	const FSOWeaponRolls& R = W.Stats;
 	S.Damage = A->Damage * Mult * R.Damage * (1.0f + W.Power / 200.0f);
 	S.Rpm = A->RoundsPerMinute * R.Rpm;
-	S.Mag = FMath::RoundToInt(A->MagazineSize * (W.HasPerk(TEXT("overflow")) ? 1.4f : 1.0f));
+	// what its perks do, as the data says (never by a perk's name)
+	S.Perks = PerkEffects(W);
+	S.Mag = FMath::RoundToInt(A->MagazineSize * S.Perks.Magazine);
 	S.Reserve = A->ReserveAmmo;
-	S.Reload = A->ReloadTime * (W.HasPerk(TEXT("quickdraw")) ? 0.65f : 1.0f) / (0.9f + R.Handling * 0.1f);
+	S.Reload = A->ReloadTime * S.Perks.Reload / (0.9f + R.Handling * 0.1f);
 	S.Range = A->Range * R.Range;
-	S.Spread = A->Spread * (W.HasPerk(TEXT("steady")) ? 0.6f : 1.0f) / FMath::Max(R.Stability, 0.1f);
-	S.Crit = A->CritMultiplier * (W.HasPerk(TEXT("deadeye")) ? 1.25f : 1.0f);
-	S.Recoil = W.HasPerk(TEXT("steady")) ? 0.6f : 1.0f;
+	S.Spread = A->Spread * S.Perks.Spread / FMath::Max(R.Stability, 0.1f);
+	S.Crit = A->CritMultiplier * S.Perks.Precision;
+	S.Recoil = S.Perks.Recoil;
 	S.Zoom = A->AimZoom;
 	if (const FSOSightInfo* Sight = Tables ? Tables->FindSight(W.Sight) : nullptr; Sight && Sight->Zoom > 0.0f && W.Sight != TEXT("default"))
 	{

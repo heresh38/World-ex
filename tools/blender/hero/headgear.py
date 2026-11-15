@@ -210,9 +210,12 @@ def relax_on(bm, fn, iters=16, k=.6):
     bm.normal_update()
 
 
-def cut_plate(base_bm, tree, region, lift, thick, mat, name, bevel, keep=.45, field=None):
+def cut_plate(base_bm, tree, region, lift, thick, mat, name, bevel, keep=.45, field=None, reach=.006, cap=.006, thin=None, sheet=False):
     """a plate laid on the base surface: the base faces inside `region`, their open edges slid exactly onto the
-    region's outline along the surface (then smoothed), lifted by `lift`, given `thick` and a chamfered rim"""
+    region's outline along the surface (then smoothed), lifted by `lift`, given `thick` and a chamfered rim.
+    reach: how far from the outline an open edge may start (a cell of the base; coarser bases need more), cap: the
+    longest step along the surface per pass; thin(o): the caller's own way of making the sheet lighter (instead of
+    the plain collapse by `keep`)"""
     from wardrobe import to_object
     from boots import decimate
     bm = base_bm.copy()
@@ -244,8 +247,7 @@ def cut_plate(base_bm, tree, region, lift, thick, mat, name, bevel, keep=.45, fi
 
     # only the edge that lies on the outline moves (the base's own open edge at the neck stays where it is); each
     # step along the surface is capped at two cells, so a weak or kinked gradient can never throw a point away
-    edge = [v for v in bm.verts if v.is_boundary and abs(float(region(np.array([v.co[:]], F32))[0])) < .006]
-    cap = .006
+    edge = [v for v in bm.verts if v.is_boundary and abs(float(region(np.array([v.co[:]], F32))[0])) < reach]
     for it in range(10):
         P = np.array([v.co[:] for v in edge], F32)
         if not len(P):
@@ -289,7 +291,11 @@ def cut_plate(base_bm, tree, region, lift, thick, mat, name, bevel, keep=.45, fi
     for v, p, n in zip(bm.verts, P, Nn):
         v.co = Vector((p + n * lift).tolist())
     o = to_object(bm, name, mat)
-    if keep < 1.0:
+    if sheet:                                                    # (the caller finishes the lifted sheet itself)
+        return o
+    if thin is not None:
+        thin(o)
+    elif keep < 1.0:
         decimate(o, keep)
     m = o.modifiers.new("solid", 'SOLIDIFY')
     m.thickness = thick

@@ -47,11 +47,29 @@ class Cut:
         return 0 if abs(c.x) < .22 or c.z < self.hem else (1 if c.x > 0 else -1)
 
 
+def armhole(info, sx, ua):
+    """where an arm leaves the trunk on the body: the middle of the border between the chest and the upper arm on
+    this side, and the plane that border lies in (its normal out along the arm)"""
+    import numpy as np
+    pts = []
+    for e in info.bm.edges:
+        if len(e.link_faces) == 2 and {info.face_region[f.index] for f in e.link_faces} == {"chest", "upperarm"}:
+            for v in e.verts:
+                if v.co.x * sx > 0:
+                    pts.append(v.co)
+    P = np.array([tuple(p) for p in pts])
+    centre = P.mean(axis=0)
+    n = np.linalg.svd(P - centre)[2][2]                    # the direction the loop is thinnest in
+    n = Vector(n).normalized()
+    return Vector(centre), (n if n.dot(ua) > 0 else -n)
+
+
 def shell(info, C):
     from coat import bisect, keep_largest, strip_shape_layers
     from wardrobe import drape_out, Folds
     m = C.m
-    regions = ("chest", "midriff", "pelvis", "neck") + (("upperarm", "forearm") if m else ())
+    # (hers keeps the upper arm's first centimetres too: the armhole is cut from them, below)
+    regions = ("chest", "midriff", "pelvis", "neck", "upperarm") + (("forearm",) if m else ())
     bm = info.bm.copy()
     strip_shape_layers(bm)
     bm.faces.ensure_lookup_table()
@@ -96,9 +114,14 @@ def shell(info, C):
         if m:
             W, fa = C.mirror(C.W, sx), C.mirror(C.fa, sx)
             bisect(bm, [f for f in bm.faces if C.arm(f.calc_center_median()) == sx], W - fa * .018, fa, clear=True)
-        else:                                               # sleeveless: the armhole round the shoulder joint
-            S, ua = C.mirror(C.S, sx), C.mirror(C.ua, sx)
-            bisect(bm, [f for f in bm.faces if f.calc_center_median().x * sx > .08], S - ua * .012, ua, clear=True)
+        else:                                               # sleeveless: the armhole round the arm's root
+            # The armhole is the body's own border between the chest and the upper arm, a few millimetres out along
+            # the arm: one clean loop, and everything the top hides (the chest region) is under it. (A plane through
+            # the shoulder joint square to the arm, left to cut everything beyond it, took the whole side of the
+            # chest away: with the jacket off the body showed a hole there.)
+            centre, n = armhole(info, sx, C.mirror(C.ua, sx))
+            bisect(bm, [f for f in bm.faces if names[f[reg]] == "upperarm" or (f.calc_center_median() - centre).length < .11],
+                   centre + n * .006, n, clear=True)
     keep_largest(bm)
     # sleeves in ripstop, the body in knit
     for f in bm.faces:

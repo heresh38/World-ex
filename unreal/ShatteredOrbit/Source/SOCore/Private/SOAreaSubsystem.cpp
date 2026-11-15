@@ -1,4 +1,5 @@
 #include "SOAreaSubsystem.h"
+#include "SOData.h"
 
 #include "Containers/Ticker.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -67,6 +68,7 @@ namespace
 		return USOAreaSubsystem::Get(World);
 	}
 
+#if !UE_BUILD_SHIPPING // the developer's console commands: not in a shipping build
 	FAutoConsoleCommandWithWorldAndArgs GAreasCmd(TEXT("SOAreas"), TEXT("Lists the areas and which one is being played."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
 		{
@@ -115,6 +117,7 @@ namespace
 				Areas->StartTour(Args.Contains(TEXT("quit")), Only);
 			}
 		}));
+#endif
 }
 
 namespace
@@ -456,7 +459,7 @@ void USOAreaSubsystem::LoadAreas()
 	Areas.Reset();
 	FString Text;
 	TSharedPtr<FJsonObject> Root;
-	if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectDir() / TEXT("Data/areas.json")))
+	if (!SOData::LoadText(TEXT("Data/areas.json"), Text)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root)
 	{
 		UE_LOG(LogShatteredOrbit, Warning, TEXT("Areas: could not read Data/areas.json"));

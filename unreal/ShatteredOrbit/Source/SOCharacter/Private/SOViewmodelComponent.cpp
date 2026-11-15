@@ -128,14 +128,20 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		SightPivot = SightRig;
 	}
 	const float Lift = 1.0f - Ads * 0.95f;
-	// view-space metres (x right, y up, z back) accumulated like viewmodel.js, then converted
-	// Sprint: the gun is carried across the chest, muzzle up and to the left, canted, still in view (like every
-	// shooter keeps it), and comes back to the hip in the gun's sprint-to-fire time.
-	const float VX = BobX + SwayX * Lift + RunT * 0.01f + G[0] + InX + RlX;
-	const float VY = BobY + SwayY * Lift - Lower * 0.35f + RunT * 0.035f + G[1] + InY + RlY;
-	// (on the sights the gun comes back only a little: the rear sight is 9 cm from the eye, and a kick of 5 cm doubled it)
-	const float VZ = KickBack * (1.0f - Ads * 0.85f) + RunT * 0.03f + G[2] + RlZ;
 	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
+	// Sprint: a long gun drops to the low ready, a short one comes up muzzle to the sky (SprintLow / SprintHigh), and
+	// either comes back to the hip in the gun's sprint-to-fire time.
+	// (each gun says which in its data, "carry": the length of a gun does not tell an SMG from a short heavy gun)
+	static const FName NHigh(TEXT("high")), NShort(TEXT("short")), NLow(TEXT("low"));
+	const FName CarryKind = Data && !Data->SprintCarry.IsNone() ? Data->SprintCarry : (bHandgun ? NHigh : NLow);
+	const bool bHigh = CarryKind == NHigh, bShort = CarryKind == NShort;
+	const FVector RunMove = (bHigh ? SprintHighOffset : (bShort ? SprintShortOffset : SprintLowOffset)) * (RunT * 0.01f);
+	const FRotator RunTurn = bHigh ? SprintHighTurn : (bShort ? SprintShortTurn : SprintLowTurn);
+	// view-space metres (x right, y up, z back) accumulated like viewmodel.js, then converted
+	const float VX = BobX + SwayX * Lift + static_cast<float>(RunMove.Y) + G[0] + InX + RlX;
+	const float VY = BobY + SwayY * Lift - Lower * 0.35f + static_cast<float>(RunMove.Z) + G[1] + InY + RlY;
+	// (on the sights the gun comes back only a little: the rear sight is 9 cm from the eye, and a kick of 5 cm doubled it)
+	const float VZ = KickBack * (1.0f - Ads * 0.85f) - static_cast<float>(RunMove.X) + G[2] + RlZ;
 	// Bulky guns (launchers, the living guns) sit further out to the right and lower at the hip, so the body of
 	// the gun stays in the corner of the view instead of filling it.
 	FVector Bulk = FVector::ZeroVector;
@@ -149,9 +155,9 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	FVector Offset = Base + FVector(-VZ * 100.0f, VX * 100.0f, VY * 100.0f);
 
 	// The muzzle flip stays small on the sights so the front post settles back on the target.
-	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * 0.14f + InPitch + RlPitch;
-	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.85f) + RunT * 0.55f + G[4] + RlYaw;
-	const float EZ = G[5] + RunT * 0.5f + InRoll + RlRoll;
+	const float EX = KickPitch * (1.0f - Ads * 0.85f) + G[3] - Lower * 0.6f + RunT * FMath::DegreesToRadians(RunTurn.Pitch) + InPitch + RlPitch;
+	const float EY = SwayX * 2.0f * (1.0f - Ads * 0.85f) + RunT * FMath::DegreesToRadians(RunTurn.Yaw) + G[4] + RlYaw;
+	const float EZ = G[5] + RunT * FMath::DegreesToRadians(RunTurn.Roll) + InRoll + RlRoll;
 	const FRotator Turn(FMath::RadiansToDegrees(EX), FMath::RadiansToDegrees(-EY), FMath::RadiansToDegrees(-EZ));
 	// On the sights the gun turns about its SIGHT, not its own origin (the owner: "the bullets don't even hit where the
 	// scope is"): the rounds leave along the eye's axis, so whatever the muzzle does (the flip of each shot, the sway

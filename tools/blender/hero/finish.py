@@ -17,6 +17,10 @@ import bpy
 F32 = np.float32
 HARD = ("orion_plate", "orion_plate_white", "orion_steel")
 PLATE = ("orion_plate", "orion_plate_white")
+# the Void Sentinel set (void_sentinel.py): each plate material has its own paint, the same on both bodies
+VOID_PAINT = {"vs_plate": (.250, .262, .295), "vs_plate_dark": (.060, .062, .072)}
+STEEL = ("orion_steel", "vs_trim")
+LIT = ("orion_glow", "hair", "orion_visor", "vs_glow", "vs_visor")
 # the plate materials are a light neutral (wardrobe.PALETTE); these are the actual paint colours, as multipliers
 SCHEME = {
     "male": dict(primary=(.36, .37, .40), accent=(.80, .66, .48), mark=(.95, .40, .10)),
@@ -200,18 +204,21 @@ def apply(piece, T, log=print):
         v = vi[sel]
         rgb = np.ones((len(v), 3), F32)
         a = np.ones(len(v), F32)
-        if name in PLATE:
-            base = np.array(S["primary"], F32) * (1 - acc[v, None]) + np.array(S["accent"], F32) * acc[v, None]
-            base = base * (1 - mark[v, None]) + np.array(S["mark"], F32) * mark[v, None]
+        if name in PLATE or name in VOID_PAINT:
+            if name in VOID_PAINT:
+                base = np.tile(np.array(VOID_PAINT[name], F32), (len(v), 1))
+            else:
+                base = np.array(S["primary"], F32) * (1 - acc[v, None]) + np.array(S["accent"], F32) * acc[v, None]
+                base = base * (1 - mark[v, None]) + np.array(S["mark"], F32) * mark[v, None]
             rgb = base * tone[v, None] * (1 + hue[v])
             expo = .7 + .5 * up[v] + .3 * front[v]               # what gets knocked: upper and front faces
             wear = band[v] ** 1.4 * (.25 + .95 * breakup[v]) * expo
             wear = np.maximum(wear, smooth(.62, .80, chips[v]) * band[v] * .8)   # chips, only near the edges
             a = 1 - np.clip(wear, 0, 1)
-        elif name == "orion_steel":
+        elif name in STEEL:
             rgb = np.ones((len(v), 3), F32) * tone[v, None]
             a = 1 - np.clip(edge[v] * (.5 + .8 * breakup[v]), 0, 1)
-        elif name.startswith("orion_glow") or name.startswith("hair") or name.startswith("orion_visor"):
+        elif name.startswith(LIT):
             pass
         else:                                                # cloth, leather, rubber: fading and soiling
             fade = 1 + .07 * (up[v] * breakup[v])                # sun-faded where it faces up

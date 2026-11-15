@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimInstanceProxy.h"
+#include "SOCombatTypes.h"
 #include "SOGunRigComponent.h"
 #include "SOLocomotionAnimInstance.generated.h"
 
@@ -123,6 +124,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	FSOFingerPose LeftFingers;
 	/** Eye position in component space (first person: the shoulders turn with the view about it). */
 	FVector EyeCS = FVector::ZeroVector;
+	FVector GunAxis = FVector::ZeroVector;
 
 	/** How much of the arm / stance solve shows (1 = all; hands coming onto and off a ledge blend through it). */
 	float HoldAlpha = 1.0f;
@@ -134,6 +136,9 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float MaxWaistTwist = 20.0f;
 	float LeanRoll = 0.0f;
 	float LeanPitch = 0.0f;
+	float FlinchTwist = 0.0f;
+	float HeadKickPitch = 0.0f;
+	float HeadKickYaw = 0.0f;
 	float PelvisDrop = 0.0f;
 	float FootOffset[2] = { 0.0f, 0.0f };
 	float TurnLift[2] = { 0.0f, 0.0f };
@@ -148,6 +153,8 @@ private:
 	/** Stance (aim pitch through the spine, lean, blade), head on the aim, both arms onto the grips (two-bone IK);
 	 *  first-person copies keep only the arms. */
 	void ApplyHold(FPoseContext& Output) const;
+	/** The head thrown by a blow to it: the last thing done to the pose (the hold sets neck and head afresh). */
+	void ApplyHit(FPoseContext& Output) const;
 };
 
 /**
@@ -247,6 +254,26 @@ public:
 	float GetPelvisDrop() const { return PelvisDrop; }
 	float GetLeanPitch() const { return LeanPitch; }
 
+	/** A blow: the trunk is knocked this far (degrees: roll to its left, pitch back) and comes back by itself.
+	 *  It lies over whatever clip is playing: nothing is interrupted. */
+	void Flinch(float Roll, float Pitch);
+
+	/** A hit, shown where it landed. Toward: the way to where it came from, in the actor's own space (X forward,
+	 *  Y right). The head is thrown back and round; a shoulder is driven back and the chest turns with it; a leg
+	 *  gives and the hips drop over it; the trunk is knocked away. All of it lies over the clip and comes back. */
+	void HitKick(ESOHitRegion Region, const FVector& Toward, float Strength);
+	float FlinchTwist = 0.0f;
+	float HeadKickPitch = 0.0f;
+	float HeadKickYaw = 0.0f;
+	float FlinchDip = 0.0f;
+
+	/** Reeling (staggered): held bowed and swaying while this is set. */
+	bool bReeling = false;
+	float FlinchRoll = 0.0f;
+	float FlinchPitch = 0.0f;
+	float ReelBlend = 0.0f;
+	float ReelClock = 0.0f;
+
 	/** Movement yaw relative to the facing (deg, 0 = forward) and whether the cycle runs backward. */
 	float MoveYaw = 0.0f;
 	bool bBackward = false;
@@ -276,12 +303,47 @@ public:
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
 	FVector EyeCS = FVector::ZeroVector;
+	/** The way the held gun points, in the mesh's space (zero: no gun): the support hand slides back along it where
+	 *  the arm would not reach. */
+	FVector GunAxis = FVector::ZeroVector;
 
 	/** The hands fitted to the gun in them (FitGrip): how each finger closes on this gun's surfaces and how far each
 	 *  wrist moves (rig space, cm) to lay the palm on it. Solved once per gun and body. */
 	const FSOFingerPose& GetFittedFingers(bool bLeft) const { return FitFingers[bLeft ? 1 : 0]; }
+
+	/** How well a body's hands hold a gun right now, measured on its posed bones against the gun's own triangles
+	 *  (index 0 the firing hand, 1 the support hand). The gun is solid and so are the hands: nothing of a hand is IN
+	 *  the gun, the palm lies on it, the wrist is not bent further than a wrist bends. */
+	struct FHoldReport
+	{
+		/** Degrees between the forearm and the hand (wrist to the middle knuckle): past about 70 no wrist goes. */
+		float WristBend[2] = { 0.0f, 0.0f };
+		/** Finger and palm bones whose core (a third of the finger's thickness) passes through the gun's surface. */
+		int32 Inside[2] = { 0, 0 };
+		/** Of how many bones. */
+		int32 Bones[2] = { 0, 0 };
+		/** Cm from the palm's skin to the gun along the palm's normal: + a gap, - sunk in; 99 = nothing under it. */
+		float PalmGap[2] = { 99.0f, 99.0f };
+		/** In the gun's frame (+X barrel, +Y right, +Z up): the way the forearm runs (elbow to wrist), the way the hand
+		 *  runs (wrist to the middle knuckle), and out of the palm. */
+		FVector Forearm[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FVector Along[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		FVector Palm[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		/** How far the arm is stretched: shoulder to wrist over the arm's own length (1 = straight, cannot reach further). */
+		float Reach[2] = { 0.0f, 0.0f };
+		/** The shoulder joint in the gun's frame, cm. */
+		FVector ShoulderAt[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		/** The palm's middle in the gun's frame, cm. */
+		FVector PalmAt[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		/** Which bones are in the gun (for the log). */
+		FString Which[2];
+		SOCHARACTER_API FString ToString() const;
+	};
+	static FHoldReport MeasureHold(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh);
 	FVector GetFittedOffset(bool bLeft) const { return FitOffset[bLeft ? 1 : 0]; }
 	bool HasFittedGrip() const { return bFitDone; }
+	/** The support hand was turned to another hold than the rig's own (a vertical fore grip): its basis in the gun's frame. */
+	bool GetFittedTurn(FQuat& OutBasis) const { OutBasis = FitBasis; return bFitTurn; }
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
 	 *  Mantle, Climb, Crouch, CrouchWalk, Stop. */
@@ -306,12 +368,21 @@ public:
 protected:
 	/** Fits both hands to the gun's own shape: the palm laid on the surface under it, every finger closed joint by
 	 *  joint until it touches (swept against the gun's triangles). Game thread; the gun must be at rest in the hands. */
-	void FitGrip(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh, bool bOneHanded);
+	void FitGrip(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh, bool bOneHanded, float SlideBack = 0.0f);
+	/** The support hand was fitted again further back, where this body's arm reaches (once a gun). */
+	bool bFitSlid = false;
 
 	TWeakObjectPtr<const class USOGunRigComponent> FitRig;
 	FSOFingerPose FitFingers[2];
 	FVector FitOffset[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	bool bFitDone = false;
+	/** The support hand turned to another hold than the gun's own (a vertical fore grip is wrapped, not cupped): its
+	 *  basis in the gun's frame. */
+	bool bFitTurn = false;
+	FQuat FitBasis = FQuat::Identity;
+	/** How much of the fit the support hand has (0..1): it lets go of it through a reload and takes it up again
+	 *  after, eased (dropped and put back in one frame, the hand jumped). */
+	float FitWeight = 0.0f;
 
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	void UpdateBodyMotion(const ACharacter* Character, float DeltaSeconds);

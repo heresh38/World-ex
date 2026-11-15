@@ -36,7 +36,7 @@ mel = unreal.MaterialEditingLibrary
 FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac",
          # the Altered (altered.py)
          "alt_skin": "hx_skin", "alt_flesh": "hx_flesh", "alt_plate": "hx_chitin", "alt_bone": "hx_bone", "alt_rag": "hx_rag"}
-ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus")
+ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer")
 
 SKIN_TONE = (0.55, 0.32, 0.22)
 
@@ -124,24 +124,70 @@ def default_textures():
 # ---------------------------------------------------------------- master material
 
 
+# An asset's OWN maps (tools/blender/bakekit.py, gunpaint.py), read on UV 1 when UA (UniqueAmount) is 1:
+# U1 = occlusion / edge wear / dirt, U2 = handling / heat / paint. With UA = 0 every line is what it was.
+# (an own map's edge wear is CUT against the shared mask's chips: the map says how much, the chips where exactly, so
+# the edge of a rubbed place is as fine as the chips at any distance, never the own map's texels)
+WEAR_EDGE = ("saturate(max((1.0 - A) * (1.0 - UA) * EdgeWear * (0.45 + W.b * 1.1), "
+             "saturate((U1.g * 1.5 + W.b - 1.0) * 3.0) * UA * saturate(0.4 + EdgeWear * 0.6)))")
 WEAR_HLSL = {
     "color": """
-float edge = saturate((1.0 - A) * EdgeWear * (0.45 + W.b * 1.1));
-float g = W.g * Grime;
-float s = W.r * Scratches;
+float edge = """ + WEAR_EDGE + """;
+float g = saturate(W.g * Grime * (1.0 - 0.6 * UA) + U1.b * UA * 0.8);
+float s = W.r * Scratches * (1.0 - 0.7 * UA);
 float3 c = C * lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.46, 0.4), g);
+c *= lerp(1.0, 0.50, U1.b * UA);
+float h = U2.g * UA * WearMetal;
+float3 hc = lerp(float3(1.0, 1.0, 1.0), float3(0.80, 0.62, 0.40), saturate(h * 2.2));
+hc = lerp(hc, float3(0.42, 0.48, 0.78), saturate(h * 2.2 - 1.1));
+c *= hc;
 float3 bare = lerp(float3(0.6, 0.6, 0.58), saturate(C * 1.7 + 0.1), 1.0 - WearMetal);
-return lerp(c, bare, saturate(edge + s * 0.5));
+c = lerp(c, bare, saturate(edge + s * 0.5));
+return lerp(c, float3(0.86, 0.85, 0.80), saturate((U2.b - 0.35) * 3.0) * UA);
 """,
     "metal": """
-float edge = saturate((1.0 - A) * EdgeWear * (0.45 + W.b * 1.1));
-return lerp(M, max(M, WearMetal), edge);
+float edge = """ + WEAR_EDGE + """;
+return lerp(lerp(M, max(M, WearMetal), edge), 0.0, saturate((U2.b - 0.35) * 3.0) * UA);
 """,
     "rough": """
-float edge = saturate((1.0 - A) * EdgeWear * (0.45 + W.b * 1.1));
-return saturate(lerp(R + W.g * Grime * 0.3, 0.3, saturate(edge * 0.8 + W.r * Scratches * 0.45)));
+float edge = """ + WEAR_EDGE + """;
+float r = saturate(lerp(R + W.g * Grime * 0.3 + U1.b * UA * 0.18, 0.3, saturate(edge * 0.8 + W.r * Scratches * (1.0 - 0.7 * UA) * 0.45)));
+r = lerp(r, r * 0.55, U2.r * UA);
+return lerp(r, 0.5, saturate((U2.b - 0.35) * 3.0) * UA);
 """,
 }
+# The relief of an asset's own height map (UV 1), bent into the normal without a tangent frame of its own (the
+# surface's own derivatives): N the world normal, WP the world position, H the height, K centimetres to the unit.
+BUMP_HLSL = """
+float3 dpx = ddx(WP);
+float3 dpy = ddy(WP);
+float hx = ddx(H);
+float hy = ddy(H);
+float3 n = normalize(N);
+float3 r1 = cross(dpy, n);
+float3 r2 = cross(n, dpx);
+float det = dot(dpx, r1);
+float3 grad = sign(det) * (hx * r1 + hy * r2);
+return normalize(abs(det) * n - K * grad);
+"""
+
+SURFACE_HLSL = {
+    "color": """
+float cav = saturate(length(D.xy) * 1.8 * S) * K;
+return C * (1.0 - cav) * (1.0 + (M.r - 0.5) * 2.0 * A);
+""",
+    "rough": """
+float cav = saturate(length(D.xy) * 1.8 * S) * K;
+return saturate(R + cav * 0.12 + (M.g - 0.5) * 0.35 * A);
+""",
+    "normal": """
+return normalize(float3(B.xy + D.xy * S, B.z));
+""",
+    "ao": """
+return lerp(1.0, O, K) * lerp(1.0, U, UA);
+""",
+}
+
 
 def master_material(defaults):
     path = "/Game/Materials/M_SOStandard"
@@ -179,7 +225,20 @@ def master_material(defaults):
         return e
 
     S = unreal.MaterialSamplerType
+    # What the owner's texture rules ask of every surface (docs/art/TEXTURE_RULES.md). Each is OFF until an instance
+    # asks for it (the defaults leave a material exactly as it was): parallax from the set's height map (Parallax =
+    # its depth over its tile), ambient occlusion from the mask's red (AOAmount), a detail normal for close up
+    # (DetailTex at DetailScale repeats a tile, DetailStrength; DetailCavity darkens what it buries), and a macro
+    # variation at a scale that is not a whole number of tiles (MacroTex R tone, G roughness; MacroAmount).
+    uv0 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1900, -300)
+    height = tex_param("HeightTex", S.SAMPLERTYPE_MASKS, defaults["mask"], -1700, -520)
+    bump = mel.create_material_expression(mat, unreal.MaterialExpressionBumpOffset, -1350, -420)
+    bump.set_editor_property("reference_plane", 0.5)
+    mel.connect_material_expressions(uv0, "", bump, "Coordinate")
+    mel.connect_material_expressions(height, "R", bump, "Height")
+    mel.connect_material_expressions(scalar("Parallax", 0.0, -1700, -300), "", bump, "HeightRatioInput")
     base = tex_param("BaseColorTex", S.SAMPLERTYPE_COLOR, defaults["white"], -900, -300)
+    mel.connect_material_expressions(bump, "", base, "UVs")
     tint = vector("BaseColorTint", (1, 1, 1, 1), -900, -80)
     vcol = mel.create_material_expression(mat, unreal.MaterialExpressionVertexColor, -900, 60)
     vamt = scalar("VertexColorAmount", 0.0, -900, 200)
@@ -192,6 +251,7 @@ def master_material(defaults):
     mel.connect_material_property(base, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
 
     mr = tex_param("MRTex", S.SAMPLERTYPE_MASKS, defaults["mask"], -900, 340)
+    mel.connect_material_expressions(bump, "", mr, "UVs")
     metal = mul(mr, "B", scalar("Metallic", 0.0, -900, 560), "", -650, 360)
     rough = mul(mr, "G", scalar("Roughness", 0.5, -900, 640), "", -650, 480)
 
@@ -203,13 +263,22 @@ def master_material(defaults):
     wear = tex_param("WearTex", S.SAMPLERTYPE_MASKS, defaults["mask"], -1000, 1500)
     mel.connect_material_expressions(uvs, "", wear, "UVs")
     amounts = {n: scalar(n, 0.0, -1000, 1700 + i * 80) for i, n in enumerate(("EdgeWear", "Scratches", "Grime", "WearMetal"))}
+    # an asset's own maps, on its second UV set
+    uv1 = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1300, 3100)
+    uv1.set_editor_property("coordinate_index", 1)
+    own = []
+    for i in range(3):
+        t = tex_param(f"UniqueTex{i + 1}", S.SAMPLERTYPE_MASKS, defaults["mask"], -1000, 3100 + i * 230)
+        mel.connect_material_expressions(uv1, "", t, "UVs")
+        own.append(t)
+    uamt = scalar("UniqueAmount", 0.0, -1000, 3800)
 
     def wear_node(kind, inputs, out_type, y):
         node = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -250, y)
         node.set_editor_property("code", WEAR_HLSL[kind])
         node.set_editor_property("output_type", out_type)
         ins = []
-        for name in list(inputs) + ["A", "W", "EdgeWear", "Scratches", "Grime", "WearMetal"]:
+        for name in list(inputs) + ["A", "W", "EdgeWear", "Scratches", "Grime", "WearMetal", "U1", "U2", "UA"]:
             ci = unreal.CustomInput()
             ci.set_editor_property("input_name", name)
             ins.append(ci)
@@ -220,19 +289,69 @@ def master_material(defaults):
         mel.connect_material_expressions(wear, "RGB", node, "W")
         for n, e in amounts.items():
             mel.connect_material_expressions(e, "", node, n)
+        mel.connect_material_expressions(own[0], "RGB", node, "U1")
+        mel.connect_material_expressions(own[1], "RGB", node, "U2")
+        mel.connect_material_expressions(uamt, "", node, "UA")
         return node
     F = unreal.CustomMaterialOutputType
     worn_colour = wear_node("color", {"C": (colour, "")}, F.CMOT_FLOAT3, -200)
     worn_metal = wear_node("metal", {"M": (metal, "")}, F.CMOT_FLOAT1, 360)
     worn_rough = wear_node("rough", {"R": (rough, "")}, F.CMOT_FLOAT1, 480)
-    mel.connect_material_property(worn_colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    duv = mul(uv0, "", scalar("DetailScale", 8.0, -1900, 2300), "", -1650, 2300)
+    detail = tex_param("DetailTex", S.SAMPLERTYPE_NORMAL, defaults["normal"], -1400, 2300)
+    mel.connect_material_expressions(duv, "", detail, "UVs")
+    dstr = scalar("DetailStrength", 0.0, -1400, 2520)
+    dcav = scalar("DetailCavity", 0.0, -1400, 2600)
+    muv = mul(uv0, "", scalar("MacroScale", 0.173, -1900, 2760), "", -1650, 2760)
+    macro = tex_param("MacroTex", S.SAMPLERTYPE_MASKS, defaults["mask"], -1400, 2760)
+    mel.connect_material_expressions(muv, "", macro, "UVs")
+    mamt = scalar("MacroAmount", 0.0, -1400, 2980)
+
+    def finish(code, inputs, out_type, y):
+        node = _custom(mat, code, [n for n, _, _ in inputs], out_type, 150, y)
+        for n, src, pin in inputs:
+            mel.connect_material_expressions(src, pin, node, n)
+        return node
+    fc = finish(SURFACE_HLSL["color"], (("C", worn_colour, ""), ("D", detail, "RGB"), ("S", dstr, ""), ("K", dcav, ""), ("M", macro, "RGB"), ("A", mamt, "")),
+                F.CMOT_FLOAT3, -200)
+    fr = finish(SURFACE_HLSL["rough"], (("R", worn_rough, ""), ("D", detail, "RGB"), ("S", dstr, ""), ("K", dcav, ""), ("M", macro, "RGB"), ("A", mamt, "")),
+                F.CMOT_FLOAT1, 480)
+    mel.connect_material_property(fc, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(worn_metal, "", unreal.MaterialProperty.MP_METALLIC)
-    mel.connect_material_property(worn_rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(fr, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    ao = finish(SURFACE_HLSL["ao"], (("O", mr, "R"), ("K", scalar("AOAmount", 0.0, -900, 720), ""), ("U", own[0], "R"), ("UA", uamt, "")),
+                F.CMOT_FLOAT1, 620)
+    mel.connect_material_property(ao, "", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
 
     normal = tex_param("NormalTex", S.SAMPLERTYPE_NORMAL, defaults["normal"], -900, 760)
-    mel.connect_material_property(normal, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    mel.connect_material_expressions(bump, "", normal, "UVs")
+    fn = finish(SURFACE_HLSL["normal"], (("B", normal, "RGB"), ("D", detail, "RGB"), ("S", dstr, "")), F.CMOT_FLOAT3, 760)
+    final_normal = fn
+    try:
+        # the relief of the asset's own height map (engraving, a weld's bead): bent in world space, back to tangent
+        # (named `relief`: `bump` is the parallax node above, which the emissive map's UVs are still to be given)
+        to_world = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, 380, 760)
+        to_world.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_TANGENT)
+        to_world.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+        mel.connect_material_expressions(fn, "", to_world, "")
+        wpos = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, 380, 900)
+        bump_k = mul(scalar("UniqueBump", 0.40, 380, 1040), "", uamt, "", 560, 1040)
+        relief = _custom(mat, BUMP_HLSL, ("N", "WP", "H", "K"), F.CMOT_FLOAT3, 720, 800)
+        mel.connect_material_expressions(to_world, "", relief, "N")
+        mel.connect_material_expressions(wpos, "", relief, "WP")
+        mel.connect_material_expressions(own[2], "R", relief, "H")
+        mel.connect_material_expressions(bump_k, "", relief, "K")
+        to_tangent = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, 960, 800)
+        to_tangent.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD)
+        to_tangent.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_TANGENT)
+        mel.connect_material_expressions(relief, "", to_tangent, "")
+        final_normal = to_tangent
+    except Exception as e:                                      # (the relief is lost, the material is not)
+        log(f"master material: the own-map relief could not be built ({e})")
+    mel.connect_material_property(final_normal, "", unreal.MaterialProperty.MP_NORMAL)
 
     emis = tex_param("EmissiveTex", S.SAMPLERTYPE_COLOR, defaults["white"], -900, 1000)
+    mel.connect_material_expressions(bump, "", emis, "UVs")
     ecol = vector("EmissiveColor", (0, 0, 0, 1), -900, 1220)
     estr = scalar("EmissiveStrength", 1.0, -900, 1360)
     e1 = mul(emis, "RGB", ecol, "", -650, 1060)
@@ -380,6 +499,7 @@ def import_fbx(fbx, dest, name, skeletal):
     else:
         sm = ui.get_editor_property("static_mesh_import_data")
         sm.set_editor_property("combine_meshes", True)
+        sm.set_editor_property("generate_lightmap_u_vs", False)   # (UV 1 is an asset's own set: bakekit.py; lighting is dynamic)
         sm.set_editor_property("convert_scene_unit", True)  # FBX metres (UnitScaleFactor 100) -> cm
         sm.set_editor_property("auto_generate_collision", False)
         sm.set_editor_property("normal_import_method", unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS_AND_TANGENTS)
@@ -395,7 +515,41 @@ def import_fbx(fbx, dest, name, skeletal):
     paths = list(task.get_editor_property("imported_object_paths"))
     if not paths:
         raise RuntimeError(f"FBX import failed: {fbx}")
-    return [unreal.load_asset(p) for p in paths]
+    objs = [unreal.load_asset(p) for p in paths]
+    if skeletal:
+        for o in objs:
+            if isinstance(o, unreal.SkeletalMesh):
+                fit_bodies(o)
+    return objs
+
+
+# Bones shorter than this (cm) share their parent's body. Small enough that a head, a hand and a foot get their own.
+BODY_MIN_BONE = 10.0
+
+
+def fit_bodies(mesh):
+    """The physics bodies of a skeletal mesh fitted to what is drawn: one convex hull per bone (the editor module's
+    USOEditorLibrary::FitBodies). The engine's automatic bodies are a few fat capsules: on the Colossus they stood up
+    to a metre and a half in front of its surface and its head had none, so shots that passed it counted as hits and
+    a head shot never was one. A mesh without a physics asset (a wardrobe piece, the arms) is left alone."""
+    pa = mesh.get_editor_property("physics_asset")
+    if not pa:
+        return 0
+    n = unreal.SOEditorLibrary.fit_bodies(mesh, BODY_MIN_BONE, 1, 24)
+    eal.save_loaded_asset(pa, only_if_is_dirty=False)
+    log(f"{mesh.get_name()}: {n} bodies fitted per bone")
+    return n
+
+
+def bodies():
+    """Refits the bodies of every creature and both players that are already imported (SO_IMPORT_ONLY=bodies)."""
+    names = ["Stalker"] + list(ALTERED) + ["PlayerMale", "PlayerFemale"]
+    for name in names:
+        path = f"/Game/Characters/{name}/SK_{name}"
+        if eal.does_asset_exist(path):
+            fit_bodies(eal.load_asset(path))
+        else:
+            log(f"{path}: not imported, skipped")
 
 
 def assign_materials(mesh, instances):
@@ -410,12 +564,34 @@ def assign_materials(mesh, instances):
                 missing.append(str(slot.get_editor_property("material_slot_name")))
         mesh.set_editor_property("materials", mats)
     else:
-        for i, slot in enumerate(mesh.get_editor_property("static_materials")):
-            mi = instances.get(base_slot(slot.get_editor_property("material_slot_name")))
+        # A mesh imported AGAIN keeps the slot names of its first import; what the file calls each slot NOW is its
+        # imported name. Filled by the old name, a slot whose material had changed got the old material (the rifle's
+        # olive grip came out in walnut). Slot names are an API (the game looks for gun_glow, gun_body, gun_lens):
+        # they are set to the imported ones.
+        mats = list(mesh.get_editor_property("static_materials"))
+        renamed = False
+        for i, slot in enumerate(mats):
+            name = str(slot.get_editor_property("imported_material_slot_name"))
+            if name in ("", "None"):
+                name = str(slot.get_editor_property("material_slot_name"))
+            if str(slot.get_editor_property("material_slot_name")) != name:
+                slot.set_editor_property("material_slot_name", name)
+                renamed = True
+            mi = instances.get(base_slot(name))
             if mi:
-                mesh.set_material(i, mi)
+                slot.set_editor_property("material_interface", mi)
             else:
-                missing.append(str(slot.get_editor_property("material_slot_name")))
+                missing.append(name)
+        try:
+            mesh.set_editor_property("static_materials", mats)
+        except Exception as e:
+            log(f"  {mesh.get_name()}: slots not renamed ({e})")
+            for i, slot in enumerate(mats):
+                mi = slot.get_editor_property("material_interface")
+                if mi:
+                    mesh.set_material(i, mi)
+        if renamed:
+            log(f"  {mesh.get_name()}: slots renamed to the file's own: {[str(s.get_editor_property('material_slot_name')) for s in mats]}")
     if missing:
         log(f"  {mesh.get_name()}: no material for slots {missing}")
     eal.save_loaded_asset(mesh, only_if_is_dirty=False)
@@ -656,6 +832,36 @@ def make_lods(mesh, count=4):
         log(f"{mesh.get_name()}: no LODs ({e})")
 
 
+def player_pieces(spec):
+    """Only some wardrobe pieces again (SO_IMPORT_ONLY=player_pieces SO_PLAYER_PIECES=female:top:orion,...): each
+    piece's FBX over the mesh that is there, on the body's skeleton, with the material instances that are there.
+    For work on one garment (tools/blender/hero/repiece.py): nothing else of the player is touched."""
+    for one in [s.strip() for s in spec.split(",") if s.strip()]:
+        sex, slot, item = one.split(":")
+        Sex = sex.capitalize()
+        src = os.path.join(SOURCE, "Characters", f"Player{Sex}")
+        dest = f"/Game/Characters/Player{Sex}"
+        body = unreal.load_asset(f"{dest}/SK_Player{Sex}")
+        if not body or not os.path.isdir(src):
+            log(f"Player{Sex} {slot} {item}: skipped (import the player first)")
+            continue
+        manifest = load_json(os.path.join(src, "export_fbx.json"))
+        entry = next((a for a in manifest["assets"] if a.get("slot") == slot and a.get("item") == item), None)
+        if not entry:
+            log(f"Player{Sex} {slot} {item}: not in the export, skipped")
+            continue
+        mesh = import_piece(os.path.join(src, entry["file"]), dest + "/Wardrobe", f"SK_{Sex}_{slot}_{item}", body.get_editor_property("skeleton"))
+        instances = {}
+        for path in eal.list_assets(dest, recursive=False, include_folder=False):
+            name = path.split("/")[-1].split(".")[0]
+            if name.startswith("MI_"):
+                instances[name[3:]] = eal.load_asset(path)
+        assign_materials(mesh, instances)
+        make_lods(mesh)
+        eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+        log(f"SK_{Sex}_{slot}_{item}: piece re-imported")
+
+
 def player_clips(sex):
     """Only the body's clips again (SO_IMPORT_ONLY=player_clips): the takes of the body FBX onto the skeleton that is
     already there, as Anims/A_Player<Sex>_<Clip>. For work on motion (tools/blender/hero/reclip.py): nothing else of
@@ -889,7 +1095,7 @@ def shared_textures(src, materials):
 GUN_WEAR = {
     "gun_steel": (.9, .3, .4, 1), "gun_parkerized": (.85, .32, .45, 1), "gun_dark": (.8, .3, .45, 1), "gun_metal": (.85, .3, .4, 1),
     "gun_trim": (.7, .25, .3, 1), "gun_body": (.75, .28, .45, 1), "gun_paint": (.75, .28, .45, 1), "gun_brass": (.5, .2, .35, 1),
-    "gun_polymer": (.55, .22, .5, 0), "gun_odg": (.55, .22, .5, 0), "gun_grip": (.35, .1, .55, 0), "gun_wood": (.5, .2, .4, 0),
+    "gun_polymer_od": (.55, .22, .5, 0), "gun_polymer": (.55, .22, .5, 0), "gun_rubber": (.3, .1, .5, 0), "gun_wood": (.5, .2, .4, 0),
     "gun_sightpaint": (.3, .1, .3, 0),
 }
 _WEAR_TEX = {}
@@ -902,10 +1108,29 @@ def wear_texture():
     return _WEAR_TEX["mask"]
 
 
-def gun_instances(master, src, dest, materials, clear):
+def sampled(material, texture, uv, scale):
+    """tell the texture streamer how this material reads this texture: which UV set, how many repeats across it
+    (USOEditorLibrary::SetTextureSampling: the engine builds this only in an editor step the import never runs)"""
+    try:
+        unreal.SOEditorLibrary.set_texture_sampling(material, texture, uv, scale)
+    except Exception as e:
+        log(f"  {material.get_name()}: the streamer was not told about {texture.get_name()} ({e})")
+
+
+def gun_instances(master, src, dest, materials, clear, model=None):
     tex = shared_textures(src, materials)
     out = {}
     worn = wear_texture()
+    # the gun's own maps (tools/blender/gunpaint.py), when it has them: wear / dirt (m1) and the relief (m3) held at
+    # 4096, handling / heat / paint (m2) at 2048. (m1 at 2048 was a texel of half a millimetre: grime in a cut mark
+    # is what makes the mark read, and at that size a Sarketh mark on a pale shell was a smudge.)
+    own = {}
+    for k, hold in (("m1", 4096), ("m2", 2048), ("m3", 4096)):
+        f = os.path.join(REPO_TEXTURES, f"{model}_u_{k}.png") if model else ""
+        if f and os.path.exists(f):
+            own[k] = import_texture(f, dest, f"T_{model}_u_{k}", "mask")
+            own[k].set_editor_property("max_texture_size", hold)
+            eal.save_loaded_asset(own[k], only_if_is_dirty=False)
     for k, v in materials.items():
         key = base_slot(k)
         m = dict(v)
@@ -916,9 +1141,19 @@ def gun_instances(master, src, dest, materials, clear):
             extra = {"baseColorTex": "__clear"}
             tex = dict(tex, __clear=clear)
         mi = make_instance(master, dest, key, m, tex, extra)
+        if os.path.basename(m.get("mrTex") or "").startswith("wpn_"):       # (the engine's sets carry ambient occlusion in the mask's red)
+            mel.set_material_instance_scalar_parameter_value(mi, "AOAmount", 1.0)
+        if len(own) == 3 and key not in ("gun_lens", "gun_dot"):
+            for i, k in enumerate(("m1", "m2", "m3")):
+                mel.set_material_instance_texture_parameter_value(mi, f"UniqueTex{i + 1}", own[k])
+                sampled(mi, own[k], 1, 1.0)                    # (on UV 1, once across the gun: the streamer must be told)
+            mel.set_material_instance_scalar_parameter_value(mi, "UniqueAmount", 1.0)
+            mel.update_material_instance(mi)
+            eal.save_loaded_asset(mi, only_if_is_dirty=False)
         amounts = next((a for name, a in GUN_WEAR.items() if key == name or key.startswith(name + "__")), None)
         if amounts and worn:
             mel.set_material_instance_texture_parameter_value(mi, "WearTex", worn)
+            sampled(mi, worn, 0, 3.0)                          # (the shared mask repeats WearTiling times a tile)
             for name, value in zip(("EdgeWear", "Scratches", "Grime", "WearMetal"), amounts):
                 mel.set_material_instance_scalar_parameter_value(mi, name, float(value))
             mel.update_material_instance(mi)
@@ -950,9 +1185,13 @@ def weapon(master, arch, a, clear):
         return None
     ensure_dir(dest)
     materials = load_json(os.path.join(src, "materials.json"))
-    instances = gun_instances(master, src, dest, materials, clear)
+    instances = gun_instances(master, src, dest, materials, clear, a["model"])
     info = load_json(os.path.join(src, a["model"] + ".parts.json"))
     body = import_static(src, a["model"] + ".fbx", dest, f"SM_{folder}", instances)
+    try:
+        log(f"SM_{folder}: {unreal.EditorStaticMeshLibrary.get_num_uv_channels(body, 0)} UV sets")
+    except Exception:
+        pass
     parts = []
     for name, p in info["parts"].items():
         mesh = import_static(src, p["file"], dest, f"SM_{folder}_{name}", instances)
@@ -986,7 +1225,7 @@ def weapon(master, arch, a, clear):
                   gravity_scale=float(a.get("grav", 0.0)) if kind == unreal.SOProjectileKind.ROUND else (float(a.get("gooGrav", 0.35)) if kind in (
                       unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
                   kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
-                  tracer_color=hex_color(tracer), body_mesh=body, parts=parts,
+                  sprint_carry=a.get("carry", "None"), tracer_color=hex_color(tracer), body_mesh=body, parts=parts,
                   sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"])
     for key, value in values.items():
         data.set_editor_property(key, value)
@@ -1078,6 +1317,50 @@ def loot_props(master):
     return out
 
 
+def perk_infos(game):
+    """Data/game_data.json "perks" as FSOPerkInfo: its name, its line, and the numbers of what it does."""
+    perks = []
+    for pid, p in game["perks"].items():
+        info = unreal.SOPerkInfo()
+        info.set_editor_property("id", pid)
+        info.set_editor_property("name", unreal.Text(p["name"]))
+        info.set_editor_property("description", unreal.Text(p["desc"]))
+        # what it does: its own numbers (a perk names only those it uses)
+        for key, prop in (("magazine", "magazine"), ("reload", "reload"), ("spread", "spread"), ("recoil", "recoil"),
+                          ("precision", "precision"), ("fireRateShieldDown", "fire_rate_shield_down"),
+                          ("killDamage", "kill_damage"), ("killDamageTime", "kill_damage_time"), ("killHeal", "kill_heal"),
+                          ("precisionSplash", "precision_splash"), ("precisionSplashRadius", "precision_splash_radius"),
+                          ("killMagazine", "kill_magazine"), ("killReload", "kill_reload"), ("killReloadTime", "kill_reload_time"),
+                          ("openingDamage", "opening_damage"), ("openingAfter", "opening_after"),
+                          ("lowMagDamage", "low_mag_damage"), ("lowMagShare", "low_mag_share"), ("hipSpread", "hip_spread"),
+                          ("shieldDamage", "shield_damage"), ("healthDamage", "health_damage"), ("hitSlow", "hit_slow"),
+                          ("hitSlowTime", "hit_slow_time"), ("precisionBurn", "precision_burn"),
+                          ("precisionBurnTime", "precision_burn_time"), ("noise", "noise")):
+            if key in p:
+                info.set_editor_property(prop, float(p[key]))
+        for key, prop in (("killShield", "kill_shield"), ("noFalloff", "no_falloff"), ("slideReload", "slide_reload")):
+            info.set_editor_property(prop, bool(p.get(key, False)))
+        info.set_editor_property("classes", [unreal.Name(c) for c in p.get("classes", [])])
+        if "killDamageStacks" in p:
+            info.set_editor_property("kill_damage_stacks", int(p["killDamageStacks"]))
+        info.set_editor_property("autoload", bool(p.get("autoload", False)))
+        perks.append(info)
+    return perks
+
+
+def perks_only():
+    """Only the perks of the loot tables again (SO_IMPORT_ONLY=perks): their numbers changed, no gun is re-imported."""
+    path = "/Game/Data/DA_LootTables"
+    if not eal.does_asset_exist(path):
+        log("DA_LootTables: not imported yet (run the weapons step), skipped")
+        return
+    tables = eal.load_asset(path)
+    perks = perk_infos(load_json(GAME_DATA))
+    tables.set_editor_property("perks", perks)
+    eal.save_loaded_asset(tables, only_if_is_dirty=False)
+    log(f"DA_LootTables: {len(perks)} perks rewritten")
+
+
 def loot_tables(datas, sight_meshes):
     game = load_json(GAME_DATA)
     ensure_dir("/Game/Data")
@@ -1097,13 +1380,7 @@ def loot_tables(datas, sight_meshes):
         info.set_editor_property("mult", float(r["mult"]))
         info.set_editor_property("perks", int(r["perks"]))
         rarities.append(info)
-    perks = []
-    for pid, p in game["perks"].items():
-        info = unreal.SOPerkInfo()
-        info.set_editor_property("id", pid)
-        info.set_editor_property("name", unreal.Text(p["name"]))
-        info.set_editor_property("description", unreal.Text(p["desc"]))
-        perks.append(info)
+    perks = perk_infos(game)
     sights = []
     for sid, s in game["sights"].items():
         info = unreal.SOSightInfo()
@@ -1141,8 +1418,226 @@ def loot_tables(datas, sight_meshes):
     return tables
 
 
+# What each engine set (tools/blender/pbr.py) is laid over with: (detail kind, its strength, how much it darkens what
+# it buries, the macro variation's amount).
+PBR_FINISH = {
+    "nx_stone": ("stone", .8, .5, .10), "nx_paving": ("stone", .6, .4, .10), "nx_rock": ("stone", 1.0, .6, .12),
+    "nx_panel": ("metal", .7, .3, .06), "nx_trim": ("metal", .6, .2, .05), "nx_window": (None, 0, 0, 0),
+    "panel": ("metal", .7, .3, .06), "concrete": ("concrete", .9, .5, .10),
+    "ru_concrete": ("concrete", .9, .5, .10), "ru_fracture": ("concrete", .7, .4, .06), "ru_asphalt": ("asphalt", .9, .5, .10),
+    "ru_stone": ("stone", .7, .4, .10), "ru_sandstone": ("stone", .8, .5, .10), "ru_rubble": ("soil", .8, .4, .08),
+    "ru_metal": ("metal", .7, .3, .06), "ru_panel": ("metal", .6, .3, .06), "ru_corrugate": ("metal", .6, .3, .06),
+    "ru_box_red": ("metal", .6, .3, .06), "ru_box_green": ("metal", .6, .3, .06), "ru_box_ochre": ("metal", .6, .3, .06),
+    "ru_brass": ("metal", .5, .2, .04), "ru_plaster": ("plaster", .9, .4, .08), "ru_ceramic": ("plaster", .25, .1, .06),
+    "ru_tile": ("stone", .2, .1, .05),
+}
+# What the game holds of a set (the source is 4096 px throughout): colour and normal whole, the mask at 2048, the
+# height at 1024 (parallax needs no more): about 40 MB a set in video memory instead of 85.
+PBR_HOLD = {"m": 2048, "h": 1024}
+# Nexus Prime's own ground and facade sets (their maps are not the engine's yet): which detail they take.
+CITY_DETAIL = {"nc_asphalt": "asphalt", "nc_tunnel": "asphalt", "nc_pavers": "concrete", "nc_kerb": "concrete", "nc_lot": "concrete",
+               "nc_roof": "concrete", "nc_wall": "concrete", "nc_plaza": "stone", "nc_rock": "stone", "nc_grass": "soil", "nc_dirt": "soil",
+               "nc_steel": "metal", "nc_rail": "metal", "ncf_stone": "stone", "ncf_brick": "stone", "ncf_panel": "metal",
+               "ncf_industrial": "metal", "ncf_military": "metal", "ncf_warehouse": "metal"}
+DETAIL_TILE = 0.5      # metres a detail set covers (detail_maps.py)
+
+
+def world_maps(defaults):
+    """The texture engine's sets into the game (SO_IMPORT_ONLY=worldmaps): every set in assets/textures/pbr_sets.json
+    whose colour map the game already has is imported again with ALL its maps (colour, normal, AO / roughness / metal,
+    height, emissive) beside it, and every instance that shows it is told to use them: ambient occlusion, parallax at
+    the set's true depth, the detail layer of its kind, the macro variation. No mesh is imported."""
+    info = load_json(os.path.join(REPO_TEXTURES, "pbr_sets.json"))
+    folder = "/Game/Materials/Detail"
+    ensure_dir(folder)
+    det = {}
+    for f in sorted(os.listdir(REPO_TEXTURES)):
+        if f.startswith("det_") and f.endswith("_n.png"):
+            det[f[4:-6]] = import_texture(os.path.join(REPO_TEXTURES, f), folder, "T_" + f[:-4], "normal")
+    macro = import_texture(os.path.join(REPO_TEXTURES, "macro_m.png"), folder, "T_macro", "mask")
+    every = [str(a) for a in eal.list_assets("/Game", recursive=True, include_folder=False)]
+    done = 0
+    for name, i in sorted(info.items()):
+        if name.startswith("det_") or name.startswith("wpn_") or name == "macro":       # (the guns' sets: SO_IMPORT_ONLY=guntextures)
+            continue
+        homes = sorted({a.rsplit("/", 1)[0] for a in every if a.endswith(f"/T_{name}_c.T_{name}_c")})
+        for home in homes:
+            tex = {}
+            for kind, ext, how in (("c", "jpg", "color"), ("n", "png", "normal"), ("m", "png", "mask"), ("h", "png", "mask"), ("e", "jpg", "color")):
+                f = os.path.join(REPO_TEXTURES, f"{name}_{kind}.{ext}")
+                if os.path.exists(f):
+                    tex[kind] = import_texture(f, home, f"T_{name}_{kind}", how)
+                    if kind in PBR_HOLD:
+                        tex[kind].set_editor_property("max_texture_size", PBR_HOLD[kind])
+                        eal.save_loaded_asset(tex[kind], only_if_is_dirty=False)
+            kind_, strength, cavity, amount = PBR_FINISH.get(name, (None, 0, 0, 0))
+            parent = home.rsplit("/", 1)[0]
+            for a in eal.list_assets(parent, recursive=False, include_folder=False):
+                mi = eal.load_asset(str(a).split(".")[0])
+                if not isinstance(mi, unreal.MaterialInstanceConstant):
+                    continue
+                shown = mel.get_material_instance_texture_parameter_value(mi, "BaseColorTex")
+                if not shown or shown.get_path_name() != tex["c"].get_path_name():
+                    continue
+                for param, k in (("NormalTex", "n"), ("MRTex", "m"), ("HeightTex", "h")):
+                    mel.set_material_instance_texture_parameter_value(mi, param, tex[k])
+                if "e" in tex:
+                    mel.set_material_instance_texture_parameter_value(mi, "EmissiveTex", tex["e"])
+                for param, v in (("Roughness", 1.0), ("Metallic", 1.0), ("AOAmount", 1.0), ("Parallax", min(0.05, float(i["depth"]) / float(i["tile"]))),
+                                 ("DetailScale", float(i["tile"]) / DETAIL_TILE), ("DetailStrength", strength if kind_ in det else 0.0),
+                                 ("DetailCavity", cavity), ("MacroAmount", amount), ("MacroScale", 0.173)):
+                    mel.set_material_instance_scalar_parameter_value(mi, param, float(v))
+                if kind_ in det:
+                    mel.set_material_instance_texture_parameter_value(mi, "DetailTex", det[kind_])
+                mel.set_material_instance_texture_parameter_value(mi, "MacroTex", macro)
+                mel.update_material_instance(mi)
+                eal.save_loaded_asset(mi, only_if_is_dirty=False)
+                done += 1
+                log(f"world maps: {name} -> {mi.get_name()} ({home})")
+    # Nexus Prime's ground and facades: their own materials, with the detail layer
+    ground_material(defaults)
+    facade_material(defaults)
+    city = "/Game/Environments/NexusCity"
+    n_city = 0
+    for a in eal.list_assets(city, recursive=False, include_folder=False):
+        mi = eal.load_asset(str(a).split(".")[0])
+        key = mi.get_name()[3:] if isinstance(mi, unreal.MaterialInstanceConstant) else ""
+        kind_ = CITY_DETAIL.get(key) or ("concrete" if key.startswith("ncf_") and key != "ncf_glass" else None)
+        if kind_ not in det:
+            continue
+        mel.set_material_instance_texture_parameter_value(mi, "DetailTex", det[kind_])
+        tiling = mel.get_material_instance_scalar_parameter_value(mi, "TilingM") if key.startswith("nc_") else 0.0
+        mel.set_material_instance_scalar_parameter_value(mi, "DetailScale", (tiling or 3.6) / DETAIL_TILE)
+        mel.set_material_instance_scalar_parameter_value(mi, "DetailStrength", 0.8)
+        if key in info and key.startswith("nc_"):               # (an engine set: its mask's red is ambient occlusion)
+            mel.set_material_instance_scalar_parameter_value(mi, "AOAmount", 1.0)
+        mel.update_material_instance(mi)
+        eal.save_loaded_asset(mi, only_if_is_dirty=False)
+        n_city += 1
+    log(f"world maps: {done} instances on the engine's sets, {n_city} city instances with a detail layer")
+
+
+def gun_textures():
+    """The guns' shared material sets again, straight from assets/textures (SO_IMPORT_ONLY=guntextures): the maps
+    changed (tools/blender/surface_maps.py, through the texture engine), no gun's mesh or material did. Every gun
+    reads the same T_wpn_* assets. A set's lossless .png is taken where there is one beside the .jpg; the height
+    map comes in too, and every gun instance on a wpn_ set is told to take its ambient occlusion from the mask."""
+    ensure_dir(WEAPON_TEX)
+    info = load_json(os.path.join(REPO_TEXTURES, "pbr_sets.json")) if os.path.exists(os.path.join(REPO_TEXTURES, "pbr_sets.json")) else {}
+    seen = {}
+    for f in sorted(os.listdir(REPO_TEXTURES)):
+        base, ext = os.path.splitext(f)
+        if ext.lower() not in (".jpg", ".png") or not base.startswith("wpn_") or base[-2:] not in ("_c", "_n", "_m", "_h"):
+            continue
+        if ext.lower() == ".jpg" and os.path.exists(os.path.join(REPO_TEXTURES, base + ".png")):
+            continue
+        seen[base] = import_texture(os.path.join(REPO_TEXTURES, f), WEAPON_TEX, "T_" + base, {"_c": "color", "_n": "normal", "_m": "mask", "_h": "mask"}[base[-2:]])
+    told = 0
+    for a in eal.list_assets("/Game/Weapons", recursive=True, include_folder=False):
+        path = str(a).split(".")[0]
+        if "/MI_" not in path:
+            continue
+        mi = eal.load_asset(path)
+        if not isinstance(mi, unreal.MaterialInstanceConstant):
+            continue
+        mr = mel.get_material_instance_texture_parameter_value(mi, "MRTex")
+        name = mr.get_name()[2:-2] if mr and mr.get_name().startswith("T_wpn_") else ""
+        if name not in info:
+            continue
+        mel.set_material_instance_scalar_parameter_value(mi, "AOAmount", 1.0)
+        if name + "_h" in seen:
+            mel.set_material_instance_texture_parameter_value(mi, "HeightTex", seen[name + "_h"])
+        mel.update_material_instance(mi)
+        eal.save_loaded_asset(mi, only_if_is_dirty=False)
+        told += 1
+    log(f"gun textures: {len(seen)} maps, {told} gun materials take their ambient occlusion from them")
+
+
+def gun_slots():
+    """Every gun mesh's material slots again, by what its file calls them (SO_IMPORT_ONLY=gunslots): a mesh imported
+    more than once kept the slot names of its first import and was filled by those (assign_materials), so a part
+    whose material had changed since wore the old one. Nothing is imported: each mesh takes the instances that lie
+    in its own folder."""
+    by_folder = {}
+    meshes = []
+    for a in eal.list_assets("/Game/Weapons", recursive=True, include_folder=False):
+        path = str(a).split(".")[0]
+        folder, name = path.rsplit("/", 1)
+        if name.startswith("MI_"):
+            by_folder.setdefault(folder, {})[name[3:]] = path
+        elif name.startswith("SM_"):
+            meshes.append((folder, path))
+    changed = 0
+    for folder, path in meshes:
+        mesh = eal.load_asset(path)
+        if not isinstance(mesh, unreal.StaticMesh):
+            continue
+        before = [(str(m.get_editor_property("material_slot_name")), m.get_editor_property("material_interface").get_name()
+                   if m.get_editor_property("material_interface") else "") for m in mesh.get_editor_property("static_materials")]
+        instances = {k: eal.load_asset(v) for k, v in by_folder.get(folder, {}).items()}
+        assign_materials(mesh, instances)
+        after = [(str(m.get_editor_property("material_slot_name")), m.get_editor_property("material_interface").get_name()
+                  if m.get_editor_property("material_interface") else "") for m in mesh.get_editor_property("static_materials")]
+        if before != after:
+            changed += 1
+            log(f"  {path}: {[b for b, c in zip(before, after) if b != c]} -> {[c for b, c in zip(before, after) if b != c]}")
+    log(f"gun slots: {len(meshes)} meshes looked at, {changed} had a slot on the wrong material")
+
+
+def player_textures():
+    """The players' cloth and plate maps again, nothing else (SO_IMPORT_ONLY=player_textures): the maps changed
+    (tools/blender/hero/fabric.py), no body or piece did. Skin, eye and hair maps are left as they are."""
+    n = 0
+    for sex in ("Male", "Female"):
+        for folder in (f"Player{sex}", f"Player{sex}Arms"):
+            src = os.path.join(SOURCE, "Characters", folder, "Textures")
+            dest = f"/Game/Characters/{folder}/Textures"
+            if not os.path.isdir(src):
+                continue
+            for f in sorted(os.listdir(src)):
+                base, ext = os.path.splitext(f)
+                if ext.lower() != ".png" or base[-2:] not in ("_c", "_n", "_m") or not eal.does_asset_exist(f"{dest}/T_{base}"):
+                    continue
+                import_texture(os.path.join(src, f), dest, "T_" + base, {"_c": "color", "_n": "normal", "_m": "mask"}[base[-2:]])
+                n += 1
+    log(f"player textures: {n} maps")
+
+
+def gun_numbers():
+    """Data/game_data.json archetypes -> the numbers of every gun's data asset that is already imported, nothing else
+    (SO_IMPORT_ONLY=gunnumbers): the weapons step re-imports every mesh and material to change one figure."""
+    game = load_json(GAME_DATA)
+    n = 0
+    for arch, a in game["archetypes"].items():
+        if not isinstance(a, dict) or "model" not in a:
+            continue
+        folder = weapon_dir(a["model"])
+        path = f"/Game/Weapons/{folder}/DA_{folder}"
+        if not eal.does_asset_exist(path):
+            continue
+        data = eal.load_asset(path)
+        if str(data.get_editor_property("archetype")) != arch:
+            continue                                          # (another archetype shares this model: its own asset)
+        kind = projectile_kind(a)
+        velocity = a.get("vel") or (60.0 if kind == unreal.SOProjectileKind.ROCKET else 500.0)
+        values = dict(damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]), magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]),
+                      reload_time=float(a["reload"]), range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
+                      muzzle_velocity=float(velocity), kick=float(a.get("kick", 1.0)), sprint_to_fire_time=float(a["sprintOut"]),
+                      sprint_carry=a.get("carry", "None"))
+        for key, value in values.items():
+            data.set_editor_property(key, value)
+        eal.save_loaded_asset(data, only_if_is_dirty=False)
+        n += 1
+    log(f"gun numbers: {n} data assets")
+
+
 def weapons(master, defaults):
     game = load_json(GAME_DATA)
+    some = [s.strip() for s in os.environ.get("SO_WEAPONS_ONLY", "").split(",") if s.strip()]
+    if some:                                                    # SO_WEAPONS_ONLY=rifle,auto: only those guns again
+        for arch in some:
+            weapon(master, arch, game["archetypes"][arch], defaults["clear"])
+        return
     sight_meshes = optics(master, defaults["clear"])
     datas = {}
     for arch, a in game["archetypes"].items():
@@ -1179,6 +1674,85 @@ float hole = 1.0 - smoothstep(0.12, 0.2, r);
 float burn = (1.0 - smoothstep(0.2, 0.95, r)) * 0.55;
 return saturate(hole + burn);
 """
+
+
+WARN_HLSL = """
+float2 d = (WorldPos.xy - Center.xy) / max(Center.w, 1.0);
+float r = length(d);
+float2 n = d / max(r, 0.0001);
+float fill = Shape.w;
+float sector = 1.0;
+float side = 0.0;
+if (Shape.z > -0.999)
+{
+    float ang = acos(clamp(dot(n, Shape.xy), -1.0, 1.0));
+    float lim = acos(clamp(Shape.z, -1.0, 1.0));
+    float w = 0.022 / max(r, 0.06);
+    sector = 1.0 - smoothstep(lim - w * 0.4, lim, ang);
+    side = smoothstep(lim - w * 2.2, lim - w * 1.2, ang) * sector * step(0.04, r);
+}
+float inside = 1.0 - smoothstep(0.985, 1.0, r);
+float rim = smoothstep(0.925, 0.955, r) * inside;
+float wash = 1.0 - smoothstep(fill - 0.03, fill, r);
+float front = smoothstep(fill - 0.085, fill - 0.015, r) * (1.0 - smoothstep(fill - 0.015, fill + 0.005, r));
+float hot = smoothstep(0.7, 1.0, fill);
+float lines = saturate(rim + side);
+float level = 1.0 - smoothstep(170.0, 250.0, abs(WorldPos.z - Center.z));
+float3 nrm = normalize(cross(ddx(WorldPos), ddy(WorldPos)));
+level *= smoothstep(0.45, 0.75, abs(nrm.z));
+float a = inside * sector * level * saturate(0.16 + wash * 0.2 + lines * 0.85 + front * 0.7) * Color.a;
+float glow = 0.35 + wash * (0.9 + hot * 1.6) + lines * 5.0 + front * (3.0 + hot * 3.0);
+return float4(Color.rgb * glow, a);
+"""
+
+
+def warn_material():
+    """/Game/FX/M_SOWarn: the warning an area attack draws on the ground (USOFxSubsystem::Warn): a ring or a sector
+    with a fill that runs from the middle to the rim. A decal, so it lies on rubble and steps as well as on a flat
+    floor (and only on what faces up: not up the side of a crate standing in it); the picture is worked out from the world position (Center = x, y, z, radius; Shape = cos / sin of the
+    heading, cos of the half angle, fill 0..1; Color with the fade in its alpha), so the decal's own turn is nothing."""
+    path = "/Game/FX/M_SOWarn"
+    ensure_dir("/Game/FX")
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_SOWarn", "/Game/FX", unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    shape = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -450, 0)
+    shape.set_editor_property("code", WARN_HLSL)
+    shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+    vectors = {"Center": (0.0, 0.0, 0.0, 300.0), "Shape": (1.0, 0.0, -1.0, 0.5), "Color": (0.62, 0.3, 1.0, 1.0)}
+    inputs = []
+    for n in ["WorldPos"] + list(vectors):
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    shape.set_editor_property("inputs", inputs)
+    wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -900, -150)
+    mel.connect_material_expressions(wp, "", shape, "WorldPos")
+    for k, (n, value) in enumerate(vectors.items()):
+        v = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -900, 60 + k * 200)
+        v.set_editor_property("parameter_name", n)
+        v.set_editor_property("default_value", unreal.LinearColor(*value))
+        mel.connect_material_expressions(v, "RGBA", shape, n)
+    rgb = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, -150, -60)
+    for ch, on in (("r", True), ("g", True), ("b", True), ("a", False)):
+        rgb.set_editor_property(ch, on)
+    alpha = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, -150, 120)
+    for ch, on in (("r", False), ("g", False), ("b", False), ("a", True)):
+        alpha.set_editor_property(ch, on)
+    mel.connect_material_expressions(shape, "", rgb, "")
+    mel.connect_material_expressions(shape, "", alpha, "")
+    dark = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -150, -240)
+    dark.set_editor_property("constant", unreal.LinearColor(0.01, 0.006, 0.02, 1.0))
+    mel.connect_material_property(dark, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.connect_material_property(alpha, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    log("M_SOWarn")
 
 
 def fx_master():
@@ -1520,12 +2094,27 @@ def ground_material(defaults):
     mel.connect_material_property(wc, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(wr, "", unreal.MaterialProperty.MP_ROUGHNESS)
     strength = _param(mat, unreal.MaterialExpressionScalarParameter, "NormalStrength", 1.0, -800, 650)
+    # a detail normal for close up (a ground tile is 4 to 12 m: millimetres a texel); off until an instance asks
+    duv = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -1000, 1100)
+    mel.connect_material_expressions(uv, "", duv, "A")
+    mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, "DetailScale", 16.0, -1250, 1180), "", duv, "B")
+    det = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "DetailTex", (defaults["normal"], S.SAMPLERTYPE_NORMAL), -800, 1100)
+    mel.connect_material_expressions(duv, "", det, "UVs")
+    nb = _custom(mat, SURFACE_HLSL["normal"], ("B", "D", "S"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -620, 100)
+    mel.connect_material_expressions(nrm, "RGB", nb, "B")
+    mel.connect_material_expressions(det, "RGB", nb, "D")
+    mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, "DetailStrength", 0.0, -800, 1330), "", nb, "S")
     n = _custom(mat, GROUND_N_HLSL, ("Nt", "N", "K"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -450, 100)
-    mel.connect_material_expressions(nrm, "RGB", n, "Nt")
+    mel.connect_material_expressions(nb, "", n, "Nt")
     mel.connect_material_expressions(vn, "", n, "N")
     mel.connect_material_expressions(strength, "", n, "K")
     mel.connect_material_property(n, "", unreal.MaterialProperty.MP_NORMAL)
     mel.connect_material_property(msk, "B", unreal.MaterialProperty.MP_METALLIC)
+    # ambient occlusion from the mask's red, for the sets the texture engine drew (city_maps.py); off until asked
+    ao = _custom(mat, SURFACE_HLSL["ao"], ("O", "K"), unreal.CustomMaterialOutputType.CMOT_FLOAT1, -450, 600)
+    mel.connect_material_expressions(msk, "R", ao, "O")
+    mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, "AOAmount", 0.0, -800, 1500), "", ao, "K")
+    mel.connect_material_property(ao, "", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     return mat
@@ -1570,7 +2159,16 @@ def facade_material(defaults):
     for n in ("W", "D", "H", "Seed", "Wear", "Boarded"):
         mel.connect_material_expressions(cd[n], "", c, n)
     mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
-    mel.connect_material_property(nrm, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    duv = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -1000, 900)
+    mel.connect_material_expressions(uv, "", duv, "A")
+    mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, "DetailScale", 7.0, -1250, 980), "", duv, "B")
+    det = _param(mat, unreal.MaterialExpressionTextureSampleParameter2D, "DetailTex", (defaults["normal"], S.SAMPLERTYPE_NORMAL), -850, 900)
+    mel.connect_material_expressions(duv, "", det, "UVs")
+    nb = _custom(mat, SURFACE_HLSL["normal"], ("B", "D", "S"), unreal.CustomMaterialOutputType.CMOT_FLOAT3, -500, 60)
+    mel.connect_material_expressions(nrm, "RGB", nb, "B")
+    mel.connect_material_expressions(det, "RGB", nb, "D")
+    mel.connect_material_expressions(_param(mat, unreal.MaterialExpressionScalarParameter, "DetailStrength", 0.0, -850, 1130), "", nb, "S")
+    mel.connect_material_property(nb, "", unreal.MaterialProperty.MP_NORMAL)
     mel.connect_material_property(msk, "G", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.connect_material_property(msk, "B", unreal.MaterialProperty.MP_METALLIC)
     lit = _custom(mat, FACADE_LIT_HLSL, ("U0", "U1", "W", "D", "H", "Seed", "Bay", "Floor", "M", "Lit", "Glow", "Night", "Boarded"),
@@ -1766,7 +2364,7 @@ def energy_materials():
     dest = SHARED + "/Operation"
     ensure_dir(dest)
     mat = _material(dest + "/M_SOEnergy", {"blend_mode": unreal.BlendMode.BLEND_ADDITIVE, "shading_model": unreal.MaterialShadingModel.MSM_UNLIT,
-                                           "two_sided": True, "used_with_nanite": False})
+                                           "two_sided": True, "used_with_nanite": True})   # its meshes are Nanite: the editor sets the flag by itself, a package cannot
     wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -800, 0)
     uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -800, 120)
     t = mel.create_material_expression(mat, unreal.MaterialExpressionTime, -800, 240)
@@ -2080,6 +2678,272 @@ def audio():
     log(f"{count} sounds imported")
 
 
+def difficulty():
+    """Data/game_data.json "difficulty" -> /Game/Data/DA_Difficulty (USODifficultyTable): the levels and the default
+    (SO_IMPORT_ONLY=difficulty). Every number is a scale on what the creatures already have."""
+    game = load_json(GAME_DATA)
+    d = game.get("difficulty")
+    if not d:
+        return
+    ensure_dir("/Game/Data")
+    path = "/Game/Data/DA_Difficulty"
+    if eal.does_asset_exist(path):
+        table = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SODifficultyTable)
+        table = tools.create_asset("DA_Difficulty", "/Game/Data", unreal.SODifficultyTable, factory)
+    levels = []
+    for lid, l in d["levels"].items():
+        lv = unreal.SODifficulty()
+        lv.set_editor_property("id", lid)
+        lv.set_editor_property("name", unreal.Text(l.get("name", lid)))
+        for key, prop in (("notice", "notice"), ("reaction", "reaction"), ("aimError", "aim_error"), ("burst", "burst"),
+                          ("burstPause", "burst_pause"), ("patience", "patience"), ("coverHold", "cover_hold"),
+                          ("flankShare", "flank_share"), ("abilityCooldown", "ability_cooldown"), ("health", "health"),
+                          ("damage", "damage")):
+            if key in l:
+                lv.set_editor_property(prop, float(l[key]))
+        levels.append(lv)
+    table.set_editor_property("levels", levels)
+    table.set_editor_property("default", d.get("default", "standard"))
+    eal.save_loaded_asset(table, only_if_is_dirty=False)
+    log(f"DA_Difficulty: {len(levels)} levels, default {d.get('default', 'standard')}")
+
+
+SPECIES_DATA = os.path.normpath(os.path.join(PROJECT, "Data", "species.json"))
+
+
+def species():
+    """Data/species.json -> /Game/Data/DA_Species (USOSpeciesTable): every species' numbers (SO_IMPORT_ONLY=species).
+    A species the file does not have yet is written into it from its class first, so a new creature's numbers
+    appear there to be tuned; after that the file is their source. Keys: see USOSpeciesTable."""
+    data = load_json(SPECIES_DATA) if os.path.exists(SPECIES_DATA) else {}
+    added = []
+    for sid in unreal.SOSpeciesLibrary.get_species():
+        sid = str(sid)
+        numbers = {str(k): round(float(v), 4) for k, v in unreal.SOSpeciesLibrary.get_class_numbers(sid).items()}
+        entry = data.setdefault(sid, {})
+        new = sorted(k for k in numbers if k not in entry)   # (a whole new species, or a number its class has gained)
+        for k in new:
+            entry[k] = numbers[k]
+        if new:
+            added.append(f"{sid} (+{len(new)})")
+        for k in sorted(entry):
+            if k not in numbers:
+                log(f"species.json: WARNING '{sid}' has no number '{k}' (misspelt, or gone from its class): it does nothing")
+    if added:
+        with open(SPECIES_DATA, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, indent=2, sort_keys=True)
+            f.write("\n")
+        log(f"species.json: wrote from the classes: {', '.join(added)}")
+    ensure_dir("/Game/Data")
+    path = "/Game/Data/DA_Species"
+    if eal.does_asset_exist(path):
+        table = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SOSpeciesTable)
+        table = tools.create_asset("DA_Species", "/Game/Data", unreal.SOSpeciesTable, factory)
+    entries = []
+    for sid in sorted(data):
+        entry = unreal.SOSpeciesNumbers()
+        entry.set_editor_property("species", sid)
+        entry.set_editor_property("numbers", {unreal.Name(k): float(v) for k, v in data[sid].items()})
+        entries.append(entry)
+    table.set_editor_property("species", entries)
+    eal.save_loaded_asset(table, only_if_is_dirty=False)
+    log(f"DA_Species: {len(entries)} species")
+
+
+def attributes():
+    """Data/game_data.json "attributes" -> /Game/Data/DA_Attributes (USOAttributeTable): what a point of each of the
+    six character attributes is worth, and how an armour piece turns into points (SO_IMPORT_ONLY=attributes)."""
+    game = load_json(GAME_DATA)
+    a = game.get("attributes")
+    if not a:
+        return
+    ensure_dir("/Game/Data")
+    path = "/Game/Data/DA_Attributes"
+    if eal.does_asset_exist(path):
+        table = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SOAttributeTable)
+        table = tools.create_asset("DA_Attributes", "/Game/Data", unreal.SOAttributeTable, factory)
+    which = {"plating": unreal.SOAttribute.PLATING, "mending": unreal.SOAttribute.MENDING, "stride": unreal.SOAttribute.STRIDE,
+             "ordnance": unreal.SOAttribute.ORDNANCE, "impact": unreal.SOAttribute.IMPACT, "focus": unreal.SOAttribute.FOCUS}
+    rules = []
+    for key, r in a["rules"].items():
+        rule = unreal.SOAttributeRule()
+        rule.set_editor_property("attribute", which[key])
+        rule.set_editor_property("name", unreal.Text(r.get("name", key)))
+        rule.set_editor_property("effect", unreal.Text(r.get("effect", "")))
+        rule.set_editor_property("at_max", float(r.get("atMax", 1.0)))
+        rule.set_editor_property("at_max2", float(r.get("atMax2", 1.0)))
+        rules.append(rule)
+    armour = a.get("armour", {})
+    table.set_editor_property("max", float(a.get("max", 100.0)))
+    table.set_editor_property("rules", rules)
+    table.set_editor_property("points_per_armour", float(armour.get("pointsPerArmour", 2.0)))
+    table.set_editor_property("rarity_scale", [float(x) for x in armour.get("rarityScale", [1.0])])
+    table.set_editor_property("per_power", float(armour.get("perPower", 0.005)))
+    table.set_editor_property("lean", float(armour.get("lean", 0.55)))
+    table.set_editor_property("slot_lean", {slot: which[v] for slot, v in armour.get("slotLean", {}).items()})
+    eal.save_loaded_asset(table, only_if_is_dirty=False)
+    log(f"DA_Attributes: {len(rules)} rules, max {a.get('max', 100)}")
+
+
+def progression():
+    """Data/game_data.json "progression" -> /Game/Data/DA_Progression (USOProgressionTable): the experience a level
+    takes, how far a level lets gear be upgraded, and what an upgrade costs (SO_IMPORT_ONLY=progression)."""
+    game = load_json(GAME_DATA)
+    p = game.get("progression")
+    if not p:
+        return
+    ensure_dir("/Game/Data")
+    path = "/Game/Data/DA_Progression"
+    if eal.does_asset_exist(path):
+        table = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SOProgressionTable)
+        table = tools.create_asset("DA_Progression", "/Game/Data", unreal.SOProgressionTable, factory)
+    xp, cap, up = p.get("xp", {}), p.get("powerCap", {}), p.get("upgrade", {})
+    table.set_editor_property("xp_base", int(xp.get("base", 600)))
+    table.set_editor_property("xp_per_level", int(xp.get("perLevel", 250)))
+    table.set_editor_property("max_level", int(xp.get("maxLevel", 40)))
+    table.set_editor_property("power_cap_base", int(cap.get("base", 20)))
+    table.set_editor_property("power_cap_per_level", int(cap.get("perLevel", 3)))
+    table.set_editor_property("upgrade_step", int(up.get("step", 2)))
+    table.set_editor_property("upgrade_credits", float(up.get("credits", 120)))
+    table.set_editor_property("upgrade_credits_per_power", float(up.get("creditsPerPower", 6)))
+    table.set_editor_property("upgrade_alloy", float(up.get("alloy", 3)))
+    table.set_editor_property("upgrade_alloy_per_power", float(up.get("alloyPerPower", 0.1)))
+    table.set_editor_property("upgrade_rarity_cost", [float(x) for x in up.get("rarityCost", [1.0])])
+    eal.save_loaded_asset(table, only_if_is_dirty=False)
+    log(f"DA_Progression: max level {xp.get('maxLevel', 40)}, upgrade step {up.get('step', 2)}")
+
+
+def bosses():
+    """Data/game_data.json "bosses" -> /Game/Data/DA_Boss_<Id> (USOBossData): a boss fight as data: its phases by
+    health, the kit of each, the shield between them, its weak points (SO_IMPORT_ONLY=bosses)."""
+    game = load_json(GAME_DATA)
+    ensure_dir("/Game/Data")
+    for boss_id, b in game.get("bosses", {}).items():
+        if not isinstance(b, dict):
+            continue  # (the note)
+        name = "DA_Boss_" + boss_id[0].upper() + boss_id[1:]
+        path = "/Game/Data/" + name
+        if eal.does_asset_exist(path):
+            table = eal.load_asset(path)
+        else:
+            factory = unreal.DataAssetFactory()
+            factory.set_editor_property("data_asset_class", unreal.SOBossData)
+            table = tools.create_asset(name, "/Game/Data", unreal.SOBossData, factory)
+        phases = []
+        for p in b.get("phases", []):
+            ph = unreal.SOBossPhase()
+            ph.set_editor_property("name", unreal.Text(p.get("name", "")))
+            ph.set_editor_property("from_health", float(p.get("from", 1.0)))
+            ph.set_editor_property("kit", p.get("kit", "None"))
+            ph.set_editor_property("cooldown", float(p.get("cooldown", 1.0)))
+            ph.set_editor_property("speed", float(p.get("speed", 1.0)))
+            ph.set_editor_property("damage_taken", float(p.get("damageTaken", 1.0)))
+            pause = p.get("movePause", [3.0, 4.5])
+            ph.set_editor_property("move_pause", unreal.Vector2D(float(pause[0]), float(pause[1])))
+            ph.set_editor_property("shield", bool(p.get("shield", False)))
+            ph.set_editor_property("conduits", int(p.get("conduits", 3)))
+            ph.set_editor_property("stagger", float(p.get("stagger", 5.0)))
+            phases.append(ph)
+        points = []
+        for w in b.get("weakPoints", []):
+            wp = unreal.SOWeakPoint()
+            wp.set_editor_property("name", w.get("name", "None"))
+            wp.set_editor_property("bone", w.get("bone", "None"))
+            off = w.get("offset", [0, 0, 0])
+            wp.set_editor_property("offset", unreal.Vector(float(off[0]), float(off[1]), float(off[2])))
+            wp.set_editor_property("radius", float(w.get("radius", 40.0)))
+            wp.set_editor_property("scale", float(w.get("scale", 1.5)))
+            wp.set_editor_property("front", bool(w.get("front", False)))
+            wp.set_editor_property("break_damage", float(w.get("breakDamage", 0.0)))
+            wp.set_editor_property("break_stagger", float(w.get("breakStagger", 3.0)))
+            points.append(wp)
+        table.set_editor_property("boss_id", boss_id)
+        table.set_editor_property("phases", phases)
+        table.set_editor_property("weak_points", points)
+        table.set_editor_property("stagger_damage", float(b.get("staggerDamage", 1.5)))
+        table.set_editor_property("shield_text", unreal.Text(b.get("shieldText", "")))
+        eal.save_loaded_asset(table, only_if_is_dirty=False)
+        log(f"{name}: {len(phases)} phases, {len(points)} weak points")
+
+
+ABILITY_CLASSES = {
+    "strike": "/Script/SOCombat.SOAbility_Strike",
+    "grenade": "/Script/SOCombat.SOAbility_Grenade",
+    "guard": "/Script/SOCombat.SOAbility_Guard",
+    "slam": "/Script/SOCombat.SOAbility_Slam",
+    "bolt": "/Script/SOAI.SOAbility_Bolt",
+    "pulse": "/Script/SOCombat.SOAbility_Pulse",
+    "rally": "/Script/SOAI.SOAbility_Rally",
+    "sweep": "/Script/SOCombat.SOAbility_Sweep",
+    "eruption": "/Script/SOCombat.SOAbility_Eruption",
+    "barrage": "/Script/SOAI.SOAbility_Barrage",
+    "snipe": "/Script/SOAI.SOAbility_Snipe",
+}
+
+
+def kits():
+    """Data/game_data.json "kits" -> /Game/Abilities/DA_Kit_<Id> (USOAbilitySet): a kit's abilities by slot and their
+    numbers (SO_IMPORT_ONLY=kits). The ability classes are C++ (ABILITY_CLASSES); every number comes from the json."""
+    game = load_json(GAME_DATA)
+    ensure_dir("/Game/Abilities")
+    slots = {"grenade": unreal.SOAbilitySlot.GRENADE, "melee": unreal.SOAbilitySlot.MELEE, "class": unreal.SOAbilitySlot.CLASS,
+             "movement": unreal.SOAbilitySlot.MOVEMENT, "ultimate": unreal.SOAbilitySlot.ULTIMATE}
+    for kit_id, k in game.get("kits", {}).items():
+        name = "DA_Kit_" + kit_id[0].upper() + kit_id[1:]
+        path = "/Game/Abilities/" + name
+        if eal.does_asset_exist(path):
+            kit = eal.load_asset(path)
+        else:
+            factory = unreal.DataAssetFactory()
+            factory.set_editor_property("data_asset_class", unreal.SOAbilitySet)
+            kit = tools.create_asset(name, "/Game/Abilities", unreal.SOAbilitySet, factory)
+        grants = []
+        for slot, a in k.get("abilities", {}).items():
+            cls = unreal.load_class(None, ABILITY_CLASSES[a["ability"]])
+            if cls is None:
+                raise RuntimeError(f"kit {kit_id}: ability class for '{a['ability']}' not found")
+            g = unreal.SOAbilityGrant()
+            g.set_editor_property("slot", slots[slot])
+            g.set_editor_property("ability", cls)
+            g.set_editor_property("display_name", unreal.Text(a.get("name", "")))
+            g.set_editor_property("cooldown", float(a.get("cooldown", 0.0)))
+            g.set_editor_property("charges", int(a.get("charges", 1)))
+            g.set_editor_property("ultimate_cost", float(a.get("ultimateCost", 0.0)))
+            g.set_editor_property("wind_up", float(a.get("windUp", 0.0)))
+            for key in ("damage", "range", "radius", "angle", "duration", "force", "magnitude"):
+                g.set_editor_property(key, float(a.get(key, 0.0)))
+            g.set_editor_property("sound", a.get("sound", "None"))
+            g.set_editor_property("wind_up_sound", a.get("windUpSound", "None"))
+            g.set_editor_property("clip", a.get("clip", "None"))
+            g.set_editor_property("clip_lead", float(a.get("clipLead", 0.0)))
+            g.set_editor_property("status", a.get("status", "None"))
+            grants.append(g)
+        kit.set_editor_property("kit_id", kit_id)
+        kit.set_editor_property("display_name", unreal.Text(k.get("name", kit_id)))
+        kit.set_editor_property("abilities", grants)
+        kit.set_editor_property("ultimate_per_second", float(k.get("ultimatePerSecond", 0.0)))
+        kit.set_editor_property("ultimate_per_damage", float(k.get("ultimatePerDamage", 0.0)))
+        kit.set_editor_property("ultimate_per_kill", float(k.get("ultimatePerKill", 0.0)))
+        passive = k.get("passive", {})
+        kit.set_editor_property("passive_name", unreal.Text(passive.get("name", "")))
+        kit.set_editor_property("close_range", float(passive.get("closeRange", 0.0)))
+        kit.set_editor_property("close_kill_shield", float(passive.get("closeKillShield", 0.0)))
+        eal.save_loaded_asset(kit, only_if_is_dirty=False)
+        log(f"{name}: {len(grants)} abilities")
+
+
 def main():
     if not os.path.isdir(SOURCE):
         raise RuntimeError(f"{SOURCE} is missing: run bash tools/blender/export_unreal.sh first")
@@ -2098,23 +2962,55 @@ def main():
     if "player_clips" in only:
         for sex in ("male", "female"):
             player_clips(sex)
+    if "player_pieces" in only:
+        player_pieces(os.environ.get("SO_PLAYER_PIECES", ""))
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
                   master, stalker_extra, flesh=True)
     if want("altered"):
+        one = os.environ.get("SO_ALTERED_ONLY", "")   # (e.g. Bearer: just that one, the others are left as they are)
         for k in ALTERED:
-            if os.path.isdir(os.path.join(SOURCE, "Characters", k)):
+            if os.path.isdir(os.path.join(SOURCE, "Characters", k)) and (not one or k in one.split(",")):
                 character(os.path.join(SOURCE, "Characters", k), f"/Game/Characters/{k}", f"SK_{k}", f"A_{k}_", master, stalker_extra, flesh=True)
     if want("weapons") or want("rifle"):
         weapons(master, defaults)
+    if "gunnumbers" in only:
+        gun_numbers()
+    if "gunslots" in only:
+        gun_slots()
+    if "guntextures" in only:
+        gun_textures()
+    if "worldmaps" in only:
+        world_maps(defaults)
+    if "player_textures" in only:
+        player_textures()
     if want("fx"):
         fx_master()
         decal_material()
+        warn_material()
         fx_meshes()
+    elif want("warn"):
+        warn_material()
     if want("audio"):
         audio()
     if want("ui"):
         ui_materials()
+    if want("kits"):
+        kits()
+    if want("difficulty"):
+        difficulty()
+    if want("species"):
+        species()
+    if want("bosses"):
+        bosses()
+    if want("attributes"):
+        attributes()
+    if want("progression"):
+        progression()
+    if "perks" in only:
+        perks_only()
+    if "bodies" in only:
+        bodies()
     if want("nexus"):
         nexus(master)
     if want("nexuscity"):

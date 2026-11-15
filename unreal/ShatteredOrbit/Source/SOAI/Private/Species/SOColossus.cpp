@@ -1,6 +1,9 @@
 #include "SOAltered.h"
+#include "SOCue.h"
 
 #include "SOAlteredCommon.h"
+#include "SOBoss.h"
+#include "SOCombatTypes.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
@@ -84,9 +87,9 @@ void ASOConduit::Tick(float DeltaSeconds)
 	// a thin beam from the crystal's top to the anchor
 	const FVector From = GetActorLocation() + FVector(0, 0, 150.0f);
 	FVector To = A->GetActorLocation() + FVector(0, 0, 150.0f);
-	if (const ASOColossus* Boss = Cast<ASOColossus>(A))
+	if (const ASOColossus* Giant = Cast<ASOColossus>(A))
 	{
-		To = Boss->GetActorLocation() + FVector(0, 0, Boss->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.45f);
+		To = Giant->GetActorLocation() + FVector(0, 0, Giant->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.45f);
 	}
 	const FVector D = To - From;
 	Tether->SetWorldLocation(From + D * 0.5f);
@@ -102,9 +105,9 @@ void ASOConduit::HandleDeath()
 	Tether->SetVisibility(false);
 	if (USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>())
 	{
-		Fx->Blast(GetActorLocation(), FVector::UpVector, 260.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
+		USOCue::Blast(this, GetActorLocation(), FVector::UpVector, 260.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
 	}
-	USOSoundLibrary::PlayAt(this, TEXT("rocket_explode"), GetActorLocation(), 1.0f, 0.1f, ESOSoundRange::Far);
+	USOCue::Sound(this, TEXT("rocket_explode"), GetActorLocation(), 1.0f, 0.1f, ESOSoundRange::Far);
 }
 
 ASOColossus::ASOColossus(const FObjectInitializer& ObjectInitializer)
@@ -112,7 +115,7 @@ ASOColossus::ASOColossus(const FObjectInitializer& ObjectInitializer)
 {
 	SpeciesId = TEXT("colossus");
 	SOAltered::Configure(this, TEXT("Colossus"), 50.0f, 128.0f);
-	DisplayName = NSLOCTEXT("SO", "Colossus", "The Hollow Colossus");
+	DisplayName = NSLOCTEXT("SO", "Colossus", "The Colossus");
 	VoicePrefix = TEXT("colossus");
 	WeaponArchetype = TEXT("hmg");
 	WeaponDamageScale = 0.22f;
@@ -129,16 +132,36 @@ ASOColossus::ASOColossus(const FObjectInitializer& ObjectInitializer)
 	SightRange = 9000.0f;
 	CorpseLifeSpan = 0.0f;
 	ActionClips = { TEXT("Slam"), TEXT("Sweep"), TEXT("Barrage"), TEXT("Shield") };
-	ShieldAt = { 0.66f, 0.33f };
-	ConduitClass = ASOConduit::StaticClass();
+	KitId = TEXT("colossus");  // what it fights with in its first phase
+	BossId = TEXT("colossus"); // how the fight goes: phases, the shield between them, the heart
+	FlinchScale = 0.2f;
 	GetCharacterMovement()->MaxAcceleration = 600.0f;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 90.0f, 0.0f);
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 }
 
+bool ASOColossus::IsShielded() const
+{
+	return Boss && Boss->IsShielded();
+}
+
 bool ASOColossus::IsStaggered() const
 {
-	return StaggerUntil > SOAltered::Now(this);
+	return HasStatus(SOTags::Status_Stagger);
+}
+
+const TArray<TWeakObjectPtr<ASOConduit>>& ASOColossus::GetConduits() const
+{
+	static const TArray<TWeakObjectPtr<ASOConduit>> None;
+	return Boss ? Boss->GetConduits() : None;
+}
+
+void ASOColossus::StartShield()
+{
+	if (Boss)
+	{
+		Boss->StartShield();
+	}
 }
 
 FVector ASOColossus::Heart() const
@@ -146,134 +169,44 @@ FVector ASOColossus::Heart() const
 	return GetActorLocation() + GetActorForwardVector() * 110.0f + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.45f);
 }
 
-float ASOColossus::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const
-{
-	return Super::ScaleIncomingDamage(IsStaggered() ? Amount * 1.5f : Amount, Source, bCrit);
-}
-
-void ASOColossus::StartShield()
-{
-	if (bShielded || !HasAuthority())
-	{
-		return;
-	}
-	bShielded = true;
-	Pending = EMove::None;
-	ShotsLeft = 0;
-	bApproach = false;
-	SetImmune(true, NSLOCTEXT("SO", "ColossusShield", "Shielded: destroy the conduits"));
-	PlayAction(TEXT("Shield"), 1.0f);
-	TArray<FVector> Sockets;
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		if (It->ActorHasTag(TEXT("SOConduit")))
-		{
-			Sockets.Add(It->GetActorLocation());
-		}
-	}
-	if (Sockets.Num() == 0)
-	{
-		const FVector C = GetActorLocation() - FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
-		for (int32 i = 0; i < 3; ++i)
-		{
-			const float A = UE_TWO_PI * i / 3.0f + 0.5f;
-			Sockets.Add(C + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * 2800.0f);
-		}
-	}
-	Conduits.Reset();
-	for (const FVector& S : Sockets)
-	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		if (ASOConduit* C = GetWorld()->SpawnActor<ASOConduit>(ConduitClass ? *ConduitClass : ASOConduit::StaticClass(), S + FVector(0, 0, 300.0f), FRotator::ZeroRotator, Params))
-		{
-			C->Anchor = this;
-			Conduits.Add(C);
-			if (USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>())
-			{
-				Fx->Blast(S, FVector::UpVector, 220.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
-			}
-		}
-	}
-	USOSoundLibrary::PlayAt(this, TEXT("reliquary_open"), GetActorLocation(), 1.0f, 0.0f, ESOSoundRange::Far);
-}
-
-void ASOColossus::Begin(EMove Move, FName Clip, float ImpactAfter, float Rate)
-{
-	const float T = SOAltered::Now(this);
-	Pending = Move;
-	ImpactAt = T + ImpactAfter / Rate;
-	MoveEnd = T + FMath::Max(GetActionLength(Clip), ImpactAfter + 0.4f) / Rate;
-	bApproach = false;
-	PlayAction(Clip, Rate);
-}
-
 bool ASOColossus::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target)
 {
 	const float T = SOAltered::Now(this);
 	Foe = Target;
 	AI->StopMovement();
-	if (bShielded)
+	if (IsShielded())
 	{
-		Conduits.RemoveAll([](const TWeakObjectPtr<ASOConduit>& C) { return !C.IsValid() || C->IsDead(); });
-		if (Conduits.Num() == 0)
-		{
-			// the shield breaks: it reels, open to everything
-			bShielded = false;
-			SetImmune(false);
-			StaggerUntil = T + StaggerTime;
-			NextMove = StaggerUntil + 1.0f;
-			USOSoundLibrary::PlayAt(this, TEXT("rocket_explode"), Heart(), 1.0f, 0.0f, ESOSoundRange::Far);
-			if (USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>())
-			{
-				Fx->Blast(Heart(), GetActorForwardVector(), 400.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
-			}
-		}
-		else if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()); Anim && !Anim->IsPlayingAction())
+		// behind the shield it kneels into the beam and waits for its conduits
+		bApproach = false;
+		SetWantsFire(false);
+		if (USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()); Anim && !Anim->IsPlayingAction())
 		{
 			PlayAction(TEXT("Shield"), 1.0f);
 		}
 		return true;
 	}
-	if (ShieldAt.IsValidIndex(NextShield) && GetHealth() <= GetMaxHealth() * ShieldAt[NextShield])
+	if (IsUsingAbility())
 	{
-		++NextShield;
-		StartShield();
-		return true;
-	}
-	if (IsStaggered() || Pending != EMove::None || ShotsLeft > 0)
-	{
+		// in a move: it stands and commits (Tick turns it, slowly: a blow can be stepped round)
 		bApproach = false;
 		SetWantsFire(false);
+		bInMove = true;
 		return true;
+	}
+	if (bInMove)
+	{
+		// the move is over: a breath before the next (the phase says how long)
+		bInMove = false;
+		NextMove = T + (Boss ? Boss->NextMovePause() : 3.5f);
 	}
 	const float Dist = DistanceTo(Target);
 	bApproach = Dist > 700.0f;
 	SetWantsFire(Dist > 450.0f && HasLineOfFire(Target)); // the heavy gun between its moves
-	if (T < NextMove)
+	if (T >= NextMove && UseKit(AI, Target, true))
 	{
-		return true;
-	}
-	const FVector To = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
-	const bool bFront = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.35f;
-	if (Dist < 450.0f)
-	{
+		bApproach = false;
 		SetWantsFire(false);
-		if (bFront && FMath::FRand() < 0.55f)
-		{
-			Begin(EMove::Sweep, TEXT("Sweep"), 0.78f);
-		}
-		else
-		{
-			Begin(EMove::Slam, TEXT("Slam"), 0.82f);
-		}
-		NextMove = T + FMath::FRandRange(3.0f, 4.2f);
-	}
-	else if (Dist < 4200.0f && AI->LineOfSightTo(Target) && FMath::FRand() < 0.45f)
-	{
-		SetWantsFire(false);
-		Begin(EMove::Barrage, TEXT("Barrage"), 0.55f);
-		NextMove = T + FMath::FRandRange(4.0f, 5.5f);
+		bInMove = true;
 	}
 	return true;
 }
@@ -285,89 +218,23 @@ void ASOColossus::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	const float T = SOAltered::Now(this);
 	ASOCombatCharacter* Target = Foe.Get();
-	if (Target && !bShielded && !IsStaggered())
+	if (!Target || IsShielded() || IsStaggered())
 	{
-		if (bApproach)
-		{
-			AddMovementInput((Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D(), 1.0f);
-		}
-		else if (Pending != EMove::None || ShotsLeft > 0)
-		{
-			SOAltered::FaceToward(this, Target->GetActorLocation(), DeltaSeconds, Pending == EMove::Barrage ? 2.5f : 1.2f);
-		}
+		return;
 	}
-	// a move lands
-	if (Pending != EMove::None && T >= ImpactAt)
+	if (IsUsingAbility())
 	{
-		const EMove Move = Pending;
-		Pending = EMove::None;
-		const FVector Feet = GetActorLocation() - FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 10.0f);
-		USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>();
-		if (Move == EMove::Slam)
-		{
-			const FVector Impact = Feet + GetActorForwardVector() * 160.0f;
-			DamageAround(Impact, 520.0f, 40.0f, 1100.0f);
-			if (Fx)
-			{
-				Fx->Blast(Impact, FVector::UpVector, 360.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
-				Fx->Blast(Impact, FVector::UpVector, 220.0f, USOFxSubsystem::EBlast::Fire, FLinearColor(0.5f, 0.45f, 0.5f), 0.08f);
-			}
-			USOSoundLibrary::PlayAt(this, TEXT("rocket_explode"), Impact, 1.0f, 0.05f, ESOSoundRange::Far);
-		}
-		else if (Move == EMove::Sweep)
-		{
-			// everything in a wide arc in front, thrown sideways
-			const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
-			for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
-			{
-				ASOCombatCharacter* Other = *It;
-				const FVector D = Other->GetActorLocation() - GetActorLocation();
-				if (Other == this || Other->IsDead() || !USOCombatStatics::AreHostile(this, Other) || D.Size2D() > 480.0f
-					|| FVector::DotProduct(Fwd, D.GetSafeNormal2D()) < 0.0f || D.Z > 500.0f)
-				{
-					continue;
-				}
-				USOCombatStatics::ApplyDamage(this, Other, 40.0f, false);
-				const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd);
-				Other->LaunchCharacter(-Side * 900.0f + Fwd * 300.0f + FVector(0, 0, 380.0f), true, true);
-			}
-			if (Fx)
-			{
-				Fx->Blast(GetActorLocation() + Fwd * 280.0f, Fwd, 200.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
-			}
-			USOSoundLibrary::PlayAt(this, TEXT("stalker_attack"), GetActorLocation(), 1.0f, 0.0f, ESOSoundRange::Far);
-		}
-		else if (Move == EMove::Barrage)
-		{
-			ShotsLeft = 10;
-			NextShot = T;
-		}
+		SOAltered::FaceToward(this, Target->GetActorLocation(), DeltaSeconds, 1.4f);
 	}
-	if (ShotsLeft > 0 && T >= NextShot)
+	else if (bApproach)
 	{
-		if (Target)
-		{
-			SOAltered::FireBolt(this, Heart(), Target, 14.0f, 2200.0f, 6.0f);
-		}
-		--ShotsLeft;
-		NextShot = T + 0.14f;
+		AddMovementInput((Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D(), 1.0f);
 	}
 }
 
 void ASOColossus::HandleDeath()
 {
-	Super::HandleDeath();
-	for (const TWeakObjectPtr<ASOConduit>& C : Conduits)
-	{
-		if (C.IsValid() && !C->IsDead())
-		{
-			C->Die(nullptr);
-		}
-	}
-	if (USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>())
-	{
-		Fx->Blast(Heart(), FVector::UpVector, 700.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
-	}
+	Super::HandleDeath(); // (its conduits go with it: USOBossComponent::OwnerDied)
+	USOCue::Blast(this, Heart(), FVector::UpVector, 700.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
 }

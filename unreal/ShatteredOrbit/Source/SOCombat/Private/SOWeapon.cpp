@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "SOCombatCharacter.h"
+#include "SOAbilitySystemComponent.h"
 #include "SOCombatStatics.h"
 #include "SOCombatTypes.h"
 #include "SOGunRigComponent.h"
@@ -122,11 +123,11 @@ bool ASOWeapon::IsScoped() const
 float ASOWeapon::GetShotInterval() const
 {
 	float Rpm = Stats.Rpm > 0.0f ? Stats.Rpm : (Data ? Data->RoundsPerMinute : 600.0f);
-	if (Instance.HasPerk(TEXT("frenzy")))
+	if (Stats.Perks.FireRateShieldDown != 1.0f)
 	{
 		if (const ASOCombatCharacter* Holder = GetHolder(); Holder && Holder->GetShield() <= 0.0f)
 		{
-			Rpm *= 1.2f; // Overclock: +20 % while the shield is down
+			Rpm *= Stats.Perks.FireRateShieldDown; // (Overclock: faster while the shield is down)
 		}
 	}
 	return 60.0f / FMath::Max(Rpm, 1.0f);
@@ -177,24 +178,43 @@ void ASOWeapon::OnRoundHit(const FSOProjectile& Round, const FHitResult& Hit, fl
 	}
 	UWorld* World = GetWorld();
 	const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Hit.GetActor());
-	// Shrapnel Rounds: precision hits burst for 35 % of the damage around the target
-	if (Instance.HasPerk(TEXT("explosive")) && USOProjectileSubsystem::IsPrecisionBone(Hit.BoneName))
+	// (Shrapnel Rounds: a precision hit bursts for a share of the damage round the target. A precision hit is the
+	// victim's call: the head, or a boss's weak point.)
+	const bool bPrecise = Victim ? Victim->PrecisionAt(Hit) > 0.0f : USOProjectileSubsystem::IsPrecisionBone(Hit.BoneName);
+	if (Stats.Perks.PrecisionSplash > 0.0f && bPrecise)
 	{
 		if (USOProjectileSubsystem* Rounds = World->GetSubsystem<USOProjectileSubsystem>())
 		{
-			Rounds->ApplySplash(Holder, Hit.ImpactPoint, 250.0f, Stats.Damage * 0.35f, Hit.GetActor());
+			Rounds->ApplySplash(Holder, Hit.ImpactPoint, Stats.Perks.PrecisionSplashRadius, Stats.Damage * Stats.Perks.PrecisionSplash, Hit.GetActor());
 		}
+	}
+	if (Stats.Perks.PrecisionBurn > 0.0f && bPrecise && Victim && !Victim->IsDead())
+	{
+		// (Tracer Core: a precision hit sets it burning)
+		USOCombatStatics::ApplyStatus(Holder, Hit.GetActor(), SOTags::Status_Burn, FMath::Max(Stats.Perks.PrecisionBurnTime, 0.5f), Stats.Damage * Stats.Perks.PrecisionBurn);
 	}
 	if (Victim && Victim->IsDead())
 	{
-		if (Instance.HasPerk(TEXT("rampage")))
+		LastKillTime = World->GetTimeSeconds();
+		if (Stats.Perks.KillMagazine > 0.0f)
 		{
-			RampageStacks = FMath::Min(3, GetRampageStacks() + 1);
-			RampageUntil = World->GetTimeSeconds() + 4.0f;
+			RefillFromReserve(Stats.Perks.KillMagazine); // (Spoils)
 		}
-		if (Instance.HasPerk(TEXT("vampire")))
+		if (Stats.Perks.bKillShield)
 		{
-			Holder->Heal(Holder->GetMaxHealth() * 0.25f); // Siphon
+			if (USOAbilitySystemComponent* Abilities = Holder->GetSOAbilitySystem())
+			{
+				Abilities->RefillShieldNow(); // (Second Skin)
+			}
+		}
+		if (Stats.Perks.KillDamage > 0.0f)
+		{
+			RampageStacks = FMath::Min(FMath::Max(Stats.Perks.KillDamageStacks, 1), GetRampageStacks() + 1); // (Rampage)
+			RampageUntil = World->GetTimeSeconds() + Stats.Perks.KillDamageTime;
+		}
+		if (Stats.Perks.KillHeal > 0.0f)
+		{
+			Holder->Heal(Holder->GetMaxHealth() * Stats.Perks.KillHeal); // (Siphon)
 		}
 	}
 }
@@ -320,13 +340,17 @@ void ASOWeapon::FireShot()
 	{
 		return;
 	}
+	const FSOPerkInfo& Perk = Stats.Perks;
+	// (Cold Bore: the first shot after a quiet spell hits harder and flies true)
+	const bool bOpening = Perk.OpeningDamage != 1.0f && World->GetTimeSeconds() - LastShotTime >= Perk.OpeningAfter;
 	--Mag;
 	++ShotsFired;
 	LastShotTime = World->GetTimeSeconds();
 
 	const FVector Origin = Holder->GetAimOrigin();
 	const FVector Aim = Holder->GetAimDirection().GetSafeNormal();
-	const float HalfAngle = FMath::DegreesToRadians(Stats.Spread * Holder->GetSpreadScale());
+	const float HalfAngle = FMath::DegreesToRadians(Stats.Spread * Holder->GetSpreadScale() * (Holder->IsAimingDownSights() ? 1.0f : Perk.HipSpread)
+		* (bOpening ? 0.1f : 1.0f));
 	const int32 Seed = SpreadStream.RandHelper(0x7fffffff);
 	TArray<FVector, TInlineAllocator<16>> Dirs;
 	{
@@ -334,7 +358,9 @@ void ASOWeapon::FireShot()
 		ShotDirections(Aim, Seed, HalfAngle, Tmp);
 		Dirs.Append(Tmp);
 	}
-	const float Rampage = (1.0f + 0.15f * GetRampageStacks()) * Holder->GetOutgoingDamageScale();
+	float Rampage = (1.0f + Stats.Perks.KillDamage * GetRampageStacks()) * Holder->GetOutgoingDamageScale();
+	Rampage *= bOpening ? Perk.OpeningDamage : 1.0f;
+	Rampage *= Perk.LowMagDamage != 1.0f && Mag < Stats.Mag * Perk.LowMagShare ? Perk.LowMagDamage : 1.0f; // (Last Third: the rounds at the bottom)
 	USOProjectileSubsystem* Rounds = World->GetSubsystem<USOProjectileSubsystem>();
 	for (const FVector& Dir : Dirs)
 	{
@@ -346,7 +372,15 @@ void ASOWeapon::FireShot()
 		Round.Damage = Stats.Damage * Rampage;
 		Round.CritMultiplier = Stats.Crit;
 		Round.FalloffStart = Stats.Range * 100.0f;
-		Round.MinDamageScale = Data->MinDamageScale;
+		Round.MinDamageScale = Perk.bNoFalloff ? 1.0f : Data->MinDamageScale;
+		Round.ShieldScale = Perk.ShieldDamage;
+		Round.HealthScale = Perk.HealthDamage;
+		if (Perk.HitSlow < 1.0f && Perk.HitSlowTime > 0.0f)
+		{
+			Round.Status = SOTags::Status_Slow;
+			Round.StatusDuration = Perk.HitSlowTime;
+			Round.StatusMagnitude = Perk.HitSlow;
+		}
 		Round.Instigator = Holder;
 		Round.Weapon = this;
 		Round.Splash = Data->Splash * 100.0f;
@@ -360,7 +394,7 @@ void ASOWeapon::FireShot()
 			Rounds->Fire(Round);
 		}
 	}
-	USOCombatStatics::ReportNoise(this, Origin, Holder, 4500.0f);
+	USOCombatStatics::ReportNoise(this, Origin, Holder, 4500.0f * Perk.Noise);
 	MulticastShotFired(Origin, Aim, Seed, HalfAngle);
 }
 
@@ -374,8 +408,37 @@ void ASOWeapon::ShotDirections(const FVector& Aim, int32 Seed, float HalfAngle, 
 	}
 }
 
+void ASOWeapon::PredictShot()
+{
+	UWorld* World = GetWorld();
+	ASOCombatCharacter* Holder = GetHolder();
+	if (!Holder || !Data || !World)
+	{
+		return;
+	}
+	const bool bOpening = Stats.Perks.OpeningDamage != 1.0f && World->GetTimeSeconds() - LastShotTime >= Stats.Perks.OpeningAfter;
+	--Mag; // (the server's count replaces it as it arrives)
+	++ShotsFired;
+	LastShotTime = World->GetTimeSeconds();
+	const FVector Origin = Holder->GetAimOrigin();
+	const FVector Aim = Holder->GetAimDirection().GetSafeNormal();
+	const float HalfAngle = FMath::DegreesToRadians(Stats.Spread * Holder->GetSpreadScale() * (Holder->IsAimingDownSights() ? 1.0f : Stats.Perks.HipSpread)
+		* (bOpening ? 0.1f : 1.0f));
+	Reload.NotifyShot(Data->Archetype);
+	Holder->OnWeaponFired(Data->Kick * Stats.Recoil);
+	PlayShotEffects(Origin, Aim, FMath::Rand(), HalfAngle); // its own draw of the spread: where the round went is the server's
+	OnWeaponEvent.Broadcast(TEXT("fired"));
+}
+
 void ASOWeapon::MulticastShotFired_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed, float HalfAngle)
 {
+	if (!HasAuthority())
+	{
+		if (const ASOCombatCharacter* Shooter = GetHolder(); Shooter && Shooter->IsLocallyControlled())
+		{
+			return; // shown when the trigger broke (PredictShot)
+		}
+	}
 	Reload.NotifyShot(Data ? Data->Archetype : NAME_None);
 	if (!HasAuthority())
 	{
@@ -414,8 +477,16 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		const bool bLight = Data->WeaponClass == ESOWeaponClass::Energy || Data->WeaponClass == ESOWeaponClass::Horror;
 		const FLinearColor FlashColor = bLight ? FMath::Lerp(Data->TracerColor, FLinearColor::White, 0.25f) : FLinearColor(1.0f, 0.74f, 0.4f);
 		const bool bThroughScope = bFirstPerson && IsScoped() && Holder->IsAimingDownSights();
-		Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.6f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f), bFirstPerson,
-			FlashColor, bThroughScope);
+		if (Data->Projectile == ESOProjectileKind::Bolt)
+		{
+			// (a light gun burns nothing: no flame, no smoke: a bloom of its own light)
+			Fx->PlasmaFlash(Muzzle, Aim, bFirstPerson ? 0.6f : 1.0f, bFirstPerson, FlashColor, bThroughScope);
+		}
+		else
+		{
+			Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.6f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f), bFirstPerson,
+				FlashColor, bThroughScope);
+		}
 	}
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOShotFx), true, Holder);
@@ -471,22 +542,35 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		case ESOProjectileKind::Bolt:
 		{
 			const bool bEnergy = Kind == ESOProjectileKind::Bolt;
-			if (Pellet < 4 || Pellet % 2 == 0) // shotguns: not every pellet needs its own tracer
+			if (bEnergy)
 			{
-				// (a round is a thin short line; a bolt of light is longer, thicker and has a head)
-				Fx->Tracer(Muzzle, End, Speed, Data->TracerColor, bEnergy ? 3.4f : 2.0f, bEnergy ? 520.0f : 340.0f, bEnergy);
-			}
-			if (bHit)
-			{
-				Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, Victim != nullptr, Victim ? Victim->BloodColor : FLinearColor::Black, Flight, bDecal);
-				if (bEnergy && !Victim)
+				// A light gun fires plasma: a bolt that is seen to fly, heavier guns throwing bigger ones, pellets small.
+				const float BoltSize = FMath::Clamp(FMath::Sqrt(Data->Damage / 20.0f), 0.6f, 2.4f);
+				Fx->PlasmaBolt(Muzzle, End, Speed, Data->TracerColor, BoltSize);
+				if (bHit)
 				{
-					Fx->Blast(Hit.ImpactPoint, Hit.ImpactNormal, 25.0f, USOFxSubsystem::EBlast::Zap, Data->TracerColor, Flight);
-					if (Pellet == 0)
+					const bool bBody = Victim != nullptr;
+					if (bBody && !Victim->TurnsBlow(Muzzle))
+					{
+						Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, true, Victim->BloodColor, Flight, false); // (it burns its way in: the body bleeds)
+					}
+					Fx->PlasmaImpact(Hit.ImpactPoint, Hit.ImpactNormal, Data->TracerColor, BoltSize, Flight, bBody && !Victim->TurnsBlow(Muzzle));
+					if (Pellet == 0 && !bBody)
 					{
 						USOSoundLibrary::PlayAt(this, TEXT("bolt_impact"), Hit.ImpactPoint, 0.7f, 0.08f, ESOSoundRange::Near);
 					}
 				}
+				break;
+			}
+			if (Pellet < 4 || Pellet % 2 == 0) // shotguns: not every pellet needs its own tracer
+			{
+				// (a round is a thin short line)
+				Fx->Tracer(Muzzle, End, Speed, Data->TracerColor, 2.0f, 340.0f, false);
+			}
+			if (bHit)
+			{
+				// (a blow that armour turns sparks and rings; one that goes in bleeds)
+				Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, Victim != nullptr && !Victim->TurnsBlow(Muzzle), Victim ? Victim->BloodColor : FLinearColor::Black, Flight, bDecal);
 			}
 			break;
 		}
@@ -614,7 +698,30 @@ void ASOWeapon::StartReload()
 		return;
 	}
 	bReloading = true;
-	MulticastReload(true, Mag <= 0, FMath::Min(Stats.Mag - Mag, Reserve));
+	// (Hot Hands: begun just after a kill, it is quicker)
+	const bool bAfterKill = Stats.Perks.KillReload != 1.0f && GetWorld() && GetWorld()->GetTimeSeconds() - LastKillTime <= Stats.Perks.KillReloadTime;
+	MulticastReload(true, Mag <= 0, FMath::Min(Stats.Mag - Mag, Reserve), bAfterKill ? Stats.Perks.KillReload : 1.0f);
+}
+
+int32 ASOWeapon::RefillFromReserve(float Share)
+{
+	if (!HasAuthority())
+	{
+		return 0;
+	}
+	const int32 Want = FMath::Max(1, FMath::RoundToInt(Stats.Mag * FMath::Clamp(Share, 0.0f, 1.0f)));
+	const int32 In = FMath::Clamp(FMath::Min(Want, Stats.Mag - Mag), 0, FMath::Max(Reserve, 0));
+	if (In <= 0)
+	{
+		return 0;
+	}
+	if (bReloading && Mag + In >= Stats.Mag)
+	{
+		CancelReload(); // (nothing left to load)
+	}
+	Mag += In;
+	Reserve -= In;
+	return In;
 }
 
 void ASOWeapon::ServerStartReload_Implementation()
@@ -634,7 +741,7 @@ void ASOWeapon::CancelReload()
 		return;
 	}
 	bReloading = false;
-	MulticastReload(false, false, 0);
+	MulticastReload(false, false, 0, 1.0f);
 }
 
 void ASOWeapon::ServerCancelReload_Implementation()
@@ -642,11 +749,11 @@ void ASOWeapon::ServerCancelReload_Implementation()
 	CancelReload();
 }
 
-void ASOWeapon::MulticastReload_Implementation(bool bStart, bool bEmpty, int32 Rounds)
+void ASOWeapon::MulticastReload_Implementation(bool bStart, bool bEmpty, int32 Rounds, float TimeScale)
 {
 	if (bStart)
 	{
-		BeginReloadLocal(bEmpty, Rounds);
+		BeginReloadLocal(bEmpty, Rounds, TimeScale);
 	}
 	else
 	{
@@ -655,7 +762,7 @@ void ASOWeapon::MulticastReload_Implementation(bool bStart, bool bEmpty, int32 R
 	}
 }
 
-void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds)
+void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds, float TimeScale)
 {
 	if (!Data)
 	{
@@ -669,7 +776,7 @@ void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds)
 	BurstLeft = 0;
 	int32 LoopFrom, LoopTo;
 	TArray<FSOReloadSegment> Segments = SOReload::BuildReload(Data->Archetype, Data->WeaponClass == ESOWeaponClass::Energy,
-		Data->WeaponClass == ESOWeaponClass::Horror, bEmpty, Stats.Reload, Rounds, LoopFrom, LoopTo);
+		Data->WeaponClass == ESOWeaponClass::Horror, bEmpty, Stats.Reload * FMath::Clamp(TimeScale, 0.2f, 2.0f), Rounds, LoopFrom, LoopTo);
 	Reload.Start(MoveTemp(Segments), LoopFrom, LoopTo);
 	OnWeaponEvent.Broadcast(TEXT("reload"));
 	PlayEventSound(TEXT("reload"));
@@ -694,7 +801,10 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	UWorld* World = GetWorld();
 	ASOCombatCharacter* Holder = GetHolder();
 
-	if (HasAuthority() && Data && World && Holder && !Holder->IsDead())
+	// The server fires. A joined player's own machine runs the same clock beside it, only to SHOW its shots at once
+	// (PredictShot): waiting for the server's echo put every flash and kick a ping late, or lost it with a packet.
+	const bool bPredict = !HasAuthority() && Holder && Holder->IsLocallyControlled();
+	if ((HasAuthority() || bPredict) && Data && World && Holder && !Holder->IsDead())
 	{
 		const float Now = World->GetTimeSeconds();
 		if (bShotQueued && Now > ShotQueuedUntil)
@@ -707,7 +817,14 @@ void ASOWeapon::Tick(float DeltaSeconds)
 			bShotQueued = false;
 			if (Mag > 0)
 			{
-				FireShot();
+				if (HasAuthority())
+				{
+					FireShot();
+				}
+				else
+				{
+					PredictShot();
+				}
 				if (Data->Burst > 1)
 				{
 					// bursts: N rounds at the burst rate, then the trigger rate between bursts (data.js pulse)

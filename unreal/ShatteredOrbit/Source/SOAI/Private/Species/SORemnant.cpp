@@ -26,7 +26,7 @@ ASORemnant::ASORemnant(const FObjectInitializer& ObjectInitializer)
 {
 	SpeciesId = TEXT("remnant");
 	SOAltered::Configure(this, TEXT("Remnant"), 34.0f, 90.0f);
-	DisplayName = NSLOCTEXT("SO", "Remnant", "Remnant");
+	DisplayName = NSLOCTEXT("SO", "Remnant", "Levy");
 	VoicePrefix = TEXT("remnant");
 	WeaponArchetype = TEXT("smg");
 	WeaponDamageScale = 0.3f;

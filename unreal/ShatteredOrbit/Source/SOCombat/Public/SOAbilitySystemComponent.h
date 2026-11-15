@@ -6,7 +6,7 @@
 
 DECLARE_MULTICAST_DELEGATE_FourParams(FSOOnDamaged, float /*Amount*/, AActor* /*Instigator*/, bool /*bCrit*/, bool /*bKilled*/);
 
-/** Ability system with damage notifications and shield regeneration (server side). */
+/** Ability system with damage notifications, shield regeneration (server side) and the character's state tags. */
 UCLASS(ClassGroup = (ShatteredOrbit), meta = (BlueprintSpawnableComponent))
 class SOCOMBAT_API USOAbilitySystemComponent : public UAbilitySystemComponent
 {
@@ -30,10 +30,22 @@ public:
 
 	float GetLastDamageTime() const { return LastDamageTime; }
 
-	/** Server: refills the shield after ShieldRegenDelay (called by the owning character every tick; the ASC itself
-	 *  only ticks while it has gameplay tasks). */
+	/** Server: the shield starts refilling now, without the wait since the last hit (a perk's kill). */
+	void RefillShieldNow() { LastDamageTime = -1000.0f; }
+
+	/** Server: under fire though not hit: the wait before the shield refills starts over. */
+	void NoteUnderFire();
+
+	/** Server: puts the refill effect (USOGameplayEffect_ShieldRegen) on once ShieldRegenDelay has passed since the
+	 *  last hit and takes it off when the shield is full or hit again (called by the owning character every tick;
+	 *  the ASC itself only ticks while it has gameplay tasks). */
 	void UpdateShieldRegen(float DeltaTime);
+
+	/** A State.* tag on or off (dead, aiming, sprinting, in a traversal). Set by the machine that knows: the server
+	 *  and the player's own machine each from their own simulation, so abilities can be checked on both. */
+	void SetState(const FGameplayTag& Tag, bool bOn);
 
 private:
 	float LastDamageTime = -1000.0f;
+	FActiveGameplayEffectHandle ShieldRegen;
 };

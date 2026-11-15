@@ -25,11 +25,38 @@ public:
 
 	/** Hip position of the gun origin (top of the pistol grip) in eye space; within reach of both arms. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FVector HipOffset = FVector(27.0f, 11.5f, -15.5f);          // (it sat 22 cm under the eye: too low, not enough of the gun showed)
+	FVector HipOffset = FVector(29.0f, 15.0f, -17.0f);          // (the owner, 2026-11-15: "the guns cover too much of the screen ... even
+	                                                             // when standing still the gun shouldn't be at the center of the screen,
+	                                                             // better to be on the right": out to the right and a little down from
+	                                                             // (27, 11.5, -15.5); at 22 cm under the eye too little of the gun showed)
 
 	/** Handguns (short barrel, support hand on the grip) are held out at arm's length, higher and nearer the middle. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FVector HandgunHipOffset = FVector(40.0f, 8.5f, -10.5f);
+	FVector HandgunHipOffset = FVector(40.0f, 12.5f, -12.0f);
+
+	/** First person, sprinting. The owner (2026-11-15): "on running we lower the gun for rifles ... and for smaller guns
+	 *  like smg/pistol/revolver/handcannon we take it up a bit more". A LONG gun drops to the low ready: down and in,
+	 *  muzzle down and across to the left, canted, still in the corner of the view. A HANDGUN comes up beside the
+	 *  face, muzzle to the sky; a SHORT long gun (the SMGs) comes up part of the way (its support arm would cross the
+	 *  view). Offsets in cm (X forward, Y right, Z up), turns in degrees (pitch nose up, yaw left, roll). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector SprintLowOffset = FVector(-2.0f, 1.5f, -3.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FRotator SprintLowTurn = FRotator(-7.0f, 16.0f, 26.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector SprintHighOffset = FVector(-12.0f, 1.0f, 7.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FRotator SprintHighTurn = FRotator(55.0f, 8.0f, 12.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector SprintShortOffset = FVector(-5.0f, 1.0f, 3.5f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FRotator SprintShortTurn = FRotator(26.0f, 12.0f, 16.0f);
+
 
 	/** First person, while reloading: the gun comes up (cm: X forward, Y right, Z up) ... */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")

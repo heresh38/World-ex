@@ -1,4 +1,5 @@
 #include "SOAltered.h"
+#include "SOCue.h"
 
 #include "SOAlteredCommon.h"
 
@@ -33,8 +34,8 @@ ASOVeilborn::ASOVeilborn(const FObjectInitializer& ObjectInitializer)
 	PreferredRange = 2200.0f;
 	BurstTime = FVector2D(0.2f, 0.5f);
 	BurstPause = FVector2D(1.0f, 2.0f);
-	CastCooldown = 9.0f;
-	DisplayName = NSLOCTEXT("SO", "Veilborn", "Veilborn");
+	KitId = TEXT("veilborn");
+	DisplayName = NSLOCTEXT("SO", "Veilborn", "Speaker");
 	StartMaxHealth = 130.0f;
 	WalkSpeed = 180.0f;
 	RunSpeed = 420.0f;
@@ -67,10 +68,10 @@ bool ASOVeilborn::Blink(const FVector& Away)
 		{
 			if (USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>())
 			{
-				Fx->Blast(Here, FVector::UpVector, 120.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
-				Fx->Blast(To, FVector::UpVector, 120.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor, 0.05f);
+				USOCue::Blast(this, Here, FVector::UpVector, 120.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
+				USOCue::Blast(this, To, FVector::UpVector, 120.0f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor, 0.05f);
 			}
-			USOSoundLibrary::PlayAt(this, TEXT("bolt_impact"), To, 1.0f, 0.1f, ESOSoundRange::Mid);
+			USOCue::Sound(this, TEXT("bolt_impact"), To, 1.0f, 0.1f, ESOSoundRange::Mid);
 			PlayAction(TEXT("Blink"), 1.4f);
 			++Blinks;
 			return true;
@@ -89,7 +90,8 @@ bool ASOVeilborn::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Targ
 		HealthAtBlink = Health;
 	}
 	// pressed or hurt badly: blink aside
-	if (T >= NextBlink && PendingCast < 0.0f && (Dist < MinRange || HealthAtBlink - Health > 45.0f))
+	const bool bCasting = IsAbilityActive(ESOAbilitySlot::Grenade);
+	if (T >= NextBlink && !bCasting && (Dist < MinRange || HealthAtBlink - Health > 45.0f))
 	{
 		NextBlink = T + BlinkCooldown;
 		HealthAtBlink = Health;
@@ -100,23 +102,27 @@ bool ASOVeilborn::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Targ
 			return true;
 		}
 	}
-	if (PendingCast >= 0.0f)
+	if (bCasting)
 	{
 		SetWantsFire(false);
 		return true; // mid-cast: stands
 	}
-	// now and then, with a clear line, a void bolt instead of the rifle
-	if (T >= NextCast && HasLineOfFire(Target) && Dist < PreferredRange * 1.5f)
+	// now and then, with a clear line, a void bolt instead of the rifle (the kit says what it is; this says when)
+	int32 Charges = 0, MaxCharges = 0;
+	float Left = 0.0f, Cooldown = 0.0f;
+	if (T >= NextCast && HasLineOfFire(Target) && Dist < PreferredRange * 1.5f
+		&& GetAbilityState(ESOAbilitySlot::Grenade, Charges, MaxCharges, Left, Cooldown) && Charges > 0)
 	{
-		AI->StopMovement();
-		SetWantsFire(false);
-		CastTarget = Target;
-		PlayAction(TEXT("Cast"), 1.0f);
-		PendingCast = T + 0.55f;
-		NextCast = T + CastCooldown * FMath::FRandRange(0.85f, 1.2f);
-		return true;
+		SetAbilityTarget(Target);
+		if (ActivateSlot(ESOAbilitySlot::Grenade))
+		{
+			AI->StopMovement();
+			SetWantsFire(false);
+			NextCast = T + FMath::FRandRange(0.0f, 0.35f) * Cooldown; // not on the dot every time
+			return true;
+		}
 	}
-	return false; // otherwise it fights like the rest: cover, peek, rifle
+	return Super::ThinkCombat(AI, Target); // whatever else its kit holds, by rule; otherwise it fights like the rest: cover, peek, rifle
 }
 
 void ASOVeilborn::Tick(float DeltaSeconds)
@@ -126,18 +132,27 @@ void ASOVeilborn::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	if (AActor* T = CastTarget.Get(); T && PendingCast >= 0.0f)
+	if (AActor* T = GetAbilityTarget(); T && IsAbilityActive(ESOAbilitySlot::Grenade))
 	{
-		SOAltered::FaceToward(this, T->GetActorLocation(), DeltaSeconds, 10.0f);
-	}
-	if (HasAuthority() && PendingCast >= 0.0f && SOAltered::Now(this) >= PendingCast)
-	{
-		PendingCast = -1.0f;
-		if (AActor* T = CastTarget.Get())
-		{
-			const FVector Hands = GetActorLocation() + GetActorForwardVector() * 70.0f + FVector(0, 0, 55.0f);
-			SOAltered::FireBolt(this, Hands, T, BoltDamage, 2400.0f, 1.5f);
-			++BoltsFired;
-		}
+		SOAltered::FaceToward(this, T->GetActorLocation(), DeltaSeconds, 10.0f); // it turns with its target through the cast
 	}
 }
+
+void ASOVeilborn::OnAbilityWindUp(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityWindUp(Slot);
+	if (Slot == ESOAbilitySlot::Grenade)
+	{
+		PlayAction(TEXT("Cast"), 1.0f); // the hands coming together is the warning
+	}
+}
+
+void ASOVeilborn::OnAbilityUsed(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityUsed(Slot);
+	if (HasAuthority() && Slot == ESOAbilitySlot::Grenade)
+	{
+		++BoltsFired;
+	}
+}
+

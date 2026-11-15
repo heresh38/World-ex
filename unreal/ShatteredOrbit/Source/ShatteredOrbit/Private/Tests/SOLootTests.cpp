@@ -3,7 +3,7 @@
 
 #include "SOTestWorld.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -21,6 +21,14 @@
 #include "SOSound.h"
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
+#include "SOCombatStatics.h"
+#include "SOCombatTypes.h"
+#include "SOEnemy.h"
+
+namespace SOTest
+{
+	ASOEnemy* SpawnStalker(FTestWorld& W, const FVector& Feet, const FRotator& Rotation);
+}
 
 namespace SOTest
 {
@@ -419,6 +427,270 @@ bool FSOLootRequiemSetTest::RunTest(const FString& Parameters)
 	{
 		TestNotNull(*FString::Printf(TEXT("foley %s"), Foley), USOSoundLibrary::Find(FName(Foley)));
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOPerksAreDataTest, "ShatteredOrbit.Loot.PerksAreData", SOTest::Flags)
+bool FSOPerksAreDataTest::RunTest(const FString& Parameters)
+{
+	// What a perk does is its numbers in Data/game_data.json: the tables carry them, the gun reads them, and a perk
+	// that only recombines them needs no code at all.
+	USOLootTables* Tables = const_cast<USOLootTables*>(USOLootLibrary::GetTables());
+	const TSharedPtr<FJsonObject> Data = SOTest::GameData();
+	if (!TestNotNull(TEXT("DA_LootTables"), Tables) || !TestTrue(TEXT("Data/game_data.json"), Data.IsValid()))
+	{
+		return false;
+	}
+	TestFalse(TEXT("a perk with nothing in it does nothing"), FSOPerkInfo().DoesAnything());
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Data->GetObjectField(TEXT("perks"))->Values)
+	{
+		const TSharedPtr<FJsonObject> J = Pair.Value->AsObject();
+		const FSOPerkInfo* P = Tables->FindPerk(FName(Pair.Key));
+		if (!TestNotNull(*FString::Printf(TEXT("perk %s"), *Pair.Key), P))
+		{
+			continue;
+		}
+		auto Same = [&](const TCHAR* Key, float Have, float IfAbsent)
+		{
+			double Want = IfAbsent;
+			J->TryGetNumberField(Key, Want);
+			TestEqual(*FString::Printf(TEXT("%s: %s is the data's (run the import with SO_IMPORT_ONLY=perks)"), *Pair.Key, Key), Have, static_cast<float>(Want), 0.0001f);
+		};
+		Same(TEXT("magazine"), P->Magazine, 1.0f);
+		Same(TEXT("reload"), P->Reload, 1.0f);
+		Same(TEXT("spread"), P->Spread, 1.0f);
+		Same(TEXT("recoil"), P->Recoil, 1.0f);
+		Same(TEXT("precision"), P->Precision, 1.0f);
+		Same(TEXT("fireRateShieldDown"), P->FireRateShieldDown, 1.0f);
+		Same(TEXT("killDamage"), P->KillDamage, 0.0f);
+		Same(TEXT("killHeal"), P->KillHeal, 0.0f);
+		Same(TEXT("precisionSplash"), P->PrecisionSplash, 0.0f);
+		const bool bDoesSomething = P->DoesAnything();
+		TestTrue(*FString::Printf(TEXT("%s does something"), *Pair.Key), bDoesSomething);
+	}
+
+	// a copy reads them
+	const USOWeaponData* Rifle = Tables->LoadArchetype(TEXT("rifle"));
+	if (!TestNotNull(TEXT("the rifle"), Rifle))
+	{
+		return false;
+	}
+	FRandomStream Rng(7);
+	FSOWeaponInstance W = USOLootLibrary::MakeWeapon(TEXT("rifle"), 0, 10, Rng);
+	W.Perks.Reset();
+	const FSOWeaponStats Plain = USOLootLibrary::ComputeStatsFor(Rifle, W);
+	W.Perks = { TEXT("overflow"), TEXT("quickdraw") };
+	const FSOWeaponStats Two = USOLootLibrary::ComputeStatsFor(Rifle, W);
+	const FSOPerkInfo* Overflow = Tables->FindPerk(TEXT("overflow"));
+	const FSOPerkInfo* Quick = Tables->FindPerk(TEXT("quickdraw"));
+	if (TestNotNull(TEXT("overflow"), Overflow) && TestNotNull(TEXT("quickdraw"), Quick))
+	{
+		TestEqual(TEXT("a bigger magazine by the data's number"), Two.Mag, FMath::RoundToInt(Plain.Mag * Overflow->Magazine));
+		TestEqual(TEXT("and a faster reload by the other's, together"), Two.Reload, Plain.Reload * Quick->Reload, 0.0001f);
+		TestEqual(TEXT("what neither touches is unchanged"), Two.Spread, Plain.Spread, 0.0001f);
+	}
+
+	// a perk that exists only as data: no code knows its name
+	FSOPerkInfo Made;
+	Made.Id = TEXT("test_data_only");
+	Made.Magazine = 2.0f;
+	Made.Spread = 0.5f;
+	Made.KillHeal = 0.1f;
+	Tables->Perks.Add(Made);
+	W.Perks = { TEXT("test_data_only"), TEXT("vampire") };
+	const FSOWeaponStats WithMade = USOLootLibrary::ComputeStatsFor(Rifle, W);
+	const FSOPerkInfo* Siphon = Tables->FindPerk(TEXT("vampire"));
+	TestEqual(TEXT("a perk made of data alone doubles the magazine"), WithMade.Mag, Plain.Mag * 2);
+	TestEqual(TEXT("and halves the spread"), WithMade.Spread, Plain.Spread * 0.5f, 0.0001f);
+	TestEqual(TEXT("and its share of health on a kill adds to another perk's"), WithMade.Perks.KillHeal, 0.1f + (Siphon ? Siphon->KillHeal : 0.0f), 0.0001f);
+	Tables->Perks.RemoveAll([](const FSOPerkInfo& P) { return P.Id == TEXT("test_data_only"); });
+	TestNull(TEXT("(taken out again)"), Tables->FindPerk(TEXT("test_data_only")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSONewPerksTest, "ShatteredOrbit.Loot.NewPerks", SOTest::Flags)
+bool FSONewPerksTest::RunTest(const FString& Parameters)
+{
+	// The perks added on 2026-11-13, through a real gun in a real world: each does what its line says, by its
+	// numbers in the data.
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!TestNotNull(TEXT("loot tables"), Tables))
+	{
+		return false;
+	}
+	auto PerkOf = [&](const TCHAR* Id) { const FSOPerkInfo* P = Tables->FindPerk(Id); TestNotNull(*FString::Printf(TEXT("perk %s (run the import with SO_IMPORT_ONLY=perks)"), Id), P); return P ? *P : FSOPerkInfo(); };
+
+	// a class's own perks stay with the class
+	FRandomStream Rng(31);
+	const TPair<const TCHAR*, const TCHAR*> Kinds[] = { { TEXT("rifle"), TEXT("kinetic") }, { TEXT("energy"), TEXT("energy") }, { TEXT("spitter"), TEXT("horror") } };
+	for (const TPair<const TCHAR*, const TCHAR*>& Kind : Kinds)
+	{
+		int32 Wrong = 0, Own = 0;
+		for (int32 i = 0; i < 300; ++i)
+		{
+			for (const FName& Id : USOLootLibrary::MakeWeapon(Kind.Key, 4, 10, Rng).Perks)
+			{
+				const FSOPerkInfo* P = Tables->FindPerk(Id);
+				Wrong += P && P->Classes.Num() > 0 && !P->Classes.Contains(FName(Kind.Value));
+				Own += P && P->Classes.Contains(FName(Kind.Value));
+			}
+		}
+		TestEqual(*FString::Printf(TEXT("a %s gun never rolls another class's perk"), Kind.Value), Wrong, 0);
+		TestTrue(*FString::Printf(TEXT("and a %s gun does roll its own class's (%d in 300 copies)"), Kind.Value, Own), Own > 0);
+	}
+
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-4000, -4000, -100), FVector(4000, 4000, 0));
+	W.AddBox(FVector(2500, -3000, 0), FVector(2600, 3000, 800)); // a wall every round ends on
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	W.Run(0.3f);
+	USOProjectileSubsystem* Rounds = W.World->GetSubsystem<USOProjectileSubsystem>();
+	TArray<float> Fired;        // the damage each round that landed carried
+	FGameplayTag LastStatus;
+	const FDelegateHandle Handle = Rounds->OnHit.AddLambda([&](const FSOProjectile& Round, const FHitResult&, float)
+	{
+		Fired.Add(Round.Damage);
+		LastStatus = Round.Status;
+	});
+	auto GunWith = [&](const TCHAR* Arch, std::initializer_list<FName> Perks)
+	{
+		FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(Arch, 0, 10, Rng);
+		Copy.Perks = Perks;
+		ASOWeapon* Gun = Player->EquipInstance(Copy);
+		W.Run(0.4f);
+		return Gun;
+	};
+	auto Shoot = [&](ASOWeapon* Gun)
+	{
+		Fired.Reset();
+		Gun->StartFire();
+		W.Step();
+		Gun->StopFire();
+		W.Run(0.4f);
+		return Fired.Num() > 0 ? Fired[0] : -1.0f;
+	};
+
+	// Cold Bore: the first shot after a quiet spell, then the next
+	{
+		const FSOPerkInfo P = PerkOf(TEXT("cold_bore"));
+		ASOWeapon* Gun = GunWith(TEXT("scout"), { TEXT("cold_bore") });
+		if (TestNotNull(TEXT("scout rifle"), Gun))
+		{
+			W.Run(P.OpeningAfter + 0.3f);
+			TestEqual(TEXT("cold bore: the first shot after the quiet hits harder"), Shoot(Gun), Gun->GetStats().Damage * P.OpeningDamage, 0.01f);
+			TestEqual(TEXT("and the one straight after is an ordinary shot"), Shoot(Gun), Gun->GetStats().Damage, 0.01f);
+		}
+	}
+	// Last Third: the rounds at the bottom of the magazine
+	{
+		const FSOPerkInfo P = PerkOf(TEXT("last_third"));
+		ASOWeapon* Gun = GunWith(TEXT("scout"), { TEXT("last_third") });
+		if (TestNotNull(TEXT("scout rifle"), Gun))
+		{
+			TestEqual(TEXT("last third: a full magazine's first round is ordinary"), Shoot(Gun), Gun->GetStats().Damage, 0.01f);
+			Gun->SetAmmo(2, 50);
+			TestEqual(TEXT("and a round from the bottom hits harder"), Shoot(Gun), Gun->GetStats().Damage * P.LowMagDamage, 0.01f);
+		}
+	}
+	// Clinging Acid: the round carries the slow
+	{
+		const FSOPerkInfo P = PerkOf(TEXT("clinging_acid"));
+		ASOWeapon* Gun = GunWith(TEXT("scout"), { TEXT("clinging_acid") });
+		if (TestNotNull(TEXT("gun"), Gun))
+		{
+			Shoot(Gun);
+			TestTrue(TEXT("clinging acid: what it hits is slowed"), LastStatus == SOTags::Status_Slow && P.HitSlow < 1.0f && P.HitSlowTime > 0.0f);
+		}
+	}
+	// Match Grade, Slide Feed: straight from the gun
+	{
+		ASOWeapon* Gun = GunWith(TEXT("scout"), { TEXT("slide_feed"), TEXT("match_grade") });
+		if (TestNotNull(TEXT("gun"), Gun))
+		{
+			TestTrue(TEXT("the gun knows it reloads on a slide and loses nothing with distance"), Gun->GetStats().Perks.bSlideReload && Gun->GetStats().Perks.bNoFalloff);
+			Gun->SetAmmo(1, 40);
+			const int32 In = Gun->RefillFromReserve();
+			TestEqual(TEXT("slide feed: the magazine is filled"), Gun->GetMag(), Gun->GetStats().Mag);
+			TestEqual(TEXT("from the reserve"), Gun->GetReserve(), 40 - In);
+			Gun->SetAmmo(1, 2);
+			Gun->RefillFromReserve();
+			TestEqual(TEXT("and only with what the reserve has"), Gun->GetMag(), 3);
+		}
+	}
+	// a kill: Spoils, Second Skin, Hot Hands
+	{
+		const FSOPerkInfo Spoils = PerkOf(TEXT("spoils")), Hot = PerkOf(TEXT("hot_hands"));
+		ASOWeapon* Gun = GunWith(TEXT("scout"), { TEXT("spoils"), TEXT("second_skin"), TEXT("hot_hands") });
+		ASOEnemy* Prey = SOTest::SpawnStalker(W, FVector(900, 0, 0), FRotator(0, 180, 0));
+		if (TestNotNull(TEXT("gun"), Gun) && TestNotNull(TEXT("stalker"), Prey))
+		{
+			if (AController* Brain = Prey->GetController())
+			{
+				Brain->UnPossess();
+				Brain->Destroy();
+			}
+			Prey->SetAlert(true);
+			W.Run(0.3f);
+			USOCombatStatics::ApplyDamage(Player, Prey, Prey->GetHealth() - 3.0f, false);
+			const float FullShield = Player->GetShield();
+			USOCombatStatics::ApplyDamage(nullptr, Player, 20.0f, false);
+			Gun->SetAmmo(2, 100);
+			Shoot(Gun);
+			if (TestTrue(TEXT("the shot killed it"), Prey->IsDead()))
+			{
+				TestEqual(TEXT("spoils: a fifth of the magazine came back from the reserve"), Gun->GetMag(), 1 + FMath::RoundToInt(Gun->GetStats().Mag * Spoils.KillMagazine));
+				W.Run(0.6f);
+				TestTrue(TEXT("second skin: the shield is refilling without the wait"), Player->GetShield() > FullShield - 20.0f + 1.0f);
+				Gun->SetAmmo(0, 100);
+				Gun->StartReload();
+				const float After = Gun->GetReloadDuration();
+				Gun->CancelReload();
+				W.Run(Hot.KillReloadTime + 1.0f);
+				Gun->SetAmmo(0, 100);
+				Gun->StartReload();
+				const float Later = Gun->GetReloadDuration();
+				AddInfo(FString::Printf(TEXT("reload: %.2f s just after a kill, %.2f s later"), After, Later));
+				TestTrue(TEXT("hot hands: a reload just after a kill is faster by the data's share"), Later > 0.2f && FMath::IsNearlyEqual(After, Later * Hot.KillReload, Later * 0.08f));
+			}
+		}
+	}
+	// Soft Nose / Overcharged Cell, at the round: harder on flesh or on shields
+	{
+		const FSOPerkInfo Soft = PerkOf(TEXT("soft_nose")), Cell = PerkOf(TEXT("overcharged_cell"));
+		TestTrue(TEXT("soft nose trades shields for flesh"), Soft.HealthDamage > 1.0f && Soft.ShieldDamage < 1.0f);
+		TestTrue(TEXT("an overcharged cell is harder on shields"), Cell.ShieldDamage > 1.0f);
+		ASOEnemy* Shooter = SOTest::SpawnStalker(W, FVector(-900, 600, 0), FRotator::ZeroRotator);
+		if (AController* Brain = Shooter ? Shooter->GetController() : nullptr)
+		{
+			Brain->UnPossess(); // (it only lends its name to the rounds: left its brain, it would come and claw the player)
+			Brain->Destroy();
+		}
+		W.Run(12.0f); // (the shield whole again)
+		if (TestNotNull(TEXT("shooter"), Shooter) && TestTrue(TEXT("the shield is up"), Player->GetShield() > 10.0f))
+		{
+			auto Hit = [&](float Shield, float Health)
+			{
+				FSOProjectile Round;
+				Round.Origin = Round.Position = Player->GetActorLocation() + FVector(-300, 0, 20);
+				Round.Velocity = FVector(60000, 0, 0);
+				Round.Gravity = 0.0f;
+				Round.Damage = 10.0f;
+				Round.CritMultiplier = 1.0f;
+				Round.ShieldScale = Shield;
+				Round.HealthScale = Health;
+				Round.Instigator = Shooter;
+				const float Before = Player->GetHealth() + Player->GetShield();
+				Rounds->Fire(Round);
+				W.Run(0.2f);
+				return Before - (Player->GetHealth() + Player->GetShield());
+			};
+			const float Worn = Player->GetAttributeScale(ESOAttribute::Plating);
+			TestEqual(TEXT("on a shield, the shield's scale"), Hit(Soft.ShieldDamage, Soft.HealthDamage), 10.0f * Soft.ShieldDamage * Worn, 0.05f);
+			USOCombatStatics::ApplyDamage(Shooter, Player, Player->GetShield() + 1.0f, false);
+			TestEqual(TEXT("with the shield down, the flesh's"), Hit(Soft.ShieldDamage, Soft.HealthDamage), 10.0f * Soft.HealthDamage * Worn, 0.05f);
+		}
+	}
+	Rounds->OnHit.Remove(Handle);
 	return true;
 }
 

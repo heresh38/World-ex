@@ -1,4 +1,5 @@
 #include "SOAltered.h"
+#include "SOCue.h"
 
 #include "SOAlteredCommon.h"
 
@@ -34,7 +35,7 @@ ASOBulwark::ASOBulwark(const FObjectInitializer& ObjectInitializer)
 	bUsesCover = false;
 	BurstTime = FVector2D(0.1f, 0.2f);
 	BurstPause = FVector2D(0.9f, 1.4f);
-	DisplayName = NSLOCTEXT("SO", "Bulwark", "Bulwark");
+	DisplayName = NSLOCTEXT("SO", "Bulwark", "Warden");
 	StartMaxHealth = 620.0f;
 	WalkSpeed = 150.0f;
 	RunSpeed = 300.0f;
@@ -44,6 +45,8 @@ ASOBulwark::ASOBulwark(const FObjectInitializer& ObjectInitializer)
 	MeleeWindup = 0.55f;
 	LungeSpeed = 260.0f;
 	ActionClips = { TEXT("Slam") };
+	KitId = TEXT("bulwark");
+	FlinchScale = 0.45f; // (a heavy body: a hit barely moves it)
 }
 
 float ASOBulwark::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const
@@ -52,44 +55,56 @@ float ASOBulwark::ScaleIncomingDamage(float Amount, const AActor* Source, bool b
 	{
 		return Amount;
 	}
-	const FVector To = (Source->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
-	const bool bFront = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.4f;
-	return Super::ScaleIncomingDamage(bFront ? Amount * (bCrit ? FrontDamageScale * 2.0f : FrontDamageScale) : Amount, Source, bCrit);
+	const bool bFront = PlateFaces(Source->GetActorLocation());
+	const float Through = bFront ? Amount * FMath::Min(bCrit ? FrontDamageScale * 2.0f : FrontDamageScale, 1.0f) : Amount;
+	AbsorbedByArmour = Amount - Through;                          // (what the plate took: it still shakes the arm behind it)
+	return Super::ScaleIncomingDamage(Through, Source, bCrit);
+}
+
+bool ASOBulwark::PlateFaces(const FVector& From) const
+{
+	// A gunner's plate comes down to steady the gun: while it holds the trigger it is open from the front too. And a
+	// Bulwark that reels has dropped its guard: that is what hammering the plate is for.
+	const FVector To = (From - GetActorLocation()).GetSafeNormal2D();
+	return FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.4f && !(bSuppressor && IsFiring()) && !HasStatus(SOTags::Status_Stagger);
 }
 
 bool ASOBulwark::ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target)
 {
-	const float T = SOAltered::Now(this);
-	if (PendingSlam >= 0.0f)
+	if (IsAbilityActive(ESOAbilitySlot::Class))
 	{
-		return true;
+		return true; // winding up: it stands and commits
 	}
-	if (T >= NextSlam && !IsAttacking() && DistanceTo(Target) < SlamRadius * 0.75f)
+	const FSOAbilityGrant* Slam = GetAbilitySet() ? GetAbilitySet()->Find(ESOAbilitySlot::Class) : nullptr;
+	int32 Charges = 0, MaxCharges = 0;
+	float Left = 0.0f, Cooldown = 0.0f;
+	if (Slam && !IsAttacking() && DistanceTo(Target) < Slam->Range * 0.75f
+		&& GetAbilityState(ESOAbilitySlot::Class, Charges, MaxCharges, Left, Cooldown) && Charges > 0)
 	{
-		AI->StopMovement();
 		SOAltered::FaceToward(this, Target->GetActorLocation(), 0.0f, 0.0f);
-		PlayAction(TEXT("Slam"), 1.0f);
-		PendingSlam = T + 0.72f;
-		NextSlam = T + SlamCooldown;
-		return true;
+		if (ActivateSlot(ESOAbilitySlot::Class))
+		{
+			AI->StopMovement();
+			return true;
+		}
 	}
 	return false;
 }
 
-void ASOBulwark::Tick(float DeltaSeconds)
+void ASOBulwark::OnAbilityWindUp(ESOAbilitySlot Slot)
 {
-	Super::Tick(DeltaSeconds);
-	if (!HasAuthority() || IsDead() || PendingSlam < 0.0f || SOAltered::Now(this) < PendingSlam)
+	Super::OnAbilityWindUp(Slot);
+	if (Slot == ESOAbilitySlot::Class)
 	{
-		return;
+		PlayAction(TEXT("Slam"), 1.0f); // the arm going up is the warning
 	}
-	PendingSlam = -1.0f;
-	const FVector Impact = GetActorLocation() + GetActorForwardVector() * 140.0f - FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 10.0f);
-	DamageAround(Impact, SlamRadius, SlamDamage, 900.0f);
-	if (USOFxSubsystem* Fx = GetWorld()->GetSubsystem<USOFxSubsystem>())
+}
+
+void ASOBulwark::OnAbilityUsed(ESOAbilitySlot Slot)
+{
+	Super::OnAbilityUsed(Slot);
+	if (HasAuthority() && Slot == ESOAbilitySlot::Class)
 	{
-		Fx->Blast(Impact, FVector::UpVector, SlamRadius * 0.6f, USOFxSubsystem::EBlast::Zap, SOAltered::VoidColor);
+		USOCombatStatics::ReportNoise(this, GetActorLocation(), this, 2500.0f); // every creature in earshot knows
 	}
-	USOSoundLibrary::PlayAt(this, TEXT("rocket_explode"), Impact, 0.9f, 0.1f, ESOSoundRange::Far);
-	USOCombatStatics::ReportNoise(this, Impact, this, 2500.0f);
 }

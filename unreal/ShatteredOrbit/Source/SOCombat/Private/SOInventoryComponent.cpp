@@ -1,4 +1,5 @@
 #include "SOInventoryComponent.h"
+#include "SOProgression.h"
 
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -7,6 +8,7 @@
 #include "Net/UnrealNetwork.h"
 #include "SOCombatTypes.h"
 #include "SOLootLibrary.h"
+#include "SOProfileStore.h"
 #include "SOWeaponData.h"
 
 const TCHAR* USOInventoryComponent::SaveSlot = TEXT("ShatteredOrbit");
@@ -23,9 +25,11 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(USOInventoryComponent, Items);
 	DOREPLIFETIME(USOInventoryComponent, Equipped);
 	DOREPLIFETIME(USOInventoryComponent, ActiveSlot);
-	DOREPLIFETIME(USOInventoryComponent, Credits);
-	DOREPLIFETIME(USOInventoryComponent, Alloy);
-	DOREPLIFETIME(USOInventoryComponent, Xp);
+	// what a player has in the bank is theirs to see (the copies themselves go to everyone: the guns on a player's
+	// back are drawn from them on every machine)
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, Credits, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, Alloy, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, Xp, COND_OwnerOnly);
 	DOREPLIFETIME(USOInventoryComponent, Level);
 	DOREPLIFETIME(USOInventoryComponent, Armor);
 	DOREPLIFETIME(USOInventoryComponent, Body);
@@ -76,6 +80,26 @@ int32 USOInventoryComponent::GetArmorRating() const
 		{
 			const FSOWardrobeItem* Item = Wardrobe ? Wardrobe->Find(A->Slot, A->Item) : nullptr;
 			Sum += Item ? Item->Armor : 0;
+		}
+	}
+	return Sum;
+}
+
+FSOAttributePoints USOInventoryComponent::GetArmorPoints(const FSOArmorInstance& Piece) const
+{
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	const FSOWardrobeItem* Item = Wardrobe ? Wardrobe->Find(Piece.Slot, Piece.Item) : nullptr;
+	return Item ? USOAttributeTable::Get().ArmourPoints(Piece.Slot, Item->Armor, Piece.Rarity, Piece.Power, Piece.GetSeed()) : FSOAttributePoints();
+}
+
+FSOAttributePoints USOInventoryComponent::GetAttributePoints() const
+{
+	FSOAttributePoints Sum;
+	for (const FName Slot : USOWardrobeData::ArmourSlots())
+	{
+		if (const FSOArmorInstance* A = GetEquippedArmor(Slot))
+		{
+			Sum += GetArmorPoints(*A);
 		}
 	}
 	return Sum;
@@ -132,9 +156,30 @@ bool USOInventoryComponent::SetBody(FName NewBody)
 	{
 		return false;
 	}
+	// What is worn is each body's own: remember what this one has on, then put on what the other had on when it
+	// was left (a helmet put on one body is not on the other).
+	bool bDressedBefore = false;
+	for (FSOArmorInstance& A : Armor)
+	{
+		if (A.bEquipped)
+		{
+			A.WornBy.AddUnique(Body);
+		}
+		else
+		{
+			A.WornBy.Remove(Body);
+		}
+		bDressedBefore |= A.WornBy.Contains(NewBody);
+	}
 	Body = NewBody;
 	GrantWardrobe(false);
-	Dress(); // keep wearing what the new body has; every required slot that is empty gets its default
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	for (FSOArmorInstance& A : Armor)
+	{
+		// (the first time in this body: its wardrobe's own defaults)
+		A.bEquipped = bDressedBefore ? A.WornBy.Contains(Body) : (Wardrobe && Wardrobe->Find(A.Slot, A.Item) && Wardrobe->Defaults.FindRef(A.Slot) == A.Item);
+	}
+	Dress(); // (a piece this body cannot wear comes off; every required slot that is empty gets its default)
 	Changed(false, true);
 	return true;
 }
@@ -250,7 +295,7 @@ FSOArmorInstance USOInventoryComponent::AddArmorPiece(FName Slot, FName Item, in
 		Feed(FString::Printf(TEXT("%s  ·  %s  ·  %d"), Info ? *Info->Label.ToString() : *Item.ToString(), *USOWardrobeData::SlotLabel(Slot).ToString(), Out.Power),
 			Tables ? Tables->GetRarity(Out.Rarity).Color : FLinearColor::White);
 	}
-	Changed(false, false);
+	Changed(false, Out.bEquipped); // (a worn piece raised: what it gives the body changed)
 	return Out;
 }
 
@@ -439,7 +484,7 @@ FSOWeaponInstance USOInventoryComponent::PrepareForEquip(const FString& Uid)
 		return FSOWeaponInstance();
 	}
 	// Autoloader: stowed weapons reload themselves
-	if (W->HasPerk(TEXT("autoload")) && W->Mag >= 0 && W->Reserve > 0)
+	if (W->Mag >= 0 && W->Reserve > 0 && USOLootLibrary::PerkEffects(*W).bAutoload)
 	{
 		const double* Since = StowedAt.Find(Uid);
 		const FSOWeaponStats S = USOLootLibrary::ComputeStats(*W);
@@ -485,14 +530,74 @@ void USOInventoryComponent::AddAlloy(int32 Amount)
 
 void USOInventoryComponent::AddXp(int32 Amount)
 {
-	Xp += Amount;
-	while (Xp >= 600 + Level * 250) // state.js xpForLevel
+	const USOProgressionTable& Rules = USOProgressionTable::Get();
+	Xp += FMath::Max(Amount, 0);
+	while (Level < Rules.MaxLevel && Xp >= Rules.XpForLevel(Level))
 	{
-		Xp -= 600 + Level * 250;
+		Xp -= Rules.XpForLevel(Level);
 		++Level;
-		Feed(FString::Printf(TEXT("Level %d"), Level), FLinearColor(1.0f, 0.85f, 0.3f));
+		Feed(FString::Printf(TEXT("Level %d  ·  gear can now be raised to %d"), Level, Rules.PowerCap(Level)), FLinearColor(1.0f, 0.85f, 0.3f));
+	}
+	if (Level >= Rules.MaxLevel)
+	{
+		Xp = FMath::Min(Xp, Rules.XpForLevel(Level)); // (nothing more to earn: it does not pile up unseen)
 	}
 	Changed(false);
+}
+
+bool USOInventoryComponent::Spend(int32 InCredits, int32 InAlloy)
+{
+	if (InCredits < 0 || InAlloy < 0 || Credits < InCredits || Alloy < InAlloy)
+	{
+		return false;
+	}
+	Credits -= InCredits;
+	Alloy -= InAlloy;
+	return true;
+}
+
+int32 USOInventoryComponent::GetPowerCap() const
+{
+	return USOProgressionTable::Get().PowerCap(Level);
+}
+
+bool USOInventoryComponent::GetUpgrade(const FString& Uid, int32& OutPower, int32& OutCredits, int32& OutAlloy) const
+{
+	const USOProgressionTable& Rules = USOProgressionTable::Get();
+	const FSOWeaponInstance* W = Find(Uid);
+	const FSOArmorInstance* A = W ? nullptr : FindArmor(Uid);
+	if (!W && !A)
+	{
+		return false;
+	}
+	const int32 Power = W ? W->Power : A->Power;
+	OutPower = FMath::Min(Power + FMath::Max(Rules.UpgradeStep, 1), GetPowerCap());
+	Rules.UpgradeCost(W ? W->Rarity : A->Rarity, Power, OutCredits, OutAlloy);
+	return OutPower > Power;
+}
+
+bool USOInventoryComponent::Upgrade(const FString& Uid)
+{
+	int32 NewPower = 0, CostCredits = 0, CostAlloy = 0;
+	if (!GetUpgrade(Uid, NewPower, CostCredits, CostAlloy) || !Spend(CostCredits, CostAlloy))
+	{
+		return false;
+	}
+	if (FSOWeaponInstance* W = const_cast<FSOWeaponInstance*>(Find(Uid)))
+	{
+		W->Power = NewPower;
+		Feed(FString::Printf(TEXT("%s raised to %d"), *W->Name, NewPower), FLinearColor(0.95f, 0.72f, 0.32f));
+		Changed(IsEquipped(Uid) && Equipped.IsValidIndex(ActiveSlot) && Equipped[ActiveSlot] == Uid); // (the gun in hand takes its new numbers)
+	}
+	else if (FSOArmorInstance* A = Armor.FindByPredicate([&Uid](const FSOArmorInstance& X) { return X.Uid == Uid; }))
+	{
+		A->Power = NewPower;
+		const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+		const FSOWardrobeItem* Info = Wardrobe ? Wardrobe->Find(A->Slot, A->Item) : nullptr;
+		Feed(FString::Printf(TEXT("%s raised to %d"), Info ? *Info->Label.ToString() : *A->Item.ToString(), NewPower), FLinearColor(0.95f, 0.72f, 0.32f));
+		Changed(false, A->bEquipped); // (worn: what it gives the body grew)
+	}
+	return true;
 }
 
 void USOInventoryComponent::NewProfile()
@@ -545,7 +650,10 @@ void USOInventoryComponent::NewProfile()
 
 bool USOInventoryComponent::LoadProfile()
 {
-	USOSaveGame* Save = Cast<USOSaveGame>(UGameplayStatics::LoadGameFromSlot(SaveSlot, 0));
+	// the profile store is the one place that knows where a profile is kept
+	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr;
+	USOSaveGame* Save = Store ? Store->Load(SaveSlot) : nullptr;
 	if (!Save || Save->Items.Num() == 0)
 	{
 		return false;
@@ -605,10 +713,13 @@ void USOInventoryComponent::SaveProfile() const
 	Save->Alloy = Alloy;
 	Save->Xp = Xp;
 	Save->Level = Level;
-	Save->Version = 2;
 	Save->Armor = Armor;
 	Save->Body = Body;
-	UGameplayStatics::SaveGameToSlot(Save, SaveSlot, 0);
+	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	if (USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr)
+	{
+		Store->Commit(SaveSlot, Save); // off the game thread, never a half-written file
+	}
 }
 
 void USOInventoryComponent::Changed(bool bLoadout, bool bOutfit)
@@ -656,10 +767,17 @@ void USOInventoryComponent::OnRep_Inventory()
 
 // --- RPCs ------------------------------------------------------------------------------------------
 
-void USOInventoryComponent::ServerEquip_Implementation(const FString& Uid) { Equip(Uid); }
+// What a joined player asks for. Each call only ever touches that player's own copies (a uid is looked up in their
+// own list, a slot is checked against its range), so the one thing to refuse here is a string no uid could be.
+namespace
+{
+	bool PlausibleUid(const FString& Uid) { return Uid.Len() > 0 && Uid.Len() <= 64; }
+}
+void USOInventoryComponent::ServerEquip_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { Equip(Uid); } }
 void USOInventoryComponent::ServerSelectSlot_Implementation(int32 Slot) { SelectSlot(Slot); }
-void USOInventoryComponent::ServerSetKeep_Implementation(const FString& Uid, bool bKeep) { SetKeep(Uid, bKeep); }
-void USOInventoryComponent::ServerDismantle_Implementation(const FString& Uid) { Dismantle(Uid); }
-void USOInventoryComponent::ServerMarkSeen_Implementation(const FString& Uid) { MarkSeen(Uid); }
-void USOInventoryComponent::ServerEquipArmor_Implementation(const FString& Uid) { EquipArmor(Uid); }
+void USOInventoryComponent::ServerSetKeep_Implementation(const FString& Uid, bool bKeep) { if (PlausibleUid(Uid)) { SetKeep(Uid, bKeep); } }
+void USOInventoryComponent::ServerDismantle_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { Dismantle(Uid); } }
+void USOInventoryComponent::ServerMarkSeen_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { MarkSeen(Uid); } }
+void USOInventoryComponent::ServerEquipArmor_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { EquipArmor(Uid); } }
+void USOInventoryComponent::ServerUpgrade_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { Upgrade(Uid); } }
 void USOInventoryComponent::ServerSetBody_Implementation(FName NewBody) { SetBody(NewBody); }

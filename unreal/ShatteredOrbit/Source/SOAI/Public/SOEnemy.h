@@ -8,6 +8,7 @@ class USkeletalMesh;
 class UAnimSequenceBase;
 class ASOEnemyAIController;
 class ASOCombatCharacter;
+class USOBossComponent;
 struct FSOSpeciesVariant;
 
 /**
@@ -32,6 +33,15 @@ public:
 	 *  another name). The only way a level changes a creature; its behaviour stays the species'. Before it begins play
 	 *  (USOSpeciesLibrary::Spawn does that) it also arms itself with the variant's gun. */
 	virtual void ApplyVariant(const FSOSpeciesVariant& Variant);
+
+	/** Its numbers as data (the keys of USOSpeciesTable, see there): every number, switch and range this class lets
+	 *  an editor set, as this creature has them now. */
+	void GetNumbers(TMap<FName, float>& Out) const;
+
+	/** Sets the numbers it is given (keys it does not have are left alone: the table's entry also holds its brain's).
+	 *  Returns how many it set. Called with the species table's entry as the creature is made; before a variant,
+	 *  which scales them. */
+	int32 ApplyNumbers(const TMap<FName, float>& Numbers);
 	FName GetVariantId() const { return VariantId; }
 
 	/** What its special moves multiply their damage by (a variant's). */
@@ -60,6 +70,15 @@ public:
 	/** Reach from capsule edge to capsule edge (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float MeleeRange = 220.0f;
+
+	/** A pack animal: with others of its kind round, it does not go in alone. It holds off PackRing cm from its
+	 *  target, moving round it, until enough of the pack is in place, then they all go together
+	 *  (ASOEnemyAIController::PackGoes). Only matters to a creature that fights with its claws. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	bool bPack = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float PackRing = 1000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
 	float MeleeCooldown = 0.9f;
@@ -91,7 +110,39 @@ public:
 
 	/** Server, every think (~10 Hz) with a target: a creature's own fighting (ranged, specials). Return true when it
 	 *  handled this think (the controller then does nothing more); false falls back to chase and melee. */
-	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target) { return false; }
+	virtual bool ThinkCombat(ASOEnemyAIController* AI, ASOCombatCharacter* Target);
+
+	/** Its kit by rule: while one of its abilities winds up it stands and turns with its target; otherwise it asks
+	 *  each ability of its kit whether it would use it now (USOGameplayAbility::WantsUse) and uses the first that
+	 *  says yes. True when it is busy with one (the brain leaves it to it this time). A species with moves of its
+	 *  own decides those itself and ends on this (Super::ThinkCombat). */
+	bool UseKit(ASOEnemyAIController* AI, ASOCombatCharacter* Target, bool bAnyOrder = false);
+
+	/** One of its kit's abilities is winding up or still going. */
+	bool IsUsingAbility() const;
+
+	/** It carries its gun low at the right hip, in both hands, not at the shoulder (a gun too heavy to shoulder). */
+	virtual bool HoldsAtHip() const { return false; }
+
+	/** Where what it casts leaves it (a bolt, a volley). */
+	virtual FVector GetCastOrigin() const;
+
+	// --- A boss --------------------------------------------------------------------------------------------------
+
+	/** The boss table it fights by (Data/game_data.json "bosses"; none: it is not a boss). A species names its own;
+	 *  a level makes a boss of any species with a variant ("boss"). See SOBoss.h. */
+	UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_BossId, BlueprintReadOnly, Category = "SO|Enemy")
+	FName BossId;
+
+	/** Which phase of its table it is in, and which of its weak points are broken (a bit each): what every machine
+	 *  needs to know of the fight (the rest is the server's, in USOBossComponent). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SO|Enemy")
+	uint8 BossPhase = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SO|Enemy")
+	uint8 BossWeakBroken = 0;
+
+	USOBossComponent* GetBoss() const { return Boss; }
 
 	/** Server: plays a named action clip on every machine. */
 	void PlayAction(FName Clip, float Rate = 1.0f);
@@ -111,6 +162,23 @@ public:
 	float DistanceTo(const AActor* Other) const;
 
 	void SetRunning(bool bRun);
+
+	//~ ASOCombatCharacter
+	virtual void OnMoveScaleChanged() override;
+	virtual float GetAbilityDamageScale() const override { return DamageScale; }
+	virtual float GetAbilityCooldownScale(ESOAbilitySlot Slot) const override;
+	virtual FLinearColor GetAbilityColor() const override { return AbilityColor; }
+	virtual float PrecisionAt(const FHitResult& Hit) const override;
+
+	/** The kit this species' own moves come from (Data/game_data.json "kits"; none = it has no abilities). Given on
+	 *  the server as it enters play, like a player's. The species decides WHEN to use a slot (ThinkCombat), the kit
+	 *  says what it does. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	FName KitId;
+
+	/** The Altered's violet. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	FLinearColor AbilityColor = FLinearColor(0.62f, 0.3f, 1.0f);
 
 	// --- Arms: the Altered carry our guns ---------------------------------------------------------------------
 
@@ -140,6 +208,86 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
 	FVector2D BurstPause = FVector2D(0.6f, 1.5f);
+
+	/** A suppressor: when its target goes to ground it does not go looking; it keeps the place under fire, in long
+	 *  bursts, so the others can move (and they push sooner while it does). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	bool bSuppressor = false;
+
+	/** Looks for cover above its target (a marksman). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	bool bLikesHigh = false;
+
+	/** The share of the true lead it gives a moving target once it has tracked it (0 = it shoots at where the target
+	 *  is; 1 = it would never miss a target that keeps its course). What it fires takes time to arrive. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Arms")
+	float ShotLead = 0.7f;
+
+	/** How far a hit knocks its trunk about (1 = a man-sized creature; a heavy one barely moves). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float FlinchScale = 1.0f;
+
+	/** Server: fire at this place, seen or not, until the time given (suppression). */
+	void SuppressAt(const FVector& Point, float Until);
+	bool IsSuppressing() const;
+	bool IsFiring() const { return bFiring; }
+
+	// --- Every hit counts ------------------------------------------------------------------------------------
+	// A hit does three things beside the damage. It CHECKS the creature: for a moment it moves at HitSlow of its
+	// speed (a leg hit longer), so fire slows what runs at it. It UNSTEADIES it: the damage, as a share of its full
+	// health, fills a meter that drains by PoiseRecover a second; a precise hit counts PrecisionPoise times. When the
+	// meter passes Poise the creature STUMBLES: staggered for StumbleTime (the blow it was winding up is lost, an
+	// ability's wind-up broken, its fire stops) and knocked a step back; then it cannot be stumbled again for
+	// StumbleRest. And it SHOWS: the body is knocked where it was hit (USOLocomotionAnimInstance::HitKick).
+	// A creature that resists stagger (a boss: it reels by its own table) is not checked or stumbled.
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float Poise = 0.22f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float PoiseRecover = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float PrecisionPoise = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float StumbleTime = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float StumbleRest = 2.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float HitSlow = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float HitSlowTime = 0.35f;
+
+	/** What its armour turned still shakes it: this share of the damage a plate took off counts toward the stumble
+	 *  (so fire on a plate is never wasted: enough of it and the creature reels, and reeling its plate is down). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float ArmourPoise = 0.6f;
+
+	/** The damage its armour took off the blow now being applied (set by the species in ScaleIncomingDamage). */
+	mutable float AbsorbedByArmour = 0.0f;
+
+	/** Below this share of its health it is wounded and moves at WoundedSpeed of its speed. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float WoundedAt = 0.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy|Hit")
+	float WoundedSpeed = 0.85f;
+
+	/** Server: it was hit by Source for that much (where: USOCombatStatics::LastHit). See above. */
+	void HitReact(AActor* Source, float Amount, bool bPrecision);
+	virtual void OnTookDamage(AActor* Source, float Amount, bool bCrit) override;
+
+	/** How unsteady it is right now (0 to Poise), how often it has stumbled, and whether a hit is checking it. */
+	float GetPoiseDamage() const { return PoiseDamage; }
+	int32 GetStumbles() const { return Stumbles; }
+	bool IsChecked() const;
+
+	/** Server: a quick leap out of the line of fire (a clawed creature that is being shot at as it comes). */
+	void Juke(const FVector& Direction);
 
 	/** Shots on an enemy that has not noticed anyone hit this much harder (a clean ambush). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
@@ -188,14 +336,41 @@ public:
 
 	//~ AActor
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void PostActorCreated() override;
 	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 protected:
 	virtual void HandleDeath() override;
 
+	/** A creature's ability moves its body: the grant's clip, drawn out so the blow in it lands as the wind-up ends. */
+	virtual void OnAbilityWindUp(ESOAbilitySlot Slot) override;
+	virtual void OnAbilityUsed(ESOAbilitySlot Slot) override;
+
+	UFUNCTION()
+	void OnRep_BossId();
+
+	/** Makes the component that runs its boss table (every machine; nothing if it names none). */
+	void MakeBoss();
+
+	UPROPERTY(Transient)
+	TObjectPtr<USOBossComponent> Boss;
+
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastAttack();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastFlinch(FVector_NetQuantizeNormal Toward, float Strength, ESOHitRegion Region);
+
+	float PoiseDamage = 0.0f;
+	float NextStumble = 0.0f;
+	float HitSlowUntil = -1.0f;
+	bool bHitSlowed = false;
+	int32 Stumbles = 0;
+
+	FVector SuppressPoint = FVector::ZeroVector;
+	float SuppressUntil = -1.0f;
+	float LastFlinch = -100.0f;
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastAction(FName Clip, float Rate);
@@ -223,6 +398,7 @@ protected:
 	float AimSince = 0.0f;
 	float Raise = 0.0f;
 	bool bWantsFire = false;
+	bool bRunning = false;
 	bool bFiring = false;
 	float TriggerUntil = 0.0f;
 	float NextBurst = 0.0f;

@@ -1,4 +1,6 @@
 #include "SOOperation.h"
+#include "SODifficulty.h"
+#include "SOData.h"
 #include "SOAreaSubsystem.h"
 
 #include "Components/CapsuleComponent.h"
@@ -86,6 +88,12 @@ bool ASOOperation::LoadPlan(const FString& JsonText)
 	}
 	OperationName = FText::FromString(Root->GetStringField(TEXT("name")));
 	Tagline = FText::FromString(Root->GetStringField(TEXT("tagline")));
+	Root->TryGetNumberField(TEXT("perExtraPlayer"), PerExtraPlayer);
+	FString Level;
+	if (Root->TryGetStringField(TEXT("difficulty"), Level))
+	{
+		Difficulty = FName(*Level);
+	}
 	Briefing.Reset();
 	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
 	if (Root->TryGetArrayField(TEXT("briefing"), Lines))
@@ -229,8 +237,15 @@ void ASOOperation::BeginPlay()
 	if (!PlanFile.IsEmpty())
 	{
 		FString Text;
-		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectDir() / PlanFile)) && LoadPlan(Text))
+		if (SOData::LoadText(PlanFile, Text) && LoadPlan(Text))
 		{
+			if (HasAuthority() && !Difficulty.IsNone())
+			{
+				if (USODifficultySubsystem* Levels = GetWorld()->GetSubsystem<USODifficultySubsystem>())
+				{
+					Levels->SetLevel(Difficulty); // before the first creature is put down
+				}
+			}
 			UE_LOG(LogShatteredOrbit, Log, TEXT("Operation %s: %d stages, %d spawn groups, %d rewards"), *OperationName.ToString(), Stages.Num(), Groups.Num(), Rewards.Num());
 		}
 		else
@@ -411,7 +426,10 @@ void ASOOperation::StartStage(int32 Index)
 	{
 		for (const FSOWave& W : S.Waves)
 		{
-			GoalCount += W.Size();
+			for (const FSOWaveEntry& E : W.Entries)
+			{
+				GoalCount += ScaledCount(E.Count, NumPlayers(), PerExtraPlayer);
+			}
 		}
 	}
 	if (S.Kind == ESOStageKind::Boss && !S.Boss.IsNone())
@@ -526,7 +544,8 @@ void ASOOperation::SpawnWave(const FSOWave& Wave)
 {
 	for (const FSOWaveEntry& E : Wave.Entries)
 	{
-		for (int32 i = 0; i < E.Count; ++i)
+		const int32 Count = ScaledCount(E.Count, NumPlayers(), PerExtraPlayer); // more of them for more players
+		for (int32 i = 0; i < Count; ++i)
 		{
 			if (ASOEnemy* Enemy = SpawnEnemy(E.Enemy, E.Group, i, Wave.bHunt))
 			{
@@ -534,6 +553,21 @@ void ASOOperation::SpawnWave(const FSOWave& Wave)
 			}
 		}
 	}
+}
+
+int32 ASOOperation::ScaledCount(int32 Count, int32 Players, float PerExtra)
+{
+	if (Players <= 1 || Count <= 1)
+	{
+		return Count; // written for one player; and the one that stands alone stays alone
+	}
+	return Count + FMath::RoundToInt(Count * FMath::Max(PerExtra, 0.0f) * (Players - 1));
+}
+
+int32 ASOOperation::NumPlayers() const
+{
+	const UWorld* World = GetWorld();
+	return World ? FMath::Max(1, World->GetNumPlayerControllers()) : 1;
 }
 
 bool ASOOperation::ResolveEnemy(FName Name, FName& OutSpecies, FSOSpeciesVariant& OutVariant) const
@@ -572,6 +606,42 @@ TArray<FName> ASOOperation::GetEnemyNames() const
 	return Out;
 }
 
+bool ASOOperation::SeenByAPlayer(const FVector& Point) const
+{
+	const UWorld* World = GetWorld();
+	const FVector Chest = Point + FVector(0.0f, 0.0f, 90.0f);
+	for (const ASOCombatCharacter* Player : Players())
+	{
+		const FVector Eye = Player->GetPawnViewLocation();
+		const FVector To = Chest - Eye;
+		const float Distance = To.Size();
+		if (Distance > 7000.0f || FVector::DotProduct(Player->GetBaseAimRotation().Vector(), To / FMath::Max(Distance, 1.0f)) < 0.45f)
+		{
+			continue; // too far to matter, or behind / well to the side of where they are looking
+		}
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOSpawnSeen), false, Player);
+		if (!World->LineTraceTestByObjectType(Eye, Chest, FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+int32 ASOOperation::SpawnPointFor(const FSOSpawnGroup& Group, int32 Index, bool bHunt) const
+{
+	const int32 Num = Group.Points.Num();
+	for (int32 Try = 0; bHunt && Try < Num; ++Try)
+	{
+		const int32 Candidate = (Index + Try) % Num;
+		if (!SeenByAPlayer(Group.Points[Candidate]))
+		{
+			return Candidate;
+		}
+	}
+	return Num > 0 ? Index % Num : 0;
+}
+
 ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index, bool bHunt)
 {
 	FName Species;
@@ -587,7 +657,11 @@ ASOEnemy* ASOOperation::SpawnEnemy(FName Kind, FName Group, int32 Index, bool bH
 	const float Radius = USOSpeciesLibrary::Find(Species)->GetDefaultObject<ASOEnemy>()->GetCapsuleComponent()->GetScaledCapsuleRadius();
 	const int32 Lap = Index / G->Points.Num();
 	const float A = Index * 2.39996f;
-	const FVector Feet = G->Points[Index % G->Points.Num()] + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * (Radius * 2.6f * Lap);
+	// A reinforcement does not appear in front of someone's eyes: of the group's points it takes the next one no
+	// player has in view (if they can see them all, the one it would have had). A garrison is put down before
+	// anyone is near and stands where the plan says.
+	const int32 At = SpawnPointFor(*G, Index, bHunt);
+	const FVector Feet = G->Points[At] + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * (Radius * 2.6f * Lap);
 	FSOSpawnOptions Options;
 	Options.bHunter = bHunt;                                     // reinforcements know where the players are; a garrison has to find out
 	Options.Variant = &Variant;

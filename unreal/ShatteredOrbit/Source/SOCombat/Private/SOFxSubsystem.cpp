@@ -7,6 +7,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "SOSound.h"
 
@@ -17,6 +18,8 @@ namespace
 	const TCHAR* CardMaterials[] = { TEXT("/Game/FX/MI_FxGlow.MI_FxGlow"), TEXT("/Game/FX/MI_FxStreak.MI_FxStreak"),
 		TEXT("/Game/FX/MI_FxFlash.MI_FxFlash"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke") };
 	const TCHAR* DecalMaterial = TEXT("/Game/FX/M_SOBulletHole.M_SOBulletHole");
+	const TCHAR* WarnMaterial = TEXT("/Game/FX/M_SOWarn.M_SOWarn");
+	const float WarnFade = 0.2f; // seconds a warning takes to go once it has landed
 	const FLinearColor Spark(1.0f, 0.62f, 0.25f);
 	const FLinearColor Fire(1.0f, 0.74f, 0.4f);
 }
@@ -159,6 +162,236 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 		FMath::Lerp(Color, Fire, 0.35f), 0.05f);
 }
 
+void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size)
+{
+	const FVector Path = To - From;
+	const float Distance = Path.Size();
+	if (Distance < 60.0f || Speed <= 0.0f)
+	{
+		return;
+	}
+	++PlasmaBolts;
+	const FVector Axis = Path / Distance;
+	const float Flight = Distance / Speed;
+	// the tail: short and thick at a rifle bolt's speed, drawn out into a lance by a fast one
+	const float Length = FMath::Min(FMath::Clamp(Speed * 0.0058f, 90.0f, 620.0f) * Size, Distance);
+	FSOFxParticle Tail;
+	Tail.Kind = ESOFxKind::Streak;
+	Tail.Position = From;
+	Tail.Axis = Axis;
+	Tail.Velocity = Axis * Speed;
+	Tail.Life = Flight;
+	Tail.Length = Length;
+	Tail.Size0 = Tail.Size1 = 8.0f * Size;
+	Tail.Intensity0 = Tail.Intensity1 = 16.0f;
+	Tail.Color = Color;
+	Spawn(Tail);
+	// the head rides the FRONT of the tail (a streak's position is its front: the tail grows out behind it).
+	// the corona: the gun's own colour, wide and soft
+	FSOFxParticle Corona;
+	Corona.Kind = ESOFxKind::Glow;
+	Corona.Position = From;
+	Corona.Velocity = Tail.Velocity;
+	Corona.Life = Flight;
+	Corona.Size0 = Corona.Size1 = 34.0f * Size;
+	Corona.Intensity0 = Corona.Intensity1 = 9.0f;
+	Corona.Color = Color;
+	Spawn(Corona);
+	// the core: white-hot
+	FSOFxParticle Core = Corona;
+	Core.Size0 = Core.Size1 = 13.0f * Size;
+	Core.Intensity0 = Core.Intensity1 = 30.0f;
+	Core.Color = FMath::Lerp(Color, FLinearColor::White, 0.78f);
+	Spawn(Core);
+	// what it leaves behind: the air along its path glows as it passes, a length at a time, thins and goes out. Short
+	// enough in time that a burst is a row of bolts each with its own fading trail, never one beam.
+	const int32 Lengths = FMath::Clamp(FMath::CeilToInt(Distance / 130.0f), 1, 16);
+	const float Each = Distance / Lengths;
+	for (int32 i = 0; i < Lengths; ++i)
+	{
+		FSOFxParticle Glow;
+		Glow.Kind = ESOFxKind::Streak;
+		Glow.bWhole = true;
+		Glow.Axis = Axis;
+		Glow.Position = From + Axis * Each * (i + 1.0f);
+		Glow.Length = Each;
+		Glow.Delay = Each * (i + 1.0f) / Speed;
+		Glow.Life = Random.FRandRange(0.085f, 0.115f);
+		Glow.Size0 = 4.2f * Size;
+		Glow.Size1 = 1.0f * Size;
+		Glow.Intensity0 = 5.5f;
+		Glow.Intensity1 = 0.0f;
+		Glow.Color = Color;
+		Spawn(Glow);
+	}
+	// and a few breaths of it that hang a little longer and drift up
+	const int32 Puffs = FMath::Clamp(FMath::RoundToInt(Distance / 420.0f), 0, 6);
+	for (int32 i = 0; i < Puffs; ++i)
+	{
+		const float Along = Distance * (i + Random.FRandRange(0.25f, 0.75f)) / Puffs;
+		FSOFxParticle Wake;
+		Wake.Kind = ESOFxKind::Glow;
+		Wake.Position = From + Axis * Along + Random.VRand() * 2.5f * Size;
+		Wake.Velocity = Random.VRand() * 6.0f + FVector(0.0f, 0.0f, 9.0f);
+		Wake.Delay = Along / Speed;
+		Wake.Life = Random.FRandRange(0.18f, 0.30f);
+		Wake.Size0 = 9.0f * Size;
+		Wake.Size1 = 2.5f * Size;
+		Wake.Intensity0 = 3.5f;
+		Wake.Intensity1 = 0.0f;
+		Wake.Color = Color;
+		Spawn(Wake);
+	}
+}
+
+void USOFxSubsystem::PlasmaImpact(const FVector& Point, const FVector& Normal, const FLinearColor& Color, float Size, float Delay, bool bFlesh)
+{
+	const FVector N = Normal.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	const float R = (bFlesh ? 18.0f : 28.0f) * Size;
+	// the flare as it bursts
+	FSOFxParticle Flare;
+	Flare.Kind = ESOFxKind::Glow;
+	Flare.Position = Point + N * R * 0.2f;
+	Flare.Delay = Delay;
+	Flare.Life = 0.13f;
+	Flare.Size0 = R * 0.7f;
+	Flare.Size1 = R * 1.5f;
+	Flare.Intensity0 = 11.0f * FMath::Min(1.0f, Size);
+	Flare.Intensity1 = 0.0f;
+	Flare.Color = Color;
+	Spawn(Flare);
+	FSOFxParticle Hot = Flare;
+	Hot.Life = 0.07f;
+	Hot.Size0 = R * 0.45f;
+	Hot.Size1 = R * 0.3f;
+	Hot.Intensity0 = 26.0f;
+	Hot.Color = FMath::Lerp(Color, FLinearColor::White, 0.7f);
+	Spawn(Hot);
+	// it splashes: drops of it thrown out along the surface, not back at the gun
+	const FVector Side = FVector::CrossProduct(N, FMath::Abs(N.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	const int32 Drops = bFlesh ? 5 : 9;
+	for (int32 i = 0; i < Drops; ++i)
+	{
+		const FVector Out = FQuat(N, (i + Random.FRand()) / Drops * 2.0f * UE_PI).RotateVector(Side);
+		FSOFxParticle Drop;
+		Drop.Kind = ESOFxKind::Streak;
+		Drop.Position = Point + N * 2.0f;
+		Drop.Velocity = (Out + N * Random.FRandRange(0.1f, 0.45f)) * Random.FRandRange(R * 5.0f, R * 12.0f);
+		Drop.Gravity = 420.0f;
+		Drop.Drag = 4.0f;
+		Drop.Delay = Delay;
+		Drop.Life = Random.FRandRange(0.16f, 0.32f);
+		Drop.Size0 = 2.2f * Size;
+		Drop.Size1 = 0.8f * Size;
+		Drop.Intensity0 = 24.0f;
+		Drop.Intensity1 = 0.0f;
+		Drop.Color = Color;
+		Spawn(Drop);
+	}
+	// its light on the place: once for a pattern of pellets landing together (twelve lights flooded a wall), and
+	// the flares of the small ones kept low
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (Now - LastPlasmaLightTime > 0.04 || FVector::DistSquared(Point, LastPlasmaLightAt) > FMath::Square(260.0f))
+	{
+		LastPlasmaLightTime = Now;
+		LastPlasmaLightAt = Point;
+		PendingLights.Add({ Point + N * 30.0f, Color, FMath::Clamp(230.0f * Size * Size, 90.0f, 1400.0f), 0.1f, Delay });
+	}
+	if (bFlesh)
+	{
+		return;
+	}
+	// a breath of vapour off what it burned
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FSOFxParticle Mist;
+		Mist.Kind = ESOFxKind::Smoke;
+		Mist.Position = Point + N * R * 0.2f + Random.VRand() * R * 0.2f;
+		Mist.Velocity = N * R * 0.8f + Random.VRand() * R * 0.4f + FVector(0.0f, 0.0f, 22.0f);
+		Mist.Drag = 2.5f;
+		Mist.Delay = Delay + Random.FRandRange(0.02f, 0.08f);
+		Mist.Life = Random.FRandRange(0.5f, 0.9f);
+		Mist.Size0 = R * 0.3f;
+		Mist.Size1 = R * Random.FRandRange(0.9f, 1.3f);
+		Mist.Intensity0 = 0.3f;
+		Mist.Color = Color * 0.5f;
+		Mist.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(Mist);
+	}
+	// what it struck glows where it landed, and cools
+	FSOFxParticle Scorch;
+	Scorch.Kind = ESOFxKind::Glow;
+	Scorch.Position = Point + N * 2.5f;
+	Scorch.Delay = Delay;
+	Scorch.Life = 0.62f;
+	Scorch.Size0 = 24.0f * Size;
+	Scorch.Size1 = 7.0f * Size;
+	Scorch.Intensity0 = 9.0f;
+	Scorch.Intensity1 = 0.0f;
+	Scorch.Color = FMath::Lerp(Color, FLinearColor::White, 0.25f);
+	Spawn(Scorch);
+	// motes of it drifting up off the place
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FSOFxParticle Mote;
+		Mote.Kind = ESOFxKind::Glow;
+		Mote.Position = Point + N * 4.0f + Random.VRand() * 5.0f * Size;
+		Mote.Velocity = N * Random.FRandRange(20.0f, 70.0f) + Random.VRand() * 25.0f + FVector(0.0f, 0.0f, 30.0f);
+		Mote.Drag = 2.0f;
+		Mote.Delay = Delay + Random.FRandRange(0.0f, 0.06f);
+		Mote.Life = Random.FRandRange(0.35f, 0.7f);
+		Mote.Size0 = 3.2f * Size;
+		Mote.Size1 = 0.8f * Size;
+		Mote.Intensity0 = 12.0f;
+		Mote.Intensity1 = 0.0f;
+		Mote.Color = Color;
+		Spawn(Mote);
+	}
+}
+
+void USOFxSubsystem::PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope)
+{
+	if (bThroughScope)
+	{
+		return; // (as with a flame: nothing is drawn a hand's width from a magnified glass)
+	}
+	const FVector D = Dir.GetSafeNormal();
+	FSOFxParticle Bloom;
+	Bloom.Kind = ESOFxKind::Glow;
+	Bloom.Position = Muzzle + D * 4.0f * Scale;
+	Bloom.Life = 0.07f;
+	Bloom.Size0 = 22.0f * Scale;
+	Bloom.Size1 = 9.0f * Scale;
+	Bloom.Intensity0 = 10.0f;
+	Bloom.Intensity1 = 0.0f;
+	Bloom.Color = Color;
+	Spawn(Bloom);
+	FSOFxParticle Core = Bloom;
+	Core.Life = 0.045f;
+	Core.Size0 = 9.0f * Scale;
+	Core.Size1 = 4.0f * Scale;
+	Core.Intensity0 = 26.0f;
+	Core.Color = FMath::Lerp(Color, FLinearColor::White, 0.75f);
+	Spawn(Core);
+	for (int32 i = 0; i < 3; ++i)
+	{
+		FSOFxParticle Mote;
+		Mote.Kind = ESOFxKind::Glow;
+		Mote.Position = Muzzle + D * 6.0f * Scale;
+		Mote.Velocity = (D + Random.VRand() * 0.45f) * Random.FRandRange(120.0f, 260.0f);
+		Mote.Drag = 5.0f;
+		Mote.Life = Random.FRandRange(0.10f, 0.20f);
+		Mote.Size0 = 3.0f * Scale;
+		Mote.Size1 = 0.6f * Scale;
+		Mote.Intensity0 = 12.0f;
+		Mote.Intensity1 = 0.0f;
+		Mote.Color = Color;
+		Spawn(Mote);
+	}
+	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 240.0f * Scale * (bViewmodel ? 0.25f : 1.0f),
+		Color, 0.06f);
+}
+
 void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Width, float Length, bool bBolt)
 {
 	const FVector Path = To - From;
@@ -183,9 +416,9 @@ void USOFxSubsystem::Tracer(const FVector& From, const FVector& To, float Speed,
 		// a bolt of light has a head: a bead of its own colour riding at the front of the streak
 		FSOFxParticle Head;
 		Head.Kind = ESOFxKind::Glow;
-		Head.Position = From + T.Axis * Length;
+		Head.Position = From;                    // (a streak's position is its front: the tail grows out behind it)
 		Head.Velocity = T.Velocity;
-		Head.Life = FMath::Max(0.0f, (Distance - Length) / Speed);
+		Head.Life = T.Life;
 		Head.Size0 = Head.Size1 = Width * 3.4f;
 		Head.Intensity0 = Head.Intensity1 = 16.0f;
 		Head.Color = FMath::Lerp(Color, FLinearColor::White, 0.3f);
@@ -322,6 +555,262 @@ void USOFxSubsystem::Blast(const FVector& Point, const FVector& Normal, float Ra
 	}
 	const float Light = Kind == EBlast::Fire ? 2600.0f : 500.0f;
 	PendingLights.Add({ Point + N * 30.0f, Kind == EBlast::Fire ? Fire : Color, Light, Kind == EBlast::Fire ? 0.25f : 0.12f, Delay });
+}
+
+void USOFxSubsystem::Shockwave(const FVector& Point, float Radius, const FLinearColor& Color, float Delay)
+{
+	const float R = FMath::Max(Radius, 100.0f);
+	const FVector Up = FVector::UpVector;
+	// the ring: streaks racing out along the ground (drag 3 over 0.55 s carries a particle 0.269 of its speed)
+	const int32 Rays = 56;
+	for (int32 i = 0; i < Rays; ++i)
+	{
+		const float A = (i + Random.FRand() * 0.6f) / Rays * 2.0f * UE_PI;
+		const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.0f);
+		FSOFxParticle S;
+		S.Kind = ESOFxKind::Streak;
+		S.Position = Point + Dir * 40.0f + Up * 6.0f;
+		S.Velocity = Dir * (R - 40.0f) / 0.269f * Random.FRandRange(0.82f, 1.0f) + Up * Random.FRandRange(0.0f, 60.0f);
+		S.Drag = 3.0f;
+		S.Delay = Delay;
+		S.Life = 0.55f;
+		S.Size0 = 3.5f;
+		S.Size1 = 1.4f;
+		S.Length = 90.0f;
+		S.Intensity0 = 26.0f;
+		S.Color = Color;
+		Spawn(S);
+	}
+	// light rolling out with it, and the dust it lifts, which hangs
+	for (int32 i = 0; i < 16; ++i)
+	{
+		const float A = (i + Random.FRand()) / 16.0f * 2.0f * UE_PI;
+		const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.0f);
+		FSOFxParticle G;
+		G.Kind = ESOFxKind::Glow;
+		G.Position = Point + Dir * R * 0.2f + Up * 12.0f;
+		G.Velocity = Dir * R * 1.5f;
+		G.Drag = 3.0f;
+		G.Delay = Delay;
+		G.Life = 0.4f;
+		G.Size0 = R * 0.05f;
+		G.Size1 = R * 0.14f;
+		G.Intensity0 = 2.6f;
+		G.Color = Color;
+		Spawn(G);
+
+		FSOFxParticle D;
+		D.Kind = ESOFxKind::Smoke;
+		D.Position = Point + Dir * R * Random.FRandRange(0.15f, 0.55f) + Up * 10.0f;
+		D.Velocity = Dir * R * 0.7f + Up * Random.FRandRange(60.0f, 140.0f);
+		D.Drag = 2.5f;
+		D.Delay = Delay + Random.FRandRange(0.03f, 0.18f);
+		D.Life = Random.FRandRange(1.2f, 2.2f);
+		D.Size0 = R * 0.1f;
+		D.Size1 = R * Random.FRandRange(0.28f, 0.42f);
+		D.Intensity0 = 0.45f;
+		D.Color = FLinearColor(0.2f, 0.2f, 0.22f);
+		D.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(D);
+	}
+	// the blow itself, and what it throws up
+	FSOFxParticle Core;
+	Core.Kind = ESOFxKind::Glow;
+	Core.Position = Point + Up * 30.0f;
+	Core.Delay = Delay;
+	Core.Life = 0.2f;
+	Core.Size0 = R * 0.08f;
+	Core.Size1 = R * 0.22f;
+	Core.Intensity0 = 12.0f;
+	Core.Color = Color;
+	Spawn(Core);
+	for (int32 i = 0; i < 22; ++i)
+	{
+		FSOFxParticle C;
+		C.Kind = ESOFxKind::Streak;
+		C.Position = Point + Up * 4.0f;
+		C.Velocity = Random.VRandCone(Up, FMath::DegreesToRadians(62.0f)) * Random.FRandRange(400.0f, 1100.0f);
+		C.Gravity = 980.0f;
+		C.Drag = 1.0f;
+		C.Delay = Delay;
+		C.Life = Random.FRandRange(0.4f, 0.8f);
+		C.Size0 = 1.6f;
+		C.Size1 = 1.0f;
+		C.Intensity0 = 24.0f;
+		C.Color = Color;
+		Spawn(C);
+	}
+	PendingLights.Add({ Point + Up * 60.0f, Color, 1800.0f, 0.22f, Delay });
+}
+
+void USOFxSubsystem::Sweep(const FVector& Origin, const FVector& Forward, float Reach, float HalfAngle, const FLinearColor& Color)
+{
+	const FVector F = Forward.GetSafeNormal2D(UE_SMALL_NUMBER, FVector::ForwardVector);
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, F);
+	const float Half = FMath::DegreesToRadians(FMath::Clamp(HalfAngle, 10.0f, 180.0f));
+	const float Out = FMath::Max(Reach, 60.0f);
+	const int32 Rays = 26;
+	for (int32 i = 0; i < Rays; ++i)
+	{
+		const float T = i / float(Rays - 1);
+		const float A = FMath::Lerp(-Half, Half, T);
+		const FVector Dir = F * FMath::Cos(A) + Right * FMath::Sin(A);
+		FSOFxParticle S;
+		S.Kind = ESOFxKind::Streak;
+		S.Position = Origin + Dir * 45.0f - FVector(0.0f, 0.0f, 22.0f);
+		S.Velocity = Dir * Out / 0.103f + FVector(0.0f, 0.0f, Random.FRandRange(-40.0f, 40.0f)); // drag 6 over 0.16 s: 0.103 of its speed
+		S.Drag = 6.0f;
+		S.Delay = T * 0.05f; // across, like an arm
+		S.Life = 0.16f;
+		S.Size0 = 3.0f;
+		S.Size1 = 1.0f;
+		S.Length = 70.0f;
+		S.Intensity0 = 22.0f;
+		S.Color = Color;
+		Spawn(S);
+	}
+	for (int32 i = 0; i < 3; ++i)
+	{
+		FSOFxParticle G;
+		G.Kind = ESOFxKind::Glow;
+		G.Position = Origin + F * Out * (0.35f + 0.2f * i) - FVector(0.0f, 0.0f, 20.0f);
+		G.Delay = 0.02f * i;
+		G.Life = 0.12f;
+		G.Size0 = Out * 0.1f;
+		G.Size1 = Out * 0.24f;
+		G.Intensity0 = 1.4f;
+		G.Color = Color;
+		Spawn(G);
+	}
+}
+
+void USOFxSubsystem::AimLine(const AActor* Shooter, const FVector& Offset, const AActor* Target, float Time, float Lock, const FLinearColor& Color)
+{
+	if (!Shooter || !Target)
+	{
+		return;
+	}
+	FAimLine Line;
+	Line.Shooter = Shooter;
+	Line.Target = Target;
+	Line.Offset = Offset;
+	Line.End = Target->GetActorLocation();
+	Line.Color = Color;
+	Line.Time = FMath::Max(Time, 0.1f);
+	Line.Lock = FMath::Clamp(Lock, 0.0f, Line.Time);
+	AimLines.Add(Line);
+}
+
+void USOFxSubsystem::Warn(const FVector& Point, float Radius, float HalfAngle, float Yaw, float Time, const FLinearColor& Color, const AActor* Follow)
+{
+	FWarning W;
+	W.Point = Point;
+	W.Color = Color;
+	W.Radius = FMath::Max(Radius, 30.0f);
+	W.CosHalf = HalfAngle >= 179.0f ? -1.0f : FMath::Cos(FMath::DegreesToRadians(FMath::Max(HalfAngle, 5.0f)));
+	W.Yaw = Yaw;
+	W.Time = FMath::Max(Time, 0.05f);
+	W.Follow = Follow;
+	W.bFollow = Follow != nullptr;
+	W.YawOffset = Follow ? FRotator::NormalizeAxis(Yaw - Follow->GetActorRotation().Yaw) : 0.0f;
+	if (EnsureHost())
+	{
+		UDecalComponent* Decal = nullptr;
+		while (!Decal && FreeWarnings.Num() > 0)
+		{
+			Decal = FreeWarnings.Pop(EAllowShrinking::No).Get();
+		}
+		if (!Decal)
+		{
+			// drawn straight down onto whatever is there; the picture itself is worked out from the world position
+			// in the material, so the decal's own turn does not matter
+			Decal = NewObject<UDecalComponent>(Host.Get());
+			Decal->DecalSize = FVector(260.0f, 100.0f, 100.0f);
+			Decal->SetFadeScreenSize(0.0f);
+			Decal->SortOrder = 8;
+			Decal->SetWorldRotation(FRotator(-90.0f, 0.0f, 0.0f));
+			Decal->RegisterComponent();
+			if (UMaterialInterface* Parent = Cast<UMaterialInterface>(FSoftObjectPath(WarnMaterial).TryLoad()))
+			{
+				Decal->SetDecalMaterial(UMaterialInstanceDynamic::Create(Parent, Decal));
+			}
+		}
+		W.Decal = Decal;
+		W.Material = Cast<UMaterialInstanceDynamic>(Decal->GetDecalMaterial());
+		const float S = W.Radius * 1.03f / 100.0f;
+		Decal->SetWorldScale3D(FVector(1.0f, S, S));
+		Decal->SetVisibility(true);
+	}
+	PlaceWarning(W);
+	Warnings.Add(W);
+}
+
+void USOFxSubsystem::PlaceWarning(FWarning& W) const
+{
+	if (W.bFollow)
+	{
+		if (const AActor* Under = W.Follow.Get())
+		{
+			W.Point = Under->GetActorLocation() - FVector(0.0f, 0.0f, Under->GetSimpleCollisionHalfHeight());
+			W.Yaw = Under->GetActorRotation().Yaw + W.YawOffset;
+		}
+		else
+		{
+			W.Age = FMath::Max(W.Age, W.Time); // whoever it was under is gone: so is the warning
+		}
+	}
+	if (UDecalComponent* Decal = W.Decal.Get())
+	{
+		Decal->SetWorldLocation(W.Point);
+	}
+	if (UMaterialInstanceDynamic* M = W.Material.Get())
+	{
+		const float Gone = FMath::Clamp((W.Age - W.Time) / WarnFade, 0.0f, 1.0f);
+		const float A = FMath::DegreesToRadians(W.Yaw);
+		M->SetVectorParameterValue(TEXT("Center"), FLinearColor(W.Point.X, W.Point.Y, W.Point.Z, W.Radius));
+		M->SetVectorParameterValue(TEXT("Shape"), FLinearColor(FMath::Cos(A), FMath::Sin(A), W.CosHalf, FMath::Clamp(W.Age / W.Time, 0.0f, 1.0f)));
+		M->SetVectorParameterValue(TEXT("Color"), FLinearColor(W.Color.R, W.Color.G, W.Color.B, 1.0f - Gone));
+	}
+}
+
+void USOFxSubsystem::Ward(const FVector& Feet, float Height, const FLinearColor& Color)
+{
+	const FVector Up = FVector::UpVector;
+	const float H = FMath::Max(Height, 80.0f);
+	for (int32 i = 0; i < 40; ++i)
+	{
+		const float A = (i + Random.FRand()) / 40.0f * 2.0f * UE_PI;
+		const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.0f);
+		FSOFxParticle S;
+		S.Kind = ESOFxKind::Streak;
+		S.Position = Feet + Dir * 72.0f + Up * Random.FRandRange(0.0f, H * 0.25f);
+		S.Velocity = Up * Random.FRandRange(H * 1.4f, H * 2.3f) + Dir * 15.0f;
+		S.Drag = 1.2f;
+		S.Delay = Random.FRandRange(0.0f, 0.25f);
+		S.Life = Random.FRandRange(0.5f, 0.8f);
+		S.Size0 = 2.4f;
+		S.Size1 = 1.0f;
+		S.Length = 55.0f;
+		S.Intensity0 = 18.0f;
+		S.Color = Color;
+		Spawn(S);
+	}
+	for (int32 i = 0; i < 10; ++i)
+	{
+		const float A = Random.FRand() * 2.0f * UE_PI;
+		FSOFxParticle G;
+		G.Kind = ESOFxKind::Glow;
+		G.Position = Feet + FVector(FMath::Cos(A), FMath::Sin(A), 0.0f) * 72.0f + Up * H * Random.FRand();
+		G.Velocity = Up * 120.0f;
+		G.Delay = Random.FRandRange(0.05f, 0.3f);
+		G.Life = 0.5f;
+		G.Size0 = 30.0f;
+		G.Size1 = 60.0f;
+		G.Intensity0 = 3.5f;
+		G.Color = Color;
+		Spawn(G);
+	}
+	PendingLights.Add({ Feet + Up * H * 0.6f, Color, 900.0f, 0.3f, 0.0f });
 }
 
 void USOFxSubsystem::Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay, bool bDecal)
@@ -612,6 +1101,76 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		}
 	}
 
+	for (int32 i = AimLines.Num() - 1; i >= 0; --i)
+	{
+		FAimLine& Line = AimLines[i];
+		Line.Age += DeltaTime;
+		const AActor* Shooter = Line.Shooter.Get();
+		if (!Shooter || Line.Age >= Line.Time)
+		{
+			AimLines.RemoveAtSwap(i, 1, EAllowShrinking::No);
+			continue;
+		}
+		if (const AActor* Target = Line.Target.Get(); Target && Line.Age < Line.Time - Line.Lock)
+		{
+			Line.End = Target->GetActorLocation() + FVector(0.0f, 0.0f, 20.0f); // (it follows until it locks)
+		}
+		const FVector From = Shooter->GetActorLocation() + Shooter->GetActorRotation().RotateVector(Line.Offset);
+		const FVector Path = Line.End - From;
+		const float Distance = Path.Size();
+		if (Distance < 100.0f)
+		{
+			continue;
+		}
+		// drawn afresh every frame (a streak that lives one frame): thin and faint at first, hard and bright once it
+		// has locked
+		const float K = Line.Age / Line.Time;
+		const bool bLocked = Line.Age >= Line.Time - Line.Lock;
+		FSOFxParticle S;
+		S.Kind = ESOFxKind::Streak;
+		S.Position = From;
+		S.Axis = Path / Distance;
+		S.Length = FMath::Min(Distance + 250.0f, 9000.0f);
+		S.Life = FMath::Max(DeltaTime * 1.1f, 0.02f);
+		S.Size0 = S.Size1 = bLocked ? 3.2f : FMath::Lerp(0.9f, 1.8f, K);
+		S.Intensity0 = S.Intensity1 = bLocked ? 30.0f : FMath::Lerp(5.0f, 14.0f, K);
+		S.bHold = true;
+		S.Color = bLocked ? FMath::Lerp(Line.Color, FLinearColor::White, 0.5f) : Line.Color;
+		Spawn(S);
+		FSOFxParticle Glint; // where it comes from: a point of light that swells
+		Glint.Kind = ESOFxKind::Glow;
+		Glint.Position = From;
+		Glint.Life = S.Life;
+		// (to the one it points at the line is seen end-on, almost a dot: what they read is this light, so it keeps
+		// its size in their view however far off it is, and flares once the line has locked)
+		float Far = 1.0f;
+		if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
+		{
+			Far = FMath::Clamp(FVector::Dist(Camera->GetCameraLocation(), From) / 500.0f, 1.0f, 14.0f);
+		}
+		Glint.Size0 = Glint.Size1 = FMath::Lerp(8.0f, 26.0f, K) * Far * (bLocked ? 1.5f : 1.0f);
+		Glint.Intensity0 = Glint.Intensity1 = bLocked ? 34.0f : FMath::Lerp(4.0f, 14.0f, K);
+		Glint.bHold = true;
+		Glint.Color = S.Color;
+		Spawn(Glint);
+	}
+
+	for (int32 i = Warnings.Num() - 1; i >= 0; --i)
+	{
+		FWarning& W = Warnings[i];
+		W.Age += DeltaTime;
+		PlaceWarning(W);
+		if (W.Age >= W.Time + WarnFade)
+		{
+			if (UDecalComponent* Decal = W.Decal.Get())
+			{
+				Decal->SetVisibility(false);
+				FreeWarnings.Add(Decal);
+			}
+			Warnings.RemoveAtSwap(i, 1, EAllowShrinking::No);
+		}
+	}
+
 	for (int32 i = Particles.Num() - 1; i >= 0; --i)
 	{
 		FSOFxParticle& P = Particles[i];
@@ -668,7 +1227,8 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		{
 			// Card along +Y (tail at the origin), facing the eye around its own axis.
 			const FVector Dir = (P.Length > 0.0f ? P.Axis : P.Velocity.GetSafeNormal());
-			const float Length = P.Length > 0.0f ? FMath::Min(P.Length, P.Velocity.Size() * P.Age + 1.0f) : FMath::Clamp(P.Velocity.Size() * 0.03f, 2.0f, 60.0f);
+			const float Length = P.bWhole ? P.Length
+				: (P.Length > 0.0f ? FMath::Min(P.Length, P.Velocity.Size() * P.Age + 1.0f) : FMath::Clamp(P.Velocity.Size() * 0.03f, 2.0f, 60.0f));
 			T = FTransform(FRotationMatrix::MakeFromYX(Dir, ToEye).ToQuat(), P.Position - Dir * Length, FVector(1.0f, Length / 100.0f, Size / 100.0f));
 			break;
 		}

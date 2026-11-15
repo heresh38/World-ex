@@ -131,11 +131,26 @@ struct SOCOMBAT_API FSOArmorInstance
 	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Armor")
 	int32 Power = 10;
 
+	/** Worn by the body the player is in now. */
 	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Armor")
 	bool bEquipped = false;
 
+	/** The bodies that have it on (male, female): what is worn is each body's own. A piece both bodies can wear is
+	 *  owned once, but putting it on one does not put it on the other. The entry for the body the player is in is
+	 *  brought up to date when they leave it (USOInventoryComponent::SetBody); until then bEquipped is the truth. */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Armor")
+	TArray<FName> WornBy;
+
 	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Armor")
 	bool bNew = false;
+
+	/** The copy's own roll: which attributes it gives beside its slot's (0: from its uid). A later re-roll changes
+	 *  only this. */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Armor")
+	int32 Roll = 0;
+
+	/** The seed its attribute points come from (USOAttributeTable::ArmourPoints). */
+	uint32 GetSeed() const { return Roll != 0 ? static_cast<uint32>(Roll) : GetTypeHash(Uid); }
 };
 
 /** What a character wears, replicated: the body and one item per slot. */

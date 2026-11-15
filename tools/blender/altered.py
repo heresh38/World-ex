@@ -1,4 +1,8 @@
-"""The Altered: people and beasts the Stillfall changed, grown through with void crystal (the violet shards that crust
+"""THE FIRST BODIES OF MERIDIAN'S ENEMIES, BEING REPLACED (the story since 2026-11-14, docs/story/WORLD.md: one
+humanoid species, the Sarketh, ranked by what they are issued; their new bodies are tools/blender/hero/sarketh.py).
+What follows describes these first bodies as they were written.
+
+The Altered: people and beasts the Stillfall changed, grown through with void crystal (the violet shards that crust
 Meridian's ruins). Sculpted as signed-distance fields with fleshkit (ashen hide, cracked plates, crystal erupting
 through the body, violet light in the cracks), soft-skinned to the shared 20-bone rig, vertex-coloured over the
 shared hx_* texture sets.
@@ -9,15 +13,19 @@ shared hx_* texture sets.
              from the shoulders, three long fingers that gather light (keeps its distance, hurls void bolts)
   bulwark    a hulk: a great slab of crystal-plated bone grown over the left forearm as a shield, a spiked club fist,
              a crystal ridge down the back, the head sunk between the shoulders (slow; the shield turns shots)
+  bearer     the gun carrier: a broad husk plated like a strongpoint (a breastplate in three lames with light in the
+             seams, a collar of plate round a small sunken head with one slit of light, a great pauldron over the gun
+             arm), a drum of crystal-fused bone across its back that feeds the heavy gun it carries at the hip, the
+             feed coming round under the arm to a port on its belt (slow; keeps a place under fire)
   colossus   the Hollow Colossus, the operation's boss (~2.6 m, a head over a soldier): stone-hard plates fused over the body with light in every
              crack, a hollow ribcage round a burning crystal heart (its weak point), a crown of shards, long arms and
              great clawed hands, crystal masses on the shoulders and back
 
 Materials (names are an API): alt_skin, alt_flesh, alt_plate, alt_bone, alt_rag (hx_* sets), alt_crystal and
 alt_glow (emissive). Clips: Idle, Walk, Run, Attack, Death; the veilborn adds Cast and Blink, the bulwark Slam, the
-colossus Slam, Sweep, Barrage and Shield.
+colossus Slam, Sweep, Barrage and Shield, the bearer Brace.
 
-Run: blender --background --python tools/blender/altered.py [-- remnant veilborn bulwark colossus]
+Run: blender --background --python tools/blender/altered.py [-- remnant veilborn bulwark colossus bearer]
 """
 import math, os, sys
 import numpy as np
@@ -31,7 +39,7 @@ PI = math.pi
 ASH = '#aaa59f'; ASH_D = '#7a7470'; HIDE = '#8a8482'; PLATE = '#3c3744'; PLATE_L = '#5a5662'; BONE = '#d6cfc2'
 CAV = '#1c0a22'; RAG = '#4a4440'; CRYSTAL = '#9a5cff'; GLOW = '#c08cff'
 
-KINDS = {'remnant': .98, 'veilborn': 1.18, 'bulwark': 1.5, 'colossus': 1.45}
+KINDS = {'remnant': .98, 'veilborn': 1.18, 'bulwark': 1.5, 'colossus': 1.45, 'bearer': 1.3}
 
 
 def mats():
@@ -338,6 +346,111 @@ def colossus(s):
     return sc, J, dict(hunch=12, loll=0, both=True, drag=False, twitch=.15, lean=14, height=1.45)
 
 
+def bearer(s):
+    J = human_joints(s)
+    sc = fk.Sculpt(71); rnd = sc.rnd
+    sc.disp = lambda P: (fbm(P, 14 / s, 3, 5) - .5) * .006 * s + ridge(P, 4 / s, 6, 8) * .005 * s
+    hz = J['hips'][0][2]; sz = J['spine'][0][2]; cz = J['chest'][0][2]; nz = J['neck'][0][2]; h2 = J['head'][0][2]
+    W = 1.3
+    # the body under the plate: a thick trunk, square across the shoulders
+    sc.ell(V(0, .01 * s, hz), V(.15 * W, .11, .11) * s, 'hips', 'skin', HIDE, k=.035 * s)
+    sc.ell(V(0, .015 * s, sz + .1 * s), V(.125 * W, .095, .13) * s, 'spine', 'flesh', ASH_D, k=.05 * s, amp=1.2)
+    sc.ell(V(0, .005 * s, hz - .05 * s), V(.1, .095, .06) * s, 'hips', 'skin', HIDE, k=.03 * s)
+    sc.ell(V(0, .02 * s, cz + .11 * s), V(.175 * W, .13, .16) * s, 'chest', 'skin', HIDE, k=.06 * s)
+    for sx in (1, -1):
+        sh = J['upperarm.' + ('L' if sx > 0 else 'R')][0]
+        sc.cone(V(sx * .08 * s, .02 * s, cz + .18 * s), sh, .075 * s, .08 * s, 'chest', 'skin', HIDE, k=.05 * s)
+    # the breastplate: one shell round the chest, front and flanks, its lower edge a straight line; two seams across
+    # it make three lames, with light in the seams
+    cc = V(0, .02 * s, cz + .1 * s); cr = V(.19 * W, .145, .19) * s
+    breast = lambda P: sdf.ellipsoid(P, cc, cr)
+    sc.shell(breast, V(-.5 * s, -.4 * s, cz - .15 * s), V(.5 * s, .2 * s, cz + .4 * s), .02 * s, 'chest', 'plate', PLATE,
+             keep=lambda P: np.maximum(P[:, 1] - .035 * s, np.maximum((cz - .045 * s) - P[:, 2], P[:, 2] - (cz + .245 * s))), k=.01 * s, amp=.25)
+    for z in (cz + .045 * s, cz + .135 * s):
+        sc.cut_ell(V(0, -.14 * s, z), V(.2 * W, .06, .0075) * s, 'chest', 'glow', GLOW, k=.004 * s)
+    # the back plate, and the belly's two lames under the breastplate
+    sc.shell(breast, V(-.5 * s, -.1 * s, cz - .15 * s), V(.5 * s, .4 * s, cz + .4 * s), .018 * s, 'chest', 'plate', PLATE_L,
+             keep=lambda P: np.maximum(.06 * s - P[:, 1], np.maximum((cz - .02 * s) - P[:, 2], P[:, 2] - (cz + .23 * s))), k=.01 * s, amp=.25)
+    bc = V(0, .015 * s, sz + .1 * s); br = V(.145 * W, .115, .16) * s
+    belly = lambda P: sdf.ellipsoid(P, bc, br)
+    for i, (z0, z1) in enumerate(((sz + .03 * s, sz + .105 * s), (sz + .115 * s, sz + .2 * s))):
+        sc.shell(belly, V(-.5 * s, -.4 * s, sz - .1 * s), V(.5 * s, .1 * s, sz + .4 * s), .014 * s, 'spine', 'plate', PLATE_L if i else PLATE,
+                 keep=lambda P, z0=z0, z1=z1: np.maximum(P[:, 1] + .01 * s, np.maximum(z0 - P[:, 2], P[:, 2] - z1)), k=.008 * s, amp=.25)
+    # a belt, and the feed port on its right front: where the gun's feed comes home
+    sc.chain([V(.152 * W * math.cos(a) * s, (.012 + .113 * math.sin(a)) * s, hz + .08 * s) for a in np.linspace(0, TAU2, 17)],
+             [.02 * s] * 17, 'hips', 'rag', RAG, k=.006 * s, amp=.2)
+    port = V(-.14 * s, -.095 * s, hz + .06 * s)
+    sc.ell(port, V(.05, .04, .055) * s, 'hips', 'plate', PLATE_L, k=.012 * s, amp=.2)
+    sc.cut_ell(port + V(0, -.04, .0) * s, V(.022, .014, .03) * s, 'hips', 'glow', GLOW, k=.004 * s)
+    # tassets: a plate hanging from the belt over the front and outside of each thigh
+    for side, sx in (('L', 1), ('R', -1)):
+        t0, t1 = J['thigh.' + side]
+        th = lambda P, t0=t0, t1=t1: sdf.round_cone(P, t0 + V(0, 0, .03 * s), t1, .119 * s, .08 * s)
+        sc.shell(th, np.minimum(t0, t1) - .3 * s, np.maximum(t0, t1) + .3 * s, .011 * s, 'thigh.' + side, 'plate', PLATE,
+                 keep=lambda P, t0=t0, sx=sx: np.maximum(np.maximum(P[:, 1] - .03 * s, sx * (t0[0] - .07 * s * sx - P[:, 0])),
+                                                       np.maximum((t0[2] - .27 * s) - P[:, 2], P[:, 2] - (t0[2] - .03 * s))), k=.008 * s, amp=.25)
+    # the collar: a ring of plate round the neck, high at the back and the sides, low in front of the face
+    ring = []
+    for a in np.linspace(0, TAU2, 17):
+        back = .5 + .5 * math.sin(a)                             # 0 in front (-Y), 1 behind
+        ring.append(V(.135 * math.cos(a) * s, (.03 + .12 * math.sin(a)) * s, nz + (.005 + .115 * back) * s))
+    sc.chain(ring, [.036 * s] * 17, 'chest', 'plate', PLATE_L, k=.012 * s, amp=.2)
+    # ... and a second, lower ring closes it down onto the shoulders (no gap under the first)
+    sc.chain([V(.15 * math.cos(a) * s, (.035 + .13 * math.sin(a)) * s, nz + (-.03 + .05 * (.5 + .5 * math.sin(a))) * s) for a in np.linspace(0, TAU2, 17)],
+             [.04 * s] * 17, 'chest', 'plate', PLATE, k=.014 * s, amp=.2)
+    # the head: small, sunk into the collar; a skull plate over it with one slit of light
+    sc.cone(V(0, .01 * s, nz - .03 * s), V(0, -.025 * s, nz + .07 * s), .06 * s, .052 * s, 'neck', 'flesh', ASH_D, k=.035 * s, amp=1.2)
+    hc = V(0, -.06 * s, h2 - .012 * s)
+    sc.ell(hc, V(.066, .09, .068) * s, 'head', 'skin', HIDE, k=.028 * s)
+    helm = lambda P: sdf.ellipsoid(P, hc + V(0, .012, .008) * s, V(.076, .108, .078) * s)
+    sc.shell(helm, hc - .25 * s, hc + .25 * s, .011 * s, 'head', 'plate', PLATE,
+             keep=lambda P: (hc[2] - .022 * s) - P[:, 2], k=.006 * s, amp=.2)
+    sc.ell(hc + V(0, -.075, .03) * s, V(.07, .04, .016) * s, 'head', 'plate', PLATE_L, k=.012 * s, amp=.2)        # the brow
+    sc.cut_ell(hc + V(0, -.097, .004) * s, V(.048, .03, .0075) * s, 'head', 'glow', GLOW, k=.003 * s)
+    # the arms: thick, a bracer on each forearm; a great pauldron over the gun arm, a smaller one on the other
+    for side, sx in (('L', 1), ('R', -1)):
+        arm(sc, J, s, 1.45, side, sx, 'skin', HIDE)
+        a0, a1 = J['upperarm.' + side]; f0, f1 = J['forearm.' + side]
+        fb = lambda P, f0=f0, f1=f1: sdf.round_cone(P, f0, f1, .066 * s, .05 * s)
+        sc.shell(fb, np.minimum(f0, f1) - .3 * s, np.maximum(f0, f1) + .3 * s, .008 * s, 'forearm.' + side, 'plate', PLATE,
+                 keep=lambda P, f0=f0, f1=f1, sx=sx: np.maximum(np.maximum(P[:, 2] - (f0[2] - .045 * s), (f1[2] + .035 * s) - P[:, 2]),
+                                                              sx * (f0[0] + .012 * s * sx - P[:, 0])), k=.006 * s, amp=.25)
+        big = 1.0 if sx < 0 else .72
+        pc = a0 + V(sx * .035, .005, -.045) * s
+        pr = V(.082, .13, .185) * s * big
+        tilt = sx * .62                                          # the plate leans out from the neck over the arm
+        ct, st_ = math.cos(tilt), math.sin(tilt)
+
+        def pa(P, pc=pc, pr=pr, ct=ct, st_=st_):
+            q = P - pc
+            x = q[:, 0] * ct - q[:, 2] * st_; z = q[:, 0] * st_ + q[:, 2] * ct
+            return sdf.ellipsoid(np.stack([x, q[:, 1], z], axis=1), np.zeros(3), pr)
+        sc.shell(pa, pc - .35 * s, pc + .35 * s, .016 * s, 'upperarm.' + side, 'plate', PLATE_L if sx < 0 else PLATE,
+                 keep=lambda P, pc=pc, sx=sx, big=big: np.maximum((pc[2] - .07 * s * big) - P[:, 2], sx * (pc[0] - .075 * s * sx - P[:, 0])), k=.01 * s, amp=.25)
+        if sx < 0:                                               # a raised rim along the gun arm's plate: it turns blows from the neck
+            sc.chain([pc + V(-.02, y, .13 + .03 * math.cos(y * 14)) * s for y in np.linspace(-.1, .1, 7)], [.017 * s] * 7, 'upperarm.R', 'plate', PLATE, k=.008 * s, amp=.2)
+        hands(sc, J, s, 1.35, side, sx, 4, .72, 1.25)
+    sr = J['upperarm.R'][0]
+    glow_vein(sc, [sr + V(-.1, -.05, .05) * s, sr + V(-.125, 0, .02) * s, sr + V(-.1, .06, .05) * s], .006 * s, 'upperarm.R')
+    # the drum: bone fused with crystal, lying across the back between the shoulder blades, light at both ends and in
+    # its bands; the feed leaves its right end and comes round under the arm to the port on the belt
+    dz = cz + .1 * s; dy = .215 * s; dl = .165 * s; dr = .1 * s
+    sc.cone(V(-dl, dy, dz), V(dl, dy, dz), dr, dr, 'chest', 'plate', PLATE_L, k=.012 * s, amp=.25)
+    for sx in (1, -1):
+        sc.sph(V(sx * (dl + .055 * s), dy, dz), .062 * s, 'chest', 'glow', GLOW, k=.006 * s, amp=0)
+        sc.cone(V(sx * .09 * s, .1 * s, dz - .02 * s), V(sx * .1 * s, dy - .03 * s, dz), .04 * s, .045 * s, 'chest', 'bone', BONE, k=.02 * s, amp=.3)
+    for x in (-.1 * s, 0.0, .1 * s):
+        sc.chain([V(x, dy + (dr + .004 * s) * math.sin(a), dz + (dr + .004 * s) * math.cos(a)) for a in np.linspace(0, TAU2, 13)],
+                 [.014 * s] * 13, 'chest', 'bone', BONE, k=.005 * s, amp=.15)
+    for i, x in enumerate((-.1, -.02, .07)):
+        shard(sc, V(x * s, dy + .05 * s, dz + .07 * s), (x * 1.5, .7, 1), (.2 - .03 * i) * s, .032 * s, 'chest')
+    feed = [V(-dl - .05 * s, dy, dz), V(-.275 * s, .15 * s, cz - .02 * s), V(-.265 * s, .03 * s, sz + .09 * s),
+            V(-.225 * s, -.07 * s, hz + .13 * s), port + V(-.01, -.005, .05) * s]
+    sc.chain(feed, [.03 * s, .028 * s, .026 * s, .025 * s, .024 * s], ['chest', 'chest', 'spine', 'hips', 'hips'], 'bone', BONE, k=.006 * s, amp=.3)
+    legs(sc, J, s, 1.5, toes=2, plate=True)       # (thicker and the thighs fuse: the hide then stretches between them in a stride)
+    return sc, J, dict(hunch=9, loll=0, both=True, drag=False, twitch=.12, lean=13, height=1.3)
+
+
 # ------------------------------------------------------------------ extra clips
 def extra_clips(kind, st):
     """the special moves (same pose language as writhe.humanoid_clips)"""
@@ -371,6 +484,15 @@ def extra_clips(kind, st):
                  'thigh.L': [(X, -20 * s_ - 8 * a)], 'shin.L': [(X, 40 * s_)], 'thigh.R': [(X, -20 * s_ - 8 * a)], 'shin.R': [(X, 40 * s_)]}
             return d, fk.Vector((0, -.05 * s_, .04 * a - .2 * s_)) * st.get('height', 1) / 1.5, None
         clips['Slam'] = (1.6 if kind == 'colossus' else 1.3, False, slam)
+    if kind == 'bearer':
+        def brace(p):                                         # sets itself: the feet go wide, the weight drops behind the gun
+            a = smooth(p / .35)
+            j = math.sin(p * 60) * smooth((p - .45) / .1) * (1 - smooth((p - .8) / .2))   # the gun's shake coming up through it
+            d = {'thigh.L': [(Y, -12 * a), (X, -22 * a)], 'shin.L': [(X, 34 * a)], 'foot.L': [(X, -12 * a)],
+                 'thigh.R': [(Y, 12 * a), (X, -6 * a), (Z, -8 * a)], 'shin.R': [(X, 20 * a)], 'foot.R': [(X, -12 * a)],
+                 'spine': [(X, hunch * .5 + 12 * a + .8 * j)], 'chest': [(X, 8 * a + .6 * j), (Z, -8 * a)], 'head': [(X, -14 * a), (Z, 8 * a)]}
+            return d, fk.Vector((0, -.03 * a, -.085 * a * st.get('height', 1))), None
+        clips['Brace'] = (1.4, False, brace)
     if kind == 'colossus':
         def sweep(p):                                         # the right arm swings round in a wide arc
             a = smooth(p / .4) * (1 - smooth((p - .4) / .25))
@@ -402,7 +524,7 @@ def extra_clips(kind, st):
     return clips
 
 
-BUILD = dict(remnant=remnant, veilborn=veilborn, bulwark=bulwark, colossus=colossus)
+BUILD = dict(remnant=remnant, veilborn=veilborn, bulwark=bulwark, colossus=colossus, bearer=bearer)
 
 
 def build(kind):
@@ -410,7 +532,7 @@ def build(kind):
     s = KINDS[kind]
     sc, J, st = BUILD[kind](s)
     res = .0085
-    target = {'remnant': 9000, 'veilborn': 11000, 'bulwark': 14000, 'colossus': 26000}[kind]
+    target = {'remnant': 9000, 'veilborn': 11000, 'bulwark': 14000, 'colossus': 26000, 'bearer': 18000}[kind]
     o = fk.build_mesh(sc, 'Body_' + kind, np.array([-.75, -.7, -.03]) * s, np.array([.75, .7, 2.2]) * s, res * s, target, mats(),
                       uv_scale=.45 * s, ao_dist=.06 * s, seed=sum(map(ord, kind)) % 97, bruise=('#4a3a50', .35, 4.0), veins=('#2a1a34', .4, 5.0))
     arm_ = fk.make_rig(J)

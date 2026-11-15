@@ -244,6 +244,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
 	FText Tagline;
 
+	/** The difficulty level this operation runs at (the plan's "difficulty"; none = the table's default). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
+	FName Difficulty;
+
 	/** Why anyone goes: shown a line at a time as the operation begins. */
 	UPROPERTY(BlueprintReadOnly, Category = "Operation")
 	TArray<FText> Briefing;
@@ -285,6 +289,15 @@ public:
 	int32 GetGoalCount() const { return GoalCount; }
 	float GetHoldLeft() const;
 	ASOEnemy* GetBoss() const { return Boss; }
+
+	/** A living player has this place in view (inside their view, near enough, nothing solid between): where a
+	 *  reinforcement should not appear out of thin air. */
+	bool SeenByAPlayer(const FVector& Point) const;
+
+	/** Which of a group's points the Index-th of a wave takes. A garrison (bHunt false) stands where the plan says,
+	 *  round the points in turn. A reinforcement takes the next point no player has in view; when they can see
+	 *  them all, the one it would have had. */
+	int32 SpawnPointFor(const FSOSpawnGroup& Group, int32 Index, bool bHunt) const;
 	const TArray<FSOOperationReward>& GetRewards() const { return Granted; }
 	/** The objective as one line ("Break the hold on the gate  12 / 20"). */
 	FString GetObjectiveLine() const;
@@ -314,6 +327,20 @@ protected:
 	void StartStage(int32 Index);
 	void TickStage();
 	void SpawnWave(const FSOWave& Wave);
+
+public:
+	/** A plan's waves are written for one player. Each further player in the game adds this share of every group
+	 *  of a wave (0.5: two players face half as many again, three twice as many); a creature that stands alone in
+	 *  its wave (an elite, a boss) stays alone. The plan's "perExtraPlayer". */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Operation")
+	float PerExtraPlayer = 0.5f;
+
+	static int32 ScaledCount(int32 Count, int32 Players, float PerExtra);
+
+	/** The players in the game now. */
+	int32 NumPlayers() const;
+
+protected:
 	ASOEnemy* SpawnEnemy(FName Kind, FName Group, int32 Index, bool bHunt = true);
 	void Complete();
 	void OnCharacterDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World);

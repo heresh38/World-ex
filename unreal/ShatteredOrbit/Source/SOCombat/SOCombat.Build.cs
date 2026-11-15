@@ -6,5 +6,6 @@ public class SOCombat : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "GameplayAbilities", "GameplayTags", "GameplayTasks", "SOCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Json" });
 	}
 }

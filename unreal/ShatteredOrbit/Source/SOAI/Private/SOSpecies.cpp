@@ -7,6 +7,7 @@
 #include "SOEnemy.h"
 #include "SOEnemyAIController.h"
 #include "SOLog.h"
+#include "SODifficulty.h"
 #include "UObject/UObjectIterator.h"
 
 namespace
@@ -61,6 +62,19 @@ FSOSpeciesVariant FSOSpeciesVariant::Over(const FSOSpeciesVariant& Base) const
 	{
 		Out.DisplayName = Base.DisplayName;
 	}
+	if (Out.Kit.IsNone())
+	{
+		Out.Kit = Base.Kit;
+	}
+	if (Out.Boss.IsNone())
+	{
+		Out.Boss = Base.Boss;
+	}
+	Out.Burst *= Base.Burst;
+	Out.BurstPause *= Base.BurstPause;
+	Out.Range *= Base.Range;
+	Out.bSuppressor |= Base.bSuppressor;
+	Out.bLikesHigh |= Base.bLikesHigh;
 	return Out;
 }
 
@@ -85,12 +99,169 @@ FSOSpeciesVariant FSOSpeciesVariant::FromJson(FName Id, const TSharedPtr<FJsonOb
 	{
 		V.Weapon = FName(Text);
 	}
+	if (Object->TryGetStringField(TEXT("kit"), Text))
+	{
+		V.Kit = FName(Text);
+	}
+	if (Object->TryGetStringField(TEXT("boss"), Text))
+	{
+		V.Boss = FName(Text);
+	}
 	Object->TryGetNumberField(TEXT("health"), V.Health);
 	Object->TryGetNumberField(TEXT("damage"), V.Damage);
 	Object->TryGetNumberField(TEXT("speed"), V.Speed);
 	Object->TryGetNumberField(TEXT("aim"), V.AimError);
 	Object->TryGetNumberField(TEXT("sight"), V.Sight);
+	Object->TryGetNumberField(TEXT("burst"), V.Burst);
+	Object->TryGetNumberField(TEXT("burstPause"), V.BurstPause);
+	Object->TryGetNumberField(TEXT("range"), V.Range);
+	Object->TryGetBoolField(TEXT("suppressor"), V.bSuppressor);
+	Object->TryGetBoolField(TEXT("high"), V.bLikesHigh);
 	return V;
+}
+
+bool FSONumbers::Key(const FProperty* Property, const UClass* Base, FString& OutKey)
+{
+	const UClass* Owner = Property->GetOwnerClass();
+	if (!Owner || !Owner->IsChildOf(Base) || !Property->HasAnyPropertyFlags(CPF_Edit))
+	{
+		return false;
+	}
+	OutKey = Property->GetName();
+	if (CastField<FBoolProperty>(Property) && OutKey.Len() > 1 && OutKey[0] == TEXT('b') && FChar::IsUpper(OutKey[1]))
+	{
+		OutKey.RightChopInline(1);
+	}
+	OutKey[0] = FChar::ToLower(OutKey[0]);
+	return true;
+}
+
+void FSONumbers::Get(const UObject* Object, const UClass* Base, TMap<FName, float>& Out)
+{
+	for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+	{
+		const FProperty* Property = *It;
+		FString Name;
+		if (!Key(Property, Base, Name))
+		{
+			continue;
+		}
+		if (const FFloatProperty* Float = CastField<FFloatProperty>(Property))
+		{
+			Out.Add(*Name, Float->GetPropertyValue_InContainer(Object));
+		}
+		else if (const FBoolProperty* Bool = CastField<FBoolProperty>(Property))
+		{
+			Out.Add(*Name, Bool->GetPropertyValue_InContainer(Object) ? 1.0f : 0.0f);
+		}
+		else if (const FIntProperty* Int = CastField<FIntProperty>(Property))
+		{
+			Out.Add(*Name, static_cast<float>(Int->GetPropertyValue_InContainer(Object)));
+		}
+		else if (const FStructProperty* Struct = CastField<FStructProperty>(Property); Struct && Struct->Struct == TBaseStructure<FVector2D>::Get())
+		{
+			const FVector2D* Range = Struct->ContainerPtrToValuePtr<FVector2D>(Object);
+			Out.Add(*(Name + TEXT("Min")), static_cast<float>(Range->X));
+			Out.Add(*(Name + TEXT("Max")), static_cast<float>(Range->Y));
+		}
+	}
+}
+
+int32 FSONumbers::Apply(UObject* Object, const UClass* Base, const TMap<FName, float>& Numbers)
+{
+	int32 Set = 0;
+	for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+	{
+		FProperty* Property = *It;
+		FString Name;
+		if (!Key(Property, Base, Name))
+		{
+			continue;
+		}
+		if (FStructProperty* Struct = CastField<FStructProperty>(Property))
+		{
+			if (Struct->Struct == TBaseStructure<FVector2D>::Get())
+			{
+				FVector2D* Range = Struct->ContainerPtrToValuePtr<FVector2D>(Object);
+				if (const float* Min = Numbers.Find(*(Name + TEXT("Min"))))
+				{
+					Range->X = *Min;
+					++Set;
+				}
+				if (const float* Max = Numbers.Find(*(Name + TEXT("Max"))))
+				{
+					Range->Y = *Max;
+					++Set;
+				}
+			}
+			continue;
+		}
+		const float* Value = Numbers.Find(*Name);
+		if (!Value)
+		{
+			continue;
+		}
+		if (FFloatProperty* Float = CastField<FFloatProperty>(Property))
+		{
+			Float->SetPropertyValue_InContainer(Object, *Value);
+			++Set;
+		}
+		else if (FBoolProperty* Bool = CastField<FBoolProperty>(Property))
+		{
+			Bool->SetPropertyValue_InContainer(Object, *Value > 0.5f);
+			++Set;
+		}
+		else if (FIntProperty* Int = CastField<FIntProperty>(Property))
+		{
+			Int->SetPropertyValue_InContainer(Object, FMath::RoundToInt(*Value));
+			++Set;
+		}
+	}
+	return Set;
+}
+
+const TMap<FName, float>* USOSpeciesTable::Find(FName Id) const
+{
+	for (const FSOSpeciesNumbers& Entry : Species)
+	{
+		if (Entry.Species == Id)
+		{
+			return &Entry.Numbers;
+		}
+	}
+	return nullptr;
+}
+
+const USOSpeciesTable& USOSpeciesTable::Get()
+{
+	static TWeakObjectPtr<const USOSpeciesTable> Loaded;
+	if (!Loaded.IsValid())
+	{
+		// (kept for good: a small table read at every spawn)
+		if (USOSpeciesTable* Table = Cast<USOSpeciesTable>(FSoftObjectPath(TEXT("/Game/Data/DA_Species.DA_Species")).TryLoad()))
+		{
+			Table->AddToRoot();
+			Loaded = Table;
+		}
+	}
+	return Loaded.IsValid() ? *Loaded : *GetDefault<USOSpeciesTable>();
+}
+
+TMap<FName, float> USOSpeciesLibrary::GetClassNumbers(FName Species)
+{
+	TMap<FName, float> Out;
+	if (const TSubclassOf<ASOEnemy> Class = Find(Species))
+	{
+		const ASOEnemy* Creature = Class->GetDefaultObject<ASOEnemy>();
+		Creature->GetNumbers(Out);
+		// and its brain's senses (not "hunter": that is a spawn's choice)
+		if (const UClass* BrainClass = Creature->AIControllerClass; BrainClass && BrainClass->IsChildOf(ASOEnemyAIController::StaticClass()))
+		{
+			FSONumbers::Get(BrainClass->GetDefaultObject(), ASOEnemyAIController::StaticClass(), Out);
+			Out.Remove(TEXT("hunter"));
+		}
+	}
+	return Out;
 }
 
 TSubclassOf<ASOEnemy> USOSpeciesLibrary::Find(FName Species)
@@ -152,9 +323,15 @@ ASOEnemy* USOSpeciesLibrary::Spawn(UWorld* World, FName Species, const FVector& 
 		{
 			continue;
 		}
-		if (Options.Variant)
+		// the level's dressing, and the difficulty level's share of health and damage on top of it
+		const FSODifficulty& Level = USODifficultySubsystem::Get(World);
+		const bool bLevelScales = !FMath::IsNearlyEqual(Level.Health, 1.0f) || !FMath::IsNearlyEqual(Level.Damage, 1.0f);
+		if (Options.Variant || bLevelScales)
 		{
-			Enemy->ApplyVariant(*Options.Variant);                    // before it begins play: it arms itself with the variant's gun
+			FSOSpeciesVariant Dressed = Options.Variant ? *Options.Variant : FSOSpeciesVariant();
+			Dressed.Health *= Level.Health;
+			Dressed.Damage *= Level.Damage;
+			Enemy->ApplyVariant(Dressed);                             // before it begins play: it arms itself with the variant's gun
 		}
 		Enemy->FinishSpawning(Where);
 		if (!Enemy->GetController())

@@ -174,6 +174,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats", meta = (Units = "s"))
 	float SprintToFireTime = 0.2f;
 
+	/** How the gun is carried in first person on a sprint (data "carry"): low (a long gun at the low ready), short (an
+	 *  SMG, up part of the way), high (a handgun, muzzle to the sky). None: a handgun high, anything else low. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	FName SprintCarry;
+
 	// --- Visuals (mesh space: cm, gun faces +Y) ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	TSoftObjectPtr<UStaticMesh> BodyMesh;

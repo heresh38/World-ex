@@ -1,4 +1,6 @@
 #include "SOEnemyAIController.h"
+#include "SODifficulty.h"
+#include "SOLog.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
@@ -12,6 +14,8 @@
 #include "SOCombatStatics.h"
 #include "SOCombatTypes.h"
 #include "SOEnemy.h"
+#include "SOSpecies.h"
+#include "SOWeapon.h"
 
 namespace
 {
@@ -46,13 +50,24 @@ ASOEnemyAIController::ASOEnemyAIController()
 void ASOEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	// its senses are its species' (the same table the creature took its own numbers from)
+	if (const ASOEnemy* Creature = Cast<ASOEnemy>(InPawn))
+	{
+		if (const TMap<FName, float>* Numbers = USOSpeciesTable::Get().Find(Creature->SpeciesId))
+		{
+			const bool bWasHunter = bHunter; // (a spawn's choice, never the table's)
+			FSONumbers::Apply(this, ASOEnemyAIController::StaticClass(), *Numbers);
+			bHunter = bWasHunter;
+		}
+	}
 	Home = InPawn ? InPawn->GetActorLocation() : FVector::ZeroVector;
 	NoiseHandle = USOCombatStatics::OnNoise().AddUObject(this, &ASOEnemyAIController::OnNoise);
 	HitHandle = USOCombatStatics::OnCharacterHit().AddUObject(this, &ASOEnemyAIController::OnHit);
 	DiedHandle = USOCombatStatics::OnCharacterDied().AddUObject(this, &ASOEnemyAIController::OnDied);
 	NextThink = GetWorld()->GetTimeSeconds() + FMath::FRandRange(0.0f, ThinkInterval);
 	LastThink = GetWorld()->GetTimeSeconds();
-	bFlanker = InPawn && (InPawn->GetUniqueID() % 3) == 0;
+	// one in three goes round the side (more of them at a harder level)
+	bFlanker = InPawn && static_cast<int32>(InPawn->GetUniqueID() % 100) < FMath::RoundToInt(100.0f * USODifficultySubsystem::Get(InPawn).FlankShare);
 	StuckCheckFrom = Home;
 	const uint32 Id = InPawn ? InPawn->GetUniqueID() : 0;
 	RangeBias = 0.78f + 0.44f * ((Id * 2654435761u >> 8) % 1000) / 1000.0f;
@@ -133,7 +148,9 @@ void ASOEnemyAIController::OnHit(ASOCombatCharacter* Victim, AActor* Source, flo
 	if (Victim == Me)
 	{
 		// It is the one hit: it knows it is in a fight and roughly where the shot came from, from any distance.
+		// (what its body does about the hit is the body's own: ASOEnemy::OnTookDamage)
 		LastHurtTime = World->GetTimeSeconds();
+		LastAttacker = Shooter;
 		if (!bInCombat)
 		{
 			EnterCombat(Shooter, true);
@@ -150,8 +167,36 @@ void ASOEnemyAIController::OnHit(ASOCombatCharacter* Victim, AActor* Source, flo
 	}
 }
 
+bool ASOEnemyAIController::IsScattering() const
+{
+	return GetWorld() && GetWorld()->GetTimeSeconds() < ScatterUntil;
+}
+
+bool ASOEnemyAIController::TargetIsOpen(const ASOCombatCharacter* Foe, float T) const
+{
+	const ASOWeapon* Gun = Foe ? Foe->GetWeapon() : nullptr;
+	return Gun && Gun->IsReloading() && T - LastSeenTime < 1.5f && USODifficultySubsystem::Get(this).Patience <= 1.05f;
+}
+
 void ASOEnemyAIController::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)
 {
+	// one of its pack went down near it: the second within a few seconds and it breaks off
+	const ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
+	const ASOEnemy* Mate = Cast<ASOEnemy>(Victim);
+	if (World == GetWorld() && Me && Mate && Mate != Me && !Me->IsDead() && bInCombat && Me->bPack && !Me->GetWeapon() && Mate->bPack
+		&& Mate->SpeciesId == Me->SpeciesId && FVector::Dist(Me->GetActorLocation(), Mate->GetActorLocation()) < 2500.0f)
+	{
+		const float T = World->GetTimeSeconds();
+		if (T - LastPackLoss < PackLossWindow && T >= NextScatter)
+		{
+			ScatterUntil = T + FMath::FRandRange(2.4f, 3.4f);
+			NextScatter = T + ScatterEvery;
+			PackGoUntil = 0.0f;       // (and when it comes back it waits for the pack again)
+			PackWaitSince = -1.0f;
+			NextRepath = 0.0f;
+		}
+		LastPackLoss = T;
+	}
 	OnHit(Victim, Killer, -1.0f, World);                          // (a kill in one shot is still a mate going down in front of them)
 }
 
@@ -190,7 +235,7 @@ float ASOEnemyAIController::SightRate(const ASOCombatCharacter* Other) const
 	{
 		return 0.0f;
 	}
-	float Rate = 2.2f * (1.0f - 0.75f * Dist / Range) * Angle;
+	float Rate = 2.2f * USODifficultySubsystem::Get(this).Notice * (1.0f - 0.75f * Dist / Range) * Angle;
 	if (Player)
 	{
 		if (Player->bIsCrouched)
@@ -245,6 +290,162 @@ ASOCombatCharacter* ASOEnemyAIController::Perceive(float Dt)
 		Awareness = FMath::Max(0.0f, Awareness - 0.12f * Dt);
 	}
 	return Best;
+}
+
+bool ASOEnemyAIController::PackGoes(ASOEnemy* Me, ASOCombatCharacter* Foe, float T)
+{
+	if (T < PackGoUntil)
+	{
+		return true;
+	}
+	// the pack: its kind, alive, unarmed, anywhere near this target
+	TArray<ASOEnemyAIController*, TInlineAllocator<12>> Pack;
+	int32 InPlace = 0;
+	bool bTargetOnOne = false;
+	const float Reach = Me->PackRing * 1.25f;
+	for (TActorIterator<ASOEnemy> It(GetWorld()); It; ++It)
+	{
+		ASOEnemy* Other = *It;
+		if (Other->IsDead() || !Other->bPack || Other->SpeciesId != Me->SpeciesId || Other->GetWeapon())
+		{
+			continue;
+		}
+		const float D = Other->DistanceTo(Foe);
+		if (D > 5000.0f)
+		{
+			continue; // (the ones still running up are the pack too: it waits for them)
+		}
+		if (ASOEnemyAIController* Brain = Cast<ASOEnemyAIController>(Other->GetController()))
+		{
+			Pack.Add(Brain);
+		}
+		InPlace += D <= Reach ? 1 : 0;
+		bTargetOnOne |= D < 450.0f;
+	}
+	if (Pack.Num() <= 1)
+	{
+		return true; // alone: it hunts as it always did
+	}
+	if (PackWaitSince < 0.0f)
+	{
+		PackWaitSince = T;
+	}
+	const bool bGo = InPlace >= FMath::Min(Pack.Num(), 3) || bTargetOnOne || T - LastHurtTime < 2.0f || T - PackWaitSince > 7.0f
+		|| (InPlace >= 2 && TargetIsOpen(Foe, T)); // (two in place and the target loading its gun: now)
+	if (!bGo)
+	{
+		return false;
+	}
+	UE_LOG(LogShatteredOrbit, Log, TEXT("Pack goes: %d of %d in place, target on one of them %d, hurt %d, waited %.1f s"), InPlace, Pack.Num(),
+		bTargetOnOne ? 1 : 0, T - LastHurtTime < 2.0f ? 1 : 0, T - PackWaitSince);
+	for (ASOEnemyAIController* Brain : Pack)
+	{
+		Brain->PackGoUntil = T + 6.0f; // one goes, all go
+		Brain->PackWaitSince = -1.0f;
+	}
+	return true;
+}
+
+void ASOEnemyAIController::HoldRing(ASOEnemy* Me, ASOCombatCharacter* Foe, float T)
+{
+	bDirectChase = false;
+	Me->SetRunning(true);
+	UNavigationSystemV1* Nav = NavOf(GetWorld());
+	bDirectHold = Nav == nullptr; // no nav mesh: steered straight at its spot in Tick, every frame
+	if (T < NextRepath)
+	{
+		return;
+	}
+	NextRepath = T + 0.4f;
+	// its own place on the ring: where it stands, seen from the target, a step further round on its own side
+	const FVector Out = (Me->GetActorLocation() - Foe->GetActorLocation()).GetSafeNormal2D();
+	FVector Spot = Foe->GetActorLocation() + Out.RotateAngleAxis(SideBias * 22.0f, FVector::UpVector) * Me->PackRing;
+	FNavLocation OnNav;
+	if (Nav && Nav->ProjectPointToNavigation(Spot, OnNav, FVector(250.0f, 250.0f, 400.0f)))
+	{
+		Spot = OnNav.Location;
+	}
+	HoldSpot = Spot;
+	if (Nav)
+	{
+		MoveToLocation(Spot, 80.0f, true, true, false, true);
+	}
+	SetFocus(Foe, EAIFocusPriority::Gameplay); // it watches what it circles
+}
+
+void ASOEnemyAIController::ReconsiderTarget(float T)
+{
+	if (T < NextTargetCheck)
+	{
+		return;
+	}
+	NextTargetCheck = T + FMath::FRandRange(1.0f, 1.6f);
+	ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
+	ASOCombatCharacter* Current = Target.Get();
+	if (!Me || !Current)
+	{
+		return;
+	}
+	// what the one it has is worth: its distance, far worse if it cannot be seen any more. Another has to beat that
+	// clearly (it does not flick between two players standing together).
+	// (and not everyone on the same player: each of its own side already on a target makes that target worth less)
+	auto Crowd = [&](const ASOCombatCharacter* Who)
+	{
+		int32 On = 0;
+		for (TActorIterator<ASOEnemy> Mate(GetWorld()); Mate; ++Mate)
+		{
+			const ASOEnemyAIController* Brain = *Mate != Me && !Mate->IsDead() ? Cast<ASOEnemyAIController>(Mate->GetController()) : nullptr;
+			On += Brain && Brain->Target.Get() == Who ? 1 : 0;
+		}
+		return 1.0f + 0.3f * FMath::Min(On, 5);
+	};
+	float Best = Me->DistanceTo(Current) * (CanSee(Current) ? 1.0f : 2.5f) * 0.6f * Crowd(Current);
+	ASOCombatCharacter* Better = nullptr;
+	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
+	{
+		ASOCombatCharacter* Other = *It;
+		if (Other == Me || Other == Current || Other->IsDead() || !USOCombatStatics::AreHostile(Me, Other) || !CanSee(Other))
+		{
+			continue;
+		}
+		// whoever just hurt it counts as half as far away
+		const float Worth = Me->DistanceTo(Other) * (Other == LastAttacker.Get() && T - LastHurtTime < 3.0f ? 0.5f : 1.0f) * Crowd(Other);
+		if (Worth < Best)
+		{
+			Best = Worth;
+			Better = Other;
+		}
+	}
+	if (Better)
+	{
+		Target = Better;
+		LastKnownLocation = Better->GetActorLocation();
+		LastSeenTime = T;
+		bHasCover = false; // its cover hid it from the other one
+		NextCoverSearch = 0.0f;
+	}
+}
+
+float ASOEnemyAIController::ThinkPace() const
+{
+	const APawn* Me = GetPawn();
+	if (bInCombat || !Me)
+	{
+		return 1.0f;
+	}
+	float Nearest = BIG_NUMBER;
+	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->Faction == ESOFaction::Player && !It->IsDead())
+		{
+			Nearest = FMath::Min(Nearest, static_cast<float>(FVector::DistSquared(It->GetActorLocation(), Me->GetActorLocation())));
+		}
+	}
+	if (Nearest >= BIG_NUMBER)
+	{
+		return 1.0f; // nobody to be far from
+	}
+	return Nearest > FMath::Square(12000.0f) ? 5.0f : (Nearest > FMath::Square(6000.0f) ? 2.0f : 1.0f);
 }
 
 ASOCombatCharacter* ASOEnemyAIController::NearestPlayer() const
@@ -312,7 +513,7 @@ void ASOEnemyAIController::Alert(ASOCombatCharacter* Other, const FVector& At)
 	}
 	PendingAlertTarget = Other;
 	PendingAlertLocation = At;
-	PendingAlertAt = Now(this) + FMath::FRandRange(0.3f, 0.9f);
+	PendingAlertAt = Now(this) + FMath::FRandRange(0.3f, 0.9f) * USODifficultySubsystem::Get(this).Reaction;
 }
 
 void ASOEnemyAIController::LeaveCombat()
@@ -357,17 +558,45 @@ void ASOEnemyAIController::Tick(float DeltaSeconds)
 		const FVector To = (Target->GetActorLocation() - Me->GetActorLocation()).GetSafeNormal2D();
 		Me->AddMovementInput(To, 1.0f);
 	}
+	if (bDirectHold && !bDirectChase && !Me->IsAttacking())
+	{
+		const FVector To = HoldSpot - Me->GetActorLocation();
+		if (To.SizeSquared2D() > FMath::Square(90.0f))
+		{
+			Me->AddMovementInput(To.GetSafeNormal2D(), 1.0f);
+		}
+	}
 	CheckStuck(DeltaSeconds);
 	const float T = GetWorld()->GetTimeSeconds();
 	if (T >= NextThink)
 	{
-		NextThink = T + ThinkInterval;
+		NextThink = T + ThinkInterval * ThinkPace();
 		Think();
 	}
 }
 
+int32 ASOEnemyAIController::ThinksCounted = 0;
+double ASOEnemyAIController::ThinkSecondsCounted = 0.0;
+
+namespace
+{
+	/** Adds one think and how long it took to the brains' cost (not in a shipping build). */
+	struct FThinkCost
+	{
+#if !UE_BUILD_SHIPPING
+		const double Start = FPlatformTime::Seconds();
+		~FThinkCost()
+		{
+			++ASOEnemyAIController::ThinksCounted;
+			ASOEnemyAIController::ThinkSecondsCounted += FPlatformTime::Seconds() - Start;
+		}
+#endif
+	};
+}
+
 void ASOEnemyAIController::Think()
 {
+	const FThinkCost Cost;
 	ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
 	const float T = Now(this);
 	const float Dt = FMath::Clamp(T - LastThink, 0.0f, 0.5f);
@@ -376,6 +605,23 @@ void ASOEnemyAIController::Think()
 	if (ASOCombatCharacter* Current = Target.Get(); Current && Current->IsDead())
 	{
 		LeaveCombat();
+	}
+	if (bInCombat)
+	{
+		ReconsiderTarget(T);
+	}
+	// staggered: knocked out of whatever it was doing until the condition ends (it still feels what hits it)
+	if (Me->HasStatus(SOTags::Status_Stagger))
+	{
+		StopMovement();
+		bDirectChase = bDirectHold = false;
+		Me->SetWantsFire(false);
+		LastHealth = Me->GetHealth();
+		// (and when it has its feet again it does not carry on where it stood: an armed one looks for cover)
+		bHasCover = false;
+		NextCoverSearch = 0.0f;
+		PackWaitSince = -1.0f;
+		return;
 	}
 	// hurt: it knows
 	const float Health = Me->GetHealth();
@@ -509,7 +755,7 @@ void ASOEnemyAIController::ThinkCombat()
 		return;
 	}
 	Me->SetRunning(true);
-	Me->SetAimTarget(bVisible || T - LastSeenTime < 1.5f ? Foe : nullptr);
+	Me->SetAimTarget(bVisible || T - LastSeenTime < 1.5f || Me->IsSuppressing() ? Foe : nullptr);
 	if (bVisible)
 	{
 		SetFocus(Foe, EAIFocusPriority::Gameplay);
@@ -563,12 +809,72 @@ void ASOEnemyAIController::ThinkCombat()
 	{
 		// claws: come in round its side, then strike
 		Me->SetWantsFire(false);
+		// It does not run straight down the barrel. Hit on its way in, or with a gun on it, it leaps out of the line
+		// (how readily is the level's: a harder one reacts more often) ...
+		const FSODifficulty& Level = USODifficultySubsystem::Get(this);
+		if (bVisible && Dist > Me->MeleeRange * 1.5f && Dist < 2600.0f && T >= NextJuke && T >= ScatterUntil && !Me->IsAttacking()
+			&& (T - LastHurtTime < 0.3f || AimedAt(Foe)))
+		{
+			NextJuke = T + FMath::FRandRange(1.1f, 2.2f) * Level.Reaction;
+			if (FMath::FRand() < FMath::Clamp(0.6f / FMath::Max(Level.Reaction, 0.4f), 0.3f, 0.95f))
+			{
+				const FVector Line = (Foe->GetActorLocation() - Me->GetActorLocation()).GetSafeNormal2D();
+				Me->Juke(FVector::CrossProduct(FVector::UpVector, Line) * (FMath::RandBool() ? 1.0f : -1.0f) + Line * 0.35f);
+				SideBias = -SideBias;                               // and it comes in from the other side now
+				MoveCommitUntil = T + 0.3f;
+				++Jukes;
+			}
+		}
+		// ... and badly hurt before it has got there, it breaks off once and comes again from somewhere else.
+		if (!bBrokeOff && Health01(Me) < 0.45f && T - LastHurtTime < 0.5f && Dist > Me->MeleeRange * 1.3f)
+		{
+			bBrokeOff = true;
+			ScatterUntil = T + FMath::FRandRange(1.5f, 2.3f);
+			NextRepath = 0.0f;
+			PackGoUntil = 0.0f;
+			PackWaitSince = -1.0f;
+		}
+		if (T < ScatterUntil)
+		{
+			// the pack is being cut down: out to its own side and away; the ring forms again when this is over
+			State = ESOEnemyState::Chase;
+			bDirectChase = false;
+			Me->SetRunning(true);
+			UNavigationSystemV1* Nav = NavOf(GetWorld());
+			bDirectHold = Nav == nullptr; // (no nav mesh: steered straight at the spot in Tick)
+			if (T >= NextRepath)
+			{
+				NextRepath = T + 0.5f;
+				const FVector Away = (Me->GetActorLocation() - Foe->GetActorLocation()).GetSafeNormal2D();
+				FVector Spot = Me->GetActorLocation() + Away.RotateAngleAxis(SideBias * 50.0f, FVector::UpVector) * 900.0f;
+				FNavLocation OnNav;
+				if (Nav && Nav->ProjectPointToNavigation(Spot, OnNav, FVector(300.0f, 300.0f, 400.0f)))
+				{
+					Spot = OnNav.Location;
+				}
+				HoldSpot = Spot;
+				if (Nav)
+				{
+					MoveToLocation(Spot, 80.0f, true, true, false, true);
+				}
+				ClearFocus(EAIFocusPriority::Gameplay); // it looks where it runs
+			}
+			return;
+		}
 		if (Dist <= Me->MeleeRange)
 		{
 			State = ESOEnemyState::Attack;
 			StopMovement();
 			bDirectChase = false;
 			Me->TryAttack(Foe);
+			return;
+		}
+		// a pack does not come in one at a time
+		bDirectHold = false;
+		if (Me->bPack && !PackGoes(Me, Foe, T))
+		{
+			State = ESOEnemyState::Chase;
+			HoldRing(Me, Foe, T);
 			return;
 		}
 		State = ESOEnemyState::Chase;
@@ -604,7 +910,20 @@ void ASOEnemyAIController::ThinkCombat()
 	// The target went out of sight: the squad does not wait for it to come back. Half push to where it was (at once
 	// if they have no cover to give up), the rest hold a little, then follow.
 	const float Blind = T - LastSeenTime;
-	const float Patience = bRetreating ? 9.0f : ((Me->GetUniqueID() % 2) == 0 || bFlanker ? 2.4f : 5.2f);
+	// A suppressor does not go looking: it keeps the place the target went to ground under fire, in long bursts, so
+	// the others can move. Not for ever: after a while it comes too.
+	if (Me->bSuppressor && Blind > 0.5f && Blind < 10.0f && FVector::Dist(Me->GetActorLocation(), LastKnownLocation) > 500.0f)
+	{
+		Me->SuppressAt(LastKnownLocation + FVector(0.0f, 0.0f, 45.0f), T + 0.6f);
+		Me->SetWantsFire(true);
+		SetFocalPoint(LastKnownLocation, EAIFocusPriority::Gameplay);
+		StopMovement();
+		bDirectChase = false;
+		State = ESOEnemyState::Fight;
+		return;
+	}
+	const float Patience = (bRetreating ? 9.0f : ((Me->GetUniqueID() % 2) == 0 || bFlanker ? 2.4f : 5.2f)) * USODifficultySubsystem::Get(this).Patience
+		* (SquadSuppressing() ? 0.4f : 1.0f); // (covered by a suppressor's fire, they move up sooner)
 	bPushing = Blind > Patience && FVector::Dist2D(Me->GetActorLocation(), LastKnownLocation) > 350.0f;
 	if (bPushing)
 	{
@@ -691,6 +1010,26 @@ void ASOEnemyAIController::Push()
 	bDirectChase = false;
 }
 
+bool ASOEnemyAIController::SquadSuppressing() const
+{
+	const ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
+	for (TActorIterator<ASOEnemy> It(GetWorld()); Me && It; ++It)
+	{
+		if (*It != Me && !It->IsDead() && It->Faction == Me->Faction && It->IsSuppressing() && FVector::DistSquared(It->GetActorLocation(), Me->GetActorLocation()) < FMath::Square(3000.0f))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ASOEnemyAIController::Relocate()
+{
+	bHasCover = false;
+	bPeeking = false;
+	NextCoverSearch = 0.0f;
+}
+
 void ASOEnemyAIController::ThinkCoverFight(float Dist)
 {
 	ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
@@ -735,11 +1074,30 @@ void ASOEnemyAIController::ThinkCoverFight(float Dist)
 	// held long enough: move on to another spot (keeps the fight moving, and the flankers swing wider). Still far
 	// from the range it likes, it holds only a few bursts before the next bound.
 	const bool bFar = !bRetreating && Dist > Me->PreferredRange * RangeBias * 1.2f;
-	if (T - CoverTaken > (bFar ? FMath::FRandRange(3.0f, 5.5f) : FMath::FRandRange(9.0f, 15.0f)))
+	if (T - CoverTaken > (bFar ? FMath::FRandRange(3.0f, 5.5f) : FMath::FRandRange(9.0f, 15.0f)) * USODifficultySubsystem::Get(this).CoverHold)
 	{
 		bHasCover = false;
 		NextCoverSearch = T;
 		return;
+	}
+	if (Me->HasStatus(SOTags::Status_Suppressed))
+	{
+		// rounds are landing round it: it keeps its head down until they stop
+		if (bPeeking)
+		{
+			bPeeking = false;
+			MoveToLocation(CoverPoint - FVector(0, 0, Half), 20.0f, false, true, false, true);
+		}
+		PhaseUntil = FMath::Max(PhaseUntil, T + 0.9f);
+		Me->SetWantsFire(false);
+		return;
+	}
+	// The target is loading its gun and was in sight a moment ago: out and fire now, not when the clock says (not
+	// again for a while).
+	if (!bPeeking && T >= NextOpportunity && TargetIsOpen(Foe, T))
+	{
+		NextOpportunity = T + 6.0f;
+		PhaseUntil = T;
 	}
 	if (T >= PhaseUntil)
 	{
@@ -875,6 +1233,10 @@ bool ASOEnemyAIController::FindCover(const FVector& ThreatEye, FVector& OutPoint
 			if (bAdvance)
 			{
 				Score += FMath::Clamp((Here - ToThreat) / 500.0f, -2.0f, 3.0f);     // ground made toward it
+			}
+			if (Me->bLikesHigh)
+			{
+				Score += FMath::Clamp((Floor.Z - ThreatEye.Z + 60.0f) / 150.0f, -1.0f, 3.0f); // (a marksman: above what it shoots at)
 			}
 			// falling back: away from the threat, not across its sights
 			if (bRetreating && FVector::Dist2D(From, ThreatEye) > ToThreat)

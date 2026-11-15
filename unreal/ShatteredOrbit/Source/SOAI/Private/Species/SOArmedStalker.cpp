@@ -25,7 +25,7 @@ ASOArmedStalker::ASOArmedStalker(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	SpeciesId = TEXT("stalker");
-	DisplayName = NSLOCTEXT("SO", "StalkerArmed", "Stalker");
+	DisplayName = NSLOCTEXT("SO", "StalkerArmed", "Veteran");
 	VoicePrefix = TEXT("stalker");
 	WeaponArchetype = TEXT("auto");
 	WeaponDamageScale = 0.3f;
