@@ -162,24 +162,30 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 		FMath::Lerp(Color, Fire, 0.35f), 0.05f);
 }
 
-void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size)
+void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size, const FVector& Carry)
 {
-	const FVector Path = To - From;
-	const float Distance = Path.Size();
-	if (Distance < 60.0f || Speed <= 0.0f)
+	if (FVector::Dist(From, To) < 60.0f || Speed <= 0.0f)
 	{
 		return;
 	}
 	++PlasmaBolts;
+	// The shot is drawn in the SHOOTER's frame: the bolt, its trail and its breaths of glowing air all carry the
+	// shooter's own velocity (Carry), as a round leaves a moving gun with the gun's speed added. Drawn fixed in the
+	// world, a player strafing or walking while firing left every trail hanging where the gun had been, a metre and
+	// more beside the barrel (the owner: "the bullets don't seem to come out of the gun's barrel" on the move). The
+	// bolt is aimed so that it still lands on To as it ends: from the shooter it flies toward where To will be.
+	const float Flight = FVector::Dist(From, To) / Speed;
+	const FVector Path = To - From - Carry * Flight;
+	const float Distance = FMath::Max(static_cast<float>(Path.Size()), 1.0f);
 	const FVector Axis = Path / Distance;
-	const float Flight = Distance / Speed;
+	const float Rel = Distance / Flight;                  // (its speed against the shooter)
 	// the tail: short and thick at a rifle bolt's speed, drawn out into a lance by a fast one
 	const float Length = FMath::Min(FMath::Clamp(Speed * 0.0058f, 90.0f, 620.0f) * Size, Distance);
 	FSOFxParticle Tail;
 	Tail.Kind = ESOFxKind::Streak;
 	Tail.Position = From;
 	Tail.Axis = Axis;
-	Tail.Velocity = Axis * Speed;
+	Tail.Velocity = Axis * Rel + Carry;
 	Tail.Life = Flight;
 	Tail.Length = Length;
 	Tail.Size0 = Tail.Size1 = 8.0f * Size;
@@ -213,9 +219,10 @@ void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Sp
 		Glow.Kind = ESOFxKind::Streak;
 		Glow.bWhole = true;
 		Glow.Axis = Axis;
-		Glow.Position = From + Axis * Each * (i + 1.0f);
+		Glow.Delay = Each * (i + 1.0f) / Rel;
+		Glow.Position = From + Axis * Each * (i + 1.0f) + Carry * Glow.Delay;   // (where the bolt is as it lights)
+		Glow.Velocity = Carry;
 		Glow.Length = Each;
-		Glow.Delay = Each * (i + 1.0f) / Speed;
 		Glow.Life = Random.FRandRange(0.085f, 0.115f);
 		Glow.Size0 = 4.2f * Size;
 		Glow.Size1 = 1.0f * Size;
@@ -231,9 +238,9 @@ void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Sp
 		const float Along = Distance * (i + Random.FRandRange(0.25f, 0.75f)) / Puffs;
 		FSOFxParticle Wake;
 		Wake.Kind = ESOFxKind::Glow;
-		Wake.Position = From + Axis * Along + Random.VRand() * 2.5f * Size;
-		Wake.Velocity = Random.VRand() * 6.0f + FVector(0.0f, 0.0f, 9.0f);
-		Wake.Delay = Along / Speed;
+		Wake.Delay = Along / Rel;
+		Wake.Position = From + Axis * Along + Carry * Wake.Delay + Random.VRand() * 2.5f * Size;
+		Wake.Velocity = Random.VRand() * 6.0f + FVector(0.0f, 0.0f, 9.0f) + Carry;
 		Wake.Life = Random.FRandRange(0.18f, 0.30f);
 		Wake.Size0 = 9.0f * Size;
 		Wake.Size1 = 2.5f * Size;

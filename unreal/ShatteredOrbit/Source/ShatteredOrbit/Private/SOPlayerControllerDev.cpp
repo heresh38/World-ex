@@ -571,6 +571,81 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.14f, TEXT("w9_throw_drawn_back"));
 		Snap(0.1f, TEXT("w10_throw_released"));
 	}
+	if (Set == 33)
+	{
+		// A light gun fired ON THE MOVE (files mf_<gun>_*), slowed to a tenth: strafing and walking forward, from
+		// the eye and over the shoulder. Do the bolts leave the barrel? -SOGuns=<archetype> (the light auto rifle).
+		FString Arch = TEXT("auto");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), Arch, false);
+		auto Dilate = [this](float Rate) { UGameplayStatics::SetGlobalTimeDilation(this, Rate); };
+		TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			Look(0.0f);
+			SetControlRotation(GetControlRotation() + FRotator(0.0f, 180.0f, 0.0f));
+			if (ASOCharacter* H = Hero())
+			{
+				*Start = H->GetActorTransform();
+				FRandomStream Rng(FCrc::StrCrc32(*Arch));
+				FSOWeaponInstance W = USOLootLibrary::MakeWeapon(FName(*Arch), 2, 20, Rng);
+				W.Sight = TEXT("default");
+				H->EquipInstance(W);
+			}
+		});
+		// a camera riding beside the player (ahead and to the right, looking back at the gun): the muzzle and the bolt
+		// leaving it in one picture, however the player moves
+		auto Ride = [this, Hero](bool bOn)
+		{
+			ASOCharacter* H = Hero();
+			if (!bOn || !H)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
+			const FVector Rel(170.0f, 230.0f, 70.0f), Look(40.0f, 10.0f, 55.0f);
+			CaptureCamera->SetActorRelativeLocation(Rel);
+			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		for (int32 Pass = 0; Pass < 3; ++Pass)
+		{
+			const ESOViewMode Mode = Pass == 1 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson;
+			const bool bSide = Pass == 2;
+			const TCHAR* V = bSide ? TEXT("side") : (Mode == ESOViewMode::ThirdPerson ? TEXT("third") : TEXT("first"));
+			for (int32 Way = 0; Way < 3; ++Way)
+			{
+				const FVector2D Move = Way == 0 ? FVector2D(0.0f, 0.0f) : (Way == 1 ? FVector2D(1.0f, 0.0f) : FVector2D(0.0f, 1.0f));
+				const TCHAR* W = Way == 0 ? TEXT("still") : (Way == 1 ? TEXT("strafe") : TEXT("forward"));
+				Act([=, this]()
+				{
+					View(Mode);
+					Ride(bSide);
+					if (ASOCharacter* H = Hero())
+					{
+						H->TeleportTo(Start->GetLocation(), Start->Rotator());
+						H->GetCharacterMovement()->StopMovementImmediately();
+					}
+				});
+				Act([=, this]() { CaptureMove = Move; });
+				Do(1.0f, [=]() { Fire(true); });
+				Do(0.25f, [=]() { Dilate(0.08f); });
+				Snap(0.012f, *FString::Printf(TEXT("mf_%s_%s_%s_a"), *Arch, V, W));
+				Snap(0.004f, *FString::Printf(TEXT("mf_%s_%s_%s_b"), *Arch, V, W));
+				Snap(0.004f, *FString::Printf(TEXT("mf_%s_%s_%s_c"), *Arch, V, W));
+				Snap(0.004f, *FString::Printf(TEXT("mf_%s_%s_%s_d"), *Arch, V, W));
+				Act([=, this]() { Dilate(1.0f); Fire(false); CaptureMove = FVector2D::ZeroVector; });
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 32)
 	{
 		// Where the gun sits in first person (files vm_<gun>_hip / _sprint): standing, looking level, then sprinting

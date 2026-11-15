@@ -546,7 +546,7 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			{
 				// A light gun fires plasma: a bolt that is seen to fly, heavier guns throwing bigger ones, pellets small.
 				const float BoltSize = FMath::Clamp(FMath::Sqrt(Data->Damage / 20.0f), 0.6f, 2.4f);
-				Fx->PlasmaBolt(Muzzle, End, Speed, Data->TracerColor, BoltSize);
+				Fx->PlasmaBolt(Muzzle, End, Speed, Data->TracerColor, BoltSize, Holder->GetVelocity());
 				if (bHit)
 				{
 					const bool bBody = Victim != nullptr;

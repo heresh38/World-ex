@@ -64,7 +64,8 @@ public:
 	 *  the gun's colour at the FRONT of a short tail (longer the faster it flies), and what it leaves behind it: the
 	 *  air along its path glows as it passes, a length at a time, and cools within a tenth of a second.
 	 *  Size: 1 = a rifle's bolt. */
-	void PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size = 1.0f);
+	void PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size = 1.0f,
+		const FVector& Carry = FVector::ZeroVector);
 
 	/** Plasma landing: it splashes: a flare, drops of it thrown out ALONG the surface, a breath of vapour, a glow on
 	 *  the place that cools over half a second, and light by its size (a pellet's is small: a shotgun's pattern must
