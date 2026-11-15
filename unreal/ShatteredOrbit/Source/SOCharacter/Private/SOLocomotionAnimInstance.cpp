@@ -780,6 +780,68 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 			}
 		}
 
+		// 1d. the TRIGGER, found on the gun's own shape by how THIN it is: probes across the gun (right to left and back)
+		//     from the grip forward, at three heights under the receiver: the grip is several centimetres across, the
+		//     gap in front of it is empty, and the trigger is a blade under a centimetre thick with that gap behind it.
+		//     The finger on it is posed below. (Probes dropped from above read the grip, the blade and the guard as
+		//     one: on most guns nothing is open under the receiver between them.)
+		FVector TriggerAt = FVector::ZeroVector;           // (rig space: a finger's radius in front of the blade)
+		bool bTrigger = false;
+		if (!bLeft)
+		{
+			auto Across = [&](float X, float Z, float& OutWidth)
+			{
+				FVector R, L;
+				if (!Surface(RigT.TransformPosition(FVector(X, 5.0f, Z)), RigT.TransformPosition(FVector(X, -5.0f, Z)), R)
+					|| !Surface(RigT.TransformPosition(FVector(X, -5.0f, Z)), RigT.TransformPosition(FVector(X, 5.0f, Z)), L))
+				{
+					return false;
+				}
+				OutWidth = static_cast<float>(RigT.InverseTransformPosition(R).Y - RigT.InverseTransformPosition(L).Y);
+				return true;
+			};
+			for (const float Z : { -1.2f, -1.8f, -2.4f })
+			{
+				bool bGap = false;
+				for (float X = 0.0f; X <= 10.0f && !bTrigger; X += 0.25f)
+				{
+					float W = 0.0f;
+					const bool bHit = Across(X, Z, W);
+					if (!bHit)
+					{
+						bGap = true;                                  // (open: the space in front of the grip)
+						continue;
+					}
+					if (bGap && W > 0.15f && W < 1.1f)
+					{
+						// a thin blade with the gap behind it; its front face is where the thin run ends
+						float Front = X;
+						for (float X2 = X + 0.1f; X2 <= X + 1.5f; X2 += 0.1f)
+						{
+							float W2 = 0.0f;
+							if (!Across(X2, Z, W2) || W2 > 1.1f)
+							{
+								break;
+							}
+							Front = X2;
+						}
+						bTrigger = true;
+						TriggerAt = FVector(Front + 1.05f, 0.0f, Z);
+					}
+					else if (W >= 1.1f)
+					{
+						bGap = false;                                 // (the grip, or something solid: not the blade)
+					}
+				}
+				if (bTrigger)
+				{
+					break;
+				}
+			}
+			UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %s trigger %s at %s"), *Rig->GetArchetype().ToString(), bTrigger ? TEXT("found") : TEXT("not found"),
+				*TriggerAt.ToCompactString());
+		}
+
 		// 2. the fingers, joint by joint from the knuckle: each closes until the rest of the finger touches the gun
 		const FTransform HandWorld(Basis * HandOffset, Wrist, Mesh->GetComponentScale());
 		for (int32 F = 0; F < 5; ++F)
@@ -836,12 +898,14 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 						}
 					}
 					const FQuat Close(Axis, FMath::DegreesToRadians(Curl[K]));
+					const FQuat Before = Parent.GetRotation();         // (the bone before this one, as posed)
 					Parent = FTransform(Close * Rigid.GetRotation(), Rigid.GetLocation(), Rigid.GetScale3D());
 					Joint[K] = Rigid.GetLocation();
 					if (K == 2)
 					{
-						Dir = (Joint[2] - Joint[1]).GetSafeNormal();
-						Dir = Close.RotateVector(Dir);
+						// the tip runs on the way the last bone turns from the one before it, its resting bend included (as
+						// MeasureHold and the drawn finger do: the curl alone left a bent tip pointing too straight)
+						Dir = (Parent.GetRotation() * Before.Inverse()).RotateVector((Joint[2] - Joint[1]).GetSafeNormal());
 					}
 				}
 				Joint[3] = Joint[2] + Dir * TipLength;
@@ -856,7 +920,7 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 				for (int32 K = FMath::Max(From, F == 4 ? 1 : 0); K < 3; ++K)
 				{
 					const FVector A = K == 0 ? FMath::Lerp(J[0], J[1], 0.4f) : J[K];
-					if (Touches(A, J[K + 1], Clearance * FingerRadius[F] * Size * (K == 0 ? 0.80f : (K == 1 ? 0.78f : 0.72f))))
+					if (Touches(A, J[K + 1], Clearance * FingerRadius[F] * Size * (K == 0 ? 0.80f : (K == 1 ? 0.78f : 0.82f))))
 					{
 						return true;
 					}
@@ -911,7 +975,7 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 				{
 					// (with a margin: the body breathes and an arm that falls short slides the hand a little, and a thumb
 					// laid exactly on the surface went into it)
-					Clearance = 1.35f;
+					Clearance = 1.6f;
 					float Best = 1e9f, BS = 0.0f, BI = 0.0f, BT = 0.0f;
 					auto Try = [&](float S, float In, float Tc)
 					{
@@ -1041,7 +1105,75 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 					Set(0.0f);
 				}
 			}
-			const bool bStartsInside = Blocked(0);
+			bool bOnTrigger = false;
+			if (F == 0 && bTrigger)
+			{
+				// The TRIGGER finger lies on the trigger: of its poses whose first two bones are clear of the gun, the
+				// one that brings the pad of its tip nearest the trigger's front face (closed like the others, it lay
+				// curled under the guard).
+				const FVector Goal = RigT.TransformPosition(TriggerAt);
+				auto Clear = [&]()
+				{
+					FVector J[4];
+					Pose(J);
+					return !Touches(FMath::Lerp(J[0], J[1], 0.4f), J[1], FingerRadius[0] * Size * 0.8f) && !Touches(J[1], J[2], FingerRadius[0] * Size * 0.72f)
+						&& !Touches(J[2], J[3], 0.45f * Size);
+				};
+				float Best = 1e9f, B0 = 0.0f, B1 = 0.0f, B2 = 0.0f;
+				auto Try = [&](float C0, float C1, float C2)
+				{
+					Curl[0] = C0; Curl[1] = C1; Curl[2] = C2;
+					if (!Clear())
+					{
+						return;
+					}
+					FVector J[4];
+					Pose(J);
+					// (and a finger's own way of bending: the middle joint more than the tip, a hard-bent tip on a straight
+					// finger read as a claw)
+					const float D = static_cast<float>(FVector::Dist(FMath::Lerp(J[2], J[3], 0.6f), Goal)) + 0.03f * FMath::Max(0.0f, C2 - 0.75f * C1)
+						+ 0.01f * FMath::Max(0.0f, -C0);
+					if (D < Best)
+					{
+						Best = D; B0 = C0; B1 = C1; B2 = C2;
+					}
+				};
+				for (float C0 = -10.0f; C0 <= 80.0f; C0 += 10.0f)
+				{
+					for (float C1 = 0.0f; C1 <= 100.0f; C1 += 12.5f)
+					{
+						for (float C2 = 0.0f; C2 <= 70.0f; C2 += 14.0f)
+						{
+							Try(C0, C1, C2);
+						}
+					}
+				}
+				if (Best < 1e8f)
+				{
+					const float A0 = B0, A1 = B1, A2 = B2;
+					for (const float D0 : { -5.0f, 0.0f, 5.0f })
+					{
+						for (const float D1 : { -6.0f, 0.0f, 6.0f })
+						{
+							for (const float D2 : { -7.0f, 0.0f, 7.0f })
+							{
+								Try(A0 + D0, FMath::Max(A1 + D1, 0.0f), FMath::Max(A2 + D2, 0.0f));
+							}
+						}
+					}
+				}
+				if (Best < 3.0f)
+				{
+					Curl[0] = B0; Curl[1] = B1; Curl[2] = B2;
+					bOnTrigger = bThumbHeld = true;               // (placed: it stays as placed)
+					UE_LOG(LogTemp, Verbose, TEXT("FitGrip:   R index on the trigger, %.1f cm off its face (curl %.0f %.0f %.0f)"), Best, B0, B1, B2);
+				}
+				else
+				{
+					Curl[0] = Curl[1] = Curl[2] = 0.0f;
+				}
+			}
+			const bool bStartsInside = Blocked(0) && !bOnTrigger;
 			const float Step = 0.035f;
 			float T = 0.0f;
 			bool bFree = !bStartsInside;
@@ -1155,7 +1287,7 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 				for (int32 K = 0; K < 3; ++K)
 				{
 					const float Preset = FitFingers[Side].Curl[F][K];
-					FitFingers[Side].Curl[F][K] = (!bLeft && F == 0 && !bStartsInside) ? FMath::Min(Curl[K], Preset + 30.0f) : Curl[K];
+					FitFingers[Side].Curl[F][K] = (!bLeft && F == 0 && !bStartsInside && !bOnTrigger) ? FMath::Min(Curl[K], Preset + 30.0f) : Curl[K];
 				}
 				++Fitted;
 			}
@@ -1286,7 +1418,10 @@ USOLocomotionAnimInstance::FHoldReport USOLocomotionAnimInstance::MeasureHold(co
 			{
 				continue;
 			}
-			J[3] = J[2] + (J[2] - J[1]) * 0.8f;
+			// (the tip runs on from the last joint the way that bone turns: carried straight on from the middle bone, a
+			// bent tip was measured as if it pointed into the gun)
+			const FQuat Middle = Mesh->GetBoneQuaternion(Bone(FingerNames[F], 2)), Last = Mesh->GetBoneQuaternion(Bone(FingerNames[F], 3));
+			J[3] = J[2] + (Last * Middle.Inverse()).RotateVector(J[2] - J[1]) * 0.8f;
 			const float Core = 0.3f * Size;
 			auto Count = [&](const FVector& A, const FVector& B, int32 K)
 			{

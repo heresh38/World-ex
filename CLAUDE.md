@@ -388,6 +388,12 @@ fingers posed from the REST pose (not on top of the clip's curl). Each THUMB is 
 poses (swung, drawn in, partly closed, with a margin), the one whose tip comes nearest its place: the firing thumb round
 the back of the grip onto its far side, the support thumb forward along the left of the fore end (taken as the first
 free way and closed toward the palm, they stood out under the grip and curled up over the handguard into the sights).
+The TRIGGER finger lies on the trigger: the trigger is found on the gun's shape by how THIN it is (probes across the
+gun from the grip forward at three heights: the grip is wide, the gap in front of it empty, the blade under a
+centimetre with the gap behind it; probes dropped from above read grip, blade and guard as one) and the finger is
+posed with its pad on the blade's front face, its first two bones clear, bent as a finger bends (the middle joint
+more than the tip). A fingertip runs on from its last joint the way that bone turns, rest bend included, in the fit
+and in `MeasureHold` alike (carried straight on from the middle bone, a bent tip measured as pointing into the gun).
 A gun may bring its own hold instead (`Data/holds/<archetype>.json`, `FSOGunHold`: both wrists, hand directions and
 every finger; read as the rig is built, nothing fitted; none written yet). Measured by `MeasureHold` (wrist bend, reach,
 finger bones in the gun, the palm's gap at its middle and 2.5 cm on); tests `ShatteredOrbit.Hold.*` (`TheGunIsSolid`,
