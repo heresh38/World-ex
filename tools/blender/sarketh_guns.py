@@ -35,7 +35,7 @@ GUN_SCALE.update({'gun_skr_rifle': 1.0, 'gun_skr_sniper': 1.0, 'gun_skr_cannon':
 def mats():
     M = K.energy_mats()
     M['shell'] = fk.tmat('gun_body__skr', 'skr_dark', rough=.24, nstr=.8)
-    M['bone'] = fk.tmat('gun_metal__skr', 'skr_chitin', rough=.35, metal=.35)
+    M['bone'] = fk.tmat('gun_metal__skr', 'skr_armour', rough=.32, metal=.62)
     M['under'] = fk.tmat('gun_dark__skr', 'skr_skin', rough=.45)
     M['white'] = bl.mat('gun_glow', '#d6e6ff', 0, .35, emit='#d6e6ff', strength=9)
     M['amber'] = bl.mat('gun_glow__amber', '#ffb24a', 0, .35, emit='#ffb24a', strength=6)
@@ -97,6 +97,9 @@ def crown(P, M, y_front, y_back, z, n, w0, rise, x=.021, t=.006):
         ww = w0 * (1 + .12 * i)
         blade(P, f'crown{i}', [(ys, z), (ys + L * .45, z + rise * .4 + .004 * i), (ys + L, z + rise + .008 * i)], [ww * .7, ww, 0], M, x=x - .0012 * i,
               t=t, lean=.25, bias=.35)
+        # under each pale blade a dark one, longer and lower (the sheet's guns are layered dark and pale)
+        P += talon(f'crown{i}d', [(ys - L * .12, z - .006), (ys + L * .40, z + rise * .25 - .004), (ys + L * 1.12, z + rise * .7)], [ww * .8, ww * .9, 0],
+                   M['shell'], x=x + .002, t=t * .8, lean=.2, bias=.2)
 
 
 def keel(P, M, y_front, y_back, z, n, w0, drop, x=.019, t=.005):
@@ -104,6 +107,8 @@ def keel(P, M, y_front, y_back, z, n, w0, drop, x=.019, t=.005):
     for i in range(n):
         ys = y_front + i * L * .72
         blade(P, f'keel{i}', [(ys, z), (ys + L * .45, z - drop * .4), (ys + L, z - drop - .004 * i)], [w0 * .7, w0, 0], M, x=x, t=t, lean=-.2, bias=-.3)
+        P += talon(f'keel{i}d', [(ys - L * .10, z + .005), (ys + L * .45, z - drop * .2 + .003), (ys + L * 1.1, z - drop * .7)], [w0 * .8, w0 * .9, 0],
+                   M['shell'], x=x + .002, t=t * .8, lean=-.2, bias=-.2)
 
 
 # ------------------------------------------------------------------ organic frames (sculpted, not extruded)
@@ -119,10 +124,18 @@ class Frame:
         self.S = fk.Sculpt(seed=2)
 
     def bone(self, pts, r, k=.010):
-        return self.S.chain(pts, r, None, 'bone', '#ffffff', k)
+        return self._chain(pts, r, 'bone', k)
 
     def shell(self, pts, r, k=.012):
-        return self.S.chain(pts, r, None, 'shell', '#ffffff', k)
+        return self._chain(pts, r, 'shell', k)
+
+    def _chain(self, pts, r, mat, k):
+        """a smooth tube: its own segments joined exactly (a soft join between segments of one tube swelled every joint
+        into a bead), the whole tube joined softly to what was there before"""
+        prims = self.S.chain(pts, r, None, mat, '#ffffff', .0015)
+        if prims:
+            prims[0].k = k
+        return prims
 
     def ell(self, c, r, mat='shell', k=.012, R=None):
         return self.S.ell(c, r, None, mat, '#ffffff', k, R=R)

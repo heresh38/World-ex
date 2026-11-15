@@ -12,7 +12,7 @@ import numpy as np
 import anatomy
 import male as male_layout
 
-SKIP = {'pec', 'pec2', 'ribfront', 'hipflare', 'pauldron2', 'pauldron3', 'belly0', 'belly1', 'belly2', 'belly3', 'scapula2', 'lowback', 'glute'}
+SKIP = {'pec', 'pec2', 'ribfront', 'hipflare', 'pauldron', 'pauldron2', 'pauldron3', 'belly0', 'belly1', 'belly2', 'belly3', 'scapula2', 'lowback', 'glute'}
 TORSO = {'hips', 'spine', 'chest', 'neck'}
 
 
@@ -122,6 +122,13 @@ def layout(A, J):
     A.blade('bust', ch + (.024, -.124, .172), ch + (.120, -.090, .066), .096, 'chest', lift=.004, ridge=.005, thick=.006, peak=.45, base=.7)
     A.blade('bustlow', ch + (.040, -.128, .080), ch + (.110, -.098, .030), .060, 'chest', mat='dark', lift=.006, ridge=.004, peak=.45)
     A.blade('ribs_f', ch + (.130, -.040, .110), ch + (.135, .000, .000), .040, 'chest', lift=.003)
+    # her own pauldron: one lighter layer
+    A.slot = 'shoulders'
+    sh = j('upperarm.L')
+    A.blade('pauldron_f', sh + (-.034, -.016, .074), sh + (.092, .010, -.110), .098, 'upperarm.L', lift=.006, ridge=.006, thick=.007, peak=.32,
+            tip=.006, bend=(.014, 0, 0))
+    A.blade('pauldron_f2', sh + (.004, .004, .046), sh + (.104, .024, -.130), .070, 'upperarm.L', mat='dark', lift=.016, ridge=.005, peak=.32,
+            tip=.008)
     # wide plates over the hips
     A.slot = 'belt'
     A.blade('hipwide', hp + (.120, -.050, .100), hp + (.182, -.010, -.080), .092, 'hips', lift=.010, ridge=.005, tip=.006, peak=.4)
