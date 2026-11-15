@@ -67,6 +67,20 @@ public:
 	void PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size = 1.0f,
 		const FVector& Carry = FVector::ZeroVector);
 
+	// --- A light gun's reload (and its heat): what it looks like as the gun works. All of it carries the holder's
+	// velocity (Carry), so it stays with the gun; bViewmodel = the first-person gun, a hand's breadth from the eye. ---
+	/** The heat purged out of an open flap At, along Out, for Duration seconds: a jet of glowing gas that blooms and
+	 *  rises, a white-hot core at the opening, sparks thrown out, its light on the hands. Strength 1 = a reload's
+	 *  purge; a little after a long burst (the gun venting its heat by itself). */
+	void ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel);
+	/** Energy drawn in from the air through an open flap At (Out = the way it faces) for Duration seconds: motes of
+	 *  light appearing all round and streaming in, a glow at the opening that grows as it fills. */
+	void ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel);
+	/** A battery's lock releasing: a puff of vapour and a spit of light round its seat. */
+	void ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel);
+	/** The gun charging up as it closes: a ring of its light swelling round it and a flash. */
+	void ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel);
+
 	/** Plasma landing: it splashes: a flare, drops of it thrown out ALONG the surface, a breath of vapour, a glow on
 	 *  the place that cools over half a second, and light by its size (a pellet's is small: a shotgun's pattern must
 	 *  not flood a wall). No bullet hole, no dust: nothing solid struck. bFlesh: smaller; the blood is Impact's. */

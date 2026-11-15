@@ -172,20 +172,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float FovInterpSpeed = 16.0f;
 
-	/** Third person: the shoulder camera's arm length and offset (cm: Y right of the body). Over the LEFT shoulder, so
-	 *  the player stands right of the middle of the screen, as the gun does in first person (the owner, 2026-11-15:
-	 *  "move the player more to the right like the guns when in third person"; it was over the right shoulder, +55). */
+	/** Third person: the shoulder camera's arm length and offset (cm: Y right of the body). Over the RIGHT shoulder, the
+	 *  player left of the middle of the screen (the owner, 2026-11-15, tried it over the left one and asked for it back). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float HipArmLength = 320.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	FVector HipSocketOffset = FVector(0.0f, -70.0f, 15.0f);
+	FVector HipSocketOffset = FVector(0.0f, 55.0f, 15.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float AimArmLength = 175.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	FVector AimSocketOffset = FVector(0.0f, -58.0f, 8.0f);
+	FVector AimSocketOffset = FVector(0.0f, 52.0f, 8.0f);
 
 	/** Third person zooms at most this much while aiming (a magnified optic zooms at the eye, in the scope view). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")

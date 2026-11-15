@@ -671,16 +671,16 @@ class Body:
             secs.append((y, z0 + inset, z1 - inset, max(hw - inset, .003), p))
         P.append(rloft(name, secs, m, n))
 
-    def shell(self, P, name, m, ya, yb, a0, a1, t=.0026, d=0.0, mirror=True, ch=.0016, base=-.0028, ny=None, na=None):
+    def shell(self, P, name, m, ya, yb, a0, a1, t=.0026, d=0.0, mirror=True, ch=.0016, base=-.0028, ny=None, na=None, side=None):
         """An armour shell over the patch ya > yb, a0 < a1: t proud of the surface, its edges chamfered, a skirt down to
-        the chassis all round (mirror = the same on the right flank)."""
+        the chassis all round (mirror = the same on the right flank; side = 1 / -1: that flank only, +X is the left)."""
         ny = ny or max(int((ya - yb) / .007), 2); na = na or max(int((a1 - a0) / .13), 2)
         ys = [ya, ya - ch] + [ya - ch + (yb - ya + 2 * ch) * i / ny for i in range(1, ny)] + [yb + ch, yb]
         ca = min(ch / .03, (a1 - a0) * .2)
         an = [a0, a0 + ca] + [a0 + ca + (a1 - a0 - 2 * ca) * j / na for j in range(1, na)] + [a1 - ca, a1]
         R, Cn = len(ys), len(an)
         loop = [(0, j) for j in range(Cn)] + [(i, Cn - 1) for i in range(1, R)] + [(R - 1, j) for j in range(Cn - 2, -1, -1)] + [(i, 0) for i in range(R - 2, 0, -1)]
-        for sg in ((1, -1) if mirror else (1,)):
+        for sg in ((side,) if side else ((1, -1) if mirror else (1,))):
             Vv = []; F = []
             for i, y in enumerate(ys):
                 for j, a in enumerate(an):

@@ -251,6 +251,189 @@ void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Sp
 	}
 }
 
+void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel)
+{
+	const FVector N = Out.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	const float S = (bViewmodel ? 0.42f : 1.0f) * FMath::Clamp(Strength, 0.1f, 1.5f);
+	const float T = FMath::Max(Duration, 0.1f);
+	const FLinearColor Hot = FMath::Lerp(Color, FLinearColor::White, 0.65f);
+	// the jet: gas leaving the opening fast, slowing as it blooms, rising as it cools; thickest at the start
+	const int32 Puffs = FMath::Max(4, FMath::RoundToInt(26.0f * FMath::Min(Strength, 1.0f)));
+	for (int32 i = 0; i < Puffs; ++i)
+	{
+		const float At01 = FMath::Pow(Random.FRand(), 1.6f);                  // (most of it early)
+		FSOFxParticle Gas;
+		Gas.Kind = ESOFxKind::Glow;
+		Gas.Position = At + Random.VRand() * 1.5f * S;
+		Gas.Velocity = (N + Random.VRand() * 0.35f).GetSafeNormal() * Random.FRandRange(180.0f, 420.0f) * S + Carry;
+		Gas.Gravity = -60.0f * S;                                               // (hot: it rises)
+		Gas.Drag = 5.5f;
+		Gas.Delay = At01 * T * 0.85f;
+		Gas.Life = Random.FRandRange(0.28f, 0.5f);
+		Gas.Size0 = Random.FRandRange(5.0f, 8.0f) * S;
+		Gas.Size1 = Random.FRandRange(18.0f, 30.0f) * S;
+		Gas.Intensity0 = Random.FRandRange(3.0f, 5.5f) * (1.0f - At01 * 0.6f) * (bViewmodel ? 0.7f : 1.0f);
+		Gas.Intensity1 = 0.0f;
+		Gas.Color = FMath::Lerp(Color, Hot, Random.FRand() * 0.5f);
+		Spawn(Gas);
+		// and what it leaves: haze that hangs a moment and drifts up
+		if (i % 3 == 0)
+		{
+			FSOFxParticle Haze;
+			Haze.Kind = ESOFxKind::Smoke;
+			Haze.Position = At + N * 4.0f * S;
+			Haze.Velocity = N * Random.FRandRange(60.0f, 120.0f) * S + FVector(0.0f, 0.0f, 25.0f * S) + Carry;
+			Haze.Drag = 3.0f;
+			Haze.Delay = Gas.Delay + 0.05f;
+			Haze.Life = Random.FRandRange(0.6f, 1.0f);
+			Haze.Size0 = 6.0f * S;
+			Haze.Size1 = Random.FRandRange(22.0f, 34.0f) * S;
+			Haze.Intensity0 = 0.35f;
+			Haze.Color = Color * 0.45f;
+			Haze.Spin = Random.FRandRange(0.0f, 360.0f);
+			Spawn(Haze);
+		}
+	}
+	// the core at the opening, white-hot while it runs
+	FSOFxParticle Core;
+	Core.Kind = ESOFxKind::Glow;
+	Core.Position = At + N * 1.5f * S;
+	Core.Velocity = Carry;
+	Core.Life = T;
+	Core.bHold = true;
+	Core.Size0 = Core.Size1 = 9.0f * S;
+	Core.Intensity0 = Core.Intensity1 = 14.0f * FMath::Min(Strength, 1.0f);
+	Core.Color = Hot;
+	Spawn(Core);
+	// sparks thrown out of it as it blows
+	for (int32 i = 0; i < FMath::RoundToInt(10.0f * FMath::Min(Strength, 1.0f)); ++i)
+	{
+		FSOFxParticle Ember;
+		Ember.Kind = ESOFxKind::Streak;
+		Ember.Position = At;
+		Ember.Velocity = (N + Random.VRand() * 0.6f).GetSafeNormal() * Random.FRandRange(250.0f, 600.0f) * S + Carry;
+		Ember.Gravity = 380.0f;
+		Ember.Drag = 2.5f;
+		Ember.Delay = Random.FRand() * T * 0.4f;
+		Ember.Life = Random.FRandRange(0.12f, 0.3f);
+		Ember.Size0 = 1.4f * S;
+		Ember.Size1 = 0.5f * S;
+		Ember.Intensity0 = 20.0f;
+		Ember.Intensity1 = 0.0f;
+		Ember.Color = Hot;
+		Spawn(Ember);
+	}
+	PendingLights.Add({ At + N * 12.0f * S, Color, (bViewmodel ? 6.0f : 40.0f) * FMath::Min(Strength, 1.0f), T * 0.8f, 0.0f });   // (at the hands: hundreds flooded the view)
+}
+
+void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel)
+{
+	const FVector N = Out.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	const float S = bViewmodel ? 0.42f : 1.0f;
+	const float T = FMath::Max(Duration, 0.15f);
+	// motes of light out of the air round the gun, each drawn in to the opening, faster as it nears it
+	const int32 Motes = 46;
+	for (int32 i = 0; i < Motes; ++i)
+	{
+		const float Life = Random.FRandRange(0.22f, 0.4f);
+		const float Start = Random.FRand() * FMath::Max(T - Life, 0.0f);
+		// (from the side the opening faces, a half sphere round it, 25-60 cm off)
+		FVector From = Random.VRand();
+		if (FVector::DotProduct(From, N) < 0.0f)
+		{
+			From -= 1.6f * FVector::DotProduct(From, N) * N;
+		}
+		const FVector P0 = At + From.GetSafeNormal() * Random.FRandRange(25.0f, 60.0f) * S;
+		FSOFxParticle Mote;
+		Mote.Kind = ESOFxKind::Streak;
+		Mote.Position = P0;
+		Mote.Velocity = (At - P0) / Life + Carry;
+		Mote.Delay = Start;
+		Mote.Life = Life;
+		Mote.Length = 6.0f * S;
+		Mote.Axis = (At - P0).GetSafeNormal();
+		Mote.Size0 = 0.8f * S;
+		Mote.Size1 = 2.2f * S;
+		Mote.Intensity0 = 1.5f;
+		Mote.Intensity1 = 9.0f;
+		Mote.Color = FMath::Lerp(Color, FLinearColor::White, Random.FRand() * 0.4f);
+		Spawn(Mote);
+	}
+	// the opening fills: a glow that grows while it draws, brightest as it closes
+	for (int32 k = 0; k < 3; ++k)
+	{
+		FSOFxParticle Fill;
+		Fill.Kind = ESOFxKind::Glow;
+		Fill.Position = At + N * 1.0f * S;
+		Fill.Velocity = Carry;
+		Fill.Delay = T * k / 3.0f;
+		Fill.Life = T / 3.0f + 0.05f;
+		Fill.Size0 = (7.0f + 5.0f * k) * S;
+		Fill.Size1 = (12.0f + 5.0f * k) * S;
+		Fill.Intensity0 = 1.5f + 2.0f * k;
+		Fill.Intensity1 = 3.0f + 2.0f * k;   // (stronger, it washed the hands in its colour)
+		Fill.Color = FMath::Lerp(Color, FLinearColor::White, 0.2f * k);
+		Spawn(Fill);
+	}
+	PendingLights.Add({ At + N * 10.0f * S, Color, bViewmodel ? 4.0f : 25.0f, T, 0.0f });
+}
+
+void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel)
+{
+	const float S = bViewmodel ? 0.42f : 1.0f;
+	for (int32 i = 0; i < 5; ++i)
+	{
+		FSOFxParticle Puff;
+		Puff.Kind = ESOFxKind::Smoke;
+		Puff.Position = At + Random.VRand() * 2.0f * S;
+		Puff.Velocity = Random.VRand() * 70.0f * S + FVector(0.0f, 0.0f, -30.0f * S) + Carry;
+		Puff.Drag = 4.0f;
+		Puff.Life = Random.FRandRange(0.35f, 0.6f);
+		Puff.Size0 = 3.0f * S;
+		Puff.Size1 = Random.FRandRange(10.0f, 15.0f) * S;
+		Puff.Intensity0 = 0.4f;
+		Puff.Color = FMath::Lerp(Color, FLinearColor::White, 0.5f) * 0.6f;
+		Puff.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(Puff);
+	}
+	FSOFxParticle Spit;
+	Spit.Kind = ESOFxKind::Glow;
+	Spit.Position = At;
+	Spit.Velocity = Carry;
+	Spit.Life = 0.12f;
+	Spit.Size0 = 5.0f * S;
+	Spit.Size1 = 11.0f * S;
+	Spit.Intensity0 = 14.0f;
+	Spit.Intensity1 = 0.0f;
+	Spit.Color = FMath::Lerp(Color, FLinearColor::White, 0.5f);
+	Spawn(Spit);
+}
+
+void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel)
+{
+	const float S = bViewmodel ? 0.42f : 1.0f;
+	const float T = FMath::Max(Duration, 0.08f);
+	FSOFxParticle Swell;
+	Swell.Kind = ESOFxKind::Glow;
+	Swell.Position = At;
+	Swell.Velocity = Carry;
+	Swell.Life = T;
+	Swell.Size0 = 6.0f * S;
+	Swell.Size1 = 26.0f * S;
+	Swell.Intensity0 = 4.0f;
+	Swell.Intensity1 = 0.0f;
+	Swell.Color = Color;
+	Spawn(Swell);
+	FSOFxParticle Flash = Swell;
+	Flash.Life = 0.07f;
+	Flash.Size0 = 10.0f * S;
+	Flash.Size1 = 4.0f * S;
+	Flash.Intensity0 = 18.0f;
+	Flash.Color = FMath::Lerp(Color, FLinearColor::White, 0.7f);
+	Spawn(Flash);
+	PendingLights.Add({ At, Color, bViewmodel ? 5.0f : 30.0f, 0.12f, 0.0f });
+}
+
 void USOFxSubsystem::PlasmaImpact(const FVector& Point, const FVector& Normal, const FLinearColor& Color, float Size, float Delay, bool bFlesh)
 {
 	const FVector N = Normal.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);

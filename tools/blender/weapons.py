@@ -252,6 +252,17 @@ def e_small(P, M, B, sel=(.03, .03), pins=((.085, .03), (-.045, .02)), catch=(-.
         P += K.sling_loop(y, z, M['dark'])
 
 
+def flap(B, P, name, m, ya, yb, a0, a1, **kw):
+    """A light gun's reload flap: the shell over ya > yb, a0 < a1 stays on the right flank, and on the LEFT flank (the
+    side the player sees) it is a part of its own, hinged along its top edge (the part `hatch`, turned about the bore
+    line through its pivot): it swings out to vent the gun's heat or to draw energy in from the air as it reloads.
+    Returns the flap's objects and its pivot."""
+    B.shell(P, name, m, ya, yb, a0, a1, side=-1, **kw)
+    F = []
+    B.shell(F, name, m, ya, yb, a0, a1, side=1, **kw)
+    return F, B.pt((ya + yb) / 2, a1, kw.get('t', .0026))
+
+
 def AF(f):
     """The angle round a Body's section (p = 5) at the height fraction f of its flank (-1 belly edge .. 1 top edge)."""
     return math.copysign(math.asin(min(abs(f), 1.0) ** 2.5), f)
@@ -317,14 +328,15 @@ def auto_rifle():
     G.brake(P, 'brake', -.6, zb, .019, .076, MT, DK, 3)
     P.append(G.band('brake_nut', -.6, .01, .0165, TR, zb, 0, .004, 6, .0008))
     # the cell
-    P += G.box_mag('mag', [(-.066, .01), (-.072, -.09), (-.088, -.15), (-.15, -.15), (-.142, -.09), (-.14, .01)], .034, MT, floor_m=DK,
+    MAG = G.box_mag('mag', [(-.066, .01), (-.072, -.09), (-.088, -.15), (-.15, -.15), (-.142, -.09), (-.14, .01)], .034, MT, floor_m=DK,
                    floor=[(-.083, -.146), (-.155, -.146), (-.157, -.162), (-.086, -.162)],
                    window=[(-.094, -.022), (-.12, -.022), (-.126, -.1), (-.1, -.1)], window_m=GL,
                    ribs=[[(-.078, -.004), (-.134, -.004), (-.1345, -.012), (-.0785, -.012)], [(-.089, -.112), (-.141, -.112), (-.143, -.12), (-.091, -.12)]])
     G.stock_body(P, M, .15, .096, .222, .13, .04, .03)
     P += e_rail(M, .1, -.44, .098)
     sz = .135
-    finish('gun_auto', P, (0, -.68, .062), (0, -.32, .02), (0, .1, sz), optic=red_dot(M, -.02, sz), rail=(0, -.02, .1075))
+    finish('gun_auto', P, (0, -.68, .062), (0, -.32, .02), (0, .1, sz), optic=red_dot(M, -.02, sz), rail=(0, -.02, .1075),
+           moving=[('mag', MAG, (0, -.103, .01))])
 
 
 def pulse_rifle():
@@ -356,7 +368,8 @@ def pulse_rifle():
         P.append(G.band('emit_standoff', y, .006, .0272, DK, zb, 0, .009, 28, .001))
     P.append(G.band('emit_muzzle', -.398, .03, .0275, DK, zb, 0, .0085, 32, .0012))
     P.append(G.band('emit_lip', -.4265, .0035, .0245, TR, zb, 0, .0055, 32, .0006))
-    G.cell(P, 'cell', (0, -.12, .004), .026, .085, M, n=8)
+    MAG = []
+    G.cell(MAG, 'cell', (0, -.12, .004), .026, .085, M, n=8)              # (its own part: the reload takes it out)
     P.append(prism('cell_latch', [(-.088, .004), (-.088, -.012), (-.096, -.016), (-.098, .004)], .02, TR, .0015))
     G.stock_folding(P, MT, DK, M['grip'], .14, .098, L=.165, drop=.115, w=.042, bolt_m=TR)
     P += e_rail(M, .12, -.06, .1)
@@ -364,7 +377,8 @@ def pulse_rifle():
     optic = []
     G.iron_rear(optic, .1, sz, DK, base_z=.1095)
     G.iron_front(optic, -.24, sz, DK, dot_m=M['green'], base_z=.094, w=.022)
-    finish('gun_pulse', P, (0, -.43, .06), (0, -.24, .01), (0, .14, sz), optic=optic, rail=(0, .03, .1095))
+    finish('gun_pulse', P, (0, -.43, .06), (0, -.24, .01), (0, .14, sz), optic=optic, rail=(0, .03, .1095),
+           moving=[('mag', MAG, (0, -.12, .004))])
 
 
 def scout_rifle():
@@ -380,7 +394,7 @@ def scout_rifle():
     B.chassis(P, DK)
     B.shell(P, 'spine', MT, .128, -.3, 1.05, math.pi - 1.05, t=.0004, mirror=False)
     B.shell(P, 'shell_cheek', BD, .126, .04, -.3, .8)
-    B.shell(P, 'shell_strake', BD, .026, -.25, AF(.42), .8)
+    FLAP, HINGE = flap(B, P, 'shell_strake', BD, .026, -.25, AF(.42), .8)
     B.shell(P, 'shell_lower', BD, .026, -.045, -.9, AF(.3))
     B.shell(P, 'shell_well', MT, -.056, -.146, -1.0, AF(.3), t=.0032)
     B.shell(P, 'shell_chin', BD, -.158, -.25, -.85, AF(.3))
@@ -403,14 +417,14 @@ def scout_rifle():
         for q in (.003, -.019):
             P.append(G.band('accel_insul', y + q, .003, .0205, MT, zb, 0, .006, 32, .0006))
     G.brake(P, 'brake', -.675, zb, .018, .068, TR, DK, 3)
-    P += G.box_mag('mag', [(-.06, .02), (-.066, -.06), (-.14, -.06), (-.136, .02)], .03, MT, floor_m=DK,
+    MAG = G.box_mag('mag', [(-.06, .02), (-.066, -.06), (-.14, -.06), (-.136, .02)], .03, MT, floor_m=DK,
                    floor=[(-.064, -.056), (-.142, -.056), (-.143, -.068), (-.066, -.068)], window=[(-.085, -.005), (-.115, -.005), (-.118, -.045), (-.088, -.045)],
                    window_m=GL)
     G.stock_soft(P, BD, MT, M['grip'], .13, .088, .222, .14, .036, .03, mode='thumb', grip_pt=G.gp(.28, 0, .004)(.028, .118), bolt_m=TR)
     P += e_rail(M, .08, -.16, .09)
     sz = .13
     finish('gun_scout', P, (0, -.74, .055), (0, -.32, .0), (0, .1, sz), optic=scope_tube(M, -.02, sz, .17, .019, .026), scoped=True,
-           rail=(0, -.04, .0995))
+           rail=(0, -.04, .0995), moving=[('mag', MAG, (0, -.098, .02)), ('hatch', FLAP, HINGE)])
 
 
 def hand_cannon():
@@ -462,8 +476,8 @@ def hand_cannon():
     FT = G.Body([(.014, .1, .11, .013, 4.0), (.0, .1, .11, .015, 5.0), (-.04, .1, .11, .015, 5.0), (-.08, .1, .11, .015, 5.0), (-.1, .1, .11, .015, 5.0)])
     FT.chassis(P, DK, inset=.0016, step=.02, n=20, name='frame_top')
     FT.shell(P, 'top_spine', MT, .012, -.098, 1.0, math.pi - 1.0, t=.0004, mirror=False)
-    for ya, yb in ((.01, -.04), (-.048, -.098)):
-        FT.shell(P, 'top_shell', BD, ya, yb, -.9, .8, t=.0016, ch=.0012, base=-.0018, na=7)
+    FT.shell(P, 'top_shell', BD, .01, -.04, -.9, .8, t=.0016, ch=.0012, base=-.0018, na=7)
+    FLAP, HINGE = flap(FT, P, 'top_shell', BD, -.048, -.098, -.9, .8, t=.0016, ch=.0012, base=-.0018, na=7)
     # pale shells on the frame's flanks, the dark frame and a line of light in the gaps between them
     P.append(plate('frame_shell', [(.019, .03), (.019, .09), (.034, .09), (.04, .078), (.047, .066), (.05, .056), (.043, .046), (.033, .034), (.027, .028)],
                    BD, .013, .0176, .0012))
@@ -561,7 +575,7 @@ def hand_cannon():
     P.append(prism('front_base', [(-.262, .1105), (-.268, .1145), (-.29, .1145), (-.294, .1105)], .011, DK, .0008))
     P.append(prism('post', [(-.272, .114), (-.277, sz + .0045), (-.2835, sz + .0045), (-.286, .114)], .0036, DK, .0005))
     P.append(lathe('postdot', [(-.2768, 0), (-.2768, .0014), (-.2772, .0014), (-.2772, 0)], M['green'], sz + .0026, 0, 8))
-    finish('gun_handcannon', P, (0, -.31, .07), (0, -.02, -.02), (0, .1, sz), rail=(0, -.045, .1116))
+    finish('gun_handcannon', P, (0, -.31, .07), (0, -.02, -.02), (0, .1, sz), rail=(0, -.045, .1116), moving=[('hatch', FLAP, HINGE)])
 
 
 def shotgun():
@@ -577,7 +591,7 @@ def shotgun():
     B.chassis(P, DK)
     B.shell(P, 'spine', MT, .09, -.212, 1.05, math.pi - 1.05, t=.0004, mirror=False)
     B.shell(P, 'shell_cheek', BD, .088, .03, -.5, .8)
-    B.shell(P, 'shell_upper', BD, .016, -.21, AF(.1), .8)
+    FLAP, HINGE = flap(B, P, 'shell_upper', BD, .016, -.21, AF(.1), .8)
     B.shell(P, 'shell_lower', MT, .016, -.2, -.92, -AF(.1), t=.0022)
     B.light(P, 'seam', GL, .012, -.2, -AF(.04), AF(.04))
     B.studs(P, TR, [(.07, .5), (-.02, .6), (-.19, .6), (-.03, -.7), (-.17, -.7)])
@@ -610,7 +624,7 @@ def shotgun():
     P.append(prism('post', [(-.529, .13), (-.531, sz), (-.537, sz), (-.539, .13)], .0026, DK, .0004))
     P.append(lathe('postdot', [(-.5288, 0), (-.5288, .0012), (-.5292, .0012), (-.5292, 0)], M['green'], sz - .0022, 0, 8))
     P += K.rail(M, .036, -.008, .0895, .022, DK)
-    finish('gun_shotgun', P, (0, -.56, .072), (0, -.35, -.005), (0, .07, sz), rail=(0, .014, .099))   # (the sight point stays
+    finish('gun_shotgun', P, (0, -.56, .072), (0, -.35, -.005), (0, .07, sz), rail=(0, .014, .099), moving=[('hatch', FLAP, HINGE)])   # (the sight point stays
     # out over the wrist: on the receiver the eye, 9 cm behind it, was level with the receiver's top and its rear face
     # filled the aimed view. To do: a raised rear sight and front post, as the rifles have.)
 
@@ -628,7 +642,7 @@ def sniper():
     B.chassis(P, DK)
     B.shell(P, 'spine', MT, .148, -.236, 1.05, math.pi - 1.05, t=.0004, mirror=False)
     B.shell(P, 'shell_cheek', MT, .146, .046, -.4, .8)
-    B.shell(P, 'shell_action', BD, .03, -.2, AF(.1), .8, t=.003)
+    FLAP, HINGE = flap(B, P, 'shell_action', BD, .03, -.2, AF(.1), .8, t=.003)
     B.shell(P, 'shell_lower', MT, .03, -.04, -.95, -AF(.1), t=.0022)
     B.shell(P, 'shell_well', BD, -.046, -.128, -1.0, -AF(.1), t=.0034)
     B.shell(P, 'shell_chin', MT, -.14, -.2, -.9, -AF(.1), t=.0022)
@@ -667,7 +681,7 @@ def sniper():
         P.append(rod('bipod', (s * .022, -.55, .02), (s * .046, -.526, -.1), .0052, DK))
         P.append(rod('bipod_ext', (s * .046, -.526, -.1), (s * .05, -.522, -.118), .0038, MT))
         P.append(lathe_x('bipodfoot', [(-.008, .009), (.008, .009), (.008, 0)], (s * .05, -.522, -.122), M['grip'], 12, 1))
-    P += G.box_mag('mag', [(-.05, .012), (-.052, -.06), (-.122, -.06), (-.12, .012)], .036, DK, floor_m=MT,
+    MAG = G.box_mag('mag', [(-.05, .012), (-.052, -.06), (-.122, -.06), (-.12, .012)], .036, DK, floor_m=MT,
                    floor=[(-.05, -.056), (-.124, -.056), (-.125, -.068), (-.052, -.068)], window=[(-.07, -.008), (-.1, -.008), (-.1, -.044), (-.07, -.044)],
                    window_m=GL)
     G.stock_adjustable(P, BD, DK, M['grip'], .15, .09, .28, .135, .044, .016, bolt_m=TR)
@@ -675,7 +689,7 @@ def sniper():
     P += e_rail(M, .14, -.2, .09)
     sz = .14
     finish('gun_sniper', P, (0, -1.03, .055), (0, -.3, .0), (0, .2, sz), optic=scope_tube(M, .02, sz, .3, .024, .034), scoped=True,
-           rail=(0, -.03, .0995))
+           rail=(0, -.03, .0995), moving=[('mag', MAG, (0, -.086, .012)), ('hatch', FLAP, HINGE)])
 
 
 def rocket():
@@ -691,7 +705,7 @@ def rocket():
     B.chassis(P, DK, n=48)
     P.append(lathe('tube_bore', [(.31, .0585), (-.63, .0705), (-.63, .068), (.31, .056)], DK, zc, 0, 40, closed=True))
     B.shell(P, 'shell_spine', BD, .25, -.54, 1.05, math.pi - 1.05, t=.003, mirror=False)
-    B.shell(P, 'shell_breech', BD, .25, .07, -.75, .8, t=.003)
+    FLAP, HINGE = flap(B, P, 'shell_breech', BD, .25, .07, -.75, .8, t=.003)
     B.shell(P, 'shell_upper', BD, .04, -.54, .12, .8, t=.003)
     B.shell(P, 'shell_lower', BD, .04, -.3, -.75, -.02, t=.003)
     B.shell(P, 'shell_chin', MT, -.32, -.54, -.75, -.02, t=.0024)
@@ -719,7 +733,8 @@ def rocket():
     sz = .23
     P.append(G.rprism('sightarm', [(.05, .2), (.05, .208), (-.09, .208), (-.09, .2), (-.03, .2), (-.02, .192), (.02, .192), (.03, .2)], .016, DK, .003))
     P += K.rail(M, .06, -.1, .205, .022, DK)
-    finish('gun_rocket', P, (0, -.64, .13), (0, -.28, -.02), (0, .1, sz), optic=red_dot(M, -.02, sz + .015, heavy=True), rail=(0, -.02, .2145))
+    finish('gun_rocket', P, (0, -.64, .13), (0, -.28, -.02), (0, .1, sz), optic=red_dot(M, -.02, sz + .015, heavy=True), rail=(0, -.02, .2145),
+           moving=[('hatch', FLAP, HINGE)])
 
 
 def smg():
@@ -749,7 +764,7 @@ def smg():
     G.cage(P, 'shroud', -.19, -.305, zb, .0285, MT, t=.004, bars=8, fill=.58, frames=((-.19, .012), (-.295, .012)), phase=math.pi / 2, frame_m=DK)
     V.barrel('barrel', M, -.3, -.37, zb, .0105, P, m=DK)
     G.can(P, 'can', -.36, zb, .0195, .118, MT, TR, bands=2)
-    P += G.box_mag('mag', [(-.072, .02), (-.078, -.15), (-.126, -.15), (-.122, .02)], .03, DK, floor_m=MT,
+    MAG = G.box_mag('mag', [(-.072, .02), (-.078, -.15), (-.126, -.15), (-.122, .02)], .03, DK, floor_m=MT,
                    floor=[(-.075, -.146), (-.129, -.146), (-.13, -.16), (-.077, -.16)], window=[(-.092, -.02), (-.108, -.02), (-.112, -.13), (-.096, -.13)],
                    window_m=GL)
     P.append(G.rprism('vgrip', [(-.23, .038), (-.236, -.048), (-.268, -.054), (-.266, .038)], .028, M['grip'], .008))
@@ -761,7 +776,8 @@ def smg():
     G.ribbed_pad(P, M['grip'], .276, .098, .014, .046, 5, .015)
     P += e_rail(M, .06, -.28, .097, .022)
     sz = .135
-    finish('gun_smg', P, (0, -.48, .066), (0, -.25, -.03), (0, .08, sz), optic=red_dot(M, -.04, sz), rail=(0, -.04, .1065))
+    finish('gun_smg', P, (0, -.48, .066), (0, -.25, -.03), (0, .08, sz), optic=red_dot(M, -.04, sz), rail=(0, -.04, .1065),
+           moving=[('mag', MAG, (0, -.097, .02))])
 
 
 def sidearm():
@@ -787,7 +803,7 @@ def sidearm():
     SL.chassis(P, DK, name='slide', step=.006)                         # the slide in two layers: grasping louvres, shells, the light between them
     SL.shell(P, 'slide_spine', MT, .036, -.168, 1.05, math.pi - 1.05, t=.0004, mirror=False)
     SL.slats(P, 'serration', BD, .035, .003, -.8, .8, 7, share=.6, t=.0022)
-    SL.shell(P, 'slide_upper', BD, -.002, -.158, AF(.16), .8, t=.0022)
+    FLAP, HINGE = flap(SL, P, 'slide_upper', BD, -.002, -.158, AF(.16), .8, t=.0022)
     SL.shell(P, 'slide_lower', MT, -.002, -.162, -.85, -AF(.12), t=.0018)
     SL.light(P, 'seam', GL, -.006, -.156, -AF(.03), AF(.07))
     SL.studs(P, TR, [(-.012, .5), (-.148, .5)], r=.0016, d=.0022)
@@ -824,7 +840,7 @@ def sidearm():
         P.append(prism('top_serration', [(y, .0901), (y, .0907), (y - .003, .0907), (y - .003, .0901)], .0085, MT, .0002))
     P.append(G.rprism('striker_plate', [(.0402, .058), (.0412, .081), (.039, .081), (.039, .058)], .02, MT, .002))
     G.rivets(P, [(-.02, .034), (-.14, .034), (.02, .03)], .016, TR, .0016)
-    finish('gun_sidearm', P, (0, -.2, .07), (0, -.02, -.02), (0, .09, sz), rail=(0, -.06, .088))
+    finish('gun_sidearm', P, (0, -.2, .07), (0, -.02, -.02), (0, .09, sz), rail=(0, -.06, .088), moving=[('hatch', FLAP, HINGE)])
 
 
 def heavy_mg():
@@ -840,7 +856,7 @@ def heavy_mg():
     B.chassis(P, DK, n=44)
     B.shell(P, 'feed_cover', MT, .09, -.2, .98, math.pi - .98, t=.003, mirror=False)
     B.shell(P, 'shell_cheek', BD, .098, .03, -.6, .82, t=.003)
-    B.shell(P, 'shell_upper', BD, .018, -.2, AF(.5), .82, t=.003)
+    FLAP, HINGE = flap(B, P, 'shell_upper', BD, .018, -.2, AF(.5), .82, t=.003)
     B.slats(P, 'feed_louvre', BD, .018, -.19, AF(.12), AF(.42), 10, share=.62, t=.003)
     B.light(P, 'feed_light', GL, .014, -.186, AF(.24), AF(.3))
     B.shell(P, 'shell_lower', MT, .018, -.2, -.95, AF(.04), t=.0024)
@@ -891,7 +907,7 @@ def heavy_mg():
     P.append(prism('rail_riser', [(.08, .12), (.08, .17), (.06, .17), (.05, .12)], .02, DK, .003))
     P.append(prism('rail_riser2', [(-.04, .122), (-.04, .17), (-.06, .17), (-.066, .122)], .02, DK, .003))
     finish('gun_hmg', P, (0, -.66, zb + .03), (0, -.3, -.04), (0, .1, sz), optic=red_dot(M, .0, sz, heavy=True), rail=(0, .01, .1795),
-           moving=[('spin', SPIN, (0, -.31, zb))])
+           moving=[('spin', SPIN, (0, -.31, zb)), ('hatch', FLAP, HINGE)])
 
 
 def energy_rifle():
@@ -927,12 +943,14 @@ def energy_rifle():
     P.append(G.rprism('sightrail', [(.05, .12), (.05, .14), (-.05, .14), (-.05, .12)], .022, DK, .004))
     G.stock_soft(P, MT, BD, M['grip'], .12, .1, .17, .1, .044, .03, mode='open', bolt_m=TR)
     P.append(G.sloft('saddle', [(.084, .016, .03, .02, 4.0), (.04, .006, .03, .025, 4.4), (-.07, .006, .03, .025, 4.4), (-.094, .016, .03, .02, 4.0)], DK, 20, 4))
-    G.cell(P, 'cell', (0, -.06, .016), .026, .05, M, n=8)
+    MAG = []
+    G.cell(MAG, 'cell', (0, -.06, .016), .026, .05, M, n=8)               # (its own part: the reload takes it out)
     for s in (1, -1):
         P.append(G.cable('feed', [(s * .014, -.05, zc - .058), (s * .016, -.18, zc - .052), (s * .012, -.33, zc - .034), (s * .008, -.372, zc - .028)], .003, DK, 8, 20))
     P.append(G.rprism('fgrip', [(-.2, .03), (-.206, -.04), (-.238, -.046), (-.236, .03)], .03, M['grip'], .008))
     sz = .165
-    finish('gun_energy', P, (0, -.42, .07), (0, -.22, -.03), (0, .09, sz), optic=red_dot(M, -.01, sz), rail=(0, -.01, .14))
+    finish('gun_energy', P, (0, -.42, .07), (0, -.22, -.03), (0, .09, sz), optic=red_dot(M, -.01, sz), rail=(0, -.01, .14),
+           moving=[('mag', MAG, (0, -.06, .016))])
 
 
 # ================================================================== kinetic line

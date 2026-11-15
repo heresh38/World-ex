@@ -226,7 +226,23 @@ existing classes, never second systems.
   ring's centre): a bead on the receiver's top put the stock in the middle of the aimed view.
   Reload parts are own objects with their origin at the pivot (node names are an API): `mag`, `bolt`, `charge`,
   `slide`, `pump`, `crane` > `cylinder` > `rounds`, `hatch` + `biomass`; loose props `x_shell`, `x_round`,
-  `x_casing`, `x_speedloader`. Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.
+  `x_casing`, `x_speedloader`. **The light guns reload their own way** (the owner, 2026-11-15: "a different reload
+  than the kinetic guns ... a part of the gun opens up and draws energy in from the air, some venting on overheating,
+  maybe a battery replacement"; before, their cell was welded to the body and the hand only cupped it flat:
+  "relaxed on his palm when he should be gripping it"), by `SOReload::GetStyle`: **cell** (auto, smg, pulse,
+  energy: the cell is the part `mag`; the hand grips it, its lock pops with a hiss, it is drawn out and dropped, a
+  fresh one is pushed home and turned to lock, the gun charges up), **vent** (hmg, sniper, scout) and **intake**
+  (shotgun, rocket, handcannon, sidearm): a flap on the LEFT flank (the side the player sees) is the part `hatch`
+  (`weapons.flap`: the shell stays on the right flank, the left one is hinged on its top edge, turned about the bore
+  line): vent = the hand throws it open, the heat is purged in a burst and the gun shudders, slapped shut; intake =
+  it opens by itself (the hands stay on the gun) and the gun draws energy in from the air, motes streaming into the
+  opening. Pictures `SOCaptureSeries 1 34 -SOGuns=<arch>,...` (files `SO_lr_<gun>_first|side|close_<n>`). Effects: reload events
+  `fx` (Arg = vent / intake / cellpop / charge, Count = thousandths of the segment, ms once scaled) ->
+  `ASOWeapon::PlayReloadFx` -> `USOFxSubsystem::ReloadVent / ReloadIntake / ReloadCellPop / ReloadCharge` (in the
+  view that shows the gun, carrying the holder's velocity). **Overheat**: a light gun that fired a long burst (half
+  its cell, 8 to 40 bolts) vents a little by itself as the trigger is let go (`HeatShots`). Sounds `sfx_synth.py`
+  `cell_pop cell_lock light_charge flap_open flap_close light_vent light_vent_small light_intake`. Test
+  `ShatteredOrbit.Loot.LightGunsReloadTheirOwnWay`. Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.
 - Material **names are an API** (`gun_body`, `gun_glow`, `orion_*`, `skin__<region>`, `hair*`, `nx_*`, `nc_*`, ...).
 - Weapon / loot numbers: `unreal/ShatteredOrbit/Data/game_data.json` is their source (edit it, re-import).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).
@@ -388,9 +404,8 @@ rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): at 
 still in the corner of the view; `SprintLow*`), `short` (SMGs: up part of the way, `SprintShort*`; higher, the support
 arm crossed the view), `high` (handguns: up by the face, muzzle to the sky, `SprintHigh*`). A gun's length does not
 tell (the heavy machine gun is shorter than the SMG). Pictures `SOCaptureSeries 1 32 -SOGuns=<arch>,<arch>` (files
-`SO_vm_<gun>_hip` / `_sprint`). **Third person**: the shoulder camera is over the LEFT shoulder (`HipSocketOffset` Y
--70, `AimSocketOffset` -58), so the player stands right of the middle of the screen as the gun does in first person
-(the owner, 2026-11-15). Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
+`SO_vm_<gun>_hip` / `_sprint`). **Third person**: the shoulder camera stays over the RIGHT shoulder (`HipSocketOffset`
+Y +55): the owner tried it over the left one on 2026-11-15 and asked for it back. Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
 screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`,
 kit + baked tiles `tools/blender/nexus_city.py`, built at runtime by `ASONexusCity`. Inventory icons:
 `tools/blender/icons.py`. Sounds: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis).

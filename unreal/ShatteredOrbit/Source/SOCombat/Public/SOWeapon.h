@@ -132,6 +132,10 @@ protected:
 	UFUNCTION()
 	void OnRep_Instance();
 	void PlayEventSound(FName Event);
+	/** A light gun's reload and heat, seen on the gun in the view that shows it (first person: the viewmodel's place
+	 *  in the world): "vent", "intake" (at its flap), "cellpop" (at its cell), "charge" (round the gun), "overheat"
+	 *  (a small vent by itself after a long burst). Seconds = how long it runs. */
+	void PlayReloadFx(FName Kind, float Seconds);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastReload(bool bStart, bool bEmpty, int32 Rounds, float TimeScale);
@@ -186,6 +190,9 @@ protected:
 	/** The barrel cluster of a rotary gun (rig part `spin`): its angle and how fast it turns (rad, rad/s). */
 	float BarrelSpin = 0.0f;
 	float BarrelSpinRate = 0.0f;
+	/** A light gun's heat: bolts fired in the burst running now (a long one vents by itself when it ends). */
+	int32 HeatShots = 0;
+	float LastBoltTime = -100.0f;
 	float LastDryFireTime = -100.0f;
 	int32 ShotsFired = 0;
 	FRandomStream SpreadStream;

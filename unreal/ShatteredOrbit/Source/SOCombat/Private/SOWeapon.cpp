@@ -547,6 +547,11 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 				// A light gun fires plasma: a bolt that is seen to fly, heavier guns throwing bigger ones, pellets small.
 				const float BoltSize = FMath::Clamp(FMath::Sqrt(Data->Damage / 20.0f), 0.6f, 2.4f);
 				Fx->PlasmaBolt(Muzzle, End, Speed, Data->TracerColor, BoltSize, Holder->GetVelocity());
+				if (Pellet == 0)
+				{
+					++HeatShots;
+					LastBoltTime = World->GetTimeSeconds();
+				}
 				if (bHit)
 				{
 					const bool bBody = Victim != nullptr;
@@ -630,6 +635,55 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 	USOSoundLibrary::PlayFor(Holder, Sound, Muzzle, bOwn ? 0.85f : 1.0f, ESOSoundRange::Far, 0.035f);
 }
 
+void ASOWeapon::PlayReloadFx(FName Kind, float Seconds)
+{
+	UWorld* World = GetWorld();
+	ASOCombatCharacter* Holder = GetHolder();
+	USOFxSubsystem* Fx = World ? World->GetSubsystem<USOFxSubsystem>() : nullptr;
+	if (!Fx || !Holder || !Data || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	const bool bFirstPerson = Holder->IsFirstPersonView() && FirstPersonRig->IsBuilt();
+	const USOGunRigComponent* Rig = bFirstPerson ? FirstPersonRig.Get() : ThirdPersonRig.Get();
+	if (!Rig || !Rig->IsBuilt())
+	{
+		return;
+	}
+	auto ToWorld = [&](const FVector& P) { return bFirstPerson ? Holder->ViewmodelToWorld(P) : P; };
+	const FTransform Frame = Rig->GetComponentTransform();
+	const FVector Centre = ToWorld(Frame.TransformPosition(Rig->GetRigBounds().GetCenter()));
+	// the flap faces out of the gun's LEFT flank (rig -Y), a little up
+	const FVector Out = Frame.TransformVectorNoScale(FVector(0.0f, -1.0f, 0.3f)).GetSafeNormal();
+	const UStaticMeshComponent* Flap = Rig->GetPart(TEXT("hatch"));
+	const UStaticMeshComponent* Cell = Rig->GetPart(TEXT("mag"));
+	const FVector AtFlap = Flap ? ToWorld(Flap->Bounds.Origin) + Out * 1.5f : Centre + Out * 3.0f;
+	const FVector Carry = Holder->GetVelocity();
+	const FLinearColor Color = Data->TracerColor;
+	if (Kind == TEXT("vent"))
+	{
+		Fx->ReloadVent(AtFlap, Out, Color, Seconds, 1.0f, Carry, bFirstPerson);
+	}
+	else if (Kind == TEXT("overheat"))
+	{
+		// (a gun without a flap breathes it out of its muzzle end)
+		const FVector At = Flap ? AtFlap : ToWorld(Rig->GetMuzzleLocation());
+		Fx->ReloadVent(At, Flap ? Out : Frame.GetUnitAxis(EAxis::X), Color, Seconds, 0.35f, Carry, bFirstPerson);
+	}
+	else if (Kind == TEXT("intake"))
+	{
+		Fx->ReloadIntake(AtFlap, Out, Color, Seconds, Carry, bFirstPerson);
+	}
+	else if (Kind == TEXT("cellpop"))
+	{
+		Fx->ReloadCellPop(Cell ? ToWorld(Cell->Bounds.Origin) : Centre, Color, Carry, bFirstPerson);
+	}
+	else if (Kind == TEXT("charge"))
+	{
+		Fx->ReloadCharge(Centre, Color, Seconds, Carry, bFirstPerson);
+	}
+}
+
 void ASOWeapon::PlayEventSound(FName Event)
 {
 	// reload.js sfx kinds -> sfx_synth.py sounds
@@ -643,7 +697,10 @@ void ASOWeapon::PlayEventSound(FName Event)
 		{ TEXT("pumpfwd"), TEXT("pump_fwd") }, { TEXT("boltup"), TEXT("bolt_up") }, { TEXT("boltback"), TEXT("bolt_back") },
 		{ TEXT("boltfwd"), TEXT("bolt_fwd") }, { TEXT("boltdown"), TEXT("bolt_down") }, { TEXT("roundin"), TEXT("round_in") },
 		{ TEXT("hatchopen"), TEXT("hatch_open") }, { TEXT("hatchclose"), TEXT("hatch_close") }, { TEXT("bioin"), TEXT("bio_in") },
-		{ TEXT("cellout"), TEXT("cell_out") }, { TEXT("cellin"), TEXT("cell_in") } };
+		{ TEXT("cellout"), TEXT("cell_out") }, { TEXT("cellin"), TEXT("cell_in") },
+		{ TEXT("cellpop"), TEXT("cell_pop") }, { TEXT("celllock"), TEXT("cell_lock") }, { TEXT("charge"), TEXT("light_charge") },
+		{ TEXT("flapopen"), TEXT("flap_open") }, { TEXT("flapclose"), TEXT("flap_close") }, { TEXT("vent"), TEXT("light_vent") },
+		{ TEXT("intake"), TEXT("light_intake") }, { TEXT("overheat"), TEXT("light_vent_small") } };
 	// the carbine and the compact SMG rack a charging handle, not a bolt
 	const FName Style = Data ? SOReload::GetStyle(Data->Archetype) : NAME_None;
 	const bool bCharge = Style == TEXT("carbine") || Style == TEXT("ksmg");
@@ -884,6 +941,10 @@ void ASOWeapon::Tick(float DeltaSeconds)
 		{
 			DropPart(TEXT("biomass"));
 		}
+		else if (Event.Name == TEXT("fx"))
+		{
+			PlayReloadFx(Event.Arg, Event.Count / 1000.0f);
+		}
 		const FName Name = Event.Name == TEXT("sfx") ? Event.Arg : Event.Name;
 		OnWeaponEvent.Broadcast(Name);
 		PlayEventSound(Name);
@@ -891,6 +952,18 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	if (bFinished)
 	{
 		bReloading = false;
+	}
+
+	// A light gun's heat: a long burst (half a cell, at least 8 bolts, never more than 40) vents by itself as the
+	// trigger is let go (the owner, 2026-11-15: "some venting on overheating"); a short one cools unseen.
+	if (World && HeatShots > 0 && World->GetTimeSeconds() - LastBoltTime > 0.22f)
+	{
+		if (HeatShots >= FMath::Clamp(Stats.Mag / 2, 8, 40) && !bReloading)
+		{
+			PlayReloadFx(TEXT("overheat"), 0.55f);
+			PlayEventSound(TEXT("overheat"));
+		}
+		HeatShots = 0;
 	}
 
 	// A gun with a cluster of barrels (a part named `spin`) turns it while it fires: up to speed in a few shots, and

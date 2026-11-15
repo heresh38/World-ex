@@ -1268,6 +1268,105 @@ def cell_out():
     return finish(room(out), -4)
 
 
+# --- the light guns' own reloads and heat (the owner, 2026-11-15: a different reload than the kinetic guns: a battery,
+# venting, a part that opens and draws energy in from the air) ---------------------------------------------------
+def cell_pop():
+    """A battery's lock letting go: a pneumatic pop, a fizz of escaping charge, the cell dropping onto its stop."""
+    out = silence(0.4)
+    out = place(out, filt(noise(0.05, 1901), "band", (1100, 2800)) * env_exp(0.05, 0.008, 0.0004), 0.0, 0.9)  # pop
+    out = place(out, thump(160, 90, 0.06, 0.014, 1.3), 0.0, 0.5)
+    hiss = svf_sweep(noise(0.3, 1902), "band", 6000, 2500, 1.4) * env_ad(0.3, 0.004, 0.08)
+    out = place(out, hiss, 0.005, 0.45)  # charge escaping
+    out = place(out, crackle(0.1, 1903, 1800, 3000, 12000, 0.03), 0.004, 0.3)
+    out = place(out, modal(0.08, [(2100, 0.015, 0.5), (4300, 0.01, 0.3)], 1904), 0.05, 0.4)  # onto its stop
+    return finish(room(out), -4)
+
+
+def cell_lock():
+    """The fresh cell turned home: two detents and a heavy latch."""
+    out = silence(0.35)
+    out = place(out, scrape(0.06, 1400, 2200, 1911, 0.4), 0.0)  # the turn
+    out = place(out, click(1912, 3000, 0.6), 0.03)
+    out = place(out, click(1913, 3600, 0.7), 0.06)
+    out = place(out, modal(0.12, [(980, 0.03, 0.7), (2300, 0.02, 0.45), (5100, 0.01, 0.25)], 1914), 0.08, 0.9)  # latch
+    out = place(out, thump(140, 70, 0.07, 0.016, 1.3), 0.08, 0.5)
+    return finish(room(out), -3)
+
+
+def light_charge():
+    """The gun charging up as it closes: a rising whine over a hum, settling on a clean tone, a soft click of ready."""
+    d = 0.6
+    out = silence(0.75)
+    w = osc(sweep(300, 2400, d)) + 0.35 * osc(sweep(600, 4800, d), "tri") + 0.15 * osc(sweep(1200, 9600, d))
+    w *= np.sin(np.pi * np.linspace(0, 1, secs(d)) ** 0.45) ** 2
+    out = place(out, w, 0.0, 0.16)
+    hum = filt(osc(np.full(secs(d), 90.0), "saw"), "low", 500) * env_ad(d, 0.12, 0.2)
+    out = place(out, hum, 0.0, 0.12)
+    out = place(out, tone(2400, 2400, 0.25, 0.08), d - 0.05, 0.07)  # settles
+    out = place(out, click(1921, 6000, 0.3), d - 0.05)
+    return finish(room(out, 0.22), -5)
+
+
+def flap_open():
+    """A flank flap released and thrown open on its hinge: a latch, a hydraulic sigh, the flap meeting its stop."""
+    out = silence(0.4)
+    out = place(out, click(1931, 4200, 0.7), 0.0)
+    sigh = svf_sweep(noise(0.14, 1932), "band", 2200, 900, 1.6) * env_ad(0.14, 0.01, 0.05)
+    out = place(out, sigh, 0.01, 0.35)
+    out = place(out, modal(0.12, [(1150, 0.025, 0.6), (2650, 0.016, 0.45), (5200, 0.01, 0.2)], 1933), 0.1, 0.8)  # stop
+    out = place(out, thump(180, 90, 0.05, 0.012, 1.2), 0.1, 0.35)
+    return finish(room(out), -3)
+
+
+def flap_close():
+    """The flap slapped shut: a solid clap and its latch catching."""
+    out = silence(0.35)
+    out = place(out, filt(noise(0.03, 1941), "low", 3000) * env_exp(0.03, 0.006, 0.0003), 0.0, 0.8)  # the slap
+    out = place(out, modal(0.14, [(860, 0.035, 0.7), (2100, 0.02, 0.5), (4400, 0.012, 0.3)], 1942), 0.0, 0.9)
+    out = place(out, thump(120, 55, 0.07, 0.016, 1.4), 0.0, 0.5)
+    out = place(out, click(1943, 4600, 0.6), 0.045)  # latch
+    return finish(room(out), -3)
+
+
+def _vent(d, seed, gain):
+    """Superheated gas forced out of a slot: a roar that opens bright and falls darker, with crackle and a whistle."""
+    t = secs(d)
+    body = svf_sweep(noise(d, seed, "pink"), "band", 5200, 900, 0.9) * env_ad(d, 0.006, d * 0.38)
+    roar = filt(noise(d, seed + 1, "brown"), "low", 700) * env_ad(d, 0.01, d * 0.3)
+    whistle = osc(sweep(3400, 1800, d)) * env_ad(d, 0.02, d * 0.2) * 0.12
+    out = silence(d + 0.3)
+    out = place(out, body, 0.0, 0.9 * gain)
+    out = place(out, roar, 0.0, 0.6 * gain)
+    out = place(out, whistle, 0.02, gain)
+    out = place(out, crackle(d * 0.7, seed + 2, 900, 2500, 12000, d * 0.25), 0.01, 0.35 * gain)  # sparks in it
+    out = place(out, thump(90, 40, 0.12, 0.03, 1.5), 0.0, 0.5 * gain)  # the first blow
+    return finish(room(out, 0.25), -2 if gain >= 1.0 else -9)
+
+
+def light_vent():
+    return _vent(0.85, 1951, 1.0)
+
+
+def light_vent_small():
+    """A light gun breathing out its heat after a long burst."""
+    return _vent(0.45, 1961, 0.55)
+
+
+def light_intake():
+    """Energy drawn in out of the air: an airy rush rising in pitch, shimmer over it, a hum swelling under it."""
+    d = 0.9
+    out = silence(d + 0.25)
+    rush = svf_sweep(noise(d, 1971, "pink"), "band", 700, 4200, 1.3) * np.sin(np.pi * np.linspace(0, 1, secs(d)) ** 0.7) ** 2
+    out = place(out, rush, 0.0, 0.55)
+    shim = (osc(sweep(1800, 3600, d)) + 0.5 * osc(sweep(2700, 5400, d))) * (0.5 + 0.5 * osc(np.full(secs(d), 13.0)))
+    shim *= np.linspace(0, 1, secs(d)) ** 1.5
+    out = place(out, shim, 0.0, 0.06)
+    hum = filt(osc(sweep(70, 110, d), "saw"), "low", 450) * np.linspace(0, 1, secs(d)) ** 1.2
+    out = place(out, hum, 0.0, 0.2)
+    out = place(out, crackle(d, 1972, 120, 3500, 12000, None), 0.0, 0.15)  # motes arriving
+    return finish(room(out, 0.25), -4)
+
+
 def cell_in():
     out = silence(0.6)
     out = place(out, scrape(0.07, 1500, 2600, 821, 0.5), 0.0)
@@ -1639,6 +1738,8 @@ SOUNDS.update({
     "eject": eject, "speedload": speedload, "shell_in": shell_in, "pump_back": pump_back, "pump_fwd": pump_fwd,
     "bolt_up": bolt_up, "bolt_back": bolt_back, "bolt_fwd": bolt_fwd, "bolt_down": bolt_down, "round_in": round_in,
     "hatch_open": hatch_open, "bio_in": bio_in, "hatch_close": hatch_close, "cell_out": cell_out, "cell_in": cell_in,
+    "cell_pop": cell_pop, "cell_lock": cell_lock, "light_charge": light_charge, "flap_open": flap_open, "flap_close": flap_close,
+    "light_vent": light_vent, "light_vent_small": light_vent_small, "light_intake": light_intake,
     "weapon_raise": weapon_raise,
     "rocket_explode": rocket_explode, "bolt_impact": bolt_impact, "goo_splat": goo_splat, "brood_burst": brood_burst,
     "loot_drop": loot_drop, "ammo_pickup": ammo_pickup, "reliquary_open": reliquary_open,

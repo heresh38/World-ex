@@ -571,6 +571,93 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.14f, TEXT("w9_throw_drawn_back"));
 		Snap(0.1f, TEXT("w10_throw_released"));
 	}
+	if (Set == 34)
+	{
+		// The light guns' reloads (files lr_<gun>_<view>_<n>): six moments through one reload, from the eye and from a
+		// camera beside the player, looking at the gun's left flank. -SOGuns=<archetype>[,...] (one of each kind by default).
+		FString List = TEXT("smg,hmg,shotgun");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		auto Progress = [Weapon](float F) { return [Weapon, F]() { const ASOWeapon* W = Weapon(); return W && W->IsReloading() && W->GetReloadProgress() > F; }; };
+		auto Beside = [this, Hero](bool bOn)
+		{
+			ASOCharacter* H = Hero();
+			if (!bOn || !H)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
+			const FVector Rel(95.0f, -75.0f, 70.0f), Look(25.0f, 5.0f, 45.0f);
+			CaptureCamera->SetActorRelativeLocation(Rel);
+			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			Look(0.0f);
+			SetControlRotation(GetControlRotation() + FRotator(0.0f, 180.0f, 0.0f));
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+		});
+		const float Moments[] = { 0.12f, 0.2f, 0.32f, 0.45f, 0.62f, 0.8f };
+		for (const FString& Gun : Guns)
+		{
+			for (int32 Pass = 0; Pass < 3; ++Pass)
+			{
+				const TCHAR* V = Pass == 0 ? TEXT("first") : (Pass == 1 ? TEXT("side") : TEXT("close"));
+				Act([=, this]()
+				{
+					View(Pass == 0 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson);
+					Beside(Pass >= 1);
+					if (ASOCharacter* H = Hero())
+					{
+						FRandomStream Rng(FCrc::StrCrc32(*Gun));
+						FSOWeaponInstance W = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+						W.Sight = TEXT("default");
+						H->EquipInstance(W);
+					}
+				});
+				Do(1.5f, [=]() { EmptyReload(); });
+				for (int32 i = 0; i < UE_ARRAY_COUNT(Moments); ++i)
+				{
+					auto Ready = Progress(Moments[i]);
+					Snap(0.0f, *FString::Printf(TEXT("lr_%s_%s_%d"), *Gun, V, i), [=, this]()
+					{
+						if (!Ready())
+						{
+							return false;
+						}
+						const ASOWeapon* W = Weapon();
+						const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr;
+						if (Pass == 2 && Rig && CaptureCamera)
+						{
+							// from the gun's left, a little ahead, above and behind its middle
+							const FTransform T = Rig->GetComponentTransform();
+							const FVector At = T.TransformPosition(FVector(10.0f, 0.0f, 2.0f));
+							const FVector Eye = T.TransformPosition(FVector(22.0f, -55.0f, 22.0f));
+							CaptureCamera->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+							CaptureCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
+						}
+						return true;
+					});
+				}
+				Do(3.0f, []() {});
+			}
+		}
+		Act([=, this]() { Beside(false); });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 33)
 	{
 		// A light gun fired ON THE MOVE (files mf_<gun>_*), slowed to a tenth: strafing and walking forward, from

@@ -326,6 +326,70 @@ bool FSOEveryArchetypeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// The light guns reload their own way, never as the kinetic guns change magazines (the owner, 2026-11-15: "a different
+// reload than the kinetic guns ... a part of the gun opens up and draws energy in from the air, some venting on
+// overheating, maybe a battery replacement"; before it, on the SMG, the cell never moved and the hand held it "relaxed on
+// his palm"). Cell guns: the cell is a part, the hand GRIPS it, it comes out, a spare is turned home. Vent and intake
+// guns: a flank flap is a part (thrown open by the hand to vent, opening by itself to draw), it opens and closes, the purge or the draw is shown for a while in between, and every
+// light gun charges up as it closes.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLootLightReloadTest, "ShatteredOrbit.Loot.LightGunsReloadTheirOwnWay", SOTest::Flags)
+bool FSOLootLightReloadTest::RunTest(const FString& Parameters)
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!TestNotNull(TEXT("DA_LootTables (run import_assets.py)"), Tables))
+	{
+		return false;
+	}
+	const TPair<const TCHAR*, const TCHAR*> Guns[] = { { TEXT("auto"), TEXT("cell") }, { TEXT("smg"), TEXT("cell") }, { TEXT("pulse"), TEXT("cell") },
+		{ TEXT("energy"), TEXT("cell") }, { TEXT("hmg"), TEXT("vent") }, { TEXT("sniper"), TEXT("vent") }, { TEXT("scout"), TEXT("vent") },
+		{ TEXT("shotgun"), TEXT("intake") }, { TEXT("rocket"), TEXT("intake") }, { TEXT("handcannon"), TEXT("intake") }, { TEXT("sidearm"), TEXT("intake") } };
+	for (const TPair<const TCHAR*, const TCHAR*>& Gun : Guns)
+	{
+		const TCHAR* Arch = Gun.Key;
+		const FName Style(Gun.Value);
+		const USOWeaponData* W = Tables->LoadArchetype(Arch);
+		if (!TestNotNull(*FString::Printf(TEXT("%s data"), Arch), W))
+		{
+			continue;
+		}
+		TestEqual(*FString::Printf(TEXT("%s: reloads by %s"), Arch, Gun.Value), SOReload::GetStyle(Arch), Style);
+		const FName Part = Style == TEXT("cell") ? FName(TEXT("mag")) : FName(TEXT("hatch"));
+		const FSOWeaponPart* Found = W->Parts.FindByPredicate([Part](const FSOWeaponPart& P) { return P.Name == Part; });
+		TestTrue(*FString::Printf(TEXT("%s: its %s is a part of its own"), Arch, *Part.ToString()), Found && !Found->Mesh.IsNull());
+		int32 From = -1, To = -1;
+		const TArray<FSOReloadSegment> Segs = SOReload::BuildReload(Arch, true, false, true, W->ReloadTime, 3, From, To);
+		bool bGrips = false, bMoves = false, bSpare = false, bSeat = false, bCharge = false, bShown = false;
+		for (const FSOReloadSegment& S : Segs)
+		{
+			if (const TArray<FSOKey>* Hand = S.Channels.Find(TEXT("hand")))
+			{
+				bGrips |= Hand->ContainsByPredicate([Part](const FSOKey& K) { return K.Anchor == Part; });
+				bSpare |= Hand->ContainsByPredicate([](const FSOKey& K) { return K.Anchor == TEXT("spare"); });
+			}
+			bMoves |= S.Channels.Contains(Part);
+			for (const FSOReloadEvent& E : S.Events)
+			{
+				bSeat |= E.Name == TEXT("seat");
+				bCharge |= E.Name == TEXT("fx") && E.Arg == TEXT("charge");
+				bShown |= E.Name == TEXT("fx") && (E.Arg == Style || (Style == TEXT("cell") && E.Arg == TEXT("cellpop"))) && E.Count > 50;
+			}
+		}
+		if (Style != TEXT("intake"))   // (an intake's flap opens by itself: the hands stay on the gun)
+		{
+			TestTrue(*FString::Printf(TEXT("%s: the hand goes to its %s"), Arch, *Part.ToString()), bGrips);
+		}
+		TestTrue(*FString::Printf(TEXT("%s: its %s moves"), Arch, *Part.ToString()), bMoves);
+		if (Style == TEXT("cell"))
+		{
+			TestTrue(*FString::Printf(TEXT("%s: a fresh cell is turned home"), Arch), bSpare);
+		}
+		TestTrue(*FString::Printf(TEXT("%s: the charge is restored"), Arch), bSeat);
+		TestTrue(*FString::Printf(TEXT("%s: what it does is shown for a while"), Arch), bShown);
+		TestTrue(*FString::Printf(TEXT("%s: it charges up as it closes"), Arch), bCharge);
+	}
+	return true;
+}
+
 // The Void Requiem set (the first operation's reward guns): every gun carries the parts its reload moves, reloads with
 // a sequence of its own length, tolls with its own shot and has the set's foley.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLootRequiemSetTest, "ShatteredOrbit.Loot.RequiemSet", SOTest::Flags)

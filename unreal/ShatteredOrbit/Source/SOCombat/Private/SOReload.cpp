@@ -697,10 +697,111 @@ namespace SOReload
 		return { S };
 	}
 
+	/** A light gun's battery (the cell, its part `mag`): the gun rolls its flank up, the hand takes the cell, its lock
+	 *  releases with a hiss (it drops a finger's breadth), the hand draws it out and lets it fall, fetches a fresh one,
+	 *  pushes it home and turns it to lock; the gun charges up. */
+	static TArray<FSOReloadSegment> CellSegments()
+	{
+		const F6 Dip{ -0.04f, 0.03f, 0.03f, 0.22f, 0.32f, -0.55f };   // (the rifle's tilt: the cell's well turned to the eye)
+		FSOReloadSegment Main = Seg(1.0f);
+		Main.Channels.Add(NGun, { K(0, Zero), K(0.16f, Dip), K(0.2f, Dip.Add(1, 0.006f), ESOEase::Out), K(0.26f, Dip), K(0.78f, Dip),
+			K(0.86f, Dip.Add(5, -0.06f), ESOEase::Out), K(0.9f, Dip.Add(1, 0.008f).Add(3, 0.03f), ESOEase::Out), K(1.0f, Dip) });
+		Main.Channels.Add(NMag, { K(0, Zero), K(0.18f, Zero), K(0.21f, { 0, -0.018f, 0, 0, 0, 0 }, ESOEase::Out), K(0.3f, { 0, -0.018f, 0, 0, 0, 0 }),
+			K(0.44f, { 0.01f, -0.13f, 0.02f, -0.25f, 0, 0.3f }) });
+		Main.Channels.Add(NSpare, { K(0, { 0, -0.42f, -0.18f, 0.5f, 0.2f, 0.3f }), K(0.58f, { 0, -0.42f, -0.18f, 0.5f, 0.2f, 0.3f }),
+			K(0.7f, { 0, -0.06f, 0.0f, 0.0f, 0.9f, 0 }), K(0.78f, { 0, 0, 0, 0, 0.9f, 0 }, ESOEase::Out), K(0.86f, Zero, ESOEase::Back) });
+		Main.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.15f, TEXT("mag"), { 0, -0.01f, 0, -0.2f, 0, -0.3f }), H(0.3f, TEXT("mag"), { 0, -0.01f, 0, -0.2f, 0, -0.3f }),
+			H(0.44f, TEXT("mag"), { 0, -0.01f, 0, -0.3f, 0, -0.3f }), H(0.56f, TEXT("pouch"), { 0, 0, 0, 0.5f, 0.3f, -0.6f }),
+			H(0.7f, TEXT("spare"), { 0, 0, 0, -0.25f, 0.05f, -0.25f }), H(0.78f, TEXT("spare"), { 0, 0, 0, -0.2f, 0, -0.2f }),
+			H(0.86f, TEXT("spare"), { 0, 0, 0, -0.2f, -0.5f, -0.2f }, ESOEase::Back), H(1.0f, TEXT("spare"), { 0, 0, 0, -0.2f, -0.5f, -0.2f }) });
+		Ev(Main, 0.19f, TEXT("sfx"), TEXT("cellpop"));
+		Ev(Main, 0.19f, TEXT("fx"), TEXT("cellpop"), 120);
+		Ev(Main, 0.32f, TEXT("sfx"), TEXT("cellout"));
+		Ev(Main, 0.45f, TEXT("drop"));
+		Ev(Main, 0.52f, TEXT("sfx"), TEXT("pouch"));
+		Ev(Main, 0.6f, TEXT("spare"));
+		Ev(Main, 0.77f, TEXT("sfx"), TEXT("cellin"));
+		Ev(Main, 0.86f, TEXT("sfx"), TEXT("celllock"));
+		Ev(Main, 0.87f, TEXT("seat"));
+		Ev(Main, 0.88f, TEXT("fx"), TEXT("charge"), 110);
+		Ev(Main, 0.88f, TEXT("sfx"), TEXT("charge"));
+		FSOReloadSegment Back = Seg(0.22f);
+		Back.Channels.Add(NGun, { K(0, Dip), K(1.0f, Zero) });
+		Back.Channels.Add(NHand, { H(0, TEXT("cur"), { 0, 0, 0, 0.2f, 0, -0.2f }), H(0.85f, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		return { Main, Back };
+	}
+
+	/** A light gun's flank flap (the part `hatch`, on the side the player sees). Vent: the hand throws it open, the gun
+	 *  purges its heat in a burst out of the opening and shudders with it, and the hand slaps it shut. Intake: the flap
+	 *  swings open and the gun draws energy in from the air round it (motes of light streaming into the opening, a
+	 *  rising hum), then it snaps shut and the gun charges up. */
+	static TArray<FSOReloadSegment> FlapSegments(bool bVent)
+	{
+		const float Open = 1.1f;
+		const F6 Show = bVent ? F6{ -0.02f, -0.03f, 0.02f, 0.12f, 0.1f, 0.42f } : F6{ -0.01f, 0.03f, 0.03f, 0.22f, 0.12f, 0.32f };
+		FSOReloadSegment Main = Seg(1.0f);
+		TArray<FSOKey> Gun = { K(0, Zero), K(0.14f, Show), K(0.24f, Show.Add(1, 0.008f), ESOEase::Out), K(0.28f, Show) };
+		if (bVent)
+		{
+			// (the purge shoves the gun: a kick as it blows, a shudder while it runs)
+			Gun.Append({ K(0.31f, Show.Add(3, -0.05f).Add(2, 0.01f), ESOEase::Out), K(0.38f, Show.Add(3, 0.012f)), K(0.46f, Show.Add(3, -0.015f)),
+				K(0.54f, Show.Add(3, 0.01f)), K(0.62f, Show.Add(3, -0.008f)), K(0.7f, Show) });
+		}
+		else
+		{
+			// (it lifts a little as it fills, a tremble as the charge builds)
+			Gun.Append({ K(0.45f, Show.Add(1, 0.006f)), K(0.6f, Show.Add(1, 0.01f).Add(5, 0.012f)), K(0.66f, Show.Add(1, 0.01f).Add(5, -0.012f)),
+				K(0.72f, Show.Add(1, 0.01f)) });
+		}
+		Gun.Append({ K(0.8f, Show), K(0.86f, Show.Add(1, -0.01f).Add(3, -0.04f), ESOEase::Out), K(0.92f, Show.Add(3, 0.03f), ESOEase::Out), K(1.0f, Show) });
+		Main.Channels.Add(NGun, Gun);
+		Main.Channels.Add(NHatch, { K1(0, 0), K1(0.16f, 0), K1(0.24f, Open * 1.08f, ESOEase::Back), K1(0.28f, Open), K1(0.79f, Open), K1(0.85f, 0, ESOEase::In) });
+		const F6 Hook{ 0, -0.012f, 0, -0.2f, 0, -0.4f };
+		if (bVent)
+		{
+			Main.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.13f, TEXT("hatch"), Hook), H(0.24f, TEXT("hatch"), Hook), H(0.34f, TEXT("fore"), Zero),
+				H(0.72f, TEXT("fore"), Zero), H(0.8f, TEXT("hatch"), { 0, 0.02f, 0, -0.2f, 0, -0.4f }), H(0.85f, TEXT("hatch"), { 0, -0.004f, 0, -0.2f, 0, -0.4f }, ESOEase::In),
+				H(1.0f, TEXT("hatch"), { 0, 0.01f, 0, -0.2f, 0, -0.4f }) });
+		}
+		else
+		{
+			// (the flap opens by itself; the hands stay on the gun and steady it: reaching for the flap, the arm crossed
+			// the whole view)
+			Main.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		}
+		Ev(Main, 0.17f, TEXT("sfx"), TEXT("flapopen"));
+		if (bVent)
+		{
+			Ev(Main, 0.27f, TEXT("sfx"), TEXT("vent"));
+			Ev(Main, 0.27f, TEXT("fx"), TEXT("vent"), 470);
+		}
+		else
+		{
+			Ev(Main, 0.27f, TEXT("sfx"), TEXT("intake"));
+			Ev(Main, 0.27f, TEXT("fx"), TEXT("intake"), 520);
+		}
+		Ev(Main, 0.82f, TEXT("seat"));
+		Ev(Main, 0.85f, TEXT("sfx"), TEXT("flapclose"));
+		Ev(Main, 0.86f, TEXT("fx"), TEXT("charge"), 110);
+		Ev(Main, 0.86f, TEXT("sfx"), TEXT("charge"));
+		FSOReloadSegment Back = Seg(0.22f);
+		Back.Channels.Add(NGun, { K(0, Show), K(1.0f, Zero) });
+		Back.Channels.Add(NHand, { H(0, TEXT("cur"), { 0, 0, 0, 0.2f, 0, -0.2f }), H(0.85f, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		return { Main, Back };
+	}
+
 	FName GetStyle(FName Arch)
 	{
+		// The light guns do not change magazines as the kinetic guns do (the owner, 2026-11-15: "a different reload than
+		// the kinetic guns ... a part of the gun opens up and draws energy in from the air, some venting on overheating,
+		// maybe a battery replacement"): "cell" (the battery: popped, pulled, a fresh one twisted home, the gun charges
+		// up), "vent" (a flank flap thrown open, the heat purged in a burst, slapped shut) and "intake" (the flap opens
+		// and the gun draws energy in from the air round it).
 		static const TMap<FName, FName> Styles = { { TEXT("vr_rifle"), TEXT("carbine") }, { TEXT("vr_sniper"), TEXT("dmr") }, { TEXT("vr_smg"), TEXT("ksmg") },
-			{ TEXT("vr_pistol"), TEXT("pistol") }, { TEXT("vr_shotgun"), TEXT("pump") }, { TEXT("vr_handcannon"), TEXT("revolver") } };
+			{ TEXT("vr_pistol"), TEXT("pistol") }, { TEXT("vr_shotgun"), TEXT("pump") }, { TEXT("vr_handcannon"), TEXT("revolver") },
+			{ TEXT("auto"), TEXT("cell") }, { TEXT("smg"), TEXT("cell") }, { TEXT("pulse"), TEXT("cell") }, { TEXT("energy"), TEXT("cell") },
+			{ TEXT("hmg"), TEXT("vent") }, { TEXT("sniper"), TEXT("vent") }, { TEXT("scout"), TEXT("vent") },
+			{ TEXT("shotgun"), TEXT("intake") }, { TEXT("rocket"), TEXT("intake") }, { TEXT("handcannon"), TEXT("intake") }, { TEXT("sidearm"), TEXT("intake") } };
 		const FName* Style = Styles.Find(Arch);
 		return Style ? *Style : Arch;
 	}
@@ -837,6 +938,14 @@ namespace SOReload
 		{
 			Segs = MagSegments(Arch, bEmpty);
 		}
+		else if (Arch == TEXT("cell"))
+		{
+			Segs = CellSegments();
+		}
+		else if (Arch == TEXT("vent") || Arch == TEXT("intake"))
+		{
+			Segs = FlapSegments(Arch == TEXT("vent"));
+		}
 		else if (Arch == TEXT("revolver"))
 		{
 			Segs = RevolverSegments();
@@ -867,6 +976,13 @@ namespace SOReload
 		for (FSOReloadSegment& S : Segs)
 		{
 			S.Duration *= Scale;
+			for (FSOReloadEvent& E : S.Events)
+			{
+				if (E.Name == TEXT("fx"))
+				{
+					E.Count = FMath::RoundToInt(E.Count * S.Duration);   // (written as thousandths of the segment: now ms)
+				}
+			}
 		}
 		return Segs;
 	}
