@@ -21,6 +21,7 @@ import math
 import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
+import bpy                      # noqa: E402
 import bl                       # noqa: E402
 import gunkit as K              # noqa: E402
 import fleshkit as fk           # noqa: E402
@@ -442,6 +443,18 @@ def _bilinear(A, u, v):
     return (A[i0, j0] * (1 - fu) * (1 - fv) + A[i0, j0 + 1] * fu * (1 - fv) + A[i0 + 1, j0] * (1 - fu) * fv + A[i0 + 1, j0 + 1] * fu * fv)
 
 
+def _blur2(A, r):
+    """a box blur of r pixels each way, twice (near a gaussian), edges held"""
+    for _ in range(2):
+        for ax in (0, 1):
+            P_ = np.pad(A, [(r, r) if a == ax else (0, 0) for a in (0, 1)], mode='edge')
+            c = np.cumsum(P_, axis=ax, dtype=np.float64)
+            c = np.concatenate([np.zeros_like(np.take(c, [0], axis=ax)), c], axis=ax)
+            n = A.shape[ax]
+            A = (np.take(c, np.arange(2 * r + 1, 2 * r + 1 + n), axis=ax) - np.take(c, np.arange(0, n), axis=ax)) / (2 * r + 1)
+    return A
+
+
 def traced(name):
     bl.reset(); M = mats(); P = []
     T = np.load(os.path.join(TRACE, name + '.npz'))
@@ -458,7 +471,8 @@ def traced(name):
     # every pale region a plate of its own, standing 4.5 mm proud of the dark with a chamfered edge (the sheet's layering)
     pale_in = T['pale_in'] * px
     hw = hw + .0045 * np.clip(pale_in / .0025, 0, 1) + np.where(cls >= 3, -.0012, 0) + (lum - .25).clip(-.15, .5) * .0018
-    hw = np.maximum(hw, .0012)
+    hw = np.maximum(_blur2(hw, 2), .0012)                             # (softened: a step in it was a stair on the surface)
+    sd = _blur2(sd, 1)
     if spec.get('round'):                                             # the grenade is round: its width follows its height
         hw = np.maximum(hw, wmax * np.sqrt(np.clip(inside / (.5 * H * px), 0, 1)))
 
@@ -473,8 +487,12 @@ def traced(name):
         return np.maximum(d2, np.abs(Pt[:, 0]) - h).astype(np.float32)
     lo = (-wmax - .008, -gu * px - .004, (gv - H) * px - .004)
     hi = (wmax + .008, (W - gu) * px + .004, gv * px + .004)
-    V, Q = sdf.mesh(field, lo, hi, .0012 if name != 'skr_grenade' else .0006)
+    V, Q = sdf.mesh(field, lo, hi, .0009 if name != 'skr_grenade' else .0005)
     o = fk.to_object('frame', V, Q)
+    bpy.context.view_layer.objects.active = o
+    md = o.modifiers.new('smooth', 'CORRECTIVE_SMOOTH')              # what is left of the grid smoothed away, the volume kept
+    md.iterations = 6; md.factor = .5; md.smooth_type = 'SIMPLE'; md.use_only_smooth = True if hasattr(md, 'use_only_smooth') else False
+    bpy.ops.object.modifier_apply(modifier=md.name)
     fk.decimate_to(o, 46000 if name not in ('skr_pistol', 'skr_grenade') else 26000)
     names = ['shell', 'bone', 'amber', 'white']
     for nm in names:
