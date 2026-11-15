@@ -188,169 +188,212 @@ def gun_frame(F, y_back, y_front, z, r_body, stock=True, stock_len=.23, grip_h=.
 
 
 # ------------------------------------------------------------------ the guns
+# The sheet's guns, read closely: the barrel is a BUNDLE of long dark slats stacked one over another, tapering to a
+# pointed nose, amber light burning in the gaps between them; the receiver a dark glossy mass with oval windows
+# through it; a few BIG pale blades curving back over it with hooked tips (not rows of small spikes); the grip, the
+# guard and the stock open loops of pale metal.
 def trigger(P, M, y=-.014, z=.004):
-    """a thin bone blade (the hand's fit finds a trigger by how thin it is)"""
+    """a thin blade (the hand's fit finds a trigger by how thin it is)"""
     P += talon('trigger', [(y, z), (y - .006, z - .022), (y + .002, z - .040)], [.009, .008, 0], M['trim'], x=0, t=.0032, two=True, sym=False, n=8)
 
 
-def housing_cuts(F, y0, y1, z, r, n, x=None):
-    """notches round the housing and recessed slots for the lights"""
-    x = r if x is None else x
-    for k in range(n):
-        y = y0 + (y1 - y0) * (k + .5) / n
-        for s in (1, -1):
-            F.cut((s * x, y, z), (.0055, .0028, r * .9), k=.002)
-            F.cut((s * x, y - (y1 - y0) / n * .5, z), (.0045, .0115, .0042), k=.0015)
+def bundle(P, M, y0, y1, z, h, w, nose=.06, glow_gap=True, n_dash=6):
+    """the barrel: an upper and a lower slat round a core tube, each a chamfered blade in the side view, the upper one
+    running on to a pointed nose; dashes of amber light in the gaps between them"""
+    gap = .0045
+    up = [(y0, z + h * .5), (y1 + nose * .4, z + h * .5 - .004), (y1 - nose * .6, z + h * .18), (y1 + nose * .1, z + gap), (y0, z + gap + .002)]
+    lo = [(y0, z - gap - .002), (y1 + nose * .2, z - gap), (y1 - nose * .1, z - h * .30), (y1 + nose * .5, z - h * .5 + .004), (y0, z - h * .5)]
+    P.append(prism('slat_up', up, w, M['shell'], min(.004, w * .12)))
+    P.append(prism('slat_lo', lo, w * .92, M['shell'], min(.004, w * .12)))
+    P.append(lathe('core', [(y0, 0), (y0, h * .17), (y1 + .01, h * .17), (y1, h * .12), (y1, 0)], M['under'], z, n=10, phase=math.pi / 10))
+    P.append(prism('rail_mid', [(y0, z + gap * .4), (y1 + nose * .3, z + gap * .4), (y1 + nose * .3, z - gap * .4), (y0, z - gap * .4)], w * .7,
+                   M['shell'], .001))
+    if glow_gap:
+        for k in range(n_dash):
+            ya = y0 + (y1 - y0) * (k + .15) / n_dash
+            yb = y0 + (y1 - y0) * (k + .75) / n_dash
+            for zz in (z + gap * .5 + .001, z - gap * .5 - .001):
+                P.append(B(f'dash{k}', (w * .80, abs(yb - ya), .0028), (0, (ya + yb) / 2, zz), M['amber'], .0006))
+    # a second, thinner slat over the first, stopping short of the nose; dark plates along each flank of the bundle with
+    # a pale edge, so the barrel is layered side to side as well as top to bottom (the sheet's)
+    top = z + h * .5
+    P.append(prism('slat_top', [(y0 + .02, top - .002), (y0 + (y1 - y0) * .62, top + .002), (y0 + (y1 - y0) * .70, top - h * .10),
+                                (y0 + .02, top - h * .12)], w * .62, M['shell'], .0025))
+    L = y1 - y0
+    for k, (t0, t1) in enumerate(((.05, .42), (.36, .78))):
+        pts = [(y0 + L * t0, z + h * .30), (y0 + L * t1, z + h * .22), (y0 + L * (t1 + .05), z), (y0 + L * t1, z - h * .24),
+               (y0 + L * t0, z - h * .30)]
+        P.append(plate(f'cheek{k}', pts, M['shell'], w * .5 - .002, w * .5 + .0045, .0016))
+        for q in range(3):                                   # amber slots along each side plate
+            yq = y0 + L * (t0 + (t1 - t0) * (q + .5) / 3.3)
+            for sd in (1, -1):
+                P.append(B(f'cheekslot{k}{q}', (.003, abs(L) * (t1 - t0) * .16, .0036), (sd * (w * .5 + .0050), yq, z + h * .02), M['amber'], .0008))
+        P += talon(f'cheekedge{k}', [(y0 + L * t0, z + h * .32), (y0 + L * (t0 + t1) * .5, z + h * .30), (y0 + L * (t1 + .06), z + h * .02)],
+                   [.006, .008, 0], M['bone'], x=w * .5 + .0035, t=.003)
+    for sd in (1, -1):
+        P.append(B('muzzlelight', (.003, .010, .004), (sd * w * .36, y1 + .006, z + gap * .5), M['amber'], .001))
+        P.append(B('muzzlelight', (.003, .010, .004), (sd * w * .36, y1 + .006, z - gap * .5), M['amber'], .001))
+
+
+def receiver(F, y0, y1, z, rx, rz, windows=2):
+    """the receiver: a dark glossy mass, swollen in the middle, its belly running down into the grip, oval windows
+    cut through it side to side"""
+    L = y0 - y1
+    F.ell((0, (y0 + y1) / 2, z), (rx, L * .55, rz), 'shell', k=.012)
+    F.ell((0, (y0 + y1) / 2 + L * .12, z + rz * .55), (rx * .72, L * .40, rz * .55), 'shell', k=.014)
+    F.ell((0, y0 - L * .18, z - rz * .55), (rx * .85, L * .22, rz * .65), 'shell', k=.014)
+    for k in range(windows):
+        yc = y0 - L * (.30 + .40 * k / max(windows - 1, 1))
+        F.cut((0, yc, z + rz * .05), (rx * 2.5, L * .085, rz * .32), k=.004)
+
+
+def oval_stock(F, y0, L, top, low):
+    """an open loop of pale metal: the stock's outline with an oval window through it, a butt at its end"""
+    yc, zc = y0 + L * .55, (top + low) / 2
+    F.ell((0, yc, zc), (.015, L * .55, (top - low) * .62), 'bone', k=.012)
+    F.cut((0, yc + L * .02, zc), (.05, L * .40, (top - low) * .40), k=.004)
+    F.ell((0, y0 + L * 1.05, zc - .01), (.017, .016, (top - low) * .78), 'bone', k=.010)
+
+
+def grip_loop(F, z_body, guard=True, grip_h=.112):
+    g = lambda a, b: (0.0, .010 + a * .94 + b * .34, .010 - b * .94 + a * .34)
+    F.bone([g(0, -.03), g(.002, .03), g(.004, .07), g(.004, grip_h)], [.0175, .0172, .0168, .0160], k=.012)
+    F.ell(g(.010, .05), (.0150, .0225, .055), 'bone', k=.010, R=sdf.rot((1, 0, 0), -.34).T)
+    F.ell(g(.012, grip_h + .006), (.017, .026, .011), 'bone', k=.008)
+    F.cut(g(.006, .055), (.05, .007, .024), k=.003)                                   # a slot through the grip's heel
+    if guard:
+        F.bone([g(-.016, .010), (0, -.040, -.052), (0, -.092, -.050), (0, -.126, -.016), (0, -.138, z_body - .02)], [.0068, .0062, .0064, .0070, .0095],
+               k=.007)
+
+
+def fins(P, M, y_front, y_back, top, s=1.0, n_side=2):
+    """the big pale blades: one long and low over the front, a tall hooked one in the middle, one at the back; down each
+    flank a blade curving along the receiver; a dark blade under each pale one"""
+    L = y_back - y_front
+    blade(P, 'finlow', [(y_front, top - .006 * s), (y_front + L * .30, top + .010 * s), (y_front + L * .52, top + .016 * s)],
+          [.026 * s, .030 * s, 0], M, x=.012 * s, t=.006 * s, lean=.35, bias=.3)
+    P += talon('finlow_d', [(y_front - L * .04, top - .012 * s), (y_front + L * .30, top + .002 * s), (y_front + L * .58, top + .006 * s)],
+               [.024 * s, .028 * s, 0], M['shell'], x=.015 * s, t=.005 * s, lean=.3, bias=.2)
+    blade(P, 'finhook', [(y_front + L * .40, top + .002 * s), (y_front + L * .58, top + .036 * s), (y_front + L * .74, top + .052 * s),
+                         (y_front + L * .82, top + .044 * s)], [.040 * s, .034 * s, .018 * s, 0], M, t=.008 * s)
+    blade(P, 'finrear', [(y_front + L * .70, top - .002 * s), (y_front + L * .88, top + .024 * s), (y_back + L * .08, top + .030 * s)],
+          [.034 * s, .026 * s, 0], M, t=.007 * s)
+    for k in range(n_side):
+        a = y_front + L * (.10 + .45 * k)
+        blade(P, f'flank{k}', [(a, top - .040 * s), (a + L * .18, top - .052 * s), (a + L * .36, top - .044 * s), (a + L * .46, top - .030 * s)],
+              [.016 * s, .024 * s, .020 * s, 0], M, x=.030 * s, t=.005 * s, bias=.3)
+        P += talon(f'flank{k}d', [(a - L * .03, top - .030 * s), (a + L * .18, top - .036 * s), (a + L * .40, top - .028 * s)],
+                   [.014 * s, .018 * s, 0], M['shell'], x=.028 * s, t=.004 * s)
 
 
 def skr_rifle():
     bl.reset(); M = mats(); P = []
     F = Frame()
-    F.shell([(0, .060, .074), (0, -.020, .085), (0, -.140, .088), (0, -.262, .082)], [.024, .031, .030, .025])
-    F.ell((0, -.100, .074), (.023, .150, .040))
-    F.ell((0, -.040, .108), (.016, .090, .020), 'bone', k=.010)
-    F.shell([(0, -.255, .080), (0, -.420, .078), (0, -.590, .078)], [.0235, .0222, .0210], k=.010)
-    housing_cuts(F, -.30, -.58, .078, .0225, 5)
-    F.bone([(0, -.582, .078), (0, -.632, .078)], [.0255, .0225], k=.006)
-    F.cut((0, -.640, .078), (.0085, .030, .0085), k=.002)
-    gun_frame(F, .040, -.26, .078, .030)
-    P.append(F.mesh('frame', M, (-.05, -.68, -.15), (.05, .34, .17)))
+    receiver(F, .05, -.26, .086, .036, .060, windows=3)
+    grip_loop(F, .086)
+    oval_stock(F, .040, .24, .124, .006)
+    F.bone([(0, .040, .108), (0, .070, .110)], [.010, .010], k=.010)
+    F.bone([(0, .040, .030), (0, .070, .020)], [.010, .010], k=.010)
+    P.append(F.mesh('frame', M, (-.05, -.30, -.15), (.05, .34, .17)))
     trigger(P, M)
-    slots(P, M, -.315, -.563, .078, .0218, 5)
-    P.append(lathe('bore', [(-.618, .0080), (-.618, 0)], M['white'], .078, n=12))
+    bundle(P, M, -.20, -.62, .084, .084, .050, nose=.09)
+    fins(P, M, -.32, .06, .140, s=1.35, n_side=2)
+    blade(P, 'buttspur', [(.282, .012), (.315, -.012), (.350, -.026)], [.018, .012, 0], M, t=.007)
     for sd in (1, -1):
-        P.append(B('slit', (.003, .074, .006), (sd * .0262, -.110, .084), M['white'], .0012, rot=(.06, 0, 0)))
-        P.append(B('muzzleslot', (.003, .022, .0038), (sd * .0228, -.606, .086), M['amber'], .001))
-        P.append(B('muzzleslot', (.003, .022, .0038), (sd * .0228, -.606, .070), M['amber'], .001))
-    blade(P, 'prong', [(-.52, .102), (-.60, .110), (-.71, .098)], [.020, .015, 0], M, t=.007)
-    blade(P, 'prong_low', [(-.54, .054), (-.61, .046), (-.69, .054)], [.015, .011, 0], M, t=.006)
-    crown(P, M, -.55, -.12, .094, 5, .020, .030, x=.019)
-    keel(P, M, -.54, -.25, .062, 3, .017, .024, x=.018)
-    blade(P, 'fin', [(-.08, .118), (.01, .158), (.10, .205)], [.042, .030, 0], M, t=.008)
-    blade(P, 'fin2', [(-.18, .116), (-.11, .140), (-.04, .170)], [.030, .022, 0], M, x=.014, t=.005, lean=.3)
-    blade(P, 'flankblade', [(-.22, .072), (-.12, .066), (.00, .072), (.06, .060)], [.020, .028, .022, 0], M, x=.027, t=.005, bias=.3)
-    blade(P, 'chin', [(-.16, .048), (-.10, .024), (-.04, .004)], [.020, .016, 0], M, x=.016, t=.004)
-    blade(P, 'gripspur', [(.030, -.030), (.064, -.080), (.104, -.124)], [.020, .016, 0], M, t=.007)
-    blade(P, 'buttspur', [(.272, .010), (.310, -.020), (.360, -.040)], [.020, .014, 0], M, t=.008)
-    blade(P, 'buttspur2', [(.262, .095), (.300, .125), (.340, .160)], [.018, .012, 0], M, t=.007)
-    for sd in (1, -1):
-        P.append(B('stocklight', (.003, .060, .004), (sd * .0118, .150, .110), M['white'], .001))
-    finish('gun_skr_rifle', P, (0, -.640, .078), (0, -.38, .052), (0, -.05, .14))
+        P.append(B('slit', (.003, .060, .005), (sd * .0300, -.090, .090), M['white'], .0012, rot=(.10, 0, 0)))
+        P.append(B('slit2', (.003, .032, .004), (sd * .0285, -.170, .070), M['white'], .0010, rot=(-.08, 0, 0)))
+    finish('gun_skr_rifle', P, (0, -.71, .084), (0, -.36, .040), (0, -.05, .16))
 
 
 def skr_sniper():
     bl.reset(); M = mats(); P = []
     F = Frame()
-    F.shell([(0, .060, .074), (0, -.020, .084), (0, -.160, .086), (0, -.300, .080)], [.023, .030, .029, .024])
-    F.ell((0, -.120, .074), (.022, .170, .038))
-    F.ell((0, -.050, .106), (.015, .100, .018), 'bone', k=.010)
-    F.shell([(0, -.295, .078), (0, -.500, .077), (0, -.700, .077)], [.0205, .0195, .0185], k=.010)
-    housing_cuts(F, -.33, -.68, .077, .0195, 6)
-    F.shell([(0, -.690, .077), (0, -.800, .077)], [.0105, .0100], k=.006)
-    F.bone([(0, -.790, .077), (0, -.838, .077)], [.0185, .0160], k=.006)
-    F.cut((0, -.845, .077), (.0065, .030, .0065), k=.002)
-    F.bone([(0, -.020, .108), (0, -.020, .140)], [.0080, .0070], k=.008)
-    F.bone([(0, -.130, .106), (0, -.130, .140)], [.0080, .0070], k=.008)
-    F.shell([(0, .020, .150), (0, -.190, .150)], [.0150, .0165], k=.006)
-    gun_frame(F, .040, -.30, .077, .029, stock_len=.25)
-    P.append(F.mesh('frame', M, (-.05, -.88, -.15), (.05, .36, .19), target=34000))
+    receiver(F, .05, -.29, .084, .034, .056, windows=3)
+    grip_loop(F, .084)
+    oval_stock(F, .040, .27, .120, .004)
+    F.bone([(0, .040, .106), (0, .070, .108)], [.010, .010], k=.010)
+    F.bone([(0, .040, .026), (0, .070, .016)], [.010, .010], k=.010)
+    F.bone([(0, -.020, .112), (0, -.020, .140)], [.0080, .0070], k=.008)
+    F.bone([(0, -.150, .110), (0, -.150, .140)], [.0080, .0070], k=.008)
+    F.shell([(0, .025, .150), (0, -.200, .150)], [.0150, .0165], k=.006)
+    P.append(F.mesh('frame', M, (-.05, -.33, -.15), (.05, .37, .19), target=32000))
     trigger(P, M)
-    slots(P, M, -.355, -.66, .077, .0190, 6, L=.024, h=.0040)
-    P.append(lathe('bore', [(-.822, .006), (-.822, 0)], M['white'], .077, n=12))
-    P.append(lathe('scopelens', [(-.188, .0150), (-.194, .0150), (-.194, 0)], M['lens'], .150, n=16))
-    P.append(lathe('scopeglow', [(-.06, .0168), (-.09, .0168), (-.09, .0150), (-.06, .0150)], M['white'], .150, n=12))
+    bundle(P, M, -.22, -.84, .082, .070, .044, nose=.10, n_dash=8)
+    fins(P, M, -.34, .06, .136, s=1.25)
+    blade(P, 'bipodblade', [(-.40, .050), (-.50, .006), (-.60, -.060)], [.024, .018, 0], M, t=.008)
+    P.append(lathe('scopelens', [(-.198, .0150), (-.204, .0150), (-.204, 0)], M['lens'], .150, n=16))
+    P.append(lathe('scopeglow', [(-.07, .0168), (-.10, .0168), (-.10, .0150), (-.07, .0150)], M['white'], .150, n=12))
     for sd in (1, -1):
-        P.append(B('slit', (.003, .084, .0055), (sd * .0255, -.130, .082), M['white'], .0012, rot=(.05, 0, 0)))
-    crown(P, M, -.66, -.12, .090, 6, .019, .028, x=.018)
-    keel(P, M, -.64, -.29, .062, 3, .015, .022, x=.017)
-    blade(P, 'bipodblade', [(-.36, .056), (-.47, .008), (-.59, -.064)], [.026, .020, 0], M, t=.008)
-    blade(P, 'fin', [(-.07, .116), (.02, .150), (.11, .195)], [.038, .028, 0], M, t=.008)
-    blade(P, 'flankblade', [(-.26, .072), (-.14, .066), (.00, .072), (.06, .060)], [.020, .028, .022, 0], M, x=.026, t=.005, bias=.3)
-    blade(P, 'gripspur', [(.030, -.030), (.064, -.080), (.104, -.124)], [.020, .016, 0], M, t=.007)
-    blade(P, 'buttspur', [(.292, .010), (.330, -.020), (.380, -.040)], [.020, .014, 0], M, t=.008)
-    finish('gun_skr_sniper', P, (0, -.845, .077), (0, -.40, .050), (0, -.08, .150), scoped=True)
+        P.append(B('slit', (.003, .070, .005), (sd * .0290, -.100, .090), M['white'], .0012, rot=(.10, 0, 0)))
+    finish('gun_skr_sniper', P, (0, -.94, .082), (0, -.42, .044), (0, -.08, .150), scoped=True)
 
 
 def skr_cannon():
     bl.reset(); M = mats(); P = []
     F = Frame()
-    F.shell([(0, .060, .078), (0, -.020, .094), (0, -.150, .100), (0, -.285, .094)], [.028, .040, .042, .036])
-    F.ell((0, -.110, .074), (.030, .160, .050))
-    F.ell((0, -.060, .130), (.018, .110, .020), 'bone', k=.010)
-    F.shell([(0, -.280, .090), (0, -.420, .088), (0, -.550, .088)], [.0420, .0405, .0395], k=.010)
-    housing_cuts(F, -.31, -.54, .088, .0410, 4)
-    F.bone([(0, -.548, .088), (0, -.630, .088)], [.0500, .0480], k=.008)
-    F.cut((0, -.650, .088), (.030, .050, .030), k=.003)
-    F.bone([(0, -.100, .140), (0, -.240, .140)], [.008, .008], k=.010)
-    F.bone([(0, -.100, .120), (0, -.100, .140)], [.008, .008], k=.008)
-    F.bone([(0, -.240, .120), (0, -.240, .140)], [.008, .008], k=.008)
-    gun_frame(F, .040, -.28, .088, .040, stock_len=.20, top=.11, low=.035, grip_h=.120)
-    P.append(F.mesh('frame', M, (-.07, -.68, -.16), (.07, .32, .19), target=34000))
+    receiver(F, .05, -.27, .092, .046, .072, windows=3)
+    grip_loop(F, .090, grip_h=.118)
+    oval_stock(F, .040, .22, .126, .012)
+    F.bone([(0, .040, .122), (0, .070, .124)], [.012, .012], k=.010)
+    F.bone([(0, .040, .030), (0, .070, .020)], [.012, .012], k=.010)
+    F.bone([(0, -.100, .148), (0, -.230, .148)], [.008, .008], k=.010)
+    F.bone([(0, -.100, .130), (0, -.100, .148)], [.008, .008], k=.008)
+    F.bone([(0, -.230, .130), (0, -.230, .148)], [.008, .008], k=.008)
+    P.append(F.mesh('frame', M, (-.07, -.32, -.16), (.07, .32, .19), target=32000))
     trigger(P, M)
-    slots(P, M, -.325, -.525, .088, .0398, 4, L=.028, h=.006)
-    P.append(lathe('core', [(-.606, .030), (-.606, 0)], M['white'], .088, n=18))
-    P.append(lathe('coreamber', [(-.612, .0300), (-.618, .0300), (-.618, .0262), (-.612, .0262)], M['amber'], .088, n=18))
+    bundle(P, M, -.22, -.58, .090, .110, .072, nose=.05, n_dash=5)
+    P.append(lathe('mouth', [(-.555, 0), (-.555, .030), (-.570, .034), (-.640, .034), (-.648, .028), (-.648, .020), (-.62, .020), (-.62, 0)], M['bone'],
+                   .088, n=12, phase=math.pi / 12))
+    P.append(lathe('core', [(-.620, .020), (-.620, 0)], M['white'], .088, n=18))
+    P.append(lathe('coreamber', [(-.628, .0205), (-.636, .0205), (-.636, .0170), (-.628, .0170)], M['amber'], .088, n=18))
+    fins(P, M, -.30, .06, .162, s=1.5, n_side=2)
+    blade(P, 'buttspur', [(.262, .014), (.300, -.012), (.340, -.028)], [.020, .014, 0], M, t=.008)
     for sd in (1, -1):
-        P.append(B('chevron', (.003, .046, .007), (sd * .0405, -.160, .106), M['white'], .0012, rot=(.5, 0, 0)))
-        P.append(B('chevron', (.003, .046, .007), (sd * .0405, -.160, .086), M['white'], .0012, rot=(-.5, 0, 0)))
-    crown(P, M, -.50, -.12, .126, 5, .026, .034, x=.026, t=.007)
-    keel(P, M, -.50, -.28, .050, 3, .022, .026, x=.026, t=.006)
-    blade(P, 'fin', [(-.09, .138), (.00, .178), (.09, .222)], [.046, .032, 0], M, t=.009)
-    blade(P, 'fin2', [(-.23, .136), (-.16, .160), (-.08, .190)], [.034, .026, 0], M, x=.020, t=.006, lean=.3)
-    blade(P, 'flankblade', [(-.27, .066), (-.14, .060), (.00, .068), (.06, .058)], [.024, .034, .026, 0], M, x=.034, t=.006, bias=.3)
-    blade(P, 'gripspur', [(.030, -.030), (.064, -.080), (.104, -.124)], [.020, .016, 0], M, t=.007)
-    blade(P, 'buttspur', [(.252, .010), (.290, -.020), (.340, -.040)], [.022, .016, 0], M, t=.008)
-    finish('gun_skr_cannon', P, (0, -.650, .088), (0, -.40, .046), (0, -.05, .17))
+        P.append(B('chevron', (.003, .046, .007), (sd * .0410, -.110, .106), M['white'], .0012, rot=(.5, 0, 0)))
+        P.append(B('chevron', (.003, .046, .007), (sd * .0410, -.110, .086), M['white'], .0012, rot=(-.5, 0, 0)))
+    finish('gun_skr_cannon', P, (0, -.65, .088), (0, -.40, .046), (0, -.05, .17))
 
 
 def skr_pistol():
     bl.reset(); M = mats(); P = []
     F = Frame()
-    F.shell([(0, .048, .070), (0, -.020, .078), (0, -.120, .078), (0, -.168, .072)], [.020, .025, .024, .020])
-    F.ell((0, -.060, .066), (.019, .090, .032))
-    F.ell((0, -.020, .094), (.013, .060, .015), 'bone', k=.008)
-    F.bone([(0, -.160, .072), (0, -.206, .072)], [.0175, .0150], k=.006)
-    F.cut((0, -.212, .072), (.0055, .022, .0055), k=.002)
-    housing_cuts(F, -.08, -.15, .074, .0230, 2)
-    gun_frame(F, .030, -.17, .072, .024, stock=False, grip_h=.100)
-    P.append(F.mesh('frame', M, (-.04, -.24, -.14), (.04, .14, .14), h=.0009, target=20000))
+    receiver(F, .045, -.15, .074, .027, .044, windows=2)
+    grip_loop(F, .072, grip_h=.098)
+    F.bone([(0, .040, .090), (0, .080, .070), (0, .100, .045)], [.008, .007, .006], k=.008)          # a tail of bone over the hand
+    P.append(F.mesh('frame', M, (-.04, -.18, -.14), (.04, .14, .14), h=.0009, target=18000))
     trigger(P, M)
-    P.append(lathe('bore', [(-.196, .0055), (-.196, 0)], M['white'], .072, n=12))
+    bundle(P, M, -.11, -.25, .074, .056, .034, nose=.05, n_dash=2)
+    fins(P, M, -.17, .05, .112, s=.85, n_side=1)
     for sd in (1, -1):
-        P.append(B('slit', (.003, .052, .005), (sd * .0212, -.060, .078), M['white'], .0012, rot=(.07, 0, 0)))
-    slots(P, M, -.095, -.140, .074, .0222, 2, L=.016, h=.0036)
-    crown(P, M, -.17, .02, .090, 3, .016, .022, x=.015, t=.005)
-    blade(P, 'prong', [(-.15, .096), (-.20, .100), (-.25, .092)], [.014, .010, 0], M, t=.006)
-    blade(P, 'fin', [(-.02, .100), (.04, .126), (.09, .158)], [.030, .022, 0], M, t=.007)
-    blade(P, 'tail', [(.040, .068), (.075, .058), (.115, .040)], [.020, .014, 0], M, t=.006)
-    blade(P, 'gripspur', [(.026, -.026), (.056, -.070), (.090, -.110)], [.018, .014, 0], M, t=.006)
-    finish('gun_skr_pistol', P, (0, -.212, .072), (0, -.03, .00), (0, -.03, .11))
+        P.append(B('slit', (.003, .040, .005), (sd * .0222, -.050, .080), M['white'], .0012, rot=(.08, 0, 0)))
+    finish('gun_skr_pistol', P, (0, -.27, .072), (0, -.03, .00), (0, -.03, .11))
 
 
 def skr_blade():
-    """the energy blade: a long hooked blade, dark, a line of light along its edge, spurs along its back; held by a
-    bone grip (origin at the top of the grip, the blade running forward along -Y)"""
+    """the energy blade: a long hooked blade of dark shell with a line of light along its edge, a pale back blade
+    along its spine, a few hooked spurs; held by a pale grip (the blade running forward along -Y)"""
     bl.reset(); M = mats(); P = []
     F = Frame()
     F.bone([(0, .000, .010), (0, .004, -.050), (0, .008, -.120)], [.0165, .0160, .0150], k=.010)
     F.ell((0, .006, -.128), (.018, .022, .012), 'bone', k=.008)
-    F.shell([(0, .040, .022), (0, -.030, .030), (0, -.075, .036)], [.016, .022, .018], k=.012)
+    F.ell((0, -.020, .030), (.020, .060, .024), 'shell', k=.012)
+    F.cut((0, -.030, .030), (.05, .018, .008), k=.003)
     F.bone([(0, .020, .030), (0, .070, .055), (0, .100, .090)], [.010, .007, .004], k=.008)
     P.append(F.mesh('frame', M, (-.04, -.12, -.16), (.04, .14, .12), h=.0009, target=12000))
     spine = [(-.05, .030), (-.24, .052), (-.46, .048), (-.66, .010), (-.80, -.050)]
     P += talon('edge', spine, [.056, .066, .058, .036, 0], M['shell'], x=0, t=.007, two=True, sym=False, glow=M['white'], g=.0022, n=24)
-    P += talon('edgebone', [(-.06, .050), (-.22, .078), (-.40, .074), (-.52, .058)], [.020, .024, .018, 0], M['bone'], x=0, t=.009, two=True,
-               sym=False, n=16)
-    for i, y in enumerate((-.14, -.26, -.38)):
-        blade(P, f'backspur{i}', [(y, .074 - i * .002), (y + .03, .098), (y + .07, .112 - i * .006)], [.016, .012, 0], M, t=.006)
-    for y in (-.10, -.20, -.30):
+    P += talon('edgebone', [(-.06, .050), (-.22, .078), (-.40, .074), (-.56, .052)], [.022, .028, .020, 0], M['bone'], x=0, t=.009, two=True,
+               sym=False, n=18)
+    for i, y in enumerate((-.16, -.34)):
+        blade(P, f'backspur{i}', [(y, .076), (y + .04, .100), (y + .09, .108)], [.020, .014, 0], M, t=.006)
+    for y in (-.10, -.20, -.30, -.40):
         for sd in (1, -1):
-            P.append(B('edgeamber', (.003, .016, .004), (sd * .0074, y, .040), M['amber'], .001))
+            P.append(B('edgeamber', (.003, .022, .004), (sd * .0074, y, .040), M['amber'], .001))
     finish('gun_skr_blade', P, (0, -.80, -.05), (0, .0, -.06), (0, -.05, .08))
 
 
 def skr_grenade():
-    """the grenade: a dark egg held in a three-fingered claw of bone, a diamond of light on its face"""
+    """the grenade: a dark faceted egg held in a three-fingered claw of pale metal, a diamond of light on its face"""
     bl.reset(); M = mats(); P = []
     F = Frame()
     F.ell((0, 0, 0), (.034, .034, .046), 'shell', k=.004)
