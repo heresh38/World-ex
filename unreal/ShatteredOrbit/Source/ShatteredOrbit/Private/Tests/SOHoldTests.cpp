@@ -25,13 +25,13 @@
 
 namespace SOTest
 {
-	/** NOT YET: guns whose hold still fails the measure (2026-11-15): each has a fore end or a grip of its own kind the
-	 *  fit does not hold right (the lance's and the compact SMG's fore grips, the heavy machine gun's grip, two living
-	 *  guns, two of the Requiem set). A name comes off this list when its gun passes ShatteredOrbit.Hold.TheGunIsSolid.
-	 *  Never add a gun to it to make a failure go away. */
+	/** NOT YET: guns whose hold still fails the measure (2026-11-15). The Requiem LMG: its vertical grip is out of reach,
+	 *  and where the arm does reach, the blade plates down the sides of its broad underside meet the support hand's
+	 *  palm (it backs off 4 cm, a fingertip touches): its model has to give the hand room there. A name comes off this
+	 *  list when its gun passes ShatteredOrbit.Hold.TheGunIsSolid. Never add a gun to it to make a failure go away. */
 	bool HoldNotYet(const FString& Arch)
 	{
-		static const TCHAR* Guns[] = { TEXT("hmg"), TEXT("ksmg"), TEXT("brood"), TEXT("vr_sniper"), TEXT("vr_lmg") };
+		static const TCHAR* Guns[] = { TEXT("vr_lmg") };
 		return Algo::Find(Guns, Arch) != nullptr;
 	}
 

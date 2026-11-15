@@ -960,7 +960,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		// -SOGuns=<archetype> picks the gun (the reference rifle by default).
 		FString Arch = TEXT("rifle");
 		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), Arch, false);
-		auto ReviewAt = [this, Weapon](const FVector& Local, const FVector& Side, float Distance, float Fov)
+		auto ReviewAt = [this, Weapon](const FVector& Local, const FVector& Side, float Distance, float Fov, bool bMuzzle)
 		{
 			const ASOWeapon* W = Weapon();
 			if (!W)
@@ -974,7 +974,14 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			FVector Origin, Extent;
 			W->GetActorBounds(false, Origin, Extent);
 			const FTransform T = W->GetActorTransform();
-			const FVector Target = Origin + T.TransformVectorNoScale(Local);
+			FVector Target = Origin + T.TransformVectorNoScale(Local);
+			// (the muzzle shot looks at the gun's OWN muzzle, a little back along the barrel: a fixed point ahead of
+			// the middle was the rifle's muzzle and empty air in front of a handgun or an SMG)
+			const USOGunRigComponent* Rig = W->GetThirdPersonRig();
+			if (bMuzzle && Rig)
+			{
+				Target = Rig->GetMuzzleLocation() + T.TransformVectorNoScale(Local);
+			}
 			const FVector Eye = Target + T.TransformVectorNoScale(Side).GetSafeNormal() * Distance;
 			CaptureCamera->SetActorLocationAndRotation(Eye, (Target - Eye).Rotation());
 			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
@@ -1005,7 +1012,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		// low mip, its markings a smudge. Six seconds, then the pictures.)
 		Do(6.0f, [=]() { if (ASOCharacter* H = Hero()) { H->SetActorHiddenInGame(true); } });
 		const FString Tag = FString::Printf(TEXT("r_%s_"), *Arch);
-		struct FView { const TCHAR* Name; FVector Local; FVector Side; float Distance; float Fov; };
+		struct FView { const TCHAR* Name; FVector Local; FVector Side; float Distance; float Fov; bool bMuzzle = false; };
 		const FView Views[] = {
 			{ TEXT("1_left"), FVector(0, 0, 0), FVector(0, -1, 0.05f), 200.0f, 30.0f },
 			{ TEXT("2_right"), FVector(0, 0, 0), FVector(0, 1, 0.05f), 200.0f, 30.0f },
@@ -1015,12 +1022,12 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{ TEXT("6_receiver_right"), FVector(-9, 0, 1), FVector(0, 1, 0.1f), 60.0f, 30.0f },
 			{ TEXT("7_markings"), FVector(-6, 0, 0.5f), FVector(0, -1, 0.05f), 24.0f, 34.0f },
 			{ TEXT("7b_serial"), FVector(4, 0, 0.5f), FVector(0, -1, 0.05f), 24.0f, 34.0f },
-			{ TEXT("8_muzzle"), FVector(38, 0, 4), FVector(0.5f, -1, 0.3f), 45.0f, 30.0f },
+			{ TEXT("8_muzzle"), FVector(-6, 0, 0), FVector(0.5f, -1, 0.3f), 45.0f, 30.0f, true },
 			{ TEXT("9_top"), FVector(-5, 0, 0), FVector(0, -0.15f, 1), 150.0f, 30.0f },
 		};
 		for (const FView& V : Views)
 		{
-			Act([=]() { ReviewAt(V.Local, V.Side, V.Distance, V.Fov); });
+			Act([=]() { ReviewAt(V.Local, V.Side, V.Distance, V.Fov, V.bMuzzle); });
 			Snap(0.8f, Tag + V.Name);
 		}
 		Act([=]() { if (ASOCharacter* H = Hero()) { H->SetActorHiddenInGame(false); } });

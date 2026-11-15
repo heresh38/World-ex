@@ -374,6 +374,10 @@ protected:
 	void FitGrip(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh, bool bOneHanded, float SlideBack = 0.0f);
 	/** The support hand was fitted again further back, where this body's arm reaches (once a gun). */
 	bool bFitSlid = false;
+	// how far the firing hand is set below its usual seat (cm), and whether the trigger finger's root started in the gun
+	// at the last fit: a grip whose frame comes down low ahead of it is held lower, so the finger clears the frame
+	float FitGripDrop = 0.0f;
+	bool bFitIndexInside = false;
 
 	TWeakObjectPtr<const class USOGunRigComponent> FitRig;
 	FSOFingerPose FitFingers[2];

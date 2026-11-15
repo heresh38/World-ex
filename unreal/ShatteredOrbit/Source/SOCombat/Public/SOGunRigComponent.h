@@ -41,6 +41,9 @@ struct SOCOMBAT_API FSOFingerPose
 	/** The thumb drawn in toward the fingers, degrees about the palm's normal: it lies ALONG what the hand holds (a
 	 *  thumb forward along a handguard) instead of standing off from it. */
 	float ThumbIn = 0.0f;
+	/** The index finger turned in the palm's plane (degrees about the palm's normal) before it closes: lifted to a
+	 *  trigger that sits higher than the knuckles of a hand round its grip (the finger alone, the others as they are). */
+	float IndexLift = 0.0f;
 
 	static FSOFingerPose Make(const float Index[3], const float Middle[3], const float Ring[3], const float Pinky[3], const float Thumb[3]);
 	/** Firing hand on a pistol grip: three fingers wrapped, the index finger on the trigger, the thumb over the top. */

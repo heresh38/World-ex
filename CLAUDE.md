@@ -166,7 +166,7 @@ existing classes, never second systems.
   `SO_IMPORT_ONLY=weapons,guntextures SO_WEAPONS_ONLY=rifle`. Known cost: a gun's GLB now carries the 4096 px
   tiling maps (the rifle's is 130 MB): the exporter should stop embedding them. Look at ONE gun in the game:
   `SOCaptureSeries 1 29 -SOGuns=<archetype>` (the gun alone from each flank, three quarters, close on the receiver,
-  the markings, the muzzle: files `SO_r_<gun>_*`). **The high-poly** (`bakekit.bake_highpoly_normals`, every gun with own maps: the rifle and all
+  the markings, the muzzle (aimed at the gun's own muzzle, `USOGunRigComponent::GetMuzzleLocation`): files `SO_r_<gun>_*`). **The high-poly** (`bakekit.bake_highpoly_normals`, every gun with own maps: the rifle and all
   eleven light guns; `SO_GUN_HIGHPOLY=none` skips it, a list bakes only those): the game model with its hard edges rounded (0.7 mm bevel, three steps, weighted normals), its normals baked
   in OBJECT space onto UV 1 (`<gun>_u_n`, imported BC7 linear as `T_<gun>_u_n`); `M_SOStandard` decodes it (Blender
   X left, Y back, Z up -> mesh X, -Y, Z), takes it to world space and turns the surface normal (tiling and detail on
@@ -396,18 +396,28 @@ The TRIGGER finger lies on the trigger: the trigger is found on the gun's shape 
 gun from the grip forward at three heights: the grip is wide, the gap in front of it empty, the blade under a
 centimetre with the gap behind it; probes dropped from above read grip, blade and guard as one) and the finger is
 posed with its pad on the blade's front face, its first two bones clear, bent as a finger bends (the middle joint
-more than the tip). A fingertip runs on from its last joint the way that bone turns, rest bend included, in the fit
+more than the tip), and LIFTED in the palm's plane where the trigger stands higher than the knuckles of the hand round
+its grip (`FSOFingerPose::IndexLift`, up to 24 degrees; it is in the hold files as `indexLift`); a trigger finger that
+still starts in the gun has the whole firing hand seated 0.75 or 1.5 cm higher, then lower (`FitGripDrop`: the heavy
+machine gun's guard ran along the straight finger and its drum stood ahead of it). A fingertip runs on from its last joint the way that bone turns, rest bend included, in the fit
 and in `MeasureHold` alike (carried straight on from the middle bone, a bent tip measured as pointing into the gun).
 A gun may bring its own hold instead (`Data/holds/<archetype>.json`, `FSOGunHold`: both wrists, hand directions and
 every finger; read as the rig is built, nothing fitted; none written yet). Measured by `MeasureHold` (wrist bend, reach,
 finger bones in the gun, the palm's gap at its middle and 2.5 cm on); tests `ShatteredOrbit.Hold.*` (`TheGunIsSolid`,
-`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: hmg (the trigger finger's first
-bone starts in the frame: the hand sits too high on that grip for it), ksmg (its first-person gun finds no post where
-the third-person one does: that hand takes the handguard grip, sunk), vr_lmg (a support fingertip), vr_sniper (palm
-bones on its finned fore end in third person), brood (third person: palm off the gun). A post is wrapped with the
-hand running along its side (angled 30 % into it, the palm's bones crossed it), and only where the arm reaches it:
-the arm's rule slides a support hand back along the gun past 93 % of its reach, off the post with the fingers still
-curled for it, so a hand round a post may reach to 98.5 % (`bSupportOnPost`) and a post beyond reach is not taken. A gun's own shape can make a grip impossible: the heavy machine gun's drum
+`FittedGrip`; `SOTest::HoldNotYet` lists the guns that still fail, as warnings: only vr_lmg now (its post is out of
+reach and the blade plates down its underside's sides meet the palm where the arm does reach: a model change). A
+post is wrapped with the hand running along its side (angled 30 % into it, the palm's bones crossed it), and only
+where the arm reaches it: the arm's rule slides a support hand back along the gun past 93 % of its reach, off the post
+with the fingers still curled for it, so a hand round a post may reach to 98.5 % (`bSupportOnPost`) and the fit takes
+a post up to 93 % of the arm (the shoulder is an estimate) and no further. The post is looked for round the fore
+point (up to 9 cm behind it and 12 ahead), at a lower height if not at the usual one (`PostUp`), its front and back
+probed from 9 cm off and then nearer (a probe begun inside the heavy machine gun's drum read its post 11 cm long), and
+a probe that misses is tried again a hair to either side (laid along a mesh edge it slips between two faces: the
+ksmg's post was found by one view and not the other on that alone). Elsewhere the support hand is kept within 90 % of
+the first-person arm's reach and 87 % of the body's (the body's shoulder is known to five centimetres: at 90 the arm's
+own rule slid the hand back off where it was fitted, the Requiem sniper's palm into its fins). Measuring the slide the
+arm really needs and fitting again from it was tried and dropped: it fires while the gun is still coming up into the
+hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
 **Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the

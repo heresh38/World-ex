@@ -143,6 +143,8 @@ namespace
 		}
 		Fingers.ThumbSpread = static_cast<float>((*Hand)->GetNumberField(TEXT("thumbSpread")));
 		Fingers.ThumbIn = static_cast<float>((*Hand)->GetNumberField(TEXT("thumbIn")));
+		double Lift = 0.0;
+		Fingers.IndexLift = (*Hand)->TryGetNumberField(TEXT("indexLift"), Lift) ? static_cast<float>(Lift) : 0.0f;
 		return true;
 	}
 
@@ -155,7 +157,7 @@ namespace
 		{
 			Out += FString::Printf(TEXT("    \"%s\": [%.0f, %.0f, %.0f],\n"), HoldFingers[F], Fingers.Curl[F][0], Fingers.Curl[F][1], Fingers.Curl[F][2]);
 		}
-		Out += FString::Printf(TEXT("    \"thumbSpread\": %.0f,\n    \"thumbIn\": %.0f\n  }"), Fingers.ThumbSpread, Fingers.ThumbIn);
+		Out += FString::Printf(TEXT("    \"thumbSpread\": %.0f,\n    \"thumbIn\": %.0f,\n    \"indexLift\": %.0f\n  }"), Fingers.ThumbSpread, Fingers.ThumbIn, Fingers.IndexLift);
 		return Out;
 	}
 }
@@ -247,6 +249,7 @@ FSOFingerPose FSOFingerPose::Lerp(const FSOFingerPose& A, const FSOFingerPose& B
 	}
 	P.ThumbSpread = FMath::Lerp(A.ThumbSpread, B.ThumbSpread, Alpha);
 	P.ThumbIn = FMath::Lerp(A.ThumbIn, B.ThumbIn, Alpha);
+	P.IndexLift = FMath::Lerp(A.IndexLift, B.IndexLift, Alpha);
 	return P;
 }
 
