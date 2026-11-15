@@ -62,6 +62,8 @@ class Armour:
         self.thick_k = 1.0                                # every plate's thickness, scaled (a body's own choice)
         self.tip_k = 1.0                                  # how far every tip flares off the body, scaled
         self.point_k = 1.0                                # how sharp every plate's point is (under 1: blunter)
+        self.vary = 1.0                                   # how much a wrapped plate's size and place wander (0: a regular grid)
+        self.notch = .45                                  # the share of plates with a step in one edge (a shard with two points)
 
     # ------------------------------------------------------------------ helpers
     def project(self, P, iters=6, fn=None):
@@ -171,6 +173,14 @@ class Armour:
         pt2 = point * self.rng.uniform(.7, 1.4)
         prof = outline(peak, point)
         prof2 = outline(pk2, pt2)
+        if self.rng.uniform() < self.notch:
+            # a step in one edge: the plate narrows past it, so that edge has a second point (a shard, not a leaf)
+            un = self.rng.uniform(.38, .62)
+            step = 1 - self.rng.uniform(.28, .42) * smooth(un, un + .05, u)
+            if self.rng.uniform() < .5:
+                prof = prof * step
+            else:
+                prof2 = prof2 * step
         hw = w * .5 * np.maximum(prof, prof2)
         v = np.linspace(-1, 1, nv)
         side_scale = np.where(v[None, :] < 0, (prof / np.maximum(np.maximum(prof, prof2), 1e-6))[:, None],
@@ -219,7 +229,7 @@ class Armour:
     # ------------------------------------------------------------------ a limb or a trunk covered in rows of plates
     def wrap(self, name, a, b, bone, around=4, rows=2, span=(-150, 150), face=(0, -1, 0), cover=.92, overlap=.32, lift=.003,
              tip=.006, ridge=.003, thick=.006, dark=(), point=1.0, peak=.35, mirror=True, reach=.30, stagger=.5, flip=False, n=(14, 7),
-             skip=(), also=()):
+             skip=(), also=(), accents=.5):
         """Rows of plates round the axis a -> b, `around` plates in each row over the arc `span` (degrees about the
         axis, 0 = the direction `face`, positive turning toward +X on the left side), each row from a little before
         its start to past its end (`overlap`), roots toward a and tips toward b (flip: the other way). Each plate is
@@ -242,22 +252,34 @@ class Armour:
                 for k in range(around):
                     if (r, k) in skip:
                         continue
-                    f = (k + .5 + off) / around if around > 1 else .5
-                    ang = math.radians(span[0] + (span[1] - span[0]) * f)
-                    dirv = F0 * math.cos(ang) + G0 * math.sin(ang)
-                    p0 = a + (b - a) * max(min(t0, 1), 0)
-                    p1 = a + (b - a) * max(min(t1, 1), 0)
-                    mid = a + (b - a) * ((t0 + t1) / 2)
-                    s0 = self.exit_point(p0, dirv, fn, reach); s1 = self.exit_point(p1, dirv, fn, reach)
-                    sm = self.exit_point(mid, dirv, fn, reach)
-                    if s0 is None or s1 is None or sm is None:
-                        continue
-                    rad = max(np.linalg.norm((sm - mid) - D * np.dot(sm - mid, D)), .01)
-                    w = cover * rad * math.radians(abs(span[1] - span[0])) / around
+                    V_ = self.vary
+                    # each plate a little off the grid: its place round the limb, where it starts and ends, its width
+                    f = (k + .5 + off + self.rng.uniform(-.16, .16) * V_) / around if around > 1 else .5
+                    tj0 = t0 + self.rng.uniform(-.07, .03) * V_ / rows
+                    tj1 = t1 + self.rng.uniform(-.03, .09) * V_ / rows
                     isdark = dark == 'all' or (r, k) in dark
                     bn = bone if side == 1 else mirror_bone(bone)
-                    out.append(self._blade(f'{name}{r}{k}{"" if side == 1 else "_R"}', s0 * sx, s1 * sx, w, bn, lift + .0055 * r, tip, 1.0, thick,
-                                           ridge, peak, point, .6, n, 'dark' if isdark else 'armour', np.zeros(3), None, 0.0, fn))
+                    pieces = [(f, tj0, tj1, cover * self.rng.uniform(1 - .14 * V_, 1 + .12 * V_), lift + .0055 * r, isdark)]
+                    if accents and self.rng.uniform() < accents:
+                        # a smaller plate laid over the seam to the next one, in the other finish (the sheet's layering)
+                        fa = (k + 1 + off + self.rng.uniform(-.08, .08)) / around
+                        ta = tj0 + (tj1 - tj0) * self.rng.uniform(.15, .35)
+                        pieces.append((fa, ta, ta + (tj1 - tj0) * self.rng.uniform(.45, .62), cover * .48, lift + .0055 * r + .0075, not isdark))
+                    for pi, (ff, ta0, ta1, cv, lf, dk) in enumerate(pieces):
+                        ang = math.radians(span[0] + (span[1] - span[0]) * ff)
+                        dirv = F0 * math.cos(ang) + G0 * math.sin(ang)
+                        p0 = a + (b - a) * max(min(ta0, 1), 0)
+                        p1 = a + (b - a) * max(min(ta1, 1), 0)
+                        mid = a + (b - a) * ((ta0 + ta1) / 2)
+                        s0 = self.exit_point(p0, dirv, fn, reach); s1 = self.exit_point(p1, dirv, fn, reach)
+                        sm = self.exit_point(mid, dirv, fn, reach)
+                        if s0 is None or s1 is None or sm is None:
+                            continue
+                        rad = max(np.linalg.norm((sm - mid) - D * np.dot(sm - mid, D)), .01)
+                        w = cv * rad * math.radians(abs(span[1] - span[0])) / around
+                        out.append(self._blade(f'{name}{r}{k}{"abcd"[pi]}{"" if side == 1 else "_R"}', s0 * sx, s1 * sx, w, bn, lf, tip, 1.0,
+                                               thick * (1 if pi == 0 else .8), ridge, peak, point, .6, n, 'dark' if dk else 'armour', np.zeros(3),
+                                               None, 0.0, fn))
         return out
 
     # ------------------------------------------------------------------ a solid shell piece (a helmet)

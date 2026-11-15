@@ -28,7 +28,7 @@ def layout(A, J):
     # visor, flat cheeks, the jaw cut back under it to the neck. Each plane sits about a centimetre outside the skull.
     planes = [((0, .45, 1), .172), ((0, .90, .50), .172), ((0, 1, -.30), .097), ((0, -.55, .85), .162),
               ((.62, -1, .05), .085), ((-.62, -1, .05), .085), ((.5, -.6, -.6), .080), ((-.5, -.6, -.6), .080),
-              ((1, -.05, -.30), .060), ((-1, -.05, -.30), .060), ((1, .10, .90), .140), ((-1, .10, .90), .140),
+              ((1, -.05, -.30), .057), ((-1, -.05, -.30), .057), ((1, .10, .90), .122), ((-1, .10, .90), .122),
               ((0, -.75, -1), .080), ((1, -.20, -1), .062), ((-1, -.20, -1), .062), ((0, .30, -1), .060)]
     NP = np.array([np.asarray(n_, float) / np.linalg.norm(n_) for n_, _ in planes], np.float32)
     DP = np.array([d_ for _, d_ in planes], np.float32)
@@ -64,11 +64,13 @@ def layout(A, J):
             field=poly)
     for k in range(5):
         a_ = hd + (.010 + .012 * k, -.010 + .020 * k, .168 - .006 * k)
-        b_ = hd + (.030 + .022 * k, .190 + .014 * k, .192 - .028 * k)
-        A.blade(f'crest{k}', a_, b_, .088 - .006 * k, 'head', lift=.002 + .005 * k, tip=.000, free=.66, thick=.008, ridge=.008, peak=.50,
-                point=.7, bend=(0, 0, .016), mat='dark' if k in (1, 3) else 'armour', field=poly)
-    A.blade('crestmid', hd + (0, -.010, .178), hd + (0, .170, .205), .084, 'head', lift=.004, tip=.000, free=.62, thick=.009, ridge=.009,
-            peak=.50, point=.7, bend=(0, 0, .020), mirror=False, field=poly)
+        b_ = hd + (.030 + .032 * k, .190 + .010 * k, .190 - .032 * k)          # fanned out and back
+        A.blade(f'crest{k}', a_, b_, .088 - .006 * k, 'head', lift=.002 + .005 * k, tip=.000, free=.66, thick=.006, ridge=.007, peak=.40,
+                point=1.3, bend=(0, 0, .016), mat='dark' if k in (1, 3) else 'armour', field=poly)
+    A.blade('crown', hd + (.016, .000, .172), hd + (.042, .150, .246), .050, 'head', lift=.006, tip=.000, free=.55, thick=.006, ridge=.007,
+            peak=.40, point=1.3, bend=(0, 0, .02), field=poly)
+    A.blade('crestmid', hd + (0, -.010, .178), hd + (0, .170, .205), .084, 'head', lift=.004, tip=.000, free=.62, thick=.007, ridge=.008,
+            peak=.40, point=1.2, bend=(0, 0, .020), mirror=False, field=poly)
     A.blade('occiput', hd + (.020, .092, .110), hd + (.040, .140, .010), .050, 'head', lift=.002, tip=.004, free=.6, mat='dark', field=poly)
 
     A.slot = 'neck'

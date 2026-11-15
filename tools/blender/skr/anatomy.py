@@ -165,7 +165,7 @@ def sculpt(sex):
         B.cone(ch + (.030 * sg, .040, .280), B.pt('upperarm', 0, (-.03, .01, .020), s), .050 * lim, .036 * lim, 'chest', k=.04)   # trapezius
         B.cone(ch + (.020 * sg, -.050, .262), B.pt('upperarm', 0, (-.025, -.04, .005), s), .020, .024, 'chest', k=.02)           # collarbone
     sp = B.j('spine')
-    waist = .090 * w if m else .078
+    waist = .090 * w if m else .066
     B.S.chain([ch + (0, -.005, .02), sp + (0, -.004, .06), sp + (0, .000, -.04)], [.110 * w, waist, .098 * (1.0 if m else 1.12)], 'spine', 'skin', SKIN, k=.04)
     for row in range(3):                                                                                      # the segmented belly
         for sg in (1, -1):
@@ -177,7 +177,7 @@ def sculpt(sex):
     pel = (.108, .080, .078) if m else (.140, .094, .088)
     B.ell(hp + (0, .012, -.008), pel, 'hips', k=.05)
     for sg in (1, -1):
-        B.ell(hp + (.070 * sg * (1 if m else 1.08), .080, -.040), (.042, .040, .054) if m else (.060, .056, .070), 'hips', k=.04)  # glutes
+        B.ell(hp + (.070 * sg * (1 if m else 1.08), .080, -.040), (.042, .040, .054) if m else (.050, .046, .060), 'hips', k=.04)  # glutes
     B.ell(hp + (0, -.058, -.080), (.042, .030, .055), 'hips', col=DEEP, k=.03)
 
     # ---- neck and head
