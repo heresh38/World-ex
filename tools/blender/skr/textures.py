@@ -44,17 +44,17 @@ def armour():
     warp = T.noise(.04, 3) * .006
     bands = .5 + .5 * np.sin(2 * np.pi * (y + warp) / .0042)                    # growth lines along the plate
     bands2 = .5 + .5 * np.sin(2 * np.pi * (y + warp * 2.0) / .019)
-    pits = T.dents(220, (.0006, .0018))
+    pits = T.dents(90, (.0005, .0012))
     scr = T.lines(140, (.006, .040), (.00025, .0006), bend=.3, along=.5)
     var = T.noise(.06, 3)
-    base = hexc('#6c6964')
+    base = hexc('#55534f')
     alb = base * (.92 + .10 * var[..., None]) * (.985 + .015 * bands2[..., None])
     alb = mix(alb, hexc('#4b4946'), (bands * .10))
-    alb = mix(alb, hexc('#a29e98'), (scr * .55))
-    alb = mix(alb, hexc('#4a443c'), (pits * .5))
+    alb = mix(alb, hexc('#a29e98'), (scr * .28))
+    alb = mix(alb, hexc('#4a443c'), (pits * .22))
     rough = .30 + .07 * var + .12 * pits - .06 * scr + .05 * bands
     metal = .62 + .15 * scr
-    T.write(alb, [(bands, .00004), (bands2, .00012), (-pits, .00045), (-scr, .00012), (var, .00030), (T.grain(1), .000015)],
+    T.write(alb, [(bands, .00004), (bands2, .00012), (-pits, .00018), (-scr, .00006), (var, .00030), (T.grain(1), .000015)],
             rough, metal, relief=1.3, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 

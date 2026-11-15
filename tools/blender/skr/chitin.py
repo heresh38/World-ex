@@ -129,7 +129,7 @@ class Armour:
 
     # ------------------------------------------------------------------ the blade
     def blade(self, name, a, b, w, bone=None, lift=.0025, tip=0.0, free=1.0, thick=.006, ridge=.0025, peak=.35, point=1.0,
-              base=.55, n=(20, 9), mat='armour', bend=(0, 0, 0), mirror=True, tone=None, lean=0.0, only=()):
+              base=.55, n=(20, 9), mat='armour', bend=(0, 0, 0), mirror=True, tone=None, lean=0.0, only=(), field=None):
         """a, b: base and tip (left side; mirror=True makes the right one too). bend: a bow added along the length
         (metres, at the middle, as a vector). lean: the plate turned about its own length (radians): one edge lifted."""
         out = []
@@ -137,7 +137,7 @@ class Armour:
             sx = np.array([side, 1, 1], float)
             A = np.asarray(a, float) * sx; Bp = np.asarray(b, float) * sx; bd = np.asarray(bend, float) * sx
             bn = bone if side == 1 or bone is None else mirror_bone(bone)
-            fn = self.subfield(set(only) | {mirror_bone(o_) for o_ in only}) if only else None
+            fn = field or (self.subfield(set(only) | {mirror_bone(o_) for o_ in only}) if only else None)
             out.append(self._blade(f'{name}{"" if side == 1 else "_R"}', A, Bp, w, bn, lift, tip, free, thick, ridge, peak,
                                    point, base, n, mat, bd, tone, lean * side, fn))
         return out
@@ -207,7 +207,7 @@ class Armour:
         uu = np.tile((u * L)[:, None], (1, nv)); vv = v[None, :] * side_scale * hw[:, None]
         UV = np.stack([vv / TILE + self.rng.uniform(0, 1), uu / TILE + self.rng.uniform(0, 1)], -1).reshape(-1, 2)
         UV = np.concatenate([UV, UV])
-        t = self.rng.uniform(.50, .56) if tone is None else tone          # armour: one finish, little variation
+        t = self.rng.uniform(.44, .50) if tone is None else tone          # armour: one finish, little variation
         rim = np.maximum(np.abs(v)[None, :] ** 6, smooth(.82, 1.0, u)[:, None]) * np.ones((nu, nv))
         c0 = np.array([t, t * .985, t * .965]); c1 = np.array([.98, .90, .76])          # the pale rim leans warm (bronze)
         Ct = c0[None, None, :] * (1 - rim[..., None] * .7) + c1[None, None, :] * rim[..., None] * .7
@@ -256,7 +256,7 @@ class Armour:
                     w = cover * rad * math.radians(abs(span[1] - span[0])) / around
                     isdark = dark == 'all' or (r, k) in dark
                     bn = bone if side == 1 else mirror_bone(bone)
-                    out.append(self._blade(f'{name}{r}{k}{"" if side == 1 else "_R"}', s0 * sx, s1 * sx, w, bn, lift + .0035 * r, tip, 1.0, thick,
+                    out.append(self._blade(f'{name}{r}{k}{"" if side == 1 else "_R"}', s0 * sx, s1 * sx, w, bn, lift + .0055 * r, tip, 1.0, thick,
                                            ridge, peak, point, .6, n, 'dark' if isdark else 'armour', np.zeros(3), None, 0.0, fn))
         return out
 

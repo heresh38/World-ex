@@ -174,10 +174,10 @@ def sculpt(sex):
         B.ell(sp + (.080 * sg * w, -.012, .000), (.040, .056, .085), 'spine', k=.035)                   # obliques
         B.ell(sp + (.032 * sg, .080, .060), (.030, .024, .120), 'spine', col=SINEW, k=.03)              # the spine's ropes
     hp = B.j('hips')
-    pel = (.122, .086, .082) if m else (.150, .098, .090)
+    pel = (.108, .080, .078) if m else (.140, .094, .088)
     B.ell(hp + (0, .012, -.008), pel, 'hips', k=.05)
     for sg in (1, -1):
-        B.ell(hp + (.070 * sg * (1 if m else 1.08), .080, -.040), (.050, .044, .060) if m else (.066, .060, .074), 'hips', k=.04)  # glutes
+        B.ell(hp + (.070 * sg * (1 if m else 1.08), .080, -.040), (.042, .040, .054) if m else (.060, .056, .070), 'hips', k=.04)  # glutes
     B.ell(hp + (0, -.058, -.080), (.042, .030, .055), 'hips', col=DEEP, k=.03)
 
     # ---- neck and head
@@ -223,7 +223,7 @@ def sculpt(sex):
     # ---- digitigrade legs
     def leg(s, sg):
         hj, kn, hk, bl_, toe = B.j(f'thigh.{s}'), B.j(f'shin.{s}'), B.j(f'foot.{s}'), B.j(f'toes.{s}'), B.j(f'toes.{s}', 1)
-        B.cone(hj + (0, .004, .02), kn, .084 * lim, .050 * lim, f'thigh.{s}', k=.04)
+        B.cone(hj + (0, .004, .02), kn, .076 * lim, .050 * lim, f'thigh.{s}', k=.04)
         B.ell(lerp(hj, kn, .42) + (.006 * sg, -.032, 0), (.058 * lim, .052 * lim, .150), f'thigh.{s}', k=.04, R=_R(pitch=-8))   # quadriceps
         B.ell(lerp(hj, kn, .40) + (.004 * sg, .040, 0), (.050 * lim, .048 * lim, .140), f'thigh.{s}', col=SINEW, k=.04)       # hamstrings
         B.ell(lerp(hj, kn, .30) + (-.040 * sg, -.004, 0), (.038 * lim, .048 * lim, .120), f'thigh.{s}', k=.04)               # adductors

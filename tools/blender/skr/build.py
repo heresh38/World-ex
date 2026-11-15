@@ -111,7 +111,7 @@ def look(o, out):
     key = area('key', (-2.2, -2.6, 3.4), (0, 0, 0), 480, 2.2, (1.0, .95, .90)); aim(key)
     fill = area('fill', (2.6, -2.2, 1.6), (0, 0, 0), 120, 3.0, (.80, .86, 1.0)); aim(fill)
     for nm, x in (('rimL', -1.8), ('rimR', 1.8)):
-        r = area(nm, (x, 2.4, 2.6), (0, 0, 0), 1100, 1.0, (.86, .90, 1.0)); aim(r, (0, 0, 1.3))
+        r = area(nm, (x, 2.4, 2.6), (0, 0, 0), 620, 1.0, (.86, .90, 1.0)); aim(r, (0, 0, 1.3))
     topl = area('top', (0, .4, 4.2), (0, 0, 0), 300, 2.0, (1, 1, 1)); aim(topl, (0, 0, 1.0))
     cam_d = bpy.data.cameras.new('cam'); cam = bpy.data.objects.new('cam', cam_d); sc.collection.objects.link(cam); sc.camera = cam
     H = 2.4 if o['sex'] == 'male' else 2.25

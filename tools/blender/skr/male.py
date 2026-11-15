@@ -13,7 +13,7 @@ FINGERS = ('index', 'middle', 'ring', 'pinky')
 
 
 def layout(A, J):
-    A.thick_k, A.tip_k = 1.7, .7            # thick armour plates lying on the body, edges barely lifted (not spiky: the owner)
+    A.thick_k, A.tip_k = 2.4, .7            # thick armour plates lying on the body, edges barely lifted (not spiky: the owner)
     A.point_k = .55                         # blunt points: the plates end rounded, not in needles
     j = lambda b, e=0: np.asarray(J[b][e], float)
     hd, nk = j('head'), j('neck')
@@ -22,35 +22,54 @@ def layout(A, J):
     #      of light along each side, framed by pale guards; a brow plate over the crown; blades swept back off the crown and
     #      the temples. All of it is his HELMET; the eyes are his own.
     A.slot = 'body'
-    A.light('eye', [hd + (.024, -.072, .056), hd + (.035, -.062, .075), hd + (.046, -.050, .094)], .0095, 'head', lift=.002)
-    A.light('eyetail', [hd + (.040, -.042, .090), hd + (.046, -.024, .100)], .0026, 'head')
     A.slot = 'helmet'
-    # the helmet's shell: the whole head enclosed 4 mm off it, panels parted by seams, the face behind a dark visor with the
-    # eyes' slits cut through it (the light under it is his own)
-    hs_fn = A.subfield({'head'})
-    zc, zn, yn = hd[2] - .045, hd[2] + .050, hd[1] + .030
+    # the helmet (the sheet's head detail): FACETED, flat planes meeting in hard edges, not a rounded shell. A tall narrow
+    # head: the top and the back swept back, a sloping brow, the face a V of two planes down to a pointed chin under a dark
+    # visor, flat cheeks, the jaw cut back under it to the neck. Each plane sits about a centimetre outside the skull.
+    planes = [((0, .45, 1), .172), ((0, .90, .50), .172), ((0, 1, -.30), .097), ((0, -.55, .85), .162),
+              ((.62, -1, .05), .085), ((-.62, -1, .05), .085), ((.5, -.6, -.6), .080), ((-.5, -.6, -.6), .080),
+              ((1, -.05, -.30), .060), ((-1, -.05, -.30), .060), ((1, .10, .90), .140), ((-1, .10, .90), .140),
+              ((0, -.75, -1), .080), ((1, -.20, -1), .062), ((-1, -.20, -1), .062), ((0, .30, -1), .060)]
+    NP = np.array([np.asarray(n_, float) / np.linalg.norm(n_) for n_, _ in planes], np.float32)
+    DP = np.array([d_ for _, d_ in planes], np.float32)
+
+    def poly(P):
+        q = np.asarray(P, np.float32) - hd.astype(np.float32)
+        return (q @ NP.T - DP[None, :]).max(1)
+    zc, zn, yn = hd[2] - .052, hd[2] + .045, hd[1] + .035
 
     def keep(P):
         return np.maximum(zc - P[:, 2], np.minimum(zn - P[:, 2], P[:, 1] - yn))
 
     def mat_of(c):
-        return 'dark' if (c[1] < hd[1] - .015 and abs(c[0]) < .028 and c[2] < hd[2] + .115) else 'armour'
-    grooves = [((+.027, 0, 0), (1, 0, 0), .0022), ((-.027, 0, 0), (1, 0, 0), .0022),
-               (hd + (0, -.052, .116), (0, -.35, 1), .0024), (hd + (0, .040, .040), (0, 1, .25), .0022)]
-    slits = []
+        q = c - hd
+        return 'dark' if (q[1] < -.030 and -.040 < q[2] < .112 and abs(q[0]) < .046 and q[1] < -.035 - .4 * abs(q[0])) else 'armour'
+    grooves = [(hd + (0, -.030, .134), (0, -.6, 1), .0024), (hd + (0, .062, .060), (0, 1, .3), .0022)]
+    slits, eyes = [], []
     for sg in (1, -1):
-        slits.append((hd + (.024 * sg, -.074, .056), hd + (.046 * sg, -.050, .094), .0045))
-    A.shell('helmet', 'head', hs_fn, hd + (-.085, -.20, -.085), hd + (.085, .15, .225), .004, .0048, keep, mat_of, grooves, slits)
-    A.blade('temple', hd + (.046, -.022, .092), hd + (.076, .080, .082), .052, 'head', lift=.014, tip=.000, free=.70, peak=.5, point=.7,
-            only=('head',))
+        e0, e1 = hd + (.024 * sg, -.080, .052), hd + (.046 * sg, -.066, .090)
+        slits.append((e0, e1, .0042))
+        eyes.append((e0, e1, sg))
+    A.shell('helmet', 'head', poly, hd + (-.090, -.200, -.090), hd + (.090, .160, .225), -.0055, .0055, keep, mat_of, grooves, slits,
+            h=.0009, target=16000)
+    A.slot = 'body'
+    for e0, e1, sg in eyes:                                    # his eyes, burning in the slits
+        nrm = np.array([.526 * sg, -.849, .042])
+        A.claw('eye' if sg > 0 else 'eye_R', e0 - nrm * .0025, e1 - nrm * .0025, .0036, 'head', up=(0, 0, 1), hook=.0, flat=1.0, mirror=False,
+               mat='glow', segs=8, ring=6)
+    A.slot = 'helmet'
+    A.blade('guard', hd + (.040, -.060, -.022), hd + (.062, -.010, .118), .026, 'head', lift=.002, ridge=.004, peak=.5, base=.6, field=poly,
+            thick=.006)
+    A.blade('temple', hd + (.058, -.030, .108), hd + (.082, .090, .090), .050, 'head', lift=.002, tip=.000, free=.72, peak=.5, point=.7,
+            field=poly)
     for k in range(5):
-        a_ = hd + (.010 + .012 * k, .000 + .020 * k, .152 - .006 * k)
-        b_ = hd + (.030 + .020 * k, .135 + .012 * k, .170 - .026 * k)          # tucked close behind the head
-        A.blade(f'crest{k}', a_, b_, .086 - .006 * k, 'head', lift=.014 + .006 * k, tip=.000, free=.66, thick=.008, ridge=.008, peak=.50,
-                point=.7, bend=(0, 0, .018), mat='dark' if k in (1, 3) else 'armour', only=('head',))
-    A.blade('crestmid', hd + (0, .010, .166), hd + (0, .165, .200), .090, 'head', lift=.018, tip=.000, free=.62, thick=.009, ridge=.009,
-            peak=.50, point=.7, bend=(0, 0, .022), mirror=False, only=('head',))
-    A.blade('occiput', hd + (.020, .082, .110), hd + (.040, .140, .000), .052, 'head', lift=.012, tip=.006, free=.55, mat='dark', only=('head',))
+        a_ = hd + (.010 + .012 * k, -.010 + .020 * k, .168 - .006 * k)
+        b_ = hd + (.030 + .022 * k, .190 + .014 * k, .192 - .028 * k)
+        A.blade(f'crest{k}', a_, b_, .088 - .006 * k, 'head', lift=.002 + .005 * k, tip=.000, free=.66, thick=.008, ridge=.008, peak=.50,
+                point=.7, bend=(0, 0, .016), mat='dark' if k in (1, 3) else 'armour', field=poly)
+    A.blade('crestmid', hd + (0, -.010, .178), hd + (0, .170, .205), .084, 'head', lift=.004, tip=.000, free=.62, thick=.009, ridge=.009,
+            peak=.50, point=.7, bend=(0, 0, .020), mirror=False, field=poly)
+    A.blade('occiput', hd + (.020, .092, .110), hd + (.040, .140, .010), .050, 'head', lift=.002, tip=.004, free=.6, mat='dark', field=poly)
 
     A.slot = 'neck'
     # ---- neck: rings of small plates, a ridge at the nape
@@ -94,9 +113,9 @@ def layout(A, J):
     # ---- arms: the upper arm and the forearm ringed in plates pointing down
     sh, el, wr = j('upperarm.L'), j('forearm.L'), j('hand.L')
     A.wrap('uarm', sh + (el - sh) * .22, el + (el - sh) * .05, 'upperarm.L', around=5, rows=3, span=(-220, 45), face=(0, -1, 0), cover=1.06,
-           tip=.008, dark=((0, 1), (1, 3), (2, 0)))
+           tip=.008, dark=((0, 1), (0, 3), (1, 0), (1, 3), (2, 0), (2, 2)))
     A.wrap('farm', el + (wr - el) * .06, wr + (wr - el) * .02, 'forearm.L', around=5, rows=3, span=(-230, 55), face=(0, -1, 0), cover=1.06,
-           tip=.008, dark=((1, 1), (2, 3)))
+           tip=.008, dark=((0, 2), (1, 1), (1, 4), (2, 0), (2, 3)))
     A.blade('forearm', el + (.034, .006, -.030), wr + (.040, .030, .010), .060, 'forearm.L', lift=.010, ridge=.005, peak=.3, tip=.010)
     hn = j('hand.L', 1)
     A.slot = 'hands'
@@ -129,12 +148,12 @@ def layout(A, J):
     # ---- legs
     hj, kn, hk, ba = j('thigh.L'), j('shin.L'), j('foot.L'), j('toes.L')
     A.wrap('thigh', hj + (kn - hj) * .10, kn + (kn - hj) * .02, 'thigh.L', around=6, rows=4, span=(-225, 85), face=(0, -1, 0), cover=1.06,
-           tip=.008, ridge=.004, thick=.007, dark=((0, 2), (1, 0), (2, 3), (3, 5)))
+           tip=.008, ridge=.004, thick=.007, dark=((0, 2), (0, 4), (1, 0), (1, 3), (2, 1), (2, 3), (3, 0), (3, 5)))
     A.blade('thighout', hj + (.070, -.010, -.050), kn + (.050, -.010, .080), .080, 'thigh.L', lift=.014, ridge=.006, thick=.009, peak=.35, tip=.012)
     A.blade('knee', kn + (0, -.050, .070), kn + (0, -.056, -.092), .074, 'shin.L', lift=.006, ridge=.007, thick=.009)
     A.stud('kneelight', kn + (0, -.070, -.004), .0042, 'shin.L')
     A.wrap('shin', kn + (hk - kn) * .14, hk + (hk - kn) * .02, 'shin.L', around=5, rows=4, span=(-215, 85), face=(0, -1, -.4), cover=1.06,
-           tip=.008, thick=.006, dark=((1, 2), (2, 0)))
+           tip=.008, thick=.006, dark=((0, 1), (1, 2), (1, 4), (2, 0), (3, 2), (3, 4)))
     A.slot = 'feet'
     A.wrap('foot', hk + (ba - hk) * .08, ba + (ba - hk) * .10, 'foot.L', around=4, rows=2, span=(-170, 130), face=(0, -1, .3), cover=1.05,
            tip=.006, thick=.006, dark=((1, 1),))
