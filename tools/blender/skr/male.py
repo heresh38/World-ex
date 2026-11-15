@@ -2,7 +2,7 @@
 under overlapping plates with the dark scaled body showing in the gaps between them. A crest of blades lying back over
 the skull and sweeping off behind it, a pale plate down the snout over a dark mask, a slit of light either side; heavy
 layered pauldrons with spikes rising over the shoulders; a chest of broad plates meeting in a V; every limb ringed in
-rows of plates pointing down it, flaring at the elbows, knees and heels; plates across the knuckles, long curved claws;
+rows of plates pointing down it, lying close; plates across the knuckles, long curved claws;
 the spine a row of plates with lights between them. Points are for the LEFT side (+X) and mirrored.
 
 Angles in wrap(): 0 = the `face` direction; for a limb running DOWN with face (0, -1, 0) (forward), +90 is the inside
@@ -13,7 +13,8 @@ FINGERS = ('index', 'middle', 'ring', 'pinky')
 
 
 def layout(A, J):
-    A.thick_k, A.tip_k = 1.7, 1.5           # thick armour plates, their lower edges standing a little off the body
+    A.thick_k, A.tip_k = 1.7, .7            # thick armour plates lying on the body, edges barely lifted (not spiky: the owner)
+    A.point_k = .55                         # blunt points: the plates end rounded, not in needles
     j = lambda b, e=0: np.asarray(J[b][e], float)
     hd, nk = j('head'), j('neck')
 
@@ -40,14 +41,14 @@ def layout(A, J):
     for sg in (1, -1):
         slits.append((hd + (.024 * sg, -.074, .056), hd + (.046 * sg, -.050, .094), .0045))
     A.shell('helmet', 'head', hs_fn, hd + (-.085, -.20, -.085), hd + (.085, .15, .225), .004, .0048, keep, mat_of, grooves, slits)
-    A.blade('temple', hd + (.046, -.022, .092), hd + (.094, .120, .082), .052, 'head', lift=.014, tip=.002, free=.55, peak=.5, point=.7,
+    A.blade('temple', hd + (.046, -.022, .092), hd + (.076, .080, .082), .052, 'head', lift=.014, tip=.000, free=.70, peak=.5, point=.7,
             only=('head',))
     for k in range(5):
         a_ = hd + (.010 + .012 * k, .000 + .020 * k, .152 - .006 * k)
-        b_ = hd + (.032 + .026 * k, .200 + .020 * k, .196 - .030 * k)
-        A.blade(f'crest{k}', a_, b_, .086 - .006 * k, 'head', lift=.014 + .006 * k, tip=.002, free=.50, thick=.008, ridge=.008, peak=.50,
+        b_ = hd + (.030 + .020 * k, .135 + .012 * k, .170 - .026 * k)          # tucked close behind the head
+        A.blade(f'crest{k}', a_, b_, .086 - .006 * k, 'head', lift=.014 + .006 * k, tip=.000, free=.66, thick=.008, ridge=.008, peak=.50,
                 point=.7, bend=(0, 0, .018), mat='dark' if k in (1, 3) else 'armour', only=('head',))
-    A.blade('crestmid', hd + (0, .010, .166), hd + (0, .235, .232), .090, 'head', lift=.018, tip=.002, free=.48, thick=.009, ridge=.009,
+    A.blade('crestmid', hd + (0, .010, .166), hd + (0, .165, .200), .090, 'head', lift=.018, tip=.000, free=.62, thick=.009, ridge=.009,
             peak=.50, point=.7, bend=(0, 0, .022), mirror=False, only=('head',))
     A.blade('occiput', hd + (.020, .082, .110), hd + (.040, .140, .000), .052, 'head', lift=.012, tip=.006, free=.55, mat='dark', only=('head',))
 
@@ -90,15 +91,13 @@ def layout(A, J):
            dark=((1, 1),))
 
     A.slot = 'arms'
-    # ---- arms: the upper arm and the forearm ringed in plates pointing down, a spike off the elbow
+    # ---- arms: the upper arm and the forearm ringed in plates pointing down
     sh, el, wr = j('upperarm.L'), j('forearm.L'), j('hand.L')
     A.wrap('uarm', sh + (el - sh) * .22, el + (el - sh) * .05, 'upperarm.L', around=5, rows=3, span=(-220, 45), face=(0, -1, 0), cover=1.06,
            tip=.008, dark=((0, 1), (1, 3), (2, 0)))
-    A.blade('elbow', el + (-.004, .036, .040), el + (.012, .140, -.040), .044, 'forearm.L', lift=.005, tip=.012, free=.32, thick=.008)
     A.wrap('farm', el + (wr - el) * .06, wr + (wr - el) * .02, 'forearm.L', around=5, rows=3, span=(-230, 55), face=(0, -1, 0), cover=1.06,
            tip=.008, dark=((1, 1), (2, 3)))
     A.blade('forearm', el + (.034, .006, -.030), wr + (.040, .030, .010), .060, 'forearm.L', lift=.010, ridge=.005, peak=.3, tip=.010)
-    A.blade('wristflare', el + (wr - el) * .70 + (.034, .040, 0), wr + (.056, .090, -.070), .036, 'forearm.L', lift=.010, tip=.010, free=.48)
     hn = j('hand.L', 1)
     A.slot = 'hands'
     A.blade('handback', wr + (.012, .000, -.006), hn + (.018, -.004, -.014), .056, 'hand.L', lift=.003, ridge=.004, peak=.45, thick=.006)
@@ -132,16 +131,11 @@ def layout(A, J):
     A.wrap('thigh', hj + (kn - hj) * .10, kn + (kn - hj) * .02, 'thigh.L', around=6, rows=4, span=(-225, 85), face=(0, -1, 0), cover=1.06,
            tip=.008, ridge=.004, thick=.007, dark=((0, 2), (1, 0), (2, 3), (3, 5)))
     A.blade('thighout', hj + (.070, -.010, -.050), kn + (.050, -.010, .080), .080, 'thigh.L', lift=.014, ridge=.006, thick=.009, peak=.35, tip=.012)
-    A.blade('kneespike', kn + (.044, -.012, .086), kn + (.096, .000, .212), .036, 'thigh.L', lift=.008, tip=.010, free=.32, thick=.008)
     A.blade('knee', kn + (0, -.050, .070), kn + (0, -.056, -.092), .074, 'shin.L', lift=.006, ridge=.007, thick=.009)
     A.stud('kneelight', kn + (0, -.070, -.004), .0042, 'shin.L')
     A.wrap('shin', kn + (hk - kn) * .14, hk + (hk - kn) * .02, 'shin.L', around=5, rows=4, span=(-215, 85), face=(0, -1, -.4), cover=1.06,
            tip=.008, thick=.006, dark=((1, 2), (2, 0)))
-    for k, t in enumerate((.20, .48)):
-        p = kn + (hk - kn) * t
-        A.blade(f'calfspike{k}', p + (0, .044, .012), p + (0, .150, -.040), .040 - .006 * k, 'shin.L', lift=.006, tip=.010, free=.40, thick=.008)
     A.slot = 'feet'
-    A.blade('heel', hk + (0, .024, .046), hk + (0, .130, -.004), .032, 'foot.L', lift=.006, tip=.010, free=.35, thick=.007)
     A.wrap('foot', hk + (ba - hk) * .08, ba + (ba - hk) * .10, 'foot.L', around=4, rows=2, span=(-170, 130), face=(0, -1, .3), cover=1.05,
            tip=.006, thick=.006, dark=((1, 1),))
     for dx, ln in ((-.026, .088), (0.0, .102), (.026, .086)):
@@ -158,7 +152,7 @@ def layout(A, J):
     # ---- the back: the spine's plates with lights between them, plates on the low back
     for k, z in enumerate((1.745, 1.672, 1.600, 1.528, 1.456, 1.384, 1.312, 1.240)):
         bone = 'chest' if z > 1.46 else 'spine'
-        A.blade(f'spine{k}', (0, .150, z + .040), (0, .175, z - .050), .046 - .003 * k, bone, lift=.004, ridge=.006, tip=.010, free=.75,
+        A.blade(f'spine{k}', (0, .150, z + .040), (0, .175, z - .050), .046 - .003 * k, bone, lift=.004, ridge=.006, tip=.003, free=1.0,
                 mirror=False, thick=.008)
         A.stud(f'spinelight{k}', (0, .162, z - .052), .0036, bone, mirror=False)
     A.wrap('lowback', (.050, .060, 1.420), (.060, .060, 1.270), 'spine', around=2, rows=2, span=(-20, 60), face=(0, 1, 0), cover=.9, tip=.005,

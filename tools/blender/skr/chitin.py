@@ -61,6 +61,7 @@ class Armour:
         self.count = 0
         self.thick_k = 1.0                                # every plate's thickness, scaled (a body's own choice)
         self.tip_k = 1.0                                  # how far every tip flares off the body, scaled
+        self.point_k = 1.0                                # how sharp every plate's point is (under 1: blunter)
 
     # ------------------------------------------------------------------ helpers
     def project(self, P, iters=6, fn=None):
@@ -147,6 +148,7 @@ class Armour:
         L = float(np.linalg.norm(Bp - A))
         thick = thick * self.thick_k
         tip = tip * self.tip_k
+        point = point * self.point_k
         C = A + (Bp - A) * u[:, None] + bend[None, :] * np.sin(np.pi * np.minimum(u, 1))[:, None]
         att = 1 - smooth(free, min(free + .3, 1.0), u) if free < 1 else np.ones(nu)
         Cp = self.project(C, fn=fn)
