@@ -413,7 +413,93 @@ def skr_grenade():
     finish('gun_skr_grenade', P, (0, -.05, 0), (0, 0, 0), (0, -.05, .02))
 
 
-GUNS = dict(skr_rifle=skr_rifle, skr_sniper=skr_sniper, skr_cannon=skr_cannon, skr_pistol=skr_pistol, skr_blade=skr_blade, skr_grenade=skr_grenade)
+# ------------------------------------------------------------------ the guns, traced off the owner's sheet
+# (the owner, 2026-11-15: "make the guns an exact copy of the image cm by cm"). tools/reference/trace_sheet.py traces each
+# weapon's side view off the sheet (2 mm a pixel): its outline with its see-through windows, and what every part is
+# (dark plate, pale metal, amber or white light) and how the painter lit it. Here that side view is made solid: the
+# outline is exact; the thickness across the gun (which the sheet does not show) is a pillow, thin where the part is thin
+# and fuller in the body; the pale metal stands proud of the dark, the lights are set in, and the painted highlights (the
+# ridges and edges the painter lit) are raised as real relief.
+TRACE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reference', 'sarketh_trace')
+# per gun: the widest it is across (m), and where its grip is on the sheet as a share of its length and height (the
+# origin of the gun's frame: the top of the grip), or None for a gun with no grip of that kind
+TRACED = {
+    'skr_rifle': dict(width=.064, grip=(.700, .560), muzzle_z=.47, sight_z=.30),
+    'skr_sniper': dict(width=.060, grip=(.720, .600), muzzle_z=.50, sight_z=.22),
+    'skr_cannon': dict(width=.080, grip=(.700, .600), muzzle_z=.47, sight_z=.30),
+    'skr_pistol': dict(width=.046, grip=(.700, .560), muzzle_z=.55, sight_z=.25),
+    'skr_blade': dict(width=.026, grip=(.930, .600), muzzle_z=.70, sight_z=.30),
+    'skr_grenade': dict(width=.080, grip=(.500, .500), muzzle_z=.50, sight_z=.30, round=True),
+}
+
+
+def _bilinear(A, u, v):
+    """A sampled at fractional pixel (u = column, v = row), clamped"""
+    H, W = A.shape
+    u = np.clip(u, 0, W - 1.001); v = np.clip(v, 0, H - 1.001)
+    i0 = np.floor(v).astype(np.int64); j0 = np.floor(u).astype(np.int64)
+    fv = v - i0; fu = u - j0
+    return (A[i0, j0] * (1 - fu) * (1 - fv) + A[i0, j0 + 1] * fu * (1 - fv) + A[i0 + 1, j0] * (1 - fu) * fv + A[i0 + 1, j0 + 1] * fu * fv)
+
+
+def traced(name):
+    bl.reset(); M = mats(); P = []
+    T = np.load(os.path.join(TRACE, name + '.npz'))
+    mask, cls, lum, px = T['mask'], T['cls'], T['lum'], float(T['px'])
+    spec = TRACED[name]
+    H, W = mask.shape
+    gu, gv = spec['grip'][0] * W, spec['grip'][1] * H              # the grip's top on the sheet (pixels): the origin
+    inside = T['inside'] * px
+    outside = T['outside'] * px
+    sd = np.where(mask, -inside, outside)                            # signed distance to the outline, metres
+    wmax = spec['width'] * .5
+    hw = wmax * np.clip(inside / .020, 0, 1) ** .50                   # the pillow: half the width at each point
+    hw = hw + np.where(cls == 2, .0040, 0) + np.where(cls >= 3, -.0012, 0) + (lum - .25).clip(-.15, .5) * .0025
+    hw = np.maximum(hw, .0012)
+    if spec.get('round'):                                             # the grenade is round: its width follows its height
+        hw = np.maximum(hw, wmax * np.sqrt(np.clip(inside / (.5 * H * px), 0, 1)))
+
+    def field(Pt):
+        Pt = np.asarray(Pt, np.float64)
+        u = gu + Pt[:, 1] / px                                        # +Y (back, toward the butt) is the image's right
+        v = gv - Pt[:, 2] / px
+        d2 = _bilinear(sd, u, v)
+        out = (u < 0) | (u > W - 1) | (v < 0) | (v > H - 1)
+        d2 = np.where(out, .02, d2)
+        h = _bilinear(hw, u, v)
+        return np.maximum(d2, np.abs(Pt[:, 0]) - h).astype(np.float32)
+    lo = (-wmax - .008, -gu * px - .004, (gv - H) * px - .004)
+    hi = (wmax + .008, (W - gu) * px + .004, gv * px + .004)
+    V, Q = sdf.mesh(field, lo, hi, .0012 if name != 'skr_grenade' else .0006)
+    o = fk.to_object('frame', V, Q)
+    fk.decimate_to(o, 46000 if name not in ('skr_pistol', 'skr_grenade') else 26000)
+    names = ['shell', 'bone', 'amber', 'white']
+    for nm in names:
+        o.data.materials.append(M[nm])
+    me = o.data
+    cen = np.array([p_.center[:] for p_ in me.polygons])
+    u = gu + cen[:, 1] / px
+    v = gv - cen[:, 2] / px
+    c = cls[np.clip(np.round(v).astype(int), 0, H - 1), np.clip(np.round(u).astype(int), 0, W - 1)]
+    me.polygons.foreach_set('material_index', np.array([{1: 0, 2: 1, 3: 2, 4: 3}.get(int(k), 0) for k in c], np.int32))
+    bl.uv_box(o, .22)
+    K.harden(o, 40)
+    P.append(o)
+    # sockets: the muzzle at the front end of the outline, the support hand under the fore end, the sight over the receiver
+    cols = np.nonzero(mask.any(0))[0]
+    front = cols.min()
+    rows = np.nonzero(mask[:, front:front + 4].any(1))[0]
+    mz = (gv - rows.mean()) * px
+    muzzle = (0, (front - gu) * px, mz)
+    fore = (0, (front - gu) * px * .55, mz - .03)
+    sight = (0, -.05, (gv - spec['sight_z'] * H) * px)
+    if name != 'skr_blade' and name != 'skr_grenade':
+        trigger(P, M)
+    finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
+
+
+GUNS = {k: (lambda k=k: traced(k)) for k in TRACED}
+
 
 if __name__ == '__main__':
     args = [a for a in (sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []) if a]
