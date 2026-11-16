@@ -64,6 +64,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FText Title;
 
+	/** The armoury's words for it (game_data.json): its line, its class's name (Light / Ballistic / Living) and the
+	 *  trait its set or class carries (the gold node of the perk web). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FText Lore;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FText ClassName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FText TraitName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FText TraitText;
+
 	/** data.js archetype key (rifle, carbine, ...): picks the reload choreography. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FName Archetype = TEXT("rifle");

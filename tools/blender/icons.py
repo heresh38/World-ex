@@ -1,6 +1,8 @@
 """Inventory icons rendered from our own models with Cycles (transparent background, studio lighting).
 
-  guns:   assets/models/gun_<x>.glb -> <out>/guns/icon_gun_<x>.png    side view, muzzle to the right (768 x 384)
+  guns:   assets/models/gun_<x>.glb -> <out>/guns/icon_gun_<x>.png    the armoury's picture of it (1024 x 512): its right
+          flank seen three quarters from the muzzle's side and a little above through a long lens, lit like a hero
+          (a soft key, two rims from behind, a sheen from above) on the graphics card
   armour: <out>/../Characters/src/hero_<sex>.glb (hero/build.py) -> <out>/armour/icon_<sex>_<slot>_<item>.png, each
           wardrobe piece C_<slot>__<item> alone, three-quarter front view (512 x 512; gloves: the left one)
 
@@ -10,6 +12,7 @@ import bpy, sys, os, math, json, glob
 from mathutils import Vector, Euler
 sys.path.insert(0, os.path.dirname(__file__))
 import bl
+import bakekit
 
 args = sys.argv[sys.argv.index('--') + 1:]
 OUT = os.path.abspath(args[0])
@@ -19,11 +22,12 @@ ONLY = next((a.split('=', 1)[1].split(',') for a in args if a.startswith('--only
 SAMPLES = int(os.environ.get('ICON_SAMPLES', '48'))
 
 
-def studio(sc):
+def studio(sc, hero=False):
     sc.render.engine = 'CYCLES'
     sc.cycles.samples = SAMPLES
     sc.cycles.use_denoising = True
     sc.cycles.device = 'CPU'
+    bakekit._gpu(sc)                                            # (OptiX when there is a card)
     sc.render.film_transparent = True
     sc.render.image_settings.file_format = 'PNG'
     sc.render.image_settings.color_mode = 'RGBA'
@@ -46,6 +50,11 @@ def studio(sc):
     light('fill', 90, (-1.2, 1.6, .4), (.7, .8, 1), 2.4)
     light('rim', 320, (1.4, .2, 1.2), (.55, .78, 1), 1.0)       # cyan-blue rim from behind (the world's light)
     light('under', 40, (-.6, 0, -1.2), (.6, .5, 1), 2.0)        # a faint violet kick from below
+    if hero:
+        # the armoury's picture: darker round it, every edge caught by light from behind, a sheen along the top
+        bg.inputs[1].default_value = .22
+        light('rim2', 260, (1.2, 1.5, .9), (.85, .92, 1), .8)   # a pale rim from behind on the stock's side
+        light('top', 120, (0, -.3, 2.3), (1, .98, .95), 2.6)     # a long soft sheen on the upper faces
 
 
 def frame(cam, objs, view_dir, up=(0, 0, 1), margin=1.08, ortho=True, left_only=False):
@@ -73,6 +82,47 @@ def frame(cam, objs, view_dir, up=(0, 0, 1), margin=1.08, ortho=True, left_only=
     cam.data.clip_end = 40
 
 
+def frame_persp(cam, objs, view_dir, lens=80, margin=1.07, up=(0, 0, 1), margin_v=1.14):
+    """A perspective camera along view_dir as close as fits the objects' bounds with the margin; the picture's middle
+    on the middle of what it sees (the lens shifted: the near end of a long gun looks bigger)."""
+    pts = [o.matrix_world @ Vector(c) for o in objs for c in o.bound_box]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    c = (lo + hi) / 2
+    d = Vector(view_dir).normalized()
+    right = d.cross(Vector(up)).normalized(); upv = right.cross(d).normalized()
+    sc = bpy.context.scene
+    aspect = sc.render.resolution_x / sc.render.resolution_y
+    cam.data.type = 'PERSP'
+    cam.data.sensor_fit = 'HORIZONTAL'
+    cam.data.sensor_width = 36.0
+    cam.data.lens = lens
+    tan_h = 18.0 / lens
+    tan_v = tan_h / aspect
+    qs = [p - c for p in pts]
+
+    def spans(D):
+        xs = [q.dot(right) / (D + q.dot(d)) for q in qs]
+        ys = [q.dot(upv) / (D + q.dot(d)) for q in qs]
+        return min(xs), max(xs), min(ys), max(ys)
+    near = max(-q.dot(d) for q in qs) + 1e-3
+    a, b = near, near + 200.0
+    for _ in range(60):                                           # the least distance at which both spans fit
+        m = (a + b) / 2
+        x0, x1, y0, y1 = spans(m)
+        if (x1 - x0) / 2 <= tan_h / margin and (y1 - y0) / 2 <= tan_v / margin_v:
+            b = m
+        else:
+            a = m
+    x0, x1, y0, y1 = spans(b)
+    cam.location = c - d * b
+    cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
+    cam.data.shift_x = (x0 + x1) / 2 / (2 * tan_h)
+    cam.data.shift_y = (y0 + y1) / 2 / (2 * tan_h)
+    cam.data.clip_start = .005
+    cam.data.clip_end = b * 6
+
+
 def render(path):
     sc = bpy.context.scene
     sc.render.filepath = path
@@ -88,8 +138,8 @@ def guns():
             continue
         bl.reset()
         sc = bpy.context.scene
-        sc.render.resolution_x, sc.render.resolution_y = 768, 384
-        studio(sc)
+        sc.render.resolution_x, sc.render.resolution_y = 1024, 512
+        studio(sc, hero=True)
         bpy.ops.import_scene.gltf(filepath=path)
         objs = []
         for o in sc.objects:
@@ -102,8 +152,9 @@ def guns():
         if not objs:
             continue
         cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
-        # the gun's right side (barrel along -Y, right = -X): looking +X puts the muzzle on the right; a touch from above
-        frame(cam, objs, (1, 0, -.12), margin=1.06)
+        # the gun's right side (barrel along -Y, right = -X): looking +X puts the muzzle on the right; swung toward the
+        # muzzle (+Y in the view's direction: the camera stands on the muzzle's side) and looking down a little
+        frame_persp(cam, objs, (1, .30, -.17), lens=80, margin=1.07)
         render(os.path.join(OUT, 'guns', 'icon_' + stem + '.png'))
 
 

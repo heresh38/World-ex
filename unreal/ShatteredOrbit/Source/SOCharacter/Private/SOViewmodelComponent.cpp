@@ -72,7 +72,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	SwayY += ((Look.Y * 0.0006f) - SwayY) * FMath::Min(1.0f, Dt * 10.0f);
 	const float Speed = Character->GetVelocity().Size2D() / 100.0f; // m/s
 	const bool bGrounded = Move && Move->IsMovingOnGround();
-	const bool bRunning = Move && Move->IsSprinting();
+	const bool bRunning = (Move && Move->IsSprinting()) || Character->IsDisplayCarry();
 	if (bGrounded)
 	{
 		BobT += Dt * Speed * 1.15f;

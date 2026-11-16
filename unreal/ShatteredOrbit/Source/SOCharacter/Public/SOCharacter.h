@@ -355,11 +355,24 @@ public:
 	 * The style and its numbers are data (USOMeleeTable, Data/game_data.json "melee"). The server lands the blow.
 	 */
 	bool IsFists() const { return bFists; }
+
+	/** The loadout's stand-in: the gun carried low across the chest (the sprint's carry), a hero's stance for the picture. */
+	void SetDisplayCarry(bool bOn) { bDisplayCarry = bOn; }
+	bool IsDisplayCarry() const { return bDisplayCarry; }
 	void SetFists(bool bOn);
 	/** The style in use: "fists", or a blade the player owns (USOInventoryComponent::HasBlade). Key 4 goes from the gun
 	 *  to the first blade owned (or the fists), from a blade to the fists, from the fists back to the gun. */
 	FName GetMeleeStyleId() const { return MeleeStyle; }
 	void SetMeleeStyle(FName Style);
+	/** The loadout's stand-in only: shows a style whether or not anybody owns it (a picture, never a player). */
+	void SetDisplayMelee(FName Style)
+	{
+		if (Style != MeleeStyle)
+		{
+			MeleeStyle = Style;
+			OnRep_MeleeStyle();
+		}
+	}
 	/** The blade in the hand (first person / the body), null while none is out. */
 	class UStaticMeshComponent* GetHeldBlade(bool bFirstPerson) const { return bFirstPerson ? BladeFP.Get() : BladeTP.Get(); }
 	const struct FSOMeleeStyle* GetMeleeStyle() const;
@@ -549,6 +562,7 @@ protected:
 	float FistsDrop = 9.0f;
 	float FistsView = 0.0f;
 	float ArmsBaseX = 0.0f;
+	bool bDisplayCarry = false;
 
 	int32 MeleeLastIndex = -1;
 	double MeleeLastStart = -100.0;

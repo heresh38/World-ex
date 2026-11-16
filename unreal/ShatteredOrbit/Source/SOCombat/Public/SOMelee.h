@@ -91,6 +91,10 @@ struct SOCOMBAT_API FSOMeleeStyle
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	TSoftObjectPtr<UStaticMesh> Mesh;
 
+	/** Its line in the armoury. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FText Lore;
+
 	/** Its picture in the loadout (the icon renderer's, like a gun's); none for the fists. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	TSoftObjectPtr<UTexture2D> Icon;

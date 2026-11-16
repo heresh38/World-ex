@@ -17,17 +17,19 @@ class UTextBlock;
 class UTexture2D;
 class UTextureRenderTarget2D;
 class UVerticalBox;
-class UWrapBox;
+class UWidget;
 class USOInventoryComponent;
 class USOInventoryWidget;
 struct FSOArmorInstance;
 struct FSOWeaponInstance;
+struct FSOMeleeStyle;
 
 /**
- * The picture of the player in the middle of the loadout screen: a stand-in character of its own (always there,
- * whatever the pawn is doing, dead or alive), high above the world, wearing the inventory's outfit and holding the gun
- * in hand, seen by a scene capture that draws only it (transparent background), lit by its own key and rim lights,
- * turned by dragging.
+ * The picture of the player in the middle of the armoury: a stand-in character of its own (always there, whatever the
+ * pawn is doing), high above the world, wearing the inventory's outfit and holding the gun in hand carried low across
+ * the chest (a hero's stance, ASOCharacter::SetDisplayCarry), seen by a scene capture that draws only it (transparent
+ * background), lit by its own key, two rims, a fill and the platform's light from below, turned by dragging. While an
+ * item is chosen in an armoury it holds that gun, raises those fists or that blade, or wears that piece instead.
  */
 UCLASS()
 class SOUI_API USOCharacterPreview : public UObject
@@ -36,54 +38,67 @@ class SOUI_API USOCharacterPreview : public UObject
 
 public:
 	void Start(APlayerController* Player);
-	/** Dresses and arms the stand-in like the inventory says (cheap when nothing changed). */
-	void Sync(class USOInventoryComponent* Inventory);
+	/** Dresses and arms the stand-in like the inventory says (cheap when nothing changed). ShowWeapon: a gun's uid or
+	 *  "melee:<style>" to hold that instead of the gun in hand; ShowArmor: a piece's uid to wear over its slot. */
+	void Sync(USOInventoryComponent* Inventory, const FString& ShowWeapon = FString(), const FString& ShowArmor = FString());
 	void Stop();
 	void Tick(float DeltaTime);
 	APawn* GetMannequin() const { return Subject.Get(); }
 	UTextureRenderTarget2D* GetTarget() const { return Target; }
 
 	/** Degrees round the character (0 = from the front). */
-	float Yaw = 25.0f;
+	float Yaw = 24.0f;
+
+	/** The picture's height on the screen is the stage's; where the feet stand in it (0 top .. 1 bottom), worked out
+	 *  from the capture's framing (Tick): the platform is drawn there. */
+	static constexpr float FeetInPicture = 0.88f;
 
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> Target;
 
 	TWeakObjectPtr<ASceneCapture2D> Capture;
-	TWeakObjectPtr<APointLight> Key;
-	TWeakObjectPtr<APointLight> Rim;
+	TArray<TWeakObjectPtr<APointLight>> Lights;
 	TWeakObjectPtr<APawn> Subject;
 	FString ShownWeapon;
+	FString ShownOutfit;
 	void UpdateShowList();
 	/** r.PostProcessing.PropagateAlpha before the preview turned it on (the picture's background is transparent). */
 	int32 PreviousAlpha = -1;
 };
 
-/** One square on the loadout screen: a slot (what is worn / held there) or an owned item in a slot's grid. */
+/** One card on the armoury screen: a slot (what is held / worn there) or an owned item in a slot's list. */
 USTRUCT()
 struct FSOTileInfo
 {
 	GENERATED_BODY()
 
-	/** wslot | aslot | weapon | armor */
+	/** wslot | mslot | aslot (the loadout's slots) | weapon | blade | armor (an armoury list's items) */
 	FName Kind;
-	/** slot id (wslot 0..2, aslot head..feet) or the item's uid */
+	/** a slot's key ("0".."2", "melee", head .. feet) or the item's uid ("melee:<style>" for a melee style) */
 	FString Key;
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> Icon = nullptr;
 	FLinearColor Rarity = FLinearColor::White;
 	FString Title;
+	/** the small line over the name (the slot: PRIMARY, CHEST ...) */
 	FString Sub;
-	FString Badge;
-	/** a slot card's third line: what kind of thing is there (ENERGY SUBMACHINE GUN, 17 ARMOUR) */
+	/** the line under the name (what it is: AUTO RIFLE · LIGHT, LEGENDARY · 17 ARMOUR) */
 	FString Tag;
 	int32 Power = 0;
+	/** power against the one equipped in its slot (an armoury list's item; 0 = the same or nothing to compare) */
+	int32 PowerDelta = 0;
+	/** which column it stands in (its quick look opens on the stage's side) */
+	bool bLeft = true;
+	/** chosen in its list, or its slot is open */
 	bool bActive = false;
 	bool bEquipped = false;
+	bool bInHand = false;
 	bool bNew = false;
-	bool bWide = false;
-	FVector2D Size = FVector2D(110.0f, 110.0f);
+	bool bLocked = false;
+	bool bEmpty = false;
+	/** a glyph drawn where there is no picture (M_UI_Glyph's index; -1 none) */
+	int32 Glyph = -1;
 };
 
 UCLASS()
@@ -94,9 +109,12 @@ class SOUI_API USOInventoryTile : public UUserWidget
 public:
 	void Setup(USOInventoryWidget* InScreen, const FSOTileInfo& InInfo) { Screen = InScreen; Info = InInfo; }
 	const FSOTileInfo& GetInfo() const { return Info; }
+	/** Lights the card as the one chosen in its list (or not) without building it again. */
+	void SetChosen(bool bChosen);
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UFUNCTION()
 	void OnClicked();
@@ -107,22 +125,75 @@ protected:
 	UFUNCTION()
 	void OnUnhovered();
 
+	void Restyle();
+
 	UPROPERTY(Transient)
 	TObjectPtr<USOInventoryWidget> Screen;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UButton> Button;
+
+	UPROPERTY(Transient)
 	FSOTileInfo Info;
+
+	/** The card leans toward the stage while hovered (pixels, eased). */
+	float Lift = 0.0f;
+	float LiftTarget = 0.0f;
+};
+
+/** A tab of the armoury's bar, or one of the armour list's slot chips: a word that is lit when it is the one open. */
+UCLASS()
+class SOUI_API USOArmouryTab : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Setup(USOInventoryWidget* InScreen, const FString& InKey, const FString& InLabel, bool bInActive, bool bInChip, bool bInNew)
+	{
+		Screen = InScreen;
+		Key = InKey;
+		Label = InLabel;
+		bActive = bInActive;
+		bChip = bInChip;
+		bNew = bInNew;
+	}
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+
+	UFUNCTION()
+	void OnClicked();
+
+	UPROPERTY(Transient)
+	TObjectPtr<USOInventoryWidget> Screen;
+
+	FString Key;
+	FString Label;
+	bool bActive = false;
+	bool bChip = false;
+	/** something new is waiting in it (a gold mark) */
+	bool bNew = false;
 };
 
 /**
- * The loadout screen (I / Tab / View). Left: the three weapon slots and the outer layers (coat, rig); right: the
- * armour slots (head, chest, arms, legs, feet); middle: the player as they stand, turnable by dragging, in front of
- * the broken orbit (M_UI_Orbit). A slot opens its bay beside its own column (everything owned for it: plates washed
- * in their rarity, NEW and locked marks) and the details of the hovered or selected item on the far side, where the
- * other column was: the character steps aside into the gap and is never covered. Details: name, rarity, the gun,
- * stats against the equipped one, perks, and the actions Equip (E), Lock (L) and Dismantle (X, twice). Power, armour,
- * level, credits and alloy across the top; the body (male / female) under the character. Every panel is the game's
- * plate (M_UI_Plate: two cut corners, a hairline, a rarity bar). Built in C++ (no widget blueprint).
+ * The armoury (I / Tab): the loadout screen. The owner, 2026-11-16: "take our menu and upgrade it ready for a triple a
+ * game release on steam"; their mockup and the reference screens set the bar, every look and word here is ours.
+ *
+ * LOADOUT (the overview): the backdrop (M_UI_Backdrop: night blue lit from the stage, the broken orbit turning faint
+ * behind the character, motes in the light), the character large on a lit platform (M_UI_Floor) holding the gun low;
+ * the banner across the top (the emblem, the name, the level and its bar, the body; credits, alloy, the vault and the
+ * power); left the ARSENAL: four cards (primary, special, heavy, melee) with the gun's own render glowing in its
+ * rarity's light; right the ARMOUR: seven cards; between them and the stage the six attributes; a hovered card opens
+ * its quick look beside it. The tab bar along the foot: LOADOUT · PRIMARY · SPECIAL · HEAVY · MELEE · ARMOUR (A / D,
+ * the triggers), and the keys.
+ *
+ * A slot's ARMOURY (a card clicked, or its tab): left everything owned for it (cards; the armour's slots as chips over
+ * its list; up / down moves through it), right the INSPECT panel (the name large, its rarity, class and kind, its line,
+ * power, the stats against the equipped one in segmented bars, the perks on a spine of hexagons with the trait of its
+ * set or class in gold at its foot; a piece's attributes against the one worn, which the attribute column shows as
+ * well; a melee style's blows) with Equip (E), Lock (L), Dismantle (X, twice) and Raise (U); the character holds the
+ * chosen gun, raises the chosen fists or blade, or wears the chosen piece. Every card is M_UI_Card, every shape drawn
+ * by its own material (sized from the UV derivatives: crisp at any resolution). Built in C++.
  */
 UCLASS()
 class SOUI_API USOInventoryWidget : public UUserWidget
@@ -134,13 +205,18 @@ public:
 	void Refresh();
 	void Close();
 
-	/** A tile was clicked / hovered (USOInventoryTile). */
+	/** A card was clicked / hovered (USOInventoryTile). */
 	void OnTile(const FSOTileInfo& Tile);
-	void OnTileHover(const FSOTileInfo& Tile, bool bHover);
+	void OnTileHover(USOInventoryTile* Tile, bool bHover);
+	/** A tab or an armour chip was clicked (USOArmouryTab). */
+	void OnTab(const FString& Key);
 
-	/** Opens a slot's grid ("0".."2" weapons, head / top / vest / outer / hands / legs / feet armour; empty = none). */
+	/** Opens a slot's armoury ("0".."2" weapons, "melee", head / top / vest / outer / hands / legs / feet armour, "armour"
+	 *  the armour slot open last; empty = back to the loadout). */
 	void OpenSlot(const FString& SlotId);
 	const FString& GetOpenSlot() const { return OpenSlotId; }
+	/** Opens a loadout card's quick look as a hover does (its slot's key; empty = closes it): the capture series. */
+	void PeekSlot(const FString& SlotKey);
 
 	/** Called when the screen wants to close (the HUD restores game input). */
 	TFunction<void()> OnClose;
@@ -167,22 +243,40 @@ protected:
 	UFUNCTION()
 	void OnUpgrade();
 
-	/** The upgrade button for the selected piece: what it would give and cost, or why not. */
-	void ShowUpgrade(const FString& Uid);
-
 	UFUNCTION()
 	void OnBody();
 
 	void BuildTree();
-	void FillColumns();
-	void FillFlyout();
-	void FillDetails();
-	void FillWeaponDetails(const FSOWeaponInstance& W);
-	void FillArmorDetails(const FSOArmorInstance& A);
+	void FillBanner();
+	void FillLoadout();
+	void FillArmoury();
+	void FillTabs();
+	void FillHints();
+	void FillInspect();
+	void FillWeaponInspect(const FSOWeaponInstance& W);
+	void FillArmorInspect(const FSOArmorInstance& A);
+	void FillMeleeInspect(const FSOMeleeStyle& Style, FName Id);
+	/** The six attributes; with a piece, what wearing it would change. */
+	void FillAttributes(const FSOArmorInstance* TryOn);
+	void FillQuickLook(USOInventoryTile* Tile);
+	void ShowUpgrade(const FString& Uid);
+	/** Shows or hides the inspect panel's buttons (nothing to act on: hidden). */
+	void SetActions(bool bShow);
+	/** Chooses an item of the open list (the card lit, the inspect panel and the stand-in follow). */
+	void Choose(const FString& Key);
 	FSOTileInfo WeaponTile(const FSOWeaponInstance& W, bool bSlot) const;
 	FSOTileInfo ArmorTile(const FSOArmorInstance& A, bool bSlot) const;
 	FString ShownKey() const;
 	bool IsWeaponSlot(const FString& SlotKey) const { return SlotKey.Len() == 1 && FChar::IsDigit(SlotKey[0]); }
+	bool IsArmourSlot(const FString& SlotKey) const;
+	/** Moves the armoury one tab left or right (from the loadout too). */
+	void StepTab(int32 Step);
+	/** Moves the choice in the open list up or down. */
+	void StepList(int32 Step);
+	/** Shows the chosen gun / style / piece on the stand-in. */
+	void SyncPreview();
+	/** The panels slide and fade in after a change of view. */
+	void Animate();
 
 	UPROPERTY(Transient)
 	TObjectPtr<USOInventoryComponent> Inventory;
@@ -194,48 +288,72 @@ protected:
 	TObjectPtr<UCanvasPanel> Root;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UVerticalBox> LeftColumn;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UVerticalBox> RightColumn;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UImage> PreviewImage;
 
+	/** The banner: the name, the level line, the level's bar, the body; the currencies; the power. */
 	UPROPERTY(Transient)
-	TObjectPtr<UBorder> Flyout;
+	TObjectPtr<UTextBlock> NameText;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UWrapBox> Grid;
+	TObjectPtr<UTextBlock> LevelText;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> GridTitle;
+	TObjectPtr<UTextBlock> XpText;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UVerticalBox> Details;
+	TObjectPtr<UImage> XpBar;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> MaleLabel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> FemaleLabel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> Currencies;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> PowerText;
 
+	/** The left and right panels (the loadout's columns, or an armoury's list and its inspect panel). */
 	UPROPERTY(Transient)
-	TObjectPtr<UHorizontalBox> StatsRow;
-
-	/** The character's six attributes, under the figures. */
-	UPROPERTY()
-	TObjectPtr<UHorizontalBox> AttributeRow;
-
-	/** The details of the item under the cursor, on the far side from the open slot's bay. */
-	UPROPERTY(Transient)
-	TObjectPtr<UBorder> DetailPanel;
+	TObjectPtr<UVerticalBox> LeftPanel;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UCanvasPanelSlot> StageSlot;
+	TObjectPtr<UVerticalBox> RightPanel;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UCanvasPanelSlot> OrbitSlot;
+	TObjectPtr<UVerticalBox> AttributeColumn;
+
+	/** A hovered loadout card's quick look, beside it. */
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> QuickLook;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> BodyLabel;
+	TObjectPtr<UHorizontalBox> TabRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> HintRow;
+
+	/** An armoury's list (its cards, in order) and where it was scrolled to. */
+	UPROPERTY(Transient)
+	TObjectPtr<UScrollBox> ListScroll;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USOInventoryTile>> ListTiles;
+
+	/** The inspect panel (built once, put in the right panel by an armoury): its content (scrolls), its buttons. */
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> InspectFrame;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UScrollBox> InspectScroll;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> Inspect;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> ActionBlock;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> EquipButton;
@@ -247,6 +365,9 @@ protected:
 	TObjectPtr<UButton> DismantleButton;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UButton> UpgradeButton;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> EquipLabel;
 
 	UPROPERTY(Transient)
@@ -256,18 +377,17 @@ protected:
 	TObjectPtr<UTextBlock> DismantleLabel;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UButton> UpgradeButton;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> UpgradeLabel;
 
 	FString OpenSlotId;
+	FString LastArmourSlot = TEXT("head");
 	FString SelectedKey;
 	FString HoverKey;
+	FString QuickKey;
+	float ListOffset = 0.0f;
 	double DismantleArmedAt = -100.0;
 	bool bDragging = false;
-	/** The character steps aside while a bay is open (canvas units from the middle). */
-	float StageShift = 0.0f;
-	float StageShiftTarget = 0.0f;
+	/** The panels' slide in (0 just changed .. 1 settled). */
+	float Arrive = 1.0f;
 	FDelegateHandle ChangedHandle;
 };

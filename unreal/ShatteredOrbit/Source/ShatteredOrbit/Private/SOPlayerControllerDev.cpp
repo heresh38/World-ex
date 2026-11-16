@@ -188,20 +188,28 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	CaptureCues.Reset();
 	if (Set == 19)
 	{
-		// The loadout screen alone (files u*): as it opens, a weapon slot's bay with the details, an armour slot's
-		// (mirrored), a hovered item against the equipped one.
+		// The armoury alone (files u*): the loadout as it opens, a card's quick look, a gun slot's armoury (the inspect
+		// panel against the equipped gun), the heavy one's, the melee armoury (the guard raised), the armour's (the piece
+		// tried on), back to the loadout.
 		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
 		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
+		auto Peek = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->PeekSlot(SlotKey); } };
 		Do(5.0f, [=, this]() { ConsoleCommand(TEXT("DisableAllScreenMessages")); if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
 		Snap(2.0f, TEXT("u1_loadout"));
-		Act([=]() { OpenSlot(TEXT("0")); });
-		Snap(1.2f, TEXT("u2_loadout_primary"));
+		Act([=]() { Peek(TEXT("0")); });
+		Snap(0.6f, TEXT("u2_quicklook"));
+		Act([=]() { Peek(TEXT("feet")); });
+		Snap(0.6f, TEXT("u2b_quicklook_armour"));
+		Act([=]() { Peek(TEXT("")); OpenSlot(TEXT("0")); });
+		Snap(1.2f, TEXT("u3_primary"));
 		Act([=]() { OpenSlot(TEXT("2")); });
-		Snap(1.2f, TEXT("u3_loadout_heavy"));
+		Snap(1.2f, TEXT("u4_heavy"));
+		Act([=]() { OpenSlot(TEXT("melee")); });
+		Snap(1.6f, TEXT("u5_melee"));
 		Act([=]() { OpenSlot(TEXT("head")); });
-		Snap(1.2f, TEXT("u4_loadout_head"));
+		Snap(1.2f, TEXT("u6_head"));
 		Act([=]() { OpenSlot(TEXT("")); });
-		Snap(1.2f, TEXT("u5_loadout_closed"));
+		Snap(1.2f, TEXT("u7_back"));
 	}
 	if (Set == 21)
 	{

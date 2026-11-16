@@ -30,7 +30,8 @@
       "adsTime": 0.23,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Sunforge Litany"
+      "title": "Sunforge Litany",
+      "lore": "Built from a Sarketh pattern taken off the dead. The cell hums a note just under hearing while it fires."
     },
     "pulse": {
       "name": "Pulse Rifle",
@@ -63,7 +64,8 @@
       "adsTime": 0.24,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Ninefold Choir"
+      "title": "Ninefold Choir",
+      "lore": "Nine bolts to a breath, three to a burst. The Institute's engineers never agreed on why it keeps that rhythm."
     },
     "scout": {
       "name": "Scout Rifle",
@@ -94,7 +96,8 @@
       "adsTime": 0.27,
       "sprintOut": 0.22,
       "carry": "low",
-      "title": "Farsight Herald"
+      "title": "Farsight Herald",
+      "lore": "A patient gun for long streets. It finds the shape of a target before the eye does."
     },
     "handcannon": {
       "name": "Hand Cannon",
@@ -125,7 +128,8 @@
       "adsTime": 0.17,
       "sprintOut": 0.16,
       "carry": "high",
-      "title": "The Undertaker"
+      "title": "The Undertaker",
+      "lore": "One heavy bolt at a time, and every one of them is meant to be the last."
     },
     "shotgun": {
       "name": "Shotgun",
@@ -156,7 +160,8 @@
       "adsTime": 0.22,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Gravedigger’s Hymn"
+      "title": "Gravedigger’s Hymn",
+      "lore": "A wall of light at arm's length. Its intake breathes in after every shot like something alive."
     },
     "sniper": {
       "name": "Sniper Rifle",
@@ -187,7 +192,8 @@
       "adsTime": 0.42,
       "sprintOut": 0.25,
       "carry": "low",
-      "title": "Pale Horizon"
+      "title": "Pale Horizon",
+      "lore": "From across the drained canal it puts a single point of light exactly where you decide."
     },
     "smg": {
       "name": "Submachine Gun",
@@ -217,7 +223,8 @@
       "adsTime": 0.18,
       "sprintOut": 0.16,
       "carry": "short",
-      "title": "Kestrel-X9"
+      "title": "Kestrel-X9",
+      "lore": "Light, fast and hungry: made for the stairwells and corridors of the Stacks."
     },
     "sidearm": {
       "name": "Sidearm",
@@ -247,7 +254,8 @@
       "adsTime": 0.13,
       "sprintOut": 0.14,
       "carry": "high",
-      "title": "Helios"
+      "title": "Helios",
+      "lore": "A small sun in the hand. Every runner out of Nexus Prime carries one."
     },
     "energy": {
       "name": "Light Lance",
@@ -278,7 +286,8 @@
       "adsTime": 0.26,
       "sprintOut": 0.22,
       "carry": "low",
-      "title": "Eclipse"
+      "title": "Eclipse",
+      "lore": "A lance of gathered light that holds its charge until the moment is right."
     },
     "hmg": {
       "name": "Heavy Machine Gun",
@@ -309,7 +318,8 @@
       "adsTime": 0.38,
       "sprintOut": 0.26,
       "carry": "low",
-      "title": "Atlas"
+      "title": "Atlas",
+      "lore": "It turns a street into a wall. Hold the trigger and let the barrels sing."
     },
     "rocket": {
       "name": "Rocket Launcher",
@@ -339,7 +349,8 @@
       "adsTime": 0.4,
       "sprintOut": 0.26,
       "carry": "low",
-      "title": "Starfall Engine"
+      "title": "Starfall Engine",
+      "lore": "Slow, bright and final. Whatever it reaches stops being cover."
     },
     "rifle": {
       "name": "Assault Rifle",
@@ -370,7 +381,8 @@
       "adsTime": 0.24,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Old Winter"
+      "title": "Old Winter",
+      "lore": "Honest steel in an old pattern. It was here before the ships came, and it will be here after."
     },
     "carbine": {
       "name": "Carbine",
@@ -401,7 +413,8 @@
       "adsTime": 0.22,
       "sprintOut": 0.19,
       "carry": "low",
-      "title": "Dust Saint"
+      "title": "Dust Saint",
+      "lore": "Short and light, put together from what the workshops of Nexus Prime still had on their shelves."
     },
     "dmr": {
       "name": "Battle Rifle",
@@ -433,7 +446,8 @@
       "adsTime": 0.3,
       "sprintOut": 0.23,
       "carry": "low",
-      "title": "Hearthfire"
+      "title": "Hearthfire",
+      "lore": "Walnut and steel, three rounds to a pull. Somebody's grandfather kept it oiled for this."
     },
     "ksmg": {
       "name": "Compact SMG",
@@ -463,7 +477,8 @@
       "adsTime": 0.17,
       "sprintOut": 0.15,
       "carry": "short",
-      "title": "Alley Cat"
+      "title": "Alley Cat",
+      "lore": "It fits under a coat and empties in a heartbeat. Made for close streets and closer rooms."
     },
     "bolt": {
       "name": "Bolt-Action Rifle",
@@ -494,7 +509,8 @@
       "adsTime": 0.42,
       "sprintOut": 0.25,
       "carry": "low",
-      "title": "Long Silence"
+      "title": "Long Silence",
+      "lore": "One round, one breath, one name crossed off. The quietest gun in the city."
     },
     "pistol": {
       "name": "Service Pistol",
@@ -524,7 +540,8 @@
       "adsTime": 0.13,
       "sprintOut": 0.14,
       "carry": "high",
-      "title": "Gentleman’s Promise"
+      "title": "Gentleman’s Promise",
+      "lore": "It always fires, and it always comes home. That was the promise."
     },
     "revolver": {
       "name": "Revolver",
@@ -555,7 +572,8 @@
       "adsTime": 0.16,
       "sprintOut": 0.15,
       "carry": "high",
-      "title": "Six Mercies"
+      "title": "Six Mercies",
+      "lore": "Six chambers, six mercies. Load slowly, and remember who you are."
     },
     "pump": {
       "name": "Pump Shotgun",
@@ -586,7 +604,8 @@
       "adsTime": 0.22,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Porch Light"
+      "title": "Porch Light",
+      "lore": "A porch light against the dark: loud, close, and impossible to ignore."
     },
     "spitter": {
       "name": "Spitter",
@@ -618,6 +637,7 @@
       "sprintOut": 0.19,
       "carry": "low",
       "title": "The Hungering Maw",
+      "lore": "Grown, not made. It feeds on what you give it and spits back acid.",
       "gooGrav": 0.1
     },
     "bile": {
@@ -651,6 +671,7 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Mother of Rot",
+      "lore": "A living cannon that ripens its shots inside its own body. Do not ask what it eats.",
       "gooGrav": 0.18
     },
     "brood": {
@@ -684,6 +705,7 @@
       "sprintOut": 0.25,
       "carry": "low",
       "title": "The Gravid Bloom",
+      "lore": "It lays its rounds. They hatch where they land.",
       "gooGrav": 0.1
     },
     "vr_rifle": {
@@ -716,6 +738,7 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Last Rite",
+      "lore": "Silver and violet, made by a people no human has met. Every shot rings like a struck bell.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -750,6 +773,7 @@
       "sprintOut": 0.25,
       "carry": "low",
       "title": "Vigil's End",
+      "lore": "It keeps the last watch. What it sees through its glass does not see the morning.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -783,6 +807,7 @@
       "sprintOut": 0.16,
       "carry": "short",
       "title": "Threnody",
+      "lore": "A hurried lament: many notes, every one of them grief.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -817,6 +842,7 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Toll of Ruin",
+      "lore": "A single toll, as wide as a doorway.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -851,6 +877,7 @@
       "sprintOut": 0.26,
       "carry": "low",
       "title": "Last Procession",
+      "lore": "A procession of light that does not stop for the fallen.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -885,6 +912,7 @@
       "sprintOut": 0.16,
       "carry": "high",
       "title": "Final Verse",
+      "lore": "The last line of a long poem, spoken once.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -918,6 +946,7 @@
       "sprintOut": 0.14,
       "carry": "high",
       "title": "Ashen Psalm",
+      "lore": "A small prayer said over ash.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -952,6 +981,7 @@
       "sprintOut": 0.22,
       "carry": "low",
       "title": "Eulogy",
+      "lore": "It gathers its breath before it speaks, and what it says is final.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -985,6 +1015,7 @@
       "sprintOut": 0.26,
       "carry": "low",
       "title": "Funeral Bell",
+      "lore": "When it rings, the whole street falls silent.",
       "set": "void_requiem",
       "weight": 0.0,
       "shader": "requiem"
@@ -1017,6 +1048,7 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Ember Oath",
+      "lore": "A Sarketh Veteran's rifle. Its crystal condenses slugs out of its own heat, and its oath passes to whoever holds it.",
       "weight": 0.0,
       "set": "sarketh",
       "pierce": 1,
@@ -1058,6 +1090,7 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Ember Oath II",
+      "lore": "Ember Oath in mirror steel over woven fire: the rifle the Veterans salute.",
       "weight": 0.0,
       "set": "sarketh",
       "pierce": 1,
@@ -1099,6 +1132,7 @@
       "sprintOut": 0.3,
       "carry": "low",
       "title": "Pale Verdict",
+      "lore": "The Lance passes its verdict through armour, through cover, and through the one behind.",
       "weight": 0.0,
       "set": "sarketh",
       "pierce": 3,
@@ -1141,6 +1175,7 @@
       "sprintOut": 0.28,
       "carry": "low",
       "title": "Ashen Gate",
+      "lore": "A Bearer's launcher. Its drum condenses slugs heavy enough to open a wall.",
       "weight": 0.0,
       "set": "sarketh",
       "splash": 4.0,
@@ -1182,6 +1217,7 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Shard Choir",
+      "lore": "A spray of amber shards, each one singing its own note as it goes.",
       "weight": 0.0,
       "set": "sarketh",
       "pellets": 9,
@@ -1223,6 +1259,7 @@
       "sprintOut": 0.14,
       "carry": "high",
       "title": "Small Flame",
+      "lore": "Every Sarketh officer keeps a small flame on the belt.",
       "weight": 0.0,
       "set": "sarketh",
       "pierce": 1,
@@ -1265,6 +1302,7 @@
       "sprintOut": 0.16,
       "carry": "high",
       "title": "Heavy Ember",
+      "lore": "A heavy slug, condensed slowly and thrown hard. The Speakers carry it to end arguments.",
       "weight": 0.0,
       "set": "sarketh",
       "pierce": 1,
@@ -1334,7 +1372,7 @@
     },
     {
       "id": "exotic",
-      "name": "Exotic",
+      "name": "Sovereign",
       "color": "#ffcf3f",
       "mult": 1.3,
       "perks": 3
@@ -1342,12 +1380,12 @@
   ],
   "perks": {
     "overflow": {
-      "name": "Overflow",
+      "name": "Deep Magazine",
       "desc": "Magazine +40%.",
       "magazine": 1.4
     },
     "rampage": {
-      "name": "Rampage",
+      "name": "Hunter's Pace",
       "desc": "Kills grant +15% damage, stacking 3x for 4s.",
       "killDamage": 0.15,
       "killDamageStacks": 3,
@@ -2485,7 +2523,8 @@
         "parryStagger": 1.2,
         "counterTime": 1.5,
         "counter": 1.6
-      }
+      },
+      "lore": "Your hands, your guard, your rhythm. Nothing to load, nothing to lose."
     },
     "skr_blade": {
       "name": "Veyr Edge",
@@ -2634,7 +2673,36 @@
         "parryStagger": 1.4,
         "counterTime": 1.5,
         "counter": 1.6
-      }
+      },
+      "lore": "Mirror steel round a heart of glass and light. It cuts plate as if it remembered being forged for it."
     }
+  },
+  "traits": {
+    "_doc": "The trait every gun of a set (or, with no set, its class's family) carries: the armoury's gold node. -> USOWeaponData::TraitName / TraitText",
+    "sarketh": {
+      "name": "Condenser",
+      "text": "Never reloads: rounds condense from the reserve once the crystal is cold. Its slugs go through."
+    },
+    "void_requiem": {
+      "name": "Requiem",
+      "text": "Violet bolts that ring like bells; reloads of its own making."
+    },
+    "energy": {
+      "name": "Plasma",
+      "text": "Fires bolts of light that are seen to fly: lead a moving target at range."
+    },
+    "kinetic": {
+      "name": "True Flight",
+      "text": "Real rounds with a muzzle speed and drop."
+    },
+    "horror": {
+      "name": "Biomass",
+      "text": "A living weapon: what it fires burns and clings."
+    }
+  },
+  "classNames": {
+    "energy": "Light",
+    "kinetic": "Ballistic",
+    "horror": "Living"
   }
 }

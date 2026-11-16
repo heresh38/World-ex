@@ -1256,6 +1256,15 @@ def slug_values(a):
                 vent_time=float(h.get("vent", 1.4)), heat_speed=float(h.get("speed", 1.3)), refill_time=float(a.get("refill", 0.0)))
 
 
+def gun_words(a):
+    """A gun's words in the armoury (game_data.json): its line ("lore"), its class's name ("classNames") and the trait its
+    set or class carries ("traits": the armoury's gold node)."""
+    game = load_json(GAME_DATA)
+    trait = (game.get("traits") or {}).get(a.get("set") or a["cls"]) or {}
+    return dict(lore=unreal.Text(a.get("lore", "")), class_name=unreal.Text((game.get("classNames") or {}).get(a["cls"], a["cls"].title())),
+                trait_name=unreal.Text(trait.get("name", "")), trait_text=unreal.Text(trait.get("text", "")))
+
+
 def weapon(master, arch, a, clear):
     folder = weapon_dir(a["model"])
     src = os.path.join(SOURCE, "Weapons", folder)
@@ -1306,7 +1315,7 @@ def weapon(master, arch, a, clear):
                       unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
                   kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
                   sprint_carry=a.get("carry", "None"), tracer_color=hex_color(tracer), glow_color=hex_color(palette_of(a)["glow"]), body_mesh=body, parts=parts,
-                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"], **slug_values(a))
+                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"], **slug_values(a), **gun_words(a))
     for key, value in values.items():
         data.set_editor_property(key, value)
     sockets = info["sockets"]
@@ -1435,10 +1444,16 @@ def perks_only():
         log("DA_LootTables: not imported yet (run the weapons step), skipped")
         return
     tables = eal.load_asset(path)
-    perks = perk_infos(load_json(GAME_DATA))
+    game = load_json(GAME_DATA)
+    perks = perk_infos(game)
     tables.set_editor_property("perks", perks)
+    rarities = list(tables.get_editor_property("rarities"))
+    for info, r in zip(rarities, game["rarity"]):                 # (their names and colours: the rest stays)
+        info.set_editor_property("name", unreal.Text(r["name"]))
+        info.set_editor_property("color", hex_color(r["color"]))
+    tables.set_editor_property("rarities", rarities)
     eal.save_loaded_asset(tables, only_if_is_dirty=False)
-    log(f"DA_LootTables: {len(perks)} perks rewritten")
+    log(f"DA_LootTables: {len(perks)} perks and {len(rarities)} rarities rewritten")
 
 
 def loot_tables(datas, sight_meshes):
@@ -1704,12 +1719,35 @@ def gun_numbers():
                       reload_time=float(a["reload"]), range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
                       muzzle_velocity=float(velocity), kick=float(a.get("kick", 1.0)), sprint_to_fire_time=float(a["sprintOut"]),
                       sprint_carry=a.get("carry", "None"), tracer_color=hex_color(palette_of(a)["tracer"]),
-                      glow_color=hex_color(palette_of(a)["glow"]), **slug_values(a))
+                      glow_color=hex_color(palette_of(a)["glow"]), **slug_values(a), **gun_words(a))
         for key, value in values.items():
             data.set_editor_property(key, value)
         eal.save_loaded_asset(data, only_if_is_dirty=False)
         n += 1
     log(f"gun numbers: {n} data assets")
+
+
+def icons_only():
+    """Every gun's armoury picture again, nothing else (SO_IMPORT_ONLY=icons; tools/blender/icons.py renders them into
+    SourceArt/Icons/guns): the texture is replaced where it is, so whatever names it keeps it. The melee styles'
+    pictures come with SO_IMPORT_ONLY=melee."""
+    game = load_json(GAME_DATA)
+    n = 0
+    for arch, a in game["archetypes"].items():
+        if not isinstance(a, dict) or "model" not in a:
+            continue
+        folder = weapon_dir(a["model"])
+        path = f"/Game/Weapons/{folder}/DA_{folder}"
+        icon = os.path.join(ICONS, "guns", f"icon_{a['model']}.png")
+        if not eal.does_asset_exist(path) or not os.path.exists(icon):
+            continue
+        data = eal.load_asset(path)
+        if str(data.get_editor_property("archetype")) != arch:
+            continue                                          # (another archetype shares this model: its own asset)
+        data.set_editor_property("icon", import_ui_texture(icon, f"/Game/Weapons/{folder}", f"T_Icon_{folder}"))
+        eal.save_loaded_asset(data, only_if_is_dirty=False)
+        n += 1
+    log(f"icons: {n} guns")
 
 
 def register_archetypes(datas):
@@ -2661,7 +2699,16 @@ def ui_materials():
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     ui_shape("M_UI_Plate", UI_PLATE_HLSL, dict(Fill=(.035, .045, .07, .92), FillLow=(.02, .026, .045, .94), Edge=(1, 1, 1, .14),
                                               Accent=(0, 0, 0, 0), Shape=(12, 1, 0, 0), Look=(0, 0, 0, 0)))
-    ui_shape("M_UI_Orbit", UI_ORBIT_HLSL, dict(Tint=(.42, .55, 1.0, 1.0), Glow=(.36, .22, .9, 1.0), Centre=(.5, .56, 0, 0)), time=True)
+    # the armoury (the loadout screen, 2026-11-16): the backdrop, the platform, the cards, the bars, the perks' nodes,
+    # the small glyphs; every one drawn by its own code, sized from the UV derivatives (crisp at any resolution)
+    ui_shape("M_UI_Backdrop", UI_BACKDROP_HLSL, dict(Deep=(.0012, .002, .0048, 1), Tint=(.0075, .019, .040, 1), Beam=(.35, .72, 1.0, 1),
+                                                    Stage=(.5, .5, .87, .97)), time=True)
+    ui_shape("M_UI_Floor", UI_FLOOR_HLSL, dict(Ring=(.30, .78, 1.0, 1), Pool=(.18, .5, .95, 1), Look=(.24, 0, 0, 1)), time=True)
+    ui_shape("M_UI_Card", UI_CARD_HLSL, dict(Rarity=(.7, .45, 1.0, 1), State=(0, 0, 0, 0), Shape=(18, .68, .9, 7)))
+    ui_shape("M_UI_StatBar", UI_STATBAR_HLSL, dict(Values=(.6, .6, 10, 0), Fill=(.82, .9, 1.0, .95), Good=(.42, .95, .55, 1),
+                                                  Bad=(1.0, .40, .34, 1)))
+    ui_shape("M_UI_Hex", UI_HEX_HLSL, dict(Color=(.25, .85, 1.0, 1), Glyph=(0, 1, 0, 0)))
+    ui_shape("M_UI_Glyph", UI_GLYPH_HLSL, dict(Color=(.85, .92, 1.0, 1), Glyph=(0, 0, 0, 0)), time=True)
     log("UI materials ready")
 
 
@@ -2695,30 +2742,219 @@ a = lerp(a, 1.0, edge * Edge.a);
 return float4(c, a * inside);
 """
 
-UI_ORBIT_HLSL = """
-// The backdrop behind the character: the broken orbit. Thin rings about a centre, each in pieces with gaps, each
-// turning at its own slow pace; a ring of fine ticks; a soft light where the character stands.
+UI_BACKDROP_HLSL = """
+// The armoury's backdrop: night blue lit from the stage, light falling onto it from above, the broken orbit faint and
+// turning behind the character, motes drifting up through the light, a horizon of light where the floor is, the
+// edges sunk in dark. Deep = the edges, Tint = the lit middle, Beam = the light, Stage = (centre x, y, horizon y, opacity)
 float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
 float m = min(px.x, px.y);
-float2 q = (UV - Centre.xy) * px / m;
+float2 q = (UV - Stage.xy) * px / m;
+float r = length(q * float2(0.82, 1.0));
+float3 c = lerp(Tint.rgb, Deep.rgb, smoothstep(0.02, 1.05, r));
+// the light from above, widening as it falls
+float wdt = 0.018 + 0.07 * UV.y;
+float beam = exp(-q.x * q.x / wdt) * (1.0 - UV.y * 0.55) * smoothstep(0.0, 0.25, UV.y + 0.05);
+c += Beam.rgb * beam * 0.045;
+// the broken orbit behind the character: arcs in pieces, each turning at its own pace, a ring of ticks
+float2 o = q - float2(0.0, -0.06);
+float ro = length(o);
+float ao = atan2(o.y, o.x) / 6.2831853 + 0.5;
+float aa = max(fwidth(ro), 1e-5);
+float arcs = 0.0;
+arcs += saturate(1.0 - abs(ro - 0.355) / (aa * 1.3)) * step(frac(ao * 3.0 + Time * 0.006), 0.70) * 0.55;
+arcs += saturate(1.0 - abs(ro - 0.455) / (aa * 1.0)) * step(frac(ao * 5.0 - Time * 0.009 + 0.30), 0.46) * 0.38;
+arcs += saturate(1.0 - abs(ro - 0.585) / (aa * 1.7)) * step(frac(ao * 2.0 + Time * 0.004 + 0.60), 0.64) * 0.30;
+arcs += saturate(1.0 - abs(ro - 0.405) / (aa * 5.0)) * step(frac(ao * 150.0 + Time * 0.15), 0.10) * 0.22;
+arcs += saturate(1.0 - abs(ro - 0.74) / (aa * 1.0)) * step(frac(ao * 7.0 + Time * 0.003 + 0.15), 0.30) * 0.18;
+c += Beam.rgb * arcs * 0.12;
+// motes drifting up through the light (two layers)
+float mot = 0.0;
+for (int k = 0; k < 2; k++)
+{
+    float sc = k == 0 ? 24.0 : 13.0;
+    float2 g = UV * px / m * sc + float2(k * 7.31, Time * (0.05 + k * 0.035));
+    float2 id = floor(g);
+    float2 f = frac(g) - 0.5;
+    float h = frac(sin(dot(id, float2(127.1, 311.7))) * 43758.5453);
+    float h2 = frac(sin(dot(id, float2(269.5, 183.3))) * 43758.5453);
+    float2 off = float2(h - 0.5, h2 - 0.5) * 0.7;
+    float dd = length(f - off);
+    float tw = 0.45 + 0.55 * sin(Time * (0.8 + h * 1.7) + h2 * 6.2831);
+    mot += step(0.84, h) * exp(-dd * dd * (k == 0 ? 2600.0 : 1300.0)) * tw;
+}
+c += Beam.rgb * mot * 0.3 * (1.0 - 0.6 * smoothstep(0.25, 1.0, r));
+// the horizon of light at the floor's height
+float hz = exp(-pow((UV.y - Stage.z) * 20.0, 2.0)) * exp(-q.x * q.x * 1.4);
+c += Beam.rgb * hz * 0.035;
+// the edges sink into the dark
+c *= 1.0 - 0.6 * smoothstep(0.45, 1.4, r);
+return float4(c, Stage.w);
+"""
+
+UI_FLOOR_HLSL = """
+// The platform the character stands on, seen from in front and a little above: rings of light in perspective (one in
+// pieces turning, one of fine ticks), a pool of light, the dark of the feet's shadow; nearer the eye is brighter.
+// Ring, Pool = colours; Look = (squash: the ellipse's height to its width, -, -, opacity)
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float2 q = (UV - 0.5) * 2.0;
+q.y *= px.y / px.x;
+q.y /= max(Look.x, 0.05);
 float r = length(q);
 float ang = atan2(q.y, q.x) / 6.2831853 + 0.5;
-float unit = 1.0 / m;
-static const float4 R[6] = { float4(0.205, 3.0, 0.62, 0.010), float4(0.262, 5.0, 0.42, -0.016), float4(0.335, 2.0, 0.78, 0.006),
-                             float4(0.405, 7.0, 0.30, -0.011), float4(0.49, 4.0, 0.52, 0.004), float4(0.60, 9.0, 0.22, 0.003) };
-float al = 0.0;
-for (int i = 0; i < 6; i++)
+float aa = max(fwidth(r), 1e-5);
+float front = 0.55 + 0.45 * saturate(q.y * 0.9 + 0.5);
+float ring1 = saturate(1.0 - abs(r - 0.30) / (aa * 1.5));
+float ring2 = saturate(1.0 - abs(r - 0.46) / (aa * 2.2)) * step(frac(ang * 3.0 + Time * 0.02), 0.78);
+float ring3 = saturate(1.0 - abs(r - 0.62) / (aa * 1.2)) * step(frac(ang * 5.0 - Time * 0.035), 0.55);
+float ticks = saturate(1.0 - abs(r - 0.78) / (aa * 7.0)) * step(frac(ang * 120.0 + Time * 0.25), 0.18);
+float ring5 = saturate(1.0 - abs(r - 0.95) / (aa * 1.0));
+float rings = ring1 * 0.85 + ring2 * 0.7 + ring3 * 0.45 + ticks * 0.42 + ring5 * 0.28;
+rings *= front * saturate(1.0 - (r - 0.86) / 0.2);
+float pool = exp(-r * r * 6.0);
+float glow = saturate(rings + pool * 0.42);
+float3 c = Ring.rgb * rings + Pool.rgb * pool * 0.5;
+float shadow = exp(-r * r / 0.010) * 0.7;
+float a = saturate(glow + shadow * (1.0 - glow));
+c = c / max(a, 1e-4) * glow;
+return float4(c, a * Look.w);
+"""
+
+UI_CARD_HLSL = """
+// An armoury card: two corners cut (top left, bottom right), the rarity's light rising in it from the lower right and
+// glowing behind the item's picture, faint scan lines, a hairline in the rarity's colour (bright when hovered, doubled
+// and pale cyan when chosen) with its light inside it, a rarity diamond in the cut corner, an accent along the foot.
+// Rarity = colour; State = (hover, chosen, -, empty); Shape = (cut px, glow centre x, glow strength, diamond px)
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float2 p = UV * px;
+float cut = Shape.x;
+float d = min(min(p.x, p.y), min(px.x - p.x, px.y - p.y));
+d = min(d, (p.x + p.y - cut) * 0.70711);
+d = min(d, ((px.x - p.x) + (px.y - p.y) - cut) * 0.70711);
+float inside = saturate(d + 0.5);
+float hover = State.x, chosen = State.y, empty = State.w;
+float3 rar = Rarity.rgb;
+float3 c = lerp(float3(0.0062, 0.0090, 0.0175), float3(0.0030, 0.0042, 0.0090), UV.y);
+float a = 0.93;
+float rise = saturate(UV.x * 0.5 + UV.y * 0.8 - 0.5);
+c = lerp(c, rar * 0.11, rise * rise * (0.45 + 0.3 * hover) * (1.0 - empty));
+float2 g = (UV - float2(Shape.y, 0.55)) / float2(0.34, 0.70);
+c += rar * exp(-dot(g, g) * 2.0) * Shape.z * (0.075 + 0.05 * hover) * (1.0 - empty);
+c += 0.0025 * step(frac(p.y / 3.0), 0.34);
+float inner = exp(-max(d, 0.0) / 8.0) * (0.05 * hover + 0.09 * chosen);
+float3 lit = lerp(rar, float3(0.45, 0.9, 1.0), chosen * 0.55);
+c += lit * inner;
+float w = 1.0 + chosen;
+float edge = saturate(w - d + 0.5);
+float ea = lerp(0.42, 1.0, saturate(max(hover, chosen))) * lerp(1.0, 0.45, empty);
+c = lerp(c, lit, edge * ea);
+a = lerp(a, 1.0, edge * ea);
+float2 mk = p - float2(cut * 0.55 + 7.0, cut * 0.55 + 7.0);
+float md = abs(mk.x) + abs(mk.y);
+float dia = saturate(Shape.w - md + 0.5) - saturate(Shape.w * 0.42 - md + 0.5);
+c = lerp(c, rar, dia * lerp(1.0, 0.35, empty));
+float foot = step(px.y - p.y, 2.0) * saturate(1.0 - UV.x / 0.4) * (1.0 - empty);
+c = lerp(c, rar, foot);
+c += 0.012 * saturate(1.0 - p.y / 20.0) * (0.6 + hover);
+return float4(c, a * inside);
+"""
+
+UI_STATBAR_HLSL = """
+// A stat's bar: a faint track, the value in segments with a bright cap, and what it gains (Good) or loses (Bad) against
+// the one equipped. Values = (value 0..1, the equipped one's 0..1, segments, -)
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float v = saturate(Values.x), cmp = saturate(Values.y);
+float segs = max(Values.z, 1.0);
+float gap = step(frac(UV.x * segs), 1.0 - 2.0 * segs / px.x);
+float3 c = float3(1.0, 1.0, 1.0);
+float a = 0.09;
+float lo = min(v, cmp), hi = max(v, cmp);
+if (UV.x < lo) { c = Fill.rgb; a = Fill.a; }
+else if (UV.x < hi) { c = v > cmp ? Good.rgb : Bad.rgb; a = v > cmp ? 1.0 : 0.6; }
+a *= gap;
+float cap = saturate(1.0 - abs(UV.x * px.x - v * px.x) / 1.5);
+c = lerp(c, float3(1.0, 1.0, 1.0), cap * 0.6);
+a = max(a, cap * 0.95);
+return float4(c, a);
+"""
+
+UI_HEX_HLSL = """
+// A perk's node: a hexagon (flat top) with a hairline, a soft glow round it and an inner ring, a dark heart, and a glyph
+// of light in it. Color = colour; Glyph = (which glyph 0..7, how lit 0..1, -, -)
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float2 q = (UV - 0.5) * 2.0;
+float2 aq = abs(q);
+float hd = max(aq.y, aq.x * 0.866025 + aq.y * 0.5) / 0.866025;
+float unit = 2.0 / px.x;
+float lit = lerp(0.55, 1.0, saturate(Glyph.y));
+float inside = saturate((0.86 - hd) / unit + 0.5);
+float outline = saturate(1.0 - abs(hd - 0.86) / (unit * 1.7));
+float halo = exp(-max(hd - 0.86, 0.0) / 0.045) * (1.0 - inside) * 0.55;
+float ring = saturate(1.0 - abs(hd - 0.66) / (unit * 1.1)) * 0.4;
+float rr = length(q);
+float lw = unit * 1.7;
+int k = (int)(Glyph.x + 0.5);
+float g = 0.0;
+if (k == 0) { g = saturate(1.0 - abs(rr - 0.30) / lw) + saturate((0.10 - rr) / unit + 0.5); }
+else if (k == 1) { g = saturate(1.0 - abs(aq.x + aq.y - 0.34) / lw) + saturate((0.08 - (aq.x + aq.y)) / unit + 0.5); }
+else if (k == 2) { g = saturate((0.42 - (pow(aq.x, 0.55) + pow(aq.y, 0.55))) / (unit * 2.0) + 0.5); }
+else if (k == 3) { g = saturate(1.0 - abs(rr - 0.22) / lw) + saturate(1.0 - aq.x / lw) * step(0.12, aq.y) * step(aq.y, 0.40) + saturate(1.0 - aq.y / lw) * step(0.12, aq.x) * step(aq.x, 0.40); }
+else if (k == 4) { g = step(aq.y, 0.30) * max(saturate(1.0 - aq.x / (lw * 1.4)), saturate(1.0 - abs(aq.x - 0.19) / (lw * 1.4))); }
+else if (k == 5) { float2 t = float2(aq.x, q.y + 0.06); float td = max(t.x * 0.866 + t.y * 0.5, -t.y); g = saturate(1.0 - abs(td - 0.20) / lw); }
+else if (k == 6) { g = saturate(1.0 - abs(rr - 0.34) / lw) + saturate(1.0 - abs(rr - 0.18) / lw); }
+else { float h2 = max(aq.y, aq.x * 0.866025 + aq.y * 0.5) / 0.866025; g = saturate((0.30 - h2) / unit + 0.5) - saturate((0.16 - h2) / unit + 0.5); }
+g = saturate(g);
+float3 c = float3(0.016, 0.022, 0.04) + Color.rgb * 0.10;
+float a = inside * 0.94;
+c = c * inside + Color.rgb * (outline + halo + ring * inside + g * inside) * lit;
+a = saturate(a + outline + halo * 0.7);
+return float4(c, a);
+"""
+
+UI_GLYPH_HLSL = """
+// The armoury's small glyphs, drawn in light: 0 the emblem (the broken orbit round a diamond), 1 credits, 2 alloy, 3 the
+// vault, 4 power, 5 plating, 6 mending, 7 stride, 8 ordnance, 9 impact, 10 focus, 11 the fists, 12 a lock, 13 a blade.
+// Color = colour; Glyph = (which, -, -, -)
+float2 px = float2(1.0 / max(abs(ddx(UV.x)) + abs(ddy(UV.x)), 1e-6), 1.0 / max(abs(ddx(UV.y)) + abs(ddy(UV.y)), 1e-6));
+float2 q = (UV - 0.5) * 2.0;
+float2 aq = abs(q);
+float u = 2.0 / min(px.x, px.y);
+float lw = u * 1.6;
+float r = length(q);
+float ang = atan2(q.y, q.x) / 6.2831853 + 0.5;
+int k = (int)(Glyph.x + 0.5);
+float g = 0.0;
+if (k == 0)
 {
-    float w = unit * (i == 2 ? 2.0 : 1.1);
-    float ring = saturate(1.0 - abs(r - R[i].x) / w);
-    float seg = step(frac(ang * R[i].y + Time * R[i].w + i * 0.37), R[i].z);
-    al += ring * seg * (i == 2 ? 0.5 : 0.28);
+    g = saturate(1.0 - abs(r - 0.78) / (lw * 1.3)) * step(frac(ang * 3.0 + Time * 0.02), 0.72);
+    g += saturate((0.36 - (aq.x + aq.y)) / u + 0.5) - saturate((0.16 - (aq.x + aq.y)) / u + 0.5);
+    float2 sat = q - float2(cos(Time * 0.6), sin(Time * 0.6)) * 0.78;
+    g += saturate((0.09 - length(sat)) / u + 0.5);
 }
-float ticks = step(frac(ang * 96.0 + Time * 0.48), 0.1) * saturate(1.0 - abs(r - 0.349) / (unit * 4.0)) * step(0.335, r);
-al += ticks * 0.22;
-float glow = exp(-r * r * 11.0) * 0.2;
-float3 c = lerp(Tint.rgb, Glow.rgb, saturate(glow * 4.0));
-return float4(c, saturate(al * Tint.a + glow * Glow.a));
+else if (k == 1) { g = saturate(1.0 - abs(r - 0.70) / lw) + saturate(1.0 - abs(r - 0.46) / lw) + saturate(1.0 - aq.x / lw) * step(aq.y, 0.26); }
+else if (k == 2) { float h = max(aq.y, aq.x * 0.866 + aq.y * 0.5) / 0.866; g = saturate(1.0 - abs(h - 0.78) / lw) + saturate((0.36 - h) / u + 0.5); }
+else if (k == 3) { float b = max(aq.x, aq.y); g = saturate(1.0 - abs(b - 0.70) / lw) + (saturate(1.0 - aq.x / lw) + saturate(1.0 - aq.y / lw)) * step(b, 0.70); }
+else if (k == 4) { float dm = aq.x + aq.y; g = saturate((0.85 - dm) / u + 0.5) - saturate((0.40 - dm) / u + 0.5); }
+else if (k == 5) { float sh = max(aq.x * 0.9 + q.y * 0.45, -q.y * 0.8); g = saturate(1.0 - abs(sh - 0.62) / lw) + saturate((0.30 - max(aq.x * 0.9 + q.y * 0.45, -q.y * 0.8)) / u + 0.5); }
+else if (k == 6) { g = saturate(1.0 - abs(r - 0.80) / lw) + (saturate(1.0 - aq.x / (lw * 1.6)) * step(aq.y, 0.48) + saturate(1.0 - aq.y / (lw * 1.6)) * step(aq.x, 0.48)); }
+else if (k == 7) { float c1 = abs(aq.y * 0.9 - (q.x + 0.25)); float c2 = abs(aq.y * 0.9 - (q.x - 0.25)); g = (saturate(1.0 - c1 / (lw * 1.4)) + saturate(1.0 - c2 / (lw * 1.4))) * step(aq.y, 0.55) * step(abs(q.x), 0.75); }
+else if (k == 8) { float2 b = q - float2(0.0, 0.12); g = saturate(1.0 - abs(length(b) - 0.55) / lw) + step(abs(q.x), 0.16) * step(-0.78, q.y) * step(q.y, -0.52); }
+else if (k == 9) { g = saturate(1.0 - abs(frac(ang * 8.0) - 0.25) * 8.0) * step(0.30, r) * step(r, 0.85) + saturate((0.22 - r) / u + 0.5); }
+else if (k == 10) { float lid = abs(aq.y - (0.55 - q.x * q.x * 0.55)); g = saturate(1.0 - lid / lw) * step(aq.x, 0.9) + saturate((0.20 - r) / u + 0.5); }
+else if (k == 11)
+{
+    float kn = 1e3;
+    for (int f = 0; f < 4; f++) { kn = min(kn, abs(length(q - float2(-0.45 + f * 0.30, -0.36)) - 0.15)); }
+    float2 pb = abs(q - float2(0.0, 0.20)) - float2(0.56, 0.36);
+    float palm = abs(length(max(pb, 0.0)) + min(max(pb.x, pb.y), 0.0) - 0.08);
+    float2 ta = float2(-0.58, 0.10), tb = float2(0.10, 0.02);
+    float th = saturate(dot(q - ta, tb - ta) / dot(tb - ta, tb - ta));
+    float thumb = abs(length(q - ta - (tb - ta) * th) - 0.11);
+    g = saturate(1.0 - kn / lw) + saturate(1.0 - palm / lw) * step(-0.18, q.y) + saturate(1.0 - thumb / lw);
+}
+else if (k == 12) { float body = max(aq.x - 0.48, abs(q.y - 0.25) - 0.38); g = saturate((-body) / u + 0.5) * (1.0 - saturate((0.10 - length(q - float2(0.0, 0.22))) / u + 0.5)); g += saturate(1.0 - abs(length(q - float2(0.0, -0.18)) - 0.30) / lw) * step(q.y, -0.13); }
+else { float2 t = float2(q.x * 0.7071 + q.y * 0.7071, -q.x * 0.7071 + q.y * 0.7071); g = saturate((0.14 - (abs(t.y) + abs(t.x) * 0.16)) / u + 0.5) * step(abs(t.x), 0.88); }
+g = saturate(g);
+return float4(Color.rgb, g * Color.a);
 """
 
 
@@ -2910,6 +3146,7 @@ def melee(master=None, defaults=None):
         if st.get("edgeColor"):
             y.set_editor_property("edge_color", hex_color(st["edgeColor"]))
         y.set_editor_property("set_id", st.get("set", "None"))
+        y.set_editor_property("lore", unreal.Text(st.get("lore", "")))
         if st.get("mesh") and master is not None:
             folder = weapon_dir(st["mesh"])
             src = os.path.join(SOURCE, "Weapons", folder)
@@ -3195,6 +3432,8 @@ def main():
         weapons(master, defaults)
     if "gunnumbers" in only:
         gun_numbers()
+    if "icons" in only:
+        icons_only()
     if "gunslots" in only:
         gun_slots()
     if "guntextures" in only:

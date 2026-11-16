@@ -521,7 +521,7 @@ tell (the heavy machine gun is shorter than the SMG). Pictures `SOCaptureSeries 
 Y +55): the owner tried it over the left one on 2026-11-15 and asked for it back. Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
 screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`,
 kit + baked tiles `tools/blender/nexus_city.py`, built at runtime by `ASONexusCity`. Inventory icons:
-`tools/blender/icons.py`. Sounds: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis).
+`tools/blender/icons.py` (the armoury's pictures, below). Sounds: `tools/audio/sfx_synth.py` (numpy + scipy, our own synthesis).
 Combat core and abilities (Project Orion phase 1, begun 2026-11-12; plan and state in `docs/orion/ROADMAP.md` and
 `docs/orion/reports/PHASE_1.md`). **Damage is decided in one place, `USOAttributeSet::TakeDamage`**: whatever writes
 the `IncomingDamage` attribute (a round or a blow through `USOCombatStatics::ApplyDamage`, a burn ticking, an
@@ -617,11 +617,33 @@ spawn groups, checkpoints (the game mode respawns there) and boss adds keyed to 
 `ASOOperationBarrier` energy walls keep the route linear until their stage; finishing grants every player ONE random
 piece of the reward sets (`AddArmorPiece` for armour: wardrobe items with a `Set` are earned, never handed out).
 HUD: objective panel, stage banner, goal marker, boss bar, end screen. Tests `ShatteredOrbit.Operation.*`.
-The loadout screen (`USOInventoryWidget`, C++ only; redesigned 2026-11-12): every panel is the game's plate
-(`/Game/UI/M_UI_Plate`: two cut corners, a hairline, a rarity bar and wash, all drawn by one Custom node from the UV
-derivatives: `import_assets.ui_shape`), the character stands in front of the broken orbit (`M_UI_Orbit`), a slot's
-bay opens beside its own column with the details where the other column was, and the character steps into the gap
-between them (never covered). Pictures `SOCaptureSeries 1 19` (files `SO_u*`).
+**The armoury** (the loadout screen, I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word:
+"upgrade it ready for a triple a game release on steam", their mockup and reference screens as the bar, every look
+and word ours). LOADOUT: the backdrop (`M_UI_Backdrop`: night blue lit from the stage, the broken orbit faint behind
+the character, motes), the character large on a lit platform (`M_UI_Floor`), holding the gun low across the chest
+(`ASOCharacter::SetDisplayCarry`: the sprint's carry while standing, for the stand-in only); the banner (emblem, name,
+level and its bar, the body; credits, alloy, vault, power); left the ARSENAL (three guns + melee, each card with the
+gun's own render in its rarity's light), right the ARMOUR (seven cards), the six attributes in a column beside the
+stage; a hovered card opens its quick look beside it (`PeekSlot` does the same for the capture series). The tab bar
+LOADOUT · PRIMARY · SPECIAL · HEAVY · MELEE · ARMOUR (A / D, the arrows, the triggers; a gold mark where something
+new waits). A slot's ARMOURY: left its list (W / S moves through it; the armour's slots as chips over it), right the
+INSPECT panel (rarity · class · kind, the name, its line, power, the stats against the equipped gun in segmented bars
+(damage and range on a root scale), the perks on a spine of hexagons in the set's own light with the TRAIT of its
+set or class in gold at its foot; a piece's attributes against the worn one, which the attribute column shows too;
+a melee style's blows and its guard) with only the buttons that can apply. The stand-in HOLDS the chosen gun, RAISES
+the chosen fists or blade (`ASOCharacter::SetDisplayMelee`: a style shown whoever owns it, the stand-in only), WEARS
+the chosen piece. Every card is `M_UI_Card`, every shape its own material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`:
+0 emblem, 1 credits, 2 alloy, 3 vault, 4 power, 5-10 the attributes, 11 fists, 12 lock, 13 blade; the panels
+`M_UI_Plate`), one Custom node each drawn from the UV derivatives (`import_assets.ui_shape`, `SO_IMPORT_ONLY=ui`).
+**A UI material's colour is LINEAR**: the screen shows it through the sRGB curve, so a "dark" 0.03 is a mid grey
+(the first pass came out washed blue): glass is 0.003-0.02, the text greys 0.2-0.6. The words are data
+(`Data/game_data.json`): every archetype's `"lore"` (its line), `"traits"` (the gold node, by set or class family),
+`"classNames"` (Light / Ballistic / Living), the melee styles' `"lore"`; `import_assets.gun_words` puts them on
+`USOWeaponData::Lore / ClassName / TraitName / TraitText` (with the guns and `SO_IMPORT_ONLY=gunnumbers`). The top
+rarity is the Sovereign. The pictures: `tools/blender/icons.py` renders each gun 1024 x 512, three quarters from the
+muzzle's side through an 80 mm lens, rim-lit, on the graphics card (`frame_persp`: the least distance that fits, the
+lens shifted to centre it); `SO_IMPORT_ONLY=icons` brings them in. Pictures `SOCaptureSeries 1 19` at
+`-ResX=1920 -ResY=1080` (files `SO_u1_loadout` .. `SO_u7_back`: quick looks, primary, heavy, melee, head).
 The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
 `art/reference/operation/first_operation_map.png` made linear, our own names, and (owner, 2026-11-10: "at least 4x
 longer ... spawn at the very edge of the city and fight through ruined buildings / maybe a mall ... like a strike")
