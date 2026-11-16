@@ -40,15 +40,20 @@ for nm in names:
     area('top', (.2 * k, 0, 1.6 * k), 60 * k * k, 1.0 * k, (1, 1, 1))
     area('under', (.8 * k, 0, -1.0 * k), 25 * k * k, 1.0 * k, (.8, .85, 1))
     cd = bpy.data.cameras.new('c'); cam = bpy.data.objects.new('c', cd); sc.collection.objects.link(cam); sc.camera = cam
-    for view, d, res in (('side', (1, 0, 0), (1600, 700)), ('quarter', (1, -.8, .45), (1400, 900))):
+    VIEWS = {'side': ((1, 0, 0), (1600, 700)), 'quarter': ((1, -.8, .45), (1400, 900)), 'top': ((0, 0, 1), (1600, 500)),
+             'front': ((0, -1, .15), (900, 700)), 'back3q': ((-1, .8, .35), (1400, 900))}
+    for view in os.environ.get('VIEWS', 'side,quarter').split(','):
+        d, res = VIEWS[view]
         sc.render.resolution_x, sc.render.resolution_y = res
         dv = Vector(d).normalized()
-        if view == 'side':
+        if view in ('side', 'top'):
             cd.type = 'ORTHO'; cd.ortho_scale = size * 1.12
         else:
             cd.type = 'PERSP'; cd.lens = 70
         cam.location = c + dv * size * 2.6
         cam.rotation_euler = (c - cam.location).to_track_quat('-Z', 'Y').to_euler()
+        if view == 'top':
+            cam.rotation_euler = (0.0, 0.0, math.radians(-90))   # looking down, the barrel across the picture
         sc.render.filepath = os.path.join(out, f'{nm}_{view}.png')
         bpy.ops.render.render(write_still=True)
     print('[gunsheet]', nm, flush=True)

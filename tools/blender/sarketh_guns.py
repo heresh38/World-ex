@@ -425,7 +425,7 @@ TRACE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'referenc
 # per gun: the widest it is across (m), and where its grip is on the sheet as a share of its length and height (the
 # origin of the gun's frame: the top of the grip), or None for a gun with no grip of that kind
 TRACED = {
-    'skr_rifle': dict(width=.064, grip=(.700, .560), muzzle_z=.47, sight_z=.30),
+    'skr_rifle': dict(width=.090, k=.95, grip=(.700, .560), muzzle_z=.47, sight_z=.30),
     'skr_sniper': dict(width=.060, grip=(.720, .600), muzzle_z=.50, sight_z=.22),
     'skr_cannon': dict(width=.080, grip=(.700, .600), muzzle_z=.47, sight_z=.30),
     'skr_pistol': dict(width=.046, grip=(.700, .560), muzzle_z=.55, sight_z=.25),
@@ -525,7 +525,7 @@ def traced(name):
 # outline, then two inner tiers stepping out toward its core, so it is layered in depth as the sheet's guns are), every
 # pale region a plate of its own standing proud on the layer under it, every light set in its own part. The outline,
 # the windows and where each plate and light sits are the sheet's; the depth is the tiers'.
-def _curve_solid(name, rings, half, bevel, mat, x, px, gu, gv):
+def _curve_solid(name, rings, half, bevel, mat, x, px, gu, gv, res=1):
     """rings (pixel polygons: an outline, then its holes) as a bevelled extrusion `half` either side of world x"""
     from mathutils import Matrix
     cu = bpy.data.curves.new(name, 'CURVE')
@@ -533,7 +533,7 @@ def _curve_solid(name, rings, half, bevel, mat, x, px, gu, gv):
     cu.fill_mode = 'BOTH'
     cu.extrude = max(half - bevel, .0002)
     cu.bevel_depth = bevel
-    cu.bevel_resolution = 1
+    cu.bevel_resolution = res
     cu.offset = -bevel                                 # (the bevel does not grow the outline: the sheet's line stays)
     for ring in rings:
         if len(ring) < 3:
@@ -615,7 +615,174 @@ def crisp(name):
     finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
 
 
-GUNS = {k: (lambda k=k: crisp(k)) for k in TRACED}
+# ------------------------------------------------------------------ solid: every part with its own round volume
+# (the owner, 2026-11-15, on the bevelled layers: "fill the empty areas, this is just a cut out"). At every point along the
+# gun, each part the side view cuts through (a barrel, the receiver, a blade, a loop of the stock) is given a round cross
+# section: an ellipse as tall as the part is there and, across, in proportion to that height (a barrel round, the
+# receiver full, a blade thin), up to the gun's width. The pale plates are a shell lying ON that rounded surface, a few
+# millimetres proud with a sharp edge where the sheet's plate ends; the lights are the sheet's, in their own material.
+def solid(name):
+    bl.reset(); M = mats(); P = []
+    T = np.load(os.path.join(TRACE, name + '.npz'))
+    mask, cls, px = T['mask'], T['cls'], float(T['px'])
+    spec = TRACED[name]
+    H, W = mask.shape
+    gu, gv = spec['grip'][0] * W, spec['grip'][1] * H
+    sd = np.where(mask, -T['inside'], T['outside']) * px                     # the side outline, metres
+    psd = np.where(cls == 2, -T['pale_in'], T['pale_out']) * px              # the pale plates' outline, metres
+    # per pixel: the vertical run of the part it lies in (its middle row, its half height)
+    zc = np.zeros(mask.shape, np.float32); hh = np.zeros(mask.shape, np.float32)
+    for j in range(W):
+        col = mask[:, j].astype(np.int8)
+        d = np.diff(np.concatenate([[0], col, [0]]))
+        for a, b in zip(np.nonzero(d == 1)[0], np.nonzero(d == -1)[0]):
+            zc[a:b, j] = (a + b - 1) * .5
+            hh[a:b, j] = (b - a) * .5
+    rows = np.arange(H, dtype=np.float32)[:, None]
+    k = spec.get('round', False) and 1.0 or spec.get('k', .72)
+    half_w = spec['width'] * .5
+    across = np.sqrt(np.maximum(hh * hh - (rows - zc) ** 2, 0)) * px * k       # half the width at this point: an ellipse
+    across = np.minimum(across, half_w)
+    across = np.where(mask, np.maximum(_blur2(across, 1), .0016), 0)      # (neighbouring columns blended: no ribs)
+
+    def at(A, u, v):
+        return _bilinear(A, u, v)
+
+    def body(Pt):
+        u = gu + Pt[:, 1] / px
+        v = gv - Pt[:, 2] / px
+        out = (u < 0) | (u > W - 1) | (v < 0) | (v > H - 1)
+        d2 = np.where(out, .02, at(sd, u, v))
+        return np.maximum(d2, np.abs(Pt[:, 0]) - at(across, u, v)), u, v, out
+
+    def field(Pt):
+        Pt = np.asarray(Pt, np.float64)
+        fb, u, v, out = body(Pt)
+        pd = np.where(out, .02, at(psd, u, v))
+        plate = np.maximum(np.abs(fb - .0018) - .0018, pd)                      # a shell 3.6 mm thick on the body, cut to the plate
+        return np.minimum(fb, plate).astype(np.float32)
+    lo = (-half_w - .008, -gu * px - .004, (gv - H) * px - .004)
+    hi = (half_w + .008, (W - gu) * px + .004, gv * px + .004)
+    h = .0009 if name != 'skr_grenade' else .0005
+    V, Q = sdf.mesh(field, lo, hi, h)
+    o = fk.to_object('frame', V, Q)
+    print('[skr] surface nets:', len(o.data.polygons), 'quads', flush=True)
+    # down to the budget in steps (in one step from millions the surface tore into shards), each step projected back onto
+    # the true surface
+    target = 52000 if name not in ('skr_pistol', 'skr_grenade') else 26000
+    if os.environ.get('SKR_RAW'):
+        target = 10 ** 9
+    import bmesh as _bm
+    bm = _bm.new(); bm.from_mesh(o.data)
+    _bm.ops.remove_doubles(bm, verts=bm.verts, dist=h * .05)
+    _bm.ops.triangulate(bm, faces=bm.faces)
+    bm.to_mesh(o.data); bm.free()
+    for _ in range(8):
+        n = len(o.data.polygons)
+        if n <= target * 1.02:
+            break
+        bpy.context.view_layer.objects.active = o
+        md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = max(target / n, .45); md.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier=md.name)
+    names = ['shell', 'bone', 'amber', 'white']
+    for nm in names:
+        o.data.materials.append(M[nm])
+    me = o.data
+    cen = np.array([p_.center[:] for p_ in me.polygons])
+    fb, u, v, out = body(cen.astype(np.float64))
+    c = cls[np.clip(np.round(v).astype(int), 0, H - 1), np.clip(np.round(u).astype(int), 0, W - 1)]
+    on_plate = (fb > .0010) & (c == 2)
+    idx = np.where(c == 3, 2, np.where(c == 4, 3, np.where(on_plate | (c == 2), 1, 0)))
+    me.polygons.foreach_set('material_index', idx.astype(np.int32))
+    bl.uv_box(o, .22)
+    K.harden(o, 34)
+    import bmesh as _bm
+    bm = _bm.new(); bm.from_mesh(me)
+    _bm.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me); bm.free()
+    P.append(o)
+    cols = np.nonzero(mask.any(0))[0]
+    front = cols.min()
+    rr = np.nonzero(mask[:, front:front + 4].any(1))[0]
+    mz = (gv - rr.mean()) * px
+    muzzle = (0, (front - gu) * px, mz)
+    fore = (0, (front - gu) * px * .55, mz - .03)
+    sight = (0, -.05, (gv - spec['sight_z'] * H) * px)
+    if name not in ('skr_blade', 'skr_grenade'):
+        trigger(P, M)
+    import bakekit
+    bakekit.clean(P, least=2e-11)
+    finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
+
+
+# ------------------------------------------------------------------ block: a solid block worked to the sheet's pattern
+# (the owner, 2026-11-15: "use a solid block and modify it to this pattern now that we have the layout so it doesn't look
+# like a smudge"). One block cut to the side outline (its windows cut through), its edges taken off in a broad rounded
+# chamfer so it is a solid and not a cut-out, then narrowed where the gun is slimmer (the muzzle, the stock, the grip)
+# and fullest at the receiver; each pale plate laid on its faces as a raised piece with a chamfered edge, the lights set
+# in. Every edge is a modelled one: nothing is smoothed.
+def _taper(spec, y, z, y_front, y_back):
+    """the block's width as a share of the full width at (y, z): slimmer toward the muzzle and the stock, fullest
+    over the receiver, a little slimmer down the grip"""
+    t = np.clip((y - y_front) / max(y_back - y_front, 1e-6), 0, 1)               # 0 at the muzzle .. 1 at the butt
+    rec = spec.get('receiver', (.45, .75))
+    s = np.where(t < rec[0], .60 + .40 * (t / rec[0]) ** .8, np.where(t <= rec[1], 1.0, 1.0 - .22 * (t - rec[1]) / max(1 - rec[1], 1e-6)))
+    return s * np.where(z < -.02, .85, 1.0)
+
+
+def block(name):
+    import json
+    import bmesh as _bm
+    bl.reset(); M = mats(); P = []
+    S = json.load(open(os.path.join(TRACE, name + '.json')))
+    spec = TRACED[name]
+    W, H = S['size']
+    px = S['px']
+    gu, gv = spec['grip'][0] * W, spec['grip'][1] * H
+    half = spec['width'] * .5
+    bev = min(.0065, half * .35)
+    # 1. the block: the outline (with its windows) as one solid, its edges chamfered round in four steps
+    for i, p in enumerate(S['outline']):
+        P.append(_curve_solid(f'block{i}', [p['ext']] + p['holes'], half, bev, M['shell'], 0.0, px, gu, gv, res=3))
+    # 2. the plates on its faces, raised 2.4 mm with a chamfered edge; 3. the lights set in
+    for i, p in enumerate(S['pale_face']):
+        for sd in (1, -1):
+            P.append(_curve_solid(f'plate{i}{"" if sd > 0 else "_R"}', [p['ext']] + p['holes'], .0016, .0009, M['bone'],
+                                  sd * (half + .0008), px, gu, gv))
+    for key, mat in (('amber', M['amber']), ('white', M['white'])):
+        for i, p in enumerate(S[key]):
+            for sd in (1, -1):
+                P.append(_curve_solid(f'{key}{i}{"" if sd > 0 else "_R"}', [p['ext']], .0007, .0002, mat, sd * (half + .0006), px, gu, gv))
+    # 4. the taper: every part narrowed by the same rule, so the plates stay on the faces
+    y_front = (min(c for p in S['outline'] for c, r in p['ext']) - gu) * px
+    y_back = (max(c for p in S['outline'] for c, r in p['ext']) - gu) * px
+    for o in P:
+        V = fk.verts(o)
+        V[:, 0] = V[:, 0] * _taper(spec, V[:, 1], V[:, 2], y_front, y_back)
+        fk.set_verts(o, V)
+    # sockets
+    rows = [r for p in S['outline'] for c, r in p['ext'] if c < (y_front / px + gu) + 4]
+    mz = (gv - sum(rows) / len(rows)) * px
+    muzzle = (0, y_front, mz)
+    fore = (0, y_front * .55, mz - .03)
+    sight = (0, -.05, (gv - spec['sight_z'] * H) * px)
+    if name not in ('skr_blade', 'skr_grenade'):
+        trigger(P, M)
+    tris = sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in P)
+    print('[skr] block triangles', tris, flush=True)
+    if tris > 56000:
+        r = 56000 / tris
+        for o in P:
+            bpy.context.view_layer.objects.active = o
+            md = o.modifiers.new('fit', 'DECIMATE'); md.ratio = r
+            bpy.ops.object.modifier_apply(modifier=md.name)
+            bm = _bm.new(); bm.from_mesh(o.data); _bm.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(o.data); bm.free()
+    import bakekit
+    bakekit.clean(P, least=2e-11)
+    finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
+
+
+GUNS = {k: (lambda k=k: block(k)) for k in TRACED}
 
 
 if __name__ == '__main__':

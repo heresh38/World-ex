@@ -162,14 +162,16 @@ def main(out):
         inside = nd.distance_transform_edt(m)
         outside = nd.distance_transform_edt(~m)
         px = LENGTHS[nm] / max(m.shape[1], 1) if nm != 'skr_grenade' else LENGTHS[nm] / m.shape[0]
-        np.savez_compressed(os.path.join(out, nm + '.npz'), mask=m, cls=cls, lum=L.astype(np.float32), inside=inside.astype(np.float32), outside=outside.astype(np.float32), pale_in=nd.distance_transform_edt(cls == 2).astype(np.float32), px=px)
+        np.savez_compressed(os.path.join(out, nm + '.npz'), mask=m, cls=cls, lum=L.astype(np.float32), inside=inside.astype(np.float32), outside=outside.astype(np.float32), pale_in=nd.distance_transform_edt(cls == 2).astype(np.float32), pale_out=nd.distance_transform_edt(cls != 2).astype(np.float32), px=px)
         # the shapes to build from: the outline, two inner tiers (the body steps out toward its core), each pale plate,
         # each light (pixel polygons with their holes; the builder turns them into bevelled solids)
         shapes = dict(size=[int(m.shape[1]), int(m.shape[0])], px=px,
                       outline=polys(m, 1.6), tier1=polys(inside > 3.5, 2.2), tier2=polys(inside > 8.5, 2.6, min_area=30),
                       pale=[dict(p, depth=float(inside[int(min(max(p['c'][1], 0), m.shape[0] - 1)), int(min(max(p['c'][0], 0), m.shape[1] - 1))]))
                             for p in polys(cls == 2, min_area=20)],
-                      amber=polys(nd.binary_dilation(cls == 3), .6, 3), white=polys(nd.binary_dilation(cls == 4), .6, 3))
+                      amber=polys(nd.binary_dilation(cls == 3), .6, 3), white=polys(nd.binary_dilation(cls == 4), .6, 3),
+                      # the plates as they lie on a solid block's flat face: kept 3 px in from its rounded edge
+                      pale_face=[dict(p, depth=0.0) for p in polys((cls == 2) & (inside > 3.0), 1.1, 20)])
         json.dump(shapes, open(os.path.join(out, nm + '.json'), 'w'))
         vis = np.zeros(m.shape + (3,), np.uint8)
         pal = {0: (30, 30, 34), 1: (60, 60, 90), 2: (200, 196, 186), 3: (255, 170, 60), 4: (210, 230, 255)}
