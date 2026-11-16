@@ -152,7 +152,7 @@ def alloy():
 
 
 def lacquer():
-    """skr_lacquer, the dark shell: grown in thin overlapping layers whose edges stand up and catch the light, a bronze
+    """skr_lacquer, the shell (the owner, 2026-11-15: "the guns are brown, they should be orange"): an orange lacquer (yellow enough that the game's tone mapping leaves it orange, not red): grown in thin overlapping layers whose edges stand up and catch the light, a bronze
     depth in their crowns, fine pores, satin where hands have been and gloss elsewhere, scuffed through to a paler
     layer in patches"""
     T = Tile('skr_lacquer', .25)
@@ -164,11 +164,11 @@ def lacquer():
     pores = T.dents(2600, (.00012, .00030))
     satin = smooth(.2, .55, T.noise(.06, 3))
     scuff = T.lines(160, (.004, .028), (.0003, .0008), bend=.4) * smooth(.1, .45, T.noise(.08, 2))
-    alb = hexc('#1d1915') * (.84 + .14 * var[..., None]) * (.95 + .10 * cid[..., None])
-    alb = mix(alb, hexc('#3a2a18'), dome * .32)                                    # the bronze depth
-    alb = mix(alb, hexc('#0b0907'), rim * .30)
-    alb = mix(alb, hexc('#4a4036'), scuff * .45)
-    alb = mix(alb, hexc('#100d0b'), pores * .4)
+    alb = hexc('#e27c1c') * (.86 + .14 * var[..., None]) * (.95 + .10 * cid[..., None])
+    alb = mix(alb, hexc('#f7a848'), dome * .34)                                    # brighter on the crowns
+    alb = mix(alb, hexc('#8a3c0a'), rim * .26)
+    alb = mix(alb, hexc('#e8b27a'), scuff * .45)
+    alb = mix(alb, hexc('#3a1404'), pores * .4)
     rough = .14 + .05 * var + .20 * satin + .16 * scuff + .10 * rim + .18 * pores
     T.write(alb, [(dome, .00045), (lap, .00012), (-rim, .00020), (-pores, .00004), (-scuff, .00006), (var, .00025), (T.grain(1), .00001)],
             rough, .18, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.4, cavity=.35)

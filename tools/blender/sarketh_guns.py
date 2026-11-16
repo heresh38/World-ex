@@ -1154,46 +1154,83 @@ def skr_handgun(name='skr_pistol', big=False):
                  (F(-.107), .012, .047, .016, 5.5), (F(-.158), .012, .047, .0158, 5.5), (F(-.166), .016, .047, .015, 4.5)])
     FR.skin(P, SH, 'frame', step=.005, n=32)
     FR.shell(P, 'frame_panel', PL, .02, F(-.095), FR.af(-.3), FR.af(.6), t=.0009, ch=.001)
-    top = .088 * (1.08 if big else 1.0)
-    hw = .0175 * (1.12 if big else 1.0)
-    SL = G.Body([(.038, .045, top, hw * .94, 5.0), (.02, .045, top, hw * .98, 5.0), (F(-.01), .045, top, hw, 5.0), (F(-.07), .045, top, hw, 5.0),
-                 (F(-.13), .045, top, hw * .98, 5.0), (F(-.15), .046, top - .0005, hw * .94, 4.8), (F(-.164), .048, top - .0025, hw * .87, 4.4),
-                 (F(-.172), .052, top - .0055, hw * .75, 4.0)])                 # (down onto the frame: no gap between them)
-    SL.chassis(P, UN, name='slide', step=.006)
-    SL.shell(P, 'slide_spine', PL, .036, F(-.168), 1.05, math.pi - 1.05, t=.0006, mirror=False)
-    SL.slats(P, 'serration', SH, .035, .003, -.8, .8, 7, share=.6, t=.0022)
-    SL.shell(P, 'slide_upper', SH, -.002, F(-.158), AF(.16), .82, t=.0022)
-    SL.shell(P, 'slide_lower', PL, -.002, F(-.162), -.85, -AF(.12), t=.0020)
-    SL.light(P, 'seam', GL, -.006, F(-.156), -AF(.03), AF(.07))
-    SL.studs(P, TR, [(-.012, .5), (F(-.148), .5), (F(-.08), -.5)], r=.0016, d=.0024)
-    for kk in range(3):                                                 # their three dashes on the slide
-        y_ = F(-.060) - kk * .010
-        xs_, _, zs_ = SL.pt(y_, AF(.62), .0030)
-        P.append(plate('slide_mark', [(y_, zs_ - .0014), (y_ - .0068, zs_ - .0008), (y_ - .0068, zs_ + .0012), (y_, zs_ + .0006)], GL,
-                       xs_ - .0012, xs_ + .0006, .0002))
-    # the emitter: a titanium nose round an amber face, vanes in its mouth
-    nose0, nose1 = F(-.166), F(-.2)
-    G.muzzle(P, 'nose', nose0, nose1, zb, .0145 * (1.2 if big else 1.0), TI, .0062 * (1.25 if big else 1.0))
-    P.append(G.band('nose_lip', nose1 + .0045, .003, .0152 * (1.2 if big else 1.0), TR, zb, 0, .003, 24, .0004))
-    P.append(lathe('nose_glow', [(nose1 + .012, 0), (nose1 + .012, .0055 * (1.25 if big else 1.0)), (nose1 + .0128, .005), (nose1 + .0128, 0)], AM, zb, n=16))
-    # the set's forms: a crest blade swept back over the rear, a keel under the nose, the blades along the slide
-    crest_top = top + (.016 if big else .012)
-    P += talon('crest', [(F(-.100), top - .002), (F(-.040), top + .004), (.010, crest_top + .002), (.040, crest_top + .006)], [.005, .012, .010, 0], PL,
-               x=hw * .70, t=.0050)
-    P += talon('keel', [(nose1 + .006, zb - .016), (F(-.150), zb - .024), (F(-.110), zb - .030)], [.004, .008, 0], PL, x=0, t=.006, two=True, sym=False)
-    # the set's great pale blades swept back across the slide's flanks (as on Ember Oath), a beavertail over the hand,
-    # their light seen through the rear serrations
-    for nm_, spine, wid in (('sweep', [(F(-.165), top - .022), (F(-.110), top - .012), (F(-.050), top - .006), (.000, top - .004), (.030, top + .002)],
-                             [.004, .012, .014, .010, 0]),
-                            ('sweep_lo', [(F(-.160), .053), (F(-.100), .056), (F(-.040), .058)], [.003, .007, 0])):
-        C_, u_ = G.spl(spine, 16)
-        Wd = np.interp(np.linspace(0, 1, len(C_)), u_, np.asarray(wid, float))
-        T_ = np.gradient(C_, axis=0); T_ /= np.linalg.norm(T_, axis=1)[:, None] + 1e-12
-        Nn = np.stack([T_[:, 1], -T_[:, 0]], 1)
-        poly = [tuple(q) for q in C_] + [tuple(q) for q in (C_ + Nn * Wd[:, None])[::-1][1:-1]]
-        P.append(plate(nm_, poly, PL, hw - .0005, hw + .0040, .0012))
-    P.append(G.rprism('beavertail', [(.030, .040), (.058, .043), (.066, .036), (.050, .030), (.032, .032)], .026, PL, .004))
-    SL.light(P, 'serration_light', AM, .033, .005, -.6, .6)
+    if not big:
+        top = .088 * (1.08 if big else 1.0)
+        hw = .0175 * (1.12 if big else 1.0)
+        SL = G.Body([(.038, .045, top, hw * .94, 5.0), (.02, .045, top, hw * .98, 5.0), (F(-.01), .045, top, hw, 5.0), (F(-.07), .045, top, hw, 5.0),
+                     (F(-.13), .045, top, hw * .98, 5.0), (F(-.15), .046, top - .0005, hw * .94, 4.8), (F(-.164), .048, top - .0025, hw * .87, 4.4),
+                     (F(-.172), .052, top - .0055, hw * .75, 4.0)])                 # (down onto the frame: no gap between them)
+        SL.chassis(P, UN, name='slide', step=.006)
+        SL.shell(P, 'slide_spine', PL, .036, F(-.168), 1.05, math.pi - 1.05, t=.0006, mirror=False)
+        SL.slats(P, 'serration', SH, .035, .003, -.8, .8, 7, share=.6, t=.0022)
+        SL.shell(P, 'slide_upper', SH, -.002, F(-.158), AF(.16), .82, t=.0022)
+        SL.shell(P, 'slide_lower', PL, -.002, F(-.162), -.85, -AF(.12), t=.0020)
+        SL.light(P, 'seam', GL, -.006, F(-.156), -AF(.03), AF(.07))
+        SL.studs(P, TR, [(-.012, .5), (F(-.148), .5), (F(-.08), -.5)], r=.0016, d=.0024)
+        for kk in range(3):                                                 # their three dashes on the slide
+            y_ = F(-.060) - kk * .010
+            xs_, _, zs_ = SL.pt(y_, AF(.62), .0030)
+            P.append(plate('slide_mark', [(y_, zs_ - .0014), (y_ - .0068, zs_ - .0008), (y_ - .0068, zs_ + .0012), (y_, zs_ + .0006)], GL,
+                           xs_ - .0012, xs_ + .0006, .0002))
+        # the emitter: a titanium nose round an amber face, vanes in its mouth
+        nose0, nose1 = F(-.166), F(-.2)
+        G.muzzle(P, 'nose', nose0, nose1, zb, .0145 * (1.2 if big else 1.0), TI, .0062 * (1.25 if big else 1.0))
+        P.append(G.band('nose_lip', nose1 + .0045, .003, .0152 * (1.2 if big else 1.0), TR, zb, 0, .003, 24, .0004))
+        P.append(lathe('nose_glow', [(nose1 + .012, 0), (nose1 + .012, .0055 * (1.25 if big else 1.0)), (nose1 + .0128, .005), (nose1 + .0128, 0)], AM, zb, n=16))
+        # the set's forms: a crest blade swept back over the rear, a keel under the nose, the blades along the slide
+        crest_top = top + (.016 if big else .012)
+        P += talon('crest', [(F(-.100), top - .002), (F(-.040), top + .004), (.010, crest_top + .002), (.040, crest_top + .006)], [.005, .012, .010, 0], PL,
+                   x=hw * .70, t=.0050)
+        P += talon('keel', [(nose1 + .006, zb - .016), (F(-.150), zb - .024), (F(-.110), zb - .030)], [.004, .008, 0], PL, x=0, t=.006, two=True, sym=False)
+        # the set's great pale blades swept back across the slide's flanks (as on Ember Oath), a beavertail over the hand,
+        # their light seen through the rear serrations
+        for nm_, spine, wid in (('sweep', [(F(-.165), top - .022), (F(-.110), top - .012), (F(-.050), top - .006), (.000, top - .004), (.030, top + .002)],
+                                 [.004, .012, .014, .010, 0]),
+                                ('sweep_lo', [(F(-.160), .053), (F(-.100), .056), (F(-.040), .058)], [.003, .007, 0])):
+            C_, u_ = G.spl(spine, 16)
+            Wd = np.interp(np.linspace(0, 1, len(C_)), u_, np.asarray(wid, float))
+            T_ = np.gradient(C_, axis=0); T_ /= np.linalg.norm(T_, axis=1)[:, None] + 1e-12
+            Nn = np.stack([T_[:, 1], -T_[:, 0]], 1)
+            poly = [tuple(q) for q in C_] + [tuple(q) for q in (C_ + Nn * Wd[:, None])[::-1][1:-1]]
+            P.append(plate(nm_, poly, PL, hw - .0005, hw + .0040, .0012))
+        P.append(G.rprism('beavertail', [(.030, .040), (.058, .043), (.066, .036), (.050, .030), (.032, .032)], .026, PL, .004))
+        SL.light(P, 'serration_light', AM, .033, .005, -.6, .6)
+    else:
+        # the hand cannon (the brief's Condensed Slugs): not the pistol made bigger (the owner: "the hand cannon and pistol
+        # look the same") but a heavy gun of its own build: a condenser drum over the trigger (six crystal cells in
+        # amber-lit flutes, where each slug is condensed), a heavy octagonal barrel with a pale top rib and amber vents,
+        # a ported compensator glowing as it fires, a pale strap over the drum, a hammer's spur hooked back over the hand,
+        # a pommel on the grip
+        top, hw, zb = .100, .020, .074
+        P.append(G.rprism('top_strap', [(.040, .084), (.042, .096), (.022, top + .002), (-.070, top + .002), (-.074, top - .006), (-.012, .090),
+                                        (.030, .084)], .022, PL, .003))
+        yd0, yd1, rd = -.008, -.062, .0245
+        P.append(lathe('condenser', [(yd0, .006), (yd0, rd - .003), (yd0 - .003, rd), (yd1 + .003, rd), (yd1, rd - .003), (yd1, .006)], TI, zb, n=36))
+        for j in range(6):
+            a_ = j * math.pi / 3 + math.pi / 6
+            P.append(B(f'flute{j}', (.0034, (yd0 - yd1) * .76, .0034), (math.cos(a_) * rd * .93, (yd0 + yd1) / 2, zb + math.sin(a_) * rd * .93), AM, .0008))
+        P.append(lathe('condenser_hub', [(yd0 + .004, 0), (yd0 + .004, .0062), (yd1 - .004, .0062), (yd1 - .004, 0)], ST, zb, n=12))
+        P.append(prism('barrel_lug', [(yd1 + .004, .044), (yd1 + .004, zb - .010), (-.196, zb - .010), (-.200, .044)], .020, SH, .0015))
+        BR = G.Body([(yd1 + .002, zb - .016, zb + .017, .0165, 4.0), (-.090, zb - .017, zb + .018, .017, 5.0), (-.200, zb - .016, zb + .017, .016, 5.0),
+                     (-.232, zb - .015, zb + .016, .015, 4.6)])
+        BR.chassis(P, SH, name='barrel', step=.006)
+        BR.shell(P, 'barrel_rib', PL, yd1, -.228, 1.15, math.pi - 1.15, t=.0028, mirror=False)
+        BR.shell(P, 'barrel_flank', UN, -.075, -.190, -AF(.5), AF(.55), t=.0016)
+        BR.studs(P, TR, [(-.080, .5), (-.196, .5)], r=.0016, d=.0020)
+        for j in range(5):
+            yv = -.088 - j * .022
+            xs_, _, zs_ = BR.pt(yv - .005, 0.0, .0020)
+            P.append(plate(f'vent{j}', [(yv, zs_ - .0035), (yv - .010, zs_ - .0035), (yv - .010, zs_ + .0035), (yv, zs_ + .0035)], AM, xs_ - .0015, xs_ + .0005, .0003))
+        nose1 = -.258
+        P.append(lathe('compensator', [(-.228, 0), (-.228, .0185), (-.252, .0185), (-.256, .0165), (nose1, .0165), (nose1, .0075), (nose1 + .010, .0070),
+                                       (nose1 + .010, 0)], TI, zb, n=8))
+        for j, yc in enumerate((-.234, -.241, -.248)):
+            P.append(B(f'port{j}', (.026, .0028, .006), (0, yc, zb + .0172), AM, .0006))
+        P.append(lathe('nose_glow', [(nose1 + .0095, 0), (nose1 + .0095, .0062), (nose1 + .0105, .0056), (nose1 + .0105, 0)], AM, zb, n=12))
+        P += talon('spur', [(.030, top - .004), (.052, top + .004), (.066, top + .016)], [.010, .008, 0], PL, x=0, t=.010, two=True, sym=False)
+        P += talon('keel', [(-.250, zb - .016), (-.200, zb - .026), (-.130, zb - .028)], [.004, .010, 0], PL, x=0, t=.008, two=True, sym=False)
+        P += talon('crest', [(-.185, zb + .016), (-.115, zb + .020), (-.045, top + .002), (.000, top + .008)], [.004, .008, .008, 0], PL, x=hw * .95, t=.0045)
+        P.append(G.rprism('pommel', [g(.030, .118), g(-.022, .122), g(-.026, .134), g(.034, .130)], .036, PL, .004))
     # controls
     G.selector(P, .024, .038, .016, TR, 1, ang=.25, L=.017, r=.0045)
     P.append(lathe_x('cellrelease', [(0, .0044), (.003, .0044), (.0036, .0034), (.0036, 0)], (.016, -.017, .012), PO, 14, 1))
@@ -1204,9 +1241,11 @@ def skr_handgun(name='skr_pistol', big=False):
     for sgn in (1, -1):
         P.append(prism('rear_ear', [(.035, sz - .006), (.035, sz + .003), (.025, sz + .004), (.021, sz - .006)], .0065, PL, .001, x=sgn * .0088))
         P.append(lathe_x('rear_dot', [(0, .0016), (.0006, .0016), (.0008, 0)], (sgn * .0088, .0352, sz - .002), AM, 4, 1))
-    P.append(prism('front_base', [(F(-.132), top + .0005), (F(-.138), top + .0045), (F(-.156), top + .0045), (F(-.16), top + .0005)], .011, UN, .0008))
-    P.append(prism('post', [(F(-.142), top + .004), (F(-.146), sz + .003), (F(-.152), sz + .003), (F(-.154), top + .004)], .0036, PL, .0005))
-    P.append(lathe('post_dot', [(F(-.1458), 0), (F(-.1458), .0014), (F(-.1462), .0014), (F(-.1462), 0)], AM, sz + .0012, 0, 4))
+    fz = top if not big else zb + .0195                                  # (the hand cannon's front sight stands on its barrel's rib)
+    fy = (lambda y: F(y)) if not big else (lambda y: y - .060)
+    P.append(prism('front_base', [(fy(-.132), fz + .0005), (fy(-.138), fz + .0045), (fy(-.156), fz + .0045), (fy(-.16), fz + .0005)], .011, UN, .0008))
+    P.append(prism('post', [(fy(-.142), fz + .004), (fy(-.146), sz + .003), (fy(-.152), sz + .003), (fy(-.154), fz + .004)], .0036, PL, .0005))
+    P.append(lathe('post_dot', [(fy(-.1458), 0), (fy(-.1458), .0014), (fy(-.1462), .0014), (fy(-.1462), 0)], AM, sz + .0012, 0, 4))
     finish('gun_' + name, P, (0, nose1, zb), (0, -.02, -.02), (0, .09, sz), moving=[('mag', MAG, (0, g(0, .040)[0], g(0, .040)[1]))])
 
 

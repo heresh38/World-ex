@@ -1134,6 +1134,9 @@ def shared_textures(src, materials):
 
 # Gun wear per material (edge wear, scratches, grime, bare metal under the finish): nothing looks factory-new.
 GUN_WEAR = {
+    # the Sarketh's orange lacquer (the owner: "the guns are brown, they should be orange"): kept, chipped little, little
+    # grime, no bare metal under it: the body's heavy wear turned it brown in the game
+    "gun_body__skr": (.35, .12, .10, 0),
     "gun_steel": (.9, .3, .4, 1), "gun_parkerized": (.85, .32, .45, 1), "gun_dark": (.8, .3, .45, 1), "gun_metal": (.85, .3, .4, 1),
     "gun_trim": (.7, .25, .3, 1), "gun_body": (.75, .28, .45, 1), "gun_paint": (.75, .28, .45, 1), "gun_brass": (.5, .2, .35, 1),
     "gun_polymer_od": (.55, .22, .5, 0), "gun_polymer": (.55, .22, .5, 0), "gun_rubber": (.3, .1, .5, 0), "gun_wood": (.5, .2, .4, 0),
@@ -1204,7 +1207,7 @@ def gun_instances(master, src, dest, materials, clear, model=None):
                 mel.set_material_instance_scalar_parameter_value(mi, "UniqueNormalAmount", 1.0)
             mel.update_material_instance(mi)
             eal.save_loaded_asset(mi, only_if_is_dirty=False)
-        amounts = next((a for name, a in GUN_WEAR.items() if key == name or key.startswith(name + "__")), None)
+        amounts = GUN_WEAR.get(key) or next((a for name, a in GUN_WEAR.items() if key.startswith(name + "__")), None)   # (a variant's own first)
         if amounts and worn:
             mel.set_material_instance_texture_parameter_value(mi, "WearTex", worn)
             sampled(mi, worn, 0, 3.0)                          # (the shared mask repeats WearTiling times a tile)
