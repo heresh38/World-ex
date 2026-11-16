@@ -429,6 +429,7 @@ void USOCharacterPreview::Start(APlayerController* Player)
 		Move->DisableMovement();
 	}
 	Pawn->SetViewMode(ESOViewMode::ThirdPerson);
+	Pawn->SetDisplayOnly();                                   // on no side, never a target, never damaged or killed
 	Pawn->SetDisplayCarry(true);                              // the gun low across the chest: a hero's stance
 	Pawn->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	Subject = Pawn;
@@ -623,7 +624,7 @@ TSharedRef<SWidget> USOInventoryTile::RebuildWidget()
 		const bool bSlot = Info.Kind == TEXT("wslot") || Info.Kind == TEXT("aslot") || Info.Kind == TEXT("mslot");
 		const FLinearColor Rarity = Alpha(Info.Rarity, 1.0f);
 		const float Height = bWeapon ? (bSlot ? 168.0f : 128.0f) : (bSlot ? 100.0f : 92.0f);
-		Button = Make<UButton>(T);
+		Button = Make<USOQuietButton>(T);
 		Restyle();
 		Button->OnClicked.AddDynamic(this, &USOInventoryTile::OnClicked);
 		Button->OnHovered.AddDynamic(this, &USOInventoryTile::OnHovered);
@@ -762,8 +763,18 @@ void USOInventoryTile::Restyle()
 	const float GlowX = bWeapon ? 0.68f : 0.88f;
 	const float Glow = bWeapon ? (Info.Icon ? 0.95f : 0.45f) : 0.65f;
 	const float Chosen = Info.bActive ? 1.0f : 0.0f;
-	StyleButton(Button, CardBrush(this, Info.Rarity, 0.0f, Chosen, Info.bEmpty, GlowX, Glow), CardBrush(this, Info.Rarity, 1.0f, Chosen, Info.bEmpty, GlowX, Glow),
+	StyleButton(Button, CardBrush(this, Info.Rarity, bFocused ? 1.0f : 0.0f, Chosen, Info.bEmpty, GlowX, Glow), CardBrush(this, Info.Rarity, 1.0f, Chosen, Info.bEmpty, GlowX, Glow),
 		CardBrush(this, Info.Rarity, 1.6f, Chosen, Info.bEmpty, GlowX, Glow));
+}
+
+void USOInventoryTile::SetFocused(bool bOn)
+{
+	if (bFocused != bOn)
+	{
+		bFocused = bOn;
+		LiftTarget = bFocused || bHovered ? 7.0f : 0.0f;
+		Restyle();
+	}
 }
 
 void USOInventoryTile::SetChosen(bool bChosen)
@@ -795,6 +806,7 @@ void USOInventoryTile::OnClicked()
 
 void USOInventoryTile::OnHovered()
 {
+	bHovered = true;
 	LiftTarget = 7.0f;                                          // (leans toward the stage)
 	if (Screen)
 	{
@@ -804,7 +816,8 @@ void USOInventoryTile::OnHovered()
 
 void USOInventoryTile::OnUnhovered()
 {
-	LiftTarget = 0.0f;
+	bHovered = false;
+	LiftTarget = bFocused ? 7.0f : 0.0f;
 	if (Screen)
 	{
 		Screen->OnTileHover(this, false);
@@ -818,7 +831,7 @@ TSharedRef<SWidget> USOArmouryTab::RebuildWidget()
 	if (WidgetTree && !WidgetTree->RootWidget)
 	{
 		UWidgetTree* T = WidgetTree;
-		UButton* Button = Make<UButton>(T);
+		UButton* Button = Make<USOQuietButton>(T);
 		if (bChip)
 		{
 			// an armour slot's chip over its list: a small plate, lit when it is the one open
@@ -926,8 +939,27 @@ void USOInventoryWidget::NativeDestruct()
 void USOInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (Root)
+	{
+		const float Width = static_cast<float>(Root->GetCachedGeometry().GetLocalSize().X);
+		if (Width > 100.0f && !FMath::IsNearlyEqual(Width, LaidOutWidth, 1.0f))
+		{
+			UpdateLayout(Width);
+		}
+	}
 	if (Preview)
 	{
+		const float Dt = FMath::Min(InDeltaTime, 0.05f);
+		if (FMath::Abs(StickYaw) > 0.18f)
+		{
+			Preview->Yaw -= StickYaw * 150.0f * Dt;               // (the right stick turns it)
+			SpinVelocity = 0.0f;
+		}
+		else if (!bDragging && FMath::Abs(SpinVelocity) > 1.0f)
+		{
+			Preview->Yaw += SpinVelocity * Dt;                    // (a drag let go spins on and settles)
+			SpinVelocity *= FMath::Exp(-5.0f * Dt);
+		}
 		Preview->Tick(InDeltaTime);
 	}
 	// the panels slide in from their sides and fade up after a change of view
@@ -992,7 +1024,7 @@ void USOInventoryWidget::BuildTree()
 	{
 		Back->SetBrush(FSlateColorBrush(FLinearColor(0.008f, 0.012f, 0.026f, 1.0f)));
 	}
-	Back->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Back->SetVisibility(ESlateVisibility::Visible);             // (catches the clicks no card takes: a drag turns the character)
 	Place(Back, FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FMargin(0.0f));
 
 	// the platform under the feet: rings of light in perspective, a pool of light, the feet's shadow
@@ -1033,7 +1065,7 @@ void USOInventoryWidget::BuildTree()
 	WhoSlot->SetPadding(FMargin(14, 0, 0, 0));
 	WhoSlot->SetVerticalAlignment(VAlign_Center);
 	{
-		UButton* BodyButton = Make<UButton>(T);
+		UButton* BodyButton = Make<USOQuietButton>(T);
 		FPlate Normal;
 		Normal.Cut = 7.0f;
 		Normal.Fill = FLinearColor(0.006f, 0.009f, 0.018f, 0.8f);
@@ -1082,9 +1114,12 @@ void USOInventoryWidget::BuildTree()
 		PowerBox->SetContent(PowerRow);
 		Banner->AddChildToHorizontalBox(PowerBox)->SetVerticalAlignment(VAlign_Center);
 	}
+	BannerWidget = Banner;
 	Place(Banner, FAnchors(0.0f, 0.0f, 1.0f, 0.0f), FMargin(Margin, 20.0f, Margin, 66.0f));
-	Place(Box(T, FSlateColorBrush(Faint), FMargin(0)), FAnchors(0.0f, 0.0f, 1.0f, 0.0f), FMargin(Margin, 100.0f, Margin, 1.0f));
-	Place(Box(T, FSlateColorBrush(Cyan), FMargin(0)), FAnchors(0.0f, 0.0f), FMargin(Margin, 99.0f, 120.0f, 2.0f));
+	BannerRule = Box(T, FSlateColorBrush(Faint), FMargin(0));
+	Place(BannerRule, FAnchors(0.0f, 0.0f, 1.0f, 0.0f), FMargin(Margin, 100.0f, Margin, 1.0f));
+	BannerLit = Box(T, FSlateColorBrush(Cyan), FMargin(0));
+	Place(BannerLit, FAnchors(0.0f, 0.0f), FMargin(Margin, 99.0f, 120.0f, 2.0f));
 
 	// the panels, the attributes beside the stage, a card's quick look
 	LeftPanel = Make<UVerticalBox>(T);
@@ -1104,12 +1139,14 @@ void USOInventoryWidget::BuildTree()
 	Place(QuickLook, FAnchors(0.0f, 0.0f), FMargin(0.0f), FVector2D::ZeroVector, true);
 
 	// the foot: a hairline, the tabs in the middle, what the keys do
-	Place(Box(T, FSlateColorBrush(Faint), FMargin(0)), FAnchors(0.0f, 1.0f, 1.0f, 1.0f), FMargin(Margin, -(1080.0f - 978.0f), Margin, 1.0f));
+	FooterRule = Box(T, FSlateColorBrush(Faint), FMargin(0));
+	Place(FooterRule, FAnchors(0.0f, 1.0f, 1.0f, 1.0f), FMargin(Margin, -(1080.0f - 978.0f), Margin, 1.0f));
 	TabRow = Make<UHorizontalBox>(T);
 	Place(TabRow, FAnchors(0.5f, 1.0f), FMargin(0.0f, -(1080.0f - FooterY), 0.0f, 0.0f), FVector2D(0.5f, 0.5f), true);
 	HintRow = Make<UHorizontalBox>(T);
 	Place(HintRow, FAnchors(1.0f, 1.0f), FMargin(-Margin + 22.0f, -(1080.0f - HintY), 0.0f, 0.0f), FVector2D(1.0f, 0.5f), true);
-	Place(Hint(T, TEXT("DRAG"), TEXT("TURN")), FAnchors(0.0f, 1.0f), FMargin(Margin, -(1080.0f - HintY), 0.0f, 0.0f), FVector2D(0.0f, 0.5f), true);
+	DragHint = Hint(T, TEXT("DRAG"), TEXT("TURN"));
+	Place(DragHint, FAnchors(0.0f, 1.0f), FMargin(Margin, -(1080.0f - HintY), 0.0f, 0.0f), FVector2D(0.0f, 0.5f), true);
 
 	// the inspect panel (an armoury puts it in the right panel): its content scrolls, its buttons stay under it
 	FPlate InspectPlate;
@@ -1128,7 +1165,7 @@ void USOInventoryWidget::BuildTree()
 	UVerticalBox* Actions = Make<UVerticalBox>(T);
 	auto Action = [&](TObjectPtr<UButton>& Out, TObjectPtr<UTextBlock>& Label, const TCHAR* Key, const TCHAR* Caption, const FLinearColor& Color) -> UButton*
 	{
-		Out = Make<UButton>(T);
+		Out = Make<USOQuietButton>(T);
 		FPlate Normal;
 		Normal.Cut = 8.0f;
 		Normal.Fill = FLinearColor(0.008f, 0.012f, 0.024f, 0.95f);
@@ -1372,6 +1409,10 @@ void USOInventoryWidget::FillLoadout()
 	QuickLook->SetVisibility(ESlateVisibility::Collapsed);
 	QuickKey.Reset();
 	FillAttributes(nullptr);
+	if (bKeyFocus)
+	{
+		ApplyFocus();
+	}
 }
 
 void USOInventoryWidget::FillArmoury()
@@ -2239,7 +2280,23 @@ void USOInventoryWidget::OnTileHover(USOInventoryTile* Tile, bool bHover)
 	}
 	if (OpenSlotId.IsEmpty())
 	{
-		// the loadout: the hovered slot's quick look beside it
+		// the loadout: the mouse takes the highlight to the card it is on; the hovered slot's quick look beside it
+		if (bHover)
+		{
+			FocusColumn = Info.bLeft ? 0 : 1;
+			FocusRow = FMath::Max(0, ColumnTiles(FocusColumn).IndexOfByKey(Tile));
+			if (bKeyFocus)
+			{
+				bKeyFocus = false;
+				for (int32 Column = 0; Column < 2; ++Column)
+				{
+					for (USOInventoryTile* Each : ColumnTiles(Column))
+					{
+						Each->SetFocused(false);
+					}
+				}
+			}
+		}
 		if (bHover && !Info.bEmpty)
 		{
 			QuickKey = Info.Key;
@@ -2380,6 +2437,170 @@ void USOInventoryWidget::StepList(int32 Step)
 	if (ListScroll)
 	{
 		ListScroll->ScrollWidgetIntoView(ListTiles[Next], true, EDescendantScrollDestination::IntoView);
+	}
+}
+
+TArray<USOInventoryTile*> USOInventoryWidget::ColumnTiles(int32 Column) const
+{
+	TArray<USOInventoryTile*> Out;
+	if (const UVerticalBox* Panel = Column == 0 ? LeftPanel.Get() : RightPanel.Get())
+	{
+		for (UWidget* Child : Panel->GetAllChildren())
+		{
+			if (USOInventoryTile* Tile = Cast<USOInventoryTile>(Child))
+			{
+				Out.Add(Tile);
+			}
+		}
+	}
+	return Out;
+}
+
+void USOInventoryWidget::MoveFocus(int32 DX, int32 DY)
+{
+	if (!OpenSlotId.IsEmpty())
+	{
+		// an armoury: up and down through the list; over the armour left and right go from slot to slot
+		if (DY != 0)
+		{
+			StepList(DY);
+		}
+		else if (DX != 0 && IsArmourSlot(OpenSlotId))
+		{
+			const TArray<FName>& Slots = USOWardrobeData::ArmourSlots();
+			const int32 Now = Slots.IndexOfByKey(FName(*OpenSlotId));
+			const int32 Next = FMath::Clamp(Now + DX, 0, Slots.Num() - 1);
+			if (Next != Now)
+			{
+				OpenSlot(Slots[Next].ToString());
+			}
+		}
+		return;
+	}
+	// the loadout: a column (the arsenal, the armour) and a row in it; the first press only shows where it is
+	if (bKeyFocus)
+	{
+		if (DX != 0)
+		{
+			const int32 From = ColumnTiles(FocusColumn).Num();
+			const int32 Column = FMath::Clamp(FocusColumn + DX, 0, 1);
+			if (Column != FocusColumn)
+			{
+				const int32 To = ColumnTiles(Column).Num();
+				FocusRow = From > 1 && To > 1 ? FMath::RoundToInt(static_cast<float>(FocusRow) * (To - 1) / (From - 1)) : 0;
+				FocusColumn = Column;
+			}
+		}
+		FocusRow += DY;
+	}
+	bKeyFocus = true;
+	USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.3f, 0.0f);
+	ApplyFocus();
+}
+
+void USOInventoryWidget::ApplyFocus()
+{
+	if (!OpenSlotId.IsEmpty())
+	{
+		return;
+	}
+	const TArray<USOInventoryTile*> Column = ColumnTiles(FocusColumn);
+	FocusRow = Column.Num() > 0 ? FMath::Clamp(FocusRow, 0, Column.Num() - 1) : 0;
+	for (int32 Each = 0; Each < 2; ++Each)
+	{
+		for (USOInventoryTile* Tile : ColumnTiles(Each))
+		{
+			Tile->SetFocused(bKeyFocus && Each == FocusColumn && Column.IsValidIndex(FocusRow) && Tile == Column[FocusRow]);
+		}
+	}
+	if (bKeyFocus && Column.IsValidIndex(FocusRow))
+	{
+		USOInventoryTile* Tile = Column[FocusRow];
+		if (!Tile->GetInfo().bEmpty)
+		{
+			QuickKey = Tile->GetInfo().Key;
+			FillQuickLook(Tile);
+		}
+		else
+		{
+			QuickKey.Reset();
+			QuickLook->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+void USOInventoryWidget::Accept()
+{
+	if (!OpenSlotId.IsEmpty())
+	{
+		OnEquip();
+		return;
+	}
+	const TArray<USOInventoryTile*> Column = ColumnTiles(FocusColumn);
+	if (Column.IsValidIndex(FocusRow))
+	{
+		OpenSlot(Column[FocusRow]->GetInfo().Key);
+	}
+}
+
+FNavigationReply USOInventoryWidget::NativeOnNavigation(const FGeometry& MyGeometry, const FNavigationEvent& InNavigationEvent, const FNavigationReply& InDefaultReply)
+{
+	// the arrows, the d-pad and the left stick move the armoury's own highlight; nothing else takes the focus
+	switch (InNavigationEvent.GetNavigationType())
+	{
+	case EUINavigation::Up: MoveFocus(0, -1); break;
+	case EUINavigation::Down: MoveFocus(0, 1); break;
+	case EUINavigation::Left: MoveFocus(-1, 0); break;
+	case EUINavigation::Right: MoveFocus(1, 0); break;
+	default: break;
+	}
+	return FNavigationReply::Stop();
+}
+
+FReply USOInventoryWidget::NativeOnAnalogValueChanged(const FGeometry& InGeometry, const FAnalogInputEvent& InAnalogEvent)
+{
+	if (InAnalogEvent.GetKey() == EKeys::Gamepad_RightX)
+	{
+		StickYaw = InAnalogEvent.GetAnalogValue();
+		return FReply::Handled();
+	}
+	return Super::NativeOnAnalogValueChanged(InGeometry, InAnalogEvent);
+}
+
+FCursorReply USOInventoryWidget::NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent)
+{
+	if (bDragging)
+	{
+		return FCursorReply::Cursor(EMouseCursor::GrabHandClosed);
+	}
+	return Super::NativeOnCursorQuery(InGeometry, InCursorEvent);
+}
+
+void USOInventoryWidget::UpdateLayout(float Width)
+{
+	LaidOutWidth = Width;
+	// the frame: the whole screen up to 2200 wide (an ultrawide keeps it in the middle)
+	const float Side = FMath::Max(0.0f, (Width - 2200.0f) * 0.5f) + Margin;
+	auto Offsets = [](UWidget* W, const FMargin& M)
+	{
+		if (UCanvasPanelSlot* S = W ? Cast<UCanvasPanelSlot>(W->Slot) : nullptr)
+		{
+			S->SetOffsets(M);
+		}
+	};
+	Offsets(BannerWidget, FMargin(Side, 20.0f, Side, 66.0f));
+	Offsets(BannerRule, FMargin(Side, 100.0f, Side, 1.0f));
+	Offsets(BannerLit, FMargin(Side, 99.0f, 120.0f, 2.0f));
+	Offsets(LeftPanel, FMargin(Side, PanelTop, PanelWidth, PanelBottom));
+	Offsets(RightPanel, FMargin(-(Side + PanelWidth), PanelTop, PanelWidth, PanelBottom));
+	Offsets(AttributeColumn, FMargin(-(Side + PanelWidth + 104.0f), 236.0f, 84.0f, 0.0f));
+	Offsets(FooterRule, FMargin(Side, -(1080.0f - 978.0f), Side, 1.0f));
+	Offsets(HintRow, FMargin(-Side + 22.0f, -(1080.0f - HintY), 0.0f, 0.0f));
+	Offsets(DragHint, FMargin(Side, -(1080.0f - HintY), 0.0f, 0.0f));
+	// narrow (4:3, 5:4): the attributes give way, the character keeps the middle between the panels
+	if (AttributeColumn)
+	{
+		AttributeColumn->SetVisibility(Width - 2.0f * Side < 1650.0f ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -2539,7 +2760,9 @@ FReply USOInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		bDragging = true;
-		return FReply::Handled().CaptureMouse(TakeWidget());
+		SpinVelocity = 0.0f;
+		LastDragTime = FPlatformTime::Seconds();
+		return FReply::Handled().CaptureMouse(TakeWidget()).SetUserFocus(TakeWidget());
 	}
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && !OpenSlotId.IsEmpty())
 	{
@@ -2554,6 +2777,10 @@ FReply USOInventoryWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, co
 	if (bDragging)
 	{
 		bDragging = false;
+		if (FPlatformTime::Seconds() - LastDragTime > 0.08)
+		{
+			SpinVelocity = 0.0f;                                  // (it was held still before it was let go)
+		}
 		return FReply::Handled().ReleaseMouseCapture();
 	}
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
@@ -2563,7 +2790,12 @@ FReply USOInventoryWidget::NativeOnMouseMove(const FGeometry& InGeometry, const 
 {
 	if (bDragging && Preview)
 	{
-		Preview->Yaw -= InMouseEvent.GetCursorDelta().X * 0.45f;
+		const float Turn = -static_cast<float>(InMouseEvent.GetCursorDelta().X) * 0.45f;
+		Preview->Yaw += Turn;
+		const double Now = FPlatformTime::Seconds();
+		const float Dt = FMath::Max(static_cast<float>(Now - LastDragTime), 1.0f / 240.0f);
+		SpinVelocity = FMath::Lerp(SpinVelocity, FMath::Clamp(Turn / Dt, -900.0f, 900.0f), 0.5f);
+		LastDragTime = Now;
 		return FReply::Handled();
 	}
 	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
@@ -2589,24 +2821,29 @@ FReply USOInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FK
 		Close();
 		return FReply::Handled();
 	}
-	if (Key == EKeys::A || Key == EKeys::Left || Key == EKeys::Gamepad_LeftTrigger)
+	if (Key == EKeys::A || Key == EKeys::Gamepad_LeftTrigger)
 	{
 		StepTab(-1);
 		return FReply::Handled();
 	}
-	if (Key == EKeys::D || Key == EKeys::Right || Key == EKeys::Gamepad_RightTrigger)
+	if (Key == EKeys::D || Key == EKeys::Gamepad_RightTrigger)
 	{
 		StepTab(1);
 		return FReply::Handled();
 	}
-	if (Key == EKeys::W || Key == EKeys::Up || Key == EKeys::Gamepad_DPad_Up)
+	if (Key == EKeys::W)
 	{
-		StepList(-1);
+		MoveFocus(0, -1);
 		return FReply::Handled();
 	}
-	if (Key == EKeys::S || Key == EKeys::Down || Key == EKeys::Gamepad_DPad_Down)
+	if (Key == EKeys::S)
 	{
-		StepList(1);
+		MoveFocus(0, 1);
+		return FReply::Handled();
+	}
+	if (Key == EKeys::Enter || Key == EKeys::SpaceBar || Key == EKeys::Gamepad_FaceButton_Bottom || Key == EKeys::Virtual_Accept)
+	{
+		Accept();
 		return FReply::Handled();
 	}
 	if (Key == EKeys::E || Key == EKeys::Gamepad_FaceButton_Top)

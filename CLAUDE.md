@@ -632,7 +632,16 @@ INSPECT panel (rarity · class · kind, the name, its line, power, the stats aga
 set or class in gold at its foot; a piece's attributes against the worn one, which the attribute column shows too;
 a melee style's blows and its guard) with only the buttons that can apply. The stand-in HOLDS the chosen gun, RAISES
 the chosen fists or blade (`ASOCharacter::SetDisplayMelee`: a style shown whoever owns it, the stand-in only), WEARS
-the chosen piece. Every card is `M_UI_Card`, every shape its own material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`:
+the chosen piece. **The stand-in is a picture, never a body in play** (`ASOCombatCharacter::SetDisplayOnly`: no side,
+hostile to nobody, the damage gate lets nothing through, `Die` does nothing, no collision; the owner: "if the player
+dies then the player model in the gun selection dies too": the creatures' nearest player was the stand-in once the
+player was down, and an operation counted it as a living player; test `ShatteredOrbit.Combat.TheArmouryModelIsOnlyAPicture`).
+Turning it: a drag anywhere the cards are not (the backdrop catches the click; a flick spins on and settles), the right
+stick. The keyboard / pad: the arrows, the d-pad and the left stick move the armoury's own highlight (cards in the
+loadout, the list in an armoury, the armour's slots left / right; `NativeOnNavigation`), W / S the list, Enter / Space /
+A opens or equips, A / D and the triggers the tabs; every button is a `USOQuietButton` (never focused: the screen keeps
+the focus). The layout follows the screen's width (`UpdateLayout`): wider than 2200 units it keeps to a 2200 frame in the
+middle, narrower than 1650 (4:3) the attribute column gives way. Every card is `M_UI_Card`, every shape its own material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`:
 0 emblem, 1 credits, 2 alloy, 3 vault, 4 power, 5-10 the attributes, 11 fists, 12 lock, 13 blade; the panels
 `M_UI_Plate`), one Custom node each drawn from the UV derivatives (`import_assets.ui_shape`, `SO_IMPORT_ONLY=ui`).
 **A UI material's colour is LINEAR**: the screen shows it through the sRGB curve, so a "dark" 0.03 is a mid grey
@@ -642,8 +651,10 @@ the chosen piece. Every card is `M_UI_Card`, every shape its own material (`M_UI
 `USOWeaponData::Lore / ClassName / TraitName / TraitText` (with the guns and `SO_IMPORT_ONLY=gunnumbers`). The top
 rarity is the Sovereign. The pictures: `tools/blender/icons.py` renders each gun 1024 x 512, three quarters from the
 muzzle's side through an 80 mm lens, rim-lit, on the graphics card (`frame_persp`: the least distance that fits, the
-lens shifted to centre it); `SO_IMPORT_ONLY=icons` brings them in. Pictures `SOCaptureSeries 1 19` at
-`-ResX=1920 -ResY=1080` (files `SO_u1_loadout` .. `SO_u7_back`: quick looks, primary, heavy, melee, head).
+lens shifted to centre it), and each armour piece the same way at 512 x 512; `SO_IMPORT_ONLY=icons` brings both in.
+Pictures `SOCaptureSeries 1 19` at `-ResX=1920 -ResY=1080` (and 1440 x 1080, 2560 x 1080 for the layouts; files
+`SO_u1_loadout` .. `SO_u8_player_down`: the pad's highlight, quick looks, primary, heavy, melee, head, the player
+dying with the armoury open).
 The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
 `art/reference/operation/first_operation_map.png` made linear, our own names, and (owner, 2026-11-10: "at least 4x
 longer ... spawn at the very edge of the city and fight through ruined buildings / maybe a mall ... like a strike")

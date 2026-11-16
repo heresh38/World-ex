@@ -4,7 +4,8 @@
           flank seen three quarters from the muzzle's side and a little above through a long lens, lit like a hero
           (a soft key, two rims from behind, a sheen from above) on the graphics card
   armour: <out>/../Characters/src/hero_<sex>.glb (hero/build.py) -> <out>/armour/icon_<sex>_<slot>_<item>.png, each
-          wardrobe piece C_<slot>__<item> alone, three-quarter front view (512 x 512; gloves: the left one)
+          wardrobe piece C_<slot>__<item> alone, three quarters from the front through a long lens, lit like the guns
+          (512 x 512; gloves: the left one)
 
 blender --background --python tools/blender/icons.py -- <out dir> [guns] [armour] [--only=a,b]
 """
@@ -82,10 +83,10 @@ def frame(cam, objs, view_dir, up=(0, 0, 1), margin=1.08, ortho=True, left_only=
     cam.data.clip_end = 40
 
 
-def frame_persp(cam, objs, view_dir, lens=80, margin=1.07, up=(0, 0, 1), margin_v=1.14):
-    """A perspective camera along view_dir as close as fits the objects' bounds with the margin; the picture's middle
-    on the middle of what it sees (the lens shifted: the near end of a long gun looks bigger)."""
-    pts = [o.matrix_world @ Vector(c) for o in objs for c in o.bound_box]
+def frame_persp(cam, objs, view_dir, lens=80, margin=1.07, up=(0, 0, 1), margin_v=1.14, pts=None):
+    """A perspective camera along view_dir as close as fits the objects' bounds (or the points given) with the margin;
+    the picture's middle on the middle of what it sees (the lens shifted: the near end of a long gun looks bigger)."""
+    pts = pts or [o.matrix_world @ Vector(c) for o in objs for c in o.bound_box]
     lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
     hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     c = (lo + hi) / 2
@@ -170,7 +171,7 @@ def armour():
         bl.reset()
         sc = bpy.context.scene
         sc.render.resolution_x, sc.render.resolution_y = 512, 512
-        studio(sc)
+        studio(sc, hero=True)
         sc.view_settings.exposure = -1.6           # the studio is set for guns; cloth reads true-to-albedo this way
         bpy.ops.import_scene.gltf(filepath=path)
         for o in sc.objects:                       # the rest pose, not a clip's first frame
@@ -188,7 +189,9 @@ def armour():
             if ONLY and f'{slot}_{item}' not in ONLY:
                 continue
             p.hide_render = False
-            frame(cam, [p], (-.55, .8, -.25), margin=1.22, left_only=slot == 'hands')
+            # (gloves: only the left one, the +X half)
+            pts = [p.matrix_world @ v.co for v in p.data.vertices if (p.matrix_world @ v.co).x > 0.02] if slot == 'hands' else None
+            frame_persp(cam, [p], (-.55, .8, -.25), lens=85, margin=1.2, margin_v=1.2, pts=pts)
             render(os.path.join(OUT, 'armour', f'icon_{sex}_{slot}_{item}.png'))
             p.hide_render = True
 

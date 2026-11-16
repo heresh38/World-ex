@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "SOInventoryWidget.generated.h"
 
 class ASceneCapture2D;
@@ -23,6 +24,16 @@ class USOInventoryWidget;
 struct FSOArmorInstance;
 struct FSOWeaponInstance;
 struct FSOMeleeStyle;
+
+/** A button the keyboard and the pad never focus: the armoury keeps the focus itself and moves its own highlight. */
+UCLASS()
+class SOUI_API USOQuietButton : public UButton
+{
+	GENERATED_BODY()
+
+public:
+	USOQuietButton(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer) { InitIsFocusable(false); }
+};
 
 /**
  * The picture of the player in the middle of the armoury: a stand-in character of its own (always there, whatever the
@@ -111,6 +122,8 @@ public:
 	const FSOTileInfo& GetInfo() const { return Info; }
 	/** Lights the card as the one chosen in its list (or not) without building it again. */
 	void SetChosen(bool bChosen);
+	/** The keyboard's or pad's highlight is on it (it looks and leans as if hovered). */
+	void SetFocused(bool bOn);
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -136,9 +149,11 @@ protected:
 	UPROPERTY(Transient)
 	FSOTileInfo Info;
 
-	/** The card leans toward the stage while hovered (pixels, eased). */
+	/** The card leans toward the stage while hovered or focused (pixels, eased). */
 	float Lift = 0.0f;
 	float LiftTarget = 0.0f;
+	bool bHovered = false;
+	bool bFocused = false;
 };
 
 /** A tab of the armoury's bar, or one of the armour list's slot chips: a word that is lit when it is the one open. */
@@ -217,6 +232,11 @@ public:
 	const FString& GetOpenSlot() const { return OpenSlotId; }
 	/** Opens a loadout card's quick look as a hover does (its slot's key; empty = closes it): the capture series. */
 	void PeekSlot(const FString& SlotKey);
+	/** The keyboard's / pad's highlight (the arrows, the d-pad, the left stick, W / S): in the loadout over the cards (a
+	 *  column and a row; the first press only shows where it is), in an armoury the list's choice (and, over the armour,
+	 *  its slot). Accept (Enter, Space, the pad's A) opens the slot or equips. */
+	void MoveFocus(int32 DX, int32 DY);
+	void Accept();
 
 	/** Called when the screen wants to close (the HUD restores game input). */
 	TFunction<void()> OnClose;
@@ -230,6 +250,9 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FNavigationReply NativeOnNavigation(const FGeometry& MyGeometry, const FNavigationEvent& InNavigationEvent, const FNavigationReply& InDefaultReply) override;
+	virtual FReply NativeOnAnalogValueChanged(const FGeometry& InGeometry, const FAnalogInputEvent& InAnalogEvent) override;
+	virtual FCursorReply NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent) override;
 
 	UFUNCTION()
 	void OnEquip();
@@ -277,6 +300,11 @@ protected:
 	void SyncPreview();
 	/** The panels slide and fade in after a change of view. */
 	void Animate();
+	void ApplyFocus();
+	TArray<USOInventoryTile*> ColumnTiles(int32 Column) const;
+	/** Places everything for the screen's width in its own units: wider than 2200 the layout keeps to a frame of 2200
+	 *  in the middle; narrower than 1650 the attribute column gives way to the character. */
+	void UpdateLayout(float Width);
 
 	UPROPERTY(Transient)
 	TObjectPtr<USOInventoryComponent> Inventory;
@@ -379,8 +407,33 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> UpgradeLabel;
 
+	/** What UpdateLayout moves. */
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> BannerWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> BannerRule;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> BannerLit;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> FooterRule;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> DragHint;
+
 	FString OpenSlotId;
 	FString LastArmourSlot = TEXT("head");
+	int32 FocusColumn = 0;
+	int32 FocusRow = 0;
+	/** The highlight shows (the keyboard or the pad moved it; the mouse takes over on a hover). */
+	bool bKeyFocus = false;
+	/** Turning the character: the right stick's deflection, the spin a drag leaves behind (degrees a second). */
+	float StickYaw = 0.0f;
+	float SpinVelocity = 0.0f;
+	double LastDragTime = 0.0;
+	float LaidOutWidth = 0.0f;
 	FString SelectedKey;
 	FString HoverKey;
 	FString QuickKey;

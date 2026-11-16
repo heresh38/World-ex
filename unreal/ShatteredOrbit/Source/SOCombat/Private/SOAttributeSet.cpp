@@ -119,7 +119,7 @@ void USOAttributeSet::TakeDamage(const FGameplayEffectModCallbackData& Data)
 	// the gate every source of damage passes
 	if (Victim)
 	{
-		if (Victim->IsDead() || Victim->IsImmune())
+		if (Victim->IsDead() || Victim->IsImmune() || Victim->IsDisplayOnly())
 		{
 			return;
 		}

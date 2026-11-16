@@ -75,6 +75,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SO|Combat")
 	float GetDeathTime() const { return DeathTime; }
 
+	/** A body only to be looked at (the armoury's stand-in): on no side and hostile to nobody (so never anybody's
+	 *  target or anybody's player: before this the creatures turned on the stand-in once the player was down, and an
+	 *  operation counted it as a player), takes no damage, never dies, collides with nothing. */
+	void SetDisplayOnly();
+	bool IsDisplayOnly() const { return bDisplayOnly; }
+
 	/** Scale on the damage of the rounds this character's gun fires (creatures hit softer than players). */
 	virtual float GetOutgoingDamageScale() const { return 1.0f; }
 
@@ -286,6 +292,7 @@ protected:
 
 	float DeathTime = 0.0f;
 	bool bDeathHandled = false;
+	bool bDisplayOnly = false;
 
 private:
 	void HandleMoveScaleChanged(const struct FOnAttributeChangeData& Change);

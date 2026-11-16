@@ -985,7 +985,7 @@ void ASOHUD::DrawHUD()
 	for (TActorIterator<ASOCombatCharacter> It(GetWorld()); It; ++It)
 	{
 		const ASOCombatCharacter* Other = *It;
-		if ((Operation && Other == Operation->GetBoss()) || Other == Player || Other->IsDead() || Other->Faction == Player->Faction)
+		if ((Operation && Other == Operation->GetBoss()) || Other == Player || Other->IsDead() || Other->Faction == Player->Faction || Other->IsDisplayOnly())
 		{
 			continue;
 		}

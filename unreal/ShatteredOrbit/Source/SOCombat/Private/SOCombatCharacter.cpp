@@ -109,9 +109,17 @@ void ASOCombatCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ASOCombatCharacter, AbilitySet);
 }
 
+void ASOCombatCharacter::SetDisplayOnly()
+{
+	bDisplayOnly = true;
+	Faction = ESOFaction::Neutral;
+	SetCanBeDamaged(false);
+	SetActorEnableCollision(false);
+}
+
 void ASOCombatCharacter::Die(AActor* Killer)
 {
-	if (bDead || !HasAuthority())
+	if (bDead || !HasAuthority() || bDisplayOnly)
 	{
 		return;
 	}

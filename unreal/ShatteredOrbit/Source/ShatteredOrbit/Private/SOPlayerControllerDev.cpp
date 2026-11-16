@@ -194,8 +194,11 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
 		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
 		auto Peek = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->PeekSlot(SlotKey); } };
+		auto Nav = [Hud](int32 DX, int32 DY) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->MoveFocus(DX, DY); } };
 		Do(5.0f, [=, this]() { ConsoleCommand(TEXT("DisableAllScreenMessages")); if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
 		Snap(2.0f, TEXT("u1_loadout"));
+		Act([=]() { Nav(0, 1); Nav(1, 0); Nav(0, 1); Nav(0, 1); });            // (the pad: the highlight over the armour's third card)
+		Snap(0.6f, TEXT("u1b_pad_focus"));
 		Act([=]() { Peek(TEXT("0")); });
 		Snap(0.6f, TEXT("u2_quicklook"));
 		Act([=]() { Peek(TEXT("feet")); });
@@ -210,6 +213,9 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(1.2f, TEXT("u6_head"));
 		Act([=]() { OpenSlot(TEXT("")); });
 		Snap(1.2f, TEXT("u7_back"));
+		// the player goes down with the armoury open: the stand-in is a picture and stays as it was
+		Act([=]() { if (ASOCharacter* H = Hero()) { H->Die(nullptr); } });
+		Snap(3.0f, TEXT("u8_player_down"));
 	}
 	if (Set == 21)
 	{

@@ -148,6 +148,10 @@ bool USOCombatStatics::AreHostile(const AActor* A, const AActor* B)
 	{
 		return true;
 	}
+	if (CA->IsDisplayOnly() || CB->IsDisplayOnly())
+	{
+		return false;                                          // (a body only to be looked at is nobody's enemy)
+	}
 	return CA->Faction != CB->Faction;
 }
 

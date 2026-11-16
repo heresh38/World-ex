@@ -15,6 +15,7 @@ Headless:
 """
 
 import json
+import glob
 import os
 import re
 import struct
@@ -1728,9 +1729,9 @@ def gun_numbers():
 
 
 def icons_only():
-    """Every gun's armoury picture again, nothing else (SO_IMPORT_ONLY=icons; tools/blender/icons.py renders them into
-    SourceArt/Icons/guns): the texture is replaced where it is, so whatever names it keeps it. The melee styles'
-    pictures come with SO_IMPORT_ONLY=melee."""
+    """Every gun's and armour piece's armoury picture again, nothing else (SO_IMPORT_ONLY=icons; tools/blender/icons.py
+    renders them into SourceArt/Icons/guns and /armour): each texture is replaced where it is, so whatever names it
+    keeps it. The melee styles' pictures come with SO_IMPORT_ONLY=melee."""
     game = load_json(GAME_DATA)
     n = 0
     for arch, a in game["archetypes"].items():
@@ -1748,6 +1749,17 @@ def icons_only():
         eal.save_loaded_asset(data, only_if_is_dirty=False)
         n += 1
     log(f"icons: {n} guns")
+    # the armour pieces' pictures (made with the bodies' wardrobes: T_Icon_<slot>_<item> under each body's Icons)
+    pieces = 0
+    for sex in ("male", "female"):
+        dest = f"/Game/Characters/Player{sex.title()}/Icons"
+        for icon in sorted(glob.glob(os.path.join(ICONS, "armour", f"icon_{sex}_*.png"))):
+            slot_item = os.path.basename(icon)[len(f"icon_{sex}_"):-4]
+            name = f"T_Icon_{slot_item}"
+            if eal.does_asset_exist(f"{dest}/{name}"):
+                import_ui_texture(icon, dest, name)
+                pieces += 1
+    log(f"icons: {pieces} armour pieces")
 
 
 def register_archetypes(datas):

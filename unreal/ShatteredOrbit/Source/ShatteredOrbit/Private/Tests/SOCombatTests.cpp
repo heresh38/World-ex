@@ -556,4 +556,46 @@ bool FSOClipMatchesSkeletonTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// The armoury's stand-in is a picture, never a body in play (the owner, 2026-11-16: "if the player dies then the player
+// model in the gun selection dies too"): once the player was down the creatures' nearest player was the stand-in.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOStandInTest, "ShatteredOrbit.Combat.TheArmouryModelIsOnlyAPicture", SOTest::Flags)
+bool FSOStandInTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	PC->Possess(Player);
+	ASOCharacter* Model = W.SpawnCharacter(FVector(0, 900, 0));
+	Model->SetDisplayOnly();                                    // (as USOCharacterPreview::Start makes it)
+	ASOEnemy* Stalker = SOTest::SpawnStalker(W, FVector(500, 0, 0), FRotator(0, 180, 0));
+	if (!TestNotNull(TEXT("player"), Player) || !TestNotNull(TEXT("stand-in"), Model) || !TestNotNull(TEXT("creature"), Stalker))
+	{
+		return false;
+	}
+	W.Run(0.2f);
+	TestFalse(TEXT("nobody is the stand-in's enemy"), USOCombatStatics::AreHostile(Stalker, Model));
+	TestFalse(TEXT("and it is nobody's"), USOCombatStatics::AreHostile(Model, Stalker));
+	TestTrue(TEXT("it is on no side"), Model->Faction == ESOFaction::Neutral);
+	const float Before = Model->GetHealth();
+	TestTrue(TEXT("it has its health"), Before > 0.0f);
+	USOCombatStatics::ApplyDamage(Stalker, Model, 1000.0f, false);
+	W.Run(0.1f);
+	TestEqual(TEXT("the damage gate lets nothing through to it"), Model->GetHealth(), Before);
+	Model->Die(Stalker);
+	TestFalse(TEXT("it cannot be killed"), Model->IsDead());
+
+	// the player goes down: the creature does not turn on the stand-in
+	Player->Die(Stalker);
+	W.Run(4.0f);
+	TestFalse(TEXT("the stand-in still stands after the player died"), Model->IsDead());
+	TestEqual(TEXT("untouched"), Model->GetHealth(), Before);
+	if (const ASOEnemyAIController* AI = Cast<ASOEnemyAIController>(Stalker->GetController()))
+	{
+		TestTrue(TEXT("the creature's target is never the stand-in"), AI->GetTarget() != Model);
+	}
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
