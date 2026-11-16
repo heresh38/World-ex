@@ -1644,9 +1644,22 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			return false;
 		};
 		const USOLootTables* Tables = USOLootLibrary::GetTables();
-		for (const TCHAR* G : Guns)
+		// -SOGuns=<archetype>[,...] picks the guns (every gun of the list above by default)
+		TArray<FString> Picked;
+		FString List;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false))
 		{
-			const FString A = G;
+			List.ParseIntoArray(Picked, TEXT(","), true);
+		}
+		else
+		{
+			for (const TCHAR* G : Guns)
+			{
+				Picked.Add(G);
+			}
+		}
+		for (const FString& A : Picked)
+		{
 			const FSOArchetypeEntry* Entry = Tables ? Tables->Archetypes.FindByPredicate([&](const FSOArchetypeEntry& E) { return E.Id == FName(*A); }) : nullptr;
 			const USOWeaponData* Data = Entry ? Entry->Data.LoadSynchronous() : nullptr;
 			if (!Data)
