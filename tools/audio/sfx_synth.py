@@ -1428,6 +1428,42 @@ def bolt_impact():
     return finish(reverb(out, impulse_response(0.6, 887, decay=0.14, damping=4500), 0.22), -2)
 
 
+
+# ---------------------------------------------------------------------------- the Sarketh's slugs
+# docs/orion/SARKETH_WEAPONS.md: electromagnetic rails throwing a crystalline slug in an amber field. Not a powder shot
+# (no blast of gas) and not a light gun's zap: the rails' hard crack, the field collapsing in a tight falling whine,
+# the crystal ringing, a heavy low thump (their guns are heavy), the amber field tearing off the slug with a sizzle.
+SARKETH = {"skr_rifle": dict(seed=5101, heavy=1.0, pitch=1.0)}
+
+
+def skr_core(seed, heavy=1.0, pitch=1.0):
+    out = silence(0.9)
+    out = place(out, click(seed, 4200 * pitch, 1.0, 0.02), 0.0, 0.9)                                   # the rails
+    out = place(out, fm_zap(0.10, 2400 * pitch, 520 * pitch, 1.5, 3.0, 0.02, 0.03, seed + 1), 0.0, 0.55)  # field collapsing
+    out = place(out, thump(110 * pitch, 42, 0.2, 0.045 * heavy, 1.6), 0.0, 1.0 * heavy)                 # weight
+    out = place(out, svf_sweep(noise(0.12, seed + 2) * env_ad(0.12, 0.0005, 0.02), "band", 6000, 1500, 1.2), 0.0, 0.8)
+    out = place(out, modal(0.5, [(2950 * pitch, 0.12, 0.3), (4410 * pitch, 0.08, 0.2), (6230 * pitch, 0.05, 0.12)], seed + 3), 0.002, 0.25)
+    out = place(out, crackle(0.25, seed + 4, 1400, 2500, 11000, 0.06), 0.005, 0.35)                    # the field tearing off
+    return saturate(out * 0.9, 1.4)
+
+
+def skr_shot(gun, fp):
+    P = SARKETH[gun]
+    s = P["seed"] + (0 if fp else 50)
+    return shot_space(skr_core(s, P["heavy"], P["pitch"]), s + 30, fp, decay=0.3, wet=0.28, rumble=0.55, rumble_tau=0.25)
+
+
+def slug_impact():
+    """A slug's shell rupturing: a sharp thermal crack, the burst's short thump, white-hot sizzle, the crystal's ping."""
+    out = silence(0.7)
+    out = place(out, click(5181, 3600, 1.0), 0.0)
+    out = place(out, thump(140, 55, 0.12, 0.03, 1.5), 0.0, 0.8)
+    out = place(out, svf_sweep(noise(0.1, 5182), "band", 5000, 900, 1.5) * env_ad(0.1, 0.0005, 0.025), 0.0, 0.8)
+    out = place(out, crackle(0.35, 5183, 1800, 2500, 12000, 0.09), 0.004, 0.5)
+    out = place(out, modal(0.3, [(3300, 0.06, 0.25), (5100, 0.04, 0.15)], 5184), 0.003, 0.3)
+    out = place(out, rustle(0.2, 5185, 3000, 10000, 12, 0.2), 0.01)
+    return finish(reverb(out, impulse_response(0.6, 5186, decay=0.14, damping=4500), 0.22), -2)
+
 def goo_splat():
     out = silence(1.2)
     out = place(out, filt(noise(0.06, 891), "low", 1800) * env_ad(0.06, 0.0008, 0.015), 0.0, 1.0)
@@ -1727,6 +1763,10 @@ for _g in KINETIC:
 for _g in ENERGY:
     SOUNDS[_g + "_shot_fp"] = lambda g=_g: nrg_shot(g, True)
     SOUNDS[_g + "_shot_world"] = lambda g=_g: nrg_shot(g, False)
+for _g in SARKETH:
+    SOUNDS[_g + "_shot_fp"] = lambda g=_g: skr_shot(g, True)
+    SOUNDS[_g + "_shot_world"] = lambda g=_g: skr_shot(g, False)
+SOUNDS["slug_impact"] = slug_impact
 SOUNDS["rocket_shot_fp"] = lambda: rocket_shot(True)
 SOUNDS["rocket_shot_world"] = lambda: rocket_shot(False)
 for _g in ("spitter", "bile", "brood"):

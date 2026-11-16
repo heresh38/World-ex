@@ -362,12 +362,14 @@ void ASOWeapon::FireShot()
 	Rampage *= bOpening ? Perk.OpeningDamage : 1.0f;
 	Rampage *= Perk.LowMagDamage != 1.0f && Mag < Stats.Mag * Perk.LowMagShare ? Perk.LowMagDamage : 1.0f; // (Last Third: the rounds at the bottom)
 	USOProjectileSubsystem* Rounds = World->GetSubsystem<USOProjectileSubsystem>();
+	ShotHeat = Heat;                                                      // (a hot crystal throws its rounds faster)
+	const float SpeedScale = HeatSpeedScale(ShotHeat);
 	for (const FVector& Dir : Dirs)
 	{
 		FSOProjectile Round;
 		Round.Origin = Origin;
 		Round.Position = Origin;
-		Round.Velocity = Dir * Data->MuzzleVelocity * 100.0f;
+		Round.Velocity = Dir * Data->MuzzleVelocity * 100.0f * SpeedScale;
 		Round.Gravity = 980.0f * Data->GravityScale;
 		Round.Damage = Stats.Damage * Rampage;
 		Round.CritMultiplier = Stats.Crit;
@@ -388,7 +390,13 @@ void ASOWeapon::FireShot()
 		Round.Swarm = Data->Swarm;
 		const bool bGoo = Data->Projectile == ESOProjectileKind::Spit || Data->Projectile == ESOProjectileKind::Bile || Data->Projectile == ESOProjectileKind::Brood;
 		Round.Pool = bGoo ? USOProjectileSubsystem::PoolSeconds : 0.0f;
-		Round.Life = Data->Projectile == ESOProjectileKind::Round || Data->Projectile == ESOProjectileKind::Bolt ? 3.0f : 8.0f;
+		const bool bFast = Data->Projectile == ESOProjectileKind::Round || Data->Projectile == ESOProjectileKind::Bolt || Data->Projectile == ESOProjectileKind::Slug;
+		Round.Life = bFast ? 3.0f : 8.0f;
+		if (Data->Projectile == ESOProjectileKind::Slug)
+		{
+			Round.Pierce = Data->Pierce;                                  // (its crystal goes on into the body)
+			Round.PierceKeep = Data->PierceKeep;
+		}
 		if (Rounds)
 		{
 			Rounds->Fire(Round);
@@ -396,6 +404,51 @@ void ASOWeapon::FireShot()
 	}
 	USOCombatStatics::ReportNoise(this, Origin, Holder, 4500.0f * Perk.Noise);
 	MulticastShotFired(Origin, Aim, Seed, HalfAngle);
+	AddHeat();
+}
+
+bool ASOWeapon::HasHeat() const
+{
+	return Data && Data->HeatPerShot > 0.0f;
+}
+
+bool ASOWeapon::IsVenting() const
+{
+	return HasHeat() && GetWorld() && GetWorld()->GetTimeSeconds() < VentUntil;
+}
+
+float ASOWeapon::HeatSpeedScale(float H) const
+{
+	if (!HasHeat() || H < HeatHigh)
+	{
+		return 1.0f;
+	}
+	return FMath::Lerp(1.0f, Data->HeatSpeed, FMath::Clamp((H - HeatHigh) / (1.0f - HeatHigh), 0.0f, 1.0f));
+}
+
+float ASOWeapon::HeatBright(float H)
+{
+	return 1.0f + 0.8f * FMath::Clamp((H - HeatMedium) / (1.0f - HeatMedium), 0.0f, 1.0f);
+}
+
+void ASOWeapon::AddHeat()
+{
+	UWorld* World = GetWorld();
+	if (!HasHeat() || !World)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	Heat = FMath::Min(1.0f, Heat + Data->HeatPerShot);
+	LastHeatTime = Now;
+	if (Heat >= 1.0f && Now >= VentUntil)
+	{
+		// full: the crystal vents by itself (the gun cannot fire until it has); the heat runs out of it meanwhile
+		VentUntil = Now + Data->VentTime;
+		PlayReloadFx(TEXT("vent"), Data->VentTime);
+		PlayEventSound(TEXT("vent"));
+		OnWeaponEvent.Broadcast(TEXT("vent"));
+	}
 }
 
 void ASOWeapon::ShotDirections(const FVector& Aim, int32 Seed, float HalfAngle, TArray<FVector>& Out) const
@@ -426,7 +479,9 @@ void ASOWeapon::PredictShot()
 		* (bOpening ? 0.1f : 1.0f));
 	Reload.NotifyShot(Data->Archetype);
 	Holder->OnWeaponFired(Data->Kick * Stats.Recoil);
+	ShotHeat = Heat;
 	PlayShotEffects(Origin, Aim, FMath::Rand(), HalfAngle); // its own draw of the spread: where the round went is the server's
+	AddHeat();
 	OnWeaponEvent.Broadcast(TEXT("fired"));
 }
 
@@ -448,7 +503,15 @@ void ASOWeapon::MulticastShotFired_Implementation(FVector_NetQuantize Origin, FV
 	{
 		Holder->OnWeaponFired((Data ? Data->Kick : 1.0f) * Stats.Recoil);
 	}
+	if (!HasAuthority())
+	{
+		ShotHeat = Heat; // (the server set its own as it fired)
+	}
 	PlayShotEffects(Origin, Aim, Seed, HalfAngle);
+	if (!HasAuthority())
+	{
+		AddHeat();
+	}
 	OnWeaponEvent.Broadcast(TEXT("fired"));
 }
 
@@ -477,7 +540,12 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		const bool bLight = Data->WeaponClass == ESOWeaponClass::Energy || Data->WeaponClass == ESOWeaponClass::Horror;
 		const FLinearColor FlashColor = bLight ? FMath::Lerp(Data->TracerColor, FLinearColor::White, 0.25f) : FLinearColor(1.0f, 0.74f, 0.4f);
 		const bool bThroughScope = bFirstPerson && IsScoped() && Holder->IsAimingDownSights();
-		if (Data->Projectile == ESOProjectileKind::Bolt)
+		if (Data->Projectile == ESOProjectileKind::Slug)
+		{
+			// (the rails throw it: a hard white-gold flash, the amber field tearing off, nothing burning)
+			Fx->SlugFlash(Muzzle, Aim, bFirstPerson ? 0.6f : 1.0f, bFirstPerson, HeatBright(ShotHeat), bThroughScope);
+		}
+		else if (Data->Projectile == ESOProjectileKind::Bolt)
 		{
 			// (a light gun burns nothing: no flame, no smoke: a bloom of its own light)
 			Fx->PlasmaFlash(Muzzle, Aim, bFirstPerson ? 0.6f : 1.0f, bFirstPerson, FlashColor, bThroughScope);
@@ -491,7 +559,7 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOShotFx), true, Holder);
 	Params.AddIgnoredActor(this);
-	const float Speed = Data->MuzzleVelocity * 100.0f;
+	const float Speed = Data->MuzzleVelocity * 100.0f * HeatSpeedScale(ShotHeat);
 	const float Gravity = 980.0f * Data->GravityScale;
 	const ESOProjectileKind Kind = Data->Projectile;
 	TArray<FVector> Dirs;
@@ -504,7 +572,7 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		bool bHit = false;
 		float Flight = 0.0f;
 		FVector End = Origin + Dir * 30000.0f;
-		if (Kind == ESOProjectileKind::Round || Kind == ESOProjectileKind::Bolt)
+		if (Kind == ESOProjectileKind::Round || Kind == ESOProjectileKind::Bolt || Kind == ESOProjectileKind::Slug)
 		{
 			bHit = World->LineTraceSingleByChannel(Hit, Origin, End, SO_TRACE_BULLET, Params);
 			End = bHit ? FVector(Hit.ImpactPoint) : End;
@@ -576,6 +644,47 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			{
 				// (a blow that armour turns sparks and rings; one that goes in bleeds)
 				Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, Victim != nullptr && !Victim->TurnsBlow(Muzzle), Victim ? Victim->BloodColor : FLinearColor::Black, Flight, bDecal);
+			}
+			break;
+		}
+		case ESOProjectileKind::Slug:
+		{
+			// The Sarketh's: a slug seen to fly in its amber field; its shell ruptures where it lands and, in a body,
+			// the crystal goes on through (the server's round does: Pierce) and out the far side
+			const float Size = Data->RoundSize > 0.0f ? Data->RoundSize : FMath::Clamp(FMath::Sqrt(Data->Damage / 17.0f), 0.5f, 2.4f);
+			const float Bright = HeatBright(ShotHeat);
+			Fx->SlugRound(Muzzle, End, Speed, Size, Bright, Holder->GetVelocity());
+			if (bHit)
+			{
+				const bool bBody = Victim != nullptr;
+				const bool bIn = bBody && !Victim->TurnsBlow(Muzzle);
+				if (bIn)
+				{
+					Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, true, Victim->BloodColor, Flight, false);
+				}
+				Fx->SlugImpact(Hit.ImpactPoint, Hit.ImpactNormal, Size, Flight, bIn, Data->Splash * 100.0f);
+				if (Pellet == 0)
+				{
+					USOSoundLibrary::PlayAt(this, TEXT("slug_impact"), Hit.ImpactPoint, 0.75f, 0.08f, ESOSoundRange::Near);
+				}
+				if (bIn && Data->Pierce > 0)
+				{
+					FCollisionQueryParams On(SCENE_QUERY_STAT(SOSlugOn), true, Holder);
+					On.AddIgnoredActor(this);
+					On.AddIgnoredActor(Victim);
+					FHitResult Out;
+					const FVector From = FVector(Hit.ImpactPoint) + Dir * 3.0f;
+					FVector To = From + Dir * 20000.0f;
+					const bool bOut = World->LineTraceSingleByChannel(Out, From, To, SO_TRACE_BULLET, On);
+					To = bOut ? FVector(Out.ImpactPoint) : To;
+					const float Later = Flight + FVector::Dist(From, To) / FMath::Max(Speed, 1.0f);
+					Fx->SlugRound(From, To, Speed, Size * 0.7f, Bright, FVector::ZeroVector, Flight);
+					if (bOut)
+					{
+						const ASOCombatCharacter* Next = Cast<ASOCombatCharacter>(Out.GetActor());
+						Fx->SlugImpact(Out.ImpactPoint, Out.ImpactNormal, Size * 0.7f, Later, Next && !Next->TurnsBlow(Muzzle), 0.0f);
+					}
+				}
 			}
 			break;
 		}
@@ -869,7 +978,7 @@ void ASOWeapon::Tick(float DeltaSeconds)
 			bShotQueued = false; // a click is a request for now, not for whenever the gun is ready again
 		}
 		const bool bBurstRunning = BurstLeft > 0;
-		if ((bTriggerHeld || bShotQueued || bBurstRunning) && !bReloading && Now >= NextShotTime && Holder->CanFireWeapon())
+		if ((bTriggerHeld || bShotQueued || bBurstRunning) && !bReloading && !IsVenting() && Now >= NextShotTime && Holder->CanFireWeapon())
 		{
 			bShotQueued = false;
 			if (Mag > 0)
@@ -952,6 +1061,20 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	if (bFinished)
 	{
 		bReloading = false;
+	}
+
+	// Thermal accumulation: while it vents the heat runs out of it; otherwise it cools once the trigger has rested.
+	if (World && HasHeat())
+	{
+		const float Now = World->GetTimeSeconds();
+		if (Now < VentUntil)
+		{
+			Heat = FMath::Clamp((VentUntil - Now) / FMath::Max(Data->VentTime, 0.01f), 0.0f, 1.0f);
+		}
+		else if (Now - LastHeatTime > Data->HeatCoolDelay)
+		{
+			Heat = FMath::Max(0.0f, Heat - Data->HeatCool * DeltaSeconds);
+		}
 	}
 
 	// A light gun's heat: a long burst (half a cell, at least 8 bolts, never more than 40) vents by itself as the

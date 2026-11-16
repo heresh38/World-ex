@@ -17,7 +17,9 @@ enum class ESOProjectileKind : uint8
 	Rocket,  // slow, splash
 	Spit,    // horror: acid glob, splash + acid damage over time
 	Bile,    // horror: bile pellets
-	Brood    // horror: a brood sac that bursts into a swarm
+	Brood,   // horror: a brood sac that bursts into a swarm
+	Slug     // Sarketh: a crystalline slug in an amber field: flies (seen), its shell ruptures on a hit, the slug goes on
+	         // into the body (docs/orion/SARKETH_WEAPONS.md)
 };
 
 /** One moving reload part (node names are an API: mag, bolt, charge, slide, pump, ...). Mesh space = imported FBX space. */
@@ -151,6 +153,37 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	FLinearColor TracerColor = FLinearColor(1.0f, 0.78f, 0.45f);
+
+	/** A slug's remaining crystal goes on through the body it ruptured on: how many bodies it passes after the first,
+	 *  and the share of its damage it keeps through each (the Sarketh's rounds; the Penetrator pierces several). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	int32 Pierce = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	float PierceKeep = 0.6f;
+
+	/** How big the round is drawn (1 = the assault rifle's slug); 0 = from its damage. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	float RoundSize = 0.0f;
+
+	/** Thermal accumulation (the Sarketh's guns): the heat one shot adds to the crystal (1 = full; 0 = the gun has
+	 *  none), how much it loses a second once the trigger has rested HeatCoolDelay, the vent it is forced into at
+	 *  full heat (s, it cannot fire meanwhile), and how much faster its rounds fly at high heat. Medium heat: the
+	 *  rounds burn brighter. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat")
+	float HeatPerShot = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat")
+	float HeatCool = 0.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat")
+	float HeatCoolDelay = 0.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat")
+	float VentTime = 1.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat")
+	float HeatSpeed = 1.3f;
 
 	/** ADS magnification (field of view divided by this). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")

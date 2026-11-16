@@ -570,8 +570,19 @@ void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
 			}
 			if (bGlow)
 			{
-				MID->SetVectorParameterValue(TEXT("BaseColorTint"), Glow);
-				MID->SetVectorParameterValue(TEXT("EmissiveColor"), Glow);
+				// the Sarketh's light is theirs whatever the copy's rarity (docs/orion/SARKETH_WEAPONS.md: the cells pale
+				// amber; amber is how a player knows their fire)
+				FLinearColor SlotGlow = Glow;
+				if (SlotName.EndsWith(TEXT("__cell")))
+				{
+					SlotGlow = FLinearColor(1.0f, 0.55f, 0.18f);
+				}
+				else if (SlotName.EndsWith(TEXT("__amber")))
+				{
+					SlotGlow = FLinearColor(1.0f, 0.42f, 0.08f);
+				}
+				MID->SetVectorParameterValue(TEXT("BaseColorTint"), SlotGlow);
+				MID->SetVectorParameterValue(TEXT("EmissiveColor"), SlotGlow);
 			}
 			else
 			{

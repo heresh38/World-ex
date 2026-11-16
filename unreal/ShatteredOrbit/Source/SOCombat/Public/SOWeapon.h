@@ -68,6 +68,19 @@ public:
 
 	bool CanReload() const;
 	bool IsReloading() const { return bReloading; }
+
+	/** Thermal accumulation (the Sarketh's guns, docs/orion/SARKETH_WEAPONS.md): the crystal's heat 0..1, every shot
+	 *  adds the data's HeatPerShot, it cools once the trigger rests. Medium heat: the rounds burn brighter; high heat:
+	 *  they fly faster; full heat: the gun vents by itself and cannot fire until it has. */
+	bool HasHeat() const;
+	float GetHeat() const { return Heat; }
+	bool IsVenting() const;
+	static constexpr float HeatMedium = 0.4f;
+	static constexpr float HeatHigh = 0.7f;
+	/** How much faster its rounds fly at heat H (1 below HeatHigh, up to the data's HeatSpeed at full). */
+	float HeatSpeedScale(float H) const;
+	/** How much brighter its rounds burn at heat H (1 below HeatMedium, up to 1.8 at full). */
+	static float HeatBright(float H);
 	bool IsTriggerHeld() const { return bTriggerHeld; }
 	float GetReloadProgress() const { return Reload.GetProgress(); }
 	float GetReloadDuration() const { return Reload.GetDuration(); }
@@ -193,6 +206,13 @@ protected:
 	/** A light gun's heat: bolts fired in the burst running now (a long one vents by itself when it ends). */
 	int32 HeatShots = 0;
 	float LastBoltTime = -100.0f;
+	/** Thermal accumulation (above): the heat now, the heat as the shot being shown left the gun, when it last fired,
+	 *  and until when it vents. Each machine that fires or shows the gun runs it (the server's is the one that counts). */
+	float Heat = 0.0f;
+	float ShotHeat = 0.0f;
+	float LastHeatTime = -100.0f;
+	float VentUntil = -100.0f;
+	void AddHeat();
 	float LastDryFireTime = -100.0f;
 	int32 ShotsFired = 0;
 	FRandomStream SpreadStream;

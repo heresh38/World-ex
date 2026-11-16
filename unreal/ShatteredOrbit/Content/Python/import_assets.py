@@ -1216,11 +1216,22 @@ def import_static(src, file, dest, name, instances):
 
 
 def projectile_kind(a):
+    if a.get("round") == "slug":                                  # the Sarketh's crystalline slugs (docs/orion/SARKETH_WEAPONS.md)
+        return unreal.SOProjectileKind.SLUG
     if a.get("goo"):
         return {"spit": unreal.SOProjectileKind.SPIT, "bile": unreal.SOProjectileKind.BILE, "brood": unreal.SOProjectileKind.BROOD}[a["goo"]]
     if a.get("projectile"):
         return unreal.SOProjectileKind.ROCKET
     return unreal.SOProjectileKind.ROUND if a["cls"] == "kinetic" else unreal.SOProjectileKind.BOLT
+
+
+def slug_values(a):
+    """A Sarketh gun's slug and its crystal's heat (game_data.json: "pierce", "pierceKeep", "roundSize", "heat": {perShot,
+    cool, delay, vent, speed}); every other gun has none."""
+    h = a.get("heat") or {}
+    return dict(pierce=int(a.get("pierce", 0)), pierce_keep=float(a.get("pierceKeep", 0.6)), round_size=float(a.get("roundSize", 0.0)),
+                heat_per_shot=float(h.get("perShot", 0.0)), heat_cool=float(h.get("cool", 0.6)), heat_cool_delay=float(h.get("delay", 0.3)),
+                vent_time=float(h.get("vent", 1.4)), heat_speed=float(h.get("speed", 1.3)))
 
 
 def weapon(master, arch, a, clear):
@@ -1269,11 +1280,11 @@ def weapon(master, arch, a, clear):
                   automatic=bool(a.get("auto")), burst=int(a.get("burst", 0)), burst_rpm=float(a.get("burstRpm", 0.0)),
                   pellets=int(a.get("pellets", 1)), projectile=kind, splash=float(a.get("splash", 0.0)), dot=float(a.get("dot", 0.0)),
                   swarm=int(a.get("swarm", 0)), aim_zoom=float(a["zoom"]), muzzle_velocity=float(velocity),
-                  gravity_scale=float(a.get("grav", 0.0)) if kind == unreal.SOProjectileKind.ROUND else (float(a.get("gooGrav", 0.35)) if kind in (
+                  gravity_scale=float(a.get("grav", 0.0)) if kind in (unreal.SOProjectileKind.ROUND, unreal.SOProjectileKind.SLUG) else (float(a.get("gooGrav", 0.35)) if kind in (
                       unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
                   kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
                   sprint_carry=a.get("carry", "None"), tracer_color=hex_color(tracer), body_mesh=body, parts=parts,
-                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"])
+                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"], **slug_values(a))
     for key, value in values.items():
         data.set_editor_property(key, value)
     sockets = info["sockets"]
@@ -1670,7 +1681,7 @@ def gun_numbers():
         values = dict(damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]), magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]),
                       reload_time=float(a["reload"]), range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
                       muzzle_velocity=float(velocity), kick=float(a.get("kick", 1.0)), sprint_to_fire_time=float(a["sprintOut"]),
-                      sprint_carry=a.get("carry", "None"))
+                      sprint_carry=a.get("carry", "None"), **slug_values(a))
         for key, value in values.items():
             data.set_editor_property(key, value)
         eal.save_loaded_asset(data, only_if_is_dirty=False)
@@ -1678,12 +1689,34 @@ def gun_numbers():
     log(f"gun numbers: {n} data assets")
 
 
+def register_archetypes(datas):
+    """Puts (or replaces) these guns' entries in the loot tables' archetype list without touching anything else in it
+    (SO_WEAPONS_ONLY: a new gun is known to the game, MakeWeapon / LoadArchetype find it)."""
+    path = "/Game/Data/DA_LootTables"
+    if not datas or not eal.does_asset_exist(path):
+        return
+    tables = eal.load_asset(path)
+    entries = [e for e in list(tables.get_editor_property("archetypes")) if str(e.get_editor_property("id")) not in datas]
+    for arch, data in datas.items():
+        e = unreal.SOArchetypeEntry()
+        e.set_editor_property("id", arch)
+        e.set_editor_property("data", data)
+        entries.append(e)
+    tables.set_editor_property("archetypes", entries)
+    eal.save_loaded_asset(tables, only_if_is_dirty=False)
+    log(f"DA_LootTables: {', '.join(datas)} registered ({len(entries)} archetypes)")
+
+
 def weapons(master, defaults):
     game = load_json(GAME_DATA)
     some = [s.strip() for s in os.environ.get("SO_WEAPONS_ONLY", "").split(",") if s.strip()]
     if some:                                                    # SO_WEAPONS_ONLY=rifle,auto: only those guns again
+        datas = {}
         for arch in some:
-            weapon(master, arch, game["archetypes"][arch], defaults["clear"])
+            data = weapon(master, arch, game["archetypes"][arch], defaults["clear"])
+            if data:
+                datas[arch] = data
+        register_archetypes(datas)                              # (a gun new to the game is put in the loot tables too)
         return
     sight_meshes = optics(master, defaults["clear"])
     datas = {}

@@ -104,6 +104,11 @@ existing classes, never second systems.
   part `spin` (origin on its axis): `ASOWeapon::Tick` turns it while firing. Tracers and flashes take the gun's own
   colour (`tracer` in the data: kinetic warm, light guns cyan / blue / gold, living green and violet; a bolt of light
   is longer with a head), the flash is five torn blades (`FX_Star`, shader mode 3), nothing is drawn through a scope.
+  **The Sarketh's guns fire crystalline SLUGS** (the owner's brief, `docs/orion/SARKETH_WEAPONS.md`, word for word
+  there): `ESOProjectileKind::Slug`, an amber-charged solid round (`USOFxSubsystem::SlugRound / SlugImpact /
+  SlugFlash`) that goes on through bodies (`pierce`), and thermal accumulation on the gun (`"heat"`: brighter, then
+  faster, then a forced vent; the HUD's heat gauge). Never the light guns' plasma look on them. Test
+  `ShatteredOrbit.Weapon.SarkethSlugs`.
   **The light guns fire plasma, not bullets** (the owner, 2026-11-14: "more alien ... alien energy or plasma ... instead
   of a kinetic bullet the human weapons use"; they are the Sarketh's own technology): a gun whose projectile is
   `ESOProjectileKind::Bolt` draws `USOFxSubsystem::PlasmaFlash` (a bloom of its light, no flame or smoke),

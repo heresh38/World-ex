@@ -539,6 +539,232 @@ void USOFxSubsystem::PlasmaImpact(const FVector& Point, const FVector& Normal, c
 	}
 }
 
+// --- The Sarketh's slugs (docs/orion/SARKETH_WEAPONS.md: "amber-charged kinetic projectiles. Not ordinary bullets, not
+// lasers, and not generic plasma beams"). The colours are the brief's own table: the core white-hot, the shell amber,
+// the trail golden orange, the sparks white and gold, the burst orange with dark smoke.
+namespace SOSlug
+{
+	const FLinearColor Core(1.0f, 0.93f, 0.80f);
+	const FLinearColor Shell(1.0f, 0.50f, 0.10f);
+	const FLinearColor Trail(1.0f, 0.62f, 0.18f);
+	const FLinearColor SparkWhite(1.0f, 0.95f, 0.85f);
+	const FLinearColor SparkGold(1.0f, 0.72f, 0.28f);
+	const FLinearColor Burst(1.0f, 0.42f, 0.10f);
+	const FLinearColor Smoke(0.05f, 0.045f, 0.04f);
+}
+
+void USOFxSubsystem::SlugRound(const FVector& From, const FVector& To, float Speed, float Size, float Bright, const FVector& Carry, float Delay)
+{
+	if (FVector::Dist(From, To) < 40.0f || Speed <= 0.0f)
+	{
+		return;
+	}
+	++Slugs;
+	// in the shooter's frame, as a plasma bolt is (PlasmaBolt): it leaves a moving gun with the gun's speed and lands on To
+	const float Flight = FVector::Dist(From, To) / Speed;
+	const FVector Path = To - From - Carry * Flight;
+	const float Distance = FMath::Max(static_cast<float>(Path.Size()), 1.0f);
+	const FVector Axis = Path / Distance;
+	const float Rel = Distance / Flight;
+	// a SHORT trail (a solid slug, not a lance of light): a hand's length at a rifle's speed
+	FSOFxParticle Tail;
+	Tail.Kind = ESOFxKind::Streak;
+	Tail.Position = From;
+	Tail.Axis = Axis;
+	Tail.Velocity = Axis * Rel + Carry;
+	Tail.Delay = Delay;
+	Tail.Life = Flight;
+	Tail.Length = FMath::Min(FMath::Clamp(Speed * 0.0022f, 45.0f, 220.0f) * Size, Distance);
+	Tail.Size0 = Tail.Size1 = 4.5f * Size;
+	Tail.Intensity0 = Tail.Intensity1 = 11.0f * Bright;
+	Tail.Color = SOSlug::Trail;
+	Spawn(Tail);
+	// the amber field round it, and the white-hot slug in it (at the trail's front)
+	FSOFxParticle Field;
+	Field.Kind = ESOFxKind::Glow;
+	Field.Position = From;
+	Field.Velocity = Tail.Velocity;
+	Field.Delay = Delay;
+	Field.Life = Flight;
+	Field.Size0 = Field.Size1 = 19.0f * Size * FMath::Sqrt(Bright);
+	Field.Intensity0 = Field.Intensity1 = 8.0f * Bright;
+	Field.Color = SOSlug::Shell;
+	Spawn(Field);
+	FSOFxParticle Slug = Field;
+	Slug.Size0 = Slug.Size1 = 6.0f * Size;
+	Slug.Intensity0 = Slug.Intensity1 = 34.0f * Bright;
+	Slug.Color = SOSlug::Core;
+	Spawn(Slug);
+	// a hot crystal sheds a few gold sparks behind it (more as the gun heats)
+	const int32 Sheds = FMath::Clamp(FMath::RoundToInt(Distance / 700.0f * Bright), 0, 5);
+	for (int32 i = 0; i < Sheds; ++i)
+	{
+		const float Along = Distance * (i + Random.FRandRange(0.2f, 0.8f)) / FMath::Max(Sheds, 1);
+		FSOFxParticle Mote;
+		Mote.Kind = ESOFxKind::Glow;
+		Mote.Delay = Delay + Along / Rel;
+		Mote.Position = From + Axis * Along + Carry * (Along / Rel);
+		Mote.Velocity = Random.VRand() * 40.0f + FVector(0.0f, 0.0f, -60.0f) + Carry;
+		Mote.Gravity = 300.0f;
+		Mote.Life = Random.FRandRange(0.08f, 0.16f);
+		Mote.Size0 = 2.2f * Size;
+		Mote.Size1 = 0.6f * Size;
+		Mote.Intensity0 = 14.0f;
+		Mote.Intensity1 = 0.0f;
+		Mote.Color = SOSlug::SparkGold;
+		Spawn(Mote);
+	}
+}
+
+void USOFxSubsystem::SlugImpact(const FVector& Point, const FVector& Normal, float Size, float Delay, bool bFlesh, float Splash)
+{
+	const FVector N = Normal.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	const float R = 24.0f * Size;
+	// the shell ruptures: a sharp thermal flash (short and hard: a crack, not a bloom)
+	FSOFxParticle Flash;
+	Flash.Kind = ESOFxKind::Glow;
+	Flash.Position = Point + N * R * 0.25f;
+	Flash.Delay = Delay;
+	Flash.Life = 0.08f;
+	Flash.Size0 = R * 1.1f;
+	Flash.Size1 = R * 1.6f;
+	Flash.Intensity0 = 18.0f;
+	Flash.Intensity1 = 0.0f;
+	Flash.Color = SOSlug::Burst;
+	Spawn(Flash);
+	FSOFxParticle Hot = Flash;
+	Hot.Life = 0.045f;
+	Hot.Size0 = R * 0.5f;
+	Hot.Size1 = R * 0.3f;
+	Hot.Intensity0 = 34.0f;
+	Hot.Color = SOSlug::Core;
+	Spawn(Hot);
+	FSOFxParticle Crack;                                    // the rupture's tongues, out of the surface
+	Crack.Kind = ESOFxKind::Star;
+	Crack.Position = Point + N * 2.0f;
+	Crack.Axis = N;
+	Crack.Delay = Delay;
+	Crack.Life = 0.06f;
+	Crack.Length = R * 1.3f;
+	Crack.Size0 = R * 0.9f;
+	Crack.Size1 = R * 1.2f;
+	Crack.Intensity0 = 16.0f;
+	Crack.Intensity1 = 0.0f;
+	Crack.Color = SOSlug::Burst;
+	Crack.Spin = Random.FRandRange(0.0f, 360.0f);
+	Spawn(Crack);
+	// white and gold sparks thrown out off the surface, falling
+	const FVector Side = FVector::CrossProduct(N, FMath::Abs(N.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	const int32 Sparks = bFlesh ? 5 : 12;
+	for (int32 i = 0; i < Sparks; ++i)
+	{
+		const FVector Out = FQuat(N, (i + Random.FRand()) / Sparks * 2.0f * UE_PI).RotateVector(Side);
+		FSOFxParticle Mote;
+		Mote.Kind = ESOFxKind::Streak;
+		Mote.Position = Point + N * 2.0f;
+		Mote.Velocity = (Out + N * Random.FRandRange(0.3f, 1.1f)) * Random.FRandRange(R * 14.0f, R * 28.0f);
+		Mote.Gravity = 900.0f;
+		Mote.Drag = 3.0f;
+		Mote.Delay = Delay;
+		Mote.Life = Random.FRandRange(0.12f, 0.30f);
+		Mote.Size0 = 1.5f * Size;
+		Mote.Size1 = 0.5f * Size;
+		Mote.Intensity0 = 26.0f;
+		Mote.Intensity1 = 0.0f;
+		Mote.Color = (i % 2 == 0) ? SOSlug::SparkWhite : SOSlug::SparkGold;
+		Spawn(Mote);
+	}
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (Now - LastPlasmaLightTime > 0.04 || FVector::DistSquared(Point, LastPlasmaLightAt) > FMath::Square(260.0f))
+	{
+		LastPlasmaLightTime = Now;
+		LastPlasmaLightAt = Point;
+		PendingLights.Add({ Point + N * 30.0f, SOSlug::Burst, FMath::Clamp(260.0f * Size * Size, 110.0f, 1600.0f), 0.08f, Delay });
+	}
+	if (Splash > 0.0f)
+	{
+		// a Breach Charge: the whole charge goes (the burst's own fire and smoke)
+		Blast(Point, N, Splash, EBlast::Fire, SOSlug::Burst, Delay);
+	}
+	if (bFlesh)
+	{
+		return; // (into a body the rest is the body's: it bleeds)
+	}
+	// dark smoke off what it burned, and the place glowing where the crystal went in
+	for (int32 i = 0; i < 3; ++i)
+	{
+		FSOFxParticle Puff;
+		Puff.Kind = ESOFxKind::Smoke;
+		Puff.Position = Point + N * R * 0.3f + Random.VRand() * R * 0.2f;
+		Puff.Velocity = N * R * 1.2f + Random.VRand() * R * 0.5f + FVector(0.0f, 0.0f, 28.0f);
+		Puff.Drag = 2.2f;
+		Puff.Delay = Delay + Random.FRandRange(0.01f, 0.05f);
+		Puff.Life = Random.FRandRange(0.8f, 1.3f);
+		Puff.Size0 = R * 0.35f;
+		Puff.Size1 = R * Random.FRandRange(1.3f, 1.8f);
+		Puff.Intensity0 = 0.6f;
+		Puff.Color = SOSlug::Smoke;
+		Puff.Spin = Random.FRandRange(0.0f, 360.0f);
+		Spawn(Puff);
+	}
+	FSOFxParticle Ember;
+	Ember.Kind = ESOFxKind::Glow;
+	Ember.Position = Point + N * 2.0f;
+	Ember.Delay = Delay;
+	Ember.Life = 0.5f;
+	Ember.Size0 = 12.0f * Size;
+	Ember.Size1 = 4.0f * Size;
+	Ember.Intensity0 = 10.0f;
+	Ember.Intensity1 = 0.0f;
+	Ember.Color = SOSlug::Shell;
+	Spawn(Ember);
+}
+
+void USOFxSubsystem::SlugFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, float Bright, bool bThroughScope)
+{
+	if (bThroughScope)
+	{
+		return;
+	}
+	const FVector D = Dir.GetSafeNormal();
+	// the rails' discharge: a hard white-gold flash, no flame and no smoke (nothing burns: the slug is thrown)
+	FSOFxParticle Flash;
+	Flash.Kind = ESOFxKind::Glow;
+	Flash.Position = Muzzle + D * 3.0f * Scale;
+	Flash.Life = 0.05f;
+	Flash.Size0 = 16.0f * Scale;
+	Flash.Size1 = 7.0f * Scale;
+	Flash.Intensity0 = 14.0f * Bright;
+	Flash.Intensity1 = 0.0f;
+	Flash.Color = SOSlug::Shell;
+	Spawn(Flash);
+	FSOFxParticle Core = Flash;
+	Core.Life = 0.035f;
+	Core.Size0 = 7.0f * Scale;
+	Core.Size1 = 3.0f * Scale;
+	Core.Intensity0 = 30.0f * Bright;
+	Core.Color = SOSlug::Core;
+	Spawn(Core);
+	// the amber field tearing off the slug as it leaves: a few gold sparks forward and out
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FSOFxParticle Mote;
+		Mote.Kind = ESOFxKind::Streak;
+		Mote.Position = Muzzle + D * 4.0f * Scale;
+		Mote.Velocity = (D + Random.VRand() * 0.6f) * Random.FRandRange(300.0f, 650.0f) * Scale;
+		Mote.Drag = 6.0f;
+		Mote.Life = Random.FRandRange(0.05f, 0.10f);
+		Mote.Size0 = 1.2f * Scale;
+		Mote.Size1 = 0.4f * Scale;
+		Mote.Intensity0 = 20.0f * Bright;
+		Mote.Intensity1 = 0.0f;
+		Mote.Color = SOSlug::SparkGold;
+		Spawn(Mote);
+	}
+	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 220.0f * Scale * (bViewmodel ? 0.25f : 1.0f),
+		SOSlug::Shell, 0.05f);
+}
+
 void USOFxSubsystem::PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope)
 {
 	if (bThroughScope)

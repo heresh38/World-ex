@@ -62,3 +62,28 @@ honest.
 - Thermal accumulation: each gun's crystal heats with every shot and cools when it rests. Low: normal. Medium: the
   rounds burn brighter. High: they fly faster. Maximum: the gun vents by itself (it cannot fire until it has vented).
 - Their guns' cells and the light in them are pale amber; amber is how a player knows Sarketh fire at a glance.
+
+## In the game (2026-11-15)
+
+- **The round**: `ESOProjectileKind::Slug` (game_data.json `"round": "slug"`). A real projectile on the projectile
+  subsystem (it flies, a little drop: `grav`), drawn by `USOFxSubsystem::SlugRound` (white-hot core, amber field, a
+  short golden-orange trail, gold sparks shed as it heats), `SlugImpact` (the shell's rupture: a hard orange flash and
+  crack, white and gold sparks, dark smoke, a glowing mark; into a body the flash and sparks only; with `splash` the whole
+  burst, for a Breach Charge) and `SlugFlash` (the rails' hard white-gold flash, no flame or smoke). Sounds
+  `<gun>_shot_fp|world` and `slug_impact` (`tools/audio/sfx_synth.py`, `SARKETH`, `skr_core`).
+- **Penetration**: `"pierce"` (bodies passed after the first) and `"pierceKeep"` (the share of damage kept through each)
+  -> `FSOProjectile::Pierce / PierceKeep`: the server's round goes on through a body (never a wall, never a plate that
+  turns the blow) and is drawn going on out the far side.
+- **Thermal accumulation**: `"heat": {perShot, cool, delay, vent, speed}` -> `USOWeaponData::HeatPerShot / HeatCool /
+  HeatCoolDelay / VentTime / HeatSpeed`; `ASOWeapon::GetHeat / IsVenting / HeatSpeedScale / HeatBright` (medium 0.4:
+  brighter rounds, high 0.7: faster up to `speed`, full: a forced vent with the light guns' vent effect and sound, no
+  fire until it ends). The HUD draws the heat under the ammo count, amber turning white-hot, and says VENTING.
+- **Their light keeps its colour**: a gun's `gun_glow__cell` and `gun_glow__amber` slots are not tinted by rarity
+  (`USOGunRigComponent::Dress`).
+- **Guns**: the assault rifle only, `skr_rifle` (Veyr Rifle: Veyr Slugs, pierce 1, a vent after about 23 shots held),
+  loot weight 0 until the owner approves it; reload style `cell`. The Penetrator, Breach Charge, Shard Burst and
+  Condensed Slug wait for their guns (the sniper, the heavy cannon, a shotgun, a hand cannon): each is the same round
+  with its own numbers (`pierce`, `splash`, `pellets`, `roundSize`, `vel`, `kick`).
+- **Test**: `ShatteredOrbit.Weapon.SarkethSlugs` (a slug passes the body in front into the one behind with less, a round
+  without pierce stops; the rifle fires slugs, never plasma; it heats, cools at rest, vents at full heat and holds its
+  fire meanwhile, then fires again).

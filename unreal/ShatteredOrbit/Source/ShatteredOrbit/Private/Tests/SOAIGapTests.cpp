@@ -1003,3 +1003,120 @@ bool FSOPlasmaTest::RunTest(const FString& Parameters)
 	TestTrue(FString::Printf(TEXT("with no lead it aims at where the target is (%.0f cm ahead)"), NoLead), FMath::Abs(NoLead) < 6.0f);
 	return true;
 }
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSarkethSlugTest, "ShatteredOrbit.Weapon.SarkethSlugs", SOTest::Flags)
+bool FSOSarkethSlugTest::RunTest(const FString& Parameters)
+{
+	// The Sarketh's guns (docs/orion/SARKETH_WEAPONS.md): a crystalline slug seen to fly, whose crystal goes on through
+	// the body it ruptures on; and thermal accumulation: the crystal heats with every shot, its rounds burn brighter and
+	// then fly faster, and at full heat it vents by itself and cannot fire until it has.
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-9000, -9000, -100), FVector(9000, 9000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	FSOSpawnOptions Options;
+	Options.bOnNav = false;
+	ASOEnemy* Front = USOSpeciesLibrary::Spawn(W.World, TEXT("stalker_feral"), FVector(1500, 0, 0), 180.0f, Options);
+	ASOEnemy* Behind = USOSpeciesLibrary::Spawn(W.World, TEXT("stalker_feral"), FVector(1800, 0, 0), 180.0f, Options);
+	if (!TestNotNull(TEXT("a body in front"), Front) || !TestNotNull(TEXT("a body behind it"), Behind))
+	{
+		return false;
+	}
+	for (ASOEnemy* Mark : { Front, Behind })
+	{
+		if (AController* Brain = Mark->GetController())
+		{
+			Brain->UnPossess();
+			Brain->Destroy();
+		}
+		Mark->SetAlert(true);
+	}
+	W.Run(0.3f);
+	auto Life = [](const ASOCombatCharacter* C) { return C->GetHealth() + C->GetShield(); };
+
+	// a slug passes through the first body into the second; a round that does not pierce stops in the first
+	USOProjectileSubsystem* Rounds = W.World->GetSubsystem<USOProjectileSubsystem>();
+	if (!TestNotNull(TEXT("rounds"), Rounds))
+	{
+		return false;
+	}
+	const float Z = Front->GetActorLocation().Z;
+	auto Throw = [&](int32 Pierce)
+	{
+		FSOProjectile Slug;
+		Slug.Origin = Slug.Position = FVector(900.0f, 0.0f, Z);
+		Slug.Velocity = FVector(30000.0f, 0.0f, 0.0f);
+		Slug.Damage = 10.0f;
+		Slug.CritMultiplier = 1.0f;
+		Slug.FalloffStart = 1.0e6f;
+		Slug.MinDamageScale = 1.0f;
+		Slug.Life = 3.0f;
+		Slug.Instigator = Player;
+		Slug.Pierce = Pierce;
+		Slug.PierceKeep = 0.5f;
+		Rounds->Fire(Slug);
+		W.Run(0.3f);
+	};
+	float F0 = Life(Front), B0 = Life(Behind);
+	Throw(0);
+	TestTrue(TEXT("a round that does not pierce hurts the body in front"), Life(Front) < F0);
+	TestEqual(TEXT("and stops in it"), Life(Behind), B0);
+	F0 = Life(Front);
+	B0 = Life(Behind);
+	Throw(1);
+	const float FrontLost = F0 - Life(Front), BehindLost = B0 - Life(Behind);
+	TestTrue(TEXT("a slug hurts the body in front"), FrontLost > 0.0f);
+	TestTrue(FString::Printf(TEXT("and goes on into the body behind it (%.1f, then %.1f)"), FrontLost, BehindLost), BehindLost > 0.0f);
+	TestTrue(TEXT("with what it has left"), BehindLost < FrontLost);
+
+	// the rifle: it fires slugs, seen to fly
+	USOFxSubsystem* Fx = W.World->GetSubsystem<USOFxSubsystem>();
+	FRandomStream Rng(11);
+	Player->EquipInstance(USOLootLibrary::MakeWeapon(TEXT("skr_rifle"), 2, 20, Rng));
+	W.Run(0.3f);
+	ASOWeapon* Gun = Player->GetWeapon();
+	if (!TestNotNull(TEXT("the Sarketh rifle (skr_rifle imported)"), Gun) || !TestNotNull(TEXT("its data"), Gun->GetData()) || !TestNotNull(TEXT("effects"), Fx))
+	{
+		return false;
+	}
+	const USOWeaponData* Data = Gun->GetData();
+	TestEqual(TEXT("it fires slugs"), Data->Projectile, ESOProjectileKind::Slug);
+	TestTrue(TEXT("its slug pierces"), Data->Pierce > 0);
+	TestTrue(TEXT("its crystal heats"), Gun->HasHeat());
+	TestTrue(FString::Printf(TEXT("a slug flies at %.0f m/s: seen, as a light gun's bolt is, far slower than a bullet"), Data->MuzzleVelocity),
+		Data->MuzzleVelocity > 150.0f && Data->MuzzleVelocity < 500.0f);
+	const int32 Before = Fx->GetSlugs();
+	const int32 Bolts = Fx->GetPlasmaBolts();
+	Gun->StartFire();
+	W.Run(0.02f);
+	Gun->StopFire();
+	TestTrue(TEXT("the shot is drawn as a slug"), Fx->GetSlugs() > Before);
+	TestEqual(TEXT("never as a plasma bolt"), Fx->GetPlasmaBolts(), Bolts);
+	TestTrue(TEXT("one shot warms the crystal"), Gun->GetHeat() > 0.0f);
+	W.Run(2.5f);
+	TestTrue(FString::Printf(TEXT("and it cools at rest (%.2f)"), Gun->GetHeat()), Gun->GetHeat() < 0.01f);
+
+	// held down: brighter, then faster, then it vents by itself and holds its fire
+	TestTrue(TEXT("medium heat burns brighter"), ASOWeapon::HeatBright(0.9f) > ASOWeapon::HeatBright(0.2f));
+	TestTrue(TEXT("high heat throws faster"), Gun->HeatSpeedScale(0.95f) > 1.05f && Gun->HeatSpeedScale(0.3f) == 1.0f);
+	Gun->StartFire();
+	float Most = 0.0f;
+	bool bVented = false;
+	for (int32 i = 0; i < 120 && !bVented; ++i)
+	{
+		W.Run(0.05f);
+		Most = FMath::Max(Most, Gun->GetHeat());
+		bVented = Gun->IsVenting();
+	}
+	TestTrue(FString::Printf(TEXT("held down, the crystal reaches full heat (%.2f) and vents"), Most), bVented);
+	TestTrue(TEXT("before the cell runs dry"), Gun->GetMag() > 0);
+	const int32 Held = Gun->GetMag();
+	W.Run(0.5f);
+	TestEqual(TEXT("venting, it does not fire though the trigger is held"), Gun->GetMag(), Held);
+	W.Run(Data->VentTime);
+	TestFalse(TEXT("then the vent is over"), Gun->IsVenting());
+	W.Run(0.3f);
+	TestTrue(TEXT("and it fires again"), Gun->GetMag() < Held);
+	Gun->StopFire();
+	return true;
+}

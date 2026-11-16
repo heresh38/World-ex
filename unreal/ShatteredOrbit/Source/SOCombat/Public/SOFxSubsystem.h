@@ -89,6 +89,19 @@ public:
 	/** The muzzle of a light gun as it fires: a bloom of its light and a few motes thrown forward. No flame, no smoke. */
 	void PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope = false);
 	int32 GetPlasmaBolts() const { return PlasmaBolts; }
+
+	// --- The Sarketh's slugs (docs/orion/SARKETH_WEAPONS.md): a crystalline slug in an amber field ----------------
+	/** A slug from From to To at Speed (cm/s): a white-hot core in an amber shell at the front of a SHORT golden-orange
+	 *  trail, drawn in the shooter's frame (Carry) as a plasma bolt is. Size: 1 = the rifle's slug; Bright: 1, more as
+	 *  the gun's crystal heats. Delay: seconds before it appears (a slug going on out of a body). */
+	void SlugRound(const FVector& From, const FVector& To, float Speed, float Size = 1.0f, float Bright = 1.0f, const FVector& Carry = FVector::ZeroVector,
+		float Delay = 0.0f);
+	/** Its shell rupturing where it lands: a sharp orange flash, white and gold sparks, dark smoke and a glowing mark
+	 *  (into a body: the flash and sparks only). Splash > 0 (a Breach Charge): the whole burst, that radius (cm). */
+	void SlugImpact(const FVector& Point, const FVector& Normal, float Size = 1.0f, float Delay = 0.0f, bool bFlesh = false, float Splash = 0.0f);
+	/** The muzzle: a hard white-gold flash and the amber field tearing off the slug; no flame, no smoke. */
+	void SlugFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, float Bright = 1.0f, bool bThroughScope = false);
+	int32 GetSlugs() const { return Slugs; }
 	/** (where and when plasma last lit what it struck: a pattern of pellets lights the place once) */
 	FVector LastPlasmaLightAt = FVector::ZeroVector;
 	double LastPlasmaLightTime = -1.0;
@@ -148,6 +161,7 @@ public:
 
 	int32 GetNumParticles() const { return Particles.Num(); }
 	int32 PlasmaBolts = 0;
+	int32 Slugs = 0;
 	int32 GetNumDecals() const;
 	int32 GetNumImpactsPlayed() const { return ImpactsPlayed; }
 

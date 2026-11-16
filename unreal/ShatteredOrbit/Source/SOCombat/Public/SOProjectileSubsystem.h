@@ -79,6 +79,13 @@ struct SOCOMBAT_API FSOProjectile
 
 	UPROPERTY(BlueprintReadWrite, Category = "Projectile")
 	float StatusMagnitude = 0.0f;
+
+	/** A Sarketh slug: the bodies it goes on through after the first (its shell ruptures on the first, the crystal
+	 *  penetrates), the share of its damage it keeps through each, and the bodies it has passed (never met again). A
+	 *  wall, or a plate that turns the blow, stops it. */
+	int32 Pierce = 0;
+	float PierceKeep = 0.6f;
+	TArray<TWeakObjectPtr<AActor>, TInlineAllocator<4>> Passed;
 };
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FSOOnProjectileHit, const FSOProjectile& /*Round*/, const FHitResult& /*Hit*/, float /*DamageApplied*/);

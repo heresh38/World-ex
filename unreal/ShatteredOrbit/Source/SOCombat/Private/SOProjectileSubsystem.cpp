@@ -92,6 +92,10 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 		Shooter->GetAttachedActors(Attached);
 		Params.AddIgnoredActors(Attached);
 	}
+	for (const TWeakObjectPtr<AActor>& Through : Round.Passed)
+	{
+		Params.AddIgnoredActor(Through.Get());
+	}
 
 	FHitResult Hit;
 	const bool bMet = World->LineTraceSingleByChannel(Hit, Start, End, SO_TRACE_BULLET, Params);
@@ -136,6 +140,16 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 		if (OutHit)
 		{
 			*OutHit = Hit;
+		}
+		// a slug's crystal goes on into the body and out the far side (the next body in line takes what it has left);
+		// a wall stops it, and so does a plate that turns the blow
+		if (Round.Pierce > 0 && Struck && !Struck->TurnsBlow(Round.Origin))
+		{
+			--Round.Pierce;
+			Round.Damage *= Round.PierceKeep;
+			Round.Passed.Add(Hit.GetActor());
+			Round.Position = FVector(Hit.ImpactPoint) + Round.Velocity.GetSafeNormal() * 2.0f;
+			return Round.Life > 0.0f;
 		}
 		return false;
 	}

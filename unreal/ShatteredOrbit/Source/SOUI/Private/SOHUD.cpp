@@ -859,6 +859,20 @@ void ASOHUD::DrawHUD()
 		{
 			DrawText(FString::Printf(TEXT("RAMPAGE x%d"), Weapon->GetRampageStacks()), FLinearColor(1.0f, 0.5f, 0.2f), W - 230.0f * S, H - 60.0f * S, Font, 1.0f * S);
 		}
+		if (Weapon->HasHeat())
+		{
+			// the crystal's heat under the count: amber, turning white-hot past the point where its rounds fly faster;
+			// at full it vents and the gauge says so
+			const float Heat = Weapon->GetHeat();
+			const FLinearColor Cool(1.0f, 0.5f, 0.1f), Hot(1.0f, 0.93f, 0.8f);
+			const FLinearColor C = FMath::Lerp(Cool, Hot, FMath::Clamp((Heat - ASOWeapon::HeatMedium) / (1.0f - ASOWeapon::HeatMedium), 0.0f, 1.0f));
+			DrawRect(FLinearColor(1, 1, 1, 0.08f), W - 230.0f * S, H - 100.0f * S, 150.0f * S, 4.0f * S);
+			DrawBar(W - 230.0f * S, H - 100.0f * S, 150.0f * S, 4.0f * S, Heat, C);
+			if (Weapon->IsVenting())
+			{
+				DrawText(TEXT("VENTING"), Hot, W - 74.0f * S, H - 108.0f * S, Font, 0.8f * S);
+			}
+		}
 		// the three slots: number, name in the rarity colour, the one in hand bright
 		const USOLootTables* Tables = USOLootLibrary::GetTables();
 		for (int32 Slot = 0; Slot < USOInventoryComponent::NumSlots; ++Slot)
