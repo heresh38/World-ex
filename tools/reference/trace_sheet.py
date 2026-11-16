@@ -171,7 +171,16 @@ def main(out):
                             for p in polys(cls == 2, min_area=20)],
                       amber=polys(nd.binary_dilation(cls == 3), .6, 3), white=polys(nd.binary_dilation(cls == 4), .6, 3),
                       # the plates as they lie on a solid block's flat face: kept 3 px in from its rounded edge
-                      pale_face=[dict(p, depth=0.0) for p in polys((cls == 2) & (inside > 3.0), 1.1, 20)])
+                      pale_face=[dict(p, depth=0.0) for p in polys((cls == 2) & (inside > 3.0), 1.1, 20)],
+                      # the pale parts as CUT plates: each region's outline pulled tight to a few straight edges (a plate is
+                      # cut, not painted), and how much of it lies over the body (over it: a plate on the face; off it:
+                      # a blade standing free, the crest fins)
+                      plates=[dict(ext=list(map(list, Polygon(p['ext']).simplify(3.2).exterior.coords[:-1])), area=p['area'],
+                                   over=float(m[np.clip(np.asarray(p['ext'])[:, 1].astype(int), 0, m.shape[0] - 1),
+                                                np.clip(np.asarray(p['ext'])[:, 0].astype(int), 0, m.shape[1] - 1)].mean()),
+                                   inner=float(np.mean([inside[int(min(max(y_, 0), m.shape[0] - 1)), int(min(max(x_, 0), m.shape[1] - 1))]
+                                                        for x_, y_ in p['ext']])))
+                              for p in polys(cls == 2, 1.1, 60)])
         json.dump(shapes, open(os.path.join(out, nm + '.json'), 'w'))
         vis = np.zeros(m.shape + (3,), np.uint8)
         pal = {0: (30, 30, 34), 1: (60, 60, 90), 2: (200, 196, 186), 3: (255, 170, 60), 4: (210, 230, 255)}

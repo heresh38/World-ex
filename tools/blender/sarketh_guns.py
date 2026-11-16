@@ -782,7 +782,93 @@ def block(name):
     finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
 
 
-GUNS = {k: (lambda k=k: block(k)) for k in TRACED}
+# ------------------------------------------------------------------ parts: real geometry on the sheet's layout
+# (the owner, 2026-11-15: "the layout is good but the material looks horrible ... now apply real geometry, real mesh to
+# it"). The layout stays: the block cut to the outline with its windows is the receiver, the stock and the grip. On it,
+# modelled parts where the sheet has them: the barrel as a real bundle (stacked slats, a core tube, amber light in the
+# gaps between them) set where the sheet's barrel is and as tall; every pale region a CUT plate (its outline pulled to a
+# few straight edges, chamfered, standing off the face), not a painted patch; the lights set in.
+def parts(name):
+    import json
+    from voidkit import plate as vplate
+    bl.reset(); M = mats(); P = []
+    S = json.load(open(os.path.join(TRACE, name + '.json')))
+    Tz = np.load(os.path.join(TRACE, name + '.npz'))
+    mask = Tz['mask']
+    spec = TRACED[name]
+    W, H = S['size']
+    px = S['px']
+    gu, gv = spec['grip'][0] * W, spec['grip'][1] * H
+    half = spec['width'] * .5
+    yz = lambda c, r: ((c - gu) * px, (gv - r) * px)
+    cols = np.nonzero(mask.any(0))[0]
+    c_front, c_back = int(cols.min()), int(cols.max())
+    c_split = int(c_front + (c_back - c_front) * spec.get('barrel', .42))
+    y_front, y_back = yz(c_front, 0)[0], yz(c_back, 0)[0]
+    y_split = yz(c_split, 0)[0]
+    rule = dict(spec, receiver=(spec.get('barrel', .42) + .04, .76))
+
+    def width_at(y, z):
+        t = np.clip((y - y_front) / max(y_back - y_front, 1e-6), 0, 1)
+        return np.where(t < rule['receiver'][0], .48, np.where(t <= rule['receiver'][1], 1.0, 1.0 - .22 * (t - rule['receiver'][1]) / .24)) * \
+            np.where(z < -.02, .85, 1.0)
+    # 1. the block (the receiver, the stock, the grip; through the barrel only a slim spine the bundle wraps)
+    body = []
+    for i, p in enumerate(S['outline']):
+        body.append(_curve_solid(f'block{i}', [p['ext']] + p['holes'], half, min(.0065, half * .35), M['shell'], 0.0, px, gu, gv, res=3))
+    for key, mat in (('amber', M['amber']), ('white', M['white'])):
+        for i, p in enumerate(S[key]):
+            if np.mean([c for c, r in p['ext']]) < c_split:
+                continue                                   # (the barrel's lights are the bundle's own)
+            for sd in (1, -1):
+                body.append(_curve_solid(f'{key}{i}{"" if sd > 0 else "_R"}', [p['ext']], .0007, .0002, mat, sd * (half + .0006), px, gu, gv))
+    for o in body:
+        V = fk.verts(o)
+        V[:, 0] = V[:, 0] * width_at(V[:, 1], V[:, 2])
+        fk.set_verts(o, V)
+    P += body
+    # 2. the barrel: a bundle as tall as the sheet's barrel, from the receiver to the muzzle
+    top, bot = [], []
+    for c in range(c_front, c_split):
+        r = np.nonzero(mask[:, c])[0]
+        if len(r):
+            top.append(r.min()); bot.append(r.max())
+    z_mid = (gv - (np.median(top) + np.median(bot)) * .5) * px
+    h_bar = (np.median(bot) - np.median(top)) * px * .92
+    bundle(P, M, y_split + .02, y_front + .01, z_mid, h_bar, spec['width'] * .62, nose=min(.09, (y_split - y_front) * .2), n_dash=6)
+    # 3. the cut plates, standing off the face where they lie (over the barrel: off the bundle's flank)
+    for i, p in enumerate(S['plates']):
+        pts = [yz(c, r) for c, r in p['ext']]
+        if len(pts) < 3:
+            continue
+        yc = float(np.mean([q[0] for q in pts])); zc = float(np.mean([q[1] for q in pts]))
+        face = spec['width'] * .31 if yc < y_split else half * float(width_at(np.array(yc), np.array(zc)))
+        P.append(vplate(f'plate{i}', pts, M['bone'], face - .0015, face + .0032, .0016))
+    rows = [r for p in S['outline'] for c, r in p['ext'] if c < c_front + 4]
+    mz = (gv - sum(rows) / len(rows)) * px
+    muzzle = (0, y_front, mz)
+    fore = (0, (y_front + y_split) * .5, z_mid - h_bar * .5)
+    sight = (0, -.05, (gv - spec['sight_z'] * H) * px)
+    if name not in ('skr_blade', 'skr_grenade'):
+        trigger(P, M)
+    import bmesh as _bm
+    tris = sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in P if o is not None and o.type == 'MESH')
+    print('[skr] parts triangles', tris, flush=True)
+    if tris > 56000:
+        r = 56000 / tris
+        for o in P:
+            if o is None or o.type != 'MESH':
+                continue
+            bpy.context.view_layer.objects.active = o
+            md = o.modifiers.new('fit', 'DECIMATE'); md.ratio = r
+            bpy.ops.object.modifier_apply(modifier=md.name)
+            bm = _bm.new(); bm.from_mesh(o.data); _bm.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(o.data); bm.free()
+    import bakekit
+    bakekit.clean([o for o in P if o is not None], least=2e-11)
+    finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
+
+
+GUNS = {k: (lambda k=k: parts(k)) for k in TRACED}
 
 
 if __name__ == '__main__':
