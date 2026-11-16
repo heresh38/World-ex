@@ -1072,7 +1072,47 @@ def skr_sight(M, y, z):
 #                    louvres at its root; the muzzle recessed inside the shroud's mouth with prongs over and under it
 #   sensors          a rangefinder pod on the left of the shroud, an illuminator on the right
 #   stock            an open stock (comb, cheek rest, lower limb, butt, ribbed pad), an access panel on its flank
-def assembled_rifle(name='skr_rifle'):
+def skr_scope(M, y, z, L=.235):
+    """The Sarketh's magnified scope (the sniper's, built in: these guns carry only their own sight): a main tube of
+    lozenge section (their emblem's) in dark lacquer under a pale swept brow, titanium rings at its ends, the
+    objective in a titanium bell with an amber rim, clear glass at both ends, a rubber eyecup, lozenge turrets with
+    amber caps, two rings clamped on their toothed mount. The parts are the optic; `scope` names the magnified view."""
+    SH, PL, UN, TR, AM = M['shell'], M['bone'], M['under'], M['trim'], M['amber']
+    TI = fk.tmat('gun_metal__ti', 'skr_titanium')
+    P = []
+    y0, y1 = y + L * .42, y - L * .58                                   # the eyepiece's end, the objective's end
+    r, ob = .0165, .0245
+    P.append(lathe('scope', [(y0 - .030, r * .80), (y0 - .030, r * 1.42), (y1 + .050, r * 1.42), (y1 + .050, r * .80)], SH, z, n=4, closed=True))
+    P += talon('scope_brow', [(y1 + .055, z + r * 1.30), (y + .02, z + r * 1.52), (y0 - .034, z + r * 1.36)], [.006, .012, .004], PL, x=0, t=.010,
+               two=True, sym=False)
+    P.append(lathe('scope_bell', [(y1 + .052, r * 1.05), (y1 + .052, r * 1.30), (y1 + .020, ob), (y1 + .002, ob), (y1, ob * .94), (y1, ob * .82),
+                                  (y1 + .014, ob * .80), (y1 + .050, r * 1.05)], TI, z, n=32, closed=True))
+    P.append(lathe('scope_rim', [(y1 - .0004, ob * .82), (y1 - .0004, ob * .95), (y1 - .0018, ob * .95), (y1 - .0018, ob * .82)], AM, z, n=32, closed=True))
+    P.append(lathe('scope_lens_f', [(y1 + .012, 0), (y1 + .012, ob * .80), (y1 + .014, ob * .80), (y1 + .014, 0)], M['lens'], z, n=32))
+    P.append(lathe('scope_eye', [(y0 - .032, r * .95), (y0 - .032, r * 1.25), (y0 - .004, r * 1.32), (y0 - .004, r * .95)], TI, z, n=32, closed=True))
+    P.append(lathe('scope_cup', [(y0 - .005, r * .98), (y0 - .005, r * 1.36), (y0 + .010, r * 1.44), (y0 + .012, r * 1.36), (y0 + .012, r * 1.05)],
+                   M['grip'], z, n=32, closed=True))
+    P.append(lathe('scope_lens_r', [(y0 - .010, 0), (y0 - .010, r * 1.0), (y0 - .012, r * 1.0), (y0 - .012, 0)], M['lens'], z, n=24))
+    ty = y - L * .06
+    P.append(G_lathe_z('scope_turret', [(-.002, .0072), (.0095, .0072), (.0110, .0060), (.0110, .0001)], (0, ty, z + r * 1.30), UN, 4))
+    P.append(G_lathe_z('scope_turret_cap', [(.0108, .0050), (.0128, .0042), (.0128, .0001)], (0, ty, z + r * 1.30), AM, 4))
+    for sg in (1, -1):
+        P.append(lathe_x('scope_knob', [(0, .0068), (.0085, .0068), (.0098, .0052), (.0098, 0)], (sg * r * 1.40, ty, z), UN, 4, sg))
+        P.append(lathe_x('scope_knob_cap', [(.0096, .0040), (.0110, .0040), (.0112, .0030), (.0112, 0)], (sg * r * 1.40, ty, z), AM, 4, sg))
+    zr = z - .034                                                        # the mount's top
+    for yy in (y + L * .20, y - L * .30):
+        P.append(lathe('scope_ring', [(yy + .007, r * 1.40), (yy + .007, r * 1.62), (yy - .007, r * 1.62), (yy - .007, r * 1.40)], SH, z, n=4, closed=True))
+        P.append(prism('scope_ringbase', [(yy + .009, zr), (yy + .009, z - r * 1.5), (yy - .009, z - r * 1.5), (yy - .009, zr)], .022, UN, .0020))
+        P.append(lathe_x('scope_clamp', [(0, .0034), (.0026, .0034), (.0034, .0026), (.0034, 0)], (.011, yy, zr + .006), TR, 6, 1))
+    return P
+
+
+def G_lathe_z(name, prof, c, m, n):
+    import gunparts as G
+    return G.lathe_z(name, prof, c, m, n)
+
+
+def assembled_rifle(name='skr_rifle', sniper=False):
     import gunparts as G
     from weapons import e_hand, e_small
     bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []   # (their guns' own sets: skr/textures.py)
@@ -1249,6 +1289,28 @@ def assembled_rifle(name='skr_rifle'):
                 c[o.name.split('.')[0].rstrip('0123456789_')] += sum(len(f.vertices) - 2 for f in o.data.polygons)
         for k_, v_ in c.most_common(30):
             print('[skr] tris', k_, v_, flush=True)
+    if sniper:
+        # the sniper (the Veyr Lance, the brief's Penetrator rounds): everything ahead of the receiver drawn out forward
+        # to a long barrel (the shroud and its dashes, the muzzle, the prongs, the keel, the sensors); a small part is
+        # moved with it, never stretched (a stud stays round); and the magnified scope in place of the red dot
+        stretch, y_at = 1.93, -.400
+        for o in P:
+            if o is None or o.type != 'MESH':
+                continue
+            V = fk.verts(o)
+            if len(V) == 0 or V[:, 1].min() > y_at:
+                continue
+            if np.ptp(V[:, 1]) < .02:
+                c = float(V[:, 1].mean())
+                if c < y_at:
+                    V[:, 1] += (y_at + (c - y_at) * stretch) - c
+            else:
+                V[:, 1] = np.where(V[:, 1] < y_at, y_at + (V[:, 1] - y_at) * stretch, V[:, 1])
+            fk.set_verts(o, V)
+        muzzle_y = y_at + (-.700 - y_at) * stretch
+        finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .14, sz), optic=skr_scope(M, -.04, sz), scoped=True,
+               moving=[('mag', MAG, (0, -.103, .01))])
+        return
     finish('gun_' + name, P, (0, -.700, zb), (0, -.33, .02), (0, .1, sz), optic=skr_sight(M, -.02, sz), rail=(0, -.02, .113),
            moving=[('mag', MAG, (0, -.103, .01))])
 
@@ -1552,6 +1614,7 @@ def layered(model='gun_skr_striker', trace='skr_rifle'):
 
 GUNS = {k: (lambda k=k: parts(k)) for k in TRACED}
 GUNS['skr_rifle'] = assembled_rifle
+GUNS['skr_sniper'] = lambda: assembled_rifle('skr_sniper', sniper=True)
 GUNS['skr_striker'] = layered
 
 
