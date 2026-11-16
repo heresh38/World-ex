@@ -1137,7 +1137,9 @@ def assembled_rifle(name='skr_rifle'):
             tier = [tuple(q) for q in lo] + [tuple(q) for q in hi[::-1]]
             t0, t1 = (-.0045, .0045) if centre else (x1 - .0006, x1 + .0020)
             P.append(plate(nm_ + '_tier', tier, PL, t0, t1, .0009, sym=not centre))
-    for nm_, spine, wid, x, up in (('crest', [(-.040, .100), (.02, .108), (.08, .120), (.122, .138), (.150, .150)], [.010, .022, .026, .016, 0], .0215, True),
+    # (the crest stays 2 cm under the eye line behind the sight: aimed in, blades at the eye's height either side of it
+    # were two walls filling the view, the owner's "first person is broken")
+    for nm_, spine, wid, x, up in (('crest', [(-.050, .098), (.010, .104), (.060, .110), (.100, .112), (.130, .108)], [.008, .014, .014, .008, 0], .026, True),
                                    ('crest_fore', [(-.250, .088), (-.17, .098), (-.075, .104)], [.004, .010, 0], .024, True),
                                    # the sheet's great pale blades, swept back across the receiver's flanks from the shroud's root
                                    ('sweep', [(-.262, .068), (-.200, .082), (-.120, .095), (-.040, .103), (.030, .110), (.078, .122)],
@@ -1156,8 +1158,11 @@ def assembled_rifle(name='skr_rifle'):
     G.coil(P, 'emitter', -.250, -.405, zb, .0185, M, rings=6, ring_m=TI, lip_m=TR)
     G.cage(P, 'cage', -.244, -.410, zb, .0325, TI, t=.0045, bars=6, fill=.52, frames=((-.244, .014), (-.330, .007), (-.400, .012)),
            phase=math.pi / 2, frame_m=SH)
-    P.append(G.sloft('forepanel', [(-.256, .012, .032, .021, 3.6), (-.30, .008, .032, .024, 4.0), (-.38, .008, .032, .024, 4.0), (-.398, .014, .032, .020, 3.6)], PO, 18, 3))
-    G.slots(P, 'forecut', [(-.296 - i * .026, .0205, .021, .0045, 0) for i in range(3)], .0242, UN)
+    # (the fore panel is what the support hand closes on: tall and wide enough that the fingers stop on its flanks below
+    # the cage's lower bars and its front ring, full width to under the shroud; lower, narrower and tapering before the
+    # ring, the index's tip curled over its edge into the cage in first person)
+    P.append(G.sloft('forepanel', [(-.256, .010, .036, .024, 3.6), (-.30, .006, .041, .0305, 4.0), (-.396, .006, .041, .0305, 4.0), (-.416, .012, .037, .025, 3.6)], PO, 18, 3))
+    G.slots(P, 'forecut', [(-.296 - i * .026, .0235, .021, .0045, 0) for i in range(3)], .0308, UN)
     # ---- the shroud: slats above and below, the light between them in dashes, a pale strake, the recessed muzzle
     S = G.Body([(-.398, zb - .030, zb + .034, .026, 4.4), (-.42, zb - .032, zb + .036, .028, 5.0), (-.50, zb - .030, zb + .034, .027, 5.0),
                 (-.58, zb - .027, zb + .031, .025, 5.0), (-.635, zb - .024, zb + .028, .023, 4.6)])

@@ -108,7 +108,8 @@ existing classes, never second systems.
   there): `ESOProjectileKind::Slug`, an amber-charged solid round (`USOFxSubsystem::SlugRound / SlugImpact /
   SlugFlash`) that goes on through bodies (`pierce`), and thermal accumulation on the gun (`"heat"`: brighter, then
   faster, then a forced vent; the HUD's heat gauge). Never the light guns' plasma look on them. Test
-  `ShatteredOrbit.Weapon.SarkethSlugs`.
+  `ShatteredOrbit.Weapon.SarkethSlugs`. A gun's glass may carry a maker's name (`gun_lens__skr`): the import makes every
+  `gun_lens*` slot see-through (named otherwise it was a solid pane over the sight). Try it: the range's Sarketh cache.
   **The light guns fire plasma, not bullets** (the owner, 2026-11-14: "more alien ... alien energy or plasma ... instead
   of a kinetic bullet the human weapons use"; they are the Sarketh's own technology): a gun whose projectile is
   `ESOProjectileKind::Bolt` draws `USOFxSubsystem::PlasmaFlash` (a bloom of its light, no flame or smoke),

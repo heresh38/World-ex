@@ -1178,15 +1178,16 @@ def gun_instances(master, src, dest, materials, clear, model=None):
         key = base_slot(k)
         m = dict(v)
         extra = None
-        if key == "gun_lens":
-            # optic glass: see straight through (the browser draws it at 14 % opacity)
+        if key.startswith("gun_lens"):
+            # optic glass: see straight through (the browser draws it at 14 % opacity); a maker's own glass too
+            # (gun_lens__skr: named for its tint, it was drawn as a solid amber pane over the sight)
             m["alphaMode"] = "MASK"
             extra = {"baseColorTex": "__clear"}
             tex = dict(tex, __clear=clear)
         mi = make_instance(master, dest, key, m, tex, extra)
         if os.path.basename(m.get("mrTex") or "").startswith("wpn_"):       # (the engine's sets carry ambient occlusion in the mask's red)
             mel.set_material_instance_scalar_parameter_value(mi, "AOAmount", 1.0)
-        if len(own) == 3 and key not in ("gun_lens", "gun_dot"):
+        if len(own) == 3 and not key.startswith("gun_lens") and key != "gun_dot":
             for i, k in enumerate(("m1", "m2", "m3")):
                 mel.set_material_instance_texture_parameter_value(mi, f"UniqueTex{i + 1}", own[k])
                 sampled(mi, own[k], 1, 1.0)                    # (on UV 1, once across the gun: the streamer must be told)
