@@ -85,6 +85,14 @@ honest.
   (`L_TestRange`, beside the Void Requiem cache: set `sarketh`, one Legendary copy of each of their guns, rearms in 10 s). The Penetrator, Breach Charge, Shard Burst and
   Condensed Slug wait for their guns (the sniper, the heavy cannon, a shotgun, a hand cannon): each is the same round
   with its own numbers (`pierce`, `splash`, `pellets`, `roundSize`, `vel`, `kick`).
+- **The Veyr Striker** (`skr_striker`, 2026-11-15): the sheet's own outline built as six stacked layers of shell
+  (`sarketh_guns.layered`, `tools/reference/trace_layers.py`) at 0.9 scale, every working part of the Veyr Rifle on it,
+  and the crest made the sight: a hollow sight of clear glass in the crest's own profile (`gun_glass__skr` ->
+  `M_SOGlass`, clear face on, catching light at its edges), a thin edge of their pale alloy, a window twice a red dot's,
+  the amber lozenge reticle; it zooms as a red dot does. Same numbers as the Veyr Rifle; in the Sarketh cache too.
+- **Their guns' materials** (`tools/blender/skr/textures.py`, both guns): `skr_alloy` (the pale armour: a crystalline
+  alloy, its grains each taking the light their own way), `skr_lacquer` (the dark shell), `skr_steel`, `skr_iron`,
+  `skr_titanium` (heat-tinted), `skr_poly` (their moulded hex), `skr_rubber` (deep knurl); the human guns keep `wpn_*`.
 - **Test**: `ShatteredOrbit.Weapon.SarkethSlugs` (a slug passes the body in front into the one behind with less, a round
   without pierce stops; the rifle fires slugs, never plasma; it heats, cools at rest, vents at full heat and holds its
   fire meanwhile, then fires again).

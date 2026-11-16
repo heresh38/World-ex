@@ -49,7 +49,7 @@ LIMITS = dict(overlap=.01, density_spread=1.6, stretch_share=.10, flipped_share=
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     opt = dict(cls="weapon", own=None, textures="assets/textures", size=4096, json=None,
-               flat_ok="gun_glow,gun_lens,gun_dot,gun_tritium,gun_sightpaint,gun_sightorange")     # lights, glass, a dab of sight paint
+               flat_ok="gun_glow,gun_lens,gun_glass,gun_dot,gun_tritium,gun_sightpaint,gun_sightorange")     # lights, glass, a dab of sight paint
     files = []
     for x in a:
         if x.startswith("--"):
@@ -349,6 +349,12 @@ def main():
         xy = np.clip((c * ao.shape[0]).astype(np.int32), 0, ao.shape[0] - 1)
         seen = ao[xy[:, 1], xy[:, 0]] >= .03
         R.add("UVs", "triangles under other parts (never seen)", f"{100 * float((~seen).mean()):.0f} %", "", "info")
+    # lights, glass and sight paint carry no maps (flat by design): their texel density says nothing, so it is judged
+    # on the rest (a glass sight's broad panes held the spread over its limit with nothing on them to see)
+    flat_ok = tuple(x for x in opt["flat_ok"].split(",") if x)
+    textured = np.array([not str(n).startswith(flat_ok) for n in names], bool)[M] if len(names) else None
+    if textured is not None:
+        seen = textured if seen is None else (seen & textured)
     hit = uvs(P, U1, A, R, opt, seen) if budget["own"] else None
     textures(names, M, R, opt, budget)
     if budget["own"]:

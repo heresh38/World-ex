@@ -97,6 +97,9 @@ def finish(name, parts, muzzle, fore, sight, optic=(), rail=None, scoped=False, 
 IRON_PARTS = {'post', 'postL', 'postR', 'postdot', 'front_base', 'front_ear', 'frontpost', 'rear_ring', 'rear_base',
               'rear_earL', 'rear_earR', 'rearblock', 'buis_base', 'fbuis_base', 'fbuis_arm'}
 
+# a gun's own unwrap ((angle, method), ...) where the default islands squeeze a flat face against its curved rim (the
+# Sarketh's layered shells: a flank and its bevel as one island held the texel density over the gate's limit)
+UNWRAP_TRIES = {}
 GUN_SCALE = {'gun_rifle': .82, 'gun_carbine': .9, 'gun_auto': .9, 'gun_scout': .92, 'gun_dmr': .9, 'gun_bolt': .85,
              'gun_sniper': .88, 'gun_pump': .86, 'gun_handcannon': .9}
 
@@ -119,7 +122,7 @@ def own_maps(name, info=None):
     bpy.context.view_layer.update()
     objs = [o for o in bpy.data.objects if o.type == 'MESH']
     print(f"[bakekit] {name}: {bakekit.clean(objs)} faces with no area removed")
-    bakekit.unwrap_fit(objs)
+    bakekit.unwrap_fit(objs, tries=UNWRAP_TRIES.get(name))
     size = int(os.environ.get("SO_GUN_BAKE_SIZE", "4096"))
     maps = bakekit.bake(objs, size)
     gunpaint.paint(name, maps, spec, bl.TEXTURES)

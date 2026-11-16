@@ -113,6 +113,155 @@ def gun_dark():
                   (T.grain(1), .00001)], rough, .15, relief=1.2, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 
+
+# ---------------------------------------------------------------------------- the Sarketh guns' own materials
+# (the owner, 2026-11-15, on the Veyr guns: "the textures you applied to the gun are too flat, make better steel/
+# polimer/ exotic textures"). Each a set of its own (the human guns keep the wpn_* sets), with real relief at two or
+# three scales, colour and roughness that vary, and something of their making in each: the pale alloy shows its
+# crystal grains, the titanium the colours heat leaves, the polymer their moulded hex.
+def _xy(T):
+    a = (np.arange(T.Z, dtype=np.float32) + .5) * T.texel
+    return a[None, :] * np.ones((T.Z, 1), np.float32), a[:, None] * np.ones((1, T.Z), np.float32)
+
+
+def alloy():
+    """skr_alloy, the pale armour: a crystalline alloy whose grains (a few millimetres) each take the light their own
+    way (a brushed direction, a tone, a roughness of their own), hammered in broad blows, scratched where it was
+    handled, pitted in clusters"""
+    T = Tile('skr_alloy', .25)
+    d1, d2, gid = T.cells(.0055, warp=.0012, warp_feature=.02)
+    edge = 1 - smooth(0.0, .05, d2 - d1)                                           # the grain boundaries
+    bx, by = T.brushed(.012, axis=1), T.brushed(.012, axis=0)
+    dirn = gid > .5
+    brush = np.where(dirn, bx, by)                                                 # each grain brushed its own way
+    hammer = T.dents(380, (.004, .011))
+    var = T.noise(.05, 3)
+    scr = T.lines(220, (.004, .035), (.00018, .00045), bend=.35, along=.55) * smooth(-.1, .4, T.noise(.07, 2))
+    pits = T.dents(320, (.0003, .0008)) * smooth(.15, .5, T.noise(.04, 3))
+    heat = smooth(.3, .7, T.noise(.04, 4))
+    base = hexc('#67645d')
+    alb = base * (.86 + .10 * var[..., None] + .10 * (gid[..., None] - .5)) * (.97 + .03 * brush[..., None])
+    alb = mix(alb, hexc('#4d463b'), heat * .30)
+    alb = mix(alb, hexc('#4a4741'), edge * .12)
+    alb = mix(alb, hexc('#c2beb5'), scr * .45)
+    alb = mix(alb, hexc('#2f2a24'), pits * .6)
+    rough = .22 + .12 * gid + .05 * var + .10 * heat + .03 * edge + .18 * pits - .08 * scr + .02 * brush
+    metal = .72 + .16 * gid - .10 * heat + .1 * scr
+    T.write(alb, [(-hammer, .00022), ((gid - .5), .000012), (-edge, .000008), (brush, .000006), (-scr, .00006), (-pits, .00022),
+                  (var, .00025), (T.grain(1), .00001)], rough, metal, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.4, cavity=.4)
+
+
+def lacquer():
+    """skr_lacquer, the dark shell: grown in thin overlapping layers whose edges stand up and catch the light, a bronze
+    depth in their crowns, fine pores, satin where hands have been and gloss elsewhere, scuffed through to a paler
+    layer in patches"""
+    T = Tile('skr_lacquer', .25)
+    var = T.noise(.05, 3)
+    d1, d2, cid = T.cells(.012, warp=.004, warp_feature=.04)
+    rim = 1 - smooth(0.0, .09, d2 - d1)
+    dome = np.clip(1 - d1 * 1.05, 0, 1) ** .7
+    lap = smooth(.0, .35, d1) * (1 - rim)                                          # each layer laps under the next
+    pores = T.dents(2600, (.00012, .00030))
+    satin = smooth(.2, .55, T.noise(.06, 3))
+    scuff = T.lines(160, (.004, .028), (.0003, .0008), bend=.4) * smooth(.1, .45, T.noise(.08, 2))
+    alb = hexc('#1d1915') * (.84 + .14 * var[..., None]) * (.95 + .10 * cid[..., None])
+    alb = mix(alb, hexc('#3a2a18'), dome * .32)                                    # the bronze depth
+    alb = mix(alb, hexc('#0b0907'), rim * .30)
+    alb = mix(alb, hexc('#4a4036'), scuff * .45)
+    alb = mix(alb, hexc('#100d0b'), pores * .4)
+    rough = .14 + .05 * var + .20 * satin + .16 * scuff + .10 * rim + .18 * pores
+    T.write(alb, [(dome, .00045), (lap, .00012), (-rim, .00020), (-pores, .00004), (-scuff, .00006), (var, .00025), (T.grain(1), .00001)],
+            rough, .18, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.4, cavity=.35)
+
+
+def steel():
+    """skr_steel, bolts, pins and vanes: machined steel, brushed along, fine tool marks across, oil darkening in patches,
+    bright where it was wiped"""
+    T = Tile('skr_steel', .25)
+    x, y = _xy(T)
+    brush = T.brushed(.02, axis=1)
+    tool = .5 + .5 * np.sin(2 * np.pi * (y + T.noise(.03, 2) * .0006) / .00045)     # the cutter's passes, 0.45 mm
+    oil = smooth(.2, .65, T.noise(.035, 4))
+    wipe = smooth(.35, .75, T.noise(.05, 3))
+    scr = T.lines(260, (.003, .025), (.00012, .0003), bend=.25, along=.7)
+    alb = hexc('#8b8d8f') * (.92 + .05 * brush[..., None] + .03 * tool[..., None])
+    alb = mix(alb, hexc('#4c4b48'), oil * .45)
+    alb = mix(alb, hexc('#b4b6b8'), wipe * .2 + scr * .5)
+    rough = .26 + .10 * oil - .08 * wipe + .04 * brush - .06 * scr
+    T.write(alb, [(brush, .000012), (tool, .000006), (-scr, .00004), (T.noise(.05, 3), .00008), (T.grain(1), .000006)], rough, .95, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.3,
+            cavity=.3)
+
+
+def iron():
+    """skr_iron, the chassis and mounts: forged iron, hammered, pitted in clusters with rust in the pits, mill scale
+    left in dark bluish patches, rubbed bright on what stands up"""
+    T = Tile('skr_iron', .25)
+    hammer = T.dents(520, (.005, .014))
+    small = T.dents(900, (.0012, .003))
+    cluster = smooth(.05, .45, T.noise(.04, 3))
+    pits = T.dents(900, (.0003, .0010)) * cluster
+    scale = smooth(.25, .6, T.noise(.03, 4))
+    var = T.noise(.06, 3)
+    alb = hexc('#2e2b28') * (.85 + .15 * var[..., None])
+    alb = mix(alb, hexc('#20232a'), scale * .55)                                   # mill scale
+    alb = mix(alb, hexc('#5a3018'), pits * .75)                                    # rust in the pits
+    alb = mix(alb, hexc('#4a4744'), smooth(.4, .9, hammer) * .25)
+    rough = .52 + .12 * var + .12 * pits - .10 * scale + .06 * small
+    metal = .78 - .45 * pits + .05 * scale
+    T.write(alb, [(-hammer, .00035), (-small, .00010), (-pits, .00030), (var, .00030), (T.grain(1), .00002)], rough, metal, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.5,
+            cavity=.45)
+
+
+def titanium():
+    """skr_titanium, cages, rings and the muzzle: brushed titanium blued by the heat it carries: bands of straw,
+    bronze, violet and blue where it ran hot, plain grey where it stayed cool"""
+    T = Tile('skr_titanium', .25)
+    brush = T.brushed(.025, axis=1)
+    h = np.clip(.5 + .5 * T.noise(.06, 3), 0, 1)                                    # how hot each place ran
+    stops = [(0.0, '#9a9792'), (.45, '#9a9792'), (.58, '#c4a463'), (.68, '#9a6a3c'), (.78, '#6a3f72'), (.88, '#3f5a92'), (1.0, '#5e7fa8')]
+    alb = np.zeros((T.Z, T.Z, 3), np.float32)
+    for (a, ca), (b, cb) in zip(stops[:-1], stops[1:]):
+        t = np.clip((h - a) / max(b - a, 1e-6), 0, 1)[..., None]
+        band = ((h >= a) & (h <= b))[..., None]
+        alb = np.where(band, hexc(ca) * (1 - t) + hexc(cb) * t, alb)
+    alb = alb * (.93 + .07 * brush[..., None])
+    scr = T.lines(160, (.003, .02), (.00012, .0003), bend=.2, along=.75)
+    alb = mix(alb, hexc('#c8c6c2'), scr * .5)
+    rough = .18 + .06 * brush + .08 * (1 - h) - .05 * scr
+    T.write(alb, [(brush, .00001), (-scr, .00004), (T.noise(.05, 3), .00006), (T.grain(1), .000006)], rough, .95, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.3, cavity=.25)
+
+
+def poly():
+    """skr_poly, grip, guard, cell and fore panel: a dark warm polymer, bead-blasted to a fine stipple, moulded with
+    their hex in shallow relief, scuffed pale along edges it rubbed"""
+    T = Tile('skr_poly', .25)
+    d1, d2, hid = T.cells(.0042, warp=.0004)
+    ridge = 1 - smooth(0.0, .14, d2 - d1)                                          # the moulded hex
+    stip = T.noise(.0007, 2)
+    var = T.noise(.05, 3)
+    scuff = T.lines(140, (.003, .02), (.0003, .0009), bend=.5) * smooth(.15, .5, T.noise(.07, 2))
+    alb = hexc('#1f1c19') * (.88 + .10 * var[..., None] + .04 * hid[..., None])
+    alb = mix(alb, hexc('#2c2823'), ridge * .35)
+    alb = mix(alb, hexc('#4b4640'), scuff * .5)
+    rough = .62 + .06 * var - .10 * ridge - .14 * scuff + .05 * stip
+    T.write(alb, [(ridge, .00010), (stip, .000025), (-scuff, .00004), (var, .00015), (T.grain(1), .000008)], rough, 0.0, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.4, cavity=.35)
+
+
+def rubber():
+    """skr_rubber, the grip's panels and the pad: a deep diamond knurl (2.4 mm), its peaks worn paler and smoother"""
+    T = Tile('skr_rubber', .25)
+    x, y = _xy(T)
+    p = .0024
+    k = np.abs(np.sin(np.pi * (x + y) / p)) * np.abs(np.sin(np.pi * (x - y) / p))
+    k = k ** .6
+    wear = smooth(.1, .6, T.noise(.04, 3)) * k
+    var = T.noise(.05, 3)
+    alb = hexc('#161412') * (.9 + .08 * var[..., None])
+    alb = mix(alb, hexc('#2e2a26'), wear * .6)
+    rough = .82 - .18 * wear + .04 * var
+    T.write(alb, [(k, .00045), (T.noise(.0008, 2), .00002), (T.grain(1), .000008)], rough, 0.0, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.4, cavity=.5)
+
+
 if __name__ == '__main__':
     want = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else ['skin', 'armour', 'dark']
     for w in want:

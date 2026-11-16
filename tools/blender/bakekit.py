@@ -211,12 +211,13 @@ def stretched(objs, over=1.25):
     return bad / max(tot, 1e-12)
 
 
-def unwrap_fit(objs, limit=.08, log=print, **kw):
+def unwrap_fit(objs, limit=.08, log=print, tries=None, **kw):
     """unwrap, and while too much of the surface comes out stretched or collapsed, again another way. The
     least-stretch layout is the best where it works, but it needs an island with ONE rim: a flat ring (a tube's end,
     a washer, a band's face) has two and comes out collapsed, so turned guns (a launcher's tube, a barrel cluster)
-    go to the angle-based layout, which takes any island; then smaller islands. Stops under `limit`."""
-    tries = ((66.0, 'MINIMUM_STRETCH'), (66.0, 'ANGLE_BASED'), (50.0, 'ANGLE_BASED'), (38.0, 'ANGLE_BASED'))
+    go to the angle-based layout, which takes any island; then smaller islands. Stops under `limit`. `tries`: a gun's
+    own ((angle, method), ...) (weapons.UNWRAP_TRIES)."""
+    tries = tries or ((66.0, 'MINIMUM_STRETCH'), (66.0, 'ANGLE_BASED'), (50.0, 'ANGLE_BASED'), (38.0, 'ANGLE_BASED'))
     best = None
     for a, m in tries:
         unwrap(objs, angle=a, method=m, log=log, **kw)

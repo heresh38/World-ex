@@ -27,16 +27,17 @@ import gunkit as K              # noqa: E402
 import fleshkit as fk           # noqa: E402
 from gunkit import B            # noqa: E402
 from voidkit import talon, plate, prism, lathe, lathe_x, crystal, studs  # noqa: E402
-from weapons import finish, GUN_SCALE  # noqa: E402
+from weapons import finish, GUN_SCALE, UNWRAP_TRIES  # noqa: E402
 
 GUN_SCALE.update({'gun_skr_rifle': 1.0, 'gun_skr_sniper': 1.0, 'gun_skr_cannon': 1.0, 'gun_skr_pistol': 1.0, 'gun_skr_blade': 1.0,
-                  'gun_skr_grenade': 1.0})
+                  'gun_skr_grenade': 1.0, 'gun_skr_striker': .9})
+UNWRAP_TRIES['gun_skr_striker'] = ((30.0, 'MINIMUM_STRETCH'), (30.0, 'ANGLE_BASED'), (24.0, 'ANGLE_BASED'))
 
 
-def mats(under='skr_skin', shell='skr_dark'):
+def mats(under='skr_skin', shell='skr_dark', armour='skr_armour'):
     M = K.energy_mats()
     M['shell'] = fk.tmat('gun_body__skr', shell, rough=.24, nstr=.8)
-    M['bone'] = fk.tmat('gun_metal__skr', 'skr_armour', rough=.32, metal=.62)
+    M['bone'] = fk.tmat('gun_metal__skr', armour, rough=.32, metal=.62)
     M['under'] = fk.tmat('gun_dark__skr', under, rough=.45)
     M['white'] = bl.mat('gun_glow', '#d6e6ff', 0, .35, emit='#d6e6ff', strength=9)
     M['amber'] = bl.mat('gun_glow__amber', '#ffb24a', 0, .35, emit='#ffb24a', strength=6)
@@ -1074,23 +1075,23 @@ def skr_sight(M, y, z):
 def assembled_rifle(name='skr_rifle'):
     import gunparts as G
     from weapons import e_hand, e_small
-    bl.reset(); M = mats(under='wpn_metal', shell='skr_gun_dark'); P = []
+    bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []   # (their guns' own sets: skr/textures.py)
     # what each part is made of, every one a 4K set of its own (the owner, 2026-11-15: "apply a 4k metal/steel/iron/
     # polymer/etc textures where needed as some parts look too bland"): the dark lacquered shells (skr_dark), the pale
     # forged armour (skr_armour), the chassis, mount and emitter face in forged iron (wpn_metal), bolts, pins and the
     # muzzle's vanes in machined steel (wpn_steel), the emitter's cage, rings and the muzzle's mouth in titanium
     # (wpn_titanium), the grip, guard, cell and fore panel in polymer (wpn_poly), rubber where the hands and shoulder
     # go (wpn_knurl), their gold at fastenings (wpn_gold), glass, two lights
-    ST = fk.tmat('gun_steel', 'wpn_steel')
-    TI = fk.tmat('gun_metal__ti', 'wpn_titanium')
-    PO = fk.tmat('gun_polymer', 'wpn_poly', nstr=.3)
+    ST = fk.tmat('gun_steel', 'skr_steel')
+    TI = fk.tmat('gun_metal__ti', 'skr_titanium')
+    PO = fk.tmat('gun_polymer', 'skr_poly')
     # the colours (the owner: "i like the orange more then this purple/blue ... the orange/gold on the scope"; their brief:
     # cells pale amber): no violet or cyan on their guns: the lacquer a warm graphite, every light pale amber or amber,
     # the glass smoked amber, gold where a band or a rim is
     CELL = bl.mat('gun_glow__cell', '#ffb257', 0, .35, emit='#ffb257', strength=5)   # (paler and brighter read as white)
     M.update(body=M['shell'], dark=PO, metal=ST, glow=CELL, white=CELL, dot=M['amber'],
-             grip=fk.tmat('gun_grip', 'wpn_knurl', metal=0, rough=.7),
-             lens=bl.mat('gun_lens__skr', '#3a240e', .6, .04, emit='#140a03', strength=1.0))
+             grip=fk.tmat('gun_grip', 'skr_rubber', metal=0, rough=.7),
+             lens=bl.mat('gun_lens__skr', '#e8eef2', 0, .02, alpha=.05))
     SH, PL, UN, TR, GL, AM = M['shell'], M['bone'], M['under'], M['trim'], M['white'], M['amber']
 
     def AF(f):
@@ -1252,8 +1253,306 @@ def assembled_rifle(name='skr_rifle'):
            moving=[('mag', MAG, (0, -.103, .01))])
 
 
+# ------------------------------------------------------------------ layered: the sheet's shape, as a made gun
+# (the owner, 2026-11-15, on the layered cut-out of the sheet's rifle: "this gun is great but can you make a new one with
+# the old shape that functions the same as this ... just less flat and more detail"). The traced outline, built as six
+# stacked layers of shell (tools/reference/trace_layers.py: the outline inset 0 .. 10.5 px), thin at the edge and full
+# only in the middle, so the gun rounds like a carapace in crisp, bevelled steps (never smoothed: that was the smudge);
+# the pale plates in two tiers with studs; and on it every working part the Veyr Rifle has (WEAPON_BUILD_RULES.md):
+# a rubber grip, the trigger in the sheet's guard window, the removable cell, the barrel bundle with its amber light,
+# a recessed emitter with vanes, sensor pods, a vent, slits of light, a maintenance hatch with steel bolts, energy
+# conduits from the cell to the barrel, the selector, sling points. The sight sits on the crest's peak like a carry
+# handle's (the crest is taller than any sight in front of it could look over), and the gun is built at 0.9 so the eye
+# stays a rifle's height over the grip. Materials and colours: the Veyr Rifle's.
+def _inpoly(poly, Q):
+    """which points Q (n, 2) lie inside the polygon (ray casting)"""
+    P = np.asarray(poly, float)
+    x, y = Q[:, 0][:, None], Q[:, 1][:, None]
+    x0, y0 = P[:, 0][None, :], P[:, 1][None, :]
+    x1, y1 = np.roll(P[:, 0], -1)[None, :], np.roll(P[:, 1], -1)[None, :]
+    cross = ((y0 > y) != (y1 > y)) & (x < (x1 - x0) * (y - y0) / np.where(y1 - y0 == 0, 1e-12, y1 - y0) + x0)
+    return cross.sum(1) % 2 == 1
+
+
+def layered(model='gun_skr_striker', trace='skr_rifle'):
+    import json
+    import gunparts as G
+    bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []   # (their guns' own sets: skr/textures.py)
+    ST = fk.tmat('gun_steel', 'skr_steel')
+    TI = fk.tmat('gun_metal__ti', 'skr_titanium')
+    PO = fk.tmat('gun_polymer', 'skr_poly')
+    CELL = bl.mat('gun_glow__cell', '#ffb257', 0, .35, emit='#ffb257', strength=5)
+    M.update(body=M['shell'], dark=PO, metal=ST, glow=CELL, white=CELL, dot=M['amber'],
+             grip=fk.tmat('gun_grip', 'skr_rubber', metal=0, rough=.7),
+             lens=bl.mat('gun_lens__skr', '#e8eef2', 0, .02, alpha=.05))
+    SH, PL, UN, TR, GL, AM = M['shell'], M['bone'], M['under'], M['trim'], M['white'], M['amber']
+    S = json.load(open(os.path.join(TRACE, trace + '.json')))
+    Tz = np.load(os.path.join(TRACE, trace + '.npz'))
+    mask, cls = Tz['mask'], Tz['cls']
+    inside = Tz['inside'].astype(np.float32)
+    spec = TRACED[trace]
+    W, H = S['size']
+    px = S['px']
+    # the grip's top is the origin (weapons.py's frame): on the sheet it lies 1 cm behind and 6.6 cm under the point the
+    # trace was measured from (the trigger at the top of the guard window, the hand round the column behind it)
+    gu, gv = spec['grip'][0] * W + .010 / px, spec['grip'][1] * H + .066 / px
+    yz = lambda c, r: ((c - gu) * px, (gv - r) * px)
+    half = .030                                                        # 6 cm through the middle
+    WID = [.42, .58, .71, .82, .92, 1.0]                               # each layer's share of it, edge to middle
+    depths = [L['depth'] for L in S['layers']]
+    cols = np.nonzero(mask.any(0))[0]
+    c_front, c_back = int(cols.min()), int(cols.max())
+    c_split = int(c_front + (c_back - c_front) * .42)
+    y_front, y_back = yz(c_front, 0)[0], yz(c_back, 0)[0]
+    y_split = yz(c_split, 0)[0]
+
+    def width_at(y, z):
+        t = np.clip((y - y_front) / max(y_back - y_front, 1e-6), 0, 1)
+        return np.where(t < .46, .48, np.where(t <= .76, 1.0, 1.0 - .22 * (t - .76) / .24)) * np.where(z < .0, .85, 1.0)
+
+    def layer_of(y, z):
+        d = float(_bilinear(inside, np.array(gu + y / px), np.array(gv - z / px)))
+        return int(sum(d > t for t in depths[1:]))
+
+    def face_at(y, z):
+        return half * float(width_at(np.array(y), np.array(z))) * WID[layer_of(y, z)]
+
+    def top_at(y):
+        c = int(round(gu + y / px))
+        r = np.nonzero(mask[:, min(max(c, 0), W - 1)])[0]
+        return (gv - r.min()) * px if len(r) else 0.0
+    # 1. the shell in six layers
+    body = []
+    for k, (L, w) in enumerate(zip(S['layers'], WID)):
+        for i, p in enumerate(L['polys']):
+            if len(p['ext']) >= 3:
+                body.append(_curve_solid(f'shell{k}_{i}', [p['ext']] + p['holes'], half * w, min(.0024, half * w * .3), SH, 0.0, px, gu, gv, res=2))
+    for o in body:
+        V = fk.verts(o)
+        V[:, 0] = V[:, 0] * width_at(V[:, 1], V[:, 2])
+        fk.set_verts(o, V)
+    P += body
+    # 2. the barrel: the bundle as tall as the sheet's barrel, its emitter recessed in the slats' mouth
+    top, bot = [], []
+    for c in range(c_front, c_split):
+        r = np.nonzero(mask[:, c])[0]
+        if len(r):
+            top.append(r.min()); bot.append(r.max())
+    z_mid = (gv - (np.median(top) + np.median(bot)) * .5) * px
+    h_bar = (np.median(bot) - np.median(top)) * px * .92
+    yb0, yb1 = y_split + .02, y_front + .01
+    bundle(P, M, yb0, yb1, z_mid, h_bar, .046, nose=min(.09, (y_split - y_front) * .2), n_dash=6)
+    P.append(lathe('bore', [(yb1 - .002, 0), (yb1 - .002, h_bar * .12), (yb1 + .0015, h_bar * .12), (yb1 + .0015, 0)], AM, z_mid, n=12))
+    for k in range(6):
+        a = k * math.pi / 3
+        P.append(B(f'mouth_vane{k}', (.0016, .010, .0035), (math.cos(a) * h_bar * .15, yb1 - .004, z_mid + math.sin(a) * h_bar * .15), ST, .0004))
+    for sg, lit in ((1, AM), (-1, GL)):                                # rangefinder left, illuminator right
+        xs = sg * .0275
+        yp = yb1 + .07
+        P.append(prism('sensor_pod', [(yp + .040, z_mid - .006), (yp + .038, z_mid + .010), (yp - .004, z_mid + .011), (yp - .010, z_mid + .004),
+                                      (yp - .006, z_mid - .007)], .010, SH, .0016, x=xs))
+        P.append(lathe('sensor_lens', [(yp - .0095, 0), (yp - .0095, .0038), (yp - .0130, .0036), (yp - .0130, 0)], M['lens'], z_mid + .003, x=xs, n=16))
+        P.append(lathe('sensor_ring', [(yp - .008, .0036), (yp - .008, .0050), (yp - .0138, .0050), (yp - .0138, .0036)], TI, z_mid + .003, x=xs, n=16,
+                       closed=True))
+        P.append(B('sensor_led', (.0012, .006, .0018), (xs + sg * .0053, yp + .018, z_mid + .008), lit, .0004))
+    # 3. the pale plates, two tiers, studs at their ends; standing on the highest layer under them
+    for i, p in enumerate(S['plates']):
+        pts = [yz(c, r) for c, r in p['ext']]
+        if len(pts) < 3:
+            continue
+        yc = float(np.mean([q[0] for q in pts])); zc = float(np.mean([q[1] for q in pts]))
+        if yc < y_split:
+            face, base = .046 * .5 + .0005, .046 * .5 - .002
+        else:
+            Q = np.array(pts)
+            lo, hi = Q.min(0), Q.max(0)
+            gy, gz = np.meshgrid(np.linspace(lo[0], hi[0], 9), np.linspace(lo[1], hi[1], 7))
+            G2 = np.stack([gy.ravel(), gz.ravel()], 1)
+            G2 = np.concatenate([G2[_inpoly(Q, G2)], Q, [[yc, zc]]])
+            face = max(face_at(y, z) for y, z in G2)
+            base = half * WID[0] * min(float(width_at(np.array(y), np.array(z))) for y, z in pts) - .0015
+        P.append(plate(f'plate{i}', pts, PL, base, face + .0030, .0015))
+        ring = [yz(c, r) for c, r in p.get('up', [])]
+        if len(ring) < 3:
+            continue
+        tp = face + .0030
+        P.append(plate(f'plate{i}_up', ring, PL, tp - .001, tp + .0020, .0010))
+        R2 = np.array(ring); c0 = R2.mean(0)
+        D = np.linalg.norm(R2[:, None] - R2[None], axis=2)
+        a, b = np.unravel_index(int(D.argmax()), D.shape)
+        if D[a, b] > .03:
+            studs(M, [tuple(R2[a] + (c0 - R2[a]) * .18), tuple(R2[b] + (c0 - R2[b]) * .18)], tp + .0020, P, r=.0016)
+
+    # 4. lights, a vent and a hatch where the shell is clear (one layer under them, no plate)
+    def rect(y, z, L, h, ang):
+        ca, sa = math.cos(ang), math.sin(ang)
+        return [(y + ca * a_ - sa * b_, z + sa * a_ + ca * b_) for a_, b_ in ((-L / 2, -h / 2), (L / 2, -h / 2), (L / 2, h / 2), (-L / 2, h / 2))]
+
+    def clear(pts, margin=.002, least=3):
+        Q = np.asarray(pts, np.float64)
+        lo, hi = Q.min(0) - margin, Q.max(0) + margin
+        ys, zs = np.meshgrid(np.linspace(lo[0], hi[0], 12), np.linspace(lo[1], hi[1], 7))
+        u = np.clip(np.round(gu + ys / px).astype(int), 0, W - 1)
+        v = np.clip(np.round(gv - zs / px).astype(int), 0, H - 1)
+        d = inside[v, u]
+        k = sum((d > t).astype(int) for t in depths[1:])
+        return bool((k == k.flat[0]).all() and k.flat[0] >= least and not (cls[v, u] == 2).any())
+    used = []
+
+    def find(L, h, ang, target, ys, zs, least=3):
+        best = None
+        for yv in np.linspace(*ys, 26):
+            for zv in np.linspace(*zs, 26):
+                if any(abs(yv - uy) < (L + ul) / 2 + .008 and abs(zv - uz) < (h + uh) / 2 + .008 for uy, uz, ul, uh in used):
+                    continue
+                if clear(rect(yv, zv, L, h, ang), least=least):
+                    dd = math.hypot(yv - target[0], (zv - target[1]) * 1.5)
+                    if best is None or dd < best[0]:
+                        best = (dd, float(yv), float(zv))
+        if best:
+            used.append((best[1], best[2], L * abs(math.cos(ang)) + h, h + L * abs(math.sin(ang))))
+            return best[1:]
+        return None
+
+    def slit(nm, y, z, L, ang, face, mat):
+        P.append(plate(nm + '_frame', rect(y, z, L + .005, .0068, ang), UN, face - .002, face + .0011, .0006))
+        P.append(plate(nm, rect(y, z, L, .0026, ang), mat, face - .001, face + .0015, .0004))
+    got = find(.054, .020, 0, (y_split + .08, .06), (y_split + .03, y_split + .22), (-.02, .16))
+    if got:
+        yv, zv = got
+        f = face_at(yv, zv)
+        P.append(plate('vent_frame', rect(yv, zv, .054, .020, 0), UN, f - .003, f + .0008, .0008))
+        P.append(plate('vent_glow', rect(yv, zv, .044, .012, 0), AM, f - .002, f + .0014, .0003))
+        for k in range(6):
+            yk = yv - .020 + k * .008
+            P.append(plate(f'vent_fin{k}', [(yk - .0018, zv - .0072), (yk + .0008, zv - .0072), (yk + .0026, zv + .0072), (yk + .0000, zv + .0072)], SH,
+                           f - .002, f + .0034, .0005))
+    got = find(.050, .026, 0, (y_split + .26, .08), (y_split + .10, y_back - .06), (.0, .18))
+    if got:                                                            # the maintenance hatch, four steel bolts
+        yh, zh = got
+        f = face_at(yh, zh)
+        P.append(plate('hatch', rect(yh, zh, .050, .026, 0), SH, f - .002, f + .0026, .0010))
+        G.hexbolts(P, [(yh + sy * .020, zh + sz_ * .009) for sy in (1, -1) for sz_ in (1, -1)], f + .0026, ST, .0018)
+    for r_, target in enumerate(((y_split + .18, .14), (y_split + .05, .10), (y_back - .12, .10))):
+        got = find(.040, .0075, .24, target, (y_split + .02, y_back - .04), (-.02, .2))
+        if got:
+            y, z = got
+            for k in (-1, 0, 1):
+                slit(f'row{r_}_{k}', y + k * .0135 * math.cos(.24), z + k * .0135 * math.sin(.24), .0085, .24, face_at(y, z), GL if r_ != 1 else AM)
+    # 5. the hand's parts: rubber on the grip, the trigger in the guard window, the selector, the cell and its well
+    for i, p in enumerate(S.get('grip_panel', [])):
+        pts = [yz(c, r) for c, r in p['ext']]
+        if len(pts) >= 3:
+            yc = float(np.mean([q[0] for q in pts])); zc = float(np.mean([q[1] for q in pts]))
+            f = max(face_at(y, z) for y, z in pts + [(yc, zc)])
+            P.append(plate(f'grip_panel{i}', pts, M['grip'], f - .002, f + .0024, .0010))
+    trigger(P, M, y=-.024, z=.016)
+    # a real pistol grip out of the sheet's grip column (the column ends 7 cm under the receiver, where it joins the
+    # guard's loop: too short for a hand, which hung in the air behind it): a polymer core with rubber panels, raked
+    # as every grip the hand is fitted to
+    G.grip(P, PO, M['grip'], ST, ang=.28, h=.118, w=.032, z=.004)
+    G.selector(P, .010, .030, face_at(.010, .030) + .002, TR, 1, ang=.35, L=.02)
+    MAG = G.box_mag('mag', [(-.120, .006), (-.126, -.060), (-.140, -.098), (-.188, -.094), (-.180, -.055), (-.172, .006)], .030, PO, floor_m=PL,
+                    floor=[(-.137, -.094), (-.191, -.090), (-.193, -.104), (-.140, -.108)], rib_m=PL,
+                    window=[(-.136, -.010), (-.158, -.010), (-.166, -.074), (-.144, -.074)], window_m=GL,
+                    ribs=[[(-.124, -.004), (-.170, -.004), (-.171, -.011), (-.125, -.011)], [(-.135, -.082), (-.181, -.080), (-.183, -.087), (-.137, -.089)]])
+    # 6. the conduits: the cell's light to the barrel, on both flanks (a glowing core between the segments of its sheath)
+    for sg in (1, -1):
+        path = []
+        for y, z in ((-.150, .012), (-.190, .030), (y_split + .06, z_mid - .006), (y_split + .015, z_mid - .004)):
+            path.append((sg * (face_at(y, z) + .0035 if y > y_split + .03 else .025), y, z))
+        P.append(G.cable('conduit_core', path, .0020, GL, 10, 28))
+        C_, _ = G.spl(path, 9)
+        for k in range(0, 8, 2):
+            seg = [tuple(C_[k]), tuple((C_[k] + C_[k + 1]) / 2), tuple(C_[k + 1])]
+            P.append(G.cable('conduit_sheath', seg, .0032, SH, 12, 6))
+            P.append(G.cable('conduit_clamp', [tuple(C_[k]), tuple(C_[k] + (C_[k + 1] - C_[k]) * .12)], .0038, TR, 12, 3))
+    # 7. the sight IS the crest (the owner, 2026-11-15: "this whole top section, delete it and make it the golden scope
+    # we have in this shape so it looks amazing, make scoping bigger than red dot by 2x in screen size it takes"): the
+    # crest above its base is cut away (plates, spine and all) and in its place stands a hollow sight in the crest's own
+    # side profile, hook and all: its walls polished gold, piped in gold along the outline, its roof and back clear
+    # glass. The eye looks in at the back and out through the roof at the front: a window 6.6 cm wide and up to 4.8
+    # tall (twice a red dot's), the reticle an amber lozenge on the eye line near the front, a line of their light along
+    # the floor. Aimed it zooms as a red dot does (the data's zoom), not a scope's picture; no rail: nothing else mounts.
+    from voidkit import mk
+    z_base = .207                                                      # the crest's base on the receiver
+    WW = .066                                                          # the window's width (a red dot's is 3 cm)
+    ys = np.arange(-.15, .08, .002)
+    tops = np.array([top_at(y) for y in ys])
+    tops = np.convolve(np.pad(tops, 4, mode='edge'), np.ones(9) / 9, mode='valid')     # (the sheet's pixel steps smoothed out)
+    up = tops > z_base + .003
+    k0 = int(np.argmax(up & (ys > -.13)))
+    k1 = k0
+    while k1 + 1 < len(ys) and up[k1 + 1]:
+        k1 += 1
+    y_f0, y_b0 = float(ys[k0]), float(ys[k1])
+    keep = list(range(k0, k1 + 1, 3)) + ([k1] if (k1 - k0) % 3 else [])
+    outline = [(y_f0 - .002, z_base)] + [(float(ys[i]), float(tops[i])) for i in keep] + [(y_b0 + .002, z_base)]
+    sz = z_base + .022                                                 # the eye line
+
+    def carve(cutter):
+        V0 = fk.verts(cutter)
+        clo, chi = V0.min(0) - .001, V0.max(0) + .001
+        for o in [o for o in P if o is not None and o.type == 'MESH']:
+            V = fk.verts(o)
+            if len(V) == 0 or (V.max(0) < clo).any() or (V.min(0) > chi).any():
+                continue
+            bpy.context.view_layer.objects.active = o
+            md = o.modifiers.new('carve', 'BOOLEAN'); md.operation = 'DIFFERENCE'; md.object = cutter; md.solver = 'EXACT'
+            bpy.ops.object.modifier_apply(modifier=md.name)
+        bpy.data.objects.remove(cutter, do_unlink=True)
+    # the crest goes: everything above its base between its front and its hook's back
+    carve(plate('crest_cut', [(y_f0 - .004, z_base), (y_b0 + .004, z_base), (y_b0 + .004, z_base + .2), (y_f0 - .004, z_base + .2)], SH, -.1, .1, .0,
+                sym=False))
+    SC = []
+    # (then, the owner: "it should be a scope similar to the one you made but it should be entirety out of glass but a
+    # thin edge in the guns colors"): every face of it glass (gun_glass: M_SOGlass in the game, clear face on, its edges
+    # catching the light), its outline and the rib over the back a thin line of their pale alloy
+    GLS = bl.mat('gun_glass__skr', '#f2f5f7', 0, .03, alpha=.12)        # (clear: the owner, "see through not brown or any color")
+    _b = GLS.node_tree.nodes.get('Principled BSDF')                    # (the previews draw it as glass too)
+    if _b and 'Transmission Weight' in _b.inputs:
+        _b.inputs['Transmission Weight'].default_value = 1.0
+        _b.inputs['Roughness'].default_value = .03
+    SC.append(plate('sight_wall', outline, GLS, WW / 2, WW / 2 + .0016, .0004))
+    # the roof and back: clear glass round the profile from wall to wall
+    n = len(outline)
+    V = [(-WW / 2, y, z) for y, z in outline] + [(WW / 2, y, z) for y, z in outline]
+    F = [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)]
+    SC.append(mk('sight_glass', V, F, M['lens'], 30))                                  # (the lens the aim is checked by)
+    O2 = np.array(outline)
+    Tg = np.gradient(O2, axis=0); Tg /= np.linalg.norm(Tg, axis=1)[:, None] + 1e-12
+    Out = O2 + np.stack([-Tg[:, 1], Tg[:, 0]], 1) * .0006                              # (just outside it: the glass seen)
+    V2 = [(-WW / 2, y, z) for y, z in Out] + [(WW / 2, y, z) for y, z in Out]
+    SC.append(mk('sight_shell', V2, F, GLS, 30))
+    # gold piping along the outline on both walls, and across the roof at the back and where the roof meets the eye line
+    for sg in (1, -1):
+        pts = [(sg * (WW / 2 + .0012), y, z) for y, z in outline]
+        SC.append(G.cable('sight_piping', pts + [pts[0]], .0012, PL, 8, 140))
+    for yy in (y_b0 - .003, ):
+        zz = float(np.interp(yy, [q[0] for q in outline], [q[1] for q in outline]))
+        SC.append(G.cable('sight_rib', [(-WW / 2, yy, zz), (0.0, yy, zz + .0015), (WW / 2, yy, zz)], .0012, PL, 8, 12))
+    # the floor: their dark lacquer, a line of their light down its middle; the reticle; the crystal that throws it
+    SC.append(plate('sight_floor', [(y_f0 + .004, z_base - .0015), (y_b0 - .002, z_base - .0015), (y_b0 - .002, z_base + .0012), (y_f0 + .004, z_base + .0012)],
+                    SH, -WW / 2, WW / 2, .0004, sym=False))
+    SC.append(B('sight_floorlight', (.0025, (y_b0 - y_f0) * .7, .0012), (0, (y_f0 + y_b0) * .5 + .01, z_base + .0016), GL, .0004))
+    y_cross = float(np.interp(sz + .010, tops[k0:k0 + (k1 - k0) // 2 + 1], ys[k0:k0 + (k1 - k0) // 2 + 1]))     # the roof at the eye line
+    dot = [(.0028, 0.0), (0.0, .0020), (-.0028, 0.0), (0.0, -.0020)]
+    Vd = [(x, y_cross + .006, sz + q) for x, q in dot] + [(x, y_cross + .0066, sz + q) for x, q in dot]
+    Fd = [(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i) for i in range(4)] + [(3, 2, 1, 0), (4, 5, 6, 7)]
+    SC.append(mk('sight_dot', Vd, Fd, M['dot'], 30))
+    SC.append(crystal('sight_emitter', (0, y_b0 - .012, z_base + .0012), (0, y_b0 - .024, z_base + .008), .0026, GL, n=6, flat=.8))
+    print(f'[skr] the golden crest sight: y {y_f0:.3f} .. {y_b0:.3f}, base {z_base:.3f}, eye line {sz:.3f}, roof meets it at {y_cross:.3f}', flush=True)
+    # 8. sling points
+    P += K.sling_loop(yb1 + .16, z_mid - h_bar * .5 - .004, SH)
+    P += K.sling_loop(y_back - .05, (gv - np.nonzero(mask[:, min(int(gu + (y_back - .05) / px), W - 1)])[0].max()) * px - .004, SH)
+    import bakekit
+    bakekit.clean([o for o in P if o is not None], least=2e-11)
+    finish(model, P, (0, yb1 - .03, z_mid), (0, (yb0 + yb1) * .5 + .06, z_mid - h_bar * .5), (0, y_b0 + .10, sz), optic=SC,
+           moving=[('mag', MAG, (0, -.154, .006))])
+
 GUNS = {k: (lambda k=k: parts(k)) for k in TRACED}
 GUNS['skr_rifle'] = assembled_rifle
+GUNS['skr_striker'] = layered
 
 
 if __name__ == '__main__':

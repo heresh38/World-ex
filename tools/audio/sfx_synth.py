@@ -1433,7 +1433,7 @@ def bolt_impact():
 # docs/orion/SARKETH_WEAPONS.md: electromagnetic rails throwing a crystalline slug in an amber field. Not a powder shot
 # (no blast of gas) and not a light gun's zap: the rails' hard crack, the field collapsing in a tight falling whine,
 # the crystal ringing, a heavy low thump (their guns are heavy), the amber field tearing off the slug with a sizzle.
-SARKETH = {"skr_rifle": dict(seed=5101, heavy=1.0, pitch=1.0)}
+SARKETH = {"skr_rifle": dict(seed=5101, heavy=1.0, pitch=1.0), "skr_striker": dict(seed=5201, heavy=1.15, pitch=0.9)}
 
 
 def skr_core(seed, heavy=1.0, pitch=1.0):

@@ -1178,6 +1178,12 @@ def gun_instances(master, src, dest, materials, clear, model=None):
         key = base_slot(k)
         m = dict(v)
         extra = None
+        if key.startswith("gun_glass"):
+            # a part MADE of glass (the Sarketh's crest sight: the owner, "entirely out of glass but a thin edge in the
+            # guns colors"): seen as glass, clear face on, catching light at its edges (M_SOGlass), not cut away as a
+            # sight's lens is
+            PARENT_FOR[key] = glass_master()
+            m = {k_: v_ for k_, v_ in m.items() if k_ not in ("alphaMode", "alphaCutoff")}
         if key.startswith("gun_lens"):
             # optic glass: see straight through (the browser draws it at 14 % opacity); a maker's own glass too
             # (gun_lens__skr: named for its tint, it was drawn as a solid amber pane over the sight)
@@ -1187,7 +1193,7 @@ def gun_instances(master, src, dest, materials, clear, model=None):
         mi = make_instance(master, dest, key, m, tex, extra)
         if os.path.basename(m.get("mrTex") or "").startswith("wpn_"):       # (the engine's sets carry ambient occlusion in the mask's red)
             mel.set_material_instance_scalar_parameter_value(mi, "AOAmount", 1.0)
-        if len(own) == 3 and not key.startswith("gun_lens") and key != "gun_dot":
+        if len(own) == 3 and not key.startswith("gun_lens") and not key.startswith("gun_glass") and key != "gun_dot":
             for i, k in enumerate(("m1", "m2", "m3")):
                 mel.set_material_instance_texture_parameter_value(mi, f"UniqueTex{i + 1}", own[k])
                 sampled(mi, own[k], 1, 1.0)                    # (on UV 1, once across the gun: the streamer must be told)
@@ -2436,6 +2442,49 @@ GLOW_PULSE_HLSL = """
 float ph = dot(WP, float3(0.0011, 0.0013, 0.0007));
 return C * I * (0.55 + 0.45 * sin(T * 1.7 + ph * 6.2831) * sin(T * 0.53 + ph * 3.1));
 """
+
+
+_GLASS = {}
+
+
+def glass_master():
+    """/Game/Weapons/M_SOGlass: a gun part made of glass. Translucent and two-sided: clear face on (OpacityFace),
+    only its edges catching the light (Fresnel: OpacityEdge, a faint EdgeGlow), smooth and specular; no colour of its
+    own (the owner: "the scope needs to be see through not brown or any color"): BaseColorTint is near white."""
+    if "m" in _GLASS:
+        return _GLASS["m"]
+    ensure_dir("/Game/Weapons")
+    props = {"blend_mode": unreal.BlendMode.BLEND_TRANSLUCENT, "two_sided": True}
+    mode = getattr(unreal.TranslucencyLightingMode, "TLM_SURFACE", None)
+    if mode is not None:
+        props["translucency_lighting_mode"] = mode
+    mat = _material("/Game/Weapons/M_SOGlass", props)
+    tint = _param(mat, unreal.MaterialExpressionVectorParameter, "BaseColorTint", (0.95, 0.97, 1.0, 1.0), -900, 0)
+    face = _param(mat, unreal.MaterialExpressionScalarParameter, "OpacityFace", 0.03, -900, 200)     # (clear: no colour of its own)
+    edge = _param(mat, unreal.MaterialExpressionScalarParameter, "OpacityEdge", 0.35, -900, 300)
+    glow = _param(mat, unreal.MaterialExpressionScalarParameter, "EdgeGlow", 0.15, -900, 420)
+    fres = mel.create_material_expression(mat, unreal.MaterialExpressionFresnel, -900, 540)
+    fres.set_editor_property("exponent", 3.0)
+    lerp = mel.create_material_expression(mat, unreal.MaterialExpressionLinearInterpolate, -500, 240)
+    mel.connect_material_expressions(face, "", lerp, "A")
+    mel.connect_material_expressions(edge, "", lerp, "B")
+    mel.connect_material_expressions(fres, "", lerp, "Alpha")
+    mel.connect_material_property(lerp, "", unreal.MaterialProperty.MP_OPACITY)
+    m1 = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -500, 420)
+    mel.connect_material_expressions(tint, "", m1, "A")
+    mel.connect_material_expressions(fres, "", m1, "B")
+    m2 = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -300, 420)
+    mel.connect_material_expressions(m1, "", m2, "A")
+    mel.connect_material_expressions(glow, "", m2, "B")
+    mel.connect_material_property(m2, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.connect_material_property(tint, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, -500, 620)
+    rough.set_editor_property("r", 0.04)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    _GLASS["m"] = mat
+    return mat
 
 
 def energy_materials():

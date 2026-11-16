@@ -109,7 +109,10 @@ existing classes, never second systems.
   SlugFlash`) that goes on through bodies (`pierce`), and thermal accumulation on the gun (`"heat"`: brighter, then
   faster, then a forced vent; the HUD's heat gauge). Never the light guns' plasma look on them. Test
   `ShatteredOrbit.Weapon.SarkethSlugs`. A gun's glass may carry a maker's name (`gun_lens__skr`): the import makes every
-  `gun_lens*` slot see-through (named otherwise it was a solid pane over the sight). Try it: the range's Sarketh cache.
+  `gun_lens*` slot see-through (named otherwise it was a solid pane over the sight). A part MADE of glass is `gun_glass*`
+  (`M_SOGlass`: translucent, clear face on, its edges catching light; the Veyr Striker's crest sight). Try them: the
+  range's Sarketh cache (`skr_rifle`, `skr_striker`). A gun whose flat faces unwrap badly gets its own unwrap
+  (`weapons.UNWRAP_TRIES`).
   **The light guns fire plasma, not bullets** (the owner, 2026-11-14: "more alien ... alien energy or plasma ... instead
   of a kinetic bullet the human weapons use"; they are the Sarketh's own technology): a gun whose projectile is
   `ESOProjectileKind::Bolt` draws `USOFxSubsystem::PlasmaFlash` (a bloom of its light, no flame or smoke),
