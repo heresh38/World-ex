@@ -1112,7 +1112,107 @@ def G_lathe_z(name, prof, c, m, n):
     return G.lathe_z(name, prof, c, m, n)
 
 
+# the set's long guns as Ember Oath's build with its barrel changed (the owner, 2026-11-15: "make all the other guns in
+# this set too"): drawn out or cut short ahead of the receiver (`stretch`), made fatter round the bore (`radial`),
+# with the magnified scope or the set's lozenge sight
+VARIANTS = {'skr_sniper': dict(stretch=1.93, radial=1.0, scope=True),
+            'skr_cannon': dict(stretch=.85, radial=1.6, scope=False),
+            'skr_shotgun': dict(stretch=.55, radial=(1.55, 1.05), scope=False)}       # (wide and flat: a spread's mouth)
+
+
+def skr_handgun(name='skr_pistol', big=False):
+    """The set's handguns (the pistol and, `big`, the hand cannon: the brief's Condensed Slugs), on the light sidearm's
+    proven layout so the hands fit them alike: a polymer grip with rubber panels, the guard and the trigger, a dark
+    lacquer frame, an iron slide in two layers with pale strakes and their amber light in the seam, a cell in the grip
+    (the part `mag`), a titanium emitter with an amber face, a crest blade swept back over the rear, a keel under the
+    nose, pale blade sights with amber lozenge dots; their materials and colours."""
+    import gunparts as G
+    bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []
+    ST = fk.tmat('gun_steel', 'skr_steel')
+    TI = fk.tmat('gun_metal__ti', 'skr_titanium')
+    PO = fk.tmat('gun_polymer', 'skr_poly')
+    CELL = bl.mat('gun_glow__cell', '#ffb257', 0, .35, emit='#ffb257', strength=5)
+    M.update(body=M['shell'], dark=PO, metal=ST, glow=CELL, white=CELL, dot=M['amber'],
+             grip=fk.tmat('gun_grip', 'skr_rubber', metal=0, rough=.7),
+             lens=bl.mat('gun_lens__skr', '#e8eef2', 0, .02, alpha=.05))
+    SH, PL, UN, TR, GL, AM = M['shell'], M['bone'], M['under'], M['trim'], M['white'], M['amber']
+
+    def AF(f):
+        return math.copysign(math.asin(min(abs(f), 1.0) ** 2.5), f)
+    k = 1.22 if big else 1.0                                            # the hand cannon: longer, taller, heavier
+    zb = .07 * (1.06 if big else 1.0)
+    g = G.hand_grip(P, PO, .3, .11, .034, z=.004)
+    P.append(plate('grip_panel', [g(-.015, .032), g(.017, .028), g(.019, .06), g(.016, .096), g(-.013, .099), g(-.017, .062)], M['grip'], .011, .0179, .0012))
+    P.append(G.rprism('grip_base', [g(.0282, .1085), g(-.0202, .1125), g(-.0206, .1215), g(.0288, .1175)], .034, PL, .004))
+    G.guard(P, PO, [(-.076, .018), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.012, -.029)], .014, .006)
+    G.trigger(P, TR, -.03, .014, L=.033, w=.007)
+    MAG = G.box_mag('mag', [g(-.011, .040), g(.012, .038), g(.014, .108), g(-.012, .110)], .024, PO, floor_m=PL,
+                    floor=[g(-.015, .107), g(.017, .105), g(.018, .113), g(-.015, .115)], rib_m=PL)
+    F = lambda y: y * k                                                 # (lengths ahead of the grip scale with the gun)
+    FR = G.Body([(.057, .039, .0468, .0078, 3.0), (.046, .03, .047, .0136, 4.5), (.034, .012, .047, .0158, 5.0), (.0, .006, .047, .016, 5.0),
+                 (F(-.026), .008, .047, .016, 5.0), (F(-.033), .016, .047, .016, 5.0), (F(-.098), .016, .047, .016, 5.5),
+                 (F(-.107), .012, .047, .016, 5.5), (F(-.158), .012, .047, .0158, 5.5), (F(-.166), .016, .047, .015, 4.5)])
+    FR.skin(P, SH, 'frame', step=.005, n=32)
+    FR.shell(P, 'frame_panel', PL, .02, F(-.095), FR.af(-.3), FR.af(.6), t=.0009, ch=.001)
+    top = .088 * (1.08 if big else 1.0)
+    hw = .0175 * (1.12 if big else 1.0)
+    SL = G.Body([(.038, .045, top, hw * .94, 5.0), (.02, .045, top, hw * .98, 5.0), (F(-.01), .045, top, hw, 5.0), (F(-.07), .045, top, hw, 5.0),
+                 (F(-.13), .045, top, hw * .98, 5.0), (F(-.15), .046, top - .0005, hw * .94, 4.8), (F(-.164), .048, top - .0025, hw * .87, 4.4),
+                 (F(-.172), .052, top - .0055, hw * .75, 4.0)])                 # (down onto the frame: no gap between them)
+    SL.chassis(P, UN, name='slide', step=.006)
+    SL.shell(P, 'slide_spine', PL, .036, F(-.168), 1.05, math.pi - 1.05, t=.0006, mirror=False)
+    SL.slats(P, 'serration', SH, .035, .003, -.8, .8, 7, share=.6, t=.0022)
+    SL.shell(P, 'slide_upper', SH, -.002, F(-.158), AF(.16), .82, t=.0022)
+    SL.shell(P, 'slide_lower', PL, -.002, F(-.162), -.85, -AF(.12), t=.0020)
+    SL.light(P, 'seam', GL, -.006, F(-.156), -AF(.03), AF(.07))
+    SL.studs(P, TR, [(-.012, .5), (F(-.148), .5), (F(-.08), -.5)], r=.0016, d=.0024)
+    for kk in range(3):                                                 # their three dashes on the slide
+        y_ = F(-.060) - kk * .010
+        xs_, _, zs_ = SL.pt(y_, AF(.62), .0030)
+        P.append(plate('slide_mark', [(y_, zs_ - .0014), (y_ - .0068, zs_ - .0008), (y_ - .0068, zs_ + .0012), (y_, zs_ + .0006)], GL,
+                       xs_ - .0012, xs_ + .0006, .0002))
+    # the emitter: a titanium nose round an amber face, vanes in its mouth
+    nose0, nose1 = F(-.166), F(-.2)
+    G.muzzle(P, 'nose', nose0, nose1, zb, .0145 * (1.2 if big else 1.0), TI, .0062 * (1.25 if big else 1.0))
+    P.append(G.band('nose_lip', nose1 + .0045, .003, .0152 * (1.2 if big else 1.0), TR, zb, 0, .003, 24, .0004))
+    P.append(lathe('nose_glow', [(nose1 + .012, 0), (nose1 + .012, .0055 * (1.25 if big else 1.0)), (nose1 + .0128, .005), (nose1 + .0128, 0)], AM, zb, n=16))
+    # the set's forms: a crest blade swept back over the rear, a keel under the nose, the blades along the slide
+    crest_top = top + (.016 if big else .012)
+    P += talon('crest', [(F(-.100), top - .002), (F(-.040), top + .004), (.010, crest_top + .002), (.040, crest_top + .006)], [.005, .012, .010, 0], PL,
+               x=hw * .70, t=.0050)
+    P += talon('keel', [(nose1 + .006, zb - .016), (F(-.150), zb - .024), (F(-.110), zb - .030)], [.004, .008, 0], PL, x=0, t=.006, two=True, sym=False)
+    # the set's great pale blades swept back across the slide's flanks (as on Ember Oath), a beavertail over the hand,
+    # their light seen through the rear serrations
+    for nm_, spine, wid in (('sweep', [(F(-.165), top - .022), (F(-.110), top - .012), (F(-.050), top - .006), (.000, top - .004), (.030, top + .002)],
+                             [.004, .012, .014, .010, 0]),
+                            ('sweep_lo', [(F(-.160), .053), (F(-.100), .056), (F(-.040), .058)], [.003, .007, 0])):
+        C_, u_ = G.spl(spine, 16)
+        Wd = np.interp(np.linspace(0, 1, len(C_)), u_, np.asarray(wid, float))
+        T_ = np.gradient(C_, axis=0); T_ /= np.linalg.norm(T_, axis=1)[:, None] + 1e-12
+        Nn = np.stack([T_[:, 1], -T_[:, 0]], 1)
+        poly = [tuple(q) for q in C_] + [tuple(q) for q in (C_ + Nn * Wd[:, None])[::-1][1:-1]]
+        P.append(plate(nm_, poly, PL, hw - .0005, hw + .0040, .0012))
+    P.append(G.rprism('beavertail', [(.030, .040), (.058, .043), (.066, .036), (.050, .030), (.032, .032)], .026, PL, .004))
+    SL.light(P, 'serration_light', AM, .033, .005, -.6, .6)
+    # controls
+    G.selector(P, .024, .038, .016, TR, 1, ang=.25, L=.017, r=.0045)
+    P.append(lathe_x('cellrelease', [(0, .0044), (.003, .0044), (.0036, .0034), (.0036, 0)], (.016, -.017, .012), PO, 14, 1))
+    G.hexbolts(P, [(F(-.09), .034)], .016, ST, .0024)
+    # the sights: pale blades either side of the eye line, an amber lozenge on each, a pale post with one in front
+    sz = top + .012
+    P.append(prism('rear_base', [(.036, top + .0005), (.036, sz - .004), (.022, sz - .004), (.018, top + .0005)], .026, UN, .001))
+    for sgn in (1, -1):
+        P.append(prism('rear_ear', [(.035, sz - .006), (.035, sz + .003), (.025, sz + .004), (.021, sz - .006)], .0065, PL, .001, x=sgn * .0088))
+        P.append(lathe_x('rear_dot', [(0, .0016), (.0006, .0016), (.0008, 0)], (sgn * .0088, .0352, sz - .002), AM, 4, 1))
+    P.append(prism('front_base', [(F(-.132), top + .0005), (F(-.138), top + .0045), (F(-.156), top + .0045), (F(-.16), top + .0005)], .011, UN, .0008))
+    P.append(prism('post', [(F(-.142), top + .004), (F(-.146), sz + .003), (F(-.152), sz + .003), (F(-.154), top + .004)], .0036, PL, .0005))
+    P.append(lathe('post_dot', [(F(-.1458), 0), (F(-.1458), .0014), (F(-.1462), .0014), (F(-.1462), 0)], AM, sz + .0012, 0, 4))
+    finish('gun_' + name, P, (0, nose1, zb), (0, -.02, -.02), (0, .09, sz), moving=[('mag', MAG, (0, g(0, .040)[0], g(0, .040)[1]))])
+
+
 def assembled_rifle(name='skr_rifle', sniper=False):
+    if sniper is True:
+        sniper = 'skr_sniper'
     import gunparts as G
     from weapons import e_hand, e_small
     bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []   # (their guns' own sets: skr/textures.py)
@@ -1290,26 +1390,47 @@ def assembled_rifle(name='skr_rifle', sniper=False):
         for k_, v_ in c.most_common(30):
             print('[skr] tris', k_, v_, flush=True)
     if sniper:
-        # the sniper (the Veyr Lance, the brief's Penetrator rounds): everything ahead of the receiver drawn out forward
-        # to a long barrel (the shroud and its dashes, the muzzle, the prongs, the keel, the sensors); a small part is
-        # moved with it, never stretched (a stud stays round); and the magnified scope in place of the red dot
-        stretch, y_at = 1.93, -.400
+        # the set's other long guns (VARIANTS): everything ahead of the receiver drawn out or cut short (the shroud and
+        # its dashes, the muzzle, the prongs, the keel, the sensors) and made fatter round the bore; a small part is
+        # moved with it, never stretched (a stud stays round)
+        v = VARIANTS[sniper]
+        stretch, radial, y_at = v['stretch'], v['radial'], -.400
+        rx, rz = (radial if not isinstance(radial, tuple) else radial[0]), (radial if not isinstance(radial, tuple) else radial[1])
+        from mathutils import Matrix
+        for o in P:                                                    # (a part placed by its object, not its points: baked in)
+            if o is not None and o.type == 'MESH' and o.matrix_world != Matrix.Identity(4):
+                o.data.transform(o.matrix_world)
+                o.matrix_world = Matrix.Identity(4)
         for o in P:
             if o is None or o.type != 'MESH':
                 continue
             V = fk.verts(o)
             if len(V) == 0 or V[:, 1].min() > y_at:
                 continue
-            if np.ptp(V[:, 1]) < .02:
-                c = float(V[:, 1].mean())
-                if c < y_at:
-                    V[:, 1] += (y_at + (c - y_at) * stretch) - c
+            small = np.ptp(V[:, 1]) < .02 and np.ptp(V[:, 0]) < .02 and np.ptp(V[:, 2]) < .02
+            if small:
+                c = V.mean(0)
+                if c[1] < y_at:
+                    V += np.array([c[0] * (rx - 1), (y_at + (c[1] - y_at) * stretch) - c[1], (c[2] - zb) * (rz - 1)])
             else:
-                V[:, 1] = np.where(V[:, 1] < y_at, y_at + (V[:, 1] - y_at) * stretch, V[:, 1])
+                ahead = V[:, 1] < y_at
+                V[:, 1] = np.where(ahead, y_at + (V[:, 1] - y_at) * stretch, V[:, 1])
+                V[:, 0] = np.where(ahead, V[:, 0] * rx, V[:, 0])
+                V[:, 2] = np.where(ahead, zb + (V[:, 2] - zb) * rz, V[:, 2])
             fk.set_verts(o, V)
         muzzle_y = y_at + (-.700 - y_at) * stretch
-        finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .14, sz), optic=skr_scope(M, -.04, sz), scoped=True,
-               moving=[('mag', MAG, (0, -.103, .01))])
+        if os.environ.get('SKR_STRAYS'):
+            for o in P:
+                if o is not None and o.type == 'MESH' and len(o.data.vertices):
+                    V = fk.verts(o)
+                    if V[:, 1].min() < muzzle_y - .015:
+                        print('[skr] stray', o.name, np.round(V.min(0), 3), np.round(V.max(0), 3), flush=True)
+        if v['scope']:
+            finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .14, sz), optic=skr_scope(M, -.04, sz), scoped=True,
+                   moving=[('mag', MAG, (0, -.103, .01))])
+        else:
+            finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .1, sz), optic=skr_sight(M, -.02, sz), rail=(0, -.02, .113),
+                   moving=[('mag', MAG, (0, -.103, .01))])
         return
     finish('gun_' + name, P, (0, -.700, zb), (0, -.33, .02), (0, .1, sz), optic=skr_sight(M, -.02, sz), rail=(0, -.02, .113),
            moving=[('mag', MAG, (0, -.103, .01))])
@@ -1615,6 +1736,10 @@ def layered(model='gun_skr_striker', trace='skr_rifle'):
 GUNS = {k: (lambda k=k: parts(k)) for k in TRACED}
 GUNS['skr_rifle'] = assembled_rifle
 GUNS['skr_sniper'] = lambda: assembled_rifle('skr_sniper', sniper=True)
+GUNS['skr_cannon'] = lambda: assembled_rifle('skr_cannon', sniper='skr_cannon')
+GUNS['skr_shotgun'] = lambda: assembled_rifle('skr_shotgun', sniper='skr_shotgun')
+GUNS['skr_pistol'] = lambda: skr_handgun('skr_pistol')
+GUNS['skr_handcannon'] = lambda: skr_handgun('skr_handcannon', big=True)
 GUNS['skr_striker'] = layered
 
 
