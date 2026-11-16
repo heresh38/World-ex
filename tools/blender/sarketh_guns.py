@@ -519,7 +519,103 @@ def traced(name):
     finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
 
 
-GUNS = {k: (lambda k=k: traced(k)) for k in TRACED}
+# ------------------------------------------------------------------ crisp: hard parts placed by the trace
+# (the owner, 2026-11-15, on the traced blob: "blurry and seem smudged ... all parts can be seen properly"). Every shape
+# the trace found is built as a part of its own with hard, bevelled edges: the body as three bevelled layers (the full
+# outline, then two inner tiers stepping out toward its core, so it is layered in depth as the sheet's guns are), every
+# pale region a plate of its own standing proud on the layer under it, every light set in its own part. The outline,
+# the windows and where each plate and light sits are the sheet's; the depth is the tiers'.
+def _curve_solid(name, rings, half, bevel, mat, x, px, gu, gv):
+    """rings (pixel polygons: an outline, then its holes) as a bevelled extrusion `half` either side of world x"""
+    from mathutils import Matrix
+    cu = bpy.data.curves.new(name, 'CURVE')
+    cu.dimensions = '2D'
+    cu.fill_mode = 'BOTH'
+    cu.extrude = max(half - bevel, .0002)
+    cu.bevel_depth = bevel
+    cu.bevel_resolution = 1
+    cu.offset = -bevel                                 # (the bevel does not grow the outline: the sheet's line stays)
+    for ring in rings:
+        if len(ring) < 3:
+            continue
+        sp = cu.splines.new('POLY')
+        sp.points.add(len(ring) - 1)
+        for i, (c, r) in enumerate(ring):
+            sp.points[i].co = ((c - gu) * px, (gv - r) * px, 0, 1)
+        sp.use_cyclic_u = True
+    ob = bpy.data.objects.new(name, cu)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.matrix_world = Matrix(((0, 0, 1, x), (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.convert(target='MESH')
+    ob = bpy.context.view_layer.objects.active
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    import bmesh as _bm
+    bm = _bm.new(); bm.from_mesh(ob.data)                  # flat runs merged (a cap or a straight side is one face, not dozens)
+    if half > .0015:                                       # (a light is small: merging its faces left points in a line)
+        _bm.ops.dissolve_limit(bm, angle_limit=math.radians(2.0), verts=bm.verts, edges=bm.edges)
+    _bm.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)  # the fill and the sides welded into one closed solid,
+    _bm.ops.recalc_face_normals(bm, faces=bm.faces)       # then every face turned outward
+    bm.to_mesh(ob.data); bm.free()
+    ob.data.materials.clear()
+    ob.data.materials.append(mat)
+    K.harden(ob, 30)
+    bl.uv_box(ob, .22)
+    return ob
+
+
+def crisp(name):
+    import json
+    bl.reset(); M = mats(); P = []
+    S = json.load(open(os.path.join(TRACE, name + '.json')))
+    spec = TRACED[name]
+    W, H = S['size']
+    px = S['px']
+    gu, gv = spec['grip'][0] * W, spec['grip'][1] * H
+    Wd = spec['width']
+    half = {0: .23 * Wd, 1: .36 * Wd, 2: .50 * Wd}
+    for tier, key in ((0, 'outline'), (1, 'tier1'), (2, 'tier2')):
+        for i, p in enumerate(S[key]):
+            P.append(_curve_solid(f'{key}{i}', [p['ext']] + p['holes'], half[tier], min(.0016, half[tier] * .25), M['shell'], 0.0, px, gu, gv))
+    for i, p in enumerate(S['pale']):
+        t = 2 if p['depth'] > 8.5 else (1 if p['depth'] > 3.5 else 0)
+        for sd in (1, -1):
+            P.append(_curve_solid(f'plate{i}{"" if sd > 0 else "_R"}', [p['ext']] + p['holes'], .0019, .0010, M['bone'],
+                                  sd * (half[t] + .0013), px, gu, gv))
+    for key, mat in (('amber', M['amber']), ('white', M['white'])):
+        for i, p in enumerate(S[key]):
+            for sd in (1, -1):
+                P.append(_curve_solid(f'{key}{i}{"" if sd > 0 else "_R"}', [p['ext']], .0008, .0003, mat, sd * (half[1] + .0010), px, gu, gv))
+    # within the weapon budget (asset_check: 60 000 triangles with its moving parts): every part thinned evenly if over
+    tris = sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in P)
+    if tris > 54000:
+        r = 54000 / tris
+        for o in P:
+            bpy.context.view_layer.objects.active = o
+            md = o.modifiers.new('fit', 'DECIMATE'); md.ratio = r
+            bpy.ops.object.modifier_apply(modifier=md.name)
+            import bmesh as _bm
+            bm = _bm.new(); bm.from_mesh(o.data)              # (thinning can turn a face: every face outward again)
+            _bm.ops.recalc_face_normals(bm, faces=bm.faces)
+            bm.to_mesh(o.data); bm.free()
+    # sockets
+    mask_cols = [c for p in S['outline'] for c, r in p['ext']]
+    front = min(mask_cols)
+    rows = [r for p in S['outline'] for c, r in p['ext'] if c < front + 4]
+    mz = (gv - sum(rows) / len(rows)) * px
+    muzzle = (0, (front - gu) * px, mz)
+    fore = (0, (front - gu) * px * .55, mz - .03)
+    sight = (0, -.05, (gv - spec['sight_z'] * H) * px)
+    if name not in ('skr_blade', 'skr_grenade'):
+        trigger(P, M)
+    import bakekit
+    bakekit.clean(P, least=2e-11)                          # last: no triangle without area reaches the gate (it allows none)
+    finish('gun_' + name, P, muzzle, fore, sight, scoped=name == 'skr_sniper')
+
+
+GUNS = {k: (lambda k=k: crisp(k)) for k in TRACED}
 
 
 if __name__ == '__main__':

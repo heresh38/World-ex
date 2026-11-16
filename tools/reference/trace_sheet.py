@@ -15,9 +15,12 @@ light sits are exact; the thickness across the gun is the builder's (the sheet d
 """
 import os
 import sys
+import json
 import numpy as np
 from PIL import Image
 from scipy import ndimage as nd
+from shapely.geometry import box, Polygon, MultiPolygon
+from shapely.ops import unary_union
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -35,6 +38,38 @@ def background(lum):
         mid = r[len(r) // 4: 3 * len(r) // 4]
         bg[y] = np.median(mid)
     return nd.uniform_filter1d(bg, 25)[:, None]
+
+
+def chaikin(pts, n=1):
+    """corners cut, twice: a pixel outline's steps become the curve the painter drew"""
+    P = np.asarray(pts, float)
+    for _ in range(n):
+        Q = np.roll(P, -1, 0)
+        P = np.stack([P * .75 + Q * .25, P * .25 + Q * .75], 1).reshape(-1, 2)
+    return P.round(3).tolist()
+
+
+def polys(mask, simplify=1.35, min_area=12):
+    """a mask's regions as polygons with their holes (pixel units, x = column, y = row): the union of each row's runs,
+    simplified to under a pixel"""
+    rects = []
+    for r in range(mask.shape[0]):
+        row = mask[r].astype(np.int8)
+        d = np.diff(np.concatenate([[0], row, [0]]))
+        for a, b in zip(np.nonzero(d == 1)[0], np.nonzero(d == -1)[0]):
+            rects.append(box(a, r, b, r + 1))
+    if not rects:
+        return []
+    u = unary_union(rects).simplify(simplify, preserve_topology=True)
+    geoms = list(u.geoms) if isinstance(u, MultiPolygon) else [u]
+    out = []
+    for g in geoms:
+        if g.area < min_area:
+            continue
+        out.append(dict(ext=chaikin(g.exterior.coords[:-1]),
+                        holes=[chaikin(h.coords[:-1]) for h in g.interiors if Polygon(h).area > 8],
+                        area=float(g.area), c=[float(g.centroid.x), float(g.centroid.y)]))
+    return out
 
 
 def main(out):
@@ -128,6 +163,14 @@ def main(out):
         outside = nd.distance_transform_edt(~m)
         px = LENGTHS[nm] / max(m.shape[1], 1) if nm != 'skr_grenade' else LENGTHS[nm] / m.shape[0]
         np.savez_compressed(os.path.join(out, nm + '.npz'), mask=m, cls=cls, lum=L.astype(np.float32), inside=inside.astype(np.float32), outside=outside.astype(np.float32), pale_in=nd.distance_transform_edt(cls == 2).astype(np.float32), px=px)
+        # the shapes to build from: the outline, two inner tiers (the body steps out toward its core), each pale plate,
+        # each light (pixel polygons with their holes; the builder turns them into bevelled solids)
+        shapes = dict(size=[int(m.shape[1]), int(m.shape[0])], px=px,
+                      outline=polys(m, 1.6), tier1=polys(inside > 3.5, 2.2), tier2=polys(inside > 8.5, 2.6, min_area=30),
+                      pale=[dict(p, depth=float(inside[int(min(max(p['c'][1], 0), m.shape[0] - 1)), int(min(max(p['c'][0], 0), m.shape[1] - 1))]))
+                            for p in polys(cls == 2, min_area=20)],
+                      amber=polys(nd.binary_dilation(cls == 3), .6, 3), white=polys(nd.binary_dilation(cls == 4), .6, 3))
+        json.dump(shapes, open(os.path.join(out, nm + '.json'), 'w'))
         vis = np.zeros(m.shape + (3,), np.uint8)
         pal = {0: (30, 30, 34), 1: (60, 60, 90), 2: (200, 196, 186), 3: (255, 170, 60), 4: (210, 230, 255)}
         for k, col in pal.items():
