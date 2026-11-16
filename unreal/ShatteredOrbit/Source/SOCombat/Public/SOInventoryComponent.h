@@ -17,7 +17,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 4;
+	static constexpr int32 CurrentVersion = 5;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -50,6 +50,10 @@ public:
 
 	UPROPERTY(SaveGame)
 	FName Body = TEXT("male");
+
+	/** Version 5: the melee styles owned beyond the fists (blades: USOMeleeTable ids). */
+	UPROPERTY(SaveGame)
+	TArray<FName> Blades;
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -137,6 +141,11 @@ public:
 	/** combat.js ammo pickup: the equipped weapons' reserves grow (25 %, heavies 15 %, capped at 1.5x). */
 	void AddAmmoPickup();
 	void AddCredits(int32 Amount);
+
+	/** Hand to hand: a blade (a USOMeleeTable style id) is owned once; the fists are always there. Server only. */
+	void AddBlade(FName Style);
+	bool HasBlade(FName Style) const { return Blades.Contains(Style); }
+	const TArray<FName>& GetBlades() const { return Blades; }
 	void AddXp(int32 Amount);
 	void AddAlloy(int32 Amount);
 
@@ -234,6 +243,9 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	FName Body = TEXT("male");
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FName> Blades;
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

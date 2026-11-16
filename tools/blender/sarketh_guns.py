@@ -47,6 +47,7 @@ def mats(under='skr_skin', shell='skr_dark', armour='skr_armour'):
     if fin.startswith('mirror'):
         MS = fk.tmat('gun_steel__mirror', 'skr_mirror', rough=.05, metal=1.0)
         M['bone'] = MS
+        M['shell'] = fk.tmat('gun_body__skrcarbon', 'skr_carbon', rough=.1, nstr=.8)   # (its orange in carbon fibre: the owner)
         if fin == 'mirror_all':
             M['under'] = MS
     return M

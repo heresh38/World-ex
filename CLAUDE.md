@@ -476,8 +476,15 @@ own blow at once (`MeleePredicted`). The body: `USOLocomotionAnimInstance::SetMe
 the UPPER body (the spine and under it) over the legs' gait, the whole body when standing, the trunk pitched with the
 aim; the first-person arms play the same. Clips per body (`hero/<sex>/motion.py`): `FistGuard`, `Jab`, `Cross`, `Hook`,
 `Haymaker`, `BladeGuard`, `SlashA`, `SlashB`, `Thrust`, `Cleave` (a hook's upper arm is out at 80 and turned in -80,
-or the forearm stands up). Sounds `sfx_synth.py ... melee`. The blade style (`skr_blade`, its edge a sweep of the
-set's light) waits for its model and a way to carry it. Tests `ShatteredOrbit.Melee.*`; pictures
+or the forearm stands up). Sounds `sfx_synth.py ... melee`. **The Veyr Edge** (`skr_blade`, the owner, 2026-11-15:
+approved): `sarketh_guns.veyr_edge` (mirror-polished stainless, a ground edge, a glass window with a filament of light,
+a machined handle), exported like a gun to `SourceArt/Weapons/SkrBlade`; the style's `"mesh"` is imported with the gun
+pipeline's materials by `SO_IMPORT_ONLY=melee`. A blade is OWNED (`USOInventoryComponent::Blades`, saved: version 5,
+replicated); a set cache gives every style of its set (`FSOMeleeStyle::SetId`, `ASOReliquary`). Key 4 goes from the
+gun to the first blade owned (or the fists), from a blade to the fists, from the fists back to the gun
+(`ASOCharacter::HandleFists`, `SetMeleeStyle`, checked on the server). The blade lies in the right fist of the body and
+of the first-person arms from the hand's own bones (`ASOCharacter::BladeInHand`: the handle across the palm, the blade
+out of the thumb's side, the edge toward the knuckles). A gun put away stays away whichever view comes up. Tests `ShatteredOrbit.Melee.*`; pictures
 `SOCaptureSeries 1 35` (files `SO_me_fp_*`, `SO_me_side_*`).
 **Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
 screen ... shouldn't be at the center of the screen, better to be on the right ... on running we lower the gun for

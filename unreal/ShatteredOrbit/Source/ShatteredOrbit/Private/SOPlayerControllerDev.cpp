@@ -599,22 +599,29 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Look(0.0f);
 			SetControlRotation(GetControlRotation() + FRotator(0.0f, 180.0f, 0.0f));
 		});
-		for (int32 Pass = 0; Pass < 2; ++Pass)
+		for (int32 Pass = 0; Pass < 4; ++Pass)
 		{
-			const TCHAR* V = Pass == 0 ? TEXT("fp") : TEXT("side");
+			// passes 0 / 1 the fists, 2 / 3 the blade (given for the pictures)
+			const bool bBlade = Pass >= 2;
+			const TCHAR* V = (Pass % 2) == 0 ? (bBlade ? TEXT("bfp") : TEXT("fp")) : (bBlade ? TEXT("bside") : TEXT("side"));
 			Act([=, this]()
 			{
-				View(Pass == 0 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson);
-				Beside(Pass == 1);
+				View((Pass % 2) == 0 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson);
+				Beside((Pass % 2) == 1);
 				if (ASOCharacter* H = Hero())
 				{
+					if (bBlade && H->GetInventory())
+					{
+						H->GetInventory()->AddBlade(TEXT("skr_blade"));
+					}
 					H->SetFists(true);
+					H->SetMeleeStyle(bBlade ? FName(TEXT("skr_blade")) : FName(TEXT("fists")));
 				}
 			});
 			Do(1.2f, []() {});
 			Snap(0.0f, *FString::Printf(TEXT("me_%s_0_guard"), V));
 			const TCHAR* Names[] = { TEXT("1_jab"), TEXT("2_cross"), TEXT("3_hook") };
-			const float Lands[] = { 0.08f, 0.13f, 0.17f };
+			const float Lands[] = { bBlade ? 0.17f : 0.08f, bBlade ? 0.16f : 0.13f, bBlade ? 0.20f : 0.17f };
 			for (int32 i = 0; i < 3; ++i)
 			{
 				Act([=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(false); } });

@@ -12,6 +12,8 @@
 #include "SOLocomotionAnimInstance.h"
 #include "SOMelee.h"
 #include "SOPlayerState.h"
+#include "SOInventoryComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 namespace SOTest
 {
@@ -131,6 +133,64 @@ bool FSOMeleeFistsTest::RunTest(const FString& Parameters)
 	W.Run(0.1f);
 	TestFalse(TEXT("fists down"), Player->IsFists());
 	TestFalse(TEXT("the hands are back on the gun"), Player->IsWeaponStowed());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOMeleeBladeTest, "ShatteredOrbit.Melee.TheBladeIsOwnedAndHeld", SOTest::Flags)
+bool FSOMeleeBladeTest::RunTest(const FString& Parameters)
+{
+	const USOMeleeTable* Table = USOMeleeTable::Get();
+	const FSOMeleeStyle* Blade = Table ? Table->Find(TEXT("skr_blade")) : nullptr;
+	if (!TestNotNull(TEXT("the blade's style"), Blade) || !TestFalse(TEXT("the blade has its mesh (SO_IMPORT_ONLY=melee)"), Blade->Mesh.IsNull()))
+	{
+		return false;
+	}
+	TestEqual(TEXT("the Sarketh cache gives it"), Blade->SetId, FName(TEXT("sarketh")));
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>();
+	PC->PlayerState = PS;
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	PC->Possess(Player);
+	W.Run(0.2f);
+	USOInventoryComponent* Inventory = Player->GetInventory();
+	if (!TestNotNull(TEXT("an inventory"), Inventory))
+	{
+		return false;
+	}
+
+	// without the blade, key 4 is the fists and back
+	Player->SetMeleeStyle(TEXT("skr_blade"));
+	TestEqual(TEXT("a blade not owned cannot be taken up"), Player->GetMeleeStyleId(), FName(TEXT("fists")));
+	Player->HandleFists();
+	TestTrue(TEXT("the fists"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("fists"));
+	Player->HandleFists();
+	TestFalse(TEXT("and back to the gun"), Player->IsFists());
+
+	// owned: key 4 is the blade, then the fists, then the gun
+	Inventory->AddBlade(TEXT("skr_blade"));
+	TestTrue(TEXT("owned"), Inventory->HasBlade(TEXT("skr_blade")));
+	Player->HandleFists();
+	TestTrue(TEXT("the blade first"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("skr_blade"));
+	W.Run(0.2f);
+	const UStaticMeshComponent* Held = Player->GetHeldBlade(false);
+	TestTrue(TEXT("the blade is in the body's hand"), Held && Held->IsVisible() && Held->GetStaticMesh());
+	if (Held && !SOTest::PlayerBodyMissing(*this))
+	{
+		const FVector Hand = Player->GetMesh()->GetBoneLocation(TEXT("hand_R"));
+		const FVector Grip = Held->GetComponentTransform().TransformPosition(FVector(0.0f, -6.0f, 0.0f));
+		TestTrue(FString::Printf(TEXT("its handle is in the fist (%.1f cm from the wrist)"), FVector::Dist(Grip, Hand)), FVector::Dist(Grip, Hand) < 12.0f);
+	}
+	const float Light = Table->Find(TEXT("skr_blade"))->Light[0].Damage;
+	TestTrue(TEXT("its blows are the blade's"), Light > Table->Find(TEXT("fists"))->Light[0].Damage);
+	Player->HandleFists();
+	TestTrue(TEXT("then the fists"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("fists"));
+	W.Run(0.1f);
+	TestFalse(TEXT("the blade is put away"), Held && Held->IsVisible());
+	Player->HandleFists();
+	TestFalse(TEXT("then the gun"), Player->IsFists());
 	return true;
 }
 

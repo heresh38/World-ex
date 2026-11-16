@@ -36,6 +36,8 @@
 #include "SOLootLibrary.h"
 #include "SOGunRigComponent.h"
 #include "SOMelee.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "TimerManager.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
@@ -996,6 +998,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		}
 	}
 	UpdateMeleeGuard();
+	UpdateBlade();
 	HolsterTimer -= DeltaSeconds;
 	if (HolsterTimer <= 0.0f)
 	{
@@ -1535,7 +1538,25 @@ void ASOCharacter::HandleReload()
 void ASOCharacter::HandleWeapon1() { SelectSlot(0); }
 void ASOCharacter::HandleWeapon2() { SelectSlot(1); }
 void ASOCharacter::HandleWeapon3() { SelectSlot(2); }
-void ASOCharacter::HandleFists() { SetFists(!bFists); }
+void ASOCharacter::HandleFists()
+{
+	// the gun -> the first blade owned (or the fists) -> the fists -> the gun
+	const USOInventoryComponent* Inventory = GetInventory();
+	const FName Blade = Inventory && Inventory->GetBlades().Num() > 0 ? Inventory->GetBlades()[0] : NAME_None;
+	if (!bFists)
+	{
+		SetMeleeStyle(Blade.IsNone() ? FName(TEXT("fists")) : Blade);
+		SetFists(true);
+	}
+	else if (MeleeStyle != TEXT("fists"))
+	{
+		SetMeleeStyle(TEXT("fists"));
+	}
+	else
+	{
+		SetFists(false);
+	}
+}
 void ASOCharacter::HandleNextWeapon() { CycleSlot(1); }
 void ASOCharacter::HandlePrevWeapon() { CycleSlot(-1); }
 
@@ -2178,9 +2199,15 @@ void ASOCharacter::ApplyViewMode()
 	if (Weapon)
 	{
 		Weapon->SetFirstPersonView(bEye);
+		// (a gun put away, on a vault or in hand to hand, stays away whichever view comes up: switching views with the
+		// fists up brought the gun back into the first-person view)
 		if (Weapon->GetFirstPersonRig())
 		{
-			Weapon->GetFirstPersonRig()->SetShown(bFirst && !bScopeView);
+			Weapon->GetFirstPersonRig()->SetShown(bFirst && !bScopeView && !bHeldStowed);
+		}
+		if (bHeldStowed && Weapon->GetThirdPersonRig())
+		{
+			Weapon->GetThirdPersonRig()->SetShown(false);
 		}
 	}
 	for (USOGunRigComponent* Rig : HolsterRigs)
@@ -2403,5 +2430,115 @@ void ASOCharacter::ShowMeleeBlow(int32 Index)
 	if (IsLocallyControlled())
 	{
 		AbilityKick = Index < 0 ? -4.0f : -1.5f;            // (the view takes the blow's weight)
+	}
+}
+
+void ASOCharacter::SetMeleeStyle(FName Style)
+{
+	// the fists are always there; a blade only if this player owns it (the server checks)
+	const USOInventoryComponent* Inventory = GetInventory();
+	if (Style != TEXT("fists") && (!Inventory || !Inventory->HasBlade(Style)))
+	{
+		return;
+	}
+	if (Style == MeleeStyle)
+	{
+		return;
+	}
+	MeleeStyle = Style;
+	OnRep_MeleeStyle();
+	if (!HasAuthority())
+	{
+		ServerSetMeleeStyle(Style);
+	}
+}
+
+void ASOCharacter::ServerSetMeleeStyle_Implementation(FName Style)
+{
+	SetMeleeStyle(Style);
+}
+
+void ASOCharacter::OnRep_MeleeStyle()
+{
+	MeleeLastIndex = -1;                                     // (a new style begins its own chain)
+	UpdateMeleeGuard();
+	UpdateBlade();
+	if (bFists)
+	{
+		USOSoundLibrary::PlayFor(this, MeleeStyle == TEXT("fists") ? TEXT("melee_ready") : TEXT("blade_swing"), GetActorLocation(), 0.5f, ESOSoundRange::Near);
+	}
+}
+
+bool ASOCharacter::BladeInHand(const USkeletalMeshComponent* Skel, FTransform& OutWorld)
+{
+	static const FName Hand(TEXT("hand_R")), Index(TEXT("index_01_R")), Middle(TEXT("middle_01_R")), Pinky(TEXT("pinky_01_R"));
+	if (!Skel || Skel->GetBoneIndex(Hand) == INDEX_NONE || Skel->GetBoneIndex(Middle) == INDEX_NONE)
+	{
+		return false;
+	}
+	const FVector H = Skel->GetBoneLocation(Hand), M = Skel->GetBoneLocation(Middle);
+	const FVector Along = (M - H).GetSafeNormal();                          // the wrist to the knuckles
+	FVector Thumb = Skel->GetBoneLocation(Index) - Skel->GetBoneLocation(Pinky);   // the little finger to the index
+	Thumb = (Thumb - Along * FVector::DotProduct(Thumb, Along)).GetSafeNormal();
+	const FVector Palm = FVector::CrossProduct(Thumb, Along).GetSafeNormal(); // (right hand: out of the palm)
+	// the blade's mesh: the blade along +Y, the edge along -Z, the handle's middle 6 cm behind its origin
+	const FVector Y = Thumb, Z = -Along, X = FVector::CrossProduct(Y, Z);
+	const FQuat Rot = FMatrix(X, Y, Z, FVector::ZeroVector).ToQuat();
+	const FVector Grip = H + Along * FVector::Dist(H, M) * 0.55f + Palm * 2.6f;  // inside the closed fist
+	OutWorld = FTransform(Rot, Grip - Rot.RotateVector(FVector(0.0f, -6.0f, 0.0f)));
+	return true;
+}
+
+void ASOCharacter::UpdateBlade()
+{
+	const FSOMeleeStyle* Style = bFists && !bDead ? GetMeleeStyle() : nullptr;
+	const bool bShow = Style && !Style->Mesh.IsNull() && Style->Id == MeleeStyle;
+	if (bShow && BladeStyle != MeleeStyle)
+	{
+		// once per change of style, never every frame: the mesh is loaded with the area's assets already
+		UStaticMesh* BladeMesh = Style->Mesh.LoadSynchronous();
+		for (TObjectPtr<UStaticMeshComponent>* Slot : { &BladeTP, &BladeFP })
+		{
+			if (!*Slot)
+			{
+				UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+				C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				C->SetCastShadow(Slot == &BladeTP);
+				C->SetupAttachment(GetCapsuleComponent());
+				C->RegisterComponent();
+				if (Slot == &BladeFP)
+				{
+					C->SetOnlyOwnerSee(true);
+					C->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
+				}
+				*Slot = C;
+			}
+			(*Slot)->SetStaticMesh(BladeMesh);
+		}
+		BladeStyle = MeleeStyle;
+	}
+	if (!bShow)
+	{
+		BladeStyle = NAME_None;
+	}
+	for (const bool bFirst : { false, true })
+	{
+		UStaticMeshComponent* C = bFirst ? BladeFP.Get() : BladeTP.Get();
+		const USkeletalMeshComponent* Holder = bFirst ? FirstPersonArms.Get() : GetMesh();
+		if (!C)
+		{
+			continue;
+		}
+		FTransform At;
+		const bool bOn = bShow && Holder && Holder->IsVisible() && BladeInHand(Holder, At);
+		C->SetVisibility(bOn);
+		if (bOn)
+		{
+			C->SetWorldTransform(At);
+			if (!bFirst)
+			{
+				C->SetOwnerNoSee(GetMesh()->bOwnerNoSee);
+			}
+		}
 	}
 }

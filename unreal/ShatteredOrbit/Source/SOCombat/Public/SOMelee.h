@@ -5,6 +5,7 @@
 #include "SOMelee.generated.h"
 
 class ASOCombatCharacter;
+class UStaticMesh;
 
 /**
  * Hand to hand (the owner, 2026-11-15: "mele is when we put away all our guns on our back so we hold nothing but our
@@ -71,6 +72,14 @@ struct SOCOMBAT_API FSOMeleeStyle
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	FText Name;
+
+	/** What the hand holds (a blade; none for the fists), placed in the right fist by ASOCharacter. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	TSoftObjectPtr<UStaticMesh> Mesh;
+
+	/** The set it belongs to: a set cache (ASOReliquary::RewardSet) gives every style of its set. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FName SetId;
 
 	/** The guard: a looping clip on the upper body while the style is out. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")

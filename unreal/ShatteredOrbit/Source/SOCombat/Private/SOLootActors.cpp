@@ -1,4 +1,5 @@
 #include "SOLootActors.h"
+#include "SOMelee.h"
 
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -309,6 +310,17 @@ void ASOReliquary::Interact(APawn* User)
 		for (const FSOWeaponInstance& W : LastRewards)
 		{
 			Inventory->AddWeapon(W);
+		}
+		// and the set's blades (hand to hand), each owned once
+		if (const USOMeleeTable* Melee = USOMeleeTable::Get())
+		{
+			for (const FSOMeleeStyle& Style : Melee->Styles)
+			{
+				if (Style.SetId == RewardSet)
+				{
+					Inventory->AddBlade(Style.Id);
+				}
+			}
 		}
 		OnRep_Open();
 		return;

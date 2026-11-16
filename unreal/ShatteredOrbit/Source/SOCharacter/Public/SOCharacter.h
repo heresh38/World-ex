@@ -356,8 +356,12 @@ public:
 	 */
 	bool IsFists() const { return bFists; }
 	void SetFists(bool bOn);
-	/** The style in use: "fists" (a blade's own when one is carried: to come). */
+	/** The style in use: "fists", or a blade the player owns (USOInventoryComponent::HasBlade). Key 4 goes from the gun
+	 *  to the first blade owned (or the fists), from a blade to the fists, from the fists back to the gun. */
 	FName GetMeleeStyleId() const { return MeleeStyle; }
+	void SetMeleeStyle(FName Style);
+	/** The blade in the hand (first person / the body), null while none is out. */
+	class UStaticMeshComponent* GetHeldBlade(bool bFirstPerson) const { return bFirstPerson ? BladeFP.Get() : BladeTP.Get(); }
 	const struct FSOMeleeStyle* GetMeleeStyle() const;
 	/** A blow from this player's own input (light, or heavy): shown at once here, landed by the server. */
 	void MeleeStrike(bool bHeavy);
@@ -474,8 +478,27 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Fists)
 	bool bFists = false;
 
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_MeleeStyle)
 	FName MeleeStyle = TEXT("fists");
+
+	UFUNCTION()
+	void OnRep_MeleeStyle();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetMeleeStyle(FName Style);
+
+	/** The style's blade in the right fist of the body and of the first-person arms (made as it is first needed). */
+	UPROPERTY(Transient)
+	TObjectPtr<class UStaticMeshComponent> BladeTP;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UStaticMeshComponent> BladeFP;
+
+	FName BladeStyle;
+	void UpdateBlade();
+	/** Where the blade lies in a fist: its handle across the palm, the blade out of the thumb's side, the edge toward
+	 *  the knuckles, from the hand's own bones (as the hold fit reads them). */
+	static bool BladeInHand(const USkeletalMeshComponent* Skel, FTransform& OutWorld);
 
 	UFUNCTION()
 	void OnRep_Fists();

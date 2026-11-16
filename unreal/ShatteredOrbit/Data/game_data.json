@@ -2397,6 +2397,8 @@
     "skr_blade": {
       "name": "Veyr Edge",
       "guard": "BladeGuard",
+      "mesh": "gun_skr_blade",
+      "set": "sarketh",
       "chainGrace": 0.45,
       "edge": true,
       "edgeColor": "#ffb257",

@@ -210,6 +210,35 @@ def mirror():
             cavity=.1)
 
 
+def carbon():
+    """skr_carbon, Ember Oath II's shell (the owner, 2026-11-15, on the lacquer: "looks more like a tile floor so make it
+    more like a sleek carbon fibre"): a 2/2 twill of 3 mm tows dyed the set's orange, each tow rounded across its width
+    and drawn in its fibres along it, the tows running one way catching the light more than the others, all under a
+    deep glossy clear coat (a faint haze where it was handled, a few hairlines in the coat)"""
+    T = Tile('skr_carbon', .25)
+    x, y = _xy(T)
+    w = .003
+    i = np.floor(x / w); j = np.floor(y / w)
+    over = ((i - j) % 4) < 2                                                       # the twill: over two, under two, stepping
+    across = np.where(over, y / w - j, x / w - i)                                  # across the tow
+    prof = np.sin(np.pi * np.clip(across, 0, 1)).astype(np.float32)
+    along = np.where(over, x, y)
+    fib = .5 + .5 * np.sin(2 * np.pi * (np.where(over, y, x) / .00011) + T.noise(.002, 2) * 4)   # the fibres in a tow
+
+    def norm(a):
+        return (a - a.min()) / (np.ptp(a) + 1e-6)
+    var = norm(T.noise(.05, 3))
+    haze = smooth(.5, .85, norm(T.noise(.03, 3)))
+    hair = T.lines(60, (.004, .03), (.00008, .00018), bend=.3, along=.5)
+    shade = np.where(over, 1.0, .84).astype(np.float32)                           # (a shimmer of the weave, not a basket)
+    k = shade * (.88 + .12 * prof) * (.95 + .05 * fib) * (.95 + .05 * var)
+    alb = hexc('#d06a1a') * k[..., None]
+    alb = mix(alb, hexc('#5a2a08'), (1 - prof) ** 10 * .30)                       # a fine dark line between the tows
+    rough = .07 + .03 * (1 - prof) + .06 * haze + .07 * hair + .02 * var
+    T.write(alb, [(prof, .00002), (fib, .0000015), (-hair, .000004)], rough, 0.0, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.0,
+            cavity=.15)
+
+
 def iron():
     """skr_iron, the chassis and mounts: forged iron, hammered, pitted in clusters with rust in the pits, mill scale
     left in dark bluish patches, rubbed bright on what stands up"""

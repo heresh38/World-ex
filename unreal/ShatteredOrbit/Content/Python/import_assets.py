@@ -1139,6 +1139,8 @@ GUN_WEAR = {
     "gun_body__skr": (.35, .12, .10, 0),
     # a blade's mirror-polished stainless: kept bright and clean (the owner: "extremely shiny")
     "gun_steel__mirror": (.12, .05, .04, 1),
+    # Ember Oath II's carbon fibre under a clear coat: a little wear on its edges, little grime
+    "gun_body__skrcarbon": (.2, .08, .06, 0),
     "gun_steel": (.9, .3, .4, 1), "gun_parkerized": (.85, .32, .45, 1), "gun_dark": (.8, .3, .45, 1), "gun_metal": (.85, .3, .4, 1),
     "gun_trim": (.7, .25, .3, 1), "gun_body": (.75, .28, .45, 1), "gun_paint": (.75, .28, .45, 1), "gun_brass": (.5, .2, .35, 1),
     "gun_polymer_od": (.55, .22, .5, 0), "gun_polymer": (.55, .22, .5, 0), "gun_rubber": (.3, .1, .5, 0), "gun_wood": (.5, .2, .4, 0),
@@ -2855,9 +2857,11 @@ def difficulty():
     log(f"DA_Difficulty: {len(levels)} levels, default {d.get('default', 'standard')}")
 
 
-def melee():
+def melee(master=None, defaults=None):
     """Data/game_data.json "melee" -> /Game/Data/DA_Melee (USOMeleeTable): hand to hand, a style per way of fighting
-    (the fists, a blade): its guard clip, its chain of light blows and its heavy blow (SO_IMPORT_ONLY=melee)."""
+    (the fists, a blade): its guard clip, its chain of light blows and its heavy blow (SO_IMPORT_ONLY=melee). A style
+    with a "mesh" (a blade: tools/blender/sarketh_guns.py, exported like a gun to SourceArt/Weapons/<Dir>) has it
+    imported the way a gun's body is (its materials, the set's maps, its own baked maps) and set on the style."""
     d = load_json(GAME_DATA).get("melee")
     if not d:
         return
@@ -2895,6 +2899,18 @@ def melee():
         y.set_editor_property("edge", bool(st.get("edge", False)))
         if st.get("edgeColor"):
             y.set_editor_property("edge_color", hex_color(st["edgeColor"]))
+        y.set_editor_property("set_id", st.get("set", "None"))
+        if st.get("mesh") and master is not None:
+            folder = weapon_dir(st["mesh"])
+            src = os.path.join(SOURCE, "Weapons", folder)
+            if os.path.isdir(src):
+                dest = f"/Game/Weapons/{folder}"
+                ensure_dir(dest)
+                instances = gun_instances(master, src, dest, load_json(os.path.join(src, "materials.json")), defaults["clear"], st["mesh"])
+                y.set_editor_property("mesh", import_static(src, st["mesh"] + ".fbx", dest, f"SM_{folder}", instances))
+                log(f"SM_{folder}: the {sid} style's mesh")
+            else:
+                log(f"{sid}: its mesh {src} is missing (export it like a gun)")
         styles.append(y)
     table.set_editor_property("styles", styles)
     eal.save_loaded_asset(table, only_if_is_dirty=False)
@@ -3190,7 +3206,7 @@ def main():
     if want("difficulty"):
         difficulty()
     if want("melee"):
-        melee()
+        melee(master, defaults)
     if want("species"):
         species()
     if want("bosses"):
