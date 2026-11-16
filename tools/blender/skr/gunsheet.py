@@ -39,6 +39,37 @@ for nm in names:
     area('rim', (-1.2 * k, .8 * k, .9 * k), 160 * k * k, .5 * k, (.85, .9, 1))
     area('top', (.2 * k, 0, 1.6 * k), 60 * k * k, 1.0 * k, (1, 1, 1))
     area('under', (.8 * k, 0, -1.0 * k), 25 * k * k, 1.0 * k, (.8, .85, 1))
+    # glass as glass (the game's M_SOGlass is clear): transmission in place of the exported alpha
+    for mt in bpy.data.materials:
+        if mt.name.startswith('gun_glass') and mt.node_tree:
+            b_ = mt.node_tree.nodes.get('Principled BSDF')
+            if b_:
+                b_.inputs['Transmission Weight'].default_value = 1.0; b_.inputs['Roughness'].default_value = .02
+                b_.inputs['Alpha'].default_value = 1.0; b_.inputs['IOR'].default_value = 1.5
+    # STUDIO=1: soft boxes round the piece that only its reflections see (polished steel shows what it reflects: in the
+    # dark studio a mirror blade read as black)
+    if os.environ.get('STUDIO'):
+        # what the reflections see: a soft sky (the camera itself still sees the dark backdrop)
+        wn = w.node_tree.nodes; wl = w.node_tree.links
+        sky = wn.new('ShaderNodeTexSky'); sky.sky_type = 'MULTIPLE_SCATTERING' if hasattr(sky, 'sky_type') else sky.sky_type
+        try:
+            sky.sun_disc = False
+        except Exception:
+            pass
+        bgs = wn.new('ShaderNodeBackground'); bgs.inputs['Strength'].default_value = .5
+        wl.new(sky.outputs[0], bgs.inputs[0])
+        lp = wn.new('ShaderNodeLightPath'); mx = wn.new('ShaderNodeMixShader')
+        wl.new(lp.outputs['Is Camera Ray'], mx.inputs[0]); wl.new(bgs.outputs[0], mx.inputs[1])
+        wl.new(wn['Background'].outputs[0], mx.inputs[2]); wl.new(mx.outputs[0], wn['World Output'].inputs[0])
+        em = bpy.data.materials.new('softbox'); em.use_nodes = True
+        nt_ = em.node_tree; nt_.nodes.clear()
+        e_ = nt_.nodes.new('ShaderNodeEmission'); e_.inputs['Strength'].default_value = 6.0
+        o_ = nt_.nodes.new('ShaderNodeOutputMaterial'); nt_.links.new(e_.outputs[0], o_.inputs[0])
+        for i, (loc, rot, sz) in enumerate((((0, 0, 1.3), (0, 0, 0), (2.2, .5)), ((1.4, 0, .4), (0, 1.2, 0), (2.2, .35)),
+                                            ((-1.3, 0, .6), (0, -1.0, 0), (2.2, .5)), ((0, 0, -1.2), (math.pi, 0, 0), (2.2, .3)))):
+            bpy.ops.mesh.primitive_plane_add(size=1, location=c + Vector(loc) * k)
+            pl = bpy.context.object; pl.scale = (sz[1] * k, sz[0] * k, 1); pl.rotation_euler = rot
+            pl.data.materials.append(em); pl.visible_camera = False
     cd = bpy.data.cameras.new('c'); cam = bpy.data.objects.new('c', cd); sc.collection.objects.link(cam); sc.camera = cam
     VIEWS = {'side': ((1, 0, 0), (1600, 700)), 'quarter': ((1, -.8, .45), (1400, 900)), 'top': ((0, 0, 1), (1600, 500)),
              'front': ((0, -1, .15), (900, 700)), 'back3q': ((-1, .8, .35), (1400, 900)),

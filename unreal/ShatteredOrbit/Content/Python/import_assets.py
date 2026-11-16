@@ -1137,6 +1137,8 @@ GUN_WEAR = {
     # the Sarketh's orange lacquer (the owner: "the guns are brown, they should be orange"): kept, chipped little, little
     # grime, no bare metal under it: the body's heavy wear turned it brown in the game
     "gun_body__skr": (.35, .12, .10, 0),
+    # a blade's mirror-polished stainless: kept bright and clean (the owner: "extremely shiny")
+    "gun_steel__mirror": (.12, .05, .04, 1),
     "gun_steel": (.9, .3, .4, 1), "gun_parkerized": (.85, .32, .45, 1), "gun_dark": (.8, .3, .45, 1), "gun_metal": (.85, .3, .4, 1),
     "gun_trim": (.7, .25, .3, 1), "gun_body": (.75, .28, .45, 1), "gun_paint": (.75, .28, .45, 1), "gun_brass": (.5, .2, .35, 1),
     "gun_polymer_od": (.55, .22, .5, 0), "gun_polymer": (.55, .22, .5, 0), "gun_rubber": (.3, .1, .5, 0), "gun_wood": (.5, .2, .4, 0),
@@ -2853,6 +2855,52 @@ def difficulty():
     log(f"DA_Difficulty: {len(levels)} levels, default {d.get('default', 'standard')}")
 
 
+def melee():
+    """Data/game_data.json "melee" -> /Game/Data/DA_Melee (USOMeleeTable): hand to hand, a style per way of fighting
+    (the fists, a blade): its guard clip, its chain of light blows and its heavy blow (SO_IMPORT_ONLY=melee)."""
+    d = load_json(GAME_DATA).get("melee")
+    if not d:
+        return
+    ensure_dir("/Game/Data")
+    path = "/Game/Data/DA_Melee"
+    if eal.does_asset_exist(path):
+        table = eal.load_asset(path)
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property("data_asset_class", unreal.SOMeleeTable)
+        table = tools.create_asset("DA_Melee", "/Game/Data", unreal.SOMeleeTable, factory)
+
+    def blow(b):
+        x = unreal.SOMeleeBlow()
+        x.set_editor_property("clip", b["clip"])
+        for key, prop in (("hit", "hit_time"), ("recover", "recover"), ("damage", "damage"), ("range", "range"), ("angle", "angle"),
+                          ("force", "force"), ("stagger", "stagger"), ("lunge", "lunge")):
+            if key in b:
+                x.set_editor_property(prop, float(b[key]))
+        x.set_editor_property("swing_sound", b.get("swing", "None"))
+        x.set_editor_property("hit_sound", b.get("hitSound", "None"))
+        return x
+
+    styles = []
+    for sid, st in d.items():
+        if sid.startswith("_"):
+            continue
+        y = unreal.SOMeleeStyle()
+        y.set_editor_property("id", sid)
+        y.set_editor_property("name", unreal.Text(st.get("name", sid)))
+        y.set_editor_property("guard", st["guard"])
+        y.set_editor_property("light", [blow(b) for b in st["light"]])
+        y.set_editor_property("heavy", blow(st["heavy"]))
+        y.set_editor_property("chain_grace", float(st.get("chainGrace", 0.45)))
+        y.set_editor_property("edge", bool(st.get("edge", False)))
+        if st.get("edgeColor"):
+            y.set_editor_property("edge_color", hex_color(st["edgeColor"]))
+        styles.append(y)
+    table.set_editor_property("styles", styles)
+    eal.save_loaded_asset(table, only_if_is_dirty=False)
+    log(f"DA_Melee: {len(styles)} styles ({', '.join(str(x.get_editor_property('id')) for x in styles)})")
+
+
 SPECIES_DATA = os.path.normpath(os.path.join(PROJECT, "Data", "species.json"))
 
 
@@ -3141,6 +3189,8 @@ def main():
         kits()
     if want("difficulty"):
         difficulty()
+    if want("melee"):
+        melee()
     if want("species"):
         species()
     if want("bosses"):

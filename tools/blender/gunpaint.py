@@ -234,6 +234,9 @@ def paint(name, maps, spec, out_dir, log=print):
     inside = bakekit.spread(inside, cover, .0010 / texel)[sel]
     dust = smooth(.3, .8, N[:, 2]) * smooth(.80, .50, A) * .3
     dirt = np.clip((.80 * hollow + .5 * inside + dust) * (.35 + .65 * smooth(.25, .75, mid)), 0, 1)
+    # a mirror polish (a blade's steel, the owner: "extremely shiny") is kept clean: a trace of grime deep in a hollow only
+    mirror = is_("gun_steel__mirror")
+    dirt = np.where(mirror, dirt * .2, dirt)
 
     # ---- handling: where a hand lies, the finish is polished
     hand = np.zeros(len(P), F32)

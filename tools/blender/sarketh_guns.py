@@ -1116,7 +1116,8 @@ def G_lathe_z(name, prof, c, m, n):
 # this set too"): drawn out or cut short ahead of the receiver (`stretch`), made fatter round the bore (`radial`),
 # with the magnified scope or the set's lozenge sight
 VARIANTS = {'skr_sniper': dict(stretch=1.93, radial=1.0, scope=True),
-            'skr_cannon': dict(stretch=.85, radial=1.6, scope=False),
+            'skr_cannon': dict(stretch=.85, radial=1.6, scope=False, fore=-.29),   # (the hand behind the fat shroud: at -.33 the
+                                                                                 # first-person fit closed the index into it)
             'skr_shotgun': dict(stretch=.55, radial=(1.55, 1.05), scope=False)}       # (wide and flat: a spread's mouth)
 
 
@@ -1468,8 +1469,8 @@ def assembled_rifle(name='skr_rifle', sniper=False):
             finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .14, sz), optic=skr_scope(M, -.04, sz), scoped=True,
                    moving=[('mag', MAG, (0, -.103, .01))])
         else:
-            finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .1, sz), optic=skr_sight(M, -.02, sz), rail=(0, -.02, .113),
-                   moving=[('mag', MAG, (0, -.103, .01))])
+            finish('gun_' + name, P, (0, muzzle_y, zb), (0, v.get('fore', -.33), .02), (0, .1, sz), optic=skr_sight(M, -.02, sz),
+                   rail=(0, -.02, .113), moving=[('mag', MAG, (0, -.103, .01))])
         return
     finish('gun_' + name, P, (0, -.700, zb), (0, -.33, .02), (0, .1, sz), optic=skr_sight(M, -.02, sz), rail=(0, -.02, .113),
            moving=[('mag', MAG, (0, -.103, .01))])
@@ -1772,6 +1773,127 @@ def layered(model='gun_skr_striker', trace='skr_rifle'):
     finish(model, P, (0, yb1 - .03, z_mid), (0, (yb0 + yb1) * .5 + .06, z_mid - h_bar * .5), (0, y_b0 + .10, sz), optic=SC,
            moving=[('mag', MAG, (0, -.154, .006))])
 
+def veyr_edge(name='skr_blade'):
+    """The Sarketh energy blade (the melee style `skr_blade`, Data/game_data.json "melee"). The owner, 2026-11-15, on the
+    first one: "The blade doesn't look sharp, it needs to be a combination of stainless steel, extremely shiny and no
+    textiles like now, maybe some light/glass that's see though with effects". So: every metal surface is stainless
+    polished to a mirror (`gun_steel__mirror`, the set skr_mirror) or polished titanium; nothing woven, wrapped or
+    patterned. The blade is GROUND: a flat spine with small bevels, flat faces, then a long grind meeting in an edge a
+    fraction of a millimetre wide (a true edge, not a rounded belly), drawn up into a point. Through its middle runs a
+    window of clear glass (`gun_glass`, see-through in the game) with a filament of their amber light inside it and
+    beads of light along it; a thin line of light along each grind's shoulder. The handle is machined: a polished steel
+    core ringed by titanium bands, a titanium pommel holding a glass dome over the glowing end of the power cell (the
+    part `mag`). The guard: a polished steel block with a glass eye on each flank over light, amber vents, swept
+    steel quillons and a finger guard, studs. A titanium emitter collar at the root. Two hooked steel spurs on the
+    spine. Held in the right fist, blade forward (-Y), edge down. About 57 cm."""
+    import gunparts as G
+    bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []
+    MS = fk.tmat('gun_steel__mirror', 'skr_mirror', rough=.05, metal=1.0)
+    TI = fk.tmat('gun_metal__ti', 'skr_titanium')
+    CELL = bl.mat('gun_glow__cell', '#ffb257', 0, .35, emit='#ffb257', strength=5)
+    GLS = bl.mat('gun_glass__skr', '#f2f5f7', 0, .03, alpha=.12)
+    TR, AM = M['trim'], M['amber']
+
+    # --- the blade: its profile along y (spine top z1, edge z0, half thickness at the spine hw) and its grind
+    ys = np.array([-.016, -.050, -.120, -.200, -.280, -.340, -.385, -.415, -.432])
+    z1s = np.array([.0130, .0128, .0122, .0114, .0104, .0092, .0070, .0040, .0008])
+    z0s = np.array([-.0330, -.0350, -.0352, -.0340, -.0310, -.0262, -.0185, -.0090, -.0006])
+    hws = np.array([.0040, .0039, .0036, .0033, .0029, .0025, .0019, .0012, .0004])
+
+    def prof(y):
+        return float(np.interp(-y, -ys, z1s)), float(np.interp(-y, -ys, z0s)), float(np.interp(-y, -ys, hws))
+
+    def grind(y):                                            # the grind's shoulder: 55 % of the way down from the spine
+        z1, z0, hw = prof(y)
+        return z1 - .55 * (z1 - z0)
+
+    EDGE = .00012                                            # what is left of the edge: a little over a tenth of a mm
+
+    def ring_full(y):
+        z1, z0, hw = prof(y); zg = grind(y); c = min(.0010, hw * .35)
+        return [(hw, zg), (hw, z1 - c), (hw - c, z1), (-hw + c, z1), (-hw, z1 - c), (-hw, zg), (-EDGE, z0), (EDGE, z0)]
+
+    WZ0, WZ1 = -.0098, -.0006                                # the window's band (where the blade is tall enough for it)
+    W0, W1 = -.060, -.300
+
+    def ring_upper(y):
+        z1, z0, hw = prof(y); c = min(.0010, hw * .35)
+        return [(hw, WZ1), (hw, z1 - c), (hw - c, z1), (-hw + c, z1), (-hw, z1 - c), (-hw, WZ1)]
+
+    def ring_lower(y):
+        z1, z0, hw = prof(y); zg = grind(y)
+        return [(hw, zg), (hw, WZ0), (-hw, WZ0), (-hw, zg), (-EDGE, z0), (EDGE, z0)]
+
+    def ring_glass(y):
+        z1, z0, hw = prof(y); g = hw * .82
+        return [(g, WZ0 - .0005), (g * 1.04, (WZ0 + WZ1) / 2), (g, WZ1 + .0005), (-g, WZ1 + .0005), (-g * 1.04, (WZ0 + WZ1) / 2), (-g, WZ0 - .0005)]
+
+    def run(y0, y1, step=.004):
+        n = max(int(abs(y1 - y0) / step), 2)
+        return [y0 + (y1 - y0) * i / n for i in range(n + 1)]
+    P.append(G._skin('blade_root', [(y, ring_full(y)) for y in run(-.016, W0)], MS, 24))
+    P.append(G._skin('blade_spine', [(y, ring_upper(y)) for y in run(W0, W1)], MS, 24))
+    P.append(G._skin('blade_edge', [(y, ring_lower(y)) for y in run(W0, W1)], MS, 24))
+    P.append(G._skin('blade_window', [(y, ring_glass(y)) for y in run(W0 + .0005, W1 - .0005)], GLS, 40))
+    P.append(G._skin('blade_tip', [(y, ring_full(y)) for y in run(W1, -.432, .003)], MS, 24))
+    # the light inside the glass: a filament the length of the window and beads of light strung on it
+    zc = (WZ0 + WZ1) / 2
+    P.append(lathe('filament', [(W0 + .004, 0), (W0 + .004, .0006), (W1 - .004, .0006), (W1 - .004, 0)], CELL, zc, n=8))
+    for k in range(9):
+        yb = W0 - .012 - k * (W0 - W1 - .024) / 8
+        P.append(crystal('bead', (0, yb + .0045, zc), (0, yb - .0045, zc), .0016, CELL, n=4, k0=.5, k1=.5))
+    # a line of light on each grind's shoulder (the edge itself stays bare, polished steel)
+    for sg in (1, -1):
+        rings = []
+        for y in run(-.030, -.360):
+            z1, z0, hw = prof(y); zg = grind(y)
+            rings.append((y, [(sg * (hw + .00025), zg - .0006), (sg * (hw + .00025), zg + .0006), (sg * (hw - .0004), zg + .0006),
+                              (sg * (hw - .0004), zg - .0006)][::sg]))
+        P.append(G._skin('shoulder_light', rings, CELL, 40))
+    # the emitter collar at the root, and two hooked spurs on the spine
+    P.append(G.loft('emitter', [(-.0155, -.036, .0158, .0066, .0018), (-.0175, -.0372, .0170, .0072, .0020), (-.0275, -.0372, .0170, .0072, .0020),
+                                (-.0295, -.0360, .0158, .0066, .0018)], TI))
+    P.append(G.loft('emitter_light', [(-.0222, -.0376, .0174, .0074, .0020), (-.0232, -.0376, .0174, .0074, .0020)], CELL))
+    for i, y in enumerate((-.135, -.235)):
+        z1 = prof(y)[0]
+        P += talon(f'spur{i}', [(y, z1 - .0015), (y + .018, z1 + .009), (y + .044, z1 + .014)], [.010, .006, 0], MS, x=0, t=.0036, two=True, sym=False)
+
+    # --- the guard: a polished block, a glass eye on each flank over light, vents, studs, quillons, a finger guard
+    P.append(G.rprism('guard_block', [(.006, -.024), (-.004, -.036), (-.016, -.038), (-.016, .022), (-.004, .026), (.006, .021)], .036, MS, .004))
+    P.append(lathe_x('guard_eye_light', [(-.0004, .0062), (.0006, .0062), (.0006, 0)], (.0178, -.005, -.004), CELL, 20, 1))
+    P.append(lathe_x('guard_eye_light', [(-.0004, .0062), (.0006, .0062), (.0006, 0)], (-.0178, -.005, -.004), CELL, 20, -1))
+    for sd in (1, -1):
+        P.append(lathe_x('guard_eye', [(-.0002, .0080), (.0016, .0078), (.0034, .0060), (.0040, .0030), (.0042, 0)], (sd * .0180, -.005, -.004), GLS, 24, sd))
+        P.append(lathe_x('guard_eye_ring', [(-.0002, .0096), (.0014, .0096), (.0018, .0084), (.0018, .0080), (-.0002, .0080)], (sd * .0180, -.005, -.004), TI, 24, sd))
+    for k in range(3):
+        yv = -.010 - k * .0028
+        P.append(plate('guard_vent', [(yv, .008), (yv - .0014, .008), (yv - .0014, .020), (yv, .020)], AM, .0172, .0184, .0002))
+    for y_, z_ in ((.001, -.029), (.001, .017), (-.012, -.032), (-.012, .020)):
+        for sd in (1, -1):
+            P.append(lathe_x('guard_stud', [(-.001, .0020), (.0012, .0020), (.0016, .0016), (.0016, 0)], (sd * .018, y_, z_), TI, 6, sd, phase=.5))
+    P += talon('quillon', [(-.010, .022), (-.022, .033), (-.038, .040), (-.052, .041)], [.011, .009, .005, 0], MS, x=.012, t=.0036)
+    P += talon('finger_guard', [(-.006, -.034), (-.014, -.050), (-.026, -.057), (-.042, -.055)], [.011, .009, .005, 0], MS, x=0, t=.008,
+               two=True, sym=False)
+
+    # --- the handle: a polished steel core ringed with titanium bands; the pommel with the cell's light under glass
+    hs = [(.118, -.0118, .0118, .0116, 3.2), (.106, -.0150, .0146, .0136, 3.2), (.080, -.0168, .0156, .0146, 3.2),
+          (.052, -.0154, .0144, .0136, 3.2), (.026, -.0166, .0154, .0144, 3.2), (.004, -.0164, .0156, .0146, 3.0)]
+    H = G.Body(hs)
+    H.chassis(P, MS, name='handle', step=.004, inset=.0)
+    for k in range(7):                                       # machined bands: something for the fingers to hold, not a wrap
+        yk = .098 - k * .0128
+        H.collar(P, 'band', TI, yk, .0042, d=.0011)
+    H.shell(P, 'spine_strip', TI, .110, .010, 1.45, math.pi - 1.45, t=.0010, mirror=False)
+    P.append(lathe('pommel', [(.116, .0), (.116, .0128), (.121, .0136), (.130, .0130), (.134, .0112), (.134, .0)], TI, 0.0, n=8))
+    P.append(lathe('cell_end', [(.128, .0), (.128, .0078), (.140, .0070), (.140, .0)], CELL, 0.0, n=20))
+    P.append(lathe('pommel_glass', [(.1335, .0), (.1335, .0098), (.1385, .0094), (.1425, .0070), (.1445, .0036), (.1452, .0)], GLS, 0.0, n=28))
+    MAG = [lathe('mag', [(.050, .0), (.050, .0085), (.118, .0085), (.118, .0)], CELL, 0.0, n=16)]   # the cell, inside the handle
+
+    import bakekit
+    bakekit.clean([o for o in P if o is not None], least=2e-11)
+    finish('gun_' + name, P, (0, -.432, -.0006), (0, -.030, .0), (0, .0, .030), moving=[('mag', MAG, (0, .118, .0))])
+
+
 GUNS = {k: (lambda k=k: parts(k)) for k in TRACED}
 GUNS['skr_rifle'] = assembled_rifle
 GUNS['skr_sniper'] = lambda: assembled_rifle('skr_sniper', sniper=True)
@@ -1780,6 +1902,7 @@ GUNS['skr_shotgun'] = lambda: assembled_rifle('skr_shotgun', sniper='skr_shotgun
 GUNS['skr_pistol'] = lambda: skr_handgun('skr_pistol')
 GUNS['skr_handcannon'] = lambda: skr_handgun('skr_handcannon', big=True)
 GUNS['skr_striker'] = layered
+GUNS['skr_blade'] = veyr_edge
 
 
 if __name__ == '__main__':

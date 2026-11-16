@@ -35,6 +35,8 @@
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
 #include "SOGunRigComponent.h"
+#include "SOMelee.h"
+#include "TimerManager.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
@@ -69,6 +71,7 @@ namespace SOInputPaths
 	static const TCHAR* Melee = TEXT("/Game/Input/IA_Melee.IA_Melee");
 	static const TCHAR* ClassAbility = TEXT("/Game/Input/IA_ClassAbility.IA_ClassAbility");
 	static const TCHAR* Ultimate = TEXT("/Game/Input/IA_Ultimate.IA_Ultimate");
+	static const TCHAR* Fists = TEXT("/Game/Input/IA_Fists.IA_Fists");
 	static const TCHAR* PadShoulderRight = TEXT("/Game/Input/IA_PadShoulderRight.IA_PadShoulderRight");
 	static const TCHAR* PadShoulderLeft = TEXT("/Game/Input/IA_PadShoulderLeft.IA_PadShoulderLeft");
 }
@@ -176,6 +179,7 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	MeleeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Melee));
 	ClassAbilityAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::ClassAbility));
 	UltimateAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Ultimate));
+	FistsAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Fists));
 	PadShoulderRightAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PadShoulderRight));
 	PadShoulderLeftAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::PadShoulderLeft));
 	Flashlight = CreateDefaultSubobject<USpotLightComponent>(TEXT("Flashlight"));
@@ -971,7 +975,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	{
 		// (and while the body plays an ability's clip: a throw, a blow, a brace)
 		const USOLocomotionAnimInstance* BodyAnim = GetMesh() ? Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr;
-		const bool bStow = (SOMove->IsMantling() || (BodyAnim && BodyAnim->IsPlayingAction())) && !bDead;
+		const bool bStow = (SOMove->IsMantling() || (BodyAnim && BodyAnim->IsPlayingAction()) || bFists) && !bDead;
 		if (bStow != bHeldStowed)
 		{
 			bHeldStowed = bStow;
@@ -991,6 +995,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 			HolsterTimer = 0.0f;
 		}
 	}
+	UpdateMeleeGuard();
 	HolsterTimer -= DeltaSeconds;
 	if (HolsterTimer <= 0.0f)
 	{
@@ -1045,8 +1050,12 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	// The first-person arms hang from the eye, not from the capsule. Crouched (or sliding) the capsule's centre drops
 	// and the eye comes down to it: left on the capsule, the arms' shoulders ended up above the camera and the arms
 	// reached down into the view from overhead. Their shoulders keep their place under the eye exactly as standing.
+	// With the fists up the arms stand a little forward and lower (the guard is at the chin: from the eye the fists filled
+	// the bottom corners of the view; a hand to hand view shows them ahead, under the line of sight).
+	FistsView = FMath::FInterpTo(FistsView, bFists ? 1.0f : 0.0f, DeltaSeconds, 8.0f);
 	const FVector ArmsAt = FirstPersonArms->GetRelativeLocation();
-	FirstPersonArms->SetRelativeLocation(FVector(ArmsAt.X, ArmsAt.Y, EyeOffset - StandingEyeHeight));
+	const float ArmsX = GetMesh() ? GetMesh()->GetRelativeLocation().X : ArmsAt.X;
+	FirstPersonArms->SetRelativeLocation(FVector(ArmsX + FistsForward * FistsView, ArmsAt.Y, EyeOffset - StandingEyeHeight - FistsDrop * FistsView));
 
 	// Aim down sights: progress at the weapon ADS rate, zoom by the weapon magnification.
 	const USOWeaponData* WeaponData = Weapon ? Weapon->GetData() : nullptr;
@@ -1161,6 +1170,7 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	if (UInputAction* A = Load(Weapon1Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon1); }
 	if (UInputAction* A = Load(Weapon2Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon2); }
 	if (UInputAction* A = Load(Weapon3Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon3); }
+	if (UInputAction* A = Load(FistsAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleFists); }
 	if (UInputAction* A = Load(NextWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleNextWeapon); }
 	if (UInputAction* A = Load(PrevWeaponAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePrevWeapon); }
 	if (UInputAction* A = Load(InventoryAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInventory); }
@@ -1376,6 +1386,11 @@ void ASOCharacter::HandleFirePressed()
 		bSprintLatched = false;
 		Move->SetWantsToSprint(false);
 	}
+	if (bFists)
+	{
+		MeleeStrike(false);
+		return;
+	}
 	if (Weapon)
 	{
 		Weapon->StartFire();
@@ -1486,6 +1501,11 @@ void ASOCharacter::HandleAimPressed()
 	{
 		return;
 	}
+	if (bFists)
+	{
+		MeleeStrike(true);
+		return;
+	}
 	bAiming = true;
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
 	{
@@ -1506,7 +1526,7 @@ void ASOCharacter::HandleAimReleased()
 
 void ASOCharacter::HandleReload()
 {
-	if (Weapon && !bDead)
+	if (Weapon && !bDead && !bFists)
 	{
 		Weapon->StartReload();
 	}
@@ -1515,6 +1535,7 @@ void ASOCharacter::HandleReload()
 void ASOCharacter::HandleWeapon1() { SelectSlot(0); }
 void ASOCharacter::HandleWeapon2() { SelectSlot(1); }
 void ASOCharacter::HandleWeapon3() { SelectSlot(2); }
+void ASOCharacter::HandleFists() { SetFists(!bFists); }
 void ASOCharacter::HandleNextWeapon() { CycleSlot(1); }
 void ASOCharacter::HandlePrevWeapon() { CycleSlot(-1); }
 
@@ -1653,11 +1674,18 @@ USOInventoryComponent* ASOCharacter::GetInventory() const
 void ASOCharacter::SelectSlot(int32 Slot)
 {
 	USOInventoryComponent* Inventory = GetInventory();
-	if (!Inventory || bDead || Slot == Inventory->GetActiveSlot() || !Inventory->GetEquipped(Slot))
+	if (!Inventory || bDead || !Inventory->GetEquipped(Slot))
 	{
 		return;
 	}
-	Inventory->ServerSelectSlot(Slot);
+	if (bFists)
+	{
+		SetFists(false);
+	}
+	if (Slot != Inventory->GetActiveSlot())
+	{
+		Inventory->ServerSelectSlot(Slot);
+	}
 }
 
 void ASOCharacter::CycleSlot(int32 Step)
@@ -1667,12 +1695,32 @@ void ASOCharacter::CycleSlot(int32 Step)
 	{
 		return;
 	}
-	for (int32 i = 1; i < USOInventoryComponent::NumSlots; ++i)
+	// the hands are one more stop on the wheel, after the last gun and before the first
+	const int32 Num = USOInventoryComponent::NumSlots;
+	if (bFists)
 	{
-		const int32 Slot = (Inventory->GetActiveSlot() + Step * i + USOInventoryComponent::NumSlots * 2) % USOInventoryComponent::NumSlots;
-		if (Inventory->GetEquipped(Slot))
+		for (int32 i = 0; i < Num; ++i)
 		{
-			SelectSlot(Slot);
+			const int32 Slot = Step > 0 ? i : Num - 1 - i;
+			if (Inventory->GetEquipped(Slot))
+			{
+				SelectSlot(Slot);
+				return;
+			}
+		}
+		return;
+	}
+	for (int32 i = 1; i <= Num; ++i)
+	{
+		const int32 Raw = Inventory->GetActiveSlot() + Step * i;
+		if (Raw >= Num || Raw < 0)
+		{
+			SetFists(true);
+			return;
+		}
+		if (Inventory->GetEquipped(Raw))
+		{
+			SelectSlot(Raw);
 			return;
 		}
 	}
@@ -2101,6 +2149,8 @@ void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME_CONDITION(ASOCharacter, ViewMode, COND_SkipOwner);
 	DOREPLIFETIME(ASOCharacter, Outfit);
 	DOREPLIFETIME(ASOCharacter, bFlashlightOn);
+	DOREPLIFETIME(ASOCharacter, bFists);
+	DOREPLIFETIME(ASOCharacter, MeleeStyle);
 	DOREPLIFETIME_CONDITION(ASOCharacter, bAiming, COND_SkipOwner);
 }
 
@@ -2139,5 +2189,219 @@ void ASOCharacter::ApplyViewMode()
 		{
 			Rig->SetOwnerNoSeeAll(bEye);
 		}
+	}
+}
+
+
+// --- hand to hand -------------------------------------------------------------------------------------------------------
+
+const FSOMeleeStyle* ASOCharacter::GetMeleeStyle() const
+{
+	const USOMeleeTable* Table = USOMeleeTable::Get();
+	const FSOMeleeStyle* Style = Table ? Table->Find(MeleeStyle) : nullptr;
+	return Style ? Style : (Table ? Table->Find(TEXT("fists")) : nullptr);
+}
+
+const FSOMeleeBlow* ASOCharacter::MeleeBlowAt(int32 Index) const
+{
+	const FSOMeleeStyle* Style = GetMeleeStyle();
+	if (!Style)
+	{
+		return nullptr;
+	}
+	return Index < 0 ? &Style->Heavy : (Style->Light.IsValidIndex(Index) ? &Style->Light[Index] : nullptr);
+}
+
+void ASOCharacter::SetFists(bool bOn)
+{
+	if (bDead || bOn == bFists)
+	{
+		return;
+	}
+	if (bOn && Weapon)
+	{
+		Weapon->StopFire();
+	}
+	if (bOn)
+	{
+		HandleAimReleased();                                 // (out of the sights first: the aim key is the heavy blow now)
+	}
+	bFists = bOn;
+	OnRep_Fists();
+	if (!HasAuthority())
+	{
+		ServerSetFists(bOn);
+	}
+}
+
+void ASOCharacter::ServerSetFists_Implementation(bool bOn)
+{
+	SetFists(bOn);
+}
+
+void ASOCharacter::OnRep_Fists()
+{
+	MeleeLastIndex = -1;
+	UpdateMeleeGuard();
+	HolsterTimer = 0.0f;                                     // (the gun goes to the back on the next tick)
+	USOSoundLibrary::PlayFor(this, bFists ? TEXT("melee_ready") : TEXT("ui_equip"), GetActorLocation(), 0.6f, ESOSoundRange::Near);
+}
+
+void ASOCharacter::UpdateMeleeGuard()
+{
+	const FSOMeleeStyle* Style = bFists && !bDead ? GetMeleeStyle() : nullptr;
+	UAnimSequenceBase* Guard = Style ? GetAbilityClip(Style->Guard) : nullptr;
+	for (USkeletalMeshComponent* Skel : { GetMesh(), FirstPersonArms.Get() })
+	{
+		if (USOLocomotionAnimInstance* Anim = Skel ? Cast<USOLocomotionAnimInstance>(Skel->GetAnimInstance()) : nullptr)
+		{
+			Anim->SetMeleeGuard(Guard);
+		}
+	}
+}
+
+int32 ASOCharacter::NextMeleeBlow(bool bHeavy) const
+{
+	const FSOMeleeStyle* Style = GetMeleeStyle();
+	const UWorld* World = GetWorld();
+	if (!Style || !World || Style->Light.Num() == 0)
+	{
+		return -2;
+	}
+	const double Now = World->GetTimeSeconds();
+	const FSOMeleeBlow* Last = MeleeLastIndex == -1 && MeleeLastStart < -50.0 ? nullptr : MeleeBlowAt(MeleeLastIndex);
+	const double Free = Last ? MeleeLastStart + Last->Recover : -100.0;
+	if (Now < Free - 0.06)                                  // (a press a hair early still counts: the machines' clocks differ)
+	{
+		return -2;
+	}
+	if (bHeavy)
+	{
+		return -1;
+	}
+	// a light blow pressed within the grace after the last light one could follow it goes on with the chain
+	if (Last && MeleeLastIndex >= 0 && Now <= Free + Style->ChainGrace)
+	{
+		return (MeleeLastIndex + 1) % Style->Light.Num();
+	}
+	return 0;
+}
+
+void ASOCharacter::MeleeStrike(bool bHeavy)
+{
+	if (!bFists || bDead || !IsLocallyControlled())
+	{
+		return;
+	}
+	const int32 Index = NextMeleeBlow(bHeavy);
+	if (Index < -1)
+	{
+		return;
+	}
+	if (HasAuthority())
+	{
+		ServerMelee_Implementation(bHeavy);
+		return;
+	}
+	// a joined player sees their own blow at once; the server lands it and its echo is skipped here
+	BeginMeleeBlow(Index);
+	ShowMeleeBlow(Index);
+	MeleePredicted = GetWorld()->GetTimeSeconds();
+	ServerMelee(bHeavy);
+}
+
+void ASOCharacter::BeginMeleeBlow(int32 Index)
+{
+	MeleeLastIndex = Index;
+	MeleeLastStart = GetWorld()->GetTimeSeconds();
+}
+
+void ASOCharacter::ServerMelee_Implementation(bool bHeavy)
+{
+	if (!bFists || bDead)
+	{
+		return;
+	}
+	const int32 Index = NextMeleeBlow(bHeavy);
+	const FSOMeleeBlow* Blow = Index >= -1 ? MeleeBlowAt(Index) : nullptr;
+	if (!Blow)
+	{
+		return;
+	}
+	BeginMeleeBlow(Index);
+	MulticastMeleeBlow(static_cast<int8>(Index));
+	// the blow lands when the clip says (after its wind-up), if the hands are still fighting then
+	TWeakObjectPtr<ASOCharacter> Self(this);
+	GetWorldTimerManager().SetTimer(MeleeHitTimer, FTimerDelegate::CreateLambda([Self, Index]()
+	{
+		ASOCharacter* Me = Self.Get();
+		const FSOMeleeBlow* B = Me ? Me->MeleeBlowAt(Index) : nullptr;
+		if (Me && B && Me->bFists && !Me->bDead)
+		{
+			USOMeleeLibrary::Land(Me, *B);
+		}
+	}), FMath::Max(Blow->HitTime, 0.01f), false);
+}
+
+void ASOCharacter::MulticastMeleeBlow_Implementation(int8 Index)
+{
+	if (!HasAuthority())
+	{
+		if (IsLocallyControlled() && GetWorld()->GetTimeSeconds() - MeleePredicted < 0.6)
+		{
+			return;                                          // (shown already, as it was pressed)
+		}
+		BeginMeleeBlow(Index);
+	}
+	ShowMeleeBlow(Index);
+}
+
+void ASOCharacter::ShowMeleeBlow(int32 Index)
+{
+	const FSOMeleeStyle* Style = GetMeleeStyle();
+	const FSOMeleeBlow* Blow = MeleeBlowAt(Index);
+	if (!Style || !Blow)
+	{
+		return;
+	}
+	if (UAnimSequenceBase* Clip = GetAbilityClip(Blow->Clip))
+	{
+		for (USkeletalMeshComponent* Skel : { GetMesh(), FirstPersonArms.Get() })
+		{
+			if (USOLocomotionAnimInstance* Anim = Skel ? Cast<USOLocomotionAnimInstance>(Skel->GetAnimInstance()) : nullptr)
+			{
+				Anim->PlayMeleeBlow(Clip, 1.0f);
+			}
+		}
+	}
+	if (!Blow->SwingSound.IsNone())
+	{
+		USOSoundLibrary::PlayFor(this, Blow->SwingSound, GetActorLocation(), Index < 0 ? 0.9f : 0.7f, ESOSoundRange::Near);
+	}
+	// the body steps into it (its own machine moves it: the movement is the owner's)
+	if (IsLocallyControlled() && Blow->Lunge > 0.0f && !GetCharacterMovement()->IsFalling())
+	{
+		const FVector Ahead = GetAimDirection().GetSafeNormal2D();
+		GetCharacterMovement()->Velocity += Ahead * Blow->Lunge;
+	}
+	// a blade's edge is a sweep of light as it lands
+	if (Style->bEdge)
+	{
+		TWeakObjectPtr<ASOCharacter> Self(this);
+		const float Range = Blow->Range, Angle = Blow->Angle;
+		const FLinearColor Color = Style->EdgeColor;
+		GetWorldTimerManager().SetTimer(MeleeEdgeTimer, FTimerDelegate::CreateLambda([Self, Range, Angle, Color]()
+		{
+			ASOCharacter* Me = Self.Get();
+			USOFxSubsystem* Fx = Me && Me->GetWorld() ? Me->GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr;
+			if (Fx)
+			{
+				Fx->Sweep(Me->GetAimOrigin(), Me->GetAimDirection(), Range, Angle, Color);
+			}
+		}), FMath::Max(Blow->HitTime - 0.03f, 0.01f), false);
+	}
+	if (IsLocallyControlled())
+	{
+		AbilityKick = Index < 0 ? -4.0f : -1.5f;            // (the view takes the blow's weight)
 	}
 }

@@ -248,6 +248,10 @@ public:
 	TSoftObjectPtr<UInputAction> ClassAbilityAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> UltimateAction;
+	/** Hand to hand: the guns go on the back, the hands are free (key 4; the mouse wheel and the pad's d-pad reach it
+	 *  past the last gun). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> FistsAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> PadShoulderRightAction;
@@ -305,6 +309,7 @@ public:
 	void HandleWeapon1();
 	void HandleWeapon2();
 	void HandleWeapon3();
+	void HandleFists();
 	void HandleNextWeapon();
 	void HandlePrevWeapon();
 	void HandleInventory();
@@ -340,8 +345,25 @@ public:
 	 *  places with the gun in hand. Cheap when nothing changed. */
 	void RefreshHolsters();
 
-	/** The gun in hand is in its holster and the hands are free: while vaulting, mantling or climbing. */
+	/** The gun in hand is in its holster and the hands are free: while vaulting, mantling or climbing, and in hand to hand. */
 	bool IsWeaponStowed() const { return bHeldStowed; }
+
+	/**
+	 * Hand to hand (the owner, 2026-11-15: "mele is when we put away all our guns on our back so we hold nothing but our
+	 * fists ... light and hard strike for everything in mele"): every gun on the back, the style's guard on the upper
+	 * body; fire is the light blow (a chain: each press within the style's grace goes on to the next), aim the heavy one.
+	 * The style and its numbers are data (USOMeleeTable, Data/game_data.json "melee"). The server lands the blow.
+	 */
+	bool IsFists() const { return bFists; }
+	void SetFists(bool bOn);
+	/** The style in use: "fists" (a blade's own when one is carried: to come). */
+	FName GetMeleeStyleId() const { return MeleeStyle; }
+	const struct FSOMeleeStyle* GetMeleeStyle() const;
+	/** A blow from this player's own input (light, or heavy): shown at once here, landed by the server. */
+	void MeleeStrike(bool bHeavy);
+	/** Which blow the last one was (0.. the light chain, -1 heavy) and when it began (world seconds). */
+	int32 GetMeleeLastBlow() const { return MeleeLastIndex; }
+	double GetMeleeLastStart() const { return MeleeLastStart; }
 
 	/** The worn gun of an equipped slot (null: that slot is empty or in the hands). */
 	class USOGunRigComponent* GetHolsteredRig(int32 Slot) const { return HolsterRigs.IsValidIndex(Slot) ? HolsterRigs[Slot].Get() : nullptr; }
@@ -447,6 +469,48 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetFlashlight(bool bOn);
+
+	// --- hand to hand
+	UPROPERTY(ReplicatedUsing = OnRep_Fists)
+	bool bFists = false;
+
+	UPROPERTY(Replicated)
+	FName MeleeStyle = TEXT("fists");
+
+	UFUNCTION()
+	void OnRep_Fists();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetFists(bool bOn);
+
+	UFUNCTION(Server, Reliable)
+	void ServerMelee(bool bHeavy);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastMeleeBlow(int8 Index);
+
+	/** The next blow's index for a press now (-1 heavy), or -2 when the last one is still too early to follow. */
+	int32 NextMeleeBlow(bool bHeavy) const;
+	const struct FSOMeleeBlow* MeleeBlowAt(int32 Index) const;
+	/** The clip, the sounds, the edge's light, the step in (this machine). */
+	void ShowMeleeBlow(int32 Index);
+	/** Starts a blow's clock (both the predicting machine and the server keep it). */
+	void BeginMeleeBlow(int32 Index);
+	/** The guard on (or off) both bodies' animation. */
+	void UpdateMeleeGuard();
+
+	/** First person with the fists up: the arms this far forward and down (cm), eased in by FistsView. */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Melee")
+	float FistsForward = 14.0f;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Melee")
+	float FistsDrop = 9.0f;
+	float FistsView = 0.0f;
+
+	int32 MeleeLastIndex = -1;
+	double MeleeLastStart = -100.0;
+	double MeleePredicted = -100.0;  // (this machine showed the blow it asked for: the server's echo is skipped)
+	FTimerHandle MeleeHitTimer;
+	FTimerHandle MeleeEdgeTimer;
 
 	/** Feet on the ground make noise the creatures hear: running loud, walking soft, crouching none. */
 	void TickFootstepNoise(float DeltaSeconds);

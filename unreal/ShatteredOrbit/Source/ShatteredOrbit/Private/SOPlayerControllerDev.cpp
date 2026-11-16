@@ -571,6 +571,67 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.14f, TEXT("w9_throw_drawn_back"));
 		Snap(0.1f, TEXT("w10_throw_released"));
 	}
+	if (Set == 35)
+	{
+		// Hand to hand (files me_<view>_<moment>): the fists up, the light chain (jab, cross, hook) and the heavy blow,
+		// each at the moment it lands, from the eye and from a camera off the player's right front.
+		auto Beside = [this, Hero](bool bOn)
+		{
+			ASOCharacter* H = Hero();
+			if (!bOn || !H)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
+			const FVector Rel(210.0f, 170.0f, 40.0f), Look(20.0f, 0.0f, 30.0f);
+			CaptureCamera->SetActorRelativeLocation(Rel);
+			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			Look(0.0f);
+			SetControlRotation(GetControlRotation() + FRotator(0.0f, 180.0f, 0.0f));
+		});
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			const TCHAR* V = Pass == 0 ? TEXT("fp") : TEXT("side");
+			Act([=, this]()
+			{
+				View(Pass == 0 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson);
+				Beside(Pass == 1);
+				if (ASOCharacter* H = Hero())
+				{
+					H->SetFists(true);
+				}
+			});
+			Do(1.2f, []() {});
+			Snap(0.0f, *FString::Printf(TEXT("me_%s_0_guard"), V));
+			const TCHAR* Names[] = { TEXT("1_jab"), TEXT("2_cross"), TEXT("3_hook") };
+			const float Lands[] = { 0.08f, 0.13f, 0.17f };
+			for (int32 i = 0; i < 3; ++i)
+			{
+				Act([=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(false); } });
+				Snap(Lands[i], *FString::Printf(TEXT("me_%s_%s"), V, Names[i]));
+				Do(0.3f, []() {});
+			}
+			Do(1.0f, []() {});
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(true); } });
+			Snap(0.3f, *FString::Printf(TEXT("me_%s_4_heavy_windup"), V));
+			Snap(0.17f, *FString::Printf(TEXT("me_%s_5_heavy_lands"), V));
+			Do(1.5f, []() {});
+		}
+		Act([=, this]() { Beside(false); if (ASOCharacter* H = Hero()) { H->SetFists(false); } });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 34)
 	{
 		// The light guns' reloads (files lr_<gun>_<view>_<n>): six moments through one reload, from the eye and from a

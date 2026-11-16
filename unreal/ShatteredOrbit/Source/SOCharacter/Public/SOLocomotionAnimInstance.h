@@ -146,7 +146,18 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float FootIKAlpha = 0.0f;
 	bool bBodyMotion = false;
 
+	// Hand to hand: the guard or the blow on the upper body (see USOLocomotionAnimInstance::SetMeleeGuard).
+	const UAnimSequenceBase* MeleeClip = nullptr;
+	float MeleeTime = 0.0f;
+	bool bMeleeLoop = true;
+	float MeleeWeight = 0.0f;
+	float MeleeLegs = 0.0f;
+	float MeleePitch = 0.0f;
+
 private:
+	/** The melee layer laid over the blended locomotion (before the body motion, the hold and the hit). */
+	void ApplyMelee(FPoseContext& Output) const;
+
 	/** Orientation warping (legs toward the movement direction, the chest kept on the aim), leans into acceleration,
 	 *  landing compression and foot placement on uneven ground (two-bone leg IK). */
 	void ApplyBody(FPoseContext& Output) const;
@@ -191,6 +202,29 @@ public:
 	/** The clip on the attack layer right now. */
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequenceBase> ActiveAttack;
+
+	/**
+	 * Hand to hand (the guns on the back): the style's guard loops on the UPPER body (the spine and all above it) over
+	 * whatever the legs are doing, and a blow plays there once and goes back to the guard. Standing, the whole body takes
+	 * the clip (its feet set as it was made); on the move the legs keep their gait. None = no melee layer.
+	 */
+	void SetMeleeGuard(UAnimSequenceBase* Guard);
+	void PlayMeleeBlow(UAnimSequenceBase* Clip, float PlayRate = 1.0f);
+	bool IsMeleeBlowPlaying() const { return MeleeBlowTime >= 0.0f; }
+	float GetMeleeWeight() const { return MeleeWeight; }
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> MeleeGuard;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> MeleeBlow;
+
+	float MeleeBlowTime = -1.0f;
+	float MeleeBlowRate = 1.0f;
+	float MeleeGuardTime = 0.0f;
+	float MeleeWeight = 0.0f;   // the layer coming on and off (0 to 1)
+	float MeleeLegs = 0.0f;     // how much of the legs it takes (1 standing)
+	float MeleePitch = 0.0f;    // the aim's pitch: blows go where the eyes look
 
 	// State read by the proxy (game thread).
 	float Speed = 0.0f;

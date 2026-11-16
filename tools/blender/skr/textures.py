@@ -192,6 +192,21 @@ def steel():
             cavity=.3)
 
 
+def mirror():
+    """skr_mirror, a blade's steel (the owner, 2026-11-15: "a combination of stainless steel, extremely shiny"): stainless
+    polished to a mirror, the faintest swirl of the last polish, a few hairline scratches, a breath of colour from the
+    alloy; almost no roughness anywhere"""
+    T = Tile('skr_mirror', .25)
+    swirl = T.noise(.004, 3)
+    hair = T.lines(90, (.004, .03), (.00008, .00018), bend=.3, along=.5)
+    var = T.noise(.07, 3)
+    alb = hexc('#d4d7dc') * (.97 + .03 * var[..., None])
+    alb = mix(alb, hexc('#e6e8eb'), hair * .35)
+    rough = .045 + .02 * smooth(.3, .8, swirl) + .05 * hair + .01 * var
+    T.write(alb, [(swirl, .000002), (-hair, .000012), (T.grain(1), .000001)], rough, 1.0, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.0,
+            cavity=.1)
+
+
 def iron():
     """skr_iron, the chassis and mounts: forged iron, hammered, pitted in clusters with rust in the pits, mill scale
     left in dark bluish patches, rubbed bright on what stands up"""

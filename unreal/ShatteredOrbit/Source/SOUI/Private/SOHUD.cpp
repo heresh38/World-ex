@@ -37,6 +37,144 @@ namespace
 	const FLinearColor Back(0.0f, 0.0f, 0.0f, 0.45f);
 }
 
+/**
+ * Every set (or, with no set, its class's family) looks through its own glass (the owner, 2026-11-15: "the zoomed in
+ * screen should be unique to the weapon set like instead of a black screen it should be unique with the guns theme and
+ * the crosshair too"): the window's shape, what stands round it, its rim, the reticle and the hip crosshair, all in the
+ * set's light (the palette's glow, `Data/game_data.json` "palettes"). What the sight does is the same for all.
+ */
+namespace SOSightTheme
+{
+	enum class ETheme : uint8 { Kinetic, Light, Sarketh, Void, Living };
+
+	ETheme Of(const USOWeaponData* D)
+	{
+		if (!D)
+		{
+			return ETheme::Kinetic;
+		}
+		if (D->SetId == TEXT("sarketh"))
+		{
+			return ETheme::Sarketh;
+		}
+		if (D->SetId == TEXT("void_requiem"))
+		{
+			return ETheme::Void;
+		}
+		switch (D->WeaponClass)
+		{
+		case ESOWeaponClass::Energy: return ETheme::Light;
+		case ESOWeaponClass::Horror: return ETheme::Living;
+		default: return ETheme::Kinetic;
+		}
+	}
+
+	/** The set's light (its palette's glow; the tracer where a gun has no glow). */
+	FLinearColor Glow(const USOWeaponData* D)
+	{
+		if (!D)
+		{
+			return FLinearColor(1.0f, 0.2f, 0.1f);
+		}
+		return D->GlowColor.A > 0.0f ? FLinearColor(D->GlowColor.R, D->GlowColor.G, D->GlowColor.B, 1.0f) : D->TracerColor;
+	}
+
+	/** Brighter for a reticle on a dark ground: the colour scaled so its brightest channel is 1. */
+	FLinearColor Lit(const FLinearColor& C, float A)
+	{
+		const float M = FMath::Max3(C.R, C.G, C.B);
+		const float K = M > KINDA_SMALL_NUMBER ? 1.0f / M : 1.0f;
+		return FLinearColor(C.R * K, C.G * K, C.B * K, A);
+	}
+
+	/** The window's edge at angle A (radians, screen space: +Y down) for a window of size R. */
+	float Radius(ETheme T, float A, float R, float Time)
+	{
+		switch (T)
+		{
+		case ETheme::Sarketh:
+		{
+			// the lozenge of their emblem, wider than tall, its points softened (a superellipse, p 1.35)
+			const float Ax = R * 1.36f, By = R * 0.88f, P = 1.35f;
+			const float Cx = FMath::Abs(FMath::Cos(A)) / Ax, Sy = FMath::Abs(FMath::Sin(A)) / By;
+			return 1.0f / FMath::Pow(FMath::Pow(Cx, P) + FMath::Pow(Sy, P), 1.0f / P);
+		}
+		case ETheme::Void:
+		{
+			// a hexagon standing on a point
+			const float Seg = UE_PI / 3.0f;
+			const float L = FMath::Fmod(A + UE_PI * 2.0f + UE_PI / 2.0f, Seg) - Seg * 0.5f;
+			return R * 1.02f * FMath::Cos(Seg * 0.5f) / FMath::Cos(L);
+		}
+		case ETheme::Living:
+			// a membrane that breathes
+			return R * (1.0f + 0.03f * FMath::Sin(5.0f * A + 0.8f * Time) + 0.018f * FMath::Sin(9.0f * A - 1.3f * Time)
+				+ 0.012f * FMath::Sin(2.0f * A + 0.5f * Time));
+		default:
+			return R;
+		}
+	}
+
+	struct FLook
+	{
+		FLinearColor Near, Far;      // what stands round the window: next to it, toward the screen's edge
+		FLinearColor Rim;            // the window's frame
+		float RimWidth = 3.0f;       // px at 1080
+		FLinearColor Edge;           // the glass's tint at its edge, fading inward
+		float EdgeDepth = 0.1f;      // of the window's size
+	};
+
+	FLook LookOf(ETheme T, const FLinearColor& G)
+	{
+		FLook L;
+		switch (T)
+		{
+		case ETheme::Sarketh:
+			// dark orange lacquer round the glass, a gold rim, the glass amber at its edge
+			L.Near = FLinearColor(0.11f, 0.04f, 0.012f, 1.0f);
+			L.Far = FLinearColor(0.018f, 0.007f, 0.003f, 1.0f);
+			L.Rim = FLinearColor(0.95f, 0.62f, 0.22f, 1.0f);
+			L.RimWidth = 4.0f;
+			L.Edge = FLinearColor(G.R, G.G, G.B, 0.30f);
+			L.EdgeDepth = 0.14f;
+			break;
+		case ETheme::Void:
+			L.Near = FLinearColor(0.05f, 0.018f, 0.09f, 1.0f);
+			L.Far = FLinearColor(0.012f, 0.004f, 0.025f, 1.0f);
+			L.Rim = FLinearColor(0.78f, 0.74f, 0.86f, 1.0f);
+			L.RimWidth = 2.5f;
+			L.Edge = FLinearColor(G.R, G.G, G.B, 0.26f);
+			L.EdgeDepth = 0.12f;
+			break;
+		case ETheme::Light:
+			L.Near = FLinearColor(0.012f, 0.04f, 0.06f, 1.0f);
+			L.Far = FLinearColor(0.003f, 0.01f, 0.018f, 1.0f);
+			L.Rim = FLinearColor(0.16f, 0.2f, 0.24f, 1.0f);
+			L.RimWidth = 5.0f;
+			L.Edge = FLinearColor(G.R, G.G, G.B, 0.20f);
+			L.EdgeDepth = 0.08f;
+			break;
+		case ETheme::Living:
+			L.Near = FLinearColor(0.07f, 0.1f, 0.02f, 1.0f);
+			L.Far = FLinearColor(0.012f, 0.02f, 0.004f, 1.0f);
+			L.Rim = FLinearColor(0.2f, 0.12f, 0.1f, 1.0f);
+			L.RimWidth = 9.0f;
+			L.Edge = FLinearColor(G.R, G.G, G.B, 0.22f);
+			L.EdgeDepth = 0.16f;
+			break;
+		default:
+			L.Near = FLinearColor(0.012f, 0.012f, 0.012f, 1.0f);
+			L.Far = FLinearColor::Black;
+			L.Rim = FLinearColor(0.08f, 0.08f, 0.085f, 1.0f);
+			L.RimWidth = 3.0f;
+			L.Edge = FLinearColor(0.0f, 0.0f, 0.0f, 0.55f);
+			L.EdgeDepth = 0.1f;
+			break;
+		}
+		return L;
+	}
+}
+
 ASOHUD::ASOHUD()
 {
 }
@@ -527,35 +665,206 @@ void ASOHUD::DrawBossBar(const ASOEnemy* Boss, float W, float S)
 
 void ASOHUD::DrawScope(float W, float H)
 {
-	// magnified glass: black outside a circle, a fine reticle inside
+	using namespace SOSightTheme;
+	const ASOCharacter* Player = Cast<ASOCharacter>(GetOwningPawn());
+	const ASOWeapon* Weapon = Player ? Player->GetWeapon() : nullptr;
+	const USOWeaponData* Data = Weapon ? Weapon->GetData() : nullptr;
+	const ETheme Theme = Of(Data);
+	const FLinearColor G = Glow(Data);
+	const FLook Look = LookOf(Theme, G);
+	const float Time = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	const float S = H / 1080.0f;
 	const FVector2D C(W * 0.5f, H * 0.5f);
 	const float R = H * 0.46f, Far = FMath::Max(W, H) * 1.5f;
-	const int32 N = 72;
-	TArray<FCanvasUVTri> Tris;
-	for (int32 i = 0; i < N; ++i)
+	const int32 N = 144;
+
+	auto Edge = [&](int32 i) { const float A = UE_TWO_PI * i / N; return FVector2D(FMath::Cos(A), FMath::Sin(A)) * Radius(Theme, A, R, Time); };
+	auto Quad = [](TArray<FCanvasUVTri>& Tris, const FVector2D& A0, const FVector2D& A1, const FVector2D& B0, const FVector2D& B1,
+		const FLinearColor& CA, const FLinearColor& CB)
 	{
-		const float A0 = UE_TWO_PI * i / N, A1 = UE_TWO_PI * (i + 1) / N;
-		const FVector2D I0 = C + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * R, I1 = C + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * R;
-		const FVector2D O0 = C + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * Far, O1 = C + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * Far;
 		FCanvasUVTri T1, T2;
-		T1.V0_Pos = I0; T1.V1_Pos = O0; T1.V2_Pos = O1;
-		T2.V0_Pos = I0; T2.V1_Pos = O1; T2.V2_Pos = I1;
-		T1.V0_Color = T1.V1_Color = T1.V2_Color = T2.V0_Color = T2.V1_Color = T2.V2_Color = FLinearColor::Black;
+		T1.V0_Pos = A0; T1.V1_Pos = B0; T1.V2_Pos = B1;
+		T2.V0_Pos = A0; T2.V1_Pos = B1; T2.V2_Pos = A1;
+		T1.V0_Color = CA; T1.V1_Color = CB; T1.V2_Color = CB;
+		T2.V0_Color = CA; T2.V1_Color = CB; T2.V2_Color = CA;
 		Tris.Add(T1);
 		Tris.Add(T2);
-	}
-	FCanvasTriangleItem Ring(Tris, GWhiteTexture);
-	Canvas->DrawItem(Ring);
-	const FLinearColor Line(0.02f, 0.02f, 0.02f, 0.95f);
-	const float S = H / 1080.0f;
-	DrawLine(C.X - R, C.Y, C.X - 18.0f * S, C.Y, Line, 1.5f * S);
-	DrawLine(C.X + 18.0f * S, C.Y, C.X + R, C.Y, Line, 1.5f * S);
-	DrawLine(C.X, C.Y + 18.0f * S, C.X, C.Y + R, Line, 1.5f * S);
-	DrawLine(C.X, C.Y - R * 0.6f, C.X, C.Y - 18.0f * S, Line, 1.0f * S);
-	DrawRect(FLinearColor(1.0f, 0.15f, 0.1f, 0.95f), C.X - 1.5f * S, C.Y - 1.5f * S, 3.0f * S, 3.0f * S);
-	for (int32 i = 1; i <= 4; ++i) // stadia ticks below the centre
+	};
+
+	// what stands round the window (the set's own body, darkening toward the screen's edge), its rim, the glass's tint
+	TArray<FCanvasUVTri> Body, Rim, Glass;
+	const float RimW = Look.RimWidth * S;
+	const float Mid = FMath::Max(W, H) * 0.42f;
+	FLinearColor Clear = Look.Edge;
+	Clear.A = 0.0f;
+	for (int32 i = 0; i < N; ++i)
 	{
-		DrawLine(C.X - 8.0f * S, C.Y + i * 40.0f * S, C.X + 8.0f * S, C.Y + i * 40.0f * S, Line, 1.0f * S);
+		const FVector2D E0 = Edge(i), E1 = Edge(i + 1);
+		const FVector2D D0 = E0.GetSafeNormal(), D1 = E1.GetSafeNormal();
+		Quad(Body, C + E0 + D0 * RimW, C + E1 + D1 * RimW, C + E0 + D0 * Mid, C + E1 + D1 * Mid, Look.Near, Look.Far);
+		Quad(Body, C + E0 + D0 * Mid, C + E1 + D1 * Mid, C + D0 * Far, C + D1 * Far, Look.Far, Look.Far);
+		// the light guns' rim is a ring of segments with gaps (a lit bezel)
+		const bool bGap = Theme == ETheme::Light && (i % 6) == 5;
+		const FLinearColor RimC = bGap ? Look.Near : Look.Rim;
+		Quad(Rim, C + E0, C + E1, C + E0 + D0 * RimW, C + E1 + D1 * RimW, RimC, RimC * FLinearColor(0.65f, 0.65f, 0.65f, 1.0f));
+		Quad(Glass, C + E0, C + E1, C + E0 * (1.0f - Look.EdgeDepth), C + E1 * (1.0f - Look.EdgeDepth), Look.Edge, Clear);
+	}
+	for (TArray<FCanvasUVTri>* Tris : { &Glass, &Body, &Rim })
+	{
+		FCanvasTriangleItem Item(*Tris, GWhiteTexture);
+		Item.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Item);
+	}
+
+	// a line drawn as light: a soft halo under a sharp core
+	auto Glowing = [&](const FVector2D& A, const FVector2D& B, const FLinearColor& Col, float T)
+	{
+		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(Col.R, Col.G, Col.B, Col.A * 0.22f), T * 3.5f);
+		DrawLine(A.X, A.Y, B.X, B.Y, Col, T);
+	};
+	// a polyline in 1080 px about the centre
+	auto Poly = [&](std::initializer_list<FVector2D> Pts, const FLinearColor& Col, float T, bool bClosed)
+	{
+		const TArray<FVector2D> P(Pts);
+		for (int32 i = 0; i + 1 < P.Num(); ++i)
+		{
+			Glowing(C + P[i] * S, C + P[i + 1] * S, Col, T);
+		}
+		if (bClosed && P.Num() > 2)
+		{
+			Glowing(C + P.Last() * S, C + P[0] * S, Col, T);
+		}
+	};
+	const float Edge0 = R / S; // the window's size in 1080 px
+
+	switch (Theme)
+	{
+	case ETheme::Sarketh:
+	{
+		// their emblem in gold on the lacquer round the glass: the brow's chevron over the window, three dashes either side
+		const FLinearColor Gold(0.95f, 0.64f, 0.24f, 0.9f);
+		const FLinearColor GoldDim(0.95f, 0.64f, 0.24f, 0.55f);
+		const float Top = Radius(Theme, -UE_HALF_PI, R, Time) / S, Side = Radius(Theme, 0.0f, R, Time) / S;
+		Poly({ FVector2D(-120, -Top - 26), FVector2D(0, -Top - 8), FVector2D(120, -Top - 26) }, Gold, 3.0f * S, false);
+		Poly({ FVector2D(-70, -Top - 40), FVector2D(0, -Top - 24), FVector2D(70, -Top - 40) }, GoldDim, 2.0f * S, false);
+		for (int32 j = 0; j < 3; ++j)
+		{
+			const float X = Side + 26.0f + j * 30.0f;
+			Poly({ FVector2D(X, 0), FVector2D(X + 18.0f, 0) }, Gold, 3.0f * S, false);
+			Poly({ FVector2D(-X, 0), FVector2D(-X - 18.0f, 0) }, Gold, 3.0f * S, false);
+		}
+		// the reticle, in the set's amber: an open lozenge round a point, the brow's chevron over it, three dashes either
+		// side, the slug's drop below as falling chevrons; it brightens as the gun heats
+		const float Heat = Weapon && Weapon->HasHeat() ? Weapon->GetHeat() : 0.0f;
+		const FLinearColor A = Lit(FMath::Lerp(G, FLinearColor(1.0f, 0.9f, 0.7f), Heat * 0.5f), 0.92f);
+		const float T = 1.6f * S;
+		Poly({ FVector2D(-11, 0), FVector2D(0, -8), FVector2D(11, 0), FVector2D(0, 8) }, A, T, true);
+		DrawRect(A, C.X - 1.5f * S, C.Y - 1.5f * S, 3.0f * S, 3.0f * S);
+		Poly({ FVector2D(-30, -34), FVector2D(0, -18), FVector2D(30, -34) }, A, T, false);
+		for (int32 j = 0; j < 3; ++j)
+		{
+			const float X = 30.0f + j * 22.0f;
+			Poly({ FVector2D(X, 0), FVector2D(X + 12.0f, 0) }, A, T, false);
+			Poly({ FVector2D(-X, 0), FVector2D(-X - 12.0f, 0) }, A, T, false);
+		}
+		const FLinearColor Faint(A.R, A.G, A.B, 0.4f);
+		Poly({ FVector2D(110, 0), FVector2D(Edge0 * 1.3f, 0) }, Faint, 1.0f * S, false);
+		Poly({ FVector2D(-110, 0), FVector2D(-Edge0 * 1.3f, 0) }, Faint, 1.0f * S, false);
+		for (int32 j = 1; j <= 4; ++j)
+		{
+			const float Y = 26.0f + j * 30.0f, Wd = 9.0f - j;
+			Poly({ FVector2D(-Wd, Y - Wd * 0.6f), FVector2D(0, Y), FVector2D(Wd, Y - Wd * 0.6f) }, A, 1.3f * S, false);
+		}
+		break;
+	}
+	case ETheme::Void:
+	{
+		// three lines closing on a small triangle, in the set's violet; a mark off each of the window's points
+		const FLinearColor V = Lit(G, 0.9f);
+		const float T = 1.4f * S;
+		for (int32 j = 0; j < 3; ++j)
+		{
+			const float Ang = UE_HALF_PI + j * UE_TWO_PI / 3.0f, Next = Ang + UE_TWO_PI / 3.0f;
+			const FVector2D D(FMath::Cos(Ang), FMath::Sin(Ang)), DN(FMath::Cos(Next), FMath::Sin(Next));
+			Poly({ D * 16.0f, D * Edge0 * 0.85f }, V, T, false);
+			Poly({ D * -9.0f, DN * -9.0f }, V, T, false);
+		}
+		const FLinearColor Mark(Look.Rim.R, Look.Rim.G, Look.Rim.B, 0.8f);
+		for (int32 j = 0; j < 6; ++j)
+		{
+			const float Ang = -UE_HALF_PI + j * UE_PI / 3.0f;
+			const FVector2D D(FMath::Cos(Ang), FMath::Sin(Ang));
+			const float Rr = Radius(Theme, Ang, R, Time) / S;
+			Poly({ D * (Rr + 10.0f), D * (Rr + 42.0f) }, Mark, 2.0f * S, false);
+		}
+		DrawRect(V, C.X - 1.0f * S, C.Y - 1.0f * S, 2.0f * S, 2.0f * S);
+		break;
+	}
+	case ETheme::Light:
+	{
+		// fine lines of light: a broken ring round a point, a ruler along the horizon, the drop line below
+		const FLinearColor L = Lit(G, 0.9f);
+		const float T = 1.2f * S;
+		for (int32 j = 0; j < 8; ++j)
+		{
+			const float A0 = j * UE_TWO_PI / 8.0f + 0.12f, A1 = (j + 1) * UE_TWO_PI / 8.0f - 0.12f;
+			Poly({ FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * 12.0f, FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * 12.0f }, L, T, false);
+		}
+		DrawRect(L, C.X - 1.0f * S, C.Y - 1.0f * S, 2.0f * S, 2.0f * S);
+		Poly({ FVector2D(24, 0), FVector2D(Edge0, 0) }, L, T, false);
+		Poly({ FVector2D(-24, 0), FVector2D(-Edge0, 0) }, L, T, false);
+		Poly({ FVector2D(0, 24), FVector2D(0, Edge0) }, L, T, false);
+		for (int32 j = 1; j * 36.0f < Edge0 * 0.8f; ++j)
+		{
+			const float Len = (j % 2) ? 4.0f : 8.0f;
+			Poly({ FVector2D(j * 36.0f, -Len), FVector2D(j * 36.0f, Len) }, L, 1.0f * S, false);
+			Poly({ FVector2D(-j * 36.0f, -Len), FVector2D(-j * 36.0f, Len) }, L, 1.0f * S, false);
+		}
+		break;
+	}
+	case ETheme::Living:
+	{
+		// four claws curling round a point, drops hanging below, in the living green
+		const FLinearColor L = Lit(G, 0.88f);
+		const float T = 1.8f * S;
+		for (int32 q = 0; q < 4; ++q)
+		{
+			const float Mid4 = UE_PI / 4.0f + q * UE_HALF_PI;
+			FVector2D Prev = FVector2D::ZeroVector;
+			for (int32 k = 0; k <= 6; ++k)
+			{
+				const float Ang = Mid4 - 0.5f + k / 6.0f;
+				const FVector2D P = FVector2D(FMath::Cos(Ang), FMath::Sin(Ang)) * (22.0f - k * 1.6f);
+				if (k > 0)
+				{
+					Poly({ Prev, P }, L, T, false);
+				}
+				Prev = P;
+			}
+		}
+		DrawRect(L, C.X - 1.5f * S, C.Y - 1.5f * S, 3.0f * S, 3.0f * S);
+		for (int32 j = 1; j <= 3; ++j)
+		{
+			const float Y = 30.0f + j * 34.0f, D = 4.0f - j * 0.7f;
+			DrawRect(L, C.X - D * S, C.Y + (Y - D) * S, 2.0f * D * S, 2.0f * D * S);
+		}
+		break;
+	}
+	default:
+	{
+		// a human optic: fine dark lines, a red point, stadia below
+		const FLinearColor Line(0.02f, 0.02f, 0.02f, 0.95f);
+		DrawLine(C.X - R, C.Y, C.X - 18.0f * S, C.Y, Line, 1.5f * S);
+		DrawLine(C.X + 18.0f * S, C.Y, C.X + R, C.Y, Line, 1.5f * S);
+		DrawLine(C.X, C.Y + 18.0f * S, C.X, C.Y + R, Line, 1.5f * S);
+		DrawLine(C.X, C.Y - R * 0.6f, C.X, C.Y - 18.0f * S, Line, 1.0f * S);
+		DrawRect(FLinearColor(1.0f, 0.15f, 0.1f, 0.95f), C.X - 1.5f * S, C.Y - 1.5f * S, 3.0f * S, 3.0f * S);
+		for (int32 i = 1; i <= 4; ++i) // stadia ticks below the centre
+		{
+			DrawLine(C.X - 8.0f * S, C.Y + i * 40.0f * S, C.X + 8.0f * S, C.Y + i * 40.0f * S, Line, 1.0f * S);
+		}
+		break;
+	}
 	}
 }
 
@@ -736,17 +1045,76 @@ void ASOHUD::DrawHUD()
 	// scope view (a magnified optic, either view) takes it away for the scope's own reticle.
 	const float Ads = Player->IsScopeView() ? 1.0f
 		: (Player->UsesShoulderCrosshair() ? 0.0f : FMath::Clamp(Player->GetAimProgress() * 3.0f, 0.0f, 1.0f));
-	if (Ads < 0.99f)
+	if (Player->IsFists())
+	{
+		// hand to hand: a point and a short bracket either side (the reach is the body's, not a gun's cone)
+		const float CX = W * 0.5f, CY = H * 0.5f, T = FMath::Max(2.0f * S, 1.5f), G = 10.0f * S, L = 6.0f * S;
+		DrawRect(Ink, CX - 1.5f * S, CY - 1.5f * S, 3.0f * S, 3.0f * S);
+		for (const float Side : { -1.0f, 1.0f })
+		{
+			DrawLine(CX + Side * G, CY - L, CX + Side * (G + 3.0f * S), CY, Ink, T);
+			DrawLine(CX + Side * (G + 3.0f * S), CY, CX + Side * G, CY + L, Ink, T);
+		}
+	}
+	else if (Ads < 0.99f)
 	{
 		const float Spread = Weapon ? Weapon->GetStats().Spread * Player->GetSpreadScale() : 1.0f;
 		const float Gap = (6.0f + Spread * 9.0f) * S;
 		const float Len = FMath::Max(7.0f * S, 5.0f);
-		const FLinearColor C(Ink.R, Ink.G, Ink.B, Ink.A * (1.0f - Ads));
 		const float CX = W * 0.5f, CY = H * 0.5f, T = FMath::Max(2.0f * S, 1.5f); // never thinner than a pixel and a half
-		DrawLine(CX - Gap - Len, CY, CX - Gap, CY, C, T);
-		DrawLine(CX + Gap, CY, CX + Gap + Len, CY, C, T);
-		DrawLine(CX, CY - Gap - Len, CX, CY - Gap, C, T);
-		DrawLine(CX, CY + Gap, CX, CY + Gap + Len, C, T);
+		// each set's own crosshair, in its light (mixed with white so it reads on anything): the Sarketh's a lozenge of
+		// four ticks under the brow's point, the Requiem's three closing in, the light guns' four round a point, the living
+		// guns' two curved brackets, a human gun's plain four
+		using namespace SOSightTheme;
+		const USOWeaponData* CrossData = Weapon ? Weapon->GetData() : nullptr;
+		const ETheme Theme = Of(CrossData);
+		const FLinearColor Tint = Theme == ETheme::Kinetic ? Ink : FMath::Lerp(Ink, Lit(Glow(CrossData), Ink.A), 0.6f);
+		const FLinearColor C(Tint.R, Tint.G, Tint.B, Ink.A * (1.0f - Ads));
+		auto Tick = [&](float Deg, float From, float To)
+		{
+			const FVector2D D(FMath::Cos(FMath::DegreesToRadians(Deg)), FMath::Sin(FMath::DegreesToRadians(Deg)));
+			DrawLine(CX + D.X * From, CY + D.Y * From, CX + D.X * To, CY + D.Y * To, C, T);
+		};
+		switch (Theme)
+		{
+		case ETheme::Sarketh:
+			for (const float Deg : { 45.0f, 135.0f, 225.0f, 315.0f })
+			{
+				Tick(Deg, Gap, Gap + Len);
+			}
+			Tick(270.0f, Gap + Len * 0.4f, Gap + Len * 1.3f);
+			DrawRect(C, CX - 1.5f * S, CY - 1.5f * S, 3.0f * S, 3.0f * S);
+			break;
+		case ETheme::Void:
+			for (const float Deg : { 90.0f, 210.0f, 330.0f })
+			{
+				Tick(Deg, Gap, Gap + Len * 1.2f);
+			}
+			DrawRect(C, CX - 1.0f * S, CY - 1.0f * S, 2.0f * S, 2.0f * S);
+			break;
+		case ETheme::Living:
+			for (const float Side : { 0.0f, 180.0f })
+			{
+				for (int32 k = 0; k < 4; ++k)
+				{
+					const float A0 = FMath::DegreesToRadians(Side - 40.0f + k * 20.0f), A1 = A0 + FMath::DegreesToRadians(20.0f);
+					const float Rr = Gap + Len * 0.5f;
+					DrawLine(CX + FMath::Cos(A0) * Rr, CY + FMath::Sin(A0) * Rr, CX + FMath::Cos(A1) * Rr, CY + FMath::Sin(A1) * Rr, C, T);
+				}
+			}
+			DrawRect(C, CX - 1.5f * S, CY - 1.5f * S, 3.0f * S, 3.0f * S);
+			break;
+		default:
+			for (const float Deg : { 0.0f, 90.0f, 180.0f, 270.0f })
+			{
+				Tick(Deg, Gap, Gap + Len);
+			}
+			if (Theme == ETheme::Light)
+			{
+				DrawRect(C, CX - 1.0f * S, CY - 1.0f * S, 2.0f * S, 2.0f * S);
+			}
+			break;
+		}
 	}
 
 	// Interact prompt.

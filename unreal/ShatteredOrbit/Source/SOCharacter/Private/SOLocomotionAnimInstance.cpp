@@ -74,6 +74,29 @@ void USOLocomotionAnimInstance::PlayAction(UAnimSequenceBase* Clip, float PlayRa
 	}
 }
 
+void USOLocomotionAnimInstance::SetMeleeGuard(UAnimSequenceBase* Guard)
+{
+	if (Guard != MeleeGuard)
+	{
+		MeleeGuard = Guard;
+		MeleeGuardTime = 0.0f;
+		if (!Guard)
+		{
+			MeleeBlowTime = -1.0f;
+		}
+	}
+}
+
+void USOLocomotionAnimInstance::PlayMeleeBlow(UAnimSequenceBase* Clip, float PlayRate)
+{
+	if (Clip)
+	{
+		MeleeBlow = Clip;
+		MeleeBlowTime = 0.0f;
+		MeleeBlowRate = FMath::Max(PlayRate, 0.05f);
+	}
+}
+
 float USOLocomotionAnimInstance::GetAttackLength() const
 {
 	return Clips.Attack ? Clips.Attack->GetPlayLength() : 0.0f;
@@ -562,6 +585,23 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		{
 			AttackTime = -1.0f;
 		}
+	}
+	// hand to hand: the guard comes on over a few frames, a blow runs once, standing the legs take it too
+	MeleeWeight = FMath::FInterpConstantTo(MeleeWeight, MeleeGuard && !bDead ? 1.0f : 0.0f, DeltaSeconds, 5.0f);
+	MeleeGuardTime += DeltaSeconds;
+	if (MeleeBlowTime >= 0.0f)
+	{
+		MeleeBlowTime += DeltaSeconds * MeleeBlowRate;
+		if (!MeleeBlow || MeleeBlowTime >= MeleeBlow->GetPlayLength())
+		{
+			MeleeBlowTime = -1.0f;
+		}
+	}
+	const bool bPlanted = Speed < 120.0f && !bInAir && !bMantling && !bSliding;
+	MeleeLegs = FMath::FInterpConstantTo(MeleeLegs, bPlanted ? 1.0f : 0.0f, DeltaSeconds, 4.0f);
+	if (const APawn* Owner = TryGetPawnOwner(); Owner && MeleeWeight > 0.0f)
+	{
+		MeleePitch = FMath::Clamp(FRotator::NormalizeAxis(Owner->GetBaseAimRotation().Pitch), -60.0f, 60.0f);
 	}
 }
 
@@ -1853,6 +1893,21 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	TurnLift[0] = Instance->GetTurnLift(0);
 	TurnLift[1] = Instance->GetTurnLift(1);
 	FootIKAlpha = Instance->FootIKAlpha;
+	const bool bBlow = Instance->MeleeBlowTime >= 0.0f && Instance->MeleeBlow;
+	MeleeClip = bBlow ? Instance->MeleeBlow.Get() : Instance->MeleeGuard.Get();
+	bMeleeLoop = !bBlow;
+	MeleeTime = bBlow ? Instance->MeleeBlowTime : Instance->MeleeGuardTime;
+	if (MeleeClip && bMeleeLoop && MeleeClip->GetPlayLength() > 0.0f)
+	{
+		MeleeTime = FMath::Fmod(MeleeTime, MeleeClip->GetPlayLength());
+	}
+	else if (MeleeClip)
+	{
+		MeleeTime = FMath::Min(MeleeTime, MeleeClip->GetPlayLength() - 1e-3f);
+	}
+	MeleeWeight = MeleeClip ? Instance->MeleeWeight : 0.0f;
+	MeleeLegs = Instance->MeleeLegs;
+	MeleePitch = Instance->MeleePitch;
 }
 
 bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
@@ -1882,6 +1937,7 @@ bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
 		const FSOLocomotionLayer& Layer = Layers[Active[0]];
 		FAnimationPoseData PoseData(Output);
 		Layer.Clip->GetAnimationPose(PoseData, FAnimExtractContext(static_cast<double>(Layer.Time), false, {}, Layer.bLoop));
+		ApplyMelee(Output);
 		ApplyBody(Output);
 		ApplyHold(Output);
 		ApplyHit(Output);
@@ -1907,10 +1963,86 @@ bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
 	}
 	FAnimationPoseData OutData(Output);
 	FAnimationRuntime::BlendPosesTogether(Poses, Curves, Attributes, Weights, OutData);
+	ApplyMelee(Output);
 	ApplyBody(Output);
 	ApplyHold(Output);
 	ApplyHit(Output);
 	return true;
+}
+
+void FSOLocomotionProxy::ApplyMelee(FPoseContext& Output) const
+{
+	if (!MeleeClip || MeleeWeight <= 0.01f)
+	{
+		return;
+	}
+	FCompactPose& Pose = Output.Pose;
+	const FBoneContainer& Bones = Pose.GetBoneContainer();
+	FCompactPose Upper;
+	Upper.SetBoneContainer(&Bones);
+	FBlendedCurve Curve;
+	Curve.InitFrom(Output.Curve);
+	UE::Anim::FStackAttributeContainer Attributes;
+	FAnimationPoseData Data(Upper, Curve, Attributes);
+	MeleeClip->GetAnimationPose(Data, FAnimExtractContext(static_cast<double>(MeleeTime), false, {}, bMeleeLoop));
+
+	// The upper body is the spine and everything under it (compact poses list parents before children); below it the
+	// clip takes over only as far as the body is standing still.
+	const int32 SpineMesh = Bones.GetPoseBoneIndexForBoneName(FName(TEXT("spine")));
+	const FCompactPoseBoneIndex Spine = SpineMesh == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpineMesh));
+	TArray<bool, TInlineAllocator<160>> IsUpper;
+	IsUpper.SetNumZeroed(Pose.GetNumBones());
+	for (FCompactPoseBoneIndex Index : Pose.ForEachBoneIndex())
+	{
+		const FCompactPoseBoneIndex P = Bones.GetParentBoneIndex(Index);
+		const bool bUpper = Index == Spine || (P.IsValid() && IsUpper[P.GetInt()]);
+		IsUpper[Index.GetInt()] = bUpper;
+		const float W = MeleeWeight * (bUpper ? 1.0f : MeleeLegs);
+		if (W <= 0.001f)
+		{
+			continue;
+		}
+		FTransform& T = Pose[Index];
+		const FTransform& U = Upper[Index];
+		T.SetRotation(FQuat::Slerp(T.GetRotation(), U.GetRotation(), W).GetNormalized());
+		T.SetTranslation(FMath::Lerp(T.GetTranslation(), U.GetTranslation(), W));
+	}
+
+	// Where the eyes look the blows go: the trunk pitched with the aim (about the body's own left axis; the arms of the
+	// first-person copy hang from the chest, so it takes the whole pitch there to keep the fists in the view).
+	if (FMath::Abs(MeleePitch) < 0.5f)
+	{
+		return;
+	}
+	const FQuat Pitch(FVector(1.0f, 0.0f, 0.0f), FMath::DegreesToRadians(MeleePitch * MeleeWeight));
+	auto Turn = [&](const TCHAR* Name, float Share)
+	{
+		const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(FName(Name));
+		const FCompactPoseBoneIndex Bone = MeshIndex == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex));
+		if (!Bone.IsValid())
+		{
+			return;
+		}
+		FQuat Above = FQuat::Identity;
+		for (FCompactPoseBoneIndex P = Bones.GetParentBoneIndex(Bone); P.IsValid(); P = Bones.GetParentBoneIndex(P))
+		{
+			Above = Pose[P].GetRotation() * Above;
+		}
+		const FQuat Part = FQuat::Slerp(FQuat::Identity, Pitch, Share);
+		Pose[Bone].SetRotation((Above.Inverse() * Part * Above * Pose[Bone].GetRotation()).GetNormalized());
+	};
+	if (bArmsOnly)
+	{
+		Turn(TEXT("spine"), 0.45f);
+		Turn(TEXT("chest"), 0.55f);
+	}
+	else
+	{
+		Turn(TEXT("spine"), 0.3f);
+		Turn(TEXT("chest"), 0.35f);
+		Turn(TEXT("neck"), 0.15f);
+		Turn(TEXT("head"), 0.2f);
+	}
 }
 
 void FSOLocomotionProxy::ApplyHit(FPoseContext& Output) const

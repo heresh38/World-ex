@@ -445,6 +445,32 @@ arm really needs and fitting again from it was tried and dropped: it fires while
 hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+**Every set looks through its own glass** (the owner, 2026-11-15: "the zoomed in screen should be unique to the weapon
+set like instead of a black screen it should be unique with the guns theme and the crosshair too"): `ASOHUD::DrawScope`
+and the hip crosshair take a theme from the gun (`SOSightTheme::Of`: its `set`, else its class's family): the window's
+shape, what stands round it (the set's own body, darker toward the screen's edge, never plain black), its rim, the
+glass tinted at its edge, the reticle and the crosshair, all in the palette's glow. Sarketh: a lozenge window in dark
+orange lacquer with a gold rim, their emblem in gold round it, an amber lozenge reticle under the brow's chevron
+with three dashes either side and the slug's drop as falling chevrons (brighter as the gun heats), a crosshair of four
+diagonal ticks. Requiem: a hexagon in violet, three lines closing in. Light guns: a ring of lit segments, a broken
+ring and a ruler in cyan. Living guns: a breathing membrane, claws and drops in green. Human guns: the black ring and
+red point as before. Pictures: `SOCaptureSeries 1 18 -SOGuns=skr_sniper,sniper,vr_sniper,bolt` (the aimed views).
+**Hand to hand** (the owner, 2026-11-15: "mele is when we put away all our guns on our back so we hold nothing but our
+fists ... if we have a blade then blade strikes (light and hard strike for everything in mele)"): key 4 (`IA_Fists`;
+the mouse wheel and the pad's d-pad reach it past the last gun, a gun's key leaves it) puts every gun on the back
+(`ASOCharacter::SetFists`, replicated; `bHeldStowed`); fire is the light chain (each press after the last blow's
+`recover` and within the style's `chainGrace` goes on to the next), aim the heavy blow. A style (`fists`, a blade's
+archetype id) is data: `Data/game_data.json` "melee" -> `SO_IMPORT_ONLY=melee` -> `/Game/Data/DA_Melee`
+(`USOMeleeTable`: guard clip, light blows, heavy blow; each blow's clip, `hit` time into it, `recover`, damage, range
+and cone from the eye, force, stagger, the step in, sounds). The server lands it (`USOMeleeLibrary::Land`: the other
+side within reach in the cone, not through the world's geometry, through the damage gate); a joined player sees their
+own blow at once (`MeleePredicted`). The body: `USOLocomotionAnimInstance::SetMeleeGuard` / `PlayMeleeBlow`, a layer on
+the UPPER body (the spine and under it) over the legs' gait, the whole body when standing, the trunk pitched with the
+aim; the first-person arms play the same. Clips per body (`hero/<sex>/motion.py`): `FistGuard`, `Jab`, `Cross`, `Hook`,
+`Haymaker`, `BladeGuard`, `SlashA`, `SlashB`, `Thrust`, `Cleave` (a hook's upper arm is out at 80 and turned in -80,
+or the forearm stands up). Sounds `sfx_synth.py ... melee`. The blade style (`skr_blade`, its edge a sweep of the
+set's light) waits for its model and a way to carry it. Tests `ShatteredOrbit.Melee.*`; pictures
+`SOCaptureSeries 1 35` (files `SO_me_fp_*`, `SO_me_side_*`).
 **Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
 screen ... shouldn't be at the center of the screen, better to be on the right ... on running we lower the gun for
 rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): at rest in the lower right (`HipOffset`,

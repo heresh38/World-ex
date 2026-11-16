@@ -508,6 +508,87 @@ def clips(b):
                       (1.0, idle_pose(b, 0.0))], ease=smooth)
         return slam.at(t, HIT)
 
+    # --- melee: the guns on the back, the hands empty (or a blade in the right): a guard, a chain of three light blows,
+    # one heavy; each clip begins and ends in its guard, and the time the blow lands is in the game's data ("melee")
+    def fist_guard(z=-.03, y=.0, hips=3, twist=-10, turn=-6, bob=0.0, L=(48, 8, 126), R=(42, 10, 136), **k):
+        """her guard: light on the balls of her feet, the left ahead, the hands high and close"""
+        return act(z=z + bob, y=y, hips=hips, spine=3, chest=2, head=4, twist=twist, turn=turn, width=.12, toe=12,
+                   fwd=(-.10, .07), pitch=(0, -10), L=L, R=R, curlL=GRIP, curlR=GRIP, knee=.03, **k)
+
+    def FistGuard(t):
+        return fist_guard(bob=-.006 * (1 - math.cos(TAU * t / 1.0)) * .5)
+
+    def Jab(t):
+        jab = Track([(0.0, fist_guard()),
+                     (.07, fist_guard(y=-.04, twist=8, turn=4, L=(86, 4, 6), R=(40, 16, 132))),           # it lands
+                     (.14, fist_guard(y=-.035, twist=6, turn=2, L=(82, 6, 14), R=(40, 16, 132))),
+                     (.38, fist_guard())], ease=smooth)
+        return jab.at(t, HIT)
+
+    def Cross(t):
+        cross = Track([(0.0, fist_guard()),
+                       (.05, fist_guard(twist=-18, turn=-12, z=-.04)),
+                       (.12, fist_guard(y=-.09, hips=7, twist=26, turn=16, L=(40, 14, 128), R=(88, 4, 4))),  # it lands
+                       (.21, fist_guard(y=-.08, hips=6, twist=22, turn=12, L=(40, 14, 128), R=(80, 6, 14))),
+                       (.48, fist_guard())], ease=smooth)
+        return cross.at(t, HIT)
+
+    def Hook(t):
+        hook = Track([(0.0, fist_guard()),
+                      (.08, fist_guard(twist=-26, turn=-14, z=-.045, L=(34, 56, 102), turnL=-50)),
+                      (.16, fist_guard(y=-.03, hips=5, twist=32, turn=14, L=(22, 78, 94), turnL=-80)),        # it lands
+                      (.26, fist_guard(y=-.03, hips=4, twist=26, turn=10, L=(26, 72, 96), turnL=-75)),
+                      (.52, fist_guard())], ease=smooth)
+        return hook.at(t, HIT)
+
+    def Haymaker(t):                                         # her heavy blow: a spinning back fist would be another's;
+        hay = Track([(0.0, fist_guard()),                    # hers is a loaded overhand thrown through the step
+                     (.32, fist_guard(z=-.06, y=.05, hips=-2, twist=-38, turn=-20, L=(58, 14, 112), R=(-30, 36, 120))),
+                     (.45, fist_guard(z=-.07, y=-.16, hips=11, twist=38, turn=22, L=(20, 18, 120), R=(96, 4, 8))),   # it lands
+                     (.62, fist_guard(z=-.065, y=-.14, hips=9, twist=32, turn=18, L=(24, 18, 118), R=(84, 8, 20))),
+                     (.92, fist_guard())], ease=smooth)
+        return hay.at(t, HIT)
+
+    def blade_guard(z=-.03, y=.0, hips=3, twist=-6, turn=-4, bob=0.0, L=(40, 18, 120), R=(34, 12, 74), **k):
+        return act(z=z + bob, y=y, hips=hips, spine=3, chest=2, head=3, twist=twist, turn=turn, width=.12, toe=12,
+                   fwd=(-.09, .08), pitch=(0, -10), L=L, R=R, curlL=GRIP, curlR=GRIP, knee=.03, **k)
+
+    def BladeGuard(t):
+        return blade_guard(bob=-.006 * (1 - math.cos(TAU * t / 1.2)) * .5)
+
+    def SlashA(t):
+        s = Track([(0.0, blade_guard()),
+                   (.10, blade_guard(twist=-24, turn=-12, z=-.035, R=(110, 60, 70), turnR=20)),
+                   (.16, blade_guard(y=-.06, hips=5, twist=22, turn=12, R=(64, 8, 16), turnR=-10)),       # it lands
+                   (.25, blade_guard(y=-.06, hips=5, twist=30, turn=14, R=(30, -22, 24), turnR=-20)),
+                   (.48, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def SlashB(t):
+        s = Track([(0.0, blade_guard()),
+                   (.09, blade_guard(twist=26, turn=12, z=-.04, R=(52, -26, 96), turnR=-30)),
+                   (.15, blade_guard(y=-.05, hips=4, twist=-8, turn=-4, R=(80, 18, 12), turnR=10)),        # it lands
+                   (.24, blade_guard(y=-.05, hips=4, twist=-22, turn=-10, R=(96, 54, 22), turnR=24)),
+                   (.48, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def Thrust(t):
+        s = Track([(0.0, blade_guard()),
+                   (.10, blade_guard(twist=-20, turn=-12, z=-.045, y=.03, R=(4, 18, 112))),
+                   (.19, blade_guard(y=-.14, hips=7, twist=22, turn=14, R=(88, 4, 4))),                    # it lands
+                   (.29, blade_guard(y=-.12, hips=6, twist=18, turn=12, R=(84, 6, 10))),
+                   (.52, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def Cleave(t):
+        s = Track([(0.0, blade_guard()),
+                   (.38, blade_guard(z=.0, y=.03, hips=-6, twist=-8, L=(66, 14, 102), R=(158, 12, 70))),   # raised
+                   (.50, blade_guard(z=-.09, y=-.14, hips=15, twist=8, L=(10, 24, 110), R=(46, 6, 10))),   # it lands
+                   (.68, blade_guard(z=-.085, y=-.13, hips=13, twist=6, L=(14, 24, 110), R=(36, 8, 16))),
+                   (.98, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+
     def fidget(dur, extra, shift=None):
         def f(t):
             p = idle_pose(b, t, shift(t) if shift else 0.0)
@@ -544,5 +625,6 @@ def clips(b):
             "Climb": (Climb, 1.0, False), "Crouch": (Crouch, 5.6, True), "CrouchWalk": (CrouchWalk, crouch.T, True),
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Throw": (Throw, .68, False), "Strike": (Strike, .58, False), "Brace": (Brace, .9, False), "Slam": (Slam, 1.0, False),
+            "FistGuard": (FistGuard, 2.0, True), "Jab": (Jab, .38, False), "Cross": (Cross, .48, False), "Hook": (Hook, .52, False), "Haymaker": (Haymaker, .92, False), "BladeGuard": (BladeGuard, 2.4, True), "SlashA": (SlashA, .48, False), "SlashB": (SlashB, .48, False), "Thrust": (Thrust, .52, False), "Cleave": (Cleave, .98, False),
             "Fidget1": (fidget(4.4, none, weight), 4.4, False), "Fidget2": (fidget(4.2, look_back), 4.2, False),
             "Fidget3": (fidget(4.0, stretch), 4.0, False)}, (walk, run)

@@ -492,6 +492,88 @@ def clips(b):
                       (1.0, idle_pose(b, 0.0))], ease=smooth)
         return slam.at(t, HIT)
 
+    # --- melee: the guns on the back, the hands empty (or a blade in the right): a guard, a chain of three light blows,
+    # one heavy; each clip begins and ends in its guard, and the time the blow lands is in the game's data ("melee")
+    def fist_guard(z=-.035, y=.0, hips=4, twist=-12, bob=0.0, L=(50, 10, 124), R=(44, 12, 134), **k):
+        """his boxer's guard: the left foot ahead, knees soft, the chin down behind two fists"""
+        return act(z=z + bob, y=y, hips=hips, spine=3, chest=2, head=4, twist=twist, width=.2, toe=18, fwd=(-.12, .07),
+                   L=L, R=R, curlL=GRIP, curlR=GRIP, knee=.10, **k)
+
+    def FistGuard(t):
+        return fist_guard(bob=-.006 * (1 - math.cos(TAU * t / 1.2)) * .5)
+
+    def Jab(t):                                              # the left straight, the right fist kept at the chin
+        jab = Track([(0.0, fist_guard()),
+                     (.08, fist_guard(y=-.04, twist=10, L=(86, 6, 6), R=(42, 24, 130))),           # it lands
+                     (.15, fist_guard(y=-.035, twist=8, L=(82, 8, 14), R=(42, 24, 130))),
+                     (.40, fist_guard())], ease=smooth)
+        return jab.at(t, HIT)
+
+    def Cross(t):                                            # the right straight, the hip and shoulder turned through
+        cross = Track([(0.0, fist_guard()),
+                       (.05, fist_guard(twist=-20, z=-.045)),
+                       (.13, fist_guard(y=-.09, hips=8, twist=30, L=(40, 20, 128), R=(86, 4, 4))),  # it lands
+                       (.22, fist_guard(y=-.08, hips=7, twist=26, L=(40, 20, 128), R=(80, 6, 14))),
+                       (.50, fist_guard())], ease=smooth)
+        return cross.at(t, HIT)
+
+    def Hook(t):                                             # the left hook: the elbow up, the fist round on a level line
+        hook = Track([(0.0, fist_guard()),
+                      (.08, fist_guard(twist=-28, z=-.05, L=(34, 58, 100), turnL=-50)),
+                      (.17, fist_guard(y=-.03, hips=6, twist=36, L=(22, 80, 94), turnL=-80)),        # it lands
+                      (.27, fist_guard(y=-.03, hips=5, twist=30, L=(26, 74, 96), turnL=-75)),
+                      (.55, fist_guard())], ease=smooth)
+        return hook.at(t, HIT)
+
+    def Haymaker(t):                                         # the heavy blow: loaded far back, thrown over the top
+        hay = Track([(0.0, fist_guard()),
+                     (.34, fist_guard(z=-.07, y=.05, hips=-2, twist=-42, L=(60, 20, 110), R=(-34, 44, 118))),  # loaded
+                     (.47, fist_guard(z=-.08, y=-.17, hips=12, twist=42, L=(20, 24, 120), R=(96, 6, 8))),     # it lands
+                     (.64, fist_guard(z=-.075, y=-.15, hips=10, twist=36, L=(24, 24, 118), R=(84, 10, 20))),
+                     (.95, fist_guard())], ease=smooth)
+        return hay.at(t, HIT)
+
+    def blade_guard(z=-.035, y=.0, hips=4, twist=-6, bob=0.0, L=(42, 26, 118), R=(34, 18, 74), **k):
+        """the blade held out before him in the right hand, the point up and forward; the left guards the face"""
+        return act(z=z + bob, y=y, hips=hips, spine=3, chest=2, head=3, twist=twist, width=.21, toe=18, fwd=(-.10, .08),
+                   L=L, R=R, curlL=GRIP, curlR=GRIP, knee=.10, **k)
+
+    def BladeGuard(t):
+        return blade_guard(bob=-.006 * (1 - math.cos(TAU * t / 1.4)) * .5)
+
+    def SlashA(t):                                           # high right down across to low left
+        s = Track([(0.0, blade_guard()),
+                   (.10, blade_guard(twist=-26, z=-.04, R=(110, 64, 70), turnR=20)),
+                   (.17, blade_guard(y=-.06, hips=6, twist=24, R=(64, 10, 16), turnR=-10)),              # it lands
+                   (.26, blade_guard(y=-.06, hips=6, twist=34, R=(30, -24, 24), turnR=-20)),
+                   (.50, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def SlashB(t):                                           # back again: low left up across to high right
+        s = Track([(0.0, blade_guard()),
+                   (.09, blade_guard(twist=28, z=-.045, R=(52, -28, 96), turnR=-30)),
+                   (.16, blade_guard(y=-.05, hips=5, twist=-8, R=(80, 20, 12), turnR=10)),                # it lands
+                   (.25, blade_guard(y=-.05, hips=5, twist=-24, R=(96, 58, 22), turnR=24)),
+                   (.50, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def Thrust(t):                                           # drawn back to the hip and driven straight in
+        s = Track([(0.0, blade_guard()),
+                   (.10, blade_guard(twist=-22, z=-.05, y=.03, R=(4, 22, 112))),
+                   (.20, blade_guard(y=-.14, hips=8, twist=24, R=(88, 4, 4))),                            # it lands
+                   (.30, blade_guard(y=-.12, hips=7, twist=20, R=(84, 6, 10))),
+                   (.55, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def Cleave(t):                                           # the heavy blow: raised over the head, brought straight down
+        s = Track([(0.0, blade_guard()),
+                   (.40, blade_guard(z=.0, y=.03, hips=-6, twist=-10, L=(70, 20, 100), R=(158, 16, 70))),  # raised
+                   (.52, blade_guard(z=-.10, y=-.14, hips=16, twist=8, L=(10, 30, 110), R=(46, 8, 10))),   # it lands
+                   (.70, blade_guard(z=-.095, y=-.13, hips=14, twist=6, L=(14, 30, 110), R=(36, 10, 16))),
+                   (1.0, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+
     def fidget(dur, extra):
         def f(t):
             p = idle_pose(b, t)
@@ -529,5 +611,6 @@ def clips(b):
             "Climb": (Climb, 1.0, False), "Crouch": (Crouch, 7.2, True), "CrouchWalk": (CrouchWalk, crouch.T, True),
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Throw": (Throw, .7, False), "Strike": (Strike, .6, False), "Brace": (Brace, .9, False), "Slam": (Slam, 1.0, False),
+            "FistGuard": (FistGuard, 2.4, True), "Jab": (Jab, .40, False), "Cross": (Cross, .50, False), "Hook": (Hook, .55, False), "Haymaker": (Haymaker, .95, False), "BladeGuard": (BladeGuard, 2.8, True), "SlashA": (SlashA, .50, False), "SlashB": (SlashB, .50, False), "Thrust": (Thrust, .55, False), "Cleave": (Cleave, 1.0, False),
             "Fidget1": (fidget(4.0, neck), 4.0, False), "Fidget2": (fidget(4.6, scan), 4.6, False),
             "Fidget3": (fidget(4.0, shoulders), 4.0, False)}, (walk, run)

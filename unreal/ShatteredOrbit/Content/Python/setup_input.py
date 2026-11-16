@@ -38,6 +38,8 @@ ACTIONS = {
     "IA_Melee": unreal.InputActionValueType.BOOLEAN,
     "IA_ClassAbility": unreal.InputActionValueType.BOOLEAN,
     "IA_Ultimate": unreal.InputActionValueType.BOOLEAN,
+    # hand to hand: the guns on the back, the fists (or a blade) up
+    "IA_Fists": unreal.InputActionValueType.BOOLEAN,
     # the pad's two shoulders: each alone is an ability (right: grenade, left: melee), both together the ultimate
     # (ASOCharacter::HandlePadShoulder waits a moment for the second one)
     "IA_PadShoulderRight": unreal.InputActionValueType.BOOLEAN,
@@ -73,6 +75,7 @@ MAPPINGS = [
     ("IA_Weapon1", "One", []),
     ("IA_Weapon2", "Two", []),
     ("IA_Weapon3", "Three", []),
+    ("IA_Fists", "Four", []),
     ("IA_NextWeapon", "MouseScrollDown", []),
     ("IA_NextWeapon", "Gamepad_DPad_Right", []),
     ("IA_PrevWeapon", "MouseScrollUp", []),

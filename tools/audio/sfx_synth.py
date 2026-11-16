@@ -1434,7 +1434,9 @@ def bolt_impact():
 # (no blast of gas) and not a light gun's zap: the rails' hard crack, the field collapsing in a tight falling whine,
 # the crystal ringing, a heavy low thump (their guns are heavy), the amber field tearing off the slug with a sizzle.
 SARKETH = {"skr_rifle": dict(seed=5101, heavy=1.0, pitch=1.0), "skr_striker": dict(seed=5201, heavy=1.15, pitch=0.9),
-           "skr_sniper": dict(seed=5301, heavy=1.6, pitch=0.72)}
+           "skr_sniper": dict(seed=5301, heavy=1.6, pitch=0.72),
+           "skr_cannon": dict(seed=5401, heavy=2.0, pitch=0.55), "skr_shotgun": dict(seed=5501, heavy=1.4, pitch=0.85),
+           "skr_pistol": dict(seed=5601, heavy=0.75, pitch=1.15), "skr_handcannon": dict(seed=5701, heavy=1.5, pitch=0.8)}
 
 
 def skr_core(seed, heavy=1.0, pitch=1.0):
@@ -2287,6 +2289,77 @@ SOUNDS.update({"ability_throw": ability_throw, "ability_charge_burst": ability_c
 ABILITIES = [n for n in SOUNDS if n.startswith("ability_")]
 
 
+# --- Hand to hand (build with: sfx_synth.py <out> melee): the guns go on the back, the fists or a blade come up. A light
+# blow is quick and dry, a heavy one has a rush before it and weight in it; a blade sings and its light hums as it cuts.
+def melee_ready():
+    """The guns put away and the hands up: straps and buckles, two fists closing in leather."""
+    out = silence(0.6)
+    out = place(out, rustle(0.3, 3201, 900, 5000, 30, 0.25), 0.0)
+    out = place(out, click(3203, 1500.0, 0.6, 0.02), 0.08)
+    out = place(out, filt(noise(0.09, 3205), "band", (300, 1400)) * env_ad(0.09, 0.005, 0.03), 0.2, 0.6)        # leather
+    out = place(out, filt(noise(0.09, 3207), "band", (300, 1400)) * env_ad(0.09, 0.005, 0.03), 0.28, 0.5)
+    return finish(room(out, 0.12), -14)
+
+
+def melee_swing_light():
+    """A short punch through the air."""
+    out = silence(0.3)
+    out = place(out, svf_sweep(noise(0.12, 3211), "band", 500, 2200, 1.2) * env_ad(0.12, 0.04, 0.05), 0.0, 0.8)
+    out = place(out, rustle(0.12, 3213, 1200, 5000, 30, 0.15), 0.0)
+    return finish(room(out, 0.08), -12)
+
+
+def melee_swing_heavy():
+    """A big blow loaded and thrown: the body turning, the arm's long rush."""
+    out = silence(0.7)
+    out = place(out, rustle(0.25, 3221, 800, 4500, 26, 0.3), 0.0)
+    out = place(out, svf_sweep(noise(0.3, 3223), "band", 220, 1600, 1.0) * env_ad(0.3, 0.2, 0.06), 0.18, 1.0)
+    return finish(room(out, 0.1), -9)
+
+
+def melee_hit_light():
+    """A fist landing: a dull slap on armour and cloth."""
+    out = silence(0.4)
+    out = place(out, thump(170, 70, 0.12, 0.03, 2.2), 0.0, 1.0)
+    out = place(out, filt(noise(0.05, 3231), "band", (700, 3000)) * env_ad(0.05, 0.001, 0.012), 0.0, 0.8)
+    out = place(out, rustle(0.15, 3233, 1500, 6000, 24, 0.15), 0.02)
+    return finish(room(out, 0.1), -6)
+
+
+def melee_hit_heavy():
+    """A heavy blow landing: weight, a plate ringing under it, breath knocked out."""
+    out = silence(0.8)
+    out = place(out, thump(120, 40, 0.3, 0.06, 2.6), 0.0, 1.0)
+    out = place(out, filt(noise(0.09, 3241), "band", (800, 3600)) * env_ad(0.09, 0.001, 0.02), 0.0, 0.9)
+    out = place(out, bell(1240.0, 0.4, 0.12) * 0.12, 0.01)                                                       # the plate
+    out = place(out, crackle(0.25, 3243, 60, 2000, 8000, 0.08), 0.02, 0.3)
+    return finish(room(out, 0.16), -3)
+
+
+def blade_swing():
+    """The blade's edge of light through the air: a rising hum and a thin whistle."""
+    out = silence(0.5)
+    out = place(out, svf_sweep(noise(0.22, 3251), "band", 900, 4200, 3.0) * env_ad(0.22, 0.07, 0.08), 0.0, 0.7)
+    out = place(out, fm_zap(0.28, 420, 760, 2.0, 2.0, 0.08, 0.15, 3253, 0.2), 0.0, 0.35)                         # its light
+    return finish(room(out, 0.1), -10)
+
+
+def blade_hit():
+    """The blade cutting through plate: a hiss, a bright scrape, the light biting."""
+    out = silence(0.7)
+    out = place(out, filt(noise(0.2, 3261), "high", 2500) * env_ad(0.2, 0.002, 0.07), 0.0, 0.8)
+    out = place(out, fm_zap(0.3, 1800, 600, 1.5, 4.0, 0.03, 0.12, 3263), 0.0, 0.5)
+    out = place(out, thump(200, 90, 0.1, 0.02, 2.0), 0.0, 0.6)
+    out = place(out, crackle(0.3, 3265, 90, 2500, 9000, 0.1), 0.02, 0.35)
+    return finish(room(out, 0.14), -5)
+
+
+SOUNDS.update({"melee_ready": melee_ready, "melee_swing_light": melee_swing_light, "melee_swing_heavy": melee_swing_heavy,
+               "melee_hit_light": melee_hit_light, "melee_hit_heavy": melee_hit_heavy, "blade_swing": blade_swing,
+               "blade_hit": blade_hit})
+MELEE = ["melee_ready", "melee_swing_light", "melee_swing_heavy", "melee_hit_light", "melee_hit_heavy", "blade_swing", "blade_hit"]
+
+
 # --- A boss's attacks (build with: sfx_synth.py <out> boss). A boss is heard before it is felt: every attack has a
 # sound for its wind-up (the warning, about as long as the wind-up) and one for the blow. Low, slow and wide: nothing
 # a player's own kit makes sounds like these.
@@ -2439,6 +2512,8 @@ def main():
         only = set(MOVEMENT)
     if only == {"abilities"}:
         only = set(ABILITIES)
+    if only == {"melee"}:
+        only = set(MELEE)
     if only == {"boss"}:
         only = set(BOSS)
     if only == {"marksman"}:
