@@ -382,7 +382,8 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Old Winter",
-      "lore": "Honest steel in an old pattern. It was here before the ships came, and it will be here after."
+      "lore": "Honest steel in an old pattern. It was here before the ships came, and it will be here after.",
+      "snugGrip": true
     },
     "carbine": {
       "name": "Carbine",

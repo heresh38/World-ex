@@ -445,6 +445,23 @@ arm really needs and fitting again from it was tried and dropped: it fires while
 hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+**The hands are on the gun in the SAME frame** (the owner, 2026-11-16: "the player hand keeps moving and feels like the
+player is not properly gripping the guns"): the engine calls an anim proxy's `PreUpdate` BEFORE `NativeUpdateAnimation`,
+so everything the instance worked out (the hand targets, the aim, the blends) reached the pose a frame late and the
+hands trailed the gun: about 4 cm and 4 degrees at every shot, a centimetre and a half per frame of a third-person turn,
+most of a centimetre walking. `FSOLocomotionProxy::CopyFrom` now runs at the END of `NativeUpdateAnimation` (a scope
+guard): never copy an instance's per-frame state in `PreUpdate`. `SOCaptureSeries 1 36 -SOGuns=<arch>` measures it:
+every frame, each hand's bone in the gun's own frame as RENDERED (the gun as the frame ends, the bones at the start of
+the next: a body's new pose is swapped in only as the frame goes to the renderer), through idle, walk, strafe, turn,
+sprint, aim, aim on the move and turning, and firing, both views; `HOLDDRIFT` lines (spread / largest step cm, turn
+deg, the elbow's bend) and the fit's report `HOLDFIT`. Held: under 0.05 cm everywhere. **The snug grip** (data
+`"snugGrip"` -> `USOWeaponData::bSnugGrip` -> `USOGunRigComponent::IsSnugGrip`; the rifle only until the owner has
+judged it: "start with just the ak rifle then after feedback from me we can do the rest"): the fingers brought
+together toward the middle finger's line before they close (`FSOFingerPose::Together`, 0.85, `FingersTogether`, in the
+fit and the pose alike: a resting hand fans its fingers, and they touched the handguard with their tips), the support
+thumb's place at its root's height and close to the side (it stood up beside the handguard from the eye, its tip by
+the front sight), and the first-person firing shoulder of a long gun pushed back and out from its hand rather than
+down (on the sights the wrist bent 72 degrees, now 64).
 **The Sarketh's guns never reload** (the owner, 2026-11-16: "remove loading and keep venting so after we stop shooting
 and the counter rests to 0 or after venting we slowly add bullets from reserve to magazine"): a gun with `"refill"`
 (seconds for a full load: `USOWeaponData::RefillTime`) condenses its rounds (`ASOWeapon::Condenses`, `IsCondensing`):

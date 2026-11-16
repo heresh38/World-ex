@@ -211,6 +211,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat", meta = (Units = "s"))
 	float RefillTime = 0.0f;
 
+	/** The hands fitted the snug way (data "snugGrip"; the owner, 2026-11-16: "start with just the ak rifle then after
+	 *  feedback from me we can do the rest"): the fingers together round what they hold, the support thumb laid close
+	 *  along the side instead of standing off it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hold")
+	bool bSnugGrip = false;
+
 	/** ADS magnification (field of view divided by this). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	float AimZoom = 1.35f;

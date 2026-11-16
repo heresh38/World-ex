@@ -103,6 +103,11 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 
 	virtual void PreUpdate(UAnimInstance* InAnimInstance, float DeltaSeconds) override;
 	virtual bool Evaluate(FPoseContext& Output) override;
+	/** Takes this frame's state from the instance. Called at the END of USOLocomotionAnimInstance::NativeUpdateAnimation:
+	 *  the engine calls PreUpdate BEFORE NativeUpdateAnimation, so what was copied there was the frame before's (the
+	 *  hands reached for where the gun had been a frame ago: every bob, kick and turn left them off it for a frame, the
+	 *  owner's "the player hand keeps moving and feels like the player is not properly gripping the guns"). */
+	void CopyFrom(const class USOLocomotionAnimInstance* Instance);
 
 	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget, 8 Stroll, 9 Land, 10 Vault, 11 Mantle,
 	 *  12 Climb, 13 Crouch, 14 CrouchWalk, 15 Stop */
@@ -121,6 +126,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	FTransform RightTarget;
 	FTransform LeftTarget;
 	bool bSupportOnPost = false;   // (the support hand is round a vertical fore grip: it may reach nearly straight)
+	bool bSnugHold = false;        // (the gun is held the snug way: the first-person firing shoulder goes back from its hand)
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
 	/** Eye position in component space (first person: the shoulders turn with the view about it). */
@@ -327,6 +333,8 @@ public:
 	bool bHold = false;
 	/** Only the right arm reaches for the gun (the left is busy: a shield). */
 	bool bOneHand = false;
+	/** The gun in the hands is held the snug way (USOGunRigComponent::IsSnugGrip). */
+	bool bSnugHold = false;
 	/** First-person copy of the body: everything but the arms collapses. */
 	bool bArmsOnly = false;
 	bool bCollapseBody = false;
@@ -376,6 +384,10 @@ public:
 		SOCHARACTER_API FString ToString() const;
 	};
 	static FHoldReport MeasureHold(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh);
+	/** The turn that brings a finger's line (FingerDir) Amount of the way toward the middle finger's, in the palm's plane. */
+	static FQuat FingersTogether(const FVector& FingerDir, const FVector& MiddleDir, const FVector& Palm, float Amount);
+	/** How far the snug way brings the fingers together (FSOFingerPose::Together). */
+	static constexpr float SnugTogether = 0.85f;
 	FVector GetFittedOffset(bool bLeft) const { return FitOffset[bLeft ? 1 : 0]; }
 	bool HasFittedGrip() const { return bFitDone; }
 	/** The support hand was turned to another hold than the rig's own (a vertical fore grip): its basis in the gun's frame. */

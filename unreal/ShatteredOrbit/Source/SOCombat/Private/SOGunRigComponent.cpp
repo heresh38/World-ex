@@ -145,6 +145,8 @@ namespace
 		Fingers.ThumbIn = static_cast<float>((*Hand)->GetNumberField(TEXT("thumbIn")));
 		double Lift = 0.0;
 		Fingers.IndexLift = (*Hand)->TryGetNumberField(TEXT("indexLift"), Lift) ? static_cast<float>(Lift) : 0.0f;
+		double Together = 0.0;
+		Fingers.Together = (*Hand)->TryGetNumberField(TEXT("together"), Together) ? static_cast<float>(Together) : 0.0f;
 		return true;
 	}
 
@@ -157,7 +159,7 @@ namespace
 		{
 			Out += FString::Printf(TEXT("    \"%s\": [%.0f, %.0f, %.0f],\n"), HoldFingers[F], Fingers.Curl[F][0], Fingers.Curl[F][1], Fingers.Curl[F][2]);
 		}
-		Out += FString::Printf(TEXT("    \"thumbSpread\": %.0f,\n    \"thumbIn\": %.0f,\n    \"indexLift\": %.0f\n  }"), Fingers.ThumbSpread, Fingers.ThumbIn, Fingers.IndexLift);
+		Out += FString::Printf(TEXT("    \"thumbSpread\": %.0f,\n    \"thumbIn\": %.0f,\n    \"indexLift\": %.0f,\n    \"together\": %.2f\n  }"), Fingers.ThumbSpread, Fingers.ThumbIn, Fingers.IndexLift, Fingers.Together);
 		return Out;
 	}
 }
@@ -250,6 +252,7 @@ FSOFingerPose FSOFingerPose::Lerp(const FSOFingerPose& A, const FSOFingerPose& B
 	P.ThumbSpread = FMath::Lerp(A.ThumbSpread, B.ThumbSpread, Alpha);
 	P.ThumbIn = FMath::Lerp(A.ThumbIn, B.ThumbIn, Alpha);
 	P.IndexLift = FMath::Lerp(A.IndexLift, B.IndexLift, Alpha);
+	P.Together = FMath::Lerp(A.Together, B.Together, Alpha);
 	return P;
 }
 
@@ -342,6 +345,7 @@ void USOGunRigComponent::Build(const USOWeaponData* Data, bool bInFirstPerson)
 	Muzzle = Data->MuzzleLocation;
 	Archetype = Data->Archetype;
 	bHandgun = Data->MuzzleLocation.Y < 35.0f; // short barrel, the support hand on the grip
+	bSnugGrip = Data->bSnugGrip;
 	RightGrip = RifleGrip();
 	LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
 	RightFingers = FSOFingerPose::Trigger();

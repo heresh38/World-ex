@@ -887,6 +887,246 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 36)
+	{
+		// The HOLD over time (the owner, 2026-11-16: "the player hand keeps moving and feels like the player is not
+		// properly gripping the guns"): every frame, once everything has moved, each hand's bone in its gun's own frame,
+		// through idle, a walk, a strafe, turning, a sprint, aiming, aiming on the move and while turning, and firing;
+		// first person, then third. A hand that holds stays put in the gun's frame: "spread" is how far it wanders (cm),
+		// "step" its largest jump in one frame, "turn" how far it rolls (degrees); the elbow's bend shows a straight arm
+		// (180: it cannot reach). Logged as HOLDDRIFT lines, with the fit's own report (HOLDFIT) at rest in each view.
+		// -SOGuns=<archetype> (the rifle by default).
+		FString Arch = TEXT("rifle");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), Arch, false);
+		// (what was RENDERED: a body's new pose is swapped in only as the frame goes to the renderer, after the last actor
+		// has ticked, so the gun is taken as the frame ends and the hands at the start of the next, before anything moves)
+		struct FDrift
+		{
+			struct FSample { FVector Pos; FQuat Rot; float Elbow; FVector Behind; };
+			FString Phase;
+			float Yaw = 0.0f;
+			TMap<FString, TArray<FSample>> Samples;
+			TArray<FString> Order;
+			FDelegateHandle Handle;
+			FDelegateHandle PreHandle;
+			bool bPending = false;
+			bool bPendingFirst = false;
+			FString PendingPhase;
+			FTransform PendingRig;
+			FTransform LastRig;
+			bool bLastRig = false;
+		};
+		const TSharedRef<FDrift> Drift = MakeShared<FDrift>();
+		const TWeakObjectPtr<ASOPlayerController> Self(this);
+		Drift->Handle = FWorldDelegates::OnWorldPostActorTick.AddLambda([Self, Drift](UWorld* World, ELevelTick, float Dt)
+		{
+			ASOPlayerController* PC = Self.Get();
+			if (!PC || World != PC->GetWorld() || Drift->Phase.IsEmpty())
+			{
+				return;
+			}
+			ASOCharacter* H = Cast<ASOCharacter>(PC->GetPawn());
+			const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
+			if (!W)
+			{
+				return;
+			}
+			if (Drift->Yaw != 0.0f)
+			{
+				PC->SetControlRotation(PC->GetControlRotation() + FRotator(0.0f, Drift->Yaw * Dt, 0.0f));
+			}
+			const bool bFirst = H->GetViewMode() == ESOViewMode::FirstPerson;
+			if (const USOGunRigComponent* Rig = bFirst ? W->GetFirstPersonRig() : W->GetThirdPersonRig())
+			{
+				Drift->LastRig = Drift->bPending || Drift->bLastRig ? Drift->PendingRig : Rig->GetComponentTransform();
+				Drift->bLastRig = true;
+				Drift->PendingRig = Rig->GetComponentTransform();
+				Drift->bPendingFirst = bFirst;
+				Drift->PendingPhase = Drift->Phase;
+				Drift->bPending = true;
+			}
+		});
+		Drift->PreHandle = FWorldDelegates::OnWorldPreActorTick.AddLambda([Self, Drift](UWorld* World, ELevelTick, float)
+		{
+			ASOPlayerController* PC = Self.Get();
+			if (!PC || World != PC->GetWorld() || !Drift->bPending)
+			{
+				return;
+			}
+			Drift->bPending = false;
+			ASOCharacter* H = Cast<ASOCharacter>(PC->GetPawn());
+			const bool bFirst = Drift->bPendingFirst;
+			const USkeletalMeshComponent* Body = H ? (bFirst ? H->GetFirstPersonArms() : H->GetMesh()) : nullptr;
+			if (!Body)
+			{
+				return;
+			}
+			const FTransform RigT = Drift->PendingRig;
+			for (const TCHAR* S : { TEXT("R"), TEXT("L") })
+			{
+				const int32 HandIndex = Body->GetBoneIndex(FName(*FString::Printf(TEXT("hand_%s"), S)));
+				if (HandIndex == INDEX_NONE)
+				{
+					continue;
+				}
+				const FTransform Hand = Body->GetBoneTransform(HandIndex);
+				const FVector Sh = Body->GetBoneLocation(FName(*FString::Printf(TEXT("upperarm_%s"), S)));
+				const FVector El = Body->GetBoneLocation(FName(*FString::Printf(TEXT("forearm_%s"), S)));
+				const double Cos = FVector::DotProduct((Sh - El).GetSafeNormal(), (Hand.GetLocation() - El).GetSafeNormal());
+				const float Elbow = static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Cos, -1.0, 1.0))));
+				const FTransform Rel = Hand.GetRelativeTransform(RigT);
+				const FString Key = FString::Printf(TEXT("%s %-8s %s"), bFirst ? TEXT("FP") : TEXT("TP"), *Drift->PendingPhase, S);
+				if (!Drift->Samples.Contains(Key))
+				{
+					Drift->Order.Add(Key);
+				}
+				Drift->Samples.FindOrAdd(Key).Add({ Rel.GetLocation(), Rel.GetRotation(), Elbow, Hand.GetRelativeTransform(Drift->LastRig).GetLocation() });
+			}
+		});
+		auto Report = [Drift]()
+		{
+			for (const FString& Key : Drift->Order)
+			{
+				const TArray<FDrift::FSample>& A = Drift->Samples[Key];
+				if (A.Num() < 2)
+				{
+					continue;
+				}
+				FVector Mean = FVector::ZeroVector;
+				for (const FDrift::FSample& S : A)
+				{
+					Mean += S.Pos;
+				}
+				Mean /= A.Num();
+				float Spread = 0.0f, Step = 0.0f, Turn = 0.0f, ElbowLo = 180.0f, ElbowHi = 0.0f, Lag = 0.0f;
+				FVector BehindMean = FVector::ZeroVector;
+				for (const FDrift::FSample& S : A)
+				{
+					BehindMean += S.Behind;
+				}
+				BehindMean /= A.Num();
+				for (int32 i = 0; i < A.Num(); ++i)
+				{
+					Lag = FMath::Max(Lag, static_cast<float>(FVector::Dist(A[i].Behind, BehindMean)));
+					Spread = FMath::Max(Spread, static_cast<float>(FVector::Dist(A[i].Pos, Mean)));
+					Turn = FMath::Max(Turn, FMath::RadiansToDegrees(static_cast<float>(A[i].Rot.AngularDistance(A[0].Rot))));
+					ElbowLo = FMath::Min(ElbowLo, A[i].Elbow);
+					ElbowHi = FMath::Max(ElbowHi, A[i].Elbow);
+					if (i > 0)
+					{
+						Step = FMath::Max(Step, static_cast<float>(FVector::Dist(A[i].Pos, A[i - 1].Pos)));
+					}
+				}
+				UE_LOG(LogShatteredOrbit, Log, TEXT("HOLDDRIFT %s  n=%3d  spread %5.2f cm  step %5.2f  turn %5.1f deg  (against the gun a frame before: %5.2f)  elbow %3.0f-%3.0f  at %s"),
+					*Key, A.Num(), Spread, Step, Turn, Lag, ElbowLo, ElbowHi, *Mean.ToCompactString());
+				if (Key.Contains(TEXT("fire")) && Key.EndsWith(TEXT("R")))
+				{
+					FString Series;
+					for (int32 i = 0; i < FMath::Min(A.Num(), 48); ++i)
+					{
+						Series += FString::Printf(TEXT(" %.1f"), FVector::Dist(A[i].Pos, Mean));
+					}
+					UE_LOG(LogShatteredOrbit, Log, TEXT("HOLDSERIES %s:%s"), *Key, *Series);
+				}
+			}
+		};
+		auto FitReport = [Hero](const TCHAR* Label)
+		{
+			ASOCharacter* H = Hero();
+			const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
+			if (!W)
+			{
+				return;
+			}
+			const bool bFirst = H->GetViewMode() == ESOViewMode::FirstPerson;
+			const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(bFirst ? W->GetFirstPersonRig() : W->GetThirdPersonRig(),
+				bFirst ? H->GetFirstPersonArms() : H->GetMesh());
+			UE_LOG(LogShatteredOrbit, Log, TEXT("HOLDFIT %s %s: %s"), bFirst ? TEXT("FP") : TEXT("TP"), Label, *R.ToString());
+		};
+		const TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(*Arch));
+				FSOWeaponInstance W = USOLootLibrary::MakeWeapon(FName(*Arch), 2, 20, Rng);
+				W.Sight = TEXT("default");
+				H->EquipInstance(W);
+				*Start = H->GetActorTransform();
+				if (ASOWeapon* Gun = H->GetWeapon())
+				{
+					UWorld* World = GetWorld();
+					for (USOGunRigComponent* Rig : { Gun->GetFirstPersonRig(), Gun->GetThirdPersonRig() })
+					{
+						Rig->TransformUpdated.AddLambda([Drift, World, Rig, Gun](USceneComponent* C, EUpdateTransformFlags Flags, ETeleportType)
+						{
+							if (Drift->Phase == TEXT("fire") && World)
+							{
+								UE_LOG(LogShatteredOrbit, Log, TEXT("RIGMOVE %s frame %llu group %d flags %d at %s"), Rig == Gun->GetFirstPersonRig() ? TEXT("FP") : TEXT("TP"),
+									GFrameCounter, static_cast<int32>(World->TickGroup), static_cast<int32>(Flags), *C->GetComponentLocation().ToCompactString());
+							}
+						});
+					}
+				}
+			}
+			View(ESOViewMode::FirstPerson);
+		});
+		struct FPhase { const TCHAR* Name; FVector2D Move; bool bSprint; bool bAim; bool bFire; float Yaw; };
+		static const FPhase Phases[] = {
+			{ TEXT("idle"), FVector2D(0, 0), false, false, false, 0.0f }, { TEXT("walk"), FVector2D(0, 1), false, false, false, 0.0f },
+			{ TEXT("strafe"), FVector2D(1, 0), false, false, false, 0.0f }, { TEXT("turn"), FVector2D(0, 0), false, false, false, 120.0f },
+			{ TEXT("sprint"), FVector2D(0, 1), true, false, false, 0.0f }, { TEXT("aim"), FVector2D(0, 0), false, true, false, 0.0f },
+			{ TEXT("aimwalk"), FVector2D(0, 1), false, true, false, 0.0f }, { TEXT("aimturn"), FVector2D(0, 0), false, true, false, 60.0f },
+			{ TEXT("fire"), FVector2D(0, 0), false, false, true, 0.0f } };
+		for (const ESOViewMode Mode : { ESOViewMode::FirstPerson, ESOViewMode::ThirdPerson })
+		{
+			Act([=]() { View(Mode); });
+			Do(1.5f, [=]() { FitReport(TEXT("at rest")); });
+			for (const FPhase& P : Phases)
+			{
+				Act([=, this]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						H->TeleportTo(Start->GetLocation(), Start->Rotator());
+						H->GetCharacterMovement()->StopMovementImmediately();
+						P.bSprint ? H->HandleSprintPressed() : H->HandleSprintReleased();
+						if (ASOWeapon* W = H->GetWeapon())
+						{
+							W->SetAmmo(30, 300);
+						}
+					}
+					CaptureMove = P.Move;
+					Aim(P.bAim);
+					Fire(P.bFire);
+					Drift->Yaw = P.Yaw;
+				});
+				Do(0.6f, [=]() { Drift->Phase = P.Name; });                        // (settled: measured from here)
+				Do(2.0f, [=, this]()
+				{
+					Drift->Phase.Reset();
+					Drift->Yaw = 0.0f;
+					CaptureMove = FVector2D::ZeroVector;
+					Fire(false);
+					Aim(false);
+					if (ASOCharacter* H = Hero())
+					{
+						H->HandleSprintReleased();
+					}
+				});
+				Do(0.4f, []() {});
+			}
+		}
+		Do(0.2f, [=]()
+		{
+			Report();
+			FWorldDelegates::OnWorldPostActorTick.Remove(Drift->Handle);
+			FWorldDelegates::OnWorldPreActorTick.Remove(Drift->PreHandle);
+		});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 30)
 	{
 		// The HOLD (files k_<gun>_*): both hands on the gun from close, in both views. Third person: the body's hands on

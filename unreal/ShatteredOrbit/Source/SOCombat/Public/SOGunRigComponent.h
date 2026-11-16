@@ -44,6 +44,11 @@ struct SOCOMBAT_API FSOFingerPose
 	/** The index finger turned in the palm's plane (degrees about the palm's normal) before it closes: lifted to a
 	 *  trigger that sits higher than the knuckles of a hand round its grip (the finger alone, the others as they are). */
 	float IndexLift = 0.0f;
+	/** How far the fingers close their fan, 0 .. 1: each of the index (the support hand's only: the firing hand's is on
+	 *  the trigger), ring and little finger turned in the palm's plane toward the middle finger's line before it closes.
+	 *  A hand at rest spreads its fingers; one that grips holds them together (spread, they touched what they held with
+	 *  their tips only). */
+	float Together = 0.0f;
 
 	static FSOFingerPose Make(const float Index[3], const float Middle[3], const float Ring[3], const float Pinky[3], const float Thumb[3]);
 	/** Firing hand on a pistol grip: three fingers wrapped, the index finger on the trigger, the thumb over the top. */
@@ -152,6 +157,9 @@ public:
 	bool IsBuilt() const { return bBuilt; }
 	/** A handgun (short barrel, held out in both hands). */
 	bool IsHandgun() const { return bHandgun; }
+	/** The hands are fitted the snug way (USOWeaponData::bSnugGrip): the fingers together, the support thumb laid close
+	 *  along the side. */
+	bool IsSnugGrip() const { return bSnugGrip; }
 	/** This gun brought its own hold (Data/holds/<archetype>.json): the hands go where it says, nothing is fitted. */
 	bool HasHold() const { return bHasHold; }
 	FName GetArchetype() const { return Archetype; }
@@ -212,6 +220,7 @@ private:
 	bool bOpticMounted = false;
 	float BarrelSpin = 0.0f;
 	bool bHandgun = false;
+	bool bSnugGrip = false;
 
 	/** A part's current transform in mesh space (nested parts included). */
 	FTransform PartInMesh(const UStaticMeshComponent* Comp) const;

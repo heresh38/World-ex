@@ -1316,7 +1316,8 @@ def weapon(master, arch, a, clear):
                       unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
                   kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
                   sprint_carry=a.get("carry", "None"), tracer_color=hex_color(tracer), glow_color=hex_color(palette_of(a)["glow"]), body_mesh=body, parts=parts,
-                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"], **slug_values(a), **gun_words(a))
+                  sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"], snug_grip=bool(a.get("snugGrip", False)),
+                  **slug_values(a), **gun_words(a))
     for key, value in values.items():
         data.set_editor_property(key, value)
     sockets = info["sockets"]
@@ -1720,7 +1721,7 @@ def gun_numbers():
                       reload_time=float(a["reload"]), range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
                       muzzle_velocity=float(velocity), kick=float(a.get("kick", 1.0)), sprint_to_fire_time=float(a["sprintOut"]),
                       sprint_carry=a.get("carry", "None"), tracer_color=hex_color(palette_of(a)["tracer"]),
-                      glow_color=hex_color(palette_of(a)["glow"]), **slug_values(a), **gun_words(a))
+                      glow_color=hex_color(palette_of(a)["glow"]), snug_grip=bool(a.get("snugGrip", False)), **slug_values(a), **gun_words(a))
         for key, value in values.items():
             data.set_editor_property(key, value)
         eal.save_loaded_asset(data, only_if_is_dirty=False)
