@@ -89,6 +89,30 @@ def dark():
                   (T.grain(1), .00001)], rough, .15, relief=1.2, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 
+def gun_dark():
+    """the guns' dark lacquer (the owner, 2026-11-15, on the assault rifle: "i like the orange more then this purple/blue
+    ... the orange/gold on the scope"): the shell's layered growth as dark(), in a warm graphite with a bronze depth on
+    the crowns instead of the armour's violet, so the gold and the amber light are what read on it"""
+    T = Tile('skr_gun_dark', .25)
+    var = T.noise(.05, 3)
+    d1, d2, cid = T.cells(.014, warp=.004, warp_feature=.04)
+    rim = 1 - smooth(0.0, .10, d2 - d1)
+    dome = np.clip(1 - d1 * 1.1, 0, 1) ** .8
+    fine = T.noise(.0016, 2)
+    satin = smooth(.2, .55, T.noise(.06, 3))
+    scr_zone = smooth(.05, .40, T.noise(.08, 2))
+    scr = T.lines(150, (.004, .030), (.0002, .0005), bend=.4) * scr_zone
+    pits = T.dents(140, (.0004, .0010)) * smooth(.1, .5, T.noise(.04, 3))
+    alb = hexc('#1c1916') * (.86 + .14 * var[..., None]) * (.97 + .05 * cid[..., None])
+    alb = mix(alb, hexc('#33281c'), dome * .22)
+    alb = mix(alb, hexc('#0c0a08'), rim * .22)
+    alb = mix(alb, hexc('#3a3530'), rim * smooth(.3, .7, T.noise(.02, 2)) * .20)
+    alb = mix(alb, hexc('#4a4238'), scr * .35)
+    rough = .16 + .05 * var + .18 * satin + .14 * scr + .12 * pits + .10 * rim + .02 * fine
+    T.write(alb, [(dome, .00020), (-rim, .00012), (var, .0002), (fine, .000015), (-scr, .0001), (-pits, .0003),
+                  (T.grain(1), .00001)], rough, .15, relief=1.2, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
+
+
 if __name__ == '__main__':
     want = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else ['skin', 'armour', 'dark']
     for w in want:

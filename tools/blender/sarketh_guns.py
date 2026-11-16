@@ -33,9 +33,9 @@ GUN_SCALE.update({'gun_skr_rifle': 1.0, 'gun_skr_sniper': 1.0, 'gun_skr_cannon':
                   'gun_skr_grenade': 1.0})
 
 
-def mats(under='skr_skin'):
+def mats(under='skr_skin', shell='skr_dark'):
     M = K.energy_mats()
-    M['shell'] = fk.tmat('gun_body__skr', 'skr_dark', rough=.24, nstr=.8)
+    M['shell'] = fk.tmat('gun_body__skr', shell, rough=.24, nstr=.8)
     M['bone'] = fk.tmat('gun_metal__skr', 'skr_armour', rough=.32, metal=.62)
     M['under'] = fk.tmat('gun_dark__skr', under, rough=.45)
     M['white'] = bl.mat('gun_glow', '#d6e6ff', 0, .35, emit='#d6e6ff', strength=9)
@@ -1074,7 +1074,7 @@ def skr_sight(M, y, z):
 def assembled_rifle(name='skr_rifle'):
     import gunparts as G
     from weapons import e_hand, e_small
-    bl.reset(); M = mats(under='wpn_metal'); P = []
+    bl.reset(); M = mats(under='wpn_metal', shell='skr_gun_dark'); P = []
     # what each part is made of, every one a 4K set of its own (the owner, 2026-11-15: "apply a 4k metal/steel/iron/
     # polymer/etc textures where needed as some parts look too bland"): the dark lacquered shells (skr_dark), the pale
     # forged armour (skr_armour), the chassis, mount and emitter face in forged iron (wpn_metal), bolts, pins and the
@@ -1084,8 +1084,13 @@ def assembled_rifle(name='skr_rifle'):
     ST = fk.tmat('gun_steel', 'wpn_steel')
     TI = fk.tmat('gun_metal__ti', 'wpn_titanium')
     PO = fk.tmat('gun_polymer', 'wpn_poly', nstr=.3)
-    M.update(body=M['shell'], dark=PO, metal=ST, glow=M['white'], dot=M['amber'],
-             grip=fk.tmat('gun_grip', 'wpn_knurl', metal=0, rough=.7), lens=K.energy_mats()['lens'])
+    # the colours (the owner: "i like the orange more then this purple/blue ... the orange/gold on the scope"; their brief:
+    # cells pale amber): no violet or cyan on their guns: the lacquer a warm graphite, every light pale amber or amber,
+    # the glass smoked amber, gold where a band or a rim is
+    CELL = bl.mat('gun_glow__cell', '#ffb257', 0, .35, emit='#ffb257', strength=5)   # (paler and brighter read as white)
+    M.update(body=M['shell'], dark=PO, metal=ST, glow=CELL, white=CELL, dot=M['amber'],
+             grip=fk.tmat('gun_grip', 'wpn_knurl', metal=0, rough=.7),
+             lens=bl.mat('gun_lens__skr', '#3a240e', .6, .04, emit='#140a03', strength=1.0))
     SH, PL, UN, TR, GL, AM = M['shell'], M['bone'], M['under'], M['trim'], M['white'], M['amber']
 
     def AF(f):
@@ -1192,9 +1197,9 @@ def assembled_rifle(name='skr_rifle'):
     for i in range(4):                                                             # scales: each laps over the one behind
         ya = .118 - i * .024
         R.shell(P, 'scale', SH if i % 2 == 0 else PL, ya, ya - .030, -1.02, -AF(.22), d=.0026 + i * .0007, t=.0028)
-    for y_, L_ in ((.146, .010), (.128, .006)):
-        R.collar(P, 'carapace_band', PL, y_, L_, .0034)
-    S.collar(P, 'shroud_carapace', PL, -.414, .006, .0040)
+    for y_, L_, m_ in ((.146, .010, TR), (.128, .006, PL)):
+        R.collar(P, 'carapace_band', m_, y_, L_, .0034)
+    S.collar(P, 'shroud_carapace', TR, -.414, .006, .0040)
     S.collar(P, 'shroud_carapace', SH, -.424, .005, .0032)
     for sg in (1, -1):                                                             # the conduits, both flanks
         path = [(sg * .0352, -.148, .006), (sg * .0372, -.186, .014), (sg * .0345, -.222, .030), (sg * .0275, -.250, .046)]
@@ -1224,7 +1229,7 @@ def assembled_rifle(name='skr_rifle'):
         ya = .058 - i * .0198
         teeth += [(ya, .1075), (ya - .003, .1130), (ya - .0125, .1130), (ya - .0150, .1075)]
     P.append(prism('mount_spine', [(.062, .1020)] + [(.062, .1075)] + teeth + [(-.204, .1075), (-.204, .1020)], .022, UN, .0012))
-    P.append(prism('mount_rib', [(.064, .1015), (.064, .1060), (-.206, .1060), (-.206, .1015)], .026, PL, .0010))
+    P.append(prism('mount_rib', [(.064, .1015), (.064, .1060), (-.206, .1060), (-.206, .1015)], .026, TR, .0010))
     sz = .147
     G.stock_soft(P, SH, PL, M['grip'], .150, .106, .232, .13, .040, .030, mode='open', cheek=True, bolt_m=ST)
     P.append(plate('stock_panel', [(.205, .085), (.262, .080), (.258, .058), (.208, .062)], PL, .0185, .0222, .0009, sym=True))
