@@ -633,6 +633,18 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Snap(0.3f, *FString::Printf(TEXT("me_%s_4_heavy_windup"), V));
 			Snap(0.17f, *FString::Printf(TEXT("me_%s_5_heavy_lands"), V));
 			Do(1.5f, []() {});
+			// the named moves: light, light, heavy (the finisher); light crouched (the sweep); the guard held
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(false); } });
+			Do(0.42f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(false); } });
+			Do(0.5f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(true); } });
+			Snap(0.2f, *FString::Printf(TEXT("me_%s_6_finisher"), V));
+			Do(1.0f, [=, this]() { if (ASOCharacter* H = Hero()) { H->Crouch(); } });
+			Do(0.4f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MeleeStrike(false); } });
+			Snap(0.18f, *FString::Printf(TEXT("me_%s_7_sweep"), V));
+			Do(0.8f, [=, this]() { if (ASOCharacter* H = Hero()) { H->UnCrouch(); H->SetBlocking(true); } });
+			Snap(0.4f, *FString::Printf(TEXT("me_%s_8_guard"), V));
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->SetBlocking(false); } });
+			Do(0.6f, []() {});
 		}
 		Act([=, this]() { Beside(false); if (ASOCharacter* H = Hero()) { H->SetFists(false); } });
 		Do(0.5f, []() {});

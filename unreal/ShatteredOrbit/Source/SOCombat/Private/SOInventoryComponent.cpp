@@ -25,6 +25,7 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(USOInventoryComponent, Items);
 	DOREPLIFETIME(USOInventoryComponent, Blades);
+	DOREPLIFETIME(USOInventoryComponent, MeleeSlot);
 	DOREPLIFETIME(USOInventoryComponent, Equipped);
 	DOREPLIFETIME(USOInventoryComponent, ActiveSlot);
 	// what a player has in the bank is theirs to see (the copies themselves go to everyone: the guns on a player's
@@ -681,6 +682,7 @@ bool USOInventoryComponent::LoadProfile()
 	Body = USOWardrobeData::Get(Save->Body) ? Save->Body : FName(TEXT("male"));
 	RestoreArmor(Save->Armor);
 	Blades = Save->Blades;
+	MeleeSlot = Blades.Contains(Save->MeleeSlot) ? Save->MeleeSlot : NAME_None;
 	FString Worn;
 	for (const FSOArmorInstance& A : Armor)
 	{
@@ -702,6 +704,18 @@ bool USOInventoryComponent::LoadProfile()
 	return true;
 }
 
+void USOInventoryComponent::ServerSetMeleeSlot_Implementation(FName Style)
+{
+	// a blade this player owns, or None: the fists
+	const FName Want = Style == TEXT("fists") ? NAME_None : Style;
+	if ((!Want.IsNone() && !Blades.Contains(Want)) || Want == MeleeSlot)
+	{
+		return;
+	}
+	MeleeSlot = Want;
+	Changed(true);
+}
+
 void USOInventoryComponent::AddBlade(FName Style)
 {
 	if (Style.IsNone() || Blades.Contains(Style))
@@ -709,6 +723,10 @@ void USOInventoryComponent::AddBlade(FName Style)
 		return;
 	}
 	Blades.Add(Style);
+	if (MeleeSlot.IsNone())
+	{
+		MeleeSlot = Style;                                   // (the first blade goes in the empty melee slot)
+	}
 	const USOMeleeTable* Table = USOMeleeTable::Get();
 	const FSOMeleeStyle* Info = Table ? Table->Find(Style) : nullptr;
 	Feed(FString::Printf(TEXT("+ %s (hand to hand: key 4)"), Info && !Info->Name.IsEmpty() ? *Info->Name.ToString() : *Style.ToString()),
@@ -733,6 +751,7 @@ void USOInventoryComponent::SaveProfile() const
 	Save->Armor = Armor;
 	Save->Body = Body;
 	Save->Blades = Blades;
+	Save->MeleeSlot = MeleeSlot;
 	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	if (USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr)
 	{

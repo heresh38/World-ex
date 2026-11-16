@@ -190,6 +190,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat")
 	float HeatSpeed = 1.3f;
 
+	/** The Sarketh's guns never reload (the owner, 2026-11-16: "remove loading and keep venting so after we stop
+	 *  shooting and the counter rests to 0 or after venting we slowly add bullets from reserve to magazine"): once the
+	 *  trigger rests and the crystal has cooled to nothing (or a vent has ended), rounds condense from the reserve into
+	 *  it, a full load in this many seconds. An empty trigger or the reload key vents it. 0 = a gun that reloads. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Heat", meta = (Units = "s"))
+	float RefillTime = 0.0f;
+
 	/** ADS magnification (field of view divided by this). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	float AimZoom = 1.35f;

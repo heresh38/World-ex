@@ -1,4 +1,5 @@
 #include "SOInventoryWidget.h"
+#include "SOMelee.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Brushes/SlateColorBrush.h"
@@ -409,7 +410,7 @@ TSharedRef<SWidget> USOInventoryTile::RebuildWidget()
 	if (WidgetTree && !WidgetTree->RootWidget)
 	{
 		UWidgetTree* T = WidgetTree;
-		const bool bSlot = Info.Kind == TEXT("wslot") || Info.Kind == TEXT("aslot");
+		const bool bSlot = Info.Kind == TEXT("wslot") || Info.Kind == TEXT("aslot") || Info.Kind == TEXT("mslot");
 		const FLinearColor Rarity = Alpha(Info.Rarity, 1.0f);
 		UButton* Button = Make<UButton>(T);
 		// the plate: a slot card carries its rarity as a bar down its left edge, an owned item as a bar along its foot
@@ -451,7 +452,8 @@ TSharedRef<SWidget> USOInventoryTile::RebuildWidget()
 		}
 		else
 		{
-			UOverlaySlot* Empty = Square->AddChildToOverlay(Text(T, TEXT("EMPTY"), 9, Alpha(Dim, 0.7f), true, 300));
+			const bool bHands = Info.Kind == TEXT("mslot") || Info.Kind == TEXT("blade");     // (the melee slot with nothing in it: the fists)
+			UOverlaySlot* Empty = Square->AddChildToOverlay(Text(T, bHands ? TEXT("FISTS") : TEXT("EMPTY"), 9, Alpha(bHands ? Ink : Dim, 0.7f), true, 300));
 			Empty->SetHorizontalAlignment(HAlign_Center);
 			Empty->SetVerticalAlignment(VAlign_Center);
 		}
@@ -957,6 +959,23 @@ void USOInventoryWidget::FillColumns()
 		Info.bActive = OpenSlotId == Info.Key;
 		AddTile(LeftColumn, Info);
 	}
+	{
+		// the melee slot: a blade owned, or the fists
+		const USOMeleeTable* Melee = USOMeleeTable::Get();
+		const FName In = Inventory->GetMeleeSlot();
+		const FSOMeleeStyle* Style = Melee ? Melee->Find(In.IsNone() ? FName(TEXT("fists")) : In) : nullptr;
+		FSOTileInfo Info;
+		Info.Kind = TEXT("mslot");
+		Info.Key = TEXT("melee");
+		Info.Title = Style && !Style->Name.IsEmpty() ? Style->Name.ToString() : TEXT("Fists");
+		Info.Icon = Style ? Style->Icon.LoadSynchronous() : nullptr;
+		Info.Sub = TEXT("4  MELEE");
+		Info.Tag = In.IsNone() ? TEXT("HAND TO HAND") : TEXT("BLADE");
+		Info.Rarity = In.IsNone() ? Dim : FLinearColor(1.0f, 0.62f, 0.2f);
+		Info.bWide = true;
+		Info.bActive = OpenSlotId == Info.Key;
+		AddTile(LeftColumn, Info);
+	}
 	LeftColumn->AddChildToVerticalBox(Header(T, TEXT("OUTER LAYERS")))->SetPadding(FMargin(0, 14, 0, 10));
 	for (const FName SlotId : { FName(TEXT("outer")), FName(TEXT("vest")) })
 	{
@@ -1014,7 +1033,7 @@ void USOInventoryWidget::FillFlyout()
 	DetailPanel->SetVisibility(ESlateVisibility::Visible);
 	// The bay beside the slot's own column, the details where the other column was, the character in the gap
 	// between them (1920 wide: column 56-446, bay 462-910, gap, details 1364-1864; mirrored for the right column).
-	const bool bLeft = IsWeaponSlot(OpenSlotId) || OpenSlotId == TEXT("outer") || OpenSlotId == TEXT("vest");
+	const bool bLeft = IsWeaponSlot(OpenSlotId) || OpenSlotId == TEXT("outer") || OpenSlotId == TEXT("vest") || OpenSlotId == TEXT("melee");
 	LeftColumn->SetVisibility(bLeft ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	RightColumn->SetVisibility(bLeft ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	StageShiftTarget = bLeft ? 177.0f : -177.0f;
@@ -1032,7 +1051,33 @@ void USOInventoryWidget::FillFlyout()
 	}
 	Grid->ClearChildren();
 	TArray<FSOTileInfo> Tiles;
-	if (IsWeaponSlot(OpenSlotId))
+	if (OpenSlotId == TEXT("melee"))
+	{
+		// the fists, and every blade owned
+		const USOMeleeTable* Melee = USOMeleeTable::Get();
+		TArray<FName> Styles = { FName(TEXT("fists")) };
+		Styles.Append(Inventory->GetBlades());
+		const FName In = Inventory->GetMeleeSlot().IsNone() ? FName(TEXT("fists")) : Inventory->GetMeleeSlot();
+		for (const FName Id : Styles)
+		{
+			const FSOMeleeStyle* Style = Melee ? Melee->Find(Id) : nullptr;
+			FSOTileInfo Info;
+			Info.Kind = TEXT("blade");
+			Info.Key = TEXT("melee:") + Id.ToString();
+			Info.Title = Style && !Style->Name.IsEmpty() ? Style->Name.ToString() : Id.ToString();
+			Info.Icon = Style ? Style->Icon.LoadSynchronous() : nullptr;
+			Info.Sub = Id == TEXT("fists") ? TEXT("HAND TO HAND") : TEXT("BLADE");
+			Info.Rarity = Id == TEXT("fists") ? Dim : FLinearColor(1.0f, 0.62f, 0.2f);
+			Info.bEquipped = Id == In;
+			Tiles.Add(Info);
+		}
+		if (SelectedKey.IsEmpty())
+		{
+			SelectedKey = TEXT("melee:") + In.ToString();
+		}
+		GridTitle->SetText(FText::FromString(FString::Printf(TEXT("MELEE  ·  %d"), Tiles.Num())));
+	}
+	else if (IsWeaponSlot(OpenSlotId))
 	{
 		const int32 SlotId = FCString::Atoi(*OpenSlotId);
 		const USOLootTables* Tables = USOLootLibrary::GetTables();
@@ -1108,6 +1153,39 @@ void USOInventoryWidget::FillDetails()
 	else if (const FSOArmorInstance* A = Inventory->FindArmor(Key))
 	{
 		FillArmorDetails(*A);
+	}
+	else if (Key.StartsWith(TEXT("melee:")))
+	{
+		// a melee style: its name, and every blow it has (the light chain, the heavy, the named moves) with its damage
+		const USOMeleeTable* Melee = USOMeleeTable::Get();
+		const FSOMeleeStyle* Style = Melee ? Melee->Find(FName(*Key.RightChop(6))) : nullptr;
+		if (Style)
+		{
+			Details->AddChildToVerticalBox(Text(WidgetTree, Style->Name.ToString().ToUpper(), 22, FLinearColor(1.0f, 0.78f, 0.45f)));
+			auto Line = [&](const TCHAR* What, const TCHAR* How, const FSOMeleeBlow* B)
+			{
+				if (B && !B->Clip.IsNone())
+				{
+					Details->AddChildToVerticalBox(Text(WidgetTree, FString::Printf(TEXT("%-10s %-22s %3.0f"), What, How, B->Damage), 13, FLinearColor(0.85f, 0.88f, 0.92f)));
+				}
+			};
+			for (int32 i = 0; i < Style->Light.Num(); ++i)
+			{
+				Line(*FString::Printf(TEXT("Light %d"), i + 1), TEXT("fire, again and again"), &Style->Light[i]);
+			}
+			Line(TEXT("Heavy"), TEXT("aim"), &Style->Heavy);
+			Line(TEXT("Finisher"), TEXT("light, light, heavy"), &Style->Finisher);
+			Line(TEXT("Rush"), TEXT("light at a sprint"), &Style->Rush);
+			Line(TEXT("Sweep"), TEXT("light crouched"), &Style->Sweep);
+			Line(TEXT("Launcher"), TEXT("heavy crouched"), &Style->Riser);
+			Line(TEXT("Slam"), TEXT("heavy in the air"), &Style->Air);
+			Details->AddChildToVerticalBox(Text(WidgetTree, FString::Printf(TEXT("Guard: hold R (%.0f%% gets through); raised as a blow comes: a parry"),
+				Style->BlockScale * 100.0f), 13, Dim));
+		}
+		ShowUpgrade(FString());
+		EquipButton->SetIsEnabled(Inventory->GetMeleeSlot() != (Key == TEXT("melee:fists") ? NAME_None : FName(*Key.RightChop(6))));
+		LockButton->SetIsEnabled(false);
+		DismantleButton->SetIsEnabled(false);
 	}
 	else
 	{
@@ -1328,7 +1406,7 @@ void USOInventoryWidget::FillArmorDetails(const FSOArmorInstance& A)
 
 void USOInventoryWidget::OnTile(const FSOTileInfo& Tile)
 {
-	if (Tile.Kind == TEXT("wslot") || Tile.Kind == TEXT("aslot"))
+	if (Tile.Kind == TEXT("wslot") || Tile.Kind == TEXT("aslot") || Tile.Kind == TEXT("mslot"))
 	{
 		OpenSlot(OpenSlotId == Tile.Key ? FString() : Tile.Key);
 		return;
@@ -1367,6 +1445,12 @@ void USOInventoryWidget::OnEquip()
 {
 	if (!Inventory)
 	{
+		return;
+	}
+	if (SelectedKey.StartsWith(TEXT("melee:")))
+	{
+		Inventory->ServerSetMeleeSlot(FName(*SelectedKey.RightChop(6)));
+		USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.7f, 0.0f);
 		return;
 	}
 	if (const FSOWeaponInstance* W = Inventory->Find(SelectedKey); W && !Inventory->IsEquipped(W->Uid))

@@ -208,7 +208,7 @@ public:
 	 * whatever the legs are doing, and a blow plays there once and goes back to the guard. Standing, the whole body takes
 	 * the clip (its feet set as it was made); on the move the legs keep their gait. None = no melee layer.
 	 */
-	void SetMeleeGuard(UAnimSequenceBase* Guard);
+	void SetMeleeGuard(UAnimSequenceBase* Guard, float HoldAt = -1.0f);
 	void PlayMeleeBlow(UAnimSequenceBase* Clip, float PlayRate = 1.0f);
 	bool IsMeleeBlowPlaying() const { return MeleeBlowTime >= 0.0f; }
 	float GetMeleeWeight() const { return MeleeWeight; }
@@ -222,6 +222,7 @@ public:
 	float MeleeBlowTime = -1.0f;
 	float MeleeBlowRate = 1.0f;
 	float MeleeGuardTime = 0.0f;
+	float MeleeGuardHold = -1.0f;   // (>= 0: the guard is held at this moment of its clip: the block)
 	float MeleeWeight = 0.0f;   // the layer coming on and off (0 to 1)
 	float MeleeLegs = 0.0f;     // how much of the legs it takes (1 standing)
 	float MeleePitch = 0.0f;    // the aim's pitch: blows go where the eyes look

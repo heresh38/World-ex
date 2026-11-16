@@ -74,8 +74,9 @@ void USOLocomotionAnimInstance::PlayAction(UAnimSequenceBase* Clip, float PlayRa
 	}
 }
 
-void USOLocomotionAnimInstance::SetMeleeGuard(UAnimSequenceBase* Guard)
+void USOLocomotionAnimInstance::SetMeleeGuard(UAnimSequenceBase* Guard, float HoldAt)
 {
+	MeleeGuardHold = HoldAt;
 	if (Guard != MeleeGuard)
 	{
 		MeleeGuard = Guard;
@@ -1896,7 +1897,7 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 	const bool bBlow = Instance->MeleeBlowTime >= 0.0f && Instance->MeleeBlow;
 	MeleeClip = bBlow ? Instance->MeleeBlow.Get() : Instance->MeleeGuard.Get();
 	bMeleeLoop = !bBlow;
-	MeleeTime = bBlow ? Instance->MeleeBlowTime : Instance->MeleeGuardTime;
+	MeleeTime = bBlow ? Instance->MeleeBlowTime : (Instance->MeleeGuardHold >= 0.0f ? Instance->MeleeGuardHold : Instance->MeleeGuardTime);
 	if (MeleeClip && bMeleeLoop && MeleeClip->GetPlayLength() > 0.0f)
 	{
 		MeleeTime = FMath::Fmod(MeleeTime, MeleeClip->GetPlayLength());

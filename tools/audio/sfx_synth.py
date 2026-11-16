@@ -2354,10 +2354,21 @@ def blade_hit():
     return finish(room(out, 0.14), -5)
 
 
-SOUNDS.update({"melee_ready": melee_ready, "melee_swing_light": melee_swing_light, "melee_swing_heavy": melee_swing_heavy,
+def melee_parry():
+    """A blow turned aside on the guard: a hard ring of plate on plate, a bright scrape, a breath of air."""
+    out = silence(0.9)
+    out = place(out, click(3271, 2600.0, 1.0, 0.02), 0.0)
+    out = place(out, bell(1480.0, 0.7, 0.2) * 0.3, 0.0)
+    out = place(out, bell(2210.0, 0.5, 0.15) * 0.16, 0.004)
+    out = place(out, filt(noise(0.12, 3273), "high", 3000) * env_ad(0.12, 0.001, 0.04), 0.0, 0.6)
+    out = place(out, thump(160, 70, 0.15, 0.03, 2.0), 0.0, 0.6)
+    return finish(room(out, 0.2), -5)
+
+
+SOUNDS.update({"melee_ready": melee_ready, "melee_parry": melee_parry, "melee_swing_light": melee_swing_light, "melee_swing_heavy": melee_swing_heavy,
                "melee_hit_light": melee_hit_light, "melee_hit_heavy": melee_hit_heavy, "blade_swing": blade_swing,
                "blade_hit": blade_hit})
-MELEE = ["melee_ready", "melee_swing_light", "melee_swing_heavy", "melee_hit_light", "melee_hit_heavy", "blade_swing", "blade_hit"]
+MELEE = ["melee_ready", "melee_parry", "melee_swing_light", "melee_swing_heavy", "melee_hit_light", "melee_hit_heavy", "blade_swing", "blade_hit"]
 
 
 # --- A boss's attacks (build with: sfx_synth.py <out> boss). A boss is heard before it is felt: every attack has a

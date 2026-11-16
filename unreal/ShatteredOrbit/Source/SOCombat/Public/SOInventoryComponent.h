@@ -17,7 +17,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 5;
+	static constexpr int32 CurrentVersion = 6;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -54,6 +54,10 @@ public:
 	/** Version 5: the melee styles owned beyond the fists (blades: USOMeleeTable ids). */
 	UPROPERTY(SaveGame)
 	TArray<FName> Blades;
+
+	/** Version 6: the melee slot (a blade owned, or None: the fists). */
+	UPROPERTY(SaveGame)
+	FName MeleeSlot;
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -146,6 +150,11 @@ public:
 	void AddBlade(FName Style);
 	bool HasBlade(FName Style) const { return Blades.Contains(Style); }
 	const TArray<FName>& GetBlades() const { return Blades; }
+	/** The loadout's melee slot (the owner, 2026-11-16: "in the inventory add a spot for mele and if non then it's your
+	 *  fists"): the blade in it, or None for the fists. Key 4 brings up what is there. */
+	FName GetMeleeSlot() const { return MeleeSlot; }
+	UFUNCTION(Server, Reliable)
+	void ServerSetMeleeSlot(FName Style);
 	void AddXp(int32 Amount);
 	void AddAlloy(int32 Amount);
 
@@ -246,6 +255,9 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	TArray<FName> Blades;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	FName MeleeSlot;
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

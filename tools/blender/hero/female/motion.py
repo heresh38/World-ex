@@ -589,6 +589,38 @@ def clips(b):
         return s.at(t, HIT)
 
 
+    def Uppercut(t):
+        u = Track([(0.0, fist_guard()),
+                   (.10, fist_guard(z=-.07, hips=9, twist=-24, turn=-12, R=(10, 18, 120))),
+                   (.19, fist_guard(z=.0, y=-.05, hips=-4, twist=28, turn=14, R=(90, 4, 96))),        # it lands
+                   (.33, fist_guard(z=.0, y=-.04, hips=-4, twist=24, turn=12, R=(96, 6, 90))),
+                   (.68, fist_guard())], ease=smooth)
+        return u.at(t, HIT)
+
+    def Rising(t):
+        s = Track([(0.0, blade_guard()),
+                   (.10, blade_guard(z=-.07, hips=9, twist=-28, turn=-12, R=(-20, 36, 50), turnR=-20)),
+                   (.19, blade_guard(z=.0, y=-.06, hips=-4, twist=24, turn=12, R=(140, 22, 16), turnR=10)),  # it lands
+                   (.33, blade_guard(z=.0, y=-.05, hips=-4, twist=28, turn=14, R=(150, 26, 20), turnR=10)),
+                   (.70, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def sweep_pose(z, fx, fy, twist, hips, L, R):
+        p = act(z=z, y=.0, hips=hips, spine=6, chest=4, head=-2, twist=twist, turn=twist * .3, width=.12, toe=12, fwd=(-.10, .07),
+                pitch=(0, 0), L=L, R=R, curlL=GRIP, curlR=GRIP, knee=.05)
+        a = b.ankle["R"]
+        p.feet["R"] = Foot(b.planted("R", (fx * b.scale, a.y + fy * b.scale), -hp, 40), -hp, 40)
+        return p
+
+    def Sweep(t):
+        s = Track([(0.0, fist_guard()),
+                   (.08, sweep_pose(-.24, -.28, .24, -28, 12, (48, 18, 112), (40, 24, 122))),
+                   (.17, sweep_pose(-.30, -.58, -.10, 28, 16, (30, 34, 92), (20, 44, 92))),          # it lands
+                   (.29, sweep_pose(-.28, -.45, -.38, 38, 14, (30, 34, 92), (20, 44, 92))),
+                   (.53, fist_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+
     def fidget(dur, extra, shift=None):
         def f(t):
             p = idle_pose(b, t, shift(t) if shift else 0.0)
@@ -626,5 +658,6 @@ def clips(b):
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Throw": (Throw, .68, False), "Strike": (Strike, .58, False), "Brace": (Brace, .9, False), "Slam": (Slam, 1.0, False),
             "FistGuard": (FistGuard, 2.0, True), "Jab": (Jab, .38, False), "Cross": (Cross, .48, False), "Hook": (Hook, .52, False), "Haymaker": (Haymaker, .92, False), "BladeGuard": (BladeGuard, 2.4, True), "SlashA": (SlashA, .48, False), "SlashB": (SlashB, .48, False), "Thrust": (Thrust, .52, False), "Cleave": (Cleave, .98, False),
+            "Uppercut": (Uppercut, .68, False), "Rising": (Rising, .70, False), "Sweep": (Sweep, .53, False),
             "Fidget1": (fidget(4.4, none, weight), 4.4, False), "Fidget2": (fidget(4.2, look_back), 4.2, False),
             "Fidget3": (fidget(4.0, stretch), 4.0, False)}, (walk, run)

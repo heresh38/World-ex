@@ -365,6 +365,16 @@ public:
 	const struct FSOMeleeStyle* GetMeleeStyle() const;
 	/** A blow from this player's own input (light, or heavy): shown at once here, landed by the server. */
 	void MeleeStrike(bool bHeavy);
+	/** Hand to hand's guard (the reload key held): blows from the front mostly turned, a parry just as it goes up. */
+	void SetBlocking(bool bOn);
+	bool IsBlocking() const { return bBlocking; }
+	/** The combo now (blows landed one after another) and how long since the last; when this player last parried. */
+	int32 GetComboHits() const { return ComboHits; }
+	double GetComboAge() const;
+	double GetParryShownAt() const { return ParryShownAt; }
+	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
+	virtual void OnMeleeHit(ASOCombatCharacter* Victim, const FVector& Point, float Weight, float HitStop) override;
+	void HandleReloadReleased();
 	/** Which blow the last one was (0.. the light chain, -1 heavy) and when it began (world seconds). */
 	int32 GetMeleeLastBlow() const { return MeleeLastIndex; }
 	double GetMeleeLastStart() const { return MeleeLastStart; }
@@ -507,13 +517,23 @@ protected:
 	void ServerSetFists(bool bOn);
 
 	UFUNCTION(Server, Reliable)
-	void ServerMelee(bool bHeavy);
+	void ServerMeleeBlow(int16 Index);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastMeleeBlow(int8 Index);
+	void MulticastMeleeBlow(int16 Index);
 
-	/** The next blow's index for a press now (-1 heavy), or -2 when the last one is still too early to follow. */
+	/** A blow landed: shown on every machine (the freeze of both bodies, sparks, the camera, the count). */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastMeleeImpact(ASOCombatCharacter* Victim, FVector_NetQuantize Point, float Weight, float HitStop);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetBlocking(bool bOn);
+
+	/** The next blow for a press now, by the body's stance and the chain (SOMeleeMove: crouched, at a sprint, in the
+	 *  air, or after lights), or -2 when the last one is still too early to follow. */
 	int32 NextMeleeBlow(bool bHeavy) const;
+	/** Whether this blow may start now (the server's check of what a joined player asked for). */
+	bool MeleeBlowAllowed(int32 Index) const;
 	const struct FSOMeleeBlow* MeleeBlowAt(int32 Index) const;
 	/** The clip, the sounds, the edge's light, the step in (this machine). */
 	void ShowMeleeBlow(int32 Index);
@@ -528,9 +548,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Melee")
 	float FistsDrop = 9.0f;
 	float FistsView = 0.0f;
+	float ArmsBaseX = 0.0f;
 
 	int32 MeleeLastIndex = -1;
 	double MeleeLastStart = -100.0;
+
+	// blocking and parrying (the server's: BlockStart is when the guard went up; CounterUntil the parry's reward)
+	UPROPERTY(Replicated)
+	bool bBlocking = false;
+	double BlockStart = -100.0;
+	double CounterUntil = -100.0;
+	double ParryShownAt = -100.0;
+	/** The count of blows landed one after another (this player's own machine: the HUD's combo). */
+	int32 ComboHits = 0;
+	double ComboLast = -100.0;
+	float ComboDamage = 0.0f;
 	double MeleePredicted = -100.0;  // (this machine showed the blow it asked for: the server's echo is skipped)
 	FTimerHandle MeleeHitTimer;
 	FTimerHandle MeleeEdgeTimer;

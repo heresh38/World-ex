@@ -121,6 +121,10 @@ public:
 	 *  wound). The damage is the gate's business (ScaleIncomingDamage); this is only how the hit is shown. */
 	virtual bool TurnsBlow(const FVector& From) const { return false; }
 
+	/** A hand to hand blow of this character's landed on Victim at Point (server; USOMeleeLibrary::Land): how it is
+	 *  shown everywhere (the freeze, the sparks, the count). */
+	virtual void OnMeleeHit(ASOCombatCharacter* Victim, const FVector& Point, float Weight, float HitStop) {}
+
 	/** Server: damage from someone else just went in on this character (from the damage gate; where it landed:
 	 *  USOCombatStatics::LastHit). What the body does about it. */
 	virtual void OnTookDamage(AActor* Source, float Amount, bool bCrit) {}

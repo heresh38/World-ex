@@ -1117,6 +1117,37 @@ void ASOHUD::DrawHUD()
 		}
 	}
 
+	// Hand to hand: the count of blows landed one after another (a fighter's combo), the parry, the guard.
+	if (Player->IsFists())
+	{
+		const int32 Hits = Player->GetComboHits();
+		const float Age = static_cast<float>(Player->GetComboAge());
+		if (Hits >= 2 && Age < 1.6f)
+		{
+			const float A = FMath::Clamp((1.6f - Age) / 0.4f, 0.0f, 1.0f);
+			const float Pop = 1.0f + 0.25f * FMath::Clamp(1.0f - Age / 0.12f, 0.0f, 1.0f);    // (each hit punches the number)
+			const FString Count = FString::Printf(TEXT("%d"), Hits);
+			float TW = 0.0f, TH = 0.0f;
+			GetTextSize(Count, TW, TH, Big, 2.6f * S * Pop);
+			DrawText(Count, FLinearColor(1.0f, 0.78f, 0.35f, A), W * 0.70f - TW, H * 0.36f, Big, 2.6f * S * Pop);
+			DrawText(TEXT("HITS"), FLinearColor(1.0f, 0.93f, 0.85f, A), W * 0.70f + 8.0f * S, H * 0.36f + TH * 0.45f, Font, 1.1f * S);
+		}
+		const float ParryAge = static_cast<float>(Now - Player->GetParryShownAt());
+		if (ParryAge < 0.7f)
+		{
+			const float A = FMath::Clamp((0.7f - ParryAge) / 0.3f, 0.0f, 1.0f);
+			float TW = 0.0f, TH = 0.0f;
+			GetTextSize(TEXT("PARRY"), TW, TH, Big, 1.8f * S);
+			DrawText(TEXT("PARRY"), FLinearColor(1.0f, 0.85f, 0.4f, A), W * 0.5f - TW * 0.5f, H * 0.30f, Big, 1.8f * S);
+		}
+		if (Player->IsBlocking())
+		{
+			float TW = 0.0f, TH = 0.0f;
+			GetTextSize(TEXT("GUARD"), TW, TH, Font, 0.9f * S);
+			DrawText(TEXT("GUARD"), FLinearColor(0.9f, 0.95f, 1.0f, 0.8f), W * 0.5f - TW * 0.5f, H * 0.5f + 26.0f * S, Font, 0.9f * S);
+		}
+	}
+
 	// Interact prompt.
 	if (const AActor* Target = Player->FindInteractable())
 	{
@@ -1239,6 +1270,12 @@ void ASOHUD::DrawHUD()
 			if (Weapon->IsVenting())
 			{
 				DrawText(TEXT("VENTING"), Hot, W - 74.0f * S, H - 108.0f * S, Font, 0.8f * S);
+			}
+			else if (Weapon->IsCondensing())
+			{
+				// rounds condensing from the reserve (the Sarketh's guns never reload): the word pulses with them
+				const float Pulse = 0.55f + 0.45f * FMath::Sin(Now * 6.0f);
+				DrawText(TEXT("CONDENSING"), FLinearColor(Cool.R, Cool.G, Cool.B, Pulse), W - 74.0f * S, H - 108.0f * S, Font, 0.8f * S);
 			}
 		}
 		// the three slots: number, name in the rarity colour, the one in hand bright

@@ -1137,6 +1137,21 @@ VARIANTS = {'skr_sniper': dict(stretch=1.93, radial=1.0, scope=True),
             'skr_shotgun': dict(stretch=.55, radial=(1.55, 1.05), scope=False)}       # (wide and flat: a spread's mouth)
 
 
+def skr_long_grip(P, G, UN, PL, TI, AM, CELL, ang=.28, h=.12, w=.034, z=.004):
+    """A long gun's grip their way (the owner, 2026-11-16: "the new guns handle all look the human ones"): the hand's
+    lines (the fit reads them) in dark forged iron, a pale plate on each flank with a rim of their light round it, no
+    base cap: a forged collar holding a crystal pommel in two pale claws."""
+    P.append(K.grip_profile('grip', UN, ang=ang, h=h, w=w, y=0.0, z=z, swell=.005))
+    g = G.gp(ang, 0.0, z)
+    panel = [(-.014, .024), (.016, .02), (.021, h * .5), (.015, h * .84), (-.011, h * .88), (-.019, h * .5)]
+    P.append(plate('grip_light', [g(a_ * 1.12, b_ + (b_ - h * .5) * .10) for a_, b_ in panel], CELL, w / 2 - .004, w / 2 + .0004, .0005))
+    P.append(plate('grip_panel', [g(a_, b_) for a_, b_ in panel], PL, w / 2 - .004, w / 2 + .0014, .0014))
+    P.append(G.rprism('pommel_collar', [g(-.023, h - .004), g(.029, h - .008), g(.029, h + .004), g(-.021, h + .006)], w + .002, TI, .003))
+    P.append(crystal('pommel', (0,) + g(.004, h + .002), (0,) + g(.007, h + .040), .0105, AM, n=6, k0=.2, k1=.62))
+    P += talon('pommel_claw', [g(.024, h + .004), g(.026, h + .018), g(.018, h + .032), g(.010, h + .040)], [.010, .008, .005, 0], PL, x=.0115, t=.0040)
+    P += talon('pommel_claw', [g(-.018, h + .006), g(-.020, h + .020), g(-.012, h + .033), g(-.004, h + .040)], [.010, .008, .005, 0], PL, x=.0115, t=.0040)
+
+
 def skr_handgun(name='skr_pistol', big=False):
     """The set's handguns (the pistol and, `big`, the hand cannon: the brief's Condensed Slugs), on the light sidearm's
     proven layout so the hands fit them alike: a polymer grip with rubber panels, the guard and the trigger, a dark
@@ -1158,17 +1173,24 @@ def skr_handgun(name='skr_pistol', big=False):
         return math.copysign(math.asin(min(abs(f), 1.0) ** 2.5), f)
     k = 1.22 if big else 1.0                                            # the hand cannon: longer, taller, heavier
     zb = .07 * (1.06 if big else 1.0)
-    g = G.hand_grip(P, PO, .3, .11, .034, z=.004)
-    P.append(plate('grip_panel', [g(-.015, .032), g(.017, .028), g(.019, .06), g(.016, .096), g(-.013, .099), g(-.017, .062)], M['grip'], .011, .0179, .0012))
-    P.append(G.rprism('grip_base', [g(.0282, .1085), g(-.0202, .1125), g(-.0206, .1215), g(.0288, .1175)], .034, PL, .004))
+    # the grip: no magazine in it and nothing human about it (the owner, 2026-11-16: "the new guns handle all look the
+    # human ones"): the hand's lines (the fit reads them) in their dark forged iron, clad on each flank in a pale plate
+    # with a rim of their light round it, a forged collar at its foot holding a crystal pommel in two pale claws
+    g = G.hand_grip(P, UN, .3, .11, .034, z=.004)
+    panel = [g(-.015, .032), g(.017, .028), g(.019, .06), g(.016, .096), g(-.013, .099), g(-.017, .062)]
+    rim = [g(a * 1.10, b + (b - .065) * .10) for a, b in ((-.015, .032), (.017, .028), (.019, .06), (.016, .096), (-.013, .099), (-.017, .062))]
+    P.append(plate('grip_light', rim, CELL, .011, .0172, .0006))
+    P.append(plate('grip_panel', panel, PL, .011, .0182, .0012))
+    P.append(G.rprism('pommel_collar', [g(.0262, .1060), g(-.0190, .1095), g(-.0182, .1165), g(.0262, .1135)], .036, TI, .003))
+    P.append(crystal('pommel', (0,) + g(.004, .112), (0,) + g(.006, .150), .0105, AM, n=6, k0=.2, k1=.62))
+    P += talon('pommel_claw', [g(.022, .114), g(.024, .128), g(.016, .142), g(.008, .150)], [.010, .008, .005, 0], PL, x=.0115, t=.0040)
+    P += talon('pommel_claw', [g(-.016, .116), g(-.018, .130), g(-.010, .143), g(-.002, .150)], [.010, .008, .005, 0], PL, x=.0115, t=.0040)
     if big:                                                             # squared, the heavy gun's guard
         G.guard(P, PO, [(-.076, .018), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.012, -.029)], .017, .0072)
         # (the pistol's line, heavier: a squared guard, hooked or not, stood where the off hand's index finger wraps)
     else:
         G.guard(P, PO, [(-.076, .018), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.012, -.029)], .014, .006)
     G.trigger(P, TR, -.03, .014, L=.033, w=.007)
-    MAG = G.box_mag('mag', [g(-.011, .040), g(.012, .038), g(.014, .108), g(-.012, .110)], .024, PO, floor_m=PL,
-                    floor=[g(-.015, .107), g(.017, .105), g(.018, .113), g(-.015, .115)], rib_m=PL)
     F = lambda y: y * k                                                 # (lengths ahead of the grip scale with the gun)
     FR = G.Body([(.057, .039, .0468, .0078, 3.0), (.046, .03, .047, .0136, 4.5), (.034, .012, .047, .0158, 5.0), (.0, .006, .047, .016, 5.0),
                  (F(-.026), .008, .047, .016, 5.0), (F(-.033), .016, .047, .016, 5.0), (F(-.098), .016, .047, .016, 5.5),
@@ -1280,7 +1302,6 @@ def skr_handgun(name='skr_pistol', big=False):
                            xs_ - .0012, xs_ + .0006, .0002))
     # controls
     G.selector(P, .024, .038, .016, TR, 1, ang=.25, L=.017, r=.0045)
-    P.append(lathe_x('cellrelease', [(0, .0044), (.003, .0044), (.0036, .0034), (.0036, 0)], (.016, -.017, .012), PO, 14, 1))
     G.hexbolts(P, [(F(-.09), .034)], .016, ST, .0024)
     # the sights: pale blades either side of the eye line, an amber lozenge on each, a pale post with one in front
     sz = top + .012
@@ -1293,7 +1314,7 @@ def skr_handgun(name='skr_pistol', big=False):
     P.append(prism('front_base', [(fy(-.132), fz + .0005), (fy(-.138), fz + .0045), (fy(-.156), fz + .0045), (fy(-.16), fz + .0005)], .011, UN, .0008))
     P.append(prism('post', [(fy(-.142), fz + .004), (fy(-.146), sz + .003), (fy(-.152), sz + .003), (fy(-.154), fz + .004)], .0036, PL, .0005))
     P.append(lathe('post_dot', [(fy(-.1458), 0), (fy(-.1458), .0014), (fy(-.1462), .0014), (fy(-.1462), 0)], AM, sz + .0012, 0, 4))
-    finish('gun_' + name, P, (0, nose1, zb), (0, -.02, -.02), (0, .09, sz), moving=[('mag', MAG, (0, g(0, .040)[0], g(0, .040)[1]))])
+    finish('gun_' + name, P, (0, nose1, zb), (0, -.02, -.02), (0, .09, sz), moving=[])
 
 
 def assembled_rifle(name='skr_rifle', sniper=False):
@@ -1343,9 +1364,13 @@ def assembled_rifle(name='skr_rifle', sniper=False):
     R.slats(P, 'vent', SH, -.203, -.250, -.75, .85, 4)                                 # the receiver's nose: heat out
     R.light(P, 'vent_light', AM, -.205, -.248, -AF(.08), AF(.08))
     R.studs(P, TR, [(.132, .55), (.112, -.5), (-.004, .6), (-.184, .62), (-.03, -.72), (-.18, -.5), (.004, -.5)])
-    e_small(P, M, R, sel=(.03, .034), pins=((.09, .03), (-.05, .02)), catch=(-.054, .010), charge=(.150, .1005), loops=((-.330, .021),))
-    # ---- grip, guard, trigger
-    e_hand(P, M)
+    e_small(P, M, R, sel=(.03, .034), pins=((.09, .03), (-.05, .02)), catch=None, charge=None, loops=((-.330, .021),))   # (no magazine, nothing to charge)
+    # ---- grip, guard, trigger: the grip their own (the owner, 2026-11-16: "the new guns handle all look the human ones"):
+    # on the lines the firing hand is fitted to, in their dark forged iron with a pale plate on each flank and a titanium
+    # cap, nothing of a human gun's polymer and rubber
+    skr_long_grip(P, G, UN, PL, TI, AM, CELL)
+    G.guard(P, UN, [(-.076, .018), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.012, -.029)], .013, .0052)
+    G.trigger(P, M['trim'], -.03, .014, L=.033, w=.007)
     # ---- the crest: pale blades either side of the sight line, swept back (the sheet's), clear of the eye
     def blade(nm_, spine, wid, x, up, centre=False):
         """the sheet's swept armour as SOLID plates (6 mm, chamfered, a raised second tier along its middle): the side
@@ -1376,11 +1401,17 @@ def assembled_rifle(name='skr_rifle', sniper=False):
                                    ('comb_hook', [(.205, .102), (.280, .108), (.340, .118), (.372, .136)], [.004, .014, .014, 0], .0205, True)):
         blade(nm_, spine, wid, x, up)
     blade('keel', [(-.640, zb - .026), (-.560, zb - .034), (-.470, zb - .040), (-.430, zb - .034)], [.006, .014, .012, 0], 0, False, centre=True)
-    # ---- the power cell
-    MAG = G.box_mag('mag', [(-.066, .01), (-.078, -.09), (-.100, -.146), (-.160, -.140), (-.150, -.085), (-.140, .01)], .034, PO, floor_m=PL,
-                    floor=[(-.096, -.142), (-.164, -.136), (-.168, -.152), (-.100, -.158)], rib_m=PL,
-                    window=[(-.094, -.022), (-.12, -.022), (-.132, -.098), (-.106, -.098)], window_m=GL,
-                    ribs=[[(-.077, -.004), (-.135, -.004), (-.1365, -.012), (-.0775, -.012)], [(-.094, -.110), (-.150, -.106), (-.153, -.114), (-.096, -.118)]])
+    # ---- the condenser. The Sarketh's guns never reload (the owner, 2026-11-16: "remove loading ... we can remove the
+    # handle part since we won't reload and replace it with something else to maybe balance the gun more"): where a
+    # human gun's magazine hangs, a faceted crystal in which the rounds condense from the reserve, its light their
+    # charge, held under the receiver by pale claws in a forged collar fastened by two bolts. Shorter than the magazine
+    # it replaces, it brings the gun's weight back over the grip.
+    P.append(G.rprism('condenser_collar', [(-.082, .014), (-.144, .014), (-.140, -.008), (-.086, -.008)], .042, UN, .004))
+    G.hexbolts(P, [(-.092, .003), (-.134, .003)], .021, ST, .0021)
+    P.append(crystal('condenser', (0, -.113, -.006), (0, -.130, -.090), .0135, AM, n=6, k0=.18, k1=.66))
+    for nm_, spine in (('condenser_claw', [(-.088, -.006), (-.086, -.040), (-.100, -.074), (-.114, -.090)]),
+                       ('condenser_claw', [(-.138, -.006), (-.141, -.036), (-.134, -.066), (-.124, -.084)])):
+        P += talon(nm_, spine, [.012, .010, .006, 0], PL, x=.0150, t=.0040)
     # ---- the emitter in its cage, the fore panel under it
     G.coil(P, 'emitter', -.250, -.405, zb, .0185, M, rings=6, ring_m=TI, lip_m=TR)
     G.cage(P, 'cage', -.244, -.410, zb, .0325, TI, t=.0045, bars=6, fill=.52, frames=((-.244, .014), (-.330, .007), (-.400, .012)),
@@ -1513,13 +1544,13 @@ def assembled_rifle(name='skr_rifle', sniper=False):
                         print('[skr] stray', o.name, np.round(V.min(0), 3), np.round(V.max(0), 3), flush=True)
         if v['scope']:
             finish('gun_' + name, P, (0, muzzle_y, zb), (0, -.33, .02), (0, .14, sz), optic=skr_scope(M, -.04, sz), scoped=True,
-                   moving=[('mag', MAG, (0, -.103, .01))])
+                   moving=[])
         else:
             finish('gun_' + name, P, (0, muzzle_y, zb), (0, v.get('fore', -.33), .02), (0, .1, sz), optic=skr_sight(M, -.02, sz),
-                   rail=(0, -.02, .113), moving=[('mag', MAG, (0, -.103, .01))])
+                   rail=(0, -.02, .113), moving=[])
         return
     finish('gun_' + name, P, (0, -.700, zb), (0, -.33, .02), (0, .1, sz), optic=skr_sight(M, -.02, sz), rail=(0, -.02, .113),
-           moving=[('mag', MAG, (0, -.103, .01))])
+           moving=[])
 
 
 # ------------------------------------------------------------------ layered: the sheet's shape, as a made gun
@@ -1940,6 +1971,101 @@ def veyr_edge(name='skr_blade'):
     finish('gun_' + name, P, (0, -.432, -.0006), (0, -.030, .0), (0, .0, .030), moving=[('mag', MAG, (0, .118, .0))])
 
 
+def skr_launcher(name='skr_cannon'):
+    """Ashen Gate (skr_cannon), the set's heavy launcher. The owner, 2026-11-16: "the ashen gate just looks like the
+    assault rifle so redesign it to be more bulky like a grenade launcher". Its own build: a wide receiver (8 cm); a
+    revolving condenser drum in the open between a forged top strap and a lower frame, six chambers round its axis in
+    which the heavy slugs condense (their light in the drum's flutes); a fat barrel housing, orange lacquer over a
+    forged chassis with a pale top plate, the heat out through a bank of titanium fins and a slotted belly; a wide bore
+    (5 cm) recessed in a titanium crown with the light deep in it; the fore panel under the housing where the off hand
+    holds; their grip and stock; the set's lozenge sight on the receiver. No magazine (it condenses its rounds)."""
+    import gunparts as G
+    from weapons import e_small
+    bl.reset(); M = mats(under='skr_iron', shell='skr_lacquer', armour='skr_alloy'); P = []
+    ST = fk.tmat('gun_steel', 'skr_steel')
+    TI = fk.tmat('gun_metal__ti', 'skr_titanium')
+    CELL = bl.mat('gun_glow__cell', '#ffb257', 0, .35, emit='#ffb257', strength=5)
+    M.update(body=M['shell'], dark=M['under'], metal=ST, glow=CELL, white=CELL, dot=M['amber'],
+             grip=fk.tmat('gun_grip', 'skr_rubber', metal=0, rough=.7),
+             lens=bl.mat('gun_lens__skr', '#e8eef2', 0, .02, alpha=.05))
+    SH, PL, UN, TR, GL, AM = M['shell'], M['bone'], M['under'], M['trim'], M['white'], M['amber']
+
+    def AF(f):
+        return math.copysign(math.asin(min(abs(f), 1.0) ** 2.5), f)
+    zb = .080
+    # ---- the receiver (behind the drum)
+    R = G.Body([(.150, .030, .112, .024, 4.0), (.115, .012, .122, .034, 4.6), (.070, .000, .128, .040, 5.0), (.025, -.002, .128, .041, 5.0),
+                (-.020, -.004, .126, .041, 5.0), (-.034, .002, .122, .039, 4.6)])
+    R.chassis(P, UN)
+    R.shell(P, 'upper', SH, .146, -.030, AF(.10), 1.20)
+    R.shell(P, 'upper_top', PL, .146, -.032, 1.20, math.pi - 1.20, t=.0012, mirror=False)
+    R.shell(P, 'lower', SH, .128, -.030, -1.25, -AF(.10))
+    R.light(P, 'seam', GL, .124, -.028, -AF(.04), AF(.04))
+    R.shell(P, 'cheek_plate', PL, .118, .010, AF(.22), 1.0, d=.0026, t=.003)
+    R.shell(P, 'hatch', SH, .090, .030, AF(.30), .82, d=.0056, t=.0016, ch=.001, side=1)
+    for q in [R.pt(y, a, .0074) for y, a in ((.085, AF(.36)), (.035, AF(.36)), (.085, .76), (.035, .76))]:
+        G.hexbolts(P, [(q[1], q[2])], q[0], ST, .0021, sym=False, side=1)
+    R.studs(P, TR, [(.132, .55), (.112, -.5), (-.010, .6), (-.010, -.6), (.004, -.5)])
+    e_small(P, M, R, sel=(.03, .034), pins=((.09, .03), (-.012, .02)), catch=None, charge=None, loops=((-.360, .036),))
+    # ---- grip, guard, trigger (their own grip, on the hand's lines)
+    skr_long_grip(P, G, UN, PL, TI, AM, CELL)
+    G.guard(P, UN, [(-.076, .018), (-.078, -.008), (-.068, -.026), (-.05, -.0335), (-.026, -.0335), (-.012, -.029)], .013, .0052)
+    G.trigger(P, M['trim'], -.03, .014, L=.033, w=.007)
+    # ---- the condenser drum, in the open: a top strap and a lower frame carry it from the receiver to the housing
+    yd0, yd1, rd = -.036, -.150, .047
+    P.append(G.rprism('top_strap', [(-.026, .118), (-.026, .134), (-.160, .134), (-.160, .118)], .044, PL, .004))
+    P.append(G.rprism('lower_frame', [(-.026, .000), (-.026, .028), (-.160, .032), (-.160, .010)], .036, UN, .004))
+    P.append(lathe('drum', [(yd0, .010), (yd0, rd - .004), (yd0 - .004, rd), (yd1 + .004, rd), (yd1, rd - .004), (yd1, .010)], TI, zb, n=36))
+    for ring_y in (yd0 - .010, yd1 + .010):
+        P.append(lathe('drum_band', [(ring_y + .004, .0), (ring_y + .004, rd + .0025), (ring_y - .004, rd + .0025), (ring_y - .004, .0)], PL, zb, n=36))
+    for j in range(6):
+        a_ = j * math.pi / 3 + math.pi / 6
+        c, s_ = math.cos(a_), math.sin(a_)
+        P.append(B(f'drum_flute{j}', (.0105, (yd0 - yd1) * .64, .0105), (c * rd * .98, (yd0 + yd1) / 2, zb + s_ * rd * .98), UN, .0012))
+        P.append(B(f'drum_cell{j}', (.0050, (yd0 - yd1) * .58, .0050), (c * rd * .90, (yd0 + yd1) / 2, zb + s_ * rd * .90), AM, .0010))
+    P.append(lathe('drum_axis', [(-.024, .0), (-.024, .0085), (-.162, .0085), (-.162, .0)], ST, zb, n=16))
+    P.append(lathe('drum_hub', [(yd0 + .002, .0), (yd0 + .002, .016), (yd0 - .004, .014), (yd0 - .004, .0)], CELL, zb, n=16))
+    # ---- the barrel housing: fat, orange over a forged chassis, a pale top plate, fins, a slotted belly
+    HB = G.Body([(-.150, .030, .128, .040, 5.0), (-.166, .036, .124, .041, 4.6), (-.200, .038, .122, .040, 4.0), (-.300, .038, .122, .039, 3.6),
+                 (-.400, .040, .120, .038, 3.6), (-.426, .043, .117, .035, 3.4)])
+    HB.chassis(P, UN)
+    HB.shell(P, 'housing_upper', SH, -.156, -.322, AF(.06), AF(.94))
+    HB.shell(P, 'housing_upper', SH, -.396, -.424, AF(.06), AF(.94))
+    HB.shell(P, 'housing_top', PL, -.160, -.420, AF(.94), math.pi - AF(.94), t=.0016, mirror=False)
+    HB.shell(P, 'housing_lower', SH, -.156, -.420, -AF(.94), -AF(.30))
+    HB.light(P, 'housing_seam', GL, -.160, -.418, -AF(.28), AF(.04))
+    G.fins(P, 'fins', -.326, -.394, zb - .030, zb + .034, .0395, TI, n=7, t=.0030, lift=.006)
+    HB.light(P, 'fin_light', AM, -.324, -.396, -AF(.5), AF(.9))
+    HB.slats(P, 'belly_vent', SH, -.330, -.396, -AF(.95), -AF(.32), 5)
+    HB.studs(P, TR, [(-.170, .55), (-.170, -.55), (-.312, .55), (-.312, -.55), (-.412, .5)])
+    # their three dashes of light down the housing's flank, a pale strake swept back over them, a seam where the
+    # housing's two shells meet the drum's frame
+    for k_ in range(3):
+        y_ = -.200 - k_ * .014
+        xs_, _, zs_ = HB.pt(y_, AF(.45), .0026)
+        P.append(plate('housing_mark', [(y_, zs_ - .0018), (y_ - .0090, zs_ - .0010), (y_ - .0090, zs_ + .0016), (y_, zs_ + .0008)], CELL,
+                       xs_ - .0014, xs_ + .0006, .0002))
+    P += talon('housing_strake', [(-.318, zb + .022), (-.260, zb + .028), (-.200, zb + .030), (-.160, zb + .030)], [.003, .008, .008, 0], PL,
+               x=.0405, t=.0034)
+    # the crown: a wide bore recessed in titanium, the light deep in it
+    nose1 = -.446
+    G.muzzle(P, 'crown', -.420, nose1, zb, .036, TI, .025)
+    P.append(lathe('bore_glow', [(-.428, .0), (-.428, .0230), (-.426, .0215), (-.426, .0)], AM, zb, n=24))
+    # ---- the fore panel under the housing, where the off hand holds
+    P.append(G.sloft('forepanel', [(-.206, .016, .046, .030, 3.6), (-.232, .008, .046, .034, 4.0), (-.304, .008, .046, .034, 4.0),
+                                   (-.326, .016, .046, .030, 3.6)], UN, 18, 3))
+    P.append(plate('forepanel_plate', [(-.236, .040), (-.300, .040), (-.300, .016), (-.236, .016)], PL, .0310, .0352, .0010))
+    # ---- the set's swept blades: a crest over the receiver, a keel under the crown
+    P += talon('crest', [(-.150, .126), (-.080, .132), (-.010, .132), (.080, .124)], [.004, .010, .010, 0], PL, x=.042, t=.0040)
+    P += talon('keel', [(-.440, .046), (-.400, .034), (-.360, .030)], [.004, .010, 0], PL, x=0, t=.008, two=True, sym=False)
+    # ---- the stock, the sight on the receiver
+    G.stock_soft(P, SH, PL, M['grip'], .150, .108, .232, .13, .044, .030, mode='open', cheek=True, bolt_m=ST)
+    sz = .162
+    import bakekit
+    bakekit.clean([o for o in P if o is not None], least=2e-11)
+    finish('gun_' + name, P, (0, nose1, zb), (0, -.27, .03), (0, .15, sz), optic=skr_sight(M, .03, sz), rail=(0, .03, .128), moving=[])
+
+
 GUNS = {k: (lambda k=k: parts(k)) for k in TRACED}
 GUNS['skr_rifle'] = assembled_rifle
 
@@ -1957,7 +2083,7 @@ def _rifle_v2():
 
 GUNS['skr_rifle_v2'] = _rifle_v2
 GUNS['skr_sniper'] = lambda: assembled_rifle('skr_sniper', sniper=True)
-GUNS['skr_cannon'] = lambda: assembled_rifle('skr_cannon', sniper='skr_cannon')
+GUNS['skr_cannon'] = skr_launcher
 GUNS['skr_shotgun'] = lambda: assembled_rifle('skr_shotgun', sniper='skr_shotgun')
 GUNS['skr_pistol'] = lambda: skr_handgun('skr_pistol')
 GUNS['skr_handcannon'] = lambda: skr_handgun('skr_handcannon', big=True)

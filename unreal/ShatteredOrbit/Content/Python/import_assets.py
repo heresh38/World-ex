@@ -1253,7 +1253,7 @@ def slug_values(a):
     h = a.get("heat") or {}
     return dict(pierce=int(a.get("pierce", 0)), pierce_keep=float(a.get("pierceKeep", 0.6)), round_size=float(a.get("roundSize", 0.0)),
                 heat_per_shot=float(h.get("perShot", 0.0)), heat_cool=float(h.get("cool", 0.6)), heat_cool_delay=float(h.get("delay", 0.3)),
-                vent_time=float(h.get("vent", 1.4)), heat_speed=float(h.get("speed", 1.3)))
+                vent_time=float(h.get("vent", 1.4)), heat_speed=float(h.get("speed", 1.3)), refill_time=float(a.get("refill", 0.0)))
 
 
 def weapon(master, arch, a, clear):
@@ -2878,7 +2878,8 @@ def melee(master=None, defaults=None):
         x = unreal.SOMeleeBlow()
         x.set_editor_property("clip", b["clip"])
         for key, prop in (("hit", "hit_time"), ("recover", "recover"), ("damage", "damage"), ("range", "range"), ("angle", "angle"),
-                          ("force", "force"), ("stagger", "stagger"), ("lunge", "lunge")):
+                          ("force", "force"), ("stagger", "stagger"), ("lunge", "lunge"), ("launch", "launch"), ("hitStop", "hit_stop"),
+                          ("shock", "shock")):
             if key in b:
                 x.set_editor_property(prop, float(b[key]))
         x.set_editor_property("swing_sound", b.get("swing", "None"))
@@ -2895,6 +2896,15 @@ def melee(master=None, defaults=None):
         y.set_editor_property("guard", st["guard"])
         y.set_editor_property("light", [blow(b) for b in st["light"]])
         y.set_editor_property("heavy", blow(st["heavy"]))
+        for key in ("finisher", "rush", "sweep", "riser", "air"):          # (the named moves: light, light, heavy; ...)
+            if key in st:
+                y.set_editor_property(key, blow(st[key]))
+        g = st.get("block") or {}
+        y.set_editor_property("block_clip", g.get("clip", "None"))
+        for key, prop in (("hold", "block_hold"), ("scale", "block_scale"), ("parry", "parry_window"), ("parryStagger", "parry_stagger"),
+                          ("counterTime", "counter_time"), ("counter", "counter_scale")):
+            if key in g:
+                y.set_editor_property(prop, float(g[key]))
         y.set_editor_property("chain_grace", float(st.get("chainGrace", 0.45)))
         y.set_editor_property("edge", bool(st.get("edge", False)))
         if st.get("edgeColor"):
@@ -2908,6 +2918,9 @@ def melee(master=None, defaults=None):
                 ensure_dir(dest)
                 instances = gun_instances(master, src, dest, load_json(os.path.join(src, "materials.json")), defaults["clear"], st["mesh"])
                 y.set_editor_property("mesh", import_static(src, st["mesh"] + ".fbx", dest, f"SM_{folder}", instances))
+                icon = os.path.join(ICONS, "guns", f"icon_{st['mesh']}.png")
+                if os.path.exists(icon):
+                    y.set_editor_property("icon", import_ui_texture(icon, dest, f"T_Icon_{folder}"))
                 log(f"SM_{folder}: the {sid} style's mesh")
             else:
                 log(f"{sid}: its mesh {src} is missing (export it like a gun)")

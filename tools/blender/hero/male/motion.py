@@ -574,6 +574,39 @@ def clips(b):
         return s.at(t, HIT)
 
 
+    def Uppercut(t):                                         # dropped low behind the turn, the fist driven up under the chin
+        u = Track([(0.0, fist_guard()),
+                   (.10, fist_guard(z=-.08, hips=10, twist=-26, R=(10, 24, 118))),
+                   (.20, fist_guard(z=.0, y=-.05, hips=-4, twist=30, R=(88, 6, 96))),                  # it lands
+                   (.34, fist_guard(z=.0, y=-.04, hips=-4, twist=26, R=(94, 8, 90))),
+                   (.70, fist_guard())], ease=smooth)
+        return u.at(t, HIT)
+
+    def Rising(t):                                           # the blade low behind the hip, brought up through the target
+        s = Track([(0.0, blade_guard()),
+                   (.10, blade_guard(z=-.08, hips=10, twist=-30, R=(-20, 40, 50), turnR=-20)),
+                   (.20, blade_guard(z=.0, y=-.06, hips=-4, twist=26, R=(140, 26, 16), turnR=10)),      # it lands
+                   (.34, blade_guard(z=.0, y=-.05, hips=-4, twist=30, R=(150, 30, 20), turnR=10)),
+                   (.72, blade_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+    def sweep_pose(z, fx, fy, twist, hips, L, R):
+        """down on the left leg, the right foot planted far out where the sweep has carried it along the floor"""
+        p = act(z=z, y=.0, hips=hips, spine=6, chest=4, head=-2, twist=twist, width=.2, toe=18, fwd=(-.10, .07), L=L, R=R,
+                curlL=GRIP, curlR=GRIP, knee=.12)
+        a = b.ankle["R"]
+        p.feet["R"] = Foot(b.planted("R", (fx * b.scale, a.y + fy * b.scale), 0.0, 40), 0.0, 40)
+        return p
+
+    def Sweep(t):
+        s = Track([(0.0, fist_guard()),
+                   (.08, sweep_pose(-.26, -.30, .26, -30, 14, (50, 24, 110), (40, 30, 120))),         # the leg drawn behind
+                   (.18, sweep_pose(-.32, -.62, -.10, 30, 18, (30, 40, 90), (20, 50, 90))),          # it lands, swept round low
+                   (.30, sweep_pose(-.30, -.48, -.40, 40, 16, (30, 40, 90), (20, 50, 90))),
+                   (.55, fist_guard())], ease=smooth)
+        return s.at(t, HIT)
+
+
     def fidget(dur, extra):
         def f(t):
             p = idle_pose(b, t)
@@ -612,5 +645,6 @@ def clips(b):
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
             "Throw": (Throw, .7, False), "Strike": (Strike, .6, False), "Brace": (Brace, .9, False), "Slam": (Slam, 1.0, False),
             "FistGuard": (FistGuard, 2.4, True), "Jab": (Jab, .40, False), "Cross": (Cross, .50, False), "Hook": (Hook, .55, False), "Haymaker": (Haymaker, .95, False), "BladeGuard": (BladeGuard, 2.8, True), "SlashA": (SlashA, .50, False), "SlashB": (SlashB, .50, False), "Thrust": (Thrust, .55, False), "Cleave": (Cleave, 1.0, False),
+            "Uppercut": (Uppercut, .70, False), "Rising": (Rising, .72, False), "Sweep": (Sweep, .55, False),
             "Fidget1": (fidget(4.0, neck), 4.0, False), "Fidget2": (fidget(4.6, scan), 4.6, False),
             "Fidget3": (fidget(4.0, shoulders), 4.0, False)}, (walk, run)

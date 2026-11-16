@@ -2,6 +2,7 @@
 
 #include "SOAreaSubsystem.h"
 #include "SOCombatStatics.h"
+#include "SOCue.h"
 #include "Components/SpotLightComponent.h"
 
 #include "Misc/PackageName.h"
@@ -119,6 +120,7 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	FirstPersonArms->bReceivesDecals = false;
 	FirstPersonArms->SetupAttachment(Capsule);
 	FirstPersonArms->SetRelativeLocation(Body->GetRelativeLocation());
+	ArmsBaseX = Body->GetRelativeLocation().X;                 // (the arms' own place along the body: the fists add to it)
 	FirstPersonArms->SetRelativeRotation(Body->GetRelativeRotation());
 	FirstPersonArms->SetOnlyOwnerSee(true);
 	FirstPersonArms->SetCastShadow(false);
@@ -1057,7 +1059,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	// the bottom corners of the view; a hand to hand view shows them ahead, under the line of sight).
 	FistsView = FMath::FInterpTo(FistsView, bFists ? 1.0f : 0.0f, DeltaSeconds, 8.0f);
 	const FVector ArmsAt = FirstPersonArms->GetRelativeLocation();
-	const float ArmsX = GetMesh() ? GetMesh()->GetRelativeLocation().X : ArmsAt.X;
+	const float ArmsX = ArmsBaseX;
 	FirstPersonArms->SetRelativeLocation(FVector(ArmsX + FistsForward * FistsView, ArmsAt.Y, EyeOffset - StandingEyeHeight - FistsDrop * FistsView));
 
 	// Aim down sights: progress at the weapon ADS rate, zoom by the weapon magnification.
@@ -1169,7 +1171,11 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleAimPressed);
 		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleAimReleased);
 	}
-	if (UInputAction* A = Load(ReloadAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleReload); }
+	if (UInputAction* A = Load(ReloadAction))
+	{
+		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleReload);
+		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleReloadReleased);
+	}
 	if (UInputAction* A = Load(Weapon1Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon1); }
 	if (UInputAction* A = Load(Weapon2Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon2); }
 	if (UInputAction* A = Load(Weapon3Action)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleWeapon3); }
@@ -1529,10 +1535,20 @@ void ASOCharacter::HandleAimReleased()
 
 void ASOCharacter::HandleReload()
 {
-	if (Weapon && !bDead && !bFists)
+	if (bFists)
+	{
+		SetBlocking(true);                                   // (hand to hand: the reload key is the guard)
+		return;
+	}
+	if (Weapon && !bDead)
 	{
 		Weapon->StartReload();
 	}
+}
+
+void ASOCharacter::HandleReloadReleased()
+{
+	SetBlocking(false);
 }
 
 void ASOCharacter::HandleWeapon1() { SelectSlot(0); }
@@ -1540,22 +1556,16 @@ void ASOCharacter::HandleWeapon2() { SelectSlot(1); }
 void ASOCharacter::HandleWeapon3() { SelectSlot(2); }
 void ASOCharacter::HandleFists()
 {
-	// the gun -> the first blade owned (or the fists) -> the fists -> the gun
-	const USOInventoryComponent* Inventory = GetInventory();
-	const FName Blade = Inventory && Inventory->GetBlades().Num() > 0 ? Inventory->GetBlades()[0] : NAME_None;
-	if (!bFists)
-	{
-		SetMeleeStyle(Blade.IsNone() ? FName(TEXT("fists")) : Blade);
-		SetFists(true);
-	}
-	else if (MeleeStyle != TEXT("fists"))
-	{
-		SetMeleeStyle(TEXT("fists"));
-	}
-	else
+	// the gun <-> what is in the loadout's melee slot (a blade, or the fists when it is empty)
+	if (bFists)
 	{
 		SetFists(false);
+		return;
 	}
+	const USOInventoryComponent* Inventory = GetInventory();
+	const FName Blade = Inventory ? Inventory->GetMeleeSlot() : NAME_None;
+	SetMeleeStyle(Blade.IsNone() ? FName(TEXT("fists")) : Blade);
+	SetFists(true);
 }
 void ASOCharacter::HandleNextWeapon() { CycleSlot(1); }
 void ASOCharacter::HandlePrevWeapon() { CycleSlot(-1); }
@@ -2172,6 +2182,7 @@ void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ASOCharacter, bFlashlightOn);
 	DOREPLIFETIME(ASOCharacter, bFists);
 	DOREPLIFETIME(ASOCharacter, MeleeStyle);
+	DOREPLIFETIME(ASOCharacter, bBlocking);
 	DOREPLIFETIME_CONDITION(ASOCharacter, bAiming, COND_SkipOwner);
 }
 
@@ -2232,11 +2243,7 @@ const FSOMeleeStyle* ASOCharacter::GetMeleeStyle() const
 const FSOMeleeBlow* ASOCharacter::MeleeBlowAt(int32 Index) const
 {
 	const FSOMeleeStyle* Style = GetMeleeStyle();
-	if (!Style)
-	{
-		return nullptr;
-	}
-	return Index < 0 ? &Style->Heavy : (Style->Light.IsValidIndex(Index) ? &Style->Light[Index] : nullptr);
+	return Style ? USOMeleeTable::Blow(*Style, Index) : nullptr;
 }
 
 void ASOCharacter::SetFists(bool bOn)
@@ -2254,6 +2261,10 @@ void ASOCharacter::SetFists(bool bOn)
 		HandleAimReleased();                                 // (out of the sights first: the aim key is the heavy blow now)
 	}
 	bFists = bOn;
+	if (!bOn)
+	{
+		bBlocking = false;
+	}
 	OnRep_Fists();
 	if (!HasAuthority())
 	{
@@ -2277,12 +2288,13 @@ void ASOCharacter::OnRep_Fists()
 void ASOCharacter::UpdateMeleeGuard()
 {
 	const FSOMeleeStyle* Style = bFists && !bDead ? GetMeleeStyle() : nullptr;
-	UAnimSequenceBase* Guard = Style ? GetAbilityClip(Style->Guard) : nullptr;
+	const bool bBlock = Style && bBlocking && !Style->BlockClip.IsNone();
+	UAnimSequenceBase* Guard = Style ? GetAbilityClip(bBlock ? Style->BlockClip : Style->Guard) : nullptr;
 	for (USkeletalMeshComponent* Skel : { GetMesh(), FirstPersonArms.Get() })
 	{
 		if (USOLocomotionAnimInstance* Anim = Skel ? Cast<USOLocomotionAnimInstance>(Skel->GetAnimInstance()) : nullptr)
 		{
-			Anim->SetMeleeGuard(Guard);
+			Anim->SetMeleeGuard(Guard, bBlock ? Style->BlockHold : -1.0f);
 		}
 	}
 }
@@ -2291,27 +2303,48 @@ int32 ASOCharacter::NextMeleeBlow(bool bHeavy) const
 {
 	const FSOMeleeStyle* Style = GetMeleeStyle();
 	const UWorld* World = GetWorld();
-	if (!Style || !World || Style->Light.Num() == 0)
+	if (!Style || !World || Style->Light.Num() == 0 || bBlocking)
 	{
 		return -2;
 	}
 	const double Now = World->GetTimeSeconds();
-	const FSOMeleeBlow* Last = MeleeLastIndex == -1 && MeleeLastStart < -50.0 ? nullptr : MeleeBlowAt(MeleeLastIndex);
+	const FSOMeleeBlow* Last = MeleeLastStart < -50.0 ? nullptr : MeleeBlowAt(MeleeLastIndex);
 	const double Free = Last ? MeleeLastStart + Last->Recover : -100.0;
 	if (Now < Free - 0.06)                                  // (a press a hair early still counts: the machines' clocks differ)
 	{
 		return -2;
 	}
+	const bool bAir = GetCharacterMovement() && GetCharacterMovement()->IsFalling();
+	const bool bLow = bIsCrouched;
+	const USOCharacterMovementComponent* Move = GetSOMovement();
+	const bool bRun = Move && Move->IsSprinting() && GetVelocity().Size2D() > 500.0f;
+	const bool bInChain = Last && MeleeLastIndex >= 0 && MeleeLastIndex < 100 && Now <= Free + Style->ChainGrace;
+	auto Has = [Style](int32 I) { return USOMeleeTable::Blow(*Style, I) != nullptr; };
 	if (bHeavy)
 	{
-		return -1;
+		// heavy: in the air the slam, crouched the riser, after two lights the finisher, else the heavy blow
+		if (bAir && Has(SOMeleeMove::Air)) return SOMeleeMove::Air;
+		if (bLow && Has(SOMeleeMove::Riser)) return SOMeleeMove::Riser;
+		if (bInChain && MeleeLastIndex >= 1 && Has(SOMeleeMove::Finisher)) return SOMeleeMove::Finisher;
+		return SOMeleeMove::Heavy;
 	}
-	// a light blow pressed within the grace after the last light one could follow it goes on with the chain
-	if (Last && MeleeLastIndex >= 0 && Now <= Free + Style->ChainGrace)
-	{
-		return (MeleeLastIndex + 1) % Style->Light.Num();
-	}
-	return 0;
+	// light: crouched the sweep, at a sprint the rush, else the chain
+	if (!bAir && bLow && Has(SOMeleeMove::Sweep)) return SOMeleeMove::Sweep;
+	if (!bAir && bRun && Has(SOMeleeMove::Rush)) return SOMeleeMove::Rush;
+	return bInChain ? (MeleeLastIndex + 1) % Style->Light.Num() : 0;
+}
+
+bool ASOCharacter::MeleeBlowAllowed(int32 Index) const
+{
+	const UWorld* World = GetWorld();
+	const FSOMeleeBlow* Last = MeleeLastStart < -50.0 ? nullptr : MeleeBlowAt(MeleeLastIndex);
+	const double Free = Last ? MeleeLastStart + Last->Recover : -100.0;
+	return bFists && !bDead && !bBlocking && World && MeleeBlowAt(Index) && World->GetTimeSeconds() >= Free - 0.12;
+}
+
+double ASOCharacter::GetComboAge() const
+{
+	return GetWorld() ? GetWorld()->GetTimeSeconds() - ComboLast : 100.0;
 }
 
 void ASOCharacter::MeleeStrike(bool bHeavy)
@@ -2327,14 +2360,14 @@ void ASOCharacter::MeleeStrike(bool bHeavy)
 	}
 	if (HasAuthority())
 	{
-		ServerMelee_Implementation(bHeavy);
+		ServerMeleeBlow_Implementation(static_cast<int16>(Index));
 		return;
 	}
 	// a joined player sees their own blow at once; the server lands it and its echo is skipped here
 	BeginMeleeBlow(Index);
 	ShowMeleeBlow(Index);
 	MeleePredicted = GetWorld()->GetTimeSeconds();
-	ServerMelee(bHeavy);
+	ServerMeleeBlow(static_cast<int16>(Index));
 }
 
 void ASOCharacter::BeginMeleeBlow(int32 Index)
@@ -2343,34 +2376,37 @@ void ASOCharacter::BeginMeleeBlow(int32 Index)
 	MeleeLastStart = GetWorld()->GetTimeSeconds();
 }
 
-void ASOCharacter::ServerMelee_Implementation(bool bHeavy)
+void ASOCharacter::ServerMeleeBlow_Implementation(int16 Index)
 {
-	if (!bFists || bDead)
+	if (!MeleeBlowAllowed(Index))
 	{
 		return;
 	}
-	const int32 Index = NextMeleeBlow(bHeavy);
-	const FSOMeleeBlow* Blow = Index >= -1 ? MeleeBlowAt(Index) : nullptr;
-	if (!Blow)
-	{
-		return;
-	}
+	const FSOMeleeBlow* Blow = MeleeBlowAt(Index);
 	BeginMeleeBlow(Index);
-	MulticastMeleeBlow(static_cast<int8>(Index));
-	// the blow lands when the clip says (after its wind-up), if the hands are still fighting then
+	MulticastMeleeBlow(Index);
+	// the blow lands when the clip says (after its wind-up), if the hands are still fighting then; a parry's counter
+	// makes it harder
 	TWeakObjectPtr<ASOCharacter> Self(this);
-	GetWorldTimerManager().SetTimer(MeleeHitTimer, FTimerDelegate::CreateLambda([Self, Index]()
+	const int32 At = Index;
+	GetWorldTimerManager().SetTimer(MeleeHitTimer, FTimerDelegate::CreateLambda([Self, At]()
 	{
 		ASOCharacter* Me = Self.Get();
-		const FSOMeleeBlow* B = Me ? Me->MeleeBlowAt(Index) : nullptr;
+		const FSOMeleeBlow* B = Me ? Me->MeleeBlowAt(At) : nullptr;
 		if (Me && B && Me->bFists && !Me->bDead)
 		{
-			USOMeleeLibrary::Land(Me, *B);
+			const double Now = Me->GetWorld()->GetTimeSeconds();
+			const FSOMeleeStyle* Style = Me->GetMeleeStyle();
+			const float Scale = Now < Me->CounterUntil && Style ? Style->CounterScale : 1.0f;
+			if (USOMeleeLibrary::Land(Me, *B, Scale, SOMeleeMove::Weight(At)) > 0)
+			{
+				Me->CounterUntil = -100.0;                   // (the counter is spent on the blow that lands)
+			}
 		}
 	}), FMath::Max(Blow->HitTime, 0.01f), false);
 }
 
-void ASOCharacter::MulticastMeleeBlow_Implementation(int8 Index)
+void ASOCharacter::MulticastMeleeBlow_Implementation(int16 Index)
 {
 	if (!HasAuthority())
 	{
@@ -2403,34 +2439,169 @@ void ASOCharacter::ShowMeleeBlow(int32 Index)
 	}
 	if (!Blow->SwingSound.IsNone())
 	{
-		USOSoundLibrary::PlayFor(this, Blow->SwingSound, GetActorLocation(), Index < 0 ? 0.9f : 0.7f, ESOSoundRange::Near);
+		USOSoundLibrary::PlayFor(this, Blow->SwingSound, GetActorLocation(), Index < 0 || Index >= 100 ? 0.9f : 0.7f, ESOSoundRange::Near);
 	}
-	// the body steps into it (its own machine moves it: the movement is the owner's)
-	if (IsLocallyControlled() && Blow->Lunge > 0.0f && !GetCharacterMovement()->IsFalling())
-	{
-		const FVector Ahead = GetAimDirection().GetSafeNormal2D();
-		GetCharacterMovement()->Velocity += Ahead * Blow->Lunge;
-	}
-	// a blade's edge is a sweep of light as it lands
-	if (Style->bEdge)
-	{
-		TWeakObjectPtr<ASOCharacter> Self(this);
-		const float Range = Blow->Range, Angle = Blow->Angle;
-		const FLinearColor Color = Style->EdgeColor;
-		GetWorldTimerManager().SetTimer(MeleeEdgeTimer, FTimerDelegate::CreateLambda([Self, Range, Angle, Color]()
-		{
-			ASOCharacter* Me = Self.Get();
-			USOFxSubsystem* Fx = Me && Me->GetWorld() ? Me->GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr;
-			if (Fx)
-			{
-				Fx->Sweep(Me->GetAimOrigin(), Me->GetAimDirection(), Range, Angle, Color);
-			}
-		}), FMath::Max(Blow->HitTime - 0.03f, 0.01f), false);
-	}
+	// the body moves with it (its own machine moves it: the movement is the owner's): the step in, the rush across the
+	// ground, the slam straight down out of the air
 	if (IsLocallyControlled())
 	{
-		AbilityKick = Index < 0 ? -4.0f : -1.5f;            // (the view takes the blow's weight)
+		UCharacterMovementComponent* Move = GetCharacterMovement();
+		const FVector Ahead = GetAimDirection().GetSafeNormal2D();
+		if (Index == SOMeleeMove::Air && Move->IsFalling())
+		{
+			Move->Velocity = Ahead * 300.0f + FVector(0.0f, 0.0f, -2200.0f);
+		}
+		else if (Blow->Lunge > 0.0f && !Move->IsFalling())
+		{
+			Move->Velocity += Ahead * Blow->Lunge;
+		}
+		AbilityKick = Index < 0 || Index >= 100 ? -4.0f : -1.5f;   // (the view takes the blow's weight)
 	}
+	TWeakObjectPtr<ASOCharacter> Self(this);
+	const float Range = Blow->Range, Angle = Blow->Angle, Shock = Blow->Shock;
+	const bool bEdge = Style->bEdge;
+	const FLinearColor Color = Style->EdgeColor;
+	GetWorldTimerManager().SetTimer(MeleeEdgeTimer, FTimerDelegate::CreateLambda([Self, Range, Angle, Shock, bEdge, Color]()
+	{
+		ASOCharacter* Me = Self.Get();
+		USOFxSubsystem* Fx = Me && Me->GetWorld() ? Me->GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr;
+		if (!Fx)
+		{
+			return;
+		}
+		if (Shock > 0.0f)
+		{
+			// a blow into the ground: the ring races out from the feet
+			const FVector Feet = Me->GetActorLocation() - FVector(0.0f, 0.0f, Me->GetSimpleCollisionHalfHeight());
+			Fx->Shockwave(Feet, Shock, bEdge ? Color : FLinearColor(1.0f, 0.85f, 0.6f));
+		}
+		else if (bEdge)
+		{
+			Fx->Sweep(Me->GetAimOrigin(), Me->GetAimDirection(), Range, Angle, Color);   // a blade's edge of light
+		}
+	}), FMath::Max(Blow->HitTime - 0.03f, 0.01f), false);
+}
+
+void ASOCharacter::OnMeleeHit(ASOCombatCharacter* Victim, const FVector& Point, float Weight, float HitStop)
+{
+	MulticastMeleeImpact(Victim, Point, Weight, HitStop);
+}
+
+void ASOCharacter::MulticastMeleeImpact_Implementation(ASOCombatCharacter* Victim, FVector_NetQuantize Point, float Weight, float HitStop)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	// the freeze: both bodies stop for an instant as the blow lands (each machine: this is how it is SHOWN; the
+	// server's own freeze holds the attacker's next blow back by as much, which the recover times already allow for)
+	if (HitStop > 0.0f)
+	{
+		TArray<TWeakObjectPtr<AActor>> Frozen;
+		for (AActor* A : { static_cast<AActor*>(this), static_cast<AActor*>(Victim) })
+		{
+			if (A)
+			{
+				A->CustomTimeDilation = 0.04f;
+				Frozen.Add(A);
+			}
+		}
+		FTimerHandle Thaw;
+		World->GetTimerManager().SetTimer(Thaw, FTimerDelegate::CreateLambda([Frozen]()
+		{
+			for (const TWeakObjectPtr<AActor>& A : Frozen)
+			{
+				if (A.IsValid())
+				{
+					A->CustomTimeDilation = 1.0f;
+				}
+			}
+		}), HitStop, false);
+	}
+	// sparks where it landed: the blade's light, or the fist's flash and the flesh
+	const FSOMeleeStyle* Style = GetMeleeStyle();
+	if (USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>())
+	{
+		const FVector Normal = Victim ? (GetActorLocation() - Victim->GetActorLocation()).GetSafeNormal2D() : -GetActorForwardVector();
+		if (Style && Style->bEdge)
+		{
+			Fx->PlasmaImpact(Point, Normal, Style->EdgeColor, 0.5f * Weight, 0.0f, true);
+		}
+		else
+		{
+			Fx->Impact(Point, Normal, true, FLinearColor(0.35f, 0.04f, 0.03f), 0.0f, false);
+			Fx->SlugImpact(Point, Normal, 0.35f * Weight);      // (the knuckles' spark of light off the suit's plate)
+		}
+	}
+	// the one who struck: the camera takes it, the count goes on
+	if (IsLocallyControlled())
+	{
+		AbilityKick = FMath::Min(AbilityKick, -1.5f - 1.5f * Weight);
+		const double Now = World->GetTimeSeconds();
+		ComboHits = Now - ComboLast < 1.6 ? ComboHits + 1 : 1;
+		ComboLast = Now;
+	}
+}
+
+void ASOCharacter::SetBlocking(bool bOn)
+{
+	bOn = bOn && bFists && !bDead;
+	if (bOn == bBlocking)
+	{
+		return;
+	}
+	bBlocking = bOn;
+	if (bOn && GetWorld())
+	{
+		BlockStart = GetWorld()->GetTimeSeconds();
+	}
+	UpdateMeleeGuard();
+	if (!HasAuthority())
+	{
+		ServerSetBlocking(bOn);
+	}
+}
+
+void ASOCharacter::ServerSetBlocking_Implementation(bool bOn)
+{
+	SetBlocking(bOn);
+}
+
+float ASOCharacter::ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const
+{
+	Amount = Super::ScaleIncomingDamage(Amount, Source, bCrit);
+	const FSOMeleeStyle* Style = bBlocking ? GetMeleeStyle() : nullptr;
+	const UWorld* World = GetWorld();
+	if (!Style || !Source || !World)
+	{
+		return Amount;
+	}
+	// only what comes from in front of the guard
+	const FVector To = (Source->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+	if (FVector::DotProduct(To, GetAimDirection().GetSafeNormal2D()) < FMath::Cos(FMath::DegreesToRadians(70.0f)))
+	{
+		return Amount;
+	}
+	const double Now = World->GetTimeSeconds();
+	if (Now - BlockStart <= Style->ParryWindow)
+	{
+		// a parry: nothing gets through, the attacker reels, and this player's next blow is a counter
+		ASOCharacter* Me = const_cast<ASOCharacter*>(this);
+		Me->CounterUntil = Now + Style->CounterTime;
+		if (HasAuthority())
+		{
+			if (ASOCombatCharacter* Attacker = Cast<ASOCombatCharacter>(const_cast<AActor*>(Source)))
+			{
+				USOCombatStatics::ApplyStatus(Me, Attacker, SOTags::Status_Stagger, Style->ParryStagger);
+			}
+			USOCue::Sound(this, TEXT("melee_parry"), GetActorLocation(), 1.0f, 0.03f);
+			Me->MulticastMeleeImpact(nullptr, GetActorLocation() + To * 40.0f + FVector(0, 0, 40.0f), 2.0f, 0.12f);
+		}
+		Me->ParryShownAt = Now;
+		return 0.0f;
+	}
+	return Amount * Style->BlockScale;
 }
 
 void ASOCharacter::SetMeleeStyle(FName Style)

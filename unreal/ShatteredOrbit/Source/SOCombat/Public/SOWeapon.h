@@ -75,6 +75,12 @@ public:
 	bool HasHeat() const;
 	float GetHeat() const { return Heat; }
 	bool IsVenting() const;
+	/** A gun that condenses its rounds from the reserve instead of reloading (USOWeaponData::RefillTime). */
+	bool Condenses() const;
+	/** Rounds are condensing into it now (the trigger at rest, the crystal cold, room in it and rounds in reserve). */
+	bool IsCondensing() const;
+	/** Dumps the crystal's heat now (a condensing gun's reload key, or its empty trigger); nothing if it is cold. */
+	void StartVent();
 	static constexpr float HeatMedium = 0.4f;
 	static constexpr float HeatHigh = 0.7f;
 	/** How much faster its rounds fly at heat H (1 below HeatHigh, up to the data's HeatSpeed at full). */
@@ -212,6 +218,9 @@ protected:
 	float ShotHeat = 0.0f;
 	float LastHeatTime = -100.0f;
 	float VentUntil = -100.0f;
+	float VentLength = 1.0f;      // (this vent's length, and the heat it began from)
+	float VentFrom = 1.0f;
+	float RefillCarry = 0.0f;     // (the part of a round condensed so far)
 	void AddHeat();
 	float LastDryFireTime = -100.0f;
 	int32 ShotsFired = 0;

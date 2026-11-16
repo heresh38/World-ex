@@ -445,6 +445,18 @@ arm really needs and fitting again from it was tried and dropped: it fires while
 hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+**The Sarketh's guns never reload** (the owner, 2026-11-16: "remove loading and keep venting so after we stop shooting
+and the counter rests to 0 or after venting we slowly add bullets from reserve to magazine"): a gun with `"refill"`
+(seconds for a full load: `USOWeaponData::RefillTime`) condenses its rounds (`ASOWeapon::Condenses`, `IsCondensing`):
+the trigger at rest and the crystal cold (or a vent ended), the server moves rounds from the reserve into it at that
+rate; the reload key and an empty trigger vent it (`StartVent`, as long as the heat in it asks); the HUD says
+CONDENSING. Test `ShatteredOrbit.Weapon.SarkethGunsCondense`. Their models have NO magazine: under a long gun's
+receiver a condenser (a faceted amber crystal in pale claws and a forged collar: the rounds condense in it), and every
+grip is their own (`sarketh_guns.skr_long_grip`, the handguns' own: dark forged iron on the hand's lines, a pale plate
+with a rim of light, a crystal pommel in two claws; no polymer, rubber or base cap: "the new guns handle all look the
+human ones"). **Ashen Gate** (`skr_cannon`) is a launcher of its own (`sarketh_guns.skr_launcher`: a wide receiver, a
+revolving condenser drum in the open, a fat finned housing, a 5 cm bore; the owner: "more bulky like a grenade
+launcher").
 **Ember Oath II** (`skr_rifle_v2`, the owner, 2026-11-15: "add it to the game as a variant of the rifle ... so both
 exist"): Ember Oath's build and numbers in the blade's mirror-polished stainless on its plates, blades and fittings
 (`sarketh_guns._rifle_v2` -> `SKR_FINISH=mirror`; material `gun_steel__mirror`, set `skr/textures.py mirror` =
@@ -484,7 +496,18 @@ replicated); a set cache gives every style of its set (`FSOMeleeStyle::SetId`, `
 gun to the first blade owned (or the fists), from a blade to the fists, from the fists back to the gun
 (`ASOCharacter::HandleFists`, `SetMeleeStyle`, checked on the server). The blade lies in the right fist of the body and
 of the first-person arms from the hand's own bones (`ASOCharacter::BladeInHand`: the handle across the palm, the blade
-out of the thumb's side, the edge toward the knuckles). A gun put away stays away whichever view comes up. Tests `ShatteredOrbit.Melee.*`; pictures
+out of the thumb's side, the edge toward the knuckles). A gun put away stays away whichever view comes up. **Melee like a fighter's** (the owner, 2026-11-16: "make mele combat on par" with
+fighting games; our own moves): the stance picks the move (`ASOCharacter::NextMeleeBlow`, `SOMeleeMove`): light, light,
+heavy = the finisher (a launcher); light at a sprint = the rush; light crouched = the sweep; heavy crouched = the riser
+(a launcher); heavy in the air = the slam (a ring, `Shock`); a body in the air takes 1.2x (a juggle). A blow lands with a
+hit-stop (`HitStop`: both bodies' `CustomTimeDilation` for an instant, every machine through `MulticastMeleeImpact`),
+sparks, the camera's punch and the HUD's HITS count. The reload key held is the guard (`SetBlocking`: from the front
+`BlockScale` gets through, the `Brace` clip held at `BlockHold`); raised within `ParryWindow` of a blow it is a parry
+(nothing through, the attacker reels, the next blow within `CounterTime` does `CounterScale`; the HUD's PARRY). All of
+it is data per style ("finisher", "rush", "sweep", "riser", "air", "block"). Clips `Uppercut`, `Rising`, `Sweep` (the
+sweep plants the swept foot far out with the leg's IK). The loadout has a MELEE slot (`USOInventoryComponent::
+MeleeSlot`, saves version 6): a blade owned or, empty, the fists; key 4 brings up what is in it and puts it away.
+Tests `ShatteredOrbit.Melee.*`; pictures
 `SOCaptureSeries 1 35` (files `SO_me_fp_*`, `SO_me_side_*`).
 **Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
 screen ... shouldn't be at the center of the screen, better to be on the right ... on running we lower the gun for

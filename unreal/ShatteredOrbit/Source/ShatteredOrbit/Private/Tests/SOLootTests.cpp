@@ -314,7 +314,18 @@ bool FSOEveryArchetypeTest::RunTest(const FString& Parameters)
 			W.Run(0.5f);
 			TestEqual(*FString::Printf(TEXT("%s: a burst of %d"), *Name, Data->Burst), Gun->GetShotsFired(), Shots + Data->Burst);
 		}
-		// empty it and reload: full again, whatever the choreography
+		// empty it and reload: full again, whatever the choreography (a gun that condenses never reloads: it fills
+		// again by itself once it has cooled)
+		if (Gun->Condenses())
+		{
+			Gun->SetAmmo(0, 200);
+			Gun->StartReload();
+			TestFalse(*FString::Printf(TEXT("%s: never reloads"), *Name), Gun->IsReloading());
+			W.Run(Data->VentTime + Data->HeatCoolDelay + 1.0f / FMath::Max(Data->HeatCool, 0.1f) + Data->RefillTime + 0.5f);
+			TestEqual(*FString::Printf(TEXT("%s: condensed full from the reserve"), *Name), Gun->GetMag(), Gun->GetStats().Mag);
+			W.Run(1.5f);
+			continue;
+		}
 		Gun->SetAmmo(0, 200);
 		Gun->StartReload();
 		TestTrue(*FString::Printf(TEXT("%s: reloading"), *Name), Gun->IsReloading());
@@ -791,6 +802,78 @@ bool FSOOneColourASetTest::RunTest(const FString& Parameters)
 		}
 	}
 	TestTrue(TEXT("the sets were found"), Seen.Num() >= 4);
+	return true;
+}
+
+// The Sarketh's guns never reload (the owner, 2026-11-16): the trigger at rest and the crystal cold (or vented), rounds
+// condense from the reserve into it at the data's rate; the reload key and an empty trigger vent it.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLootCondenseTest, "ShatteredOrbit.Weapon.SarkethGunsCondense", SOTest::Flags)
+bool FSOLootCondenseTest::RunTest(const FString& Parameters)
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!TestNotNull(TEXT("DA_LootTables"), Tables))
+	{
+		return false;
+	}
+	int32 Sarketh = 0;
+	for (const FSOArchetypeEntry& Entry : Tables->Archetypes)
+	{
+		const USOWeaponData* D = Tables->LoadArchetype(Entry.Id);
+		if (D && D->SetId == TEXT("sarketh"))
+		{
+			++Sarketh;
+			TestTrue(*FString::Printf(TEXT("%s condenses (\"refill\")"), *Entry.Id.ToString()), D->RefillTime > 0.0f && D->HeatPerShot > 0.0f);
+		}
+	}
+	TestTrue(TEXT("the Sarketh set is there"), Sarketh >= 7);
+
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	FRandomStream Rng(5);
+	ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(TEXT("skr_rifle"), 0, 10, Rng));
+	if (!TestNotNull(TEXT("Ember Oath"), Gun))
+	{
+		return false;
+	}
+	W.Run(0.3f);
+	const USOWeaponData* D = Gun->GetData();
+	const int32 Full = Gun->GetStats().Mag;
+	Gun->SetAmmo(Full, 100);
+	Gun->StartFire();
+	W.Run(0.6f);
+	const int32 AfterBurst = Gun->GetMag();
+	TestTrue(TEXT("firing spends rounds and heats the crystal"), AfterBurst < Full && Gun->GetHeat() > 0.0f);
+	W.Run(0.3f);
+	TestTrue(TEXT("nothing condenses while the trigger is held"), Gun->GetMag() <= AfterBurst);
+	Gun->StopFire();
+	W.Run(0.15f);
+	TestEqual(TEXT("nothing condenses while the crystal is hot"), Gun->GetReserve(), 100);
+	// the reload key vents it: no reload, the heat runs out, then the rounds come
+	Gun->StartReload();
+	TestFalse(TEXT("no reload"), Gun->IsReloading());
+	TestTrue(TEXT("the key vents it"), Gun->IsVenting());
+	for (int32 i = 0; i < 400 && Gun->IsVenting(); ++i)
+	{
+		W.Step();
+	}
+	TestEqual(TEXT("cold after the vent"), Gun->GetHeat(), 0.0f, 0.001f);
+	Gun->SetAmmo(0, 100);                                   // (from empty: the refill's pace is measured)
+	const int32 Before = Gun->GetMag();
+	W.Run(D->RefillTime * 0.5f);
+	const int32 Half = Gun->GetMag();
+	TestTrue(FString::Printf(TEXT("rounds condense slowly (%d -> %d in half the refill time)"), Before, Half), Half > Before && Half < Full);
+	TestEqual(TEXT("from the reserve"), Gun->GetReserve(), 100 - (Half - Before));
+	W.Run(D->RefillTime);
+	TestEqual(TEXT("full again"), Gun->GetMag(), Full);
+	// empty, the trigger vents it, and it fills from what the reserve has
+	Gun->SetAmmo(0, 5);
+	Gun->StartFire();
+	W.Step();
+	Gun->StopFire();
+	W.Run(D->VentTime + D->HeatCoolDelay + 1.0f / FMath::Max(D->HeatCool, 0.1f) + D->RefillTime + 0.5f);
+	TestEqual(TEXT("only what the reserve had"), Gun->GetMag(), 5);
+	TestEqual(TEXT("the reserve is spent"), Gun->GetReserve(), 0);
 	return true;
 }
 

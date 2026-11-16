@@ -444,11 +444,41 @@ void ASOWeapon::AddHeat()
 	if (Heat >= 1.0f && Now >= VentUntil)
 	{
 		// full: the crystal vents by itself (the gun cannot fire until it has); the heat runs out of it meanwhile
-		VentUntil = Now + Data->VentTime;
-		PlayReloadFx(TEXT("vent"), Data->VentTime);
-		PlayEventSound(TEXT("vent"));
-		OnWeaponEvent.Broadcast(TEXT("vent"));
+		StartVent();
 	}
+}
+
+bool ASOWeapon::Condenses() const
+{
+	return Data && Data->RefillTime > 0.0f;
+}
+
+bool ASOWeapon::IsCondensing() const
+{
+	const UWorld* World = GetWorld();
+	return Condenses() && World && Heat <= 0.0f && !IsVenting() && !bTriggerHeld && World->GetTimeSeconds() - LastShotTime > 0.25f
+		&& Mag < Stats.Mag && Reserve > 0;
+}
+
+void ASOWeapon::StartVent()
+{
+	UWorld* World = GetWorld();
+	if (!HasHeat() || !World)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	if (Heat <= 0.02f || Now < VentUntil)
+	{
+		return;
+	}
+	// as long as the heat in it asks (a crystal half hot vents in half the time), never a blink
+	VentFrom = Heat;
+	VentLength = Data->VentTime * FMath::Clamp(Heat, 0.35f, 1.0f);
+	VentUntil = Now + VentLength;
+	PlayReloadFx(TEXT("vent"), VentLength);
+	PlayEventSound(TEXT("vent"));
+	OnWeaponEvent.Broadcast(TEXT("vent"));
 }
 
 void ASOWeapon::ShotDirections(const FVector& Aim, int32 Seed, float HalfAngle, TArray<FVector>& Out) const
@@ -850,6 +880,17 @@ bool ASOWeapon::CanReload() const
 
 void ASOWeapon::StartReload()
 {
+	if (Condenses())
+	{
+		// nothing to load by hand: the key vents the crystal (here at once, on the server too), and the rounds
+		// condense once it is cold
+		StartVent();
+		if (!HasAuthority())
+		{
+			ServerStartReload();
+		}
+		return;
+	}
 	if (!HasAuthority())
 	{
 		ServerStartReload();
@@ -1011,6 +1052,10 @@ void ASOWeapon::Tick(float DeltaSeconds)
 			{
 				BurstLeft = 0;
 			}
+			else if (Condenses())
+			{
+				StartVent(); // (empty: vent, so the rounds can condense)
+			}
 			else if (CanReload())
 			{
 				StartReload(); // dry trigger on an empty mag reloads
@@ -1070,11 +1115,35 @@ void ASOWeapon::Tick(float DeltaSeconds)
 		const float Now = World->GetTimeSeconds();
 		if (Now < VentUntil)
 		{
-			Heat = FMath::Clamp((VentUntil - Now) / FMath::Max(Data->VentTime, 0.01f), 0.0f, 1.0f);
+			Heat = FMath::Clamp(VentFrom * (VentUntil - Now) / FMath::Max(VentLength, 0.01f), 0.0f, 1.0f);
+		}
+		else if (VentUntil > -50.0f && Now - VentUntil < 0.1f)
+		{
+			Heat = 0.0f;                                     // (a vent ends cold)
 		}
 		else if (Now - LastHeatTime > Data->HeatCoolDelay)
 		{
 			Heat = FMath::Max(0.0f, Heat - Data->HeatCool * DeltaSeconds);
+		}
+	}
+
+	// The Sarketh's guns condense their rounds (the server's count is the one that counts; the others are told)
+	if (World && HasAuthority() && Condenses())
+	{
+		if (IsCondensing())
+		{
+			RefillCarry += DeltaSeconds * Stats.Mag / FMath::Max(Data->RefillTime, 0.05f);
+			const int32 In = FMath::Min3(FMath::FloorToInt(RefillCarry), Stats.Mag - Mag, Reserve);
+			if (In > 0)
+			{
+				Mag += In;
+				Reserve -= In;
+				RefillCarry -= In;
+			}
+		}
+		else
+		{
+			RefillCarry = 0.0f;
 		}
 	}
 

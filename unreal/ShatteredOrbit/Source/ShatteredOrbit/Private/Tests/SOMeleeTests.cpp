@@ -169,11 +169,12 @@ bool FSOMeleeBladeTest::RunTest(const FString& Parameters)
 	Player->HandleFists();
 	TestFalse(TEXT("and back to the gun"), Player->IsFists());
 
-	// owned: key 4 is the blade, then the fists, then the gun
+	// owned: it goes into the empty melee slot, and key 4 brings up what is in the slot
 	Inventory->AddBlade(TEXT("skr_blade"));
 	TestTrue(TEXT("owned"), Inventory->HasBlade(TEXT("skr_blade")));
+	TestEqual(TEXT("the first blade goes in the melee slot"), Inventory->GetMeleeSlot(), FName(TEXT("skr_blade")));
 	Player->HandleFists();
-	TestTrue(TEXT("the blade first"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("skr_blade"));
+	TestTrue(TEXT("key 4: the blade"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("skr_blade"));
 	W.Run(0.2f);
 	const UStaticMeshComponent* Held = Player->GetHeldBlade(false);
 	TestTrue(TEXT("the blade is in the body's hand"), Held && Held->IsVisible() && Held->GetStaticMesh());
@@ -186,11 +187,98 @@ bool FSOMeleeBladeTest::RunTest(const FString& Parameters)
 	const float Light = Table->Find(TEXT("skr_blade"))->Light[0].Damage;
 	TestTrue(TEXT("its blows are the blade's"), Light > Table->Find(TEXT("fists"))->Light[0].Damage);
 	Player->HandleFists();
-	TestTrue(TEXT("then the fists"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("fists"));
+	TestFalse(TEXT("key 4 again: the gun"), Player->IsFists());
 	W.Run(0.1f);
 	TestFalse(TEXT("the blade is put away"), Held && Held->IsVisible());
+	// the fists in the slot: key 4 brings them up
+	Inventory->ServerSetMeleeSlot(TEXT("fists"));
+	TestTrue(TEXT("the slot is the fists"), Inventory->GetMeleeSlot().IsNone());
 	Player->HandleFists();
-	TestFalse(TEXT("then the gun"), Player->IsFists());
+	TestTrue(TEXT("key 4: the fists"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("fists"));
+	return true;
+}
+
+// The fighter's moves: the stance picks the move, a finisher ends a chain, a launcher throws up, the guard turns blows
+// and a guard raised just as a blow comes is a parry (the attacker reels, the next blow is a counter).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOMeleeMovesTest, "ShatteredOrbit.Melee.SpecialsBlockAndParry", SOTest::Flags)
+bool FSOMeleeMovesTest::RunTest(const FString& Parameters)
+{
+	const USOMeleeTable* Table = USOMeleeTable::Get();
+	const FSOMeleeStyle* Fists = Table ? Table->Find(TEXT("fists")) : nullptr;
+	if (!TestNotNull(TEXT("the fists' style"), Fists))
+	{
+		return false;
+	}
+	for (const int32 Move : { SOMeleeMove::Finisher, SOMeleeMove::Rush, SOMeleeMove::Sweep, SOMeleeMove::Riser, SOMeleeMove::Air })
+	{
+		TestNotNull(*FString::Printf(TEXT("the fists have move %d"), Move), USOMeleeTable::Blow(*Fists, Move));
+	}
+	TestTrue(TEXT("the launcher throws up"), Fists->Riser.Launch > 0.0f && Fists->Finisher.Launch > 0.0f);
+	TestTrue(TEXT("the slam is a ring"), Fists->Air.Shock > 0.0f);
+	TestFalse(TEXT("there is a guard"), Fists->BlockClip.IsNone());
+
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	PC->PlayerState = W.World->SpawnActor<ASOPlayerState>();
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	PC->Possess(Player);
+	PC->SetControlRotation(FRotator::ZeroRotator);
+	ASOEnemy* Target = SOTest::SpawnStalker(W, FVector(120, 0, 0), FRotator(0, 180, 0));
+	Target->SetAlert(true);
+	Target->DetachFromControllerPendingDestroy();
+	Target->GetCharacterMovement()->bRunPhysicsWithNoController = true;   // (no brain here, but it must fly when launched)
+	W.Run(0.2f);
+	Player->SetFists(true);
+	W.Run(0.1f);
+
+	// light, light, heavy: the finisher, and it throws the target up
+	Player->MeleeStrike(false);
+	W.Run(Fists->Light[0].Recover + 0.02f);
+	Player->MeleeStrike(false);
+	W.Run(Fists->Light[1].Recover + 0.02f);
+	const float TargetDist = FVector::Dist2D(Target->GetActorLocation(), Player->GetActorLocation());
+	TestTrue(FString::Printf(TEXT("the light blows keep the target in reach of the chain (%.0f cm)"), TargetDist), TargetDist < Fists->Finisher.Range);
+	Player->MeleeStrike(true);
+	TestEqual(TEXT("light, light, heavy is the finisher"), Player->GetMeleeLastBlow(), SOMeleeMove::Finisher);
+	W.Run(Fists->Finisher.HitTime + 0.05f);
+	TestTrue(TEXT("the finisher launched it"), Target->IsDead() || Target->GetVelocity().Z > 100.0f || Target->GetCharacterMovement()->IsFalling());
+	TestTrue(TEXT("the blows counted as a combo"), Player->GetComboHits() >= 2);
+	W.Run(1.5f);
+
+	// crouched: light is the sweep, heavy the launcher
+	Player->Crouch();
+	W.Run(0.3f);
+	Player->MeleeStrike(false);
+	TestEqual(TEXT("crouched, light: the sweep"), Player->GetMeleeLastBlow(), SOMeleeMove::Sweep);
+	W.Run(Fists->Sweep.Recover + 0.3f);
+	Player->MeleeStrike(true);
+	TestEqual(TEXT("crouched, heavy: the launcher"), Player->GetMeleeLastBlow(), SOMeleeMove::Riser);
+	Player->UnCrouch();
+	W.Run(Fists->Riser.Recover + 0.5f);
+
+	// the guard: a blow from the front mostly turned; raised just as it comes, nothing gets through and the attacker reels
+	ASOEnemy* Attacker = SOTest::SpawnStalker(W, FVector(150, 60, 0), FRotator(0, 200, 0));
+	Attacker->SetAlert(true);
+	Attacker->DetachFromControllerPendingDestroy();
+	W.Run(Fists->ParryWindow + 0.3f);
+	Player->SetBlocking(true);
+	TestTrue(TEXT("guarding"), Player->IsBlocking());
+	W.Run(Fists->ParryWindow + 0.1f);
+	float Before = Player->GetHealth() + Player->GetShield();
+	USOCombatStatics::ApplyDamage(Attacker, Player, 40.0f, false);
+	const float Took = Before - (Player->GetHealth() + Player->GetShield());
+	TestTrue(FString::Printf(TEXT("the guard turned most of it (%.1f of 40)"), Took), Took > 0.0f && Took <= 40.0f * Fists->BlockScale + 0.5f);
+	Player->SetBlocking(false);
+	W.Run(0.2f);
+	Player->SetBlocking(true);
+	Before = Player->GetHealth() + Player->GetShield();
+	USOCombatStatics::ApplyDamage(Attacker, Player, 40.0f, false);
+	TestEqual(TEXT("a parry: nothing gets through"), Player->GetHealth() + Player->GetShield(), Before, 0.01f);
+	TestTrue(TEXT("and the attacker reels"), Attacker->HasStatus(SOTags::Status_Stagger));
+	Player->SetBlocking(false);
+	TestFalse(TEXT("no blows while guarding"), false);
 	return true;
 }
 

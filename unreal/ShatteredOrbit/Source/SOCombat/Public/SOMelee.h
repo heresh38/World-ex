@@ -6,6 +6,7 @@
 
 class ASOCombatCharacter;
 class UStaticMesh;
+class UTexture2D;
 
 /**
  * Hand to hand (the owner, 2026-11-15: "mele is when we put away all our guns on our back so we hold nothing but our
@@ -53,6 +54,19 @@ struct SOCOMBAT_API FSOMeleeBlow
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	float Lunge = 0.0f;
 
+	/** Thrown up by (cm/s): a launcher; a body in the air takes more from the next blows (a juggle). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	float Launch = 0.0f;
+
+	/** Both bodies freeze this long as it lands (the weight of a hit). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee", meta = (Units = "s"))
+	float HitStop = 0.06f;
+
+	/** A blow into the ground: everything of the other side within this radius (cm) round the body takes it, and a
+	 *  ring of light races out (0 = a blow in the cone). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee", meta = (Units = "cm"))
+	float Shock = 0.0f;
+
 	/** Sounds: the swing (as the wind-up ends) and the hit (sfx_synth.py "melee"). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	FName SwingSound;
@@ -77,6 +91,10 @@ struct SOCOMBAT_API FSOMeleeStyle
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	TSoftObjectPtr<UStaticMesh> Mesh;
 
+	/** Its picture in the loadout (the icon renderer's, like a gun's); none for the fists. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	TSoftObjectPtr<UTexture2D> Icon;
+
 	/** The set it belongs to: a set cache (ASOReliquary::RewardSet) gives every style of its set. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	FName SetId;
@@ -91,6 +109,47 @@ struct SOCOMBAT_API FSOMeleeStyle
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
 	FSOMeleeBlow Heavy;
 
+	/** The special blows (data "finisher", "rush", "sweep", "riser", "air"): light, light, heavy; light at a sprint; light
+	 *  crouched; heavy crouched; heavy in the air. A blow with no clip is not there. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FSOMeleeBlow Finisher;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FSOMeleeBlow Rush;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FSOMeleeBlow Sweep;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FSOMeleeBlow Riser;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FSOMeleeBlow Air;
+
+	/** Blocking (the reload key held with the hands up): the clip held at BlockHold seconds, what a blow from the front
+	 *  still does, the parry (blocked within ParryWindow of raising the guard: nothing gets through, the attacker reels
+	 *  for ParryStagger, and the next blow within CounterTime does CounterScale). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	FName BlockClip;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	float BlockHold = 0.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	float BlockScale = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee", meta = (Units = "s"))
+	float ParryWindow = 0.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee", meta = (Units = "s"))
+	float ParryStagger = 1.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee", meta = (Units = "s"))
+	float CounterTime = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee")
+	float CounterScale = 1.6f;
+
 	/** A light blow pressed this long after the last one could start goes on with the chain; later it begins again. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Melee", meta = (Units = "s"))
 	float ChainGrace = 0.45f;
@@ -103,6 +162,14 @@ struct SOCOMBAT_API FSOMeleeStyle
 	FLinearColor EdgeColor = FLinearColor(1.0f, 0.6f, 0.18f);
 };
 
+/** The named blows' indices (the light chain is 0..). */
+namespace SOMeleeMove
+{
+	constexpr int32 Heavy = -1, Finisher = 100, Rush = 101, Sweep = 102, Riser = 103, Air = 104;
+	/** A blow's weight: how hard it is shown landing (the freeze, the camera, the sparks). */
+	inline float Weight(int32 Index) { return Index < 0 || Index == Finisher || Index == Riser || Index == Air ? 2.0f : (Index == Rush || Index == Sweep ? 1.5f : 1.0f); }
+}
+
 UCLASS(BlueprintType)
 class SOCOMBAT_API USOMeleeTable : public UPrimaryDataAsset
 {
@@ -113,6 +180,9 @@ public:
 	TArray<FSOMeleeStyle> Styles;
 
 	const FSOMeleeStyle* Find(FName Id) const;
+
+	/** The blows a style has by index: 0.. the light chain, the rest the named moves (SOMeleeMove). */
+	static const FSOMeleeBlow* Blow(const FSOMeleeStyle& Style, int32 Index);
 
 	/** /Game/Data/DA_Melee (loaded once, kept). */
 	static const USOMeleeTable* Get();
@@ -126,5 +196,5 @@ class SOCOMBAT_API USOMeleeLibrary : public UObject
 public:
 	/** Lands a blow (server only): every body of the other side within reach, in the cone round the aim and not behind
 	 *  the world's geometry, takes the damage through the gate, is staggered and thrown back. Returns how many it hit. */
-	static int32 Land(ASOCombatCharacter* User, const FSOMeleeBlow& Blow);
+	static int32 Land(ASOCombatCharacter* User, const FSOMeleeBlow& Blow, float Scale = 1.0f, float Weight = 1.0f);
 };

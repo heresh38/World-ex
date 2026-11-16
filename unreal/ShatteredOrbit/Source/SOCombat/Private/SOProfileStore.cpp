@@ -83,6 +83,7 @@ bool USOProfileStore::Migrate(USOSaveGame* Save)
 	// version 3 -> 4: what is worn is kept per body; a save without it wears what it wore, and the other body gets
 	// its wardrobe's defaults the first time the player takes it, so nothing to do
 	// version 4 -> 5: the blades owned (hand to hand); none before, nothing to do
+	// version 5 -> 6: the melee slot; None (the fists) before, nothing to do
 	Save->Version = USOSaveGame::CurrentVersion;
 	return true;
 }
