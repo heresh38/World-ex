@@ -512,7 +512,7 @@ def auto_spec(name, info):
     seed = sum(ord(ch) * (i + 7) for i, ch in enumerate(name))
     return dict(scale=S, muzzle=tuple(float(v) for v in mz), bore=float(mz[2]),
                 hands=[(GRIPS, lambda P, N: np.ones(len(P), F32)), (("*",), fore_hand)],
-                tracks=tracks, marks=_sarketh_marks(seed) if name in LIGHT else None)
+                tracks=tracks, marks=_sarketh_marks(seed) if (name in LIGHT or name.startswith('gun_skr_')) else None)
 
 
 def spec_for(name, info=None):
