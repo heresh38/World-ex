@@ -1049,6 +1049,7 @@
       "title": "Ember Oath",
       "tracer": "#ff9a2e",
       "weight": 0.0,
+      "set": "sarketh",
       "pierce": 1,
       "pierceKeep": 0.55,
       "heat": {

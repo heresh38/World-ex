@@ -221,6 +221,14 @@ def main():
     cache.set_editor_property("rearm_time", 10.0)
     cache.set_folder_path("Gameplay")
 
+    # The Sarketh cache: one Legendary copy of each of the Sarketh's guns (set "sarketh": the Veyr Rifle so far), to try
+    # their slugs and their heat here (the owner, 2026-11-15: "add it to a chest in the test area so i can test it").
+    skr = spawn(unreal.SOReliquary, (450, 300, 0), (0, -146, 0), "SarkethCache")
+    skr.set_editor_property("reward_set", "sarketh")
+    skr.set_editor_property("source_name", "Sarketh cache")
+    skr.set_editor_property("rearm_time", 10.0)
+    skr.set_folder_path("Gameplay")
+
     # Stage 6: the area map (mini-map, map screen) with its places and the way to Nexus Prime
     info = spawn(unreal.SOMapInfo, (0, 0, 0), (0, 0, 0), "MapInfo")
     info.set_editor_property("area_name", unreal.Text("Proving Range"))

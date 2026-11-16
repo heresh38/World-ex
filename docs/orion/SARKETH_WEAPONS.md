@@ -81,7 +81,8 @@ honest.
 - **Their light keeps its colour**: a gun's `gun_glow__cell` and `gun_glow__amber` slots are not tinted by rarity
   (`USOGunRigComponent::Dress`).
 - **Guns**: the assault rifle only, `skr_rifle` (Veyr Rifle: Veyr Slugs, pierce 1, a vent after about 23 shots held),
-  loot weight 0 until the owner approves it; reload style `cell`. The Penetrator, Breach Charge, Shard Burst and
+  loot weight 0 until the owner approves it; reload style `cell`. To try it: the Proving Range's **Sarketh cache**
+  (`L_TestRange`, beside the Void Requiem cache: set `sarketh`, one Legendary copy of each of their guns, rearms in 10 s). The Penetrator, Breach Charge, Shard Burst and
   Condensed Slug wait for their guns (the sniper, the heavy cannon, a shotgun, a hand cannon): each is the same round
   with its own numbers (`pierce`, `splash`, `pellets`, `roundSize`, `vel`, `kick`).
 - **Test**: `ShatteredOrbit.Weapon.SarkethSlugs` (a slug passes the body in front into the one behind with less, a round

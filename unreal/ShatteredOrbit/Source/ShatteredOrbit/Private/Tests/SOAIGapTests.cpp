@@ -1081,6 +1081,7 @@ bool FSOSarkethSlugTest::RunTest(const FString& Parameters)
 	}
 	const USOWeaponData* Data = Gun->GetData();
 	TestEqual(TEXT("it fires slugs"), Data->Projectile, ESOProjectileKind::Slug);
+	TestEqual(TEXT("it is in the Sarketh's set (the range's Sarketh cache gives it)"), Data->SetId, FName(TEXT("sarketh")));
 	TestTrue(TEXT("its slug pierces"), Data->Pierce > 0);
 	TestTrue(TEXT("its crystal heats"), Gun->HasHeat());
 	TestTrue(FString::Printf(TEXT("a slug flies at %.0f m/s: seen, as a light gun's bolt is, far slower than a bullet"), Data->MuzzleVelocity),
