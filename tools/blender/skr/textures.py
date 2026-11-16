@@ -202,7 +202,10 @@ def mirror():
     var = T.noise(.07, 3)
     alb = hexc('#d4d7dc') * (.97 + .03 * var[..., None])
     alb = mix(alb, hexc('#e6e8eb'), hair * .35)
-    rough = .045 + .02 * smooth(.3, .8, swirl) + .05 * hair + .01 * var
+    def norm(a):
+        return (a - a.min()) / (np.ptp(a) + 1e-6)
+    smudge = smooth(.45, .85, norm(T.noise(.03, 3)))                              # wiped, handled: a faint haze in patches
+    rough = .04 + .035 * norm(swirl) + .08 * hair + .08 * smudge + .01 * norm(var)
     T.write(alb, [(swirl, .000002), (-hair, .000012), (T.grain(1), .000001)], rough, 1.0, legacy_normal_jpg=True, legacy_mask_jpg=True, relief=1.0,
             cavity=.1)
 

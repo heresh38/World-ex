@@ -803,7 +803,7 @@ namespace SOReload
 			{ TEXT("hmg"), TEXT("vent") }, { TEXT("sniper"), TEXT("vent") }, { TEXT("scout"), TEXT("vent") },
 			{ TEXT("shotgun"), TEXT("intake") }, { TEXT("rocket"), TEXT("intake") }, { TEXT("handcannon"), TEXT("intake") }, { TEXT("sidearm"), TEXT("intake") },
 			// the Sarketh's: a crystal cell changed by hand (their heat is vented by the gun itself, at full heat)
-			{ TEXT("skr_rifle"), TEXT("cell") }, { TEXT("skr_pistol"), TEXT("cell") }, { TEXT("skr_sniper"), TEXT("cell") }, { TEXT("skr_cannon"), TEXT("cell") }, { TEXT("skr_shotgun"), TEXT("cell") }, { TEXT("skr_handcannon"), TEXT("cell") } };
+			{ TEXT("skr_rifle"), TEXT("cell") }, { TEXT("skr_rifle_v2"), TEXT("cell") }, { TEXT("skr_pistol"), TEXT("cell") }, { TEXT("skr_sniper"), TEXT("cell") }, { TEXT("skr_cannon"), TEXT("cell") }, { TEXT("skr_shotgun"), TEXT("cell") }, { TEXT("skr_handcannon"), TEXT("cell") } };
 		const FName* Style = Styles.Find(Arch);
 		return Style ? *Style : Arch;
 	}

@@ -445,6 +445,14 @@ arm really needs and fitting again from it was tried and dropped: it fires while
 hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+**Ember Oath II** (`skr_rifle_v2`, the owner, 2026-11-15: "add it to the game as a variant of the rifle ... so both
+exist"): Ember Oath's build and numbers in the blade's mirror-polished stainless on its plates, blades and fittings
+(`sarketh_guns._rifle_v2` -> `SKR_FINISH=mirror`; material `gun_steel__mirror`, set `skr/textures.py mirror` =
+`skr_mirror`: roughness .05 to .14, the gate needs a map not a value; gunpaint keeps it nearly clean of grime). Its
+own shot sounds are the rifle's (`SARKETH["skr_rifle_v2"]`). **The hand cannon** (`skr_handcannon`) was rebuilt on the
+owner's word ("design it more like a sci fi" heavy magnum): a full-length slab slide over a fixed barrel, a flat
+muzzle face, a grooved rib, an exposed hammer, a hatch with studs, vents, the light in thin seams; its guard keeps
+the pistol's line (a squared or hooked guard put the off hand's index finger inside it).
 **Every set looks through its own glass** (the owner, 2026-11-15: "the zoomed in screen should be unique to the weapon
 set like instead of a black screen it should be unique with the guns theme and the crosshair too"): `ASOHUD::DrawScope`
 and the hip crosshair take a theme from the gun (`SOSightTheme::Of`: its `set`, else its class's family): the window's
