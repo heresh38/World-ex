@@ -1028,6 +1028,47 @@
         "vent": 1.4,
         "speed": 1.3
       }
+    },
+    "skr_sniper": {
+      "name": "Veyr Lance",
+      "cls": "energy",
+      "model": "gun_skr_sniper",
+      "sound": "skr_sniper",
+      "round": "slug",
+      "dmg": 95,
+      "rpm": 55,
+      "mag": 6,
+      "reserve": 36,
+      "reload": 2.6,
+      "range": 120,
+      "spread": 0.25,
+      "crit": 2.4,
+      "auto": false,
+      "zoom": 4.0,
+      "slot": 0,
+      "vel": 900,
+      "grav": 0.05,
+      "kick": 2.8,
+      "sights": [
+        "default"
+      ],
+      "defaultSight": "default",
+      "adsTime": 0.38,
+      "sprintOut": 0.3,
+      "carry": "low",
+      "title": "Pale Verdict",
+      "weight": 0.0,
+      "set": "sarketh",
+      "pierce": 3,
+      "pierceKeep": 0.75,
+      "roundSize": 1.6,
+      "heat": {
+        "perShot": 0.22,
+        "cool": 0.5,
+        "delay": 0.5,
+        "vent": 1.8,
+        "speed": 1.15
+      }
     }
   },
   "palettes": {
