@@ -509,6 +509,12 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 void ASOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// the eye's height, the arms' place under it and the camera's roll are set in this actor's tick; the gun is laid on
+	// the eye (the viewmodel) and the arms reach for it after that, in the same frame, never from the frame before
+	if (Viewmodel)
+	{
+		Viewmodel->AddTickPrerequisiteActor(this);
+	}
 	CurrentFov = GetHipFov();
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
 	{

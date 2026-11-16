@@ -380,6 +380,13 @@ protected:
 	bool bFitIndexInside = false;
 
 	TWeakObjectPtr<const class USOGunRigComponent> FitRig;
+	/** A fit kept per gun and body (key: archetype, body mesh, one-handed): handed back instead of fitting again. */
+	bool RestoreFit(const FString& Key, const class USOGunRigComponent* Rig);
+	void KeepFit(const FString& Key);
+public:
+	/** Forgets every kept fit (a test that changes a gun's shape, or one that must fit from nothing). */
+	static void ForgetFits();
+protected:
 	FSOFingerPose FitFingers[2];
 	FVector FitOffset[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	bool bFitDone = false;

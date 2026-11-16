@@ -804,4 +804,74 @@ bool FSOSolidHoldTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOHandsOnTheGunTest, "ShatteredOrbit.Hold.HandsStayOnTheGun", SOTest::Flags)
+bool FSOHandsOnTheGunTest::RunTest(const FString& Parameters)
+{
+	// In first person the hands are parts of the gun (the owner, 2026-11-15: "the player arm/hands should essentially
+	// become like static objects on the gun because even now the player hands keep moving when moving the gun"):
+	// walking, strafing and turning with the gun, neither hand moves on it. And a switch back to a gun already in the
+	// hands once is quick: its fit is kept ("when switching guns the entire game freezes for a second").
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-9000, -9000, -100), FVector(9000, 9000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	USOLocomotionAnimInstance::ForgetFits();
+	FRandomStream Rng(5);
+	const FSOWeaponInstance Sarketh = USOLootLibrary::MakeWeapon(TEXT("skr_rifle"), 2, 20, Rng);
+	const FSOWeaponInstance Human = USOLootLibrary::MakeWeapon(TEXT("rifle"), 2, 20, Rng);
+	Player->EquipInstance(Sarketh);
+	W.Run(0.8f);
+	const ASOWeapon* Gun = Player->GetWeapon();
+	USkeletalMeshComponent* Arms = Player->GetFirstPersonArms();
+	if (!TestNotNull(TEXT("the Sarketh rifle in the hands"), Gun) || !TestNotNull(TEXT("first-person arms"), Arms) || !Gun->GetFirstPersonRig())
+	{
+		return false;
+	}
+	if (USkeletalMeshComponent* Body = Player->GetMesh())
+	{
+		Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	}
+	Arms->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	auto OnGun = [&](const TCHAR* Bone)
+	{
+		return Gun->GetFirstPersonRig()->GetComponentTransform().InverseTransformPosition(Arms->GetBoneLocation(Bone));
+	};
+	const FVector R0 = OnGun(TEXT("hand_R")), L0 = OnGun(TEXT("hand_L"));
+	float MostR = 0.0f, MostL = 0.0f;
+	int32 Frame = 0;
+	auto Sample = [&]()
+	{
+		MostR = FMath::Max(MostR, static_cast<float>(FVector::Dist(OnGun(TEXT("hand_R")), R0)));
+		MostL = FMath::Max(MostL, static_cast<float>(FVector::Dist(OnGun(TEXT("hand_L")), L0)));
+	};
+	// walk forward, strafe, turn
+	W.Run(1.2f, [&]() { Player->AddMovementInput(FVector::ForwardVector, 1.0f); if (++Frame % 4 == 0) { Sample(); } });
+	W.Run(1.2f, [&]() { Player->AddMovementInput(FVector::RightVector, 1.0f); if (++Frame % 4 == 0) { Sample(); } });
+	W.Run(0.8f, [&]() { Player->AddControllerYawInput(1.5f); Player->AddMovementInput(FVector::ForwardVector, 1.0f); if (++Frame % 4 == 0) { Sample(); } });
+	UE_LOG(LogTemp, Display, TEXT("Hands on the gun (skr_rifle, first person) while walking, strafing and turning: firing hand moved %.2f cm, support hand %.2f cm"), MostR, MostL);
+	TestTrue(FString::Printf(TEXT("the firing hand stays on the gun (moved %.2f cm)"), MostR), MostR < 0.6f);
+	TestTrue(FString::Printf(TEXT("the support hand stays on the gun (moved %.2f cm)"), MostL), MostL < 0.6f);
+
+	// a switch away and back: the second time in the hands, its fit is kept
+	Player->EquipInstance(Human);
+	W.Run(0.8f);
+	const double T0 = FPlatformTime::Seconds();
+	Player->EquipInstance(Sarketh);
+	W.Run(0.05f);
+	const double Back = FPlatformTime::Seconds() - T0;
+	USOLocomotionAnimInstance::ForgetFits();
+	Player->EquipInstance(Human);
+	W.Run(0.8f);
+	const double T1 = FPlatformTime::Seconds();
+	Player->EquipInstance(Sarketh);
+	W.Run(0.05f);
+	const double Fresh = FPlatformTime::Seconds() - T1;
+	UE_LOG(LogTemp, Display, TEXT("Switch to skr_rifle: %.0f ms with its fit kept, %.0f ms fitting it from nothing"), Back * 1000.0, Fresh * 1000.0);
+	TestTrue(FString::Printf(TEXT("a switch back to a gun already held is quick (%.0f ms)"), Back * 1000.0), Back < 0.25);
+	const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Arms->GetAnimInstance());
+	TestTrue(TEXT("and the hands are fitted to it"), Anim && Anim->HasFittedGrip());
+	return true;
+}
+
 #endif

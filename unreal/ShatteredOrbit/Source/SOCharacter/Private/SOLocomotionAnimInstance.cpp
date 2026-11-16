@@ -79,6 +79,67 @@ float USOLocomotionAnimInstance::GetAttackLength() const
 	return Clips.Attack ? Clips.Attack->GetPlayLength() : 0.0f;
 }
 
+namespace
+{
+	/** A fitted grip, kept per gun and body for the rest of the session (see NativeUpdateAnimation). */
+	struct FSOFitMemo
+	{
+		FSOFingerPose Fingers[2];
+		FVector Offset[2];
+		bool bTurn = false;
+		bool bIndexInside = false;
+		FQuat Basis = FQuat::Identity;
+		float Drop = 0.0f;
+	};
+	TMap<FString, FSOFitMemo>& FitMemos()
+	{
+		static TMap<FString, FSOFitMemo> Memos;
+		return Memos;
+	}
+}
+
+bool USOLocomotionAnimInstance::RestoreFit(const FString& Key, const USOGunRigComponent* Rig)
+{
+	const FSOFitMemo* M = Key.IsEmpty() ? nullptr : FitMemos().Find(Key);
+	if (!M)
+	{
+		return false;
+	}
+	FitFingers[0] = M->Fingers[0];
+	FitFingers[1] = M->Fingers[1];
+	FitOffset[0] = M->Offset[0];
+	FitOffset[1] = M->Offset[1];
+	bFitTurn = M->bTurn;
+	bFitIndexInside = M->bIndexInside;
+	FitBasis = M->Basis;
+	FitGripDrop = M->Drop;
+	FitRig = Rig;
+	bFitDone = true;
+	return true;
+}
+
+void USOLocomotionAnimInstance::KeepFit(const FString& Key)
+{
+	if (Key.IsEmpty() || !bFitDone)
+	{
+		return;
+	}
+	FSOFitMemo& M = FitMemos().FindOrAdd(Key);
+	M.Fingers[0] = FitFingers[0];
+	M.Fingers[1] = FitFingers[1];
+	M.Offset[0] = FitOffset[0];
+	M.Offset[1] = FitOffset[1];
+	M.bTurn = bFitTurn;
+	M.bIndexInside = bFitIndexInside;
+	M.Basis = FitBasis;
+	M.Drop = FitGripDrop;
+}
+
+void USOLocomotionAnimInstance::ForgetFits()
+{
+	FitMemos().Reset();
+}
+
 void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeUpdateAnimation(DeltaSeconds);
@@ -155,8 +216,16 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		LeftTarget = Left.GetRelativeTransform(ToMesh);
 		GunAxis = Held->IsReloading() ? FVector::ZeroVector : ToMesh.InverseTransformVectorNoScale(Rig->GetComponentTransform().GetUnitAxis(EAxis::X));
 		Rig->GetFingerPoses(RightFingers, LeftFingers);
-		// the hands fitted to this gun (once per gun, when it is at rest in them)
-		if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading())
+		// the hands fitted to this gun (once per gun, when it is at rest in them). The fit is a search of the gun's own
+		// shape (tens of thousands of sweeps) and the same gun in the same hands always comes out the same: it is kept
+		// per gun and body, and a switch back to a gun already fitted takes the kept one (the owner: "when switching
+		// guns the entire game freezes for a second": every switch fitted both bodies again from nothing)
+		const FString MemoKey = Rig ? FString::Printf(TEXT("%s|%s|%d"), *Rig->GetArchetype().ToString(),
+			Mesh->GetSkeletalMeshAsset() ? *Mesh->GetSkeletalMeshAsset()->GetPathName() : TEXT("-"), Holder->HoldsWithOneHand() ? 1 : 0) : FString();
+		if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading() && RestoreFit(MemoKey, Rig))
+		{
+		}
+		else if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading())
 		{
 			FitGripDrop = 0.0f;
 			FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
@@ -180,6 +249,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			{
 				UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %s firing hand set %.2f cm lower (negative: higher): the trigger finger is free"), *Rig->GetArchetype().ToString(), FitGripDrop);
 			}
+			KeepFit(MemoKey);
 		}
 		if (bFitDone && FitRig.Get() == Rig)
 		{
@@ -365,6 +435,18 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 				T *= 1.0f - Landing;
 			}
 			Target[Land] = Landing;
+		}
+	}
+
+	// The first-person arms holding a gun play no walk, run or landing: the gun has its own bob and sway, and shoulders
+	// swinging with the stride under grips fixed on the gun moved the hands on it (the owner: "the player arm/hands
+	// should essentially become like static objects on the gun ... the player hands keep moving when moving the gun").
+	// Traversals and anything with the gun put away are left as they are.
+	if (bArmsOnly && bHold && !bLedge)
+	{
+		for (int32 k = 0; k < Count; ++k)
+		{
+			Target[k] = k == Idle ? 1.0f : 0.0f;
 		}
 	}
 
@@ -2205,6 +2287,17 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				}
 				SetCS(Upper, FTransform(U.GetRotation(), Target.GetLocation() + Way * Least, U.GetScale3D()));
 			}
+			// and never further from its hand than the arm reaches with a bend left in it: in first person a HAND stays
+			// where it was fitted on the gun, like a part of it, and the shoulder nobody sees comes to it (the support
+			// hand used to slide back along the gun with its fingers still curled for where it had been, into the gun,
+			// and the firing hand stopped short of its grip: the owner's "the arm keeps glitching when moving")
+			const FTransform U2 = CS[Upper];
+			const FVector Off = U2.GetLocation() - Target.GetLocation();
+			const float Far = (bLeft && bSupportOnPost ? 0.97f : 0.92f) * ArmLength;
+			if (Off.SizeSquared() > Far * Far)
+			{
+				SetCS(Upper, FTransform(U2.GetRotation(), Target.GetLocation() + Off.GetSafeNormal() * Far, U2.GetScale3D()));
+			}
 		}
 
 		// Hand bone vs its anatomical basis, from the rest pose (relaxed hands: thumb forward, palm to the thigh).
@@ -2218,9 +2311,9 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		// The support hand never holds the gun further out than the arm reaches with a bend left in it: it slides BACK
 		// along the gun to where it does. (Held at a fore point a long way out, the arm was dead straight and the hand
 		// stopped short of the gun with its fingers closing in it.)
-		if (bLeft && !GunAxis.IsNearlyZero())
+		if (bLeft && !GunAxis.IsNearlyZero() && !bArmsOnly)
 		{
-			// (a hand round a vertical fore grip may reach nearly straight: slid back, it left the post with its fingers
+			// (third person only: that body's shoulders are seen. A hand round a vertical fore grip may reach nearly straight: slid back, it left the post with its fingers
 			// still curled for it, in the gun)
 			const float Most = (bSupportOnPost ? 0.985f : 0.93f) * (L1 + L2);
 			const FVector V = Target.GetLocation() - S;
