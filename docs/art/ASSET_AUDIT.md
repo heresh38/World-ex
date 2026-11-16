@@ -265,7 +265,7 @@ may change them; change them here and in `asset_check.CLASSES` together):
 
 | class | triangles | materials |
 |---|---|---|
-| a gun in the hands, with its moving parts | 60,000 | 8 |
+| a gun in the hands, with its moving parts | 200,000 (the owner, 2026-11-15: "the weapons are one the the most important part of the game and the center focus of the player so the must look amazing, raise limit to 200k"; it was 60,000) | 12 (2026-11-15: a part made of its own material, steel, iron, titanium, polymer, rubber, on the owner's "apply a 4k metal/steel/iron/polymer/etc textures where needed"; it was 8) |
 | a player with everything worn | 120,000 | 24 |
 | a boss | 150,000 | 12 |
 | a standard enemy | 40,000 | 6 |

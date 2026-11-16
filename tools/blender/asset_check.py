@@ -34,7 +34,7 @@ F32 = np.float32
 
 # triangles, materials; own = the class is made on the baked pipeline (a unique UV 1 and its own maps)
 CLASSES = {
-    "weapon": dict(tris=60000, materials=8, own=True),          # a gun in the hands, with its moving parts
+    "weapon": dict(tris=200000, materials=12, own=True),        # a gun in the hands, with its moving parts (the owner, 2026-11-15)
     "player": dict(tris=120000, materials=24, own=True),        # a body with everything it wears
     "boss": dict(tris=150000, materials=12, own=True),
     "enemy": dict(tris=40000, materials=6, own=True),           # a standard enemy, many on screen

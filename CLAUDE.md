@@ -40,6 +40,16 @@ existing classes, never second systems.
   handle, heat colour at the barrel, dust in recesses), seven materials each with its own roughness, NO flat panels,
   no surface over 10 cm visually empty, and it holds up turned within 5 cm of the camera. The games named there are
   a quality target only.
+- **Every weapon is BUILT to `docs/art/WEAPON_BUILD_RULES.md`** (the owner, 2026-11-15, word for word there: "keep/save
+  those rules we have for building all weapons so they have the correct things required"): real proportions, depth from
+  every angle, assembled from many parts in a hierarchy (primary forms, mechanical assemblies, technical details), each
+  with a purpose: separate upper / lower receiver, ergonomic grip, trigger guard, removable power cell or magazine in
+  its housing, barrel shroud, cooling vents, maintenance hatches / access panels, recessed muzzle, rail, sight and sensor
+  modules, attachment points, overlapping armour plates, fasteners, seams, panel gaps, varied materials, an exposed
+  mechanism. Never flat panels, a blob, an extruded outline or random greebles. An alien gun is its species' own
+  making, not a human rifle in alien colours. Budget: up to 200,000 triangles a gun (the owner raised it from 60k on
+  2026-11-15: "the weapons are ... the center focus of the player so the must look amazing"); guns others hold will
+  need lighter LOD copies.
 - **Every asset is made to `docs/art/ASSET_PIPELINE.md`** (the owner's PERMANENT art-production specification,
   2026-11-14, word for word there, 16 sections): fewer, exceptionally good assets first and a repeatable pipeline, then
   scale; never remodel the whole game at once. A model that works is not a finished asset: real proportions and

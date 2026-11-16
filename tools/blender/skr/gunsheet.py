@@ -41,7 +41,9 @@ for nm in names:
     area('under', (.8 * k, 0, -1.0 * k), 25 * k * k, 1.0 * k, (.8, .85, 1))
     cd = bpy.data.cameras.new('c'); cam = bpy.data.objects.new('c', cd); sc.collection.objects.link(cam); sc.camera = cam
     VIEWS = {'side': ((1, 0, 0), (1600, 700)), 'quarter': ((1, -.8, .45), (1400, 900)), 'top': ((0, 0, 1), (1600, 500)),
-             'front': ((0, -1, .15), (900, 700)), 'back3q': ((-1, .8, .35), (1400, 900))}
+             'front': ((0, -1, .15), (900, 700)), 'back3q': ((-1, .8, .35), (1400, 900)),
+             'under': ((.9, -.5, -.6), (1400, 900)), 'muzzle': ((.55, -1, .25), (1100, 900)),
+             'sight': ((.8, -.7, .45), (1100, 900)), 'sightback': ((.25, 1, .18), (1100, 900))}
     for view in os.environ.get('VIEWS', 'side,quarter').split(','):
         d, res = VIEWS[view]
         sc.render.resolution_x, sc.render.resolution_y = res
@@ -51,6 +53,18 @@ for nm in names:
         else:
             cd.type = 'PERSP'; cd.lens = 70
         cam.location = c + dv * size * 2.6
+        if view in ('muzzle', 'sight', 'sightback'):     # close on the muzzle end / on the sight (the optic, by name)
+            if view == 'muzzle':
+                tgt = c + Vector((0, -(hi - lo).y * .42, 0))
+                cam.location = tgt + dv * size * .9
+            else:
+                op = [o.matrix_world @ Vector(q) for o in sc.objects if o.type == 'MESH' and 'OPTIC' in o.name.upper() for q in o.bound_box]
+                tgt = sum(op, Vector()) / len(op) if op else c
+                cam.location = tgt + dv * size * .32
+            cam.rotation_euler = (tgt - cam.location).to_track_quat('-Z', 'Y').to_euler()
+            sc.render.filepath = os.path.join(out, f'{nm}_{view}.png')
+            bpy.ops.render.render(write_still=True)
+            continue
         cam.rotation_euler = (c - cam.location).to_track_quat('-Z', 'Y').to_euler()
         if view == 'top':
             cam.rotation_euler = (0.0, 0.0, math.radians(-90))   # looking down, the barrel across the picture

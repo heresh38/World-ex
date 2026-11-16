@@ -181,6 +181,8 @@ def main(out):
                                    inner=float(np.mean([inside[int(min(max(y_, 0), m.shape[0] - 1)), int(min(max(x_, 0), m.shape[1] - 1))]
                                                         for x_, y_ in p['ext']])))
                               for p in polys(cls == 2, 1.1, 60)])
+        for p in shapes['plates']:
+            p['up'] = plate_up(p['ext'], px)
         json.dump(shapes, open(os.path.join(out, nm + '.json'), 'w'))
         vis = np.zeros(m.shape + (3,), np.uint8)
         pal = {0: (30, 30, 34), 1: (60, 60, 90), 2: (200, 196, 186), 3: (255, 170, 60), 4: (210, 230, 255)}
@@ -188,6 +190,19 @@ def main(out):
             vis[cls == k] = col
         Image.fromarray(vis).resize((m.shape[1] * 2, m.shape[0] * 2), Image.NEAREST).save(os.path.join(out, nm + '_trace.png'))
         print(f'{nm}: {m.shape[1]} x {m.shape[0]} px, {px * 1000:.2f} mm a pixel, pale {pale.sum()} amber {amber.sum()} white {white.sum()}')
+
+
+def plate_up(ext, px):
+    """a cut plate's second tier: its outline inset from the edge (5.5 mm, or a fifth of its narrow side), simplified; []
+    when too little is left to be a plate of its own"""
+    g = Polygon(ext).buffer(0)
+    x0, y0, x1, y1 = g.bounds
+    inner = g.buffer(-min(.0055 / px, min(x1 - x0, y1 - y0) * .22), join_style=2).simplify(.4)
+    if inner.geom_type == 'MultiPolygon':
+        inner = max(inner.geoms, key=lambda q: q.area)
+    if inner.is_empty or inner.area < g.area * .25 or inner.area * px * px < 1.2e-4:
+        return []
+    return [list(c) for c in inner.exterior.coords[:-1]]
 
 
 if __name__ == '__main__':

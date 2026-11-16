@@ -38,36 +38,55 @@ def skin():
 
 
 def armour():
+    """forged plate (the owner, 2026-11-15: the first set's growth lines read as wood grain): hammered in broad shallow
+    blows, drawn out along the plate a little (a faint flow, not stripes), oxidised in patches (warmer and darker where
+    it was heated, cooler and brighter where it was ground), pitted in clusters, scratched in patches"""
     T = Tile('skr_armour', .25)
-    Z = T.Z
-    y = (np.arange(Z, dtype=np.float32)[:, None] + .5) * T.texel * np.ones((1, Z), np.float32)
-    warp = T.noise(.04, 3) * .006
-    bands = .5 + .5 * np.sin(2 * np.pi * (y + warp) / .0042)                    # growth lines along the plate
-    bands2 = .5 + .5 * np.sin(2 * np.pi * (y + warp * 2.0) / .019)
-    pits = T.dents(90, (.0005, .0012))
-    scr = T.lines(140, (.006, .040), (.00025, .0006), bend=.3, along=.5)
     var = T.noise(.06, 3)
-    base = hexc('#55534f')
-    alb = base * (.92 + .10 * var[..., None]) * (.985 + .015 * bands2[..., None])
-    alb = mix(alb, hexc('#4b4946'), (bands * .10))
-    alb = mix(alb, hexc('#a29e98'), (scr * .28))
-    alb = mix(alb, hexc('#4a443c'), (pits * .22))
-    rough = .30 + .07 * var + .12 * pits - .06 * scr + .05 * bands
-    metal = .62 + .15 * scr
-    T.write(alb, [(bands, .00004), (bands2, .00012), (-pits, .00018), (-scr, .00006), (var, .00030), (T.grain(1), .000015)],
-            rough, metal, relief=1.3, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
+    patch = T.noise(.035, 4)
+    hammer = T.dents(420, (.0035, .010))                                          # broad, shallow blows
+    flow = T.blur_px(T.brushed(.030, axis=1), 1.5)                                # drawn along the plate
+    fine = T.brushed(.006, axis=1)
+    cluster = smooth(.15, .45, T.noise(.05, 3))
+    pits = T.dents(260, (.0003, .0009)) * cluster
+    scr_zone = smooth(.0, .35, T.noise(.07, 2))
+    scr = T.lines(180, (.004, .035), (.0002, .0005), bend=.35, along=.6) * scr_zone
+    heat = smooth(.25, .6, patch)                                                 # oxidised
+    ground = smooth(.30, .65, -patch)                                             # ground back bright
+    base = hexc('#59564f')
+    alb = base * (.90 + .12 * var[..., None]) * (.97 + .03 * flow[..., None]) * (1 - .05 * hammer[..., None])
+    alb = mix(alb, hexc('#4c463d'), heat * .45)
+    alb = mix(alb, hexc('#6c6b68'), ground * .35)
+    alb = mix(alb, hexc('#b2aea6'), scr * .40)
+    alb = mix(alb, hexc('#38332c'), pits * .55)
+    rough = .30 + .06 * var + .10 * heat - .06 * ground + .16 * pits - .08 * scr + .03 * fine
+    metal = .66 + .14 * scr + .08 * ground - .10 * heat
+    T.write(alb, [(-hammer, .00022), (flow, .00003), (fine, .000008), (-pits, .00020), (-scr, .00006), (var, .00030),
+                  (T.grain(1), .000012)], rough, metal, relief=1.3, cavity=.35, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 
 def dark():
+    """the dark lacquered shell: grown in thin overlapping layers (broad, low cells whose rims catch the light), a
+    violet depth on their crowns, satin where it has been handled and gloss elsewhere, scuffs in patches, dust in the
+    layers' seams"""
     T = Tile('skr_dark', .25)
     var = T.noise(.05, 3)
-    scr = T.lines(70, (.005, .030), (.00025, .0005), bend=.4)
-    pits = T.dents(90, (.0005, .0012))
-    alb = hexc('#191826') * (.9 + .12 * var[..., None])
-    alb = mix(alb, hexc('#4a4760'), (scr * .5))
-    rough = .22 + .05 * var + .14 * scr + .1 * pits
-    T.write(alb, [(var, .0002), (-scr, .0001), (-pits, .0003), (T.grain(1), .00001)], rough, .15, relief=1.2, cavity=.25,
-            legacy_normal_jpg=True, legacy_mask_jpg=True)
+    d1, d2, cid = T.cells(.014, warp=.004, warp_feature=.04)
+    rim = 1 - smooth(0.0, .10, d2 - d1)                                           # a layer's edge
+    dome = np.clip(1 - d1 * 1.1, 0, 1) ** .8
+    fine = T.noise(.0016, 2)
+    satin = smooth(.2, .55, T.noise(.06, 3))
+    scr_zone = smooth(.05, .40, T.noise(.08, 2))
+    scr = T.lines(150, (.004, .030), (.0002, .0005), bend=.4) * scr_zone
+    pits = T.dents(140, (.0004, .0010)) * smooth(.1, .5, T.noise(.04, 3))
+    alb = hexc('#181624') * (.86 + .14 * var[..., None]) * (.97 + .05 * cid[..., None])
+    alb = mix(alb, hexc('#2a2540'), dome * .18)
+    alb = mix(alb, hexc('#0b0a12'), rim * .22)
+    alb = mix(alb, hexc('#3a3734'), rim * smooth(.3, .7, T.noise(.02, 2)) * .20)  # dust in the seams
+    alb = mix(alb, hexc('#3e3b4e'), scr * .35)
+    rough = .16 + .05 * var + .18 * satin + .14 * scr + .12 * pits + .10 * rim + .02 * fine
+    T.write(alb, [(dome, .00020), (-rim, .00012), (var, .0002), (fine, .000015), (-scr, .0001), (-pits, .0003),
+                  (T.grain(1), .00001)], rough, .15, relief=1.2, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 
 if __name__ == '__main__':
