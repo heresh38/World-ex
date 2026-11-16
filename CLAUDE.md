@@ -50,6 +50,12 @@ existing classes, never second systems.
   making, not a human rifle in alien colours. Budget: up to 200,000 triangles a gun (the owner raised it from 60k on
   2026-11-15: "the weapons are ... the center focus of the player so the must look amazing"); guns others hold will
   need lighter LOD copies.
+- **One colour palette a set** (the owner, 2026-11-15: "all guns in the set need to have the same color pallet and shoot
+  the same color, this is our rule going forward"): every gun of a set (its `"set"`; a gun of no set: its class's
+  family, light / kinetic / horror) fires the same colour and carries the same light. `Data/game_data.json`
+  `"palettes"` holds them (tracer, glow); no archetype has a colour of its own (`import_assets.palette_of`,
+  `USOWeaponData::GlowColor` over the rarity's tint; rockets burn their set's colour). Test
+  `ShatteredOrbit.Loot.OneColourASet`. A new set gets its palette before its first gun.
 - **Every asset is made to `docs/art/ASSET_PIPELINE.md`** (the owner's PERMANENT art-production specification,
   2026-11-14, word for word there, 16 sections): fewer, exceptionally good assets first and a repeatable pipeline, then
   scale; never remodel the whole game at once. A model that works is not a finished asset: real proportions and

@@ -1222,6 +1222,14 @@ def import_static(src, file, dest, name, instances):
     return mesh
 
 
+def palette_of(a):
+    """A gun's colours: its set's palette (game_data.json "palettes"), else its class family's (energy: light,
+    kinetic, horror). The owner, 2026-11-15: every gun of a set has the same colour palette and fires the same colour."""
+    pals = load_json(GAME_DATA)["palettes"]
+    fam = a.get("set") or {"energy": "light", "kinetic": "kinetic", "horror": "horror"}[a["cls"]]
+    return pals[fam]
+
+
 def projectile_kind(a):
     if a.get("round") == "slug":                                  # the Sarketh's crystalline slugs (docs/orion/SARKETH_WEAPONS.md)
         return unreal.SOProjectileKind.SLUG
@@ -1279,7 +1287,7 @@ def weapon(master, arch, a, clear):
     cls = {"kinetic": unreal.SOWeaponClass.KINETIC, "energy": unreal.SOWeaponClass.ENERGY, "horror": unreal.SOWeaponClass.HORROR}[a["cls"]]
     kind = projectile_kind(a)
     velocity = a.get("vel") or (60.0 if kind == unreal.SOProjectileKind.ROCKET else 500.0)
-    tracer = a.get("tracer") or {"kinetic": "#ffc873", "energy": "#7fe8ff", "horror": "#9cff4a"}[a["cls"]]
+    tracer = palette_of(a)["tracer"]                             # (the set's colour: never a gun's own)
     values = dict(display_name=unreal.Text(a["name"]), title=unreal.Text(a.get("title", a["name"])), archetype=arch, slot=int(a["slot"]), loot_weight=float(a.get("weight", 1.0)), default_shader=a.get("shader", "None"), set_id=a.get("set", "None"),
                   weapon_class=cls, sound_prefix=arch, damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]),
                   magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]), reload_time=float(a["reload"]),
@@ -1290,7 +1298,7 @@ def weapon(master, arch, a, clear):
                   gravity_scale=float(a.get("grav", 0.0)) if kind in (unreal.SOProjectileKind.ROUND, unreal.SOProjectileKind.SLUG) else (float(a.get("gooGrav", 0.35)) if kind in (
                       unreal.SOProjectileKind.SPIT, unreal.SOProjectileKind.BILE, unreal.SOProjectileKind.BROOD) else 0.0),
                   kick=float(a.get("kick", 1.0)), ads_time=float(a["adsTime"]), sprint_to_fire_time=float(a["sprintOut"]),
-                  sprint_carry=a.get("carry", "None"), tracer_color=hex_color(tracer), body_mesh=body, parts=parts,
+                  sprint_carry=a.get("carry", "None"), tracer_color=hex_color(tracer), glow_color=hex_color(palette_of(a)["glow"]), body_mesh=body, parts=parts,
                   sights=[unreal.Name(s) for s in a["sights"]], default_sight=a["defaultSight"], **slug_values(a))
     for key, value in values.items():
         data.set_editor_property(key, value)
@@ -1688,7 +1696,8 @@ def gun_numbers():
         values = dict(damage=float(a["dmg"]), rounds_per_minute=float(a["rpm"]), magazine_size=int(a["mag"]), reserve_ammo=int(a["reserve"]),
                       reload_time=float(a["reload"]), range=float(a["range"]), spread=float(a["spread"]), crit_multiplier=float(a["crit"]),
                       muzzle_velocity=float(velocity), kick=float(a.get("kick", 1.0)), sprint_to_fire_time=float(a["sprintOut"]),
-                      sprint_carry=a.get("carry", "None"), **slug_values(a))
+                      sprint_carry=a.get("carry", "None"), tracer_color=hex_color(palette_of(a)["tracer"]),
+                      glow_color=hex_color(palette_of(a)["glow"]), **slug_values(a))
         for key, value in values.items():
             data.set_editor_property(key, value)
         eal.save_loaded_asset(data, only_if_is_dirty=False)

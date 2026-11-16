@@ -758,4 +758,40 @@ bool FSONewPerksTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOOneColourASetTest, "ShatteredOrbit.Loot.OneColourASet", SOTest::Flags)
+bool FSOOneColourASetTest::RunTest(const FString& Parameters)
+{
+	// The owner, 2026-11-15: "all guns in the set need to have the same color pallet and shoot the same color". A set
+	// (its SetId), or for a gun of no set its class's family (light, kinetic, horror): one colour fired, one light on it.
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!TestNotNull(TEXT("loot tables"), Tables))
+	{
+		return false;
+	}
+	TMap<FString, TPair<FLinearColor, FLinearColor>> Seen;
+	TMap<FString, FString> First;
+	for (const FSOArchetypeEntry& Entry : Tables->Archetypes)
+	{
+		const USOWeaponData* Data = Tables->LoadArchetype(Entry.Id);
+		if (!Data)
+		{
+			continue;
+		}
+		const FString Family = !Data->SetId.IsNone() ? Data->SetId.ToString() : FString::Printf(TEXT("class %d"), static_cast<int32>(Data->WeaponClass));
+		TestTrue(*FString::Printf(TEXT("%s has its set's light"), *Entry.Id.ToString()), Data->GlowColor.A > 0.0f);
+		if (const TPair<FLinearColor, FLinearColor>* Was = Seen.Find(Family))
+		{
+			TestTrue(*FString::Printf(TEXT("%s fires the colour %s does (%s)"), *Entry.Id.ToString(), *First[Family], *Family), Was->Key.Equals(Data->TracerColor, 1e-3f));
+			TestTrue(*FString::Printf(TEXT("%s has the light %s has (%s)"), *Entry.Id.ToString(), *First[Family], *Family), Was->Value.Equals(Data->GlowColor, 1e-3f));
+		}
+		else
+		{
+			Seen.Add(Family, TPair<FLinearColor, FLinearColor>(Data->TracerColor, Data->GlowColor));
+			First.Add(Family, Entry.Id.ToString());
+		}
+	}
+	TestTrue(TEXT("the sets were found"), Seen.Num() >= 4);
+	return true;
+}
+
 #endif

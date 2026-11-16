@@ -689,8 +689,9 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			break;
 		}
 		case ESOProjectileKind::Rocket:
-			Fx->Trail(Muzzle, (End - Muzzle).GetSafeNormal() * Speed, 0.0f, FVector::Dist(Muzzle, End) / FMath::Max(Speed, 1.0f), USOFxSubsystem::ETrail::Rocket, FLinearColor(1.0f, 0.6f, 0.25f));
-			Fx->Blast(End, bHit ? FVector(Hit.ImpactNormal) : FVector::UpVector, Data->Splash * 100.0f, USOFxSubsystem::EBlast::Fire, FLinearColor(1.0f, 0.55f, 0.2f), Flight);
+			// (in the set's colour: a light launcher's rocket burns its set's light, not a kinetic orange)
+			Fx->Trail(Muzzle, (End - Muzzle).GetSafeNormal() * Speed, 0.0f, FVector::Dist(Muzzle, End) / FMath::Max(Speed, 1.0f), USOFxSubsystem::ETrail::Rocket, Data->TracerColor);
+			Fx->Blast(End, bHit ? FVector(Hit.ImpactNormal) : FVector::UpVector, Data->Splash * 100.0f, USOFxSubsystem::EBlast::Fire, Data->TracerColor, Flight);
 			if (bHit)
 			{
 				Fx->Impact(End, Hit.ImpactNormal, false, FLinearColor::Black, Flight, bDecal);

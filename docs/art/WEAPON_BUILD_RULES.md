@@ -109,6 +109,14 @@ a human red dot). The Sarketh's: `sarketh_guns.skr_sight` (the lozenge window of
 with a gold rim, the pale brow swept back over it, a crystal throwing an amber lozenge reticle, forged iron base held by
 pale claws on their toothed mount). A magnified scope for a gun is made the same way, by that gun's maker.
 
+## One palette a set
+
+The owner, 2026-11-15, word for word: "all guns in the set need to have the same color pallet and shoot the same
+color, this is our rule going forward, so for example this must apply to current gun sets too like light guns that
+seem to be shooting different colors". Every gun of a set (or, with no set, of its class's family: light, kinetic,
+horror) has the set's materials and colours, fires the set's colour (rounds, bolts, slugs, trails, flashes, rockets)
+and carries the set's light: `Data/game_data.json` "palettes", read by the import for every gun; nothing per gun.
+
 ## The budget
 
 The owner, 2026-11-15, word for word: "the weapons are one the the most important part of the game and the center

@@ -30,8 +30,7 @@
       "adsTime": 0.23,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Sunforge Litany",
-      "tracer": "#6fe9ff"
+      "title": "Sunforge Litany"
     },
     "pulse": {
       "name": "Pulse Rifle",
@@ -64,8 +63,7 @@
       "adsTime": 0.24,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Ninefold Choir",
-      "tracer": "#5aa8ff"
+      "title": "Ninefold Choir"
     },
     "scout": {
       "name": "Scout Rifle",
@@ -96,8 +94,7 @@
       "adsTime": 0.27,
       "sprintOut": 0.22,
       "carry": "low",
-      "title": "Farsight Herald",
-      "tracer": "#8dffd0"
+      "title": "Farsight Herald"
     },
     "handcannon": {
       "name": "Hand Cannon",
@@ -128,8 +125,7 @@
       "adsTime": 0.17,
       "sprintOut": 0.16,
       "carry": "high",
-      "title": "The Undertaker",
-      "tracer": "#ffd98a"
+      "title": "The Undertaker"
     },
     "shotgun": {
       "name": "Shotgun",
@@ -160,8 +156,7 @@
       "adsTime": 0.22,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Gravedigger’s Hymn",
-      "tracer": "#ff9a4a"
+      "title": "Gravedigger’s Hymn"
     },
     "sniper": {
       "name": "Sniper Rifle",
@@ -192,8 +187,7 @@
       "adsTime": 0.42,
       "sprintOut": 0.25,
       "carry": "low",
-      "title": "Pale Horizon",
-      "tracer": "#e6f4ff"
+      "title": "Pale Horizon"
     },
     "smg": {
       "name": "Submachine Gun",
@@ -223,8 +217,7 @@
       "adsTime": 0.18,
       "sprintOut": 0.16,
       "carry": "short",
-      "title": "Kestrel-X9",
-      "tracer": "#7ad0ff"
+      "title": "Kestrel-X9"
     },
     "sidearm": {
       "name": "Sidearm",
@@ -254,8 +247,7 @@
       "adsTime": 0.13,
       "sprintOut": 0.14,
       "carry": "high",
-      "title": "Helios",
-      "tracer": "#9ff0ff"
+      "title": "Helios"
     },
     "energy": {
       "name": "Light Lance",
@@ -282,7 +274,6 @@
         "reflex",
         "holo"
       ],
-      "tracer": "#fff3b0",
       "defaultSight": "default",
       "adsTime": 0.26,
       "sprintOut": 0.22,
@@ -318,8 +309,7 @@
       "adsTime": 0.38,
       "sprintOut": 0.26,
       "carry": "low",
-      "title": "Atlas",
-      "tracer": "#ff6a3a"
+      "title": "Atlas"
     },
     "rocket": {
       "name": "Rocket Launcher",
@@ -380,8 +370,7 @@
       "adsTime": 0.24,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Old Winter",
-      "tracer": "#ffc873"
+      "title": "Old Winter"
     },
     "carbine": {
       "name": "Carbine",
@@ -412,8 +401,7 @@
       "adsTime": 0.22,
       "sprintOut": 0.19,
       "carry": "low",
-      "title": "Dust Saint",
-      "tracer": "#ffd28f"
+      "title": "Dust Saint"
     },
     "dmr": {
       "name": "Battle Rifle",
@@ -445,8 +433,7 @@
       "adsTime": 0.3,
       "sprintOut": 0.23,
       "carry": "low",
-      "title": "Hearthfire",
-      "tracer": "#ffe2a8"
+      "title": "Hearthfire"
     },
     "ksmg": {
       "name": "Compact SMG",
@@ -476,8 +463,7 @@
       "adsTime": 0.17,
       "sprintOut": 0.15,
       "carry": "short",
-      "title": "Alley Cat",
-      "tracer": "#ffb95a"
+      "title": "Alley Cat"
     },
     "bolt": {
       "name": "Bolt-Action Rifle",
@@ -508,8 +494,7 @@
       "adsTime": 0.42,
       "sprintOut": 0.25,
       "carry": "low",
-      "title": "Long Silence",
-      "tracer": "#fff0c8"
+      "title": "Long Silence"
     },
     "pistol": {
       "name": "Service Pistol",
@@ -539,8 +524,7 @@
       "adsTime": 0.13,
       "sprintOut": 0.14,
       "carry": "high",
-      "title": "Gentleman’s Promise",
-      "tracer": "#ffc873"
+      "title": "Gentleman’s Promise"
     },
     "revolver": {
       "name": "Revolver",
@@ -571,8 +555,7 @@
       "adsTime": 0.16,
       "sprintOut": 0.15,
       "carry": "high",
-      "title": "Six Mercies",
-      "tracer": "#ffab52"
+      "title": "Six Mercies"
     },
     "pump": {
       "name": "Pump Shotgun",
@@ -603,8 +586,7 @@
       "adsTime": 0.22,
       "sprintOut": 0.2,
       "carry": "low",
-      "title": "Porch Light",
-      "tracer": "#ff9e5c"
+      "title": "Porch Light"
     },
     "spitter": {
       "name": "Spitter",
@@ -636,7 +618,6 @@
       "sprintOut": 0.19,
       "carry": "low",
       "title": "The Hungering Maw",
-      "tracer": "#9cff4a",
       "gooGrav": 0.1
     },
     "bile": {
@@ -670,7 +651,6 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Mother of Rot",
-      "tracer": "#c8ff3a",
       "gooGrav": 0.18
     },
     "brood": {
@@ -704,8 +684,7 @@
       "sprintOut": 0.25,
       "carry": "low",
       "title": "The Gravid Bloom",
-      "gooGrav": 0.1,
-      "tracer": "#e37bff"
+      "gooGrav": 0.1
     },
     "vr_rifle": {
       "name": "Void Requiem Assault Rifle",
@@ -738,7 +717,6 @@
       "carry": "low",
       "title": "Last Rite",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -773,7 +751,6 @@
       "carry": "low",
       "title": "Vigil's End",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -807,7 +784,6 @@
       "carry": "short",
       "title": "Threnody",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -842,7 +818,6 @@
       "carry": "low",
       "title": "Toll of Ruin",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -877,7 +852,6 @@
       "carry": "low",
       "title": "Last Procession",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -912,7 +886,6 @@
       "carry": "high",
       "title": "Final Verse",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -946,7 +919,6 @@
       "carry": "high",
       "title": "Ashen Psalm",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -975,7 +947,6 @@
         "reflex",
         "holo"
       ],
-      "tracer": "#b46cff",
       "defaultSight": "default",
       "adsTime": 0.26,
       "sprintOut": 0.22,
@@ -1015,7 +986,6 @@
       "carry": "low",
       "title": "Funeral Bell",
       "set": "void_requiem",
-      "tracer": "#b46cff",
       "weight": 0.0,
       "shader": "requiem"
     },
@@ -1047,7 +1017,6 @@
       "sprintOut": 0.2,
       "carry": "low",
       "title": "Ember Oath",
-      "tracer": "#ff9a2e",
       "weight": 0.0,
       "set": "sarketh",
       "pierce": 1,
@@ -1059,6 +1028,29 @@
         "vent": 1.4,
         "speed": 1.3
       }
+    }
+  },
+  "palettes": {
+    "_rule": "the owner, 2026-11-15: every gun of a set has the same colour palette and fires the same colour. A gun's palette is its set's (\"set\"), else its class's family (energy: light, kinetic, horror); no archetype has a colour of its own",
+    "light": {
+      "tracer": "#6fe9ff",
+      "glow": "#6fe9ff"
+    },
+    "kinetic": {
+      "tracer": "#ffc873",
+      "glow": "#ffc873"
+    },
+    "horror": {
+      "tracer": "#9cff4a",
+      "glow": "#9cff4a"
+    },
+    "void_requiem": {
+      "tracer": "#b46cff",
+      "glow": "#9b45ff"
+    },
+    "sarketh": {
+      "tracer": "#ff9a2e",
+      "glow": "#ffb257"
     }
   },
   "rarity": [

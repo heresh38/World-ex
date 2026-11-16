@@ -151,8 +151,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	int32 Swarm = 0;
 
+	/** The set's colours (game_data.json "palettes"; the owner, 2026-11-15: every gun of a set has the same colour
+	 *  palette and fires the same colour): what it fires, and the light on the gun (alpha 0: none set, the rarity's). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	FLinearColor TracerColor = FLinearColor(1.0f, 0.78f, 0.45f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	FLinearColor GlowColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	/** A slug's remaining crystal goes on through the body it ruptured on: how many bodies it passes after the first,
 	 *  and the share of its damage it keeps through each (the Sarketh's rounds; the Penetrator pierces several). */

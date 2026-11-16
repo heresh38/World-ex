@@ -519,9 +519,13 @@ void USOGunRigComponent::Dress(const FSOWeaponInstance& Instance)
 		}
 	}
 	FLinearColor Glow = Tables ? Tables->GetRarity(Instance.Rarity).Color : FLinearColor(0.2f, 0.8f, 1.0f);
-	if (Data && Data->SetId == TEXT("void_requiem"))
+	if (Data && Data->GlowColor.A > 0.0f)
 	{
-		Glow = FLinearColor(0.3f, 0.06f, 1.0f); // the set burns violet whatever the copy's rarity
+		Glow = Data->GlowColor;   // the set's light, whatever the copy's rarity (one palette a set: game_data.json "palettes")
+	}
+	else if (Data && Data->SetId == TEXT("void_requiem"))
+	{
+		Glow = FLinearColor(0.3f, 0.06f, 1.0f);
 	}
 	TArray<USceneComponent*> Children;
 	GunSpace->GetChildrenComponents(true, Children);
