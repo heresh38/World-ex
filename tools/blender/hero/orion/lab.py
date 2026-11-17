@@ -170,6 +170,64 @@ def outline_report(view, sil, sm):
 SIZE_OUT = [""]
 
 
+def turnaround(sc, path, samples=64):
+    """the body in clay under a studio's light (Cycles): front, three quarters, side, back, as the sheet shows it"""
+    sc.render.engine = 'CYCLES'
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        prefs.compute_device_type = 'OPTIX'
+        prefs.get_devices()
+        for d in prefs.devices:
+            d.use = d.type == 'OPTIX'
+        sc.cycles.device = 'GPU'
+    except Exception:
+        pass
+    sc.cycles.samples = samples
+    sc.cycles.use_denoising = True
+    sc.view_settings.view_transform = 'AgX'
+    w = bpy.data.worlds.new("w"); sc.world = w
+    w.use_nodes = True
+    bg = w.node_tree.nodes["Background"]
+    bg.inputs[0].default_value = (.20, .20, .23, 1); bg.inputs[1].default_value = .4
+    mat = bpy.data.materials.new("clay"); mat.use_nodes = True
+    b = mat.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (.32, .30, .285, 1); b.inputs["Roughness"].default_value = .55
+    for o in sc.objects:
+        if o.type == 'MESH':
+            o.data.materials.clear(); o.data.materials.append(mat)
+            for p in o.data.polygons:
+                p.use_smooth = True
+    tgt = Vector((0, 0, .95))
+
+    def light(name, energy, loc, size):
+        L = bpy.data.lights.new(name, 'AREA'); L.energy = energy; L.size = size
+        ob = bpy.data.objects.new(name, L); ob.location = loc
+        ob.rotation_euler = (tgt - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+        sc.collection.objects.link(ob)
+    light("key", 900, (2.2, -3.0, 3.2), 2.5)
+    light("fill", 260, (-3.0, -2.2, 1.6), 3.0)
+    light("rim", 700, (-1.2, 3.2, 2.8), 2.0)
+    cam = sc.camera
+    cam.data.type = 'ORTHO'; cam.data.ortho_scale = 2.05
+    sc.render.resolution_x, sc.render.resolution_y = 900, 1000
+    shots = []
+    for name, yaw in (("front", 0), ("q", 35), ("side", 90), ("back", 180)):
+        y = math.radians(yaw)
+        d = Vector((math.sin(y), -math.cos(y), 0))
+        cam.location = d * 8 + Vector((0, 0, .94))
+        cam.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()
+        p = path.replace(".png", f"_{name}.png")
+        sc.render.filepath = p
+        bpy.ops.render.render(write_still=True)
+        shots.append(load_png(p)[..., :3])
+    img = np.concatenate(shots, axis=1)
+    hh, ww = img.shape[:2]
+    res = bpy.data.images.new("look", ww, hh, alpha=False)
+    res.pixels = np.concatenate([img[::-1], np.ones((hh, ww, 1), np.float32)], axis=2).ravel()
+    res.filepath_raw = path; res.file_format = 'PNG'; res.save()
+    log("look", path)
+
+
 def load_png(path):
     im = bpy.data.images.load(path, check_existing=False)
     W, H = im.size
@@ -186,15 +244,41 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
     t0 = time.time()
-    C, info = B.build(log=log)
-    if "--cage" in flags:
-        X = np.array(C.V)
+    if "--anatomy" in flags:
+        # the anatomy itself (anatomy.py), meshed straight from its field
+        sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+        import sdf
+        import anatomy as AN
+        body = AN.Anatomy()
+        lo, hi = body.bounds()
+        Vv, Qq = sdf.mesh(body, lo, hi, float(flags.get("--h", .003)), log=log)
+        o = make_object(Vv, Qq, "orion_anatomy")
     else:
-        X = B.solve_cage(C.V, C.F, log=log)
-    o = make_object(X, C.F, "orion_male")
-    if "--cage" not in flags:
-        m = o.modifiers.new("sub", 'SUBSURF')
-        m.levels = m.render_levels = int(flags.get("--levels", 2))
+        C, info = B.build(log=log)
+        if "--cage" in flags:
+            X = np.array(C.V)
+        else:
+            X = B.solve_cage(C.V, C.F, log=log)
+        o = make_object(X, C.F, "orion_male")
+        if "--cage" not in flags:
+            m = o.modifiers.new("sub", 'SUBSURF')
+            m.levels = m.render_levels = int(flags.get("--levels", 2))
+        if "--detail" in flags:
+            # the anatomy's forms over the subdivided body (anatomy.py): along each vertex's normal
+            sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+            import anatomy as AN
+            dg = bpy.context.evaluated_depsgraph_get()
+            me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
+            o.modifiers.clear()
+            o.data = me
+            n = len(me.vertices)
+            co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
+            nr = np.zeros(n * 3, np.float32); me.vertices.foreach_get("normal", nr); nr = nr.reshape(n, 3)
+            disp = AN.Anatomy().detail(co)
+            co += nr * disp[:, None]
+            me.vertices.foreach_set("co", co.ravel())
+            me.update()
+            log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")
     log(f"built in {time.time() - t0:.1f} s")
     sc.render.engine = 'BLENDER_WORKBENCH'
     sc.render.resolution_x, sc.render.resolution_y = SIZE
@@ -233,6 +317,8 @@ def main():
     res.pixels = rgba.ravel()
     res.filepath_raw = out; res.file_format = 'PNG'; res.save()
     log("wrote", out)
+    if "--look" in flags:
+        turnaround(sc, out.replace(".png", "_look.png"), int(flags.get("--samples", 64)))
     if isinstance(flags.get("--save"), str):
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(flags["--save"]))
 

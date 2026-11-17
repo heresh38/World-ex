@@ -167,11 +167,10 @@ def torso_mod(theta, z):
     """anatomy on the torso's section (metres along its outward normal); theta in degrees: 0 the front midline,
     90 the side, 180 the back's midline"""
     d = 0.0
-    d += .020 * band(z, 1.375, 1.52, .018) * bump(theta, 32, 20)            # the pectoral plates, their lower edge a crease
+    d += .010 * band(z, 1.375, 1.52, .018) * bump(theta, 32, 20)            # the pectoral mass (its forms: anatomy.py)
     d -= .006 * band(z, 1.32, 1.54, .02) * bump(theta, 0, 7)                 # the sternum's groove
-    d += .007 * band(z, 1.03, 1.33, .03) * bump(theta, 0, 20)                # rectus a little proud of the obliques
-    d -= .004 * band(z, 1.08, 1.27, .03) * bump(theta, 62, 10)               # the obliques' line
-    d += .012 * band(z, 1.26, 1.43, .03) * bump(theta, 102, 22)              # lats flaring behind the side
+
+    d += .004 * band(z, 1.30, 1.43, .03) * bump(theta, 108, 22)              # lats behind the side (their form: anatomy.py)
     d += .008 * band(z, 1.38, 1.58, .03) * bump(theta, 148, 20)              # the scapulae
     d -= .010 * band(z, 1.03, 1.57, .03) * bump(theta, 180, 9)               # the spine's groove
     d += .010 * band(z, 1.03, 1.26, .03) * bump(theta, 163, 12)              # the erectors either side
@@ -180,11 +179,15 @@ def torso_mod(theta, z):
     return d
 
 
+WAIST_ADD = 0.012          # half width added at the waist (the owner: "widen the waist just a little")
+THIGH_ADD = 0.012          # added round the thigh (the owner: "give the thighs more natural volume")
+
+
 def torso_width(cc, z):
-    """half the torso's own width: the sheet's below the armpits; above them its outline is the arms', so the
-    chest narrows from the lats to the shoulder's socket as anatomy has it"""
+    """half the torso's own width: the sheet's below the armpits (the waist a little wider, the owner's note);
+    above them its outline is the arms', so the chest narrows from the lats to the shoulder's socket"""
     if z <= 1.392:
-        return cc.torso_w(z)
+        return cc.torso_w(z) + WAIST_ADD * bump(z, 1.18, .075)
     return float(np.interp(z, [1.392, 1.405, 1.488, 1.568], [cc.torso_w(1.392), .212, .186, .172]))
 
 
@@ -338,7 +341,7 @@ def window_angles():
 def socket_point(psi, sx=1):
     p = math.radians(psi)
     c, s = math.cos(p), math.sin(p)
-    x = WIN_C[0] - .024 * max(-s, 0) ** 1.5 + .004 * c - .006 * max(s, 0)     # the armpit's hollow sits in
+    x = WIN_C[0] - .012 * max(-s, 0) ** 1.5 + .004 * c - .006 * max(s, 0)     # the armpit sits in a little
     return np.array([sx * x, WIN_C[1] + WIN_AY * c, WIN_C[2] + WIN_AZ * s])
 
 
@@ -430,6 +433,8 @@ def leg_section(cc, z, sx, n=N_L, phi0=320.0):
     yf, yb = cc.side(z)
     xc, a = .5 * (xi + xo), .5 * (xo - xi)
     yc, b = .5 * (yf + yb), .5 * (yb - yf)
+    full = THIGH_ADD * band(z, 0.58, 0.86, .06)            # natural volume: more outward and in front than inside
+    a, xc, b, yc = a + .75 * full, xc + .25 * full, b + full, yc - .3 * full
     pts = []
     for j in range(n):
         phi = (phi0 + 360.0 * j / n) % 360
