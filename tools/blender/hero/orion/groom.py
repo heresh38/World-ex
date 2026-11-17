@@ -36,18 +36,22 @@ def scalp_mask(Q):
 
 
 def beard_mask(Q, H, soft=False):
-    """the beard (cm): under a line across each cheek, the moustache, the chin, the jaw, under it to the neck; the
-    lips bare. soft: 0..1, fading in over a centimetre at its borders, fuller on the chin and the moustache"""
+    """the beard (cm): under a line across each cheek (from the sideburn down to beside the mouth), the moustache,
+    the chin, the jaw, under it to the neck; the lips bare. soft: 0..1, fading in over a centimetre at its borders,
+    fuller on the chin and the moustache"""
     x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
     st = H.stom_z
-    cheek_line = -1.6 - .55 * np.clip(6.6 - x, 0, 6.6)                   # from the sideburn down toward the mouth
+    cheek_line = -2.0 - 1.2 * np.clip(6.4 - x, 0, 3.0)                  # the sideburn down to beside the mouth
     lips = (np.abs(z - st) < 1.0 - .05 * x * x) & (x < 2.9) & (y < -9.0)
     under_nose = (z > H.subn[0] - .15) & (x < 1.6)
+    moust = (x < 2.75) & (z < H.subn[0] - .1) & (z > st) & (y < -9.0)
     if not soft:
-        face = (y < 1.5) & (z < cheek_line) & (z > -15.5)
+        face = (y < 1.5) & ((z < cheek_line) | moust) & (z > -15.5)
         neck = (z < -13.0) & (y > -5.0)
         return face & ~lips & ~under_nose & ~neck
-    f = np.clip((cheek_line - z) / 1.2, 0, 1) * np.clip((z + 14.0) / 1.5, 0, 1) * (y < 1.5)
+    f = np.clip((cheek_line - z) / 1.2, 0, 1)
+    fm = np.clip((H.subn[0] - .1 - z) / .4, 0, 1) * np.clip((2.75 - x) / .5, 0, 1) * (z > st) * (y < -9.0)
+    f = np.maximum(f, fm) * np.clip((z + 14.0) / 1.5, 0, 1) * (y < 1.5)
     f = f * np.where((z < -13.0) & (y > -5.0), np.clip((-13.0 - z) * 0 + 1 - (z + 13.0) * -.6, 0, 1), 1.0)
     full = .55 + .45 * np.maximum(np.exp(-((z + 10.6) / 2.2) ** 2) * np.exp(-(x / 2.8) ** 2),
                                   (z > st) * (x < 3.0) * 1.0)
@@ -55,11 +59,15 @@ def beard_mask(Q, H, soft=False):
 
 
 def strands_from(roots, normals, flow, length, k, H, lift0=.9, lift1=.12, gravity=0.0, noise=.08, rng=None,
-                 hug=.06):
+                 hug=.06, reach=None):
     """strands of k points from each root (cm): they stand off the skin at the root, turn into the flow and lie
-    onto the head, kept `hug` cm off its skin by the head's own field"""
+    onto the head, kept `hug` cm off its skin by the head's own field and, given `reach`, no further off it than
+    that (the hair's volume: rising from the root they lie back inside it, layered, instead of standing up)"""
     rng = rng or np.random.default_rng(1)
     n = len(roots)
+    hug = np.broadcast_to(np.asarray(hug, F32), (n,))
+    gravity = np.broadcast_to(np.asarray(gravity, F32), (n,))
+    reach = None if reach is None else np.broadcast_to(np.asarray(reach, F32), (n,))
     P = np.zeros((n, k, 3), F32)
     p = roots - normals * .03
     P[:, 0] = p
@@ -78,7 +86,12 @@ def strands_from(roots, normals, flow, length, k, H, lift0=.9, lift1=.12, gravit
         under = dist < hug
         if under.any():
             gW = grad_world(H, W[under])
-            p[under] += gW * (hug - dist[under])[:, None]
+            p[under] += gW * (hug[under] - dist[under])[:, None]
+        if reach is not None:
+            over = dist > reach
+            if over.any():
+                gO = grad_world(H, W[over])
+                p[over] -= gO * (dist[over] - reach[over])[:, None]
         P[:, i] = p
     return P
 
@@ -110,13 +123,19 @@ def hair(V, N, H, n=60000, rng=None):
     rng = rng or np.random.default_rng(7)
     Q = to_head(V, H)
     m = scalp_mask(Q)
-    idx = rng.choice(np.nonzero(m)[0], size=min(n, int(m.sum())), replace=True)
+    ax0, z0 = np.abs(Q[:, 0]), Q[:, 2]
+    line = 6.2 + .07 * ax0 * ax0 - .45 * np.exp(-((ax0 - 4.6) / 1.0) ** 2)
+    soft = np.where((Q[:, 1] < -5.0) & (z0 > 3.2), np.clip((z0 - line + .35) / 1.0, 0, 1) ** .8, 1.0)
+    cand = np.nonzero(m & (soft > .02))[0]
+    wgt = soft[cand] / soft[cand].sum()
+    idx = rng.choice(cand, size=min(n, len(cand)), replace=True, p=wgt)
     R, Nn = Q[idx] + rng.normal(0, .05, (len(idx), 3)), N[idx]
     x, y, z = R[:, 0], R[:, 1], R[:, 2]
     ax = np.abs(x)
     # how long: long on top, tapering short down the sides and the back
     top = np.clip((z - 3.0) / 4.0, 0, 1) * np.clip(1 - (ax - 3.5) / 3.0, 0, 1)
     L = 1.3 + 7.8 * top + .8 * np.clip((z - 1.0) / 6, 0, 1)
+    L *= np.where(ax > 5.2, .6, 1.0)
     L *= rng.uniform(.8, 1.15, len(L))
     # the flow: up and back on top, back and down on the sides, down at the back
     flow = np.zeros_like(R)
@@ -130,8 +149,12 @@ def hair(V, N, H, n=60000, rng=None):
     flow[lock] = np.c_[-.25 * np.ones(lock.sum()), -.55 * np.ones(lock.sum()), -.75 * np.ones(lock.sum())]
     L[lock] *= 1.15
     flow /= np.linalg.norm(flow, axis=1)[:, None]
-    lift0 = np.where(top > .3, .80, .45)[:, None]
-    P = strands_from(R, Nn, flow, L, 12, H, lift0=lift0, lift1=.16, gravity=.35, noise=.26, rng=rng, hug=.30)
+    lift0 = np.where(top > .3, .9, .45)[:, None]
+    # the volume: fullest over the front of the top (the portrait's swept-up front), close on the sides
+    front = .7 + .3 * np.clip((-y - 2.0) / 6.0, 0, 1)
+    reach = (.45 + 1.7 * top * front) * rng.uniform(.82, 1.12, len(top))
+    P = strands_from(R, Nn, flow, L, 14, H, lift0=lift0, lift1=.08, gravity=.3 * (1 - .5 * top), noise=.36,
+                     rng=rng, hug=.15 + .45 * top, reach=reach)
     # locks: clumps of neighbours round seeds
     seeds = rng.choice(len(R), 1500, replace=False)
     from_seed = np.argmin(((R[:, None, :] - R[seeds][None, :, :]) ** 2).sum(2), axis=1)
@@ -139,7 +162,7 @@ def hair(V, N, H, n=60000, rng=None):
     return clump(P, groups, .82)
 
 
-def beard(V, N, H, n=42000, rng=None):
+def beard(V, N, H, n=75000, rng=None):
     rng = rng or np.random.default_rng(3)
     Q = to_head(V, H)
     m = beard_mask(Q, H)
@@ -150,25 +173,25 @@ def beard(V, N, H, n=42000, rng=None):
     x, y, z = R[:, 0], R[:, 1], R[:, 2]
     chin = np.exp(-((z + 10.5) / 2.0) ** 2) * np.exp(-(x / 2.6) ** 2)
     moust = (z > H.stom_z) & (np.abs(x) < 3.0)
-    L = .12 + .22 * chin + .12 * moust
-    L *= rng.uniform(.7, 1.2, len(L))
+    L = .2 + .24 * chin + .1 * moust                         # a short boxed beard, 2-4.5 mm, fuller on the chin
+    L *= rng.uniform(.7, 1.25, len(L))
     flow = np.zeros_like(R)
     flow[:, 2] = -1.0
     flow[:, 0] = np.where(moust, np.sign(x) * .8, 0.0)
     flow[:, 1] = np.where(z < -11.5, .9, 0.0)
     flow /= np.linalg.norm(flow, axis=1)[:, None]
-    return strands_from(R, Nn, flow, L, 4, H, lift0=.42, lift1=.30, noise=.25, rng=rng, hug=.015)
+    return strands_from(R, Nn, flow, L, 5, H, lift0=.5, lift1=.32, noise=.3, rng=rng, hug=.02)
 
 
-def brows(H, n=1250, rng=None):
+def brows(H, n=720, rng=None):
     """roots along each brow: thick at its head by the nose, thin at its tail, the hairs up at the head, out along it"""
     rng = rng or np.random.default_rng(5)
     t = rng.random(n)
     u = rng.normal(0, .33, n)
     x = 1.5 + 3.95 * t
     # a man's brow: heavy, low and nearly straight over the orbit's rim, a little lower at its tail
-    zc = 1.02 + .24 * np.sin(np.pi * np.clip(t * .95, 0, 1)) + .08 * t
-    w = .46 * (1 - .55 * t)
+    zc = 1.3 + .04 * np.sin(np.pi * t) - .08 * t
+    w = .52 * (1 - .5 * t)
     z = zc + u * w
     R = np.c_[x, np.full(n, -12.0), z]
     out = []
@@ -182,11 +205,11 @@ def brows(H, n=1250, rng=None):
             W = W - g * d[:, None]
         Qs = to_head(W, H)
         Ns = grad_world(H, W)
-        flow = np.c_[sx * (.62 + .38 * t), -.1 * np.ones(n), .55 - .6 * t]
+        flow = np.c_[sx * (.8 + .2 * t), -.1 * np.ones(n), .35 - .5 * t]
         flow /= np.linalg.norm(flow, axis=1)[:, None]
-        L = .55 + .18 * (1 - t)
-        out.append(strands_from(Qs, Ns, flow, L * rng.uniform(.75, 1.1, n), 6, H, lift0=.30, lift1=.14, noise=.22,
-                                rng=rng, hug=.012))
+        L = .7 + .25 * (1 - t)
+        out.append(strands_from(Qs, Ns, flow, L * rng.uniform(.75, 1.1, n), 6, H, lift0=.42, lift1=.16, noise=.26,
+                                rng=rng, hug=.02))
     return np.concatenate(out)
 
 
@@ -228,15 +251,15 @@ def hair_material(name, melanin=.9, redness=.45, rough=.32):
 
 def groom(V, N, H, log=print):
     """all of it as curve objects; returns the beard's mask per head vertex (the skin darkens under it)"""
-    hm = hair_material("hair", .97, .35, .28)
-    bm = hair_material("beard", .985, .30, .36)
+    hm = hair_material("hair", .92, .3, .3)
+    bm = hair_material("beard", .992, .25, .36)
     P = hair(V, N, H)
     to_curves("hair", P, H, .00006, .00002, hm)
     log(f"groom: hair {len(P)} strands")
     B = beard(V, N, H)
-    to_curves("beard", B, H, .000032, .000014, bm)
+    to_curves("beard", B, H, .000036, .000014, bm)
     log(f"groom: beard {len(B)} strands")
     Bw = brows(H)
-    to_curves("brows", Bw, H, .000045, .000015, bm)
+    to_curves("brows", Bw, H, .00005, .000014, bm)
     log(f"groom: brows {len(Bw)} strands")
     return beard_mask(to_head(V, H), H, soft=True)
