@@ -239,7 +239,7 @@ EYE_R = 1.2
 # the fissure in the front view (x, z) of the left eye: the canthi, the margins' highest / lowest points
 EN = (1.66, 0.02)                             # the inner canthus (3.3 cm between them: a man's, Farkas)
 EX = (4.6, 0.22)                              # the outer canthus (a little higher: the male's slight upward tilt)
-LID_UP, LID_LO = 0.5, 0.44                    # the margins' rise / fall over the line between the canthi (the upper over the iris's top: no stare)
+LID_UP, LID_LO = 0.44, 0.42                   # the margins' rise / fall over the line between the canthi (the upper over the iris's top: no stare)
 # the face's landmarks on the midline (z, y), from the owner's portrait: the nose shortish, the mouth high over a
 # long, strong chin. The nose and the lips are drawn from these, so moving one moves its whole feature.
 NASION = (0.55, -10.35)
@@ -362,7 +362,7 @@ class Head:
         u = (x - 1.2) / .72
         v = (z + 4.32) / .6
         r = np.sqrt(u * u + v * v)
-        return np.exp(-((r - 1.0) / .14) ** 2) * (x > 1.2) * G(y, -10.6, .7)
+        return np.exp(-((r - 1.0) / .26) ** 2) * (x > 1.2) * G(y, -10.6, .7)     # a soft fold, not a cut line
 
     # --- the lips -------------------------------------------------------------------------------------------
     def lips(self, Q):

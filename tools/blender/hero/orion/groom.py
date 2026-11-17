@@ -199,7 +199,7 @@ def beard(V, N, H, n=75000, rng=None):
     return strands_from(R, Nn, flow, L, 5, H, lift0=.5, lift1=.32, noise=.3, rng=rng, hug=.02)
 
 
-def brows(H, n=720, rng=None):
+def brows(H, n=950, rng=None):
     """roots along each brow: thick at its head by the nose, thin at its tail, the hairs up at the head, out along it"""
     rng = rng or np.random.default_rng(5)
     t = rng.random(n)
@@ -207,7 +207,9 @@ def brows(H, n=720, rng=None):
     x = 1.15 + 4.95 * t
     # a man's brow: heavy, low and nearly straight over the orbit's rim; its tail runs on past the eye's outer
     # corner and down along the rim toward the temple (the owner: "the eyebrows are too short")
-    zc = 1.32 + .05 * np.sin(np.pi * np.clip(t / .7, 0, 1)) - .05 * t - .42 * np.clip((t - .66) / .34, 0, 1) ** 1.5
+    # low at its head, highest two thirds out (a man's arch is shallow), easing down past the eye's corner (dropping
+    # from the head outward it read as a worried look)
+    zc = 1.18 + .22 * np.sin(np.pi * np.clip(t / 1.24, 0, 1)) - .1 * t - .16 * np.clip((t - .82) / .18, 0, 1) ** 2
     w = .52 * (1 - .45 * t)
     z = zc + u * w
     R = np.c_[x, np.full(n, -12.0), z]
@@ -222,11 +224,50 @@ def brows(H, n=720, rng=None):
             W = W - g * d[:, None]
         Qs = to_head(W, H)
         Ns = grad_world(H, W)
-        flow = np.c_[sx * (.8 + .2 * t), -.1 * np.ones(n), .35 - .5 * t - .4 * np.clip((t - .66) / .34, 0, 1)]
+        body = np.c_[sx * (.8 + .2 * t), -.1 * np.ones(n),
+                     .3 - .55 * t - .25 * np.clip((t - .8) / .2, 0, 1) - .3 * np.clip(u / .33, -1.5, 1.5)]
+        head = np.c_[sx * .5 * np.ones(n), -.1 * np.ones(n), .85 * np.ones(n)]     # the head's hairs go up and out
+        hw = np.clip((t - .04) / .16, 0, 1)[:, None]
+        flow = head * (1 - hw) + body * hw
         flow /= np.linalg.norm(flow, axis=1)[:, None]
-        L = .7 + .25 * (1 - t)
-        out.append(strands_from(Qs, Ns, flow, L * rng.uniform(.75, 1.1, n), 6, H, lift0=.42, lift1=.16, noise=.26,
-                                rng=rng, hug=.02))
+        L = .6 + .22 * (1 - t)
+        out.append(strands_from(Qs, Ns, flow, L * rng.uniform(.75, 1.1, n), 6, H, lift0=.18, lift1=.04, noise=.2,
+                                rng=rng, hug=.012))
+    return np.concatenate(out)
+
+
+def lashes(H, n_up=115, n_lo=65, rng=None):
+    """the eyelashes (there were none): a row along each lid's margin, rooted on its front edge; the upper ones
+    longer in the middle and toward the outer corner, curling up and a little out, the lower ones short and sparse,
+    curving down"""
+    import head as HM
+    rng = rng or np.random.default_rng(11)
+    out = []
+    for upper, n in ((True, n_up), (False, n_lo)):
+        t = np.sort(rng.random(n)) * .94 + .03
+        x = HM.EN[0] + (HM.EX[0] - HM.EN[0]) * t
+        _, up, lo = H.fissure(x, np.zeros_like(x))
+        z = up + .015 if upper else lo - .015
+        for sx in (1, -1):
+            R = np.c_[sx * x, np.full(n, HM.EYE[1] - 2.2), z].astype(F32)
+            W = to_world(R, H)
+            for _ in range(14):                         # onto the lid's front, along the field
+                d = H(W)
+                g = grad_world(H, W)
+                W = W - g * d[:, None]
+            Qs = to_head(W, H)
+            Ns = grad_world(H, W)
+            if upper:
+                flow = np.c_[sx * .25 * (t - .3), -.97 * np.ones(n), -.08 * np.ones(n)]  # out of the eye, forward
+                L = (.45 + .25 * np.sin(np.pi * np.clip(t * .85 + .1, 0, 1))) * rng.uniform(.85, 1.1, n)
+                curl = -.55             # then curling up (curled harder they lay back on the lid up to the brow)
+            else:
+                flow = np.c_[sx * .15 * (t - .4), -.9 * np.ones(n), -.3 * np.ones(n)]
+                L = (.22 + .14 * np.sin(np.pi * t)) * rng.uniform(.8, 1.15, n)
+                curl = .5
+            flow /= np.linalg.norm(flow, axis=1)[:, None]
+            out.append(strands_from(Qs, Ns, flow, L, 7, H, lift0=.15, lift1=.0, gravity=curl, noise=.08, rng=rng,
+                                    hug=.01))
     return np.concatenate(out)
 
 
@@ -273,18 +314,26 @@ def groom(V, N, H, log=print, beard_on=False):
     (beard_on), and without it the mask is empty"""
     hm = hair_material("hair", .92, .3, .3)
     bm = hair_material("beard", .992, .25, .36)
+    wm = hair_material("brows", .965, .3, .34)                 # dark brown, not black
+    lm = hair_material("lashes", .97, .25, .3)
     P = hair(V, N, H)
     to_curves("hair", P, H, .00006, .00002, hm)
     log(f"groom: hair {len(P)} strands")
     if not beard_on:
         Bw = brows(H)
-        to_curves("brows", Bw, H, .00005, .000014, bm)
+        to_curves("brows", Bw, H, .000038, .000011, wm)
         log(f"groom: brows {len(Bw)} strands, no beard")
+        La = lashes(H)
+        to_curves("lashes", La, H, .00005, .000012, lm)
+        log(f"groom: lashes {len(La)}")
         return np.zeros(len(V), F32)
     B = beard(V, N, H)
     to_curves("beard", B, H, .000036, .000014, bm)
     log(f"groom: beard {len(B)} strands")
     Bw = brows(H)
-    to_curves("brows", Bw, H, .00005, .000014, bm)
+    to_curves("brows", Bw, H, .000038, .000011, wm)
     log(f"groom: brows {len(Bw)} strands")
+    La = lashes(H)
+    to_curves("lashes", La, H, .00005, .000012, lm)
+    log(f"groom: lashes {len(La)}")
     return beard_mask(to_head(V, H), H, soft=True)

@@ -111,6 +111,7 @@ def skin_material(clay=False):
     red = math_('ADD', math_('MULTIPLY', blob(.036, Y0 - .088, Z0 - .03, .02, .02, .018), .42),
                 math_('MULTIPLY', blob(0, Y0 - .12, Z0 - .035, .009, .012, .012, False), .2))
     red = math_('ADD', red, math_('MULTIPLY', blob(.072, Y0 + .005, Z0 - .01, .012, .025, .035), .5))
+    red = math_('ADD', red, math_('MULTIPLY', blob(.0186, Y0 - .0821, Z0 + .0002, .0024, .0024, .0024), .95))
     red = math_('MINIMUM', red, 1.0)
     # the eyes' hollows a little darker
     dark = math_('ADD', math_('MULTIPLY', blob(.032, Y0 - .09, Z0 + .002, .02, .012, .012), .5),
@@ -161,11 +162,12 @@ def skin_material(clay=False):
     b.inputs["Coat Roughness"].default_value = .34
     b.inputs["Specular IOR Level"].default_value = .5
     # pores and fine creases
-    pores = node(nt, "ShaderNodeTexVoronoi", Scale=3200.0)
+    pores = node(nt, "ShaderNodeTexVoronoi", Scale=2300.0)
     nt.links.new(pos, pores.inputs["Vector"])
     fine = node(nt, "ShaderNodeTexNoise", Scale=1400.0, Detail=4.0, Roughness=.7)
     nt.links.new(pos, fine.inputs["Vector"])
-    hsum = math_('ADD', math_('MULTIPLY', pores.outputs["Distance"], .7), math_('MULTIPLY', fine.outputs["Fac"], .3))
+    pit = math_('POWER', math_('SUBTRACT', 1.0, math_('MINIMUM', math_('MULTIPLY', pores.outputs["Distance"], 2.6), 1.0)), 2.0)
+    hsum = math_('SUBTRACT', math_('MULTIPLY', fine.outputs["Fac"], .3), math_('MULTIPLY', pit, 1.1))   # pores: pits
     # the skin's own unevenness under the pores (a few millimetres), the forehead's fine lines
     mid = node(nt, "ShaderNodeTexNoise", Scale=260.0, Detail=3.0, Roughness=.5)
     nt.links.new(pos, mid.inputs["Vector"])
@@ -183,7 +185,7 @@ def skin_material(clay=False):
                                                   math_('MULTIPLY', lwob.outputs["Fac"], 6.0))),
                  math_('MULTIPLY', lwob.outputs["Fac"], .4))
     hsum = math_('ADD', hsum, math_('MULTIPLY', lipl, lsep.outputs[0]))
-    bump = node(nt, "ShaderNodeBump", Strength=.3, Distance=.0003)
+    bump = node(nt, "ShaderNodeBump", Strength=.45, Distance=.0003)
     nt.links.new(hsum, bump.inputs["Height"])
     nt.links.new(bump.outputs["Normal"], b.inputs["Normal"])
     nt.links.new(bump.outputs["Normal"], b.inputs["Coat Normal"])     # the sheen follows the pores too (or it is plastic)
@@ -209,9 +211,9 @@ def eye_material(name):
     ramp = nt.nodes.new("ShaderNodeValToRGB")
     nt.links.new(neg.outputs[0], ramp.inputs["Fac"])
     el = ramp.color_ramp.elements
-    el[0].position = 0.0; el[0].color = (.72, .64, .60, 1)
+    el[0].position = 0.0; el[0].color = (.6, .53, .5, 1)       # the white of the eye is not white
     el[1].position = 1.0; el[1].color = (.004, .004, .005, 1)
-    for pos, col in ((.70, (.80, .76, .72, 1)), (.835, (.84, .80, .76, 1)), (.842, (.05, .06, .07, 1)),
+    for pos, col in ((.70, (.66, .62, .58, 1)), (.835, (.7, .66, .62, 1)), (.842, (.05, .06, .07, 1)),
                      (.86, (.20, .27, .32, 1)), (.93, (.30, .38, .43, 1)), (.955, (.22, .26, .27, 1)),
                      (.962, (.006, .006, .007, 1))):
         e = el.new(pos); e.color = col
@@ -222,7 +224,7 @@ def eye_material(name):
     return m
 
 
-def studio(sc):
+def studio(sc, beauty=False):
     sc.render.engine = 'CYCLES'
     gpu(sc)
     sc.cycles.use_denoising = True
@@ -242,6 +244,12 @@ def studio(sc):
         o = bpy.data.objects.new(name, L); o.location = loc
         o.rotation_euler = (target - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
         sc.collection.objects.link(o)
+    if beauty:              # the owner's quality reference's light: a key in front to one side, a hard rim behind
+        bg.inputs[0].default_value = (.01, .01, .012, 1); bg.inputs[1].default_value = .05
+        light("key", 34, (-.25, -1.05, 2.0), (1, .96, .92), .75)
+        light("rim", 48, (.7, .55, 1.95), (.95, .97, 1), .35)
+        light("fill", 2.5, (.9, -.45, 1.6), (.85, .9, 1), 1.2)
+        return
     # the portrait's light: a broad key high on his left, a soft fill, a cool rim behind
     light("key", 24, (.55, -.85, 2.15), (1, .95, .9), .9)
     light("fill", 5, (-.85, -.55, 1.80), (.8, .87, 1), 1.4)
@@ -254,13 +262,15 @@ VIEWS = {  # yaw (degrees, positive = from his left), pitch, distance, lens
     "back": (180, 0, .70, 85), "low": (25, -20, .70, 85), "qr": (-35, 0, .70, 85),
     "close": (-20, -3, .40, 85), "under": (10, -45, .55, 85),
     "face": (0, -2, .40, 85), "faceq": (32, -2, .40, 85), "faces": (90, -2, .42, 85),
+    "eye": (-18, -2, .17, 85, (-.032, -.083, .001)), "skin": (-35, -4, .2, 85, (-.04, -.088, -.025)),
 }
 
 
 def camera(sc, view):
     cam = sc.camera
-    yaw, pitch, dist, lens = VIEWS[view]
-    target = Vector((0, H.Y0 - .055, H.Z0 - .035))
+    yaw, pitch, dist, lens = VIEWS[view][:4]
+    off = VIEWS[view][4] if len(VIEWS[view]) > 4 else (0, -.055, -.035)        # where it looks (from the head's origin)
+    target = Vector((off[0], H.Y0 + off[1], H.Z0 + off[2]))
     y, p = math.radians(yaw), math.radians(pitch)
     d = Vector((math.sin(y) * math.cos(p), -math.cos(y) * math.cos(p), math.sin(p)))
     cam.location = target + d * dist
@@ -415,7 +425,7 @@ def main():
     if "--profile" in flags:
         profile_check(sc, out)
         cam.data.type = 'PERSP'
-    studio(sc)
+    studio(sc, beauty=flags.get("--light") == "beauty")
     sc.cycles.samples = int(flags.get("--samples", 96))
     res = int(flags.get("--res", 800))
     if "--pfit" in flags:
