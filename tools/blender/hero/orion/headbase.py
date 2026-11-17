@@ -196,10 +196,19 @@ class HeadBase:
         d = d - .42 * self.k("cheekbones") * G3(P, (4.45, -8.0, -1.85), (1.5, 1.15, 1.2))
         d = d - .2 * self.k("cheekbones") * G3(P, (6.25, -5.6, -1.4), (.8, 1.9, .7))
         # the hollow under the cheekbone, the temple's hollow
-        d = d + .22 * self.k("cheek_hollow") * G3(P, (5.25, -6.9, -5.3), (1.0, 1.5, 1.3))
+        d = d + .28 * self.k("cheek_hollow") * G3(P, (5.1, -7.2, -5.0), (1.0, 1.5, 1.3))
         d = d + .12 * self.k("temples") * G3(P, (6.85, -5.2, 2.6), (.9, 1.7, 1.6))
-        # the cheek's soft pad beside the nose and above the mouth's corner
+        # the cheek's soft pad beside the nose and above the mouth's corner, and its apple under the eye (the fat
+        # pad's fullness: without it the face was a mannequin's plane from the eye to the jaw)
         d = d - .22 * self.k("cheeks") * G3(P, (2.9, -9.6, -3.6), (1.2, .8, 1.4))
+        d = d - .14 * self.k("cheeks") * G3(P, (3.5, -9.25, -2.5), (1.15, .7, 1.0))
+        # the lower lid's soft bag over the cheek (the lid-cheek junction under it is head.py's tear trough)
+        d = d - .05 * self.k("eye_bags") * G3(P, (3.25, -8.85, -.7), (.95, .45, .32))
+        # the cheek full beside the nasolabial fold (the fold itself is head.py's soft line)
+        dist, along = seg_dist(P, [(2.55, -9.9, -4.55), (3.3, -9.85, -6.2), (3.85, -9.3, -8.0)])
+        d = d - .1 * self.k("nasolabial") * np.exp(-(dist / .55) ** 2) * (y < -8.0)
+        # the forehead's two broad swells (the frontal eminences)
+        d = d - .1 * self.k("forehead") * G3(P, (2.9, -9.8, 5.4), (1.8, .9, 1.6)) * front
         # the mandible: its border a soft ridge from the chin round the angle, the angle itself, the masseter
         dist, along = seg_dist(P, JAW_BORDER)
         w = np.clip(along / 1.0, 0, 1) * np.clip((len(JAW_BORDER) - 1 - along) / .7, 0, 1)
@@ -207,8 +216,10 @@ class HeadBase:
         d = d - .22 * self.k("jaw") * G3(P, (5.7, -2.2, -8.85), (.75, 1.1, .9))
         d = d - .16 * self.k("jaw") * G3(P, (5.6, -3.4, -6.4), (.7, 1.8, 2.2))
         # the chin's mound and its two corners
-        d = d - .2 * self.k("chin") * G3(P, (0.0, -11.0, -10.1), (1.4, .7, 1.0))
+        d = d - .24 * self.k("chin") * G3(P, (0.0, -11.0, -10.1), (1.4, .7, 1.0))
         d = d - .1 * self.k("chin") * G3(P, (1.55, -10.75, -10.88), (.6, .6, .55))
+        # the groove between the lower lip and the chin (the mentolabial sulcus)
+        d = d + .06 * self.k("chin") * np.exp(-((z + 8.85) / .3) ** 2) * np.exp(-(x / 1.9) ** 2) * (y < -9.0)
         # the philtrum: two soft columns from the columella's foot down to the bow's peaks, a shallow groove between
         ph = np.clip((-4.75 - z) / .4, 0, 1) * np.clip((z + 6.2) / .35, 0, 1) * (y < -9.8)
         colx = .3 + .22 * np.clip((-4.8 - z) / 1.3, 0, 1)

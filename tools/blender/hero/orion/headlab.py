@@ -109,7 +109,8 @@ def skin_material(clay=False):
     Y0, Z0 = H.Y0, H.Z0
     # where the blood shows: the cheeks, the nose, the ears, the lips
     red = math_('ADD', math_('MULTIPLY', blob(.036, Y0 - .088, Z0 - .03, .02, .02, .018), .42),
-                math_('MULTIPLY', blob(0, Y0 - .12, Z0 - .035, .009, .012, .012, False), .2))
+                math_('MULTIPLY', blob(0, Y0 - .12, Z0 - .038, .011, .014, .012, False), .38))   # the nose redder
+    red = math_('ADD', red, math_('MULTIPLY', blob(0, Y0 - .108, Z0 - .102, .016, .01, .01, False), .14))  # the chin
     red = math_('ADD', red, math_('MULTIPLY', blob(.072, Y0 + .005, Z0 - .01, .012, .025, .035), .5))
     red = math_('ADD', red, math_('MULTIPLY', blob(.0186, Y0 - .0821, Z0 + .0002, .0024, .0024, .0024), .95))
     red = math_('MINIMUM', red, 1.0)
@@ -134,7 +135,21 @@ def skin_material(clay=False):
     nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
     mott = nt.nodes.new("ShaderNodeMix"); mott.data_type = 'RGBA'; mott.blend_type = 'MULTIPLY'
     mott.inputs[0].default_value = 1.0
-    nt.links.new(mix_d.outputs[2], mott.inputs[6]); nt.links.new(ramp.outputs[0], mott.inputs[7])
+    broad = node(nt, "ShaderNodeTexNoise", Scale=22.0, Detail=3.0, Roughness=.5)
+    nt.links.new(pos, broad.inputs["Vector"])
+    bramp = nt.nodes.new("ShaderNodeValToRGB")
+    bramp.color_ramp.elements[0].color = (.93, .92, .94, 1); bramp.color_ramp.elements[1].color = (1.05, 1.02, .99, 1)
+    nt.links.new(broad.outputs["Fac"], bramp.inputs["Fac"])
+    var = nt.nodes.new("ShaderNodeMix"); var.data_type = 'RGBA'; var.blend_type = 'MULTIPLY'
+    var.inputs[0].default_value = 1.0
+    nt.links.new(mix_d.outputs[2], var.inputs[6]); nt.links.new(bramp.outputs[0], var.inputs[7])
+    # the forehead a little lighter and yellower than the cheeks
+    fore = blob(0, Y0 - .095, Z0 + .055, .05, .03, .025, False)
+    light_ = nt.nodes.new("ShaderNodeMix"); light_.data_type = 'RGBA'
+    nt.links.new(math_('MULTIPLY', fore, .35), light_.inputs[0])
+    nt.links.new(var.outputs[2], light_.inputs[6])
+    light_.inputs[7].default_value = (.36, .245, .17, 1)
+    nt.links.new(light_.outputs[2], mott.inputs[6]); nt.links.new(ramp.outputs[0], mott.inputs[7])
     # the beard's shadow under the skin
     battr = nt.nodes.new("ShaderNodeAttribute"); battr.attribute_name = "beard"
     bsep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(battr.outputs["Color"], bsep.inputs[0])
@@ -412,6 +427,9 @@ def main():
         import groom as GR
         N = sdf.normals(head, V)
         mask = GR.groom(V, N, head, log=log, beard_on="--beard" in flags).astype(np.float32)   # clean-shaven base
+        if "--beard" not in flags:          # shaved: the beard's faint shadow under the skin
+            mask = (GR.beard_mask(GR.to_head(V, head), head, soft=True) * (head.ear(GR.to_head(V, head)) > .6)
+                    * .3).astype(np.float32)
         a = o.data.color_attributes.new("beard", 'FLOAT_COLOR', 'POINT')
         a.data.foreach_set("color", np.c_[mask, mask, mask, np.ones_like(mask)].ravel())
         sc.cycles_curves.shape = 'THICK'

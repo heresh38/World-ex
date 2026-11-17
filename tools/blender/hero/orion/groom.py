@@ -165,13 +165,16 @@ def hair(V, N, H, n=60000, rng=None):
     # the volume: fullest over the front of the top (the portrait's swept-up front), close on the sides
     front = .7 + .3 * np.clip((-y - 2.0) / 6.0, 0, 1)
     reach = (.45 + 1.7 * top * front) * rng.uniform(.82, 1.12, len(top))
-    P = strands_from(R, Nn, flow, L, 14, H, lift0=lift0, lift1=.08, gravity=.3 * (1 - .5 * top), noise=.36,
-                     rng=rng, hug=.15 + .45 * top, reach=reach)
+    # a few strays off the top (a head of hair is never combed perfectly)
+    stray = (top > .4) & (rng.random(len(top)) < .025)
+    reach = np.where(stray, reach * 1.25, reach)
+    P = strands_from(R, Nn, flow, L, 14, H, lift0=lift0, lift1=np.where(stray, .25, .08)[:, None],
+                     gravity=.3 * (1 - .5 * top), noise=.42, rng=rng, hug=.15 + .45 * top, reach=reach)
     # locks: clumps of neighbours round seeds
     seeds = rng.choice(len(R), 1500, replace=False)
     from_seed = np.argmin(((R[:, None, :] - R[seeds][None, :, :]) ** 2).sum(2), axis=1)
     groups = [np.r_[seeds[i], np.nonzero(from_seed == i)[0]] for i in range(len(seeds))]
-    P = clump(P, groups, .82)
+    P = clump(P, groups, .74)
     # and no strand lies on an ear
     n, k, _ = P.shape
     touch = (H.ear(P.reshape(-1, 3)).reshape(n, k) < .3).any(axis=1)
@@ -199,7 +202,7 @@ def beard(V, N, H, n=75000, rng=None):
     return strands_from(R, Nn, flow, L, 5, H, lift0=.5, lift1=.32, noise=.3, rng=rng, hug=.02)
 
 
-def brows(H, n=950, rng=None):
+def brows(H, n=1350, rng=None):
     """roots along each brow: thick at its head by the nose, thin at its tail, the hairs up at the head, out along it"""
     rng = rng or np.random.default_rng(5)
     t = rng.random(n)
@@ -209,31 +212,55 @@ def brows(H, n=950, rng=None):
     # corner and down along the rim toward the temple (the owner: "the eyebrows are too short")
     # low at its head, highest two thirds out (a man's arch is shallow), easing down past the eye's corner (dropping
     # from the head outward it read as a worried look)
-    zc = 1.18 + .22 * np.sin(np.pi * np.clip(t / 1.24, 0, 1)) - .1 * t - .16 * np.clip((t - .82) / .18, 0, 1) ** 2
-    w = .52 * (1 - .45 * t)
+    zc = 1.12 + .26 * np.sin(np.pi * np.clip(t / 1.24, 0, 1)) - .08 * t - .16 * np.clip((t - .82) / .18, 0, 1) ** 2
+    w = .78 * (1 - .5 * t)                  # heavy: about 9 mm deep at its head, tapering to the tail
     z = zc + u * w
     R = np.c_[x, np.full(n, -12.0), z]
     out = []
     for sx in (1, -1):
         Rs = R.copy(); Rs[:, 0] *= sx
-        W = to_world(Rs, H)
-        # onto the skin: down the field's gradient
-        for _ in range(12):
-            d = H(W)
-            g = grad_world(H, W)
-            W = W - g * d[:, None]
-        Qs = to_head(W, H)
-        Ns = grad_world(H, W)
+        Qs = onto_face(Rs, H)                        # straight back onto the skin, where each was meant to be
+        Ns = grad_world(H, to_world(Qs, H))
         body = np.c_[sx * (.8 + .2 * t), -.1 * np.ones(n),
                      .3 - .55 * t - .25 * np.clip((t - .8) / .2, 0, 1) - .3 * np.clip(u / .33, -1.5, 1.5)]
-        head = np.c_[sx * .5 * np.ones(n), -.1 * np.ones(n), .85 * np.ones(n)]     # the head's hairs go up and out
+        head = np.c_[sx * .75 * np.ones(n), -.1 * np.ones(n), .55 * np.ones(n)]    # the head's hairs up and OUT
+        # (straight up they stood taller than the brow: raised inner ends, a worried look)
         hw = np.clip((t - .04) / .16, 0, 1)[:, None]
         flow = head * (1 - hw) + body * hw
         flow /= np.linalg.norm(flow, axis=1)[:, None]
-        L = .6 + .22 * (1 - t)
+        L = (.6 + .22 * (1 - t)) * (.7 + .3 * np.clip(t / .2, 0, 1))      # the head's hairs short
         out.append(strands_from(Qs, Ns, flow, L * rng.uniform(.75, 1.1, n), 6, H, lift0=.18, lift1=.04, noise=.2,
                                 rng=rng, hug=.012))
     return np.concatenate(out)
+
+
+def onto_face(Q, H, y0=-13.5, y1=-4.0, step=.05):
+    """points (head cm) carried straight back (+y) onto the skin, keeping their x and z: the first place the head's
+    field turns inside along each one's line, refined by halving. (Slid down the field's gradient instead, the
+    brows' roots ran up onto the brow ridge and in toward the nose: the brow 1.6 cm short and 7 mm high, highest at
+    its head, a worried look.)"""
+    Q = np.asarray(Q, F32)
+    ys = np.arange(y0, y1, step, dtype=F32)
+    out = Q.copy()
+    hit = np.full(len(Q), -1)
+    for j, yv in enumerate(ys):
+        todo = np.nonzero(hit < 0)[0]
+        if not len(todo):
+            break
+        P = Q[todo].copy(); P[:, 1] = yv
+        inside = H(to_world(P, H)) < 0
+        hit[todo[inside]] = j
+    for i in np.nonzero(hit >= 0)[0]:
+        a_, b_ = ys[max(hit[i] - 1, 0)], ys[hit[i]]
+        for _ in range(12):
+            m = .5 * (a_ + b_)
+            P = Q[i:i + 1].copy(); P[0, 1] = m
+            if H(to_world(P, H))[0] < 0:
+                b_ = m
+            else:
+                a_ = m
+        out[i, 1] = b_
+    return out
 
 
 def lashes(H, n_up=115, n_lo=65, rng=None):
@@ -250,13 +277,8 @@ def lashes(H, n_up=115, n_lo=65, rng=None):
         z = up + .015 if upper else lo - .015
         for sx in (1, -1):
             R = np.c_[sx * x, np.full(n, HM.EYE[1] - 2.2), z].astype(F32)
-            W = to_world(R, H)
-            for _ in range(14):                         # onto the lid's front, along the field
-                d = H(W)
-                g = grad_world(H, W)
-                W = W - g * d[:, None]
-            Qs = to_head(W, H)
-            Ns = grad_world(H, W)
+            Qs = onto_face(R, H, y0=HM.EYE[1] - 2.6, y1=HM.EYE[1])     # straight back onto the lid's front edge
+            Ns = grad_world(H, to_world(Qs, H))
             if upper:
                 flow = np.c_[sx * .25 * (t - .3), -.97 * np.ones(n), -.08 * np.ones(n)]  # out of the eye, forward
                 L = (.45 + .25 * np.sin(np.pi * np.clip(t * .85 + .1, 0, 1))) * rng.uniform(.85, 1.1, n)
@@ -302,6 +324,11 @@ def hair_material(name, melanin=.9, redness=.45, rough=.32):
     h.inputs["Roughness"].default_value = rough
     h.inputs["Radial Roughness"].default_value = .32
     h.inputs["Coat"].default_value = .1
+    for key, v in (("Random Color", .14), ("Random Roughness", .12)):      # no two hairs quite the same colour
+        try:
+            h.inputs[key].default_value = v
+        except KeyError:
+            pass
     out = [nd for nd in nt.nodes if nd.type == 'OUTPUT_MATERIAL'][0]
     nt.links.new(h.outputs[0], out.inputs["Surface"])
     return m
