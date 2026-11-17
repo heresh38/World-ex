@@ -85,7 +85,7 @@ SECTIONS = {
 }
 
 TH = np.radians(np.linspace(0.0, 180.0, 721))        # the loft's grid round the axis (quarter degrees)
-ZG = np.linspace(-24.0, 6.0, 601)                     # and up it (0.05 cm)
+ZG = np.linspace(-24.0, 12.0, 721)                    # and up it (0.05 cm)
 
 
 def spline(xs, ys, xq):
@@ -283,7 +283,10 @@ class Head:
         Rt = lerp_grid(self.Rt, zc, th)
         d = (r - R) / np.sqrt(1 + Rz * Rz + (Rt / np.maximum(r, 1.0)) ** 2)
         # the vault of the skull above the forehead
-        vault = supershape(Q, (0, -.6, 2.9), 9.4, 10.5, 7.85, 8.4, 12.0, 2.2) if self.anatomy else             supershape(Q, (0, -.9, 2.8), 9.55, 9.5, 7.55, 8.2, 12.0, 2.25)
+        vault = supershape(Q, (0, -.2, 2.6), 9.2, 10.4, 8.0, 8.5, 12.0, 2.55) if self.anatomy else             supershape(Q, (0, -.9, 2.8), 9.55, 9.5, 7.55, 8.2, 12.0, 2.25)
+        if self.anatomy:                            # the measured sections run up to the crown (headbase.py)
+            import headbase
+            return smax(d, z - headbase.CROWN_Z, .9)
         t = np.clip((z - 4.6) / 1.6, 0, 1)
         t = t * t * (3 - 2 * t)
         return d * (1 - t) + vault * t

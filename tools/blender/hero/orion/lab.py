@@ -319,6 +319,34 @@ def main():
             me.vertices.foreach_set("co", co.ravel())
             me.update()
             log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")
+            if "--head" in flags:
+                # the body's neck goes up inside the head (head.py carries the neck from the head's cut down to it):
+                # whatever of it would show through the head's neck and jaw is drawn in under the head's skin
+                import head as HD
+                import sdf
+                hd = HD.Head()
+                me = o.data
+                n = len(me.vertices)
+                co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
+                up = np.nonzero((co[:, 2] > 1.525) & (np.abs(co[:, 0]) < .095) & (np.abs(co[:, 1]) < .12))[0]
+                up = up[hd(co[up]) < .045]                    # the neck (near the head), not the shoulders
+                if len(up):
+                    P = co[up]
+                    for _ in range(6):
+                        d = hd(P)
+                        g = sdf.grad(hd, P)
+                        g /= np.maximum(np.linalg.norm(g, axis=1), 1e-9)[:, None]
+                        step = np.maximum(d + .003, 0)
+                        P = P - g * step[:, None]
+                    mv = P - co[up]
+                    ln = np.linalg.norm(mv, axis=1)
+                    P = co[up] + mv * np.minimum(1, .045 / np.maximum(ln, 1e-9))[:, None]
+                    t = np.clip((co[up, 2] - 1.525) / .02, 0, 1)
+                    t = t * t * (3 - 2 * t)
+                    co[up] = co[up] + (P - co[up]) * t[:, None]
+                    me.vertices.foreach_set("co", co.ravel())
+                    me.update()
+                    log(f"the body's neck drawn in under the head: {len(up)} vertices")
             if "--suit" in flags:
                 import suit as SU
                 SU.build_suit(o, log=log)
