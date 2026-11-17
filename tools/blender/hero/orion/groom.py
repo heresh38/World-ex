@@ -124,6 +124,15 @@ def clump(P, groups, amount):
     return out
 
 
+def soft_noise(P, scale, seed=0, k=7):
+    """a smooth noise in space (cm): a sum of plane waves in random directions, -1..1, features about `scale` cm"""
+    r = np.random.default_rng(seed)
+    D = r.normal(size=(k, 3)); D /= np.linalg.norm(D, axis=1)[:, None]
+    ph = r.uniform(0, 2 * np.pi, k)
+    f = 2 * np.pi / scale * r.uniform(.7, 1.3, k)
+    return (np.sin(P @ D.T * f + ph)).sum(1) / np.sqrt(k / 2)
+
+
 def hair(V, N, H, n=60000, rng=None):
     """the scalp's hair (world points, the head's vertices and normals)"""
     rng = rng or np.random.default_rng(7)
@@ -151,27 +160,29 @@ def hair(V, N, H, n=60000, rng=None):
     flow = np.zeros_like(R)
     flow[:, 1] = 1.0
     flow[:, 2] = np.where(z > 5.0, .35 * np.clip((-y - 2) / 6, 0, 1), -.7)        # the front swept up, then back
-    flow[:, 0] = np.sign(x) * np.where(ax > 4.5, .25, .05)
+    flow[:, 0] = np.sign(x) * np.where(ax > 4.5, .25, .05) + .22 * top               # swept a little to his left
     back = y > 3.0
     flow[back] = np.c_[np.sign(x[back]) * .15, .25 * np.ones(back.sum()), -np.ones(back.sum())]
     # the locks over the forehead's right side fall forward and down
-    lock = (x < -1.0) & (x > -4.2) & (y < -6.5) & (z > 6.0) & (rng.random(len(x)) < .30)
+    lock = (x < -1.0) & (x > -4.2) & (y < -6.5) & (z > 6.0) & (rng.random(len(x)) < .2)
     flow[lock] = np.c_[-.25 * np.ones(lock.sum()), -.55 * np.ones(lock.sum()), -.75 * np.ones(lock.sum())]
     L[lock] *= 1.15
     by_ear = ear_r < 3.0                          # over and round the ears the hair goes back, not down over them
     flow[by_ear] = np.c_[np.sign(x[by_ear]) * .1, np.ones(by_ear.sum()), .15 * np.ones(by_ear.sum())]
     flow /= np.linalg.norm(flow, axis=1)[:, None]
-    lift0 = np.where(top > .3, .9, .45)[:, None]
+    lift0 = np.where(top > .3, np.where(y < -6.0, .55, .85), .45)[:, None]   # the front rows swept back, not up
     # the volume: fullest over the front of the top (the portrait's swept-up front), close on the sides
     front = .7 + .3 * np.clip((-y - 2.0) / 6.0, 0, 1)
-    reach = (.45 + 1.7 * top * front) * rng.uniform(.82, 1.12, len(top))
+    lift = np.clip((-y + 1.0) / 8.0, 0, 1)                    # the front of the top stands highest (the portrait's)
+    reach = (.45 + top * (1.2 + .8 * lift)) * front
+    reach *= np.clip(1 + .3 * soft_noise(R, 4.5, 3), .55, 1.45) * rng.uniform(.88, 1.1, len(top))  # tousled: no flat top
     # a few strays off the top (a head of hair is never combed perfectly)
     stray = (top > .4) & (rng.random(len(top)) < .025)
     reach = np.where(stray, reach * 1.25, reach)
     P = strands_from(R, Nn, flow, L, 14, H, lift0=lift0, lift1=np.where(stray, .25, .08)[:, None],
                      gravity=.3 * (1 - .5 * top), noise=.42, rng=rng, hug=.15 + .45 * top, reach=reach)
     # locks: clumps of neighbours round seeds
-    seeds = rng.choice(len(R), 1500, replace=False)
+    seeds = rng.choice(len(R), 950, replace=False)
     from_seed = np.argmin(((R[:, None, :] - R[seeds][None, :, :]) ** 2).sum(2), axis=1)
     groups = [np.r_[seeds[i], np.nonzero(from_seed == i)[0]] for i in range(len(seeds))]
     P = clump(P, groups, .74)

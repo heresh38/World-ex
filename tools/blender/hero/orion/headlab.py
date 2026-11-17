@@ -149,13 +149,22 @@ def skin_material(clay=False):
     nt.links.new(math_('MULTIPLY', fore, .35), light_.inputs[0])
     nt.links.new(var.outputs[2], light_.inputs[6])
     light_.inputs[7].default_value = (.36, .245, .17, 1)
-    nt.links.new(light_.outputs[2], mott.inputs[6]); nt.links.new(ramp.outputs[0], mott.inputs[7])
+    spots = node(nt, "ShaderNodeTexVoronoi", Scale=230.0)
+    nt.links.new(pos, spots.inputs["Vector"])
+    ssep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(spots.outputs["Color"], ssep.inputs[0])
+    spot = math_('MULTIPLY', math_('GREATER_THAN', ssep.outputs[0], .955),
+                 math_('SUBTRACT', 1.0, math_('MINIMUM', math_('MULTIPLY', spots.outputs["Distance"], 4.0), 1.0)))
+    spotc = nt.nodes.new("ShaderNodeMix"); spotc.data_type = 'RGBA'
+    nt.links.new(math_('MULTIPLY', spot, .4), spotc.inputs[0])
+    nt.links.new(light_.outputs[2], spotc.inputs[6])
+    spotc.inputs[7].default_value = (.2, .12, .085, 1)
+    nt.links.new(spotc.outputs[2], mott.inputs[6]); nt.links.new(ramp.outputs[0], mott.inputs[7])
     # the beard's shadow under the skin
     battr = nt.nodes.new("ShaderNodeAttribute"); battr.attribute_name = "beard"
     bsep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(battr.outputs["Color"], bsep.inputs[0])
     shade = nt.nodes.new("ShaderNodeMix"); shade.data_type = 'RGBA'
     nt.links.new(mott.outputs[2], shade.inputs[6])
-    shade.inputs[7].default_value = (.13, .09, .068, 1)
+    shade.inputs[7].default_value = (.15, .125, .115, 1)       # under the skin a shaved beard is grey-blue
     nt.links.new(math_('MULTIPLY', bsep.outputs[0], .72), shade.inputs[0])
     lattr = nt.nodes.new("ShaderNodeAttribute"); lattr.attribute_name = "lip"
     lsep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(lattr.outputs["Color"], lsep.inputs[0])
@@ -172,6 +181,9 @@ def skin_material(clay=False):
                                  blob(0, Y0 - .095, Z0 + .045, .04, .03, .025, False)), 1.0)
     rough = math_('SUBTRACT', .58, math_('MULTIPLY', oil, .16))
     rough = math_('SUBTRACT', rough, math_('MULTIPLY', lsep.outputs[0], .14))
+    rvar = node(nt, "ShaderNodeTexNoise", Scale=300.0, Detail=4.0, Roughness=.6)
+    nt.links.new(pos, rvar.inputs["Vector"])
+    rough = math_('ADD', rough, math_('MULTIPLY', math_('SUBTRACT', rvar.outputs["Fac"], .5), .14))
     nt.links.new(rough, b.inputs["Roughness"])
     b.inputs["Coat Weight"].default_value = .12                 # a second, sharper sheen: the skin's oil
     b.inputs["Coat Roughness"].default_value = .34
@@ -183,6 +195,23 @@ def skin_material(clay=False):
     nt.links.new(pos, fine.inputs["Vector"])
     pit = math_('POWER', math_('SUBTRACT', 1.0, math_('MINIMUM', math_('MULTIPLY', pores.outputs["Distance"], 2.6), 1.0)), 2.0)
     hsum = math_('SUBTRACT', math_('MULTIPLY', fine.outputs["Fac"], .3), math_('MULTIPLY', pit, 1.1))   # pores: pits
+    grain = node(nt, "ShaderNodeTexVoronoi", Scale=1500.0)
+    grain.feature = 'DISTANCE_TO_EDGE'
+    try:
+        grain.inputs["Detail"].default_value = 1.0           # plates of more than one size
+    except KeyError:
+        pass
+    warp = node(nt, "ShaderNodeTexNoise", Scale=400.0, Detail=2.0)
+    nt.links.new(pos, warp.inputs["Vector"])
+    wpos = nt.nodes.new("ShaderNodeVectorMath"); wpos.operation = 'MULTIPLY_ADD'
+    nt.links.new(warp.outputs["Color"], wpos.inputs[0]); wpos.inputs[1].default_value = (.0005, .0005, .0005)
+    nt.links.new(pos, wpos.inputs[2])
+    nt.links.new(wpos.outputs[0], grain.inputs["Vector"])
+    groove = math_('SUBTRACT', 1.0, math_('MINIMUM', math_('MULTIPLY', grain.outputs["Distance"], 9.0), 1.0))
+    gvar = node(nt, "ShaderNodeTexNoise", Scale=60.0, Detail=2.0)
+    nt.links.new(pos, gvar.inputs["Vector"])
+    gdepth = math_('ADD', .15, math_('MULTIPLY', gvar.outputs["Fac"], .4))     # deeper here, finer there
+    hsum = math_('SUBTRACT', hsum, math_('MULTIPLY', groove, gdepth))      # the skin's grain
     # the skin's own unevenness under the pores (a few millimetres), the forehead's fine lines
     mid = node(nt, "ShaderNodeTexNoise", Scale=260.0, Detail=3.0, Roughness=.5)
     nt.links.new(pos, mid.inputs["Vector"])
@@ -256,6 +285,7 @@ def studio(sc, beauty=False):
 
     def light(name, energy, loc, color, size):
         L = bpy.data.lights.new(name, 'AREA'); L.energy = energy; L.color = color; L.size = size
+        L.shape = 'DISK'                     # a round softbox: the eyes' catchlights round, not square
         o = bpy.data.objects.new(name, L); o.location = loc
         o.rotation_euler = (target - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
         sc.collection.objects.link(o)
