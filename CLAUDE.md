@@ -297,7 +297,9 @@ face.py, wardrobe.py, hair.py, skin.py, the old civilians / NPC kits) were delet
 being rebuilt from zero as two separate professional base meshes (male, female): clean quad topology with edge
 loops at the eyes, mouth, nose, ears and every joint, real anatomy and proportions (Epic's Manny / MetaHuman may be
 measured side by side, never imported), and face customisation (eyes, ears, mouth shape and colour, eye colour and
-shape, noses, hair and hair colour). Clothing and armour come back later, fitted to the new bodies. Until the new
+shape, noses, hair and hair colour, beard or none: the owner, 2026-11-16, "the face will be heavily customizable in
+game when the player first starts"; so the head is a neutral base of parameters and the hair, beard and brows are
+separate, optional pieces; the base model is CLEAN-SHAVEN, the beard an option of the character builder). Clothing and armour come back later, fitted to the new bodies. Until the new
 bodies are imported, tests that need the player body skip with a warning (SOTest::PlayerBodyMissing).
 `characters.py` still makes the enemies.
 

@@ -2,6 +2,7 @@
 skin with its eyes, beside the owner's portrait from the same side.
 
 blender -b -P tools/blender/hero/orion/headlab.py -- <out.png> [--h=0.0007] [--views=portrait,front,q,side]
+    [--groom] (hair and brows; the base model is clean-shaven) [--beard] (the beard, an option of the creator)
                                                      [--clay] [--samples=96] [--res=800] [--save=x.blend]
 
   portrait   the owner's portrait's own view (turned to his left, from a touch below), beside it
@@ -176,7 +177,11 @@ def skin_material(clay=False):
                   blob(0, Y0 - .098, Z0 + .045, .045, .03, .016, False))
     hsum = math_('ADD', hsum, math_('MULTIPLY', lines, .5))
     # the lips' fine vertical lines
-    lipl = math_('MULTIPLY', math_('SINE', math_('MULTIPLY', sep.outputs[0], 2 * math.pi / .0011)), .6)
+    lwob = node(nt, "ShaderNodeTexNoise", Scale=700.0, Detail=2.0)
+    nt.links.new(pos, lwob.inputs["Vector"])
+    lipl = math_('MULTIPLY', math_('SINE', math_('ADD', math_('MULTIPLY', sep.outputs[0], 2 * math.pi / .0011),
+                                                  math_('MULTIPLY', lwob.outputs["Fac"], 6.0))),
+                 math_('MULTIPLY', lwob.outputs["Fac"], .4))
     hsum = math_('ADD', hsum, math_('MULTIPLY', lipl, lsep.outputs[0]))
     bump = node(nt, "ShaderNodeBump", Strength=.3, Distance=.0003)
     nt.links.new(hsum, bump.inputs["Height"])
@@ -390,13 +395,13 @@ def main():
         import headbase as HB
         Qh = np.c_[V[:, 0] * 100, (V[:, 1] - H.Y0) * 100, (V[:, 2] - H.Z0) * 100].astype(np.float32)
         lp = HB.lips(Qh, head.stom_z, head.k)[0]
-        lw = (np.clip(1 - lp / .12, 0, 1) * (np.abs(Qh[:, 0]) < 2.75)).astype(np.float32)
+        lw = (np.clip(1 - lp / .12, 0, 1) * (np.abs(Qh[:, 0]) < HB.MOUTH_W + .1)).astype(np.float32)
         a = o.data.color_attributes.new("lip", 'FLOAT_COLOR', 'POINT')
         a.data.foreach_set("color", np.c_[lw, lw, lw, np.ones_like(lw)].ravel())
     if "--groom" in flags:
         import groom as GR
         N = sdf.normals(head, V)
-        mask = GR.groom(V, N, head, log=log).astype(np.float32)
+        mask = GR.groom(V, N, head, log=log, beard_on="--beard" in flags).astype(np.float32)   # clean-shaven base
         a = o.data.color_attributes.new("beard", 'FLOAT_COLOR', 'POINT')
         a.data.foreach_set("color", np.c_[mask, mask, mask, np.ones_like(mask)].ravel())
         sc.cycles_curves.shape = 'THICK'

@@ -394,10 +394,11 @@ class Head:
         """the line the lips meet on: through the lips only (it ran on past the corners into the cheek), thinning
         into each corner"""
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
-        W = 2.62 * self.k("mouth_width")
+        import headbase as HB
+        W = HB.MOUTH_W * self.k("mouth_width")
         u = np.clip(x / W, 0, 1.2)
-        st = self.stom(np.clip(x, 0, 2.62))
-        slab = np.abs(z - st) - (.008 + .022 * np.clip(1 - u ** 4, 0, 1))
+        st = self.stom(np.clip(x, 0, W))
+        slab = np.abs(z - st) - (.015 + .015 * np.clip(1 - u ** 4, 0, 1))      # a line the mesh can hold (thinner broke into dashes)
         slab = np.maximum(slab, y - (-10.2 + 1.1 * u * u))
         slab = np.maximum(slab, x - (W - .1))
         return slab
@@ -585,7 +586,7 @@ class Head:
         if self.anatomy:
             import headbase as HB
             d = smin(d, HB.nose(Q, self.k), .42)
-            d = d + .06 * self.alar_crease(Q)
+            d = d + .03 * self.alar_crease(Q)
             lp, _, _ = HB.lips(Q, self.stom_z, self.k)
             d = smin(d, lp, .3)
         else:
@@ -594,8 +595,8 @@ class Head:
             d = d - self.lips(Q)
         d = smax(d, -self.mouth_slit(Q), .04)
         # the corners of the mouth tucked in, the modiolus beside each
-        d = d + .10 * np.exp(-(((x - 2.72) / .22) ** 2 + ((z + 7.42) / .2) ** 2)) * (y < -8)
-        d = d - .06 * np.exp(-(((x - 3.15) / .45) ** 2 + ((z + 7.35) / .5) ** 2)) * (y < -8)
+        d = d + .08 * np.exp(-(((x - 2.65) / .26) ** 2 + ((z + 7.4) / .22) ** 2)) * (y < -8)
+        d = d - .05 * np.exp(-(((x - 3.08) / .45) ** 2 + ((z + 7.35) / .5) ** 2)) * (y < -8)
         d = self.eyes(Q, d)
         d = smin(d, self.ear(Q), .35)
         if not self.anatomy:
