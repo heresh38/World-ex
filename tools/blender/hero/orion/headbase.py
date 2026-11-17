@@ -193,10 +193,11 @@ class HeadBase:
         d = d - .26 * self.k("brow") * G3(P, (3.1, -10.4, 1.68), (1.9, .95, .85)) * front
         d = d - .16 * self.k("brow") * G3(P, (0.0, -11.0, 1.5), (.9, .7, .75))
         # the cheekbones: the malar mass and the arch back toward the ear
-        d = d - .42 * self.k("cheekbones") * G3(P, (4.45, -8.0, -1.85), (1.5, 1.15, 1.2))
+        d = d - .5 * self.k("cheekbones") * G3(P, (4.55, -7.9, -1.75), (1.45, 1.15, 1.1))
         d = d - .2 * self.k("cheekbones") * G3(P, (6.25, -5.6, -1.4), (.8, 1.9, .7))
         # the hollow under the cheekbone, the temple's hollow
-        d = d + .28 * self.k("cheek_hollow") * G3(P, (5.1, -7.2, -5.0), (1.0, 1.5, 1.3))
+        d = d + .42 * self.k("cheek_hollow") * G3(P, (5.0, -7.3, -4.9), (1.15, 1.6, 1.35))   # the hollow under the
+        # cheekbone, deeper (full to the jaw the lower face read wide and soft: the owner's portrait's is hollow)
         d = d + .12 * self.k("temples") * G3(P, (6.85, -5.2, 2.6), (.9, 1.7, 1.6))
         # the cheek's soft pad beside the nose and above the mouth's corner, and its apple under the eye (the fat
         # pad's fullness: without it the face was a mannequin's plane from the eye to the jaw)
