@@ -310,13 +310,13 @@ def main():
                 off = FTM.skin_offsets(co, nr, info["feet"], toe_w, ed.reshape(-1, 2))
                 log(f"feet laid on their anatomy: {off.min() * 1000:.1f} .. {off.max() * 1000:.1f} mm")
                 co = co + nr * off[:, None]
-                co = FTM.separate_toes(co, info["feet"], toe_w)
+                co = FTM.separate_toes(co, info["feet"], toe_w, edges=ed.reshape(-1, 2))
             # the last pass: what still folds or crosses itself in the hands and feet is relaxed there (meshfix.py)
             if "--nountangle" not in flags:
                 import meshfix as MF
                 qf = np.zeros(len(me.polygons) * 4, np.int64); me.polygons.foreach_get("vertices", qf)
                 digits = co[:, 2] < .23                                   # the feet (the hands are not yet checked)
-                co = MF.untangle(co, qf.reshape(-1, 4), digits, log=log).astype(np.float32)
+                co = MF.untangle(co, qf.reshape(-1, 4), digits, rounds=int(flags.get("--untangle", 6)), log=log).astype(np.float32)
             me.vertices.foreach_set("co", co.ravel())
             me.update()
             log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")

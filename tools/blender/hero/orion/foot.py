@@ -243,7 +243,8 @@ def build_foot(C, leg_rings, F, log=print):
     nt = len(chains)
     R, RC = [], []                       # per toe: its root ring (world points, the toe's own order) and middle
     for ch in chains:
-        c, u, lat_t, up_t = toe_frame(ch, .5 * float(np.linalg.norm(ch[0][1] - ch[0][0])), 1.0)
+        # the web three quarters along the first bone (at its middle the clefts ran deep and their sides crossed)
+        c, u, lat_t, up_t = toe_frame(ch, .72 * float(np.linalg.norm(ch[0][1] - ch[0][0])), 1.0)
         O = np.repeat([F.p(*c)], 8, 0)
         Dw = [F.d(*(up_t * math.cos(math.radians(a)) + lat_t * math.sin(math.radians(a)))) for a in TOE_ANG]
         R.append(cast(fs, O, Dw, tmax=.04, step=.0006))
@@ -481,11 +482,25 @@ def skin_offsets(P, N, frames, toe_w=None, edges=None, iters=6, reach=.006, smoo
     return disp
 
 
-def separate_toes(P, frames, toe_w, margin=.0009):
+def separate_toes(P, frames, toe_w, margin=.0009, edges=None, spread=10):
     """toes press together but never into each other: every vertex of a toe kept on its own side of the plane
-    between it and its neighbour (footshape's cuts), by how much it belongs to that toe (the web itself, shared by
-    two toes, stays where it is)"""
+    between it and its neighbour (footshape's cuts), by how much more it belongs to that toe than to the other (the
+    web itself, shared by two toes, stays where it is). Given the mesh's edges each toe's share is first spread a
+    few rings into the forefoot: the skin in a cleft's neck belonged to no toe, nothing held it, and the two sides
+    of the cleft crossed and folded there (thin fins between the toes)"""
     P = np.asarray(P, np.float32).copy()
+    toe_w = np.asarray(toe_w, np.float32)
+    if edges is not None and spread:
+        n = len(P)
+        e0, e1 = edges[:, 0], edges[:, 1]
+        deg = np.maximum(np.bincount(e0, minlength=n) + np.bincount(e1, minlength=n), 1)
+        T = toe_w.astype(np.float64)
+        for _ in range(spread):
+            acc = np.zeros_like(T)
+            for c in range(T.shape[1]):
+                acc[:, c] = np.bincount(e0, weights=T[e1, c], minlength=n) + np.bincount(e1, weights=T[e0, c], minlength=n)
+            T = np.maximum(T, .85 * acc / deg[:, None])                 # spread out, never taken back
+        toe_w = T.astype(np.float32)
     for F in frames:
         fs = FS.FootShape(F)
         side = (P[:, 0] * F.sx > 0)
@@ -497,8 +512,9 @@ def separate_toes(P, frames, toe_w, margin=.0009):
         Q = L[idx].copy()
         for i, (m, n) in enumerate(fs.cuts):
             s = (Q - m) @ n
-            wa = np.clip(toe_w[idx, i] * 8, 0, 1)                      # the toe inward of the plane
-            wb = np.clip(toe_w[idx, i + 1] * 8, 0, 1)                  # the toe outward of it
+            ta, tb = toe_w[idx, i], toe_w[idx, i + 1]
+            wa = np.clip((ta - tb) * 8, 0, 1)                          # the toe inward of the plane
+            wb = np.clip((tb - ta) * 8, 0, 1)                          # the toe outward of it
             Q -= n[None, :] * (np.maximum(s + margin, 0) * wa)[:, None]
             Q += n[None, :] * (np.maximum(margin - s, 0) * wb)[:, None]
         W = np.array([F.A[0], F.A[1], 0.0]) + Q[:, :1] * F.fw + Q[:, 1:2] * F.lat

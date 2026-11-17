@@ -368,6 +368,15 @@ def build(cc=None, log=print):
     for r0, r1 in zip(neck, neck[1:]):
         C.strip(r0, r1)
     crotch = crotch_verts(C, T[0])
+    # the front of the crotch: the torso's lowest ring turns down into the crotch's front vertex at a corner (the
+    # QC's sharpest crease on the body, 33 degrees bare, 42 with the muscles): both left free in the fit, and the
+    # armpit's floor beside the window's lowest point
+    C.soft[T[0][0]] = 1.0
+    C.soft[crotch[0]] = 1.0
+    for sx in (1, -1):
+        col = (lambda k: k) if sx > 0 else (lambda k: N_T - k)
+        for k in (5, 7):
+            C.soft[T[7][col(k)]] = max(C.soft.get(T[7][col(k)], 0.0), .6)
     legs = {sx: leg(C, T[0], crotch, sx, cc) for sx in (1, -1)}
     arms = {sx: arm(C, T, sx, cc) for sx in (1, -1)}
     # placeholders until the head, hands and feet are grafted on
