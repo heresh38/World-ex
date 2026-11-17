@@ -192,40 +192,68 @@ def panel_fields(P, N):
     torso = np.minimum(-arm, z - .94)
     leg = np.minimum(-arm, .94 - z)
     L = .10                                                             # the trunk's radius: metres per unit of normal
+
+    def band(a, b, half):
+        """(signed distance across the line a-b in the front's (x, z) plane, minus half its width: > 0 inside; how far
+        along it, metres)"""
+        ax, az = a
+        dx, dz = b[0] - ax, b[1] - az
+        ln = math.hypot(dx, dz)
+        along = ((x - ax) * dx + (z - az) * dz) / ln
+        across = ((x - ax) * dz - (z - az) * dx) / ln
+        return half - np.abs(across), along, ln
+
     s = []
-    # the chest's wings across the collarbones, open at the zip
-    wing_low = 1.425 + .32 * np.maximum(.10 - x, 0) - .55 * np.maximum(x - .13, 0) ** 1.3
-    s.append(I(torso, (-ny - .25) * L, x - .03, z - wing_low, 1.545 - z))
+    # the chest's wings (the sheet's close-up): from the zip at mid-chest rising outward to the front of the
+    # shoulder, a dark strap between them and the shoulder's cap; the pecs under them dark plates, outlined
+    w_in, w_out = (.022, 1.432), (.178, 1.505)
+    wb, _, _ = band(w_in, w_out, .025)
+    s.append(I(torso, (-ny - .12) * L, wb, x - .022, .172 - x))
     # the shoulders' caps and the upper arms' outsides
     shd = np.sqrt((x - .232) ** 2 + (y + .022) ** 2 + ((z - 1.53) * 1.2) ** 2)
     s.append(I(.075 - shd, (nz - .05) * .08, .032 - y))
     s.append(I(arm, .44 - x, (nz - .55) * .05))
-    # the flanks: a stripe leaning forward as it falls
-    yc = -.025 - .10 * (1.36 - z)
-    s.append(I(torso, z - 1.0, 1.37 - z, (nx - .45) * L, .045 - np.abs(y - yc)))
-    # the thighs' outer fronts: a band leaning back as it rises, ending above the knee in a curve
-    tz = .58 + .10 * np.clip((y + .12) / .1, 0, 1)
-    s.append(I(leg, z - tz, .90 - z, (nx - .30) * .07, (.30 - ny) * .07))
-    # the knee: a rounded pad
+    # the sides: a broad panel down the side of the trunk from under the arm, leaning forward as it falls, and from
+    # the hip forward along the groin to the crotch (the sheet's taper)
+    yc = -.050 - .09 * (1.36 - z)                                         # over the obliques, seen from the front
+    s.append(I(torso, z - .985, 1.37 - z, (nx - .30) * L, .058 - np.abs(y - yc)))
+    gb, ga, gl = band((.165, 1.005), (.058, .885), .021)
+    s.append(I(gb, ga + .01, gl - ga, (-ny + .35) * L, z - .86))
+    # the thighs: a band across the front from the outer hip down to the inside above the knee
+    tb, ta, tl = band((.185, .935), (.112, .600), .028)
+    s.append(I(tb, ta, tl - ta, (-ny + .05) * .07, .94 - z))
+    # the hips' outsides behind: from the hip down the outer back of the thigh, narrowing toward the knee
+    s.append(I(1.0 - z, z - .66, (nx - .25) * .08, (ny + .10) * .08, .03 + .06 * np.clip((z - .66) / .3, 0, 1)
+               - np.abs(y - (.035 + .02 * np.clip((z - .66) / .3, 0, 1)))))
+    # the knee: a rounded pad on its front only
     kz = np.abs(z - .515) / .055
     ky = np.clip(-ny - .45, 0, 1) / .55
-    s.append(I(leg, (1 - (kz ** 2 + (1 - ky) ** 2)) * .03))
+    s.append(I(leg, (1 - (kz ** 2 + (1 - ky) ** 2)) * .03, (-ny - .25) * .05))
     # the shins' outsides: a strip narrowing to the ankle
     s.append(I(leg, z - .15, .43 - z, (-ny - .15) * .05, (nx - .05 - .25 * (.43 - z)) * .05))
-    # the back: a broad centre narrowing to the waist
-    half = .045 + .13 * np.clip((z - 1.22) / .30, 0, 1)
-    s.append(I(torso, (ny - .45) * L, half - x, z - 1.05, 1.56 - z))
+    # the back: a broad V narrowing to the waist, split by the spine's dark strip and by a dark strap each side from
+    # the shoulder blade's outer top down to the waist (the sheet's inner V)
+    half = np.interp(z, [1.22, 1.30, 1.36, 1.42, 1.50], [.047, .100, .140, .165, .175])   # wide to the scapulae
+    bk = I(torso, (ny - .45) * L, half - x, z - 1.05, 1.56 - z, x - .017)
+    sb, sa, sl = band((.146, 1.50), (.048, 1.235), .016)
+    s.append(I(bk, -I(sb, sa + .02, sl + .02 - sa)))
     pan = np.maximum.reduce(s)
-    # the seams drawn on their own: the abdomen's lines (down either side of the rectus, across at its three bands),
-    # the zip down the front, the seam down the back; each a segment, so its ends are round
+    # the seams drawn on their own: the pecs' plates' outlines (the lower edge along the pec's own, the outer edge),
+    # the abdomen's lines (down either side of the rectus, across at its three bands), the zip down the front, the
+    # seam down the back's strip; each a segment, so its ends are round
     front = (ny < -.3) & (torso > 0)
     back = (ny > .3) & (torso > 0)
     far = np.full(len(P), .05)
     d = far.copy()
+    pz = 1.338 + 3.6 * np.maximum(x - .02, 0) ** 2 + .006                # just over the pec's lower edge
+    wl = w_in[1] + (x - w_in[0]) * (w_out[1] - w_in[1]) / (w_out[0] - w_in[0]) - .027   # under the wing
+    pec = I(z - pz, wl - z, x - .022, .165 - x)
+    d = np.where(front & (z > 1.30), np.minimum(d, np.abs(pec)), d)
     d = np.where(front, np.minimum(d, np.hypot(x - .078, np.maximum(np.maximum(1.0 - z, z - 1.33), 0))), d)
     for zz in (1.17, 1.228, 1.284):
         d = np.where(front, np.minimum(d, np.hypot(np.maximum(x - .078, 0), z - zz)), d)
     d = np.where(front, np.minimum(d, np.hypot(x, np.maximum(1.0 - z, 0))), d)
+    d = np.where(front, np.minimum(d, np.hypot(x - .016, np.maximum(1.15 - z, 0))), d)   # the zip's strip
     d = np.where(back, np.minimum(d, np.hypot(x, np.maximum(1.0 - z, 0))), d)
     return pan, d
 
@@ -427,7 +455,10 @@ def suit_material():
     pan = N.new("ShaderNodeMapRange"); pan.interpolation_type = 'SMOOTHSTEP'
     L.new(sep.outputs[0], pan.inputs["Value"])
     pan.inputs["From Min"].default_value = -.0007; pan.inputs["From Max"].default_value = .0007
-    seam = math('MAXIMUM', line(sep.outputs[0], W_SEAM), line(sep.outputs[1], W_SEAM * .85))
+    # a seam: a groove between the two panels' edges, each edge turned down into it (bevelled: it catches the
+    # light, so the seam reads on the dark base as on the grey, as the sheet's do)
+    seam = math('MAXIMUM', line(sep.outputs[0], W_SEAM * .7), line(sep.outputs[1], W_SEAM * .6))
+    lip = math('MAXIMUM', line(sep.outputs[0], W_SEAM * 2.4), line(sep.outputs[1], W_SEAM * 2.2))
     base = N.new("ShaderNodeMix"); base.data_type = 'RGBA'
     base.inputs[6].default_value = (.028, .028, .032, 1)                # charcoal
     base.inputs[7].default_value = (.105, .102, .112, 1)                # the grey panels
@@ -447,7 +478,7 @@ def suit_material():
     wave = N.new("ShaderNodeTexNoise"); wave.inputs["Scale"].default_value = 1400.0
     wave.inputs["Detail"].default_value = 2.0
     L.new(tc.outputs["Object"], wave.inputs["Vector"])
-    height = math('MULTIPLY_ADD', seam, -1.0, wave.outputs["Fac"])
+    height = math('ADD', math('MULTIPLY_ADD', seam, -1.4, wave.outputs["Fac"]), math('MULTIPLY', lip, .55))
     bump = N.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = .35
     bump.inputs["Distance"].default_value = .0012
     L.new(height, bump.inputs["Height"])
