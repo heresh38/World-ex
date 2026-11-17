@@ -204,9 +204,9 @@ def curve(xs, ys):
 EYE = np.array([2.95, -8.1, 0.0], F32)      # the left eyeball's centre (the portrait's eyes sit close)
 EYE_R = 1.2
 # the fissure in the front view (x, z) of the left eye: the canthi, the margins' highest / lowest points
-EN = (1.40, -0.06)                            # the inner canthus
-EX = (4.60, 0.12)                             # the outer canthus (a little higher: the male's slight upward tilt)
-LID_UP, LID_LO = 0.42, 0.41                   # the margins' rise / fall over the line between the canthi
+EN = (1.36, -0.06)                            # the inner canthus
+EX = (4.68, 0.12)                             # the outer canthus (a little higher: the male's slight upward tilt)
+LID_UP, LID_LO = 0.46, 0.42                   # the margins' rise / fall over the line between the canthi
 # the face's landmarks on the midline (z, y), from the owner's portrait: the nose shortish, the mouth high over a
 # long, strong chin. The nose and the lips are drawn from these, so moving one moves its whole feature.
 NASION = (0.55, -10.35)
@@ -286,7 +286,7 @@ class Head:
         vault = supershape(Q, (0, -.2, 2.6), 9.2, 10.4, 8.0, 8.5, 12.0, 2.55) if self.anatomy else             supershape(Q, (0, -.9, 2.8), 9.55, 9.5, 7.55, 8.2, 12.0, 2.25)
         if self.anatomy:                            # the measured sections run up to the crown (headbase.py)
             import headbase
-            return smax(d, z - headbase.CROWN_Z, .9)
+            return smax(d, z - headbase.CROWN_Z, .3)
         t = np.clip((z - 4.6) / 1.6, 0, 1)
         t = t * t * (3 - 2 * t)
         return d * (1 - t) + vault * t
@@ -425,9 +425,9 @@ class Head:
     def ear(self, Q):
         """the left ear in its own frame: s back along it, t up it, w out of its plane; mirrored"""
         P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]]
-        o = np.array([7.05, 0.15, -.75], F32)                 # the canal's opening
-        EARS = 1.0 / 1.0                                          # a man's ear, 6.3 cm long
-        tilt, out = math.radians(17), math.radians(17)
+        o = np.array([7.05, 0.15, -1.6], F32)                 # the canal's opening
+        EARS = 1.0 / 1.06                                         # a man's ear, 6.7 cm long
+        tilt, out = math.radians(17), math.radians(19)
         # the ear's axes: up its length (tilted back), back across it, out of it (turned forward)
         a_t = np.array([0, math.sin(tilt), math.cos(tilt)], F32)
         n0 = np.array([1, 0, 0], F32)

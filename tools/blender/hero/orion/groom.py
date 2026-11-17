@@ -167,7 +167,7 @@ def brows(H, n=1250, rng=None):
     u = rng.normal(0, .33, n)
     x = 1.3 + 3.95 * t
     # a man's brow: heavy, low and nearly straight over the orbit's rim, a little lower at its tail
-    zc = 1.22 + .22 * np.sin(np.pi * np.clip(t * .95, 0, 1)) - .22 * t
+    zc = 1.02 + .24 * np.sin(np.pi * np.clip(t * .95, 0, 1)) + .08 * t
     w = .46 * (1 - .55 * t)
     z = zc + u * w
     R = np.c_[x, np.full(n, -12.0), z]

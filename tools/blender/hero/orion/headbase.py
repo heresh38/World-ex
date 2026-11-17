@@ -30,76 +30,119 @@ F32 = np.float32
 # the front's and the back's roundness (2 = an ellipse, more = squarer)
 MEASURES = np.array([
     # z      front    half w   widest   back    n front  n back
-    # the neck: muscular, widening into the trapezius below; the nape a hollow under the skull's overhang
-    [-23.55, -5.9, 8.4, 1.8, 7.8, 2, 2.1],
-    [-19.55, -5.35, 6.7, 1.3, 6.8, 2, 2.1],
-    [-16.55, -5.15, 5.95, 1, 5.9, 2, 2.1],
-    [-14.55, -5.35, 5.65, 0.7, 5.35, 1.95, 2.1],
-    [-13.55, -6.5, 5.5, 0.5, 5.15, 1.85, 2.1],
-    [-12.85, -8, 5.45, 0.3, 5.05, 1.75, 2.1],
-    # under the jaw, the jaw's angle, the face tapering up to the cheekbones (an egg seen from the front)
-    [-12.25, -9.35, 5.42, 0.1, 5, 1.68, 2.1],
-    [-11.568, -10.3, 5.42, -0.1, 5, 1.66, 2.1],
-    [-10.659, -11, 5.5, -0.4, 5, 1.7, 2.15],
-    [-10.048, -11.1, 5.75, -0.9, 5.1, 1.76, 2.2],
-    [-9.354, -10.85, 6.1, -1.3, 5.3, 1.82, 2.2],
-    [-8.462, -10.65, 6.4, -1.4, 5.7, 1.92, 2.25],
-    [-7, -10.9, 6.65, -1.4, 6.6, 2.05, 2.3],
-    [-6, -10.9, 6.85, -1.4, 7.4, 2.12, 2.3],
-    [-5, -10.75, 7.1, -2.6, 8.2, 2.2, 2.3],
-    [-4, -10.5, 7.3, -3.2, 8.9, 2.26, 2.3],
+    [-23.55, -5, 8.95, 2.244, 8.887, 2, 2.1],
+    [-19.55, -4.05, 7.25, 2.045, 7.94, 2, 2.1],
+    [-16.55, -3.861, 6.5, 1.952, 7.566, 2, 2.1],
+    [-14.55, -4.35, 6.2, 1.5, 7.439, 1.9, 1.95],
+    [-13.55, -5, 6.05, 1.3, 7.414, 1.75, 1.9],
+    [-12.85, -6.2, 6.001, 1.1, 7.402, 1.4, 1.9],
+    [-12.25, -9, 5.966, 0.9, 7.408, 1.3, 1.92],
+    [-11.57, -10.05, 5.902, 0.55, 7.414, 1.45, 1.97],
+    [-10.66, -10.65, 5.898, -0.05, 7.449, 1.85, 2.05],
+    [-10.05, -10.72, 6.117, -0.75, 7.502, 1.98, 2.15],
+    [-9.354, -10.45, 6.386, -1.35, 7.569, 2.08, 2.2],
+    [-8.462, -10.3, 6.53, -1.7, 7.688, 2.08, 2.25],
+    [-7, -10.77, 6.655, -2.3, 7.98, 2.08, 2.3],
+    [-6, -10.84, 6.85, -2.55, 8.25, 2.12, 2.3],
+    [-5, -10.75, 7.1, -2.8, 8.55, 2.2, 2.3],
+    [-4, -10.5, 7.3, -3.2, 8.95, 2.26, 2.3],
     [-3, -10.3, 7.48, -3.6, 9.4, 2.32, 2.3],
     [-2, -10.15, 7.6, -3.8, 9.75, 2.36, 2.3],
-    [-1, -9.85, 7.62, -3.7, 9.9, 2.36, 2.3],
-    # the temples a little in from the skull's breadth above them
-    [0, -9.85, 7.55, -3.2, 9.95, 2.3, 2.3],
-    [0.8, -10.2, 7.55, -2.4, 10, 2.2, 2.3],
-    [1.8, -10.7, 7.62, -1.2, 10.05, 2.08, 2.3],
-    [2.6, -10.75, 7.74, 0, 10.05, 2, 2.3],
-    [3.6, -10.5, 7.88, 1, 10, 1.94, 2.3],
-    [4.6, -10.1, 7.96, 1.8, 9.9, 1.9, 2.3],
-    [5.6, -9.7, 7.98, 2.3, 9.75, 1.88, 2.3],
-    [6.557, -9.25, 7.72, 2.6, 9.55, 1.86, 2.3],
-    # over the top: the frontal bone curving back above the forehead (its front corners round), the parietals'
-    # breadth further back, the crown above and a little behind the ears, the occiput's dome
-    [7.486, -8.75, 7.32, 3, 9.2, 1.82, 2.3],
-    [8.414, -8.05, 6.72, 3.3, 8.75, 1.8, 2.3],
-    [9.343, -7.05, 5.82, 3.5, 8.05, 1.82, 2.3],
-    [10.086, -5.75, 4.82, 3.55, 7.1, 1.88, 2.3],
-    [10.643, -4.1, 3.6, 3.4, 5.75, 1.95, 2.25],
-    [11.014, -2, 2.1, 2.8, 4.1, 2, 2.2],
-    [11.2, -0.4, 0.8, 1.8, 2.9, 2, 2.1],
+    [-1, -9.85, 7.625, -3.7, 9.9, 2.36, 2.3],
+    [0, -9.85, 7.601, -3.2, 9.95, 2.3, 2.3],
+    [0.8, -10.2, 7.727, -2.4, 10, 2.2, 2.3],
+    [1.8, -10.7, 8.037, -1.2, 10.05, 2.08, 2.3],
+    [2.6, -10.75, 8.213, 0.4, 10.05, 2.02, 2.2],
+    [3.6, -10.45, 8.15, 0.85, 10, 2, 2.15],
+    [4.6, -10.02, 8.03, 1.05, 9.88, 1.99, 2.12],
+    [5.6, -9.52, 7.95, 1.15, 9.7, 1.99, 2.1],
+    [6.557, -8.95, 7.66, 1.15, 9.42, 1.99, 2.08],
+    [7.486, -8.25, 7.2, 1.12, 8.93, 1.98, 2.06],
+    [8.414, -7.38, 6.45, 1.08, 8.28, 1.97, 2.05],
+    [9.343, -6.22, 5.42, 1.02, 7.4, 1.96, 2.04],
+    [10.09, -4.95, 4.38, 0.96, 6.32, 1.96, 2.03],
+    [10.64, -3.55, 3.22, 0.9, 5.1, 1.97, 2.02],
+    [11.01, -2.25, 2.18, 0.86, 3.92, 1.98, 2.02],
+    [11.2, -1.3, 1.45, 0.84, 3, 2, 2],
+    [11.32, -0.62, 0.86, 0.82, 2.28, 2, 2],
 ])
-CROWN_Z = 11.15
+CROWN_Z = 11.3                    # the cap: a hair under where the last sections close (no flat top)
+
+
+_TABLE = {}
+
+
+def _smoothed():
+    """the measures on a fine even grid, each smoothed up the head (a Gaussian of half a centimetre; under a quarter
+    round the jaw, whose underside is a turn: smoothed wide it was a slope down to the throat, a double chin), so no
+    section steps from the next: a measure that changes fast between two rows rang round the neck as creases. The
+    ends are padded by reflection (a constant pad made the top fatter than its measures)"""
+    if "zz" not in _TABLE:
+        zs = MEASURES[:, 0]
+        zz = np.arange(zs[0], zs[-1] + 1e-6, .05)
+        n = 60
+
+        def smooth(v, sig):
+            k = np.exp(-.5 * (np.arange(-n, n + 1) * .05 / sig) ** 2); k /= k.sum()
+            vp = np.r_[2 * v[0] - v[n:0:-1], v, 2 * v[-1] - v[-2:-n - 2:-1]]
+            return np.convolve(vp, k, mode="same")[n:-n]
+
+        jaw = np.clip((zz + 14.6) / .8, 0, 1) * np.clip((-8.6 - zz) / .8, 0, 1)
+        jaw = jaw * jaw * (3 - 2 * jaw)
+        cols = []
+        for c in range(1, 7):
+            v = np.interp(zz, zs, MEASURES[:, c])
+            cols.append(smooth(v, .5) * (1 - jaw) + smooth(v, .22) * jaw if c in (1, 5) else smooth(v, .5))
+        _TABLE["zz"], _TABLE["cols"] = zz, cols
+    return _TABLE["zz"], _TABLE["cols"]
 
 
 def measures(z):
-    zs = MEASURES[:, 0]
-    return [smooth_curve(zs, MEASURES[:, k], np.atleast_1d(np.asarray(z, float))) for k in range(1, 7)]
+    zz, cols = _smoothed()
+    q = np.atleast_1d(np.asarray(z, float))
+    return [np.interp(q, zz, c) for c in cols]
+
+
+def _round_tip(xs, ys, xr):
+    """the quadrant within xr of the midline as a parabola tangent to it at xr: a superellipse under 2 comes to a
+    point on the midline (its curvature runs to infinity there), a crease down the chin and the throat"""
+    if xr <= 1e-3 or xs[-1] <= 2 * xr:
+        return ys
+    h = .02 * xr
+    yr = float(np.interp(xr, xs, ys))
+    k = (float(np.interp(xr + h, xs, ys)) - float(np.interp(xr - h, xs, ys))) / (2 * h)
+    a = k / (2 * xr)
+    m = xs < xr
+    ys = ys.copy()
+    ys[m] = yr + a * (xs[m] ** 2 - xr * xr)
+    return ys
 
 
 def section(z, n=40):
     """the half section at height z: points (x, y) from the front midline round the side to the back midline"""
     yf, w, yw, yb, nf, nb = (float(v[0]) for v in measures(z))
-    pts = []
-    for i in range(n + 1):
-        t = math.pi * i / n
-        s, c = math.sin(t), math.cos(t)
-        if c >= 0:                                    # the front quadrant: from the midline's front to the widest
-            e = 2.0 / nf
-            x = w * s ** e
-            y = yw - (yw - yf) * c ** e
-        else:
-            e = 2.0 / nb
-            x = w * s ** e
-            y = yw + (yb - yw) * (-c) ** e
-        pts.append((x, y))
-    pts[0] = (0.0, yf); pts[-1] = (0.0, yb)
+    m = n // 2
+    t = np.linspace(0.0, .5 * math.pi, m + 1)
+    s, c = np.sin(t), np.cos(t)
+    ef, eb = 2.0 / nf, 2.0 / nb
+    xf, yfq = w * s ** ef, yw - (yw - yf) * c ** ef              # the front quadrant: the midline's front to the widest
+    xb, ybq = w * s ** eb, yw + (yb - yw) * c ** eb              # the back quadrant: the midline's back to the widest
+    xr = .14 * w
+    if nf < 2.05:
+        yfq = _round_tip(xf, yfq, xr)
+    if nb < 2.05:
+        ybq = _round_tip(xb, ybq, xr)
+    pts = [(float(x), float(y)) for x, y in zip(xf, yfq)]
+    pts += [(float(x), float(y)) for x, y in zip(xb[::-1][1:], ybq[::-1][1:])]
+    pts[0] = (0.0, float(yfq[0])); pts[-1] = (0.0, float(ybq[0]))
     return pts
 
 
 def sections(step=.5):
-    zs = np.arange(MEASURES[0, 0], MEASURES[-1, 0] + 1e-6, step)
+    zs = np.arange(MEASURES[0, 0], 10.4, step)
+    zs = np.r_[zs, np.arange(zs[-1] + .1, CROWN_Z + .021, .1)]
+    zj = np.arange(-14.0, -9.0, .25)                    # and every quarter round the jaw's underside
+    zs = np.unique(np.round(np.r_[zs, zj], 4))
     return {float(z): section(z) for z in zs}
 
 
@@ -154,7 +197,7 @@ class HeadBase:
         d = d - .2 * self.k("cheekbones") * G3(P, (6.25, -5.6, -1.4), (.8, 1.9, .7))
         # the hollow under the cheekbone, the temple's hollow
         d = d + .22 * self.k("cheek_hollow") * G3(P, (5.25, -6.9, -5.3), (1.0, 1.5, 1.3))
-        d = d + .2 * self.k("temples") * G3(P, (6.85, -5.2, 2.6), (.9, 1.7, 1.6))
+        d = d + .12 * self.k("temples") * G3(P, (6.85, -5.2, 2.6), (.9, 1.7, 1.6))
         # the cheek's soft pad beside the nose and above the mouth's corner
         d = d - .22 * self.k("cheeks") * G3(P, (2.9, -10.2, -3.6), (1.2, .8, 1.4))
         # the mandible: its border a soft ridge from the chin round the angle, the angle itself, the masseter
@@ -170,8 +213,8 @@ class HeadBase:
         d = smax(d, -ell(P, *ORBIT), .45)
         # the neck: the sternomastoids from behind the ears to the notch, the larynx
         dist, along = seg_dist(P, [(5.3, 1.9, -6.0), (4.2, -.8, -11.55), (2.6, -3.4, -16.55), (1.4, -4.8, -21.55)])
-        d = d - .38 * np.exp(-(dist / 1.25) ** 2) * (along > .2)
-        d = smin(d, ell(P, (0.0, -4.9, -14.85), (1.0, .95, 1.45)), .9)
+        d = d - .38 * np.exp(-(dist / 1.25) ** 2) * np.clip((along - .1) / .7, 0, 1) ** 2
+        d = smin(d, ell(P, (0.0, -4.05, -14.9), (1.0, .7, 1.35)), 1.4)
         return d
 
 
@@ -179,13 +222,13 @@ class HeadBase:
 # A man's nose (Farkas): 5.6 cm from the nasion to the subnasale, the tip 2.3 cm out from the lip, 3.7 cm across the
 # wings; the bony bridge narrow, the cartilage wider down to a rounded lobule with two soft domes; the wings round
 # lobes set back on each side, joined to the cheek by their crease, the nostrils under them, the columella between.
-NOSE_DORSUM = [((0, -10.0, .45), .46), ((0, -10.6, -.6), .44), ((0, -11.1, -1.6), .46), ((0, -11.6, -2.7), .52),
-               ((0, -12.0, -3.45), .6)]
+NOSE_DORSUM = [((0, -9.95, .45), .46), ((0, -10.45, -.6), .44), ((0, -10.85, -1.6), .46), ((0, -11.25, -2.7), .53),
+               ((0, -11.6, -3.4), .6)]
 NOSE_SIDE = [((0, -9.2, .1), .42), ((0, -9.5, -1.0), .5), ((0, -9.85, -2.3), .58), ((0, -10.1, -3.4), .64)]
-NOSE_TIP = ((0, -11.85, -3.9), (.84, .74, .72))
-NOSE_DOMES = ((.32, -12.12, -3.82), (.4, .36, .42))
+NOSE_TIP = ((0, -11.5, -3.82), (.84, .72, .72))
+NOSE_DOMES = ((.32, -11.76, -3.74), (.4, .36, .42))
 NOSE_WING = ((1.12, -10.85, -4.5), (.52, .9, .5))
-NOSE_BASE = ((0, -11.4, -4.62), (.66, 1.05, .4))
+NOSE_BASE = ((0, -11.15, -4.58), (.66, .95, .4))
 NOSTRIL = ((.52, -11.5, -5.0), (.22, .48, .16))
 NOSE_WIDTH_SCALE = 1.33           # the bridge's round cones measured in a space narrower across: a ridge, not a pipe
 
