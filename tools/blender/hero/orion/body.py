@@ -480,9 +480,10 @@ def leg_section(cc, z, sx, n=N_L, phi0=None):
     yc, b = .5 * (yf + yb), .5 * (yb - yf)
     full = THIGH_ADD * band(z, 0.58, 0.86, .06)            # the thigh's volume against the sheet's
     a, xc, b, yc = a + .75 * full, xc + .25 * full, b + full, yc - .3 * full
+    a = a + .007 * math.exp(-((z - .51) / .045) ** 2)                     # the knee: not pinched
     calf = 1 - (1 - TONE) * band(z, 0.20, 0.46, .05)
     a, b = a * calf, b * calf
-    ank = smoothstep(0.175, 0.11, z)
+    ank = smoothstep(0.27, 0.11, z) ** 1.3
     a, b = a + (.035 - a) * ank, b + (.045 - b) * ank
     xc, yc = xc + (.207 - xc) * ank, yc + (.030 - yc) * ank
     pts = []
@@ -556,8 +557,15 @@ def arm(C, T, sx, cc):
         x_sheet = SHOULDER[0] + (abs(P[0]) - SHOULDER[0]) * SHEET_ARM / (UPPER_ARM + FOREARM + HAND)
         zc, rv = cc.arm(x_sheet)
         rv *= TONE
-        kd = float(np.interp(s, [0.058, 0.25, 0.31, 0.44, 0.552], [1.02, .95, .92, .82, .66]))
-        rh = rv * kd
+        rh = rv * float(np.interp(s, [0.058, 0.25, 0.29], [1.02, .97, .95]))
+        # from below the elbow: the forearm's own thickness (vertical, back to palm) and width (across)
+        fa_s = [0.29, 0.33, 0.38, 0.44, 0.49, 0.542]
+        fa_v = [.042, .040, .035, .029, .024, .020]
+        fa_h = [.040, .045, .042, .037, .034, .031]
+        k = smoothstep(0.27, 0.33, s)
+        rv = rv * (1 - k) + float(np.interp(s, fa_s, fa_v)) * k
+        rh = rh * (1 - k) + float(np.interp(s, fa_s, fa_h)) * k
+        zc = zc * (1 - k) + P[2] * k
         centre = P.copy(); centre[2] = zc
         ring = []
         twist = 15.0 * smoothstep(0.30, 0.542, s)

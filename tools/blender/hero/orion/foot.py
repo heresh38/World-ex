@@ -43,10 +43,10 @@ class Frame:
 
 # the foot's upright rings after the heel's: along the foot (m), half width, the top of its back, how far the inner
 # side's sole is raised (the arch)
-RINGS = [(.066, .042, .066, .008),            # the instep, sloping forward and down from the ankle
-         (.104, .046, .056, .015),            # the arch
-         (.145, .049, .043, .005),            # behind the ball
-         (.170, .050, .030, .000)]            # the ball of the foot, low at its front where the toes start
+RINGS = [(.068, .043, .068, .008),            # the instep, sloping forward and down from the ankle
+         (.108, .048, .058, .015),            # the arch
+         (.151, .051, .044, .005),            # behind the ball
+         (.177, .0525, .031, .000)]           # the ball of the foot, low at its front where the toes start
 HEEL = dict(back=(-.050, .024), front=(.042, .078), hw=.036)   # the tilted ring: its low back, its high front
 
 
@@ -54,7 +54,9 @@ def build_foot(C, ankle_ring, F, log=print):
     """adds one foot to the cage C on the leg's ankle ring (16 vertex indices; the leg's j-th vertex sits at
     326.25 + 22.5 j degrees round the leg: 0 front, 90 outside, 180 back, 270 inside)"""
     sx = F.sx
-    angs = [(326.25 + 22.5 * j) % 360 for j in range(16)]
+    # the leg's j-th vertex round the leg: the left ring runs out round the front, the right (its mirror) the other way
+    angs = [(326.25 + sx * 22.5 * j) % 360 for j in range(16)]
+    at = lambda a: min(range(16), key=lambda j: abs(math.remainder(angs[j] - a, 360)))
     rings = [list(ankle_ring)]
     (fb, zb), (ff, zf) = HEEL["back"], HEEL["front"]
     cf, cz = .5 * (fb + ff), .5 * (zb + zf)
@@ -83,8 +85,8 @@ def build_foot(C, ankle_ring, F, log=print):
         C.strip(r0, r1)
     ball = rings[-1]
     # the ball's end: back of the foot (inside -> outside) and sole (inside -> outside)
-    order_d = [14, 15, 0, 1, 2, 3, 4, 5]
-    order_p = [13, 12, 11, 10, 9, 8, 7, 6]
+    order_d = [at(281.25 + 22.5 * k) for k in range(8)]           # the back of the foot, inside -> outside
+    order_p = [at(258.75 - 22.5 * k) for k in range(8)]           # the sole, inside -> outside
     D = [ball[j] for j in order_d]
     P = [ball[j] for j in order_p]
     C.quad(D[6], D[7], P[7], P[6])                    # beyond the little toe

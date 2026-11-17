@@ -26,8 +26,8 @@ FINGERS = [("little", .097, -.031, .068, .0188, -10.0),
            ("index", .106, .033, .083, .0216, 5.0)]
 PHAL = (.46, .30, .24)                 # the phalanges' shares of a finger's length
 CURL = (10.0, 18.0, 11.0)              # the relaxed bend at the knuckle, the middle joint, the last (deg)
-PALM_X = [.015, .032, .050, .068, .086]          # the palm's rings along the hand (the knuckle ring follows them)
-PALM_W = [.034, .040, .0435, .0455, .0465]       # its half width there
+PALM_X = [.026, .042, .056, .071, .086]          # the palm's rings along the hand (the knuckle ring follows them)
+PALM_W = [.0335, .0395, .0435, .0455, .0465]     # its half width there
 KNUCKLE_Y = [(2.5, -.031), (5.5, -.011), (8.5, .011), (11.5, .033)]   # the knuckle ring's columns under the fingers
 
 
@@ -64,10 +64,12 @@ def column_y(i, wscale=1.0):
 
 def palm_z(y, x, dorsal):
     """the back of the hand (dorsal) and the palm's face: the metacarpals' arch on the back, on the palm the thenar
-    mound by the thumb, the hypothenar along the little finger's edge, the pads under the knuckles"""
+    mound by the thumb, the hypothenar along the little finger's edge, the pads under the knuckles; near the wrist
+    the section is still the wrist's oval (thicker), flattening over the palm's first rings"""
     yn = y / .047
+    round_ = max(0.0, 1 - (x - .02) / .035)                       # 1 at the wrist end, 0 from the palm's middle
     if dorsal:
-        return .0105 + .0030 * (1 - yn * yn) - .0015 * max(0.0, (x - .07) / .03)
+        return .0105 + .0030 * (1 - yn * yn) - .0015 * max(0.0, (x - .07) / .03) + .0060 * round_ * (1 - yn * yn)
     z = -.0135 - .0025 * (1 - yn * yn)
     z -= .0070 * math.exp(-((y - .030) / .014) ** 2) * math.exp(-((x - .030) / .022) ** 2)      # thenar
     z -= .0045 * math.exp(-((y + .036) / .012) ** 2) * math.exp(-((x - .045) / .035) ** 2)      # hypothenar
@@ -109,8 +111,8 @@ def build_hand(C, wrist, frame, log=print):
     def triple(a, b, top):
         c, d, e, f = top
         pa, pb = C.V[a], C.V[b]
-        m1 = C.add(pa + (C.V[d] - pa) * .45 + (pb - pa) * .12, "hand")
-        m2 = C.add(pb + (C.V[e] - pb) * .45 + (pa - pb) * .12, "hand")
+        m1 = C.add(.5 * (pa + (pb - pa) / 3) + .5 * C.V[d], "hand")
+        m2 = C.add(.5 * (pa + (pb - pa) * 2 / 3) + .5 * C.V[e], "hand")
         C.quad(a, m1, d, c); C.quad(m1, m2, e, d); C.quad(m2, b, f, e); C.quad(a, b, m2, m1)
 
     # dorsal: the first wrist segment plain, the other four each to three

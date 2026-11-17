@@ -17,45 +17,55 @@ OFFSET = .0025
 THICK = .0015
 
 
+def ramp(v, edge, width=.006):
+    """0 -> 1 as v passes edge, over `width` (metres): a panel's soft, even border"""
+    t = np.clip((v - edge) / width + .5, 0, 1)
+    return t * t * (3 - 2 * t)
+
+
 def panel_masks(P, N):
-    """per vertex: (panel 0..1, seam 0..1) from its place on the body (world metres, the sheet's posture)"""
+    """per vertex: (panel 0..1, seam 0..1) from its place on the body (world metres, the sheet's posture); every
+    border a smooth curve, eased over a few millimetres, so the panels' edges run even"""
     x, y, z = np.abs(P[:, 0]), P[:, 1], P[:, 2]
     sx = np.sign(P[:, 0])
     nx, ny, nz = N[:, 0] * sx, N[:, 1], N[:, 2]
-    arm = x > .23
-    torso = (~arm) & (z > .93)
-    leg = (~arm) & (z <= .93)
-    pan = np.zeros(len(P), bool)
-    # the chest's wings across the collarbones, open at the zip down the middle
+    arm = ramp(x, .235, .02)
+    torso = (1 - arm) * ramp(z, .94, .02)
+    leg = (1 - arm) * (1 - ramp(z, .94, .02))
+    pan = np.zeros(len(P), np.float32)
+    put = lambda m: np.maximum(pan, np.clip(m, 0, 1))
+    # the chest's wings across the collarbones, open at the zip
     wing_low = 1.425 + .32 * np.maximum(.10 - x, 0) - .55 * np.maximum(x - .13, 0) ** 1.3
-    pan |= torso & (ny < -.25) & (x > .028) & (z > wing_low) & (z < 1.545)
+    pan = put(torso * ramp(-ny, .25, .2) * ramp(x, .03) * ramp(z, wing_low) * (1 - ramp(z, 1.545)))
     # the shoulders' caps and the upper arms' outsides
-    sh = np.sqrt((x - .232) ** 2 + (y + .022) ** 2 + ((z - 1.53) * 1.2) ** 2) < .075
-    pan |= sh & (nz > .05)
-    pan |= arm & (x < .44) & (nz > .55)
-    # the flanks: a stripe from under the arm down to the hip, leaning forward as it falls
+    shd = np.sqrt((x - .232) ** 2 + (y + .022) ** 2 + ((z - 1.53) * 1.2) ** 2)
+    pan = put((1 - ramp(shd, .075, .01)) * ramp(nz, .05, .2))
+    pan = put(arm * (1 - ramp(x, .44, .02)) * ramp(nz, .55, .15))
+    # the flanks: a stripe leaning forward as it falls
     yc = -.025 - .10 * (1.36 - z)
-    pan |= torso & (z > 1.0) & (z < 1.37) & (nx > .45) & (np.abs(y - yc) < .045)
-    # the hips' sides and the thighs' outer fronts
-    pan |= (z > .86) & (z < 1.02) & (nx > .55) & (y > -.06)
-    pan |= leg & (z > .56) & (z < .90) & (nx > .25) & (ny < .30)
-    # the knees and the shins' outsides
-    pan |= leg & (z > .455) & (z < .575) & (ny < -.55)
-    pan |= leg & (z > .14) & (z < .43) & (ny < -.15) & (nx > .05)
+    pan = put(torso * ramp(z, 1.0) * (1 - ramp(z, 1.37)) * ramp(nx, .45, .15) * (1 - ramp(np.abs(y - yc), .045)))
+    # the thighs' outer fronts: a band leaning back as it rises, ending above the knee in a curve
+    tz = .58 + .10 * np.clip((y + .12) / .1, 0, 1)
+    pan = put(leg * ramp(z, tz, .01) * (1 - ramp(z, .90)) * ramp(nx, .30, .2) * (1 - ramp(ny, .30, .2)))
+    # the knee: a rounded pad
+    kz = np.abs(z - .515) / .055
+    ky = np.clip(-ny - .45, 0, 1) / .55
+    pan = put(leg * (1 - ramp(kz ** 2 + (1 - ky) ** 2, 1.0, .25)))
+    # the shins' outsides: a strip narrowing to the ankle
+    pan = put(leg * ramp(z, .15) * (1 - ramp(z, .43)) * ramp(-ny, .15, .15) * ramp(nx, .05 + .25 * (.43 - z), .15))
     # the back: a broad centre narrowing to the waist
     half = .045 + .13 * np.clip((z - 1.22) / .30, 0, 1)
-    pan |= torso & (ny > .45) & (x < half) & (z > 1.05) & (z < 1.56)
+    pan = put(torso * ramp(ny, .45, .2) * (1 - ramp(x, half)) * ramp(z, 1.05) * (1 - ramp(z, 1.56)))
     # the collar stays dark
-    pan &= ~((z > 1.545) & (x < .10))
-    seam = np.zeros(len(P), np.float32)
-    # the abdomen's lines (seams on the dark base), the spine's seam, the zip
-    front = (ny < -.5) & torso
+    pan = pan * (1 - ramp(z, 1.545) * (1 - ramp(x, .10)))
+    seam = 4 * pan * (1 - pan)                                         # a fine line where each panel ends
+    front = (ny < -.5) * torso
     seam += front * (np.exp(-((x - .078) / .0035) ** 2) * (z > 1.0) * (z < 1.33))
     for zz in (1.17, 1.228, 1.284):
         seam += front * np.exp(-((z - zz) / .0035) ** 2) * (x < .08)
     seam += front * np.exp(-(x / .003) ** 2) * (z > 1.0)
     seam += (ny > .5) * torso * np.exp(-(x / .003) ** 2)
-    return pan.astype(np.float32), np.clip(seam, 0, 1)
+    return pan, np.clip(seam, 0, 1)
 
 
 def build_suit(body, log=print):
@@ -73,7 +83,10 @@ def build_suit(body, log=print):
     # what it covers: below the collar, short of the wrists and the ankles
     x, y, z = np.abs(co[:, 0]), co[:, 1], co[:, 2]
     collar = 1.585 + .06 * np.clip((y - .0) / .07, 0, 1)
-    covered = (z < collar) & (z > .118) & ~((x > .70))
+    a = np.array([math.cos(math.radians(6.0)), 0.0, -math.sin(math.radians(6.0))])
+    along = np.c_[x - .178, y + .030, z - 1.486] @ a                     # along the arm from the shoulder joint
+    sleeve = (x > .30) & (along > .522)
+    covered = (z < collar) & (z > .118) & ~sleeve
     bm = bmesh.new(); bm.from_mesh(me)
     bm.verts.ensure_lookup_table()
     drop = [f for f in bm.faces if not all(covered[v.index] for v in f.verts)]
@@ -92,13 +105,6 @@ def build_suit(body, log=print):
     for v in me.vertices:
         _, i, _ = kd.find(v.co)
         cols[v.index] = (pan[i], seam[i], 0, 1)
-    # the panels' borders are seams too
-    nb = [[] for _ in range(len(me.vertices))]
-    for e in me.edges:
-        a, b = e.vertices
-        nb[a].append(b); nb[b].append(a)
-    border = np.array([any(abs(cols[j, 0] - cols[i, 0]) > .5 for j in nb[i]) for i in range(len(me.vertices))])
-    cols[:, 1] = np.maximum(cols[:, 1], border * .85)
     m.data.foreach_set("color", cols.ravel())
     mod = o.modifiers.new("thick", 'SOLIDIFY'); mod.thickness = THICK; mod.offset = 1.0
     o.data.materials.clear()
