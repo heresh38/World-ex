@@ -48,8 +48,8 @@ SECTIONS = {
           (7.2, -3.6), (7.6, .5), (7.35, 4.2), (5.9, 6.9), (3.1, 8.35), (0, 8.75)],
     1.15: [(0, -10.75), (1.1, -10.45), (2.0, -9.75), (3.2, -9.35), (4.4, -9.4), (5.25, -8.95), (6.1, -7.25),
            (7.0, -4.0), (7.55, .3), (7.35, 4.1), (5.9, 6.8), (3.1, 8.3), (0, 8.7)],
-    0.0: [(0, -10.35), (1.1, -9.85), (1.7, -9.15), (2.4, -8.35), (3.2, -8.05), (4.1, -8.15), (4.8, -7.85),
-          (5.45, -7.2), (6.25, -5.9), (7.05, -3.2), (7.5, 0.0), (7.3, 4.0), (5.9, 6.7), (3.1, 8.2), (0, 8.6)],
+    0.0: [(0, -10.35), (1.0, -9.85), (1.5, -9.15), (2.15, -8.35), (2.95, -8.05), (3.85, -8.15), (4.55, -7.85),
+          (5.25, -7.2), (6.25, -5.9), (7.05, -3.2), (7.5, 0.0), (7.3, 4.0), (5.9, 6.7), (3.1, 8.2), (0, 8.6)],
     -1.25: [(0, -10.0), (1.1, -9.75), (2.0, -9.45), (3.0, -9.25), (4.0, -9.05), (4.9, -8.45), (5.7, -7.45),
             (6.5, -5.6), (7.2, -3.0), (7.5, 0.0), (7.2, 3.8), (5.8, 6.5), (3.0, 8.0), (0, 8.4)],
     -2.6: [(0, -10.0), (1.2, -9.95), (2.4, -9.85), (3.7, -9.62), (4.7, -9.1), (5.6, -8.15), (6.5, -6.5),
@@ -64,10 +64,10 @@ SECTIONS = {
             (6.35, -2.3), (6.3, -.3), (5.7, 1.8), (4.2, 3.8), (2.1, 5.0), (0, 5.4)],
     -8.6: [(0, -10.2), (1.2, -10.08), (2.4, -9.55), (3.4, -8.6), (4.5, -7.1), (5.45, -5.4), (6.0, -3.4),
            (6.1, -1.4), (5.85, .5), (5.0, 2.5), (3.6, 4.0), (1.8, 4.9), (0, 5.2)],
-    -9.8: [(0, -10.55), (1.2, -10.35), (2.4, -9.4), (3.5, -8.3), (4.6, -6.6), (5.35, -4.8), (5.6, -3.0),
-           (5.4, -1.0), (4.95, 1.0), (4.2, 2.8), (3.0, 4.0), (1.5, 4.7), (0, 4.9)],
-    -11.0: [(0, -11.05), (1.0, -10.9), (2.0, -10.35), (3.0, -9.35), (3.9, -7.9), (4.4, -6.2), (4.7, -4.0),
-            (5.2, -1.2), (5.25, .9), (4.7, 2.7), (3.4, 3.9), (1.8, 4.6), (0, 4.8)],
+    -9.8: [(0, -10.55), (1.2, -10.35), (2.4, -9.4), (3.5, -8.3), (4.6, -6.6), (5.45, -4.8), (5.85, -3.0),
+           (5.85, -1.1), (4.95, 1.0), (4.2, 2.8), (3.0, 4.0), (1.5, 4.7), (0, 4.9)],
+    -11.0: [(0, -11.05), (1.0, -10.9), (2.0, -10.35), (3.0, -9.35), (3.95, -7.9), (4.65, -6.2), (5.2, -4.0),
+            (5.5, -1.3), (5.25, .9), (4.7, 2.7), (3.4, 3.9), (1.8, 4.6), (0, 4.8)],
     -12.0: [(0, -10.0), (1.0, -9.85), (2.0, -9.35), (3.0, -8.45), (3.8, -7.05), (4.3, -5.0), (5.0, -2.2),
             (5.45, .2), (5.0, 2.3), (3.9, 3.7), (2.0, 4.4), (0, 4.6)],
     -12.8: [(0, -8.4), (1.4, -8.2), (2.6, -7.55), (3.6, -6.45), (4.35, -4.7), (5.0, -2.4), (5.6, 0.0),
@@ -200,17 +200,17 @@ def curve(xs, ys):
 # ---------------------------------------------------------------------------------------------------------------
 # the features
 
-EYE = np.array([3.2, -8.1, 0.0], F32)       # the left eyeball's centre
+EYE = np.array([2.95, -8.1, 0.0], F32)      # the left eyeball's centre (the portrait's eyes sit close)
 EYE_R = 1.2
 # the fissure in the front view (x, z) of the left eye: the canthi, the margins' highest / lowest points
-EN = (1.66, -0.06)                            # the inner canthus
-EX = (4.70, 0.14)                             # the outer canthus (a little higher: the male's slight upward tilt)
+EN = (1.50, -0.06)                            # the inner canthus
+EX = (4.45, 0.14)                             # the outer canthus (a little higher: the male's slight upward tilt)
 LID_UP, LID_LO = 0.35, 0.39                   # the margins' rise / fall over the line between the canthi
 # the face's landmarks on the midline (z, y), from the owner's portrait: the nose shortish, the mouth high over a
 # long, strong chin. The nose and the lips are drawn from these, so moving one moves its whole feature.
 NASION = (0.55, -10.35)
 TIP = (-3.9, -12.95)                          # the pronasale
-SUBNASALE = (-5.0, -10.95)
+SUBNASALE = (-5.0, -10.7)
 STOMION_Z = -7.25
 
 
@@ -378,7 +378,7 @@ class Head:
         xn, yn, zn = Pn[:, 0], Pn[:, 1], Pn[:, 2]
         fis, up, lo = self.fissure(xn, zn)
         # the lids: a shell draped over the globe, a little wider than it so the canthi sit beside it
-        L = Pn - np.array([3.18, -7.95, .03], F32)
+        L = Pn - np.array([EYE[0] - .02, -7.95, .03], F32)
         L[:, 1] -= .32 * L[:, 0]
         q = L / np.array([1.58, 1.30, 1.16], F32)
         rq = length(q)
@@ -398,13 +398,13 @@ class Head:
         # under the lower lid: the lid's lower edge and the tear trough running down and out from the inner corner
         lz = lo - .55 + .1 * u
         dn = dn + .022 * np.exp(-((zn - lz) / .08) ** 2) * spow(np.sin(np.pi * u), .7)
-        tt = np.exp(-(((zn + 1.25) + .35 * (xn - 2.2)) / .22) ** 2) * G(xn, 2.4, .6)
+        tt = np.exp(-(((zn + 1.25) + .35 * (xn - 2.0)) / .22) ** 2) * G(xn, 2.2, .6)
         dn = dn + .06 * tt * self.k("tear_trough")
         # the globe sits in its socket: nothing of the head inside it
         globe = length(Pn - EYE) - (EYE_R + .025)
         dn = smax(dn, -globe, .05)
         # the inner corner's caruncle
-        dn = smin(dn, length(Pn - np.array([1.86, -8.86, -.07], F32)) - .16, .08)
+        dn = smin(dn, length(Pn - np.array([EN[0] + .2, -8.86, -.07], F32)) - .16, .08)
         out = d.copy()
         out[near] = dn
         return out
@@ -413,7 +413,8 @@ class Head:
     def ear(self, Q):
         """the left ear in its own frame: s back along it, t up it, w out of its plane; mirrored"""
         P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]]
-        o = np.array([7.05, 0.15, -1.05], F32)                # the canal's opening
+        o = np.array([7.05, 0.15, -.75], F32)                 # the canal's opening
+        EARS = 1.0 / 1.12                                         # the portrait's ear is large
         tilt, out = math.radians(17), math.radians(24)
         # the ear's axes: up its length (tilted back), back across it, out of it (turned forward)
         a_t = np.array([0, math.sin(tilt), math.cos(tilt)], F32)
@@ -423,9 +424,9 @@ class Head:
         a_w = n0 * c - a_s * s_                                         # out, and a little forward
         a_s2 = a_s * c + n0 * s_                                        # back, and out (the shell leans off the head)
         d3 = P - o
-        s = d3 @ a_s2
-        t = d3 @ a_t
-        w = d3 @ a_w
+        s = (d3 @ a_s2) * EARS
+        t = (d3 @ a_t) * EARS
+        w = (d3 @ a_w) * EARS
         L = np.c_[s, t, w]
         # the auricle: a thin shell of an oval, thicker at its rim, its back on the head at the front
         oval = ell_2d(s - 1.55, t - .25, 1.75, 3.15)
@@ -455,7 +456,7 @@ class Head:
         d = smin(d, ell(L, (1.45, -1.55, .92), (.36, .3, .28)), .12)
         # the canal
         d = smax(d, -capsule(L, (.35, -.25, .9), (.25, -.15, -.5), .3), .1)
-        return d
+        return d / EARS
 
     # --- the neck -------------------------------------------------------------------------------------------
     def neck_detail(self, Q, d):
@@ -473,10 +474,10 @@ class Head:
         ((6.3, -6.3, -1.6), (.75, 1.9, .6), .14, "cheekbones"),           # the zygomatic arch running back
         ((6.45, -5.6, 2.3), (.9, 1.5, 1.3), -.16, "temples"),              # the temple's hollow
         ((5.1, -7.2, -5.3), (1.0, 1.1, 1.3), -.22, "cheek_hollow"),        # the hollow under the cheekbone
-        ((6.05, -3.0, -6.2), (.8, 1.9, 2.0), .20, "jaw"),                  # masseter on the ramus
+        ((6.05, -3.0, -7.0), (.8, 1.9, 2.3), .20, "jaw"),                  # masseter on the ramus
         ((0.0, -10.95, -10.6), (1.4, .8, 1.0), .12, "chin"),               # the chin's pad
         ((1.5, -10.7, -11.4), (.6, .6, .55), .10, "chin"),                 # its corners
-        ((2.9, -11.0, 1.75), (1.65, .75, .5), .34, "brow"),                # the brow's ridge, low over the eye
+        ((3.15, -10.95, 1.75), (1.9, .75, .5), .34, "brow"),               # the brow's ridge, low over the eye
         ((0.0, -11.3, 1.55), (.85, .6, .7), .14, "brow"),                  # glabella
         ((3.0, -10.1, 5.0), (1.8, 1.0, 1.8), .12, "forehead"),             # the frontal eminences
         ((2.6, -10.2, -5.6), (.85, .7, 1.35), .14, "cheeks"),              # the cheek beside the nasolabial fold
@@ -486,8 +487,8 @@ class Head:
         """the mandible's lower border as one clean ridge from the chin round the angle and up the ramus's back,
         the soft shadow under it"""
         P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]]
-        pts = np.array([(1.6, -10.4, -11.75), (3.2, -8.5, -11.0), (4.7, -6.0, -10.15), (5.75, -3.2, -9.35),
-                        (6.1, -1.55, -8.75), (6.0, -.6, -7.0)], F32)
+        pts = np.array([(1.6, -10.4, -11.8), (3.2, -8.5, -11.3), (4.7, -6.0, -10.9), (5.8, -3.1, -10.45),
+                        (6.1, -1.5, -10.15), (6.0, -.5, -8.2)], F32)
         best = np.full(len(P), 1e9, F32)
         along = np.zeros(len(P), F32)
         for i in range(len(pts) - 1):

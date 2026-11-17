@@ -245,6 +245,51 @@ def profile_check(sc, out):
     log("profile", out.replace(".png", "_profile.png"))
 
 
+def pfit(sc, out):
+    """the head from the portrait's own camera (portrait_fit.py), laid half over the owner's portrait:
+    <out>_pfit.png (the portrait, the head, the two blended)"""
+    import json
+    cam = json.load(open(os.path.join(HERE, "portrait_camera.json")))
+    import math as m
+    yaw, pitch, roll, s_, tu, tv = cam["yaw"], cam["pitch"], cam["roll"], cam["scale"], cam["tu"], cam["tv"]
+    cy, sy, cp, sp, cr, sr = m.cos(yaw), m.sin(yaw), m.cos(pitch), m.sin(pitch), m.cos(roll), m.sin(roll)
+    Rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
+    Rx = np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
+    Ry = np.array([[cr, 0, sr], [0, 1, 0], [-sr, 0, cr]])
+    R = Rz @ Rx @ Ry
+    x0, y0, x1, y1 = PORTRAIT
+    W, Hh = (x1 - x0) * 2, (y1 - y0) * 2
+    # the head point under the crop's centre; the camera looks along the turned head's +y
+    qc = np.array([((x0 + x1) / 2 - tu) / s_, 0.0, (tv - (y0 + y1) / 2) / s_])
+    pc = R.T @ qc
+    fwd = R.T @ np.array([0, 1, 0.0])
+    up = R.T @ np.array([0, 0, 1.0])
+    world = Vector((pc[0] / 100, pc[1] / 100 + H.Y0, pc[2] / 100 + H.Z0))
+    c = sc.camera
+    c.data.type = 'ORTHO'
+    c.data.ortho_scale = max(W, Hh) / 2 / s_ / 100
+    c.location = world - Vector(fwd) * 1.0
+    from mathutils import Matrix
+    zc = -Vector(fwd); yc = Vector(up); xc = yc.cross(zc)
+    c.rotation_euler = Matrix((xc, yc, zc)).transposed().to_euler()
+    sc.render.resolution_x, sc.render.resolution_y = W, Hh
+    sc.render.filepath = out.replace(".png", "_pfit_head.png")
+    bpy.ops.render.render(write_still=True)
+    im = bpy.data.images.load(sc.render.filepath)
+    head = np.array(im.pixels[:], np.float32).reshape(Hh, W, 4)[::-1]
+    im = bpy.data.images.load(SHEET)
+    SW, SH = im.size
+    a = np.array(im.pixels[:], np.float32).reshape(SH, SW, 4)[::-1]
+    crop = a[y0:y1, x0:x1].repeat(2, 0).repeat(2, 1)
+    mix = crop * .5 + head * .5
+    sheet = np.concatenate([crop, head, mix], axis=1)
+    img = bpy.data.images.new("pfit", sheet.shape[1], sheet.shape[0], alpha=True)
+    img.pixels = sheet[::-1].ravel()
+    img.filepath_raw = out.replace(".png", "_pfit.png"); img.file_format = 'PNG'; img.save()
+    c.data.type = 'PERSP'
+    log("pfit", img.filepath_raw)
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:]
     out = os.path.abspath(argv[0])
@@ -272,6 +317,8 @@ def main():
     studio(sc)
     sc.cycles.samples = int(flags.get("--samples", 96))
     res = int(flags.get("--res", 800))
+    if "--pfit" in flags:
+        pfit(sc, out)
     files = []
     for v in views:
         sc.render.resolution_x = int(res * (.672 if v == "portrait" else 1.0))

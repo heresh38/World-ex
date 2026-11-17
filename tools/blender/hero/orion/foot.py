@@ -14,8 +14,8 @@ import numpy as np
 FOOT_LEN = 0.270
 TOE_OUT = 7.0                    # degrees the foot turns out
 # toes: name, segments of the ball's end (first, count), length, width at the root, splay (deg, + outward)
-TOES = [("big", 0, 2, .046, .027, -3.0), ("second", 2, 1, .036, .0175, 1.0), ("third", 3, 1, .031, .0165, 4.0),
-        ("fourth", 4, 1, .027, .0155, 7.0), ("little", 5, 1, .022, .0145, 11.0)]
+TOES = [("big", 0, 2, .036, .027, -4.0), ("second", 2, 1, .028, .0168, 0.0), ("third", 3, 1, .025, .0160, 3.0),
+        ("fourth", 4, 1, .022, .0152, 6.0), ("little", 5, 1, .018, .0145, 10.0)]
 
 
 def unit(v):
@@ -43,11 +43,11 @@ class Frame:
 
 # the foot's upright rings after the heel's: along the foot (m), half width, the top of its back, how far the inner
 # side's sole is raised (the arch)
-RINGS = [(.040, .041, .068, .006),            # in front of the ankle, the heel's front under it
-         (.095, .045, .058, .014),            # the arch
-         (.150, .049, .046, .004),            # behind the ball
-         (.178, .051, .038, .000)]            # the ball of the foot
-HEEL = dict(back=(-.052, .018), front=(.012, .088), hw=.038)   # the tilted ring: its low back, its high front
+RINGS = [(.066, .042, .066, .008),            # the instep, sloping forward and down from the ankle
+         (.104, .046, .056, .015),            # the arch
+         (.145, .049, .043, .005),            # behind the ball
+         (.170, .050, .030, .000)]            # the ball of the foot, low at its front where the toes start
+HEEL = dict(back=(-.050, .024), front=(.042, .078), hw=.036)   # the tilted ring: its low back, its high front
 
 
 def build_foot(C, ankle_ring, F, log=print):
@@ -95,28 +95,35 @@ def build_foot(C, ankle_ring, F, log=print):
 
 
 def toe(C, F, base, name, L, wd, splay):
+    """a toe: from its segments of the ball's end, rings round its own oval (as wide as the toe, a little lower than
+    wide), raised at its middle knuckle and down to its tip on the floor, a cap at the tip. The base ring's order
+    round the toe is kept: its first vertices on the toe's back from the inside out, then under it back again."""
     pts = np.array([C.V[v] for v in base])
-    root = pts.mean(0)
+    n = len(base)
     t = math.radians(splay)
     d = unit(F.fw * math.cos(t) + F.lat * math.sin(t))
-    n = len(base)
-    # the toe: forward from the ball, then down to its tip on the floor
-    plan = [(.30, 1.0), (.62, .92), (.88, .80)]
+    lat = unit(np.cross(d, F.up)) * (1 if F.sx > 0 else -1) * -1
+    root = pts.mean(0)
+    root[2] = .015 if n == 4 else .017
+    # angles round the toe (0 = outward, 90 = up): back from the inside out, the sole back again
+    half = n // 2
+    back = np.linspace(150, 30, half) if half > 2 else np.array([135.0, 45.0])
+    angs = list(back) + [-a for a in back[::-1]]
+    plan = [(.22, 1.10, .006), (.58, 1.0, .007), (.86, .90, .003)]     # share along, width, rise above the line
     rings = [list(base)]
-    centre = pts.mean(0)
-    rel = pts - centre
-    for share, ws in plan:
+    for share, ws, rise in plan:
         c = root + d * L * share
-        c[2] = root[2] + (.012 - root[2]) * share ** 1.4
+        c[2] = root[2] + (.0085 - root[2]) * share ** 1.6 + rise
         ring = []
-        for k in range(n):
-            r = rel[k] * (ws * (1 - .25 * share))
-            r[2] = rel[k][2] * ws * (1 - .35 * share)
-            ring.append(C.add(c + r, f"toe_{name}"))
+        for a in angs:
+            r = math.radians(a)
+            tall = (.50 if a > 0 else .46) * (1.15 - .3 * share)               # thick at the root, lower at the tip
+            off = lat * (wd * ws / 2 * math.cos(r)) + F.up * (wd * ws * tall * math.sin(r))
+            ring.append(C.add(c + off, f"toe_{name}"))
         rings.append(ring)
     for r0, r1 in zip(rings, rings[1:]):
         C.strip(r0, r1)
     if n == 4:
-        C.cap(rings[-1], f"toe_{name}", .006, d)
+        C.cap(rings[-1], f"toe_{name}", wd * .35, d)
     else:
-        C.cap_rect(rings[-1], 1, n // 2 - 1, f"toe_{name}", .006, d)
+        C.cap_rect(rings[-1], 1, n // 2 - 1, f"toe_{name}", wd * .35, d)

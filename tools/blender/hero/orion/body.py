@@ -482,6 +482,9 @@ def leg_section(cc, z, sx, n=N_L, phi0=None):
     a, xc, b, yc = a + .75 * full, xc + .25 * full, b + full, yc - .3 * full
     calf = 1 - (1 - TONE) * band(z, 0.20, 0.46, .05)
     a, b = a * calf, b * calf
+    ank = smoothstep(0.175, 0.11, z)
+    a, b = a + (.035 - a) * ank, b + (.045 - b) * ank
+    xc, yc = xc + (.207 - xc) * ank, yc + (.030 - yc) * ank
     pts = []
     for j in range(n):
         phi = (phi0 + 360.0 * j / n) % 360
