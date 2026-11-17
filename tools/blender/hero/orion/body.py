@@ -131,7 +131,7 @@ class Concept:
 
 SHOULDER = np.array([0.178, -0.030, 1.486])     # the left glenohumeral joint
 ARM_DROP = math.radians(6.0)                      # the sheet's arms hang 6 degrees below level
-UPPER_ARM, FOREARM, HAND = 0.293, 0.259, 0.190    # joint to fingertip 0.742: arm span = stature
+UPPER_ARM, FOREARM, HAND = 0.290, 0.252, 0.200    # joint to fingertip 0.742: arm span = stature; the hand 20 cm
 SHEET_ARM = 0.760                                 # the sheet's own joint-to-fingertip (its arms are 2 % long)
 CROTCH_Z = 4 * HEAD
 
@@ -180,14 +180,17 @@ def torso_mod(theta, z):
 
 
 WAIST_ADD = 0.012          # half width added at the waist (the owner: "widen the waist just a little")
-THIGH_ADD = 0.012          # added round the thigh (the owner: "give the thighs more natural volume")
+THIGH_ADD = -0.007         # round the thigh against the sheet's (the owner first asked for "more natural volume",
+                           # then: "tone down the muscles ... not a tank, thighs seem very big")
+TONE = 0.96                # the lats', the arms' and the calves' bulk against the sheet's: athletic, not a tank
 
 
 def torso_width(cc, z):
     """half the torso's own width: the sheet's below the armpits (the waist a little wider, the owner's note);
     above them its outline is the arms', so the chest narrows from the lats to the shoulder's socket"""
     if z <= 1.392:
-        return cc.torso_w(z) + WAIST_ADD * bump(z, 1.18, .075)
+        lats = 1 - (1 - TONE) * band(z, 1.24, 1.40, .04)
+        return cc.torso_w(z) * lats + WAIST_ADD * bump(z, 1.18, .075)
     return float(np.interp(z, [1.392, 1.405, 1.488, 1.568], [cc.torso_w(1.392), .212, .186, .172]))
 
 
@@ -245,6 +248,38 @@ class Cage:
 
     def quad(self, a, b, c, d):
         self.F.append((a, b, c, d))
+
+    def cap_rect(self, ring, m, n, part, bulge=0.0, normal=None):
+        """closes a ring of 2 (m + n) vertices with an n (along) x m (across) grid"""
+        assert len(ring) == 2 * (m + n)
+        G = {}
+        for a in range(n + 1):
+            G[(a, 0)] = ring[a]
+            G[(a, m)] = ring[2 * n + m - a]
+        for b in range(m + 1):
+            G[(n, b)] = ring[n + b]
+            G[(0, b)] = ring[(2 * n + 2 * m - b) % len(ring)]
+        pos = lambda key: self.V[G[key]]
+        for a in range(1, n):
+            for b in range(1, m):
+                u, v = a / n, b / m
+                p = ((1 - v) * pos((a, 0)) + v * pos((a, m)) + (1 - u) * pos((0, b)) + u * pos((n, b))
+                     - ((1 - u) * (1 - v) * pos((0, 0)) + u * (1 - v) * pos((n, 0)) + (1 - u) * v * pos((0, m))
+                        + u * v * pos((n, m))))
+                if normal is not None:
+                    p = p + np.asarray(normal, float) * bulge * math.sin(math.pi * u) * math.sin(math.pi * v)
+                G[(a, b)] = self.add(p, part)
+        for a in range(n):
+            for b in range(m):
+                self.quad(G[(a, b)], G[(a + 1, b)], G[(a + 1, b + 1)], G[(a, b + 1)])
+
+    def compact(self):
+        """drops vertices no quad uses (a window's inside) and renumbers"""
+        used = sorted({v for f in self.F for v in f})
+        new = {o: n for n, o in enumerate(used)}
+        self.V = [self.V[o] for o in used]
+        self.part = [self.part[o] for o in used]
+        self.F = [tuple(new[v] for v in f) for f in self.F]
 
     def strip(self, r0, r1):
         n = len(r0)
@@ -319,11 +354,19 @@ def build(cc=None, log=print):
     arms = {sx: arm(C, T, sx, cc) for sx in (1, -1)}
     # placeholders until the head, hands and feet are grafted on
     C.cap(neck[-1], "head", .10, (0, 0, 1))
+    import hand as hand_mod
+    import foot as foot_mod
+    frames = []
     for sx in (1, -1):
-        C.cap(arms[sx][-1], "hand", .03, (sx, 0, 0))
-        C.cap(legs[sx][-1], "foot", .03, (0, 0, -1))
+        S_, a, up, back = arm_axis(sx)
+        F = hand_mod.Frame(S_ + a * (UPPER_ARM + FOREARM), a, up, sx)
+        frames.append(F)
+        hand_mod.build_hand(C, arms[sx][-1], F, log=log)
+        ank = np.mean([C.V[v] for v in legs[sx][-1]], axis=0)
+        foot_mod.build_foot(C, legs[sx][-1], foot_mod.Frame((ank[0], ank[1] + .004, ank[2]), sx), log=log)
+    C.compact()
     log(f"cage: {len(C.V)} vertices, {len(C.F)} quads")
-    return C, dict(T=T, neck=neck, legs=legs, arms=arms, crotch=crotch)
+    return C, dict(T=T, neck=neck, legs=legs, arms=arms, crotch=crotch, hands=frames)
 
 
 # --- the shoulder: a window of 12 round each arm's socket ------------------------------------------------------------
@@ -428,13 +471,17 @@ def leg_mod(phi, z):
     return d
 
 
-def leg_section(cc, z, sx, n=N_L, phi0=320.0):
+def leg_section(cc, z, sx, n=N_L, phi0=None):
+    if phi0 is None:
+        phi0 = 320.0 + 6.25 * smoothstep(0.80, 0.095, z)
     xi, xo = cc.leg(z)
     yf, yb = cc.side(z)
     xc, a = .5 * (xi + xo), .5 * (xo - xi)
     yc, b = .5 * (yf + yb), .5 * (yb - yf)
-    full = THIGH_ADD * band(z, 0.58, 0.86, .06)            # natural volume: more outward and in front than inside
+    full = THIGH_ADD * band(z, 0.58, 0.86, .06)            # the thigh's volume against the sheet's
     a, xc, b, yc = a + .75 * full, xc + .25 * full, b + full, yc - .3 * full
+    calf = 1 - (1 - TONE) * band(z, 0.20, 0.46, .05)
+    a, b = a * calf, b * calf
     pts = []
     for j in range(n):
         phi = (phi0 + 360.0 * j / n) % 360
@@ -474,7 +521,7 @@ def leg(C, T0, crotch, sx, cc):
 
 # --- arms --------------------------------------------------------------------------------------------------------
 
-A_S = [0.058, 0.098, 0.145, 0.198, 0.248, 0.293, 0.335, 0.390, 0.445, 0.500, 0.552]
+A_S = [0.058, 0.097, 0.143, 0.195, 0.244, 0.290, 0.330, 0.384, 0.437, 0.490, 0.542]
 
 
 def arm_axis(sx):
@@ -505,11 +552,14 @@ def arm(C, T, sx, cc):
         # the sheet's outline at the same share of the arm (its arms are 2 % long)
         x_sheet = SHOULDER[0] + (abs(P[0]) - SHOULDER[0]) * SHEET_ARM / (UPPER_ARM + FOREARM + HAND)
         zc, rv = cc.arm(x_sheet)
+        rv *= TONE
         kd = float(np.interp(s, [0.058, 0.25, 0.31, 0.44, 0.552], [1.02, .95, .92, .82, .66]))
         rh = rv * kd
         centre = P.copy(); centre[2] = zc
         ring = []
-        for psi in window_angles():
+        twist = 15.0 * smoothstep(0.30, 0.542, s)
+        for psi0 in window_angles():
+            psi = psi0 + twist
             p = math.radians(psi)
             off = back * (rh * math.cos(p)) + up * (rv * math.sin(p))
             off = off + off / (np.linalg.norm(off) + 1e-9) * arm_mod(psi, s)

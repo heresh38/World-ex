@@ -188,12 +188,12 @@ def turnaround(sc, path, samples=64):
     w = bpy.data.worlds.new("w"); sc.world = w
     w.use_nodes = True
     bg = w.node_tree.nodes["Background"]
-    bg.inputs[0].default_value = (.20, .20, .23, 1); bg.inputs[1].default_value = .4
+    bg.inputs[0].default_value = (.20, .20, .23, 1); bg.inputs[1].default_value = .12
     mat = bpy.data.materials.new("clay"); mat.use_nodes = True
     b = mat.node_tree.nodes["Principled BSDF"]
     b.inputs["Base Color"].default_value = (.32, .30, .285, 1); b.inputs["Roughness"].default_value = .55
     for o in sc.objects:
-        if o.type == 'MESH':
+        if o.type == 'MESH' and o.name != "suit":                     # the suit keeps its own material
             o.data.materials.clear(); o.data.materials.append(mat)
             for p in o.data.polygons:
                 p.use_smooth = True
@@ -204,9 +204,9 @@ def turnaround(sc, path, samples=64):
         ob = bpy.data.objects.new(name, L); ob.location = loc
         ob.rotation_euler = (tgt - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
         sc.collection.objects.link(ob)
-    light("key", 900, (2.2, -3.0, 3.2), 2.5)
-    light("fill", 260, (-3.0, -2.2, 1.6), 3.0)
-    light("rim", 700, (-1.2, 3.2, 2.8), 2.0)
+    light("key", 260, (2.2, -3.0, 3.2), 2.5)
+    light("fill", 70, (-3.0, -2.2, 1.6), 3.0)
+    light("rim", 260, (-1.2, 3.2, 2.8), 2.0)
     cam = sc.camera
     cam.data.type = 'ORTHO'; cam.data.ortho_scale = 2.05
     sc.render.resolution_x, sc.render.resolution_y = 900, 1000
@@ -275,10 +275,15 @@ def main():
             co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
             nr = np.zeros(n * 3, np.float32); me.vertices.foreach_get("normal", nr); nr = nr.reshape(n, 3)
             disp = AN.Anatomy().detail(co)
+            import hand as HM
+            disp = disp + HM.detail(co, info["hands"])
             co += nr * disp[:, None]
             me.vertices.foreach_set("co", co.ravel())
             me.update()
             log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")
+            if "--suit" in flags:
+                import suit as SU
+                SU.build_suit(o, log=log)
     log(f"built in {time.time() - t0:.1f} s")
     sc.render.engine = 'BLENDER_WORKBENCH'
     sc.render.resolution_x, sc.render.resolution_y = SIZE

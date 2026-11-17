@@ -47,7 +47,7 @@ UPPER_ARM, FOREARM, HAND = 0.290, 0.252, 0.200          # joint to fingertip .74
 A_DIR = V(math.cos(DROP), 0, -math.sin(DROP))            # along the left arm
 A_UP = V(math.sin(DROP), 0, math.cos(DROP))              # the arm's top (its outside when it hangs)
 FR, BK = V(0, -1, 0), V(0, 1, 0)
-S = V(0.185, -0.030, 1.490)                              # glenohumeral joint
+S = V(0.178, -0.030, 1.486)                              # glenohumeral joint (as body.py's)
 E = S + A_DIR * UPPER_ARM                                # elbow
 W = S + A_DIR * (UPPER_ARM + FOREARM)                    # wrist
 H = V(0.095, -0.025, 0.925)                              # hip joint
@@ -119,10 +119,10 @@ class Muscle:
     groove between them. `inside` is the line it lies on (the bone, the trunk's axis): only the side facing away
     from it is raised."""
 
-    SHOW = {"delt_front": .55, "delt_side": .55, "delt_rear": .50, "trap_upper": .45, "pec_sternal": .45,
-            "pec_clav": .45, "pec_abd": .40, "rectus_abd": .45, "serratus0": .7, "serratus1": .7, "serratus2": .7,
-            "serratus3": .7, "biceps": .40, "triceps_long": .40, "triceps_lat": .40, "gastro_med": .40,
-            "gastro_lat": .40, "vast_med": .40}
+    SHOW = {"delt_front": .38, "delt_side": .38, "delt_rear": .34, "trap_upper": .30, "pec_sternal": .32,
+            "pec_clav": .30, "pec_abd": .28, "rectus_abd": .34, "serratus0": .5, "serratus1": .5, "serratus2": .5,
+            "serratus3": .5, "biceps": .28, "triceps_long": .28, "triceps_lat": .28, "gastro_med": .28,
+            "gastro_lat": .28, "vast_med": .26}
 
     def __init__(self, name, o, i, T, tb=.45, mid=None, inside=None, w=None, edge=1.6, depth=.05):
         self.name = name
@@ -450,8 +450,9 @@ class Anatomy:
         return (V(-.95, -.20, -.01), V(.95, .16, 1.88))
 
     # --- the anatomy as the skin's forms over a body of the right volume ----------------------------------------
-    DEFINITION = .30           # how much of each muscle's bulk shows as its own form on the skin
-    GROOVE = .0045             # how far the skin sinks where no muscle raises it (the separations)
+    DEFINITION = .20           # how much of each muscle's bulk shows as its own form on the skin (toned down:
+                               # the owner, "not a tank")
+    GROOVE = .0034             # how far the skin sinks where no muscle raises it (the separations)
 
     def detail(self, P):
         """how far the anatomy moves the skin of a body of the right volume, along its normal (metres): each
