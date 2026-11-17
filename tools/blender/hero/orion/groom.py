@@ -165,9 +165,10 @@ def brows(H, n=1250, rng=None):
     rng = rng or np.random.default_rng(5)
     t = rng.random(n)
     u = rng.normal(0, .33, n)
-    x = 1.35 + 3.9 * t
-    zc = 1.15 + .55 * np.sin(np.pi * np.clip(t * .9, 0, 1)) - .25 * t
-    w = .55 * (1 - .65 * t)
+    x = 1.3 + 3.95 * t
+    # a man's brow: heavy, low and nearly straight over the orbit's rim, a little lower at its tail
+    zc = 1.22 + .22 * np.sin(np.pi * np.clip(t * .95, 0, 1)) - .22 * t
+    w = .46 * (1 - .55 * t)
     z = zc + u * w
     R = np.c_[x, np.full(n, -12.0), z]
     out = []
@@ -181,9 +182,9 @@ def brows(H, n=1250, rng=None):
             W = W - g * d[:, None]
         Qs = to_head(W, H)
         Ns = grad_world(H, W)
-        flow = np.c_[sx * (.35 + .65 * t), -.1 * np.ones(n), .9 - .9 * t]
+        flow = np.c_[sx * (.62 + .38 * t), -.1 * np.ones(n), .55 - .6 * t]
         flow /= np.linalg.norm(flow, axis=1)[:, None]
-        L = .60 + .30 * (1 - t)
+        L = .55 + .18 * (1 - t)
         out.append(strands_from(Qs, Ns, flow, L * rng.uniform(.75, 1.1, n), 6, H, lift0=.30, lift1=.14, noise=.22,
                                 rng=rng, hug=.012))
     return np.concatenate(out)

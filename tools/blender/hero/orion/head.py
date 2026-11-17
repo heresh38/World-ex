@@ -120,9 +120,10 @@ def section_r(pts):
     return spline(th_ext, r_ext, TH)
 
 
-def build_loft():
-    zs = sorted(SECTIONS)
-    rs = np.array([section_r(SECTIONS[z]) for z in zs])          # (nz, nth)
+def build_loft(sections=None):
+    sections = SECTIONS if sections is None else sections
+    zs = sorted(sections)
+    rs = np.array([section_r(sections[z]) for z in zs])          # (nz, nth)
     R = np.empty((len(ZG), len(TH)), F32)
     for j in range(len(TH)):
         R[:, j] = spline(np.array(zs), rs[:, j], ZG)
@@ -203,9 +204,9 @@ def curve(xs, ys):
 EYE = np.array([2.95, -8.1, 0.0], F32)      # the left eyeball's centre (the portrait's eyes sit close)
 EYE_R = 1.2
 # the fissure in the front view (x, z) of the left eye: the canthi, the margins' highest / lowest points
-EN = (1.50, -0.06)                            # the inner canthus
-EX = (4.45, 0.14)                             # the outer canthus (a little higher: the male's slight upward tilt)
-LID_UP, LID_LO = 0.35, 0.39                   # the margins' rise / fall over the line between the canthi
+EN = (1.40, -0.06)                            # the inner canthus
+EX = (4.60, 0.12)                             # the outer canthus (a little higher: the male's slight upward tilt)
+LID_UP, LID_LO = 0.42, 0.41                   # the margins' rise / fall over the line between the canthi
 # the face's landmarks on the midline (z, y), from the owner's portrait: the nose shortish, the mouth high over a
 # long, strong chin. The nose and the lips are drawn from these, so moving one moves its whole feature.
 NASION = (0.55, -10.35)
@@ -219,7 +220,13 @@ class Head:
 
     def __init__(self, params=None):
         self.p = dict(params or {})
-        self.R, self.Rz, self.Rt = build_loft()
+        self.anatomy = self.p.get("base", "anatomy") == "anatomy"
+        if self.anatomy:
+            import headbase
+            self.hb = headbase.HeadBase(self.p)
+            self.R, self.Rz, self.Rt = build_loft(headbase.sections())
+        else:
+            self.R, self.Rz, self.Rt = build_loft()
         self.set_landmarks(NASION, TIP, SUBNASALE, STOMION_Z)
 
     def set_landmarks(self, nasion, tip, subnasale, stomion_z):
@@ -276,7 +283,7 @@ class Head:
         Rt = lerp_grid(self.Rt, zc, th)
         d = (r - R) / np.sqrt(1 + Rz * Rz + (Rt / np.maximum(r, 1.0)) ** 2)
         # the vault of the skull above the forehead
-        vault = supershape(Q, (0, -.9, 2.8), 9.55, 9.5, 7.55, 8.2, 12.0, 2.25)
+        vault = supershape(Q, (0, -.6, 2.9), 9.4, 10.5, 7.85, 8.4, 12.0, 2.2) if self.anatomy else             supershape(Q, (0, -.9, 2.8), 9.55, 9.5, 7.55, 8.2, 12.0, 2.25)
         t = np.clip((z - 4.6) / 1.6, 0, 1)
         t = t * t * (3 - 2 * t)
         return d * (1 - t) + vault * t
@@ -379,14 +386,14 @@ class Head:
         Pn = P[near]
         xn, yn, zn = Pn[:, 0], Pn[:, 1], Pn[:, 2]
         fis, up, lo = self.fissure(xn, zn)
-        # the lids: a shell draped over the globe, a little wider than it so the canthi sit beside it
-        L = Pn - np.array([EYE[0] - .02, -7.95, .03], F32)
-        L[:, 1] -= .32 * L[:, 0]
-        q = L / np.array([1.58, 1.30, 1.16], F32)
-        rq = length(q)
-        thick = .19 + .05 * np.clip((zn - up) / .7, 0, 1) + .05 * np.clip((lo - zn) / .6, 0, 1)
-        lid = (rq - 1.0) * 1.33 - thick
-        lid = np.where(yn > -7.6, np.maximum(lid, yn + 7.6), lid)
+        # the lids: a shell wrapped close round the globe's front (its inside a hair off the cornea, so the
+        # margins rest on the eye and the cornea shows only through the opening), thicker over the top, its
+        # outer corner reaching round the globe's side
+        L = Pn - EYE
+        rq = length(L / np.array([1.0, 1.0, .96], F32))
+        thick = .15 + .08 * np.clip((zn - up) / .6, 0, 1) + .04 * np.clip((lo - zn) / .6, 0, 1)
+        lid = np.abs(rq - (EYE_R + .2 + thick)) - thick
+        lid = np.where(yn > EYE[1] + .35, np.maximum(lid, yn - (EYE[1] + .35)), lid)
         # cut along the fissure: the margins' edges are the lid's own thickness
         lid = smax(lid, -fis, .035)
         dn = smin(dn, lid, .28)
@@ -416,8 +423,8 @@ class Head:
         """the left ear in its own frame: s back along it, t up it, w out of its plane; mirrored"""
         P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]]
         o = np.array([7.05, 0.15, -.75], F32)                 # the canal's opening
-        EARS = 1.0 / 1.12                                         # the portrait's ear is large
-        tilt, out = math.radians(17), math.radians(24)
+        EARS = 1.0 / 1.0                                          # a man's ear, 6.3 cm long
+        tilt, out = math.radians(17), math.radians(17)
         # the ear's axes: up its length (tilted back), back across it, out of it (turned forward)
         a_t = np.array([0, math.sin(tilt), math.cos(tilt)], F32)
         n0 = np.array([1, 0, 0], F32)
@@ -514,7 +521,11 @@ class Head:
 
     # --- all of it ------------------------------------------------------------------------------------------
     def cm(self, Q):
-        d = self.base(Q) - self.masses(Q) - self.jawline(Q)
+        d = self.base(Q)
+        if self.anatomy:                            # the anatomical base's soft forms (headbase.py)
+            d = self.hb.relief(Q, d)
+        else:
+            d = d - self.masses(Q) - self.jawline(Q)
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
         # the nasolabial fold: from beside the ala down and out past the mouth's corner
         fa, fb = np.array([1.75, -4.75]), np.array([3.35, -8.2])
@@ -522,16 +533,24 @@ class Head:
         dist = np.sqrt((x - fa[0] - t * (fb[0] - fa[0])) ** 2 + (z - fa[1] - t * (fb[1] - fa[1])) ** 2)
         fold = np.exp(-(dist / .16) ** 2) * spow(np.sin(np.pi * np.clip(t * .95 + .05, 0, 1)), .5) * (y < -8.5)
         d = d + .07 * fold * self.k("nasolabial")
-        d = smin(d, self.nose(Q), .48)
-        d = d + .085 * self.alar_crease(Q)
-        d = d - self.lips(Q)
+        if self.anatomy:
+            import headbase as HB
+            d = smin(d, HB.nose(Q, self.k), .42)
+            d = d + .06 * self.alar_crease(Q)
+            lp, _, _ = HB.lips(Q, self.stom_z, self.k)
+            d = smin(d, lp, .3)
+        else:
+            d = smin(d, self.nose(Q), .48)
+            d = d + .085 * self.alar_crease(Q)
+            d = d - self.lips(Q)
         d = smax(d, -self.mouth_slit(Q), .04)
         # the corners of the mouth tucked in, the modiolus beside each
         d = d + .10 * np.exp(-(((x - 2.72) / .22) ** 2 + ((z + 7.42) / .2) ** 2)) * (y < -8)
         d = d - .06 * np.exp(-(((x - 3.15) / .45) ** 2 + ((z + 7.35) / .5) ** 2)) * (y < -8)
         d = self.eyes(Q, d)
         d = smin(d, self.ear(Q), .35)
-        d = self.neck_detail(Q, d)
+        if not self.anatomy:
+            d = self.neck_detail(Q, d)
         return d
 
     # --- the world ------------------------------------------------------------------------------------------

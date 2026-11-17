@@ -67,6 +67,10 @@ def node(nt, kind, **inputs):
 
 
 def skin_material(clay=False):
+    """a man's tanned olive skin: the colour a little deeper and redder where blood lies close (cheeks, nose, ears,
+    lips), darker in the eyes' hollows and where the beard grows, light carried under the skin (subsurface, a few
+    millimetres in red, less in green and blue), an oily sheen over the nose and forehead and a dry one elsewhere,
+    pores and fine creases in the normal"""
     m = bpy.data.materials.new("skin")
     m.use_nodes = True
     nt = m.node_tree
@@ -75,6 +79,83 @@ def skin_material(clay=False):
         b.inputs["Base Color"].default_value = (.30, .28, .265, 1)
         b.inputs["Roughness"].default_value = .55
         return m
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    pos = tc.outputs["Object"]
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(pos, sep.inputs[0])
+
+    def math_(op, a, bv=None, c=None):
+        n = nt.nodes.new("ShaderNodeMath"); n.operation = op
+        for i, v in enumerate((a, bv, c)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                n.inputs[i].default_value = v
+            else:
+                nt.links.new(v, n.inputs[i])
+        return n.outputs[0]
+
+    def blob(cx, cy, cz, rx, ry, rz, mirror=True):
+        """exp(-|((p - c) / r)|^2) in the head's frame (world metres), mirrored across the midline"""
+        x = sep.outputs[0]
+        if mirror:
+            x = math_('ABSOLUTE', x)
+        dx = math_('DIVIDE', math_('SUBTRACT', x, cx), rx)
+        dy = math_('DIVIDE', math_('SUBTRACT', sep.outputs[1], cy), ry)
+        dz = math_('DIVIDE', math_('SUBTRACT', sep.outputs[2], cz), rz)
+        sq = math_('ADD', math_('ADD', math_('MULTIPLY', dx, dx), math_('MULTIPLY', dy, dy)), math_('MULTIPLY', dz, dz))
+        return math_('EXPONENT', math_('MULTIPLY', sq, -1.0))
+
+    Y0, Z0 = H.Y0, H.Z0
+    # where the blood shows: the cheeks, the nose, the ears, the lips
+    red = math_('ADD', math_('MULTIPLY', blob(.034, Y0 - .095, Z0 - .03, .02, .02, .018), .42),
+                math_('MULTIPLY', blob(0, Y0 - .12, Z0 - .035, .009, .012, .012, False), .3))
+    red = math_('ADD', red, math_('MULTIPLY', blob(.072, Y0 + .005, Z0 - .01, .012, .025, .035), .5))
+    red = math_('MINIMUM', red, 1.0)
+    # the eyes' hollows a little darker
+    dark = math_('MULTIPLY', blob(.03, Y0 - .087, Z0 - .004, .02, .012, .012), .6)
+    base = node(nt, "ShaderNodeRGB"); base.outputs[0].default_value = (.40, .245, .17, 1)
+    flush = node(nt, "ShaderNodeRGB"); flush.outputs[0].default_value = (.43, .21, .155, 1)
+    mix_r = nt.nodes.new("ShaderNodeMix"); mix_r.data_type = 'RGBA'
+    nt.links.new(red, mix_r.inputs[0]); nt.links.new(base.outputs[0], mix_r.inputs[6]); nt.links.new(flush.outputs[0], mix_r.inputs[7])
+    shadow = node(nt, "ShaderNodeRGB"); shadow.outputs[0].default_value = (.24, .14, .10, 1)
+    mix_d = nt.nodes.new("ShaderNodeMix"); mix_d.data_type = 'RGBA'
+    nt.links.new(dark, mix_d.inputs[0]); nt.links.new(mix_r.outputs[2], mix_d.inputs[6]); nt.links.new(shadow.outputs[0], mix_d.inputs[7])
+    # mottling: the colour's own small variation
+    noise = node(nt, "ShaderNodeTexNoise", Scale=180.0, Detail=8.0, Roughness=.55)
+    nt.links.new(pos, noise.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].color = (.88, .84, .82, 1); ramp.color_ramp.elements[1].color = (1.06, 1.0, .98, 1)
+    nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
+    mott = nt.nodes.new("ShaderNodeMix"); mott.data_type = 'RGBA'; mott.blend_type = 'MULTIPLY'
+    mott.inputs[0].default_value = 1.0
+    nt.links.new(mix_d.outputs[2], mott.inputs[6]); nt.links.new(ramp.outputs[0], mott.inputs[7])
+    # the beard's shadow under the skin
+    battr = nt.nodes.new("ShaderNodeAttribute"); battr.attribute_name = "beard"
+    bsep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(battr.outputs["Color"], bsep.inputs[0])
+    shade = nt.nodes.new("ShaderNodeMix"); shade.data_type = 'RGBA'
+    nt.links.new(mott.outputs[2], shade.inputs[6])
+    shade.inputs[7].default_value = (.13, .09, .068, 1)
+    nt.links.new(math_('MULTIPLY', bsep.outputs[0], .55), shade.inputs[0])
+    nt.links.new(shade.outputs[2], b.inputs["Base Color"])
+    b.inputs["Subsurface Weight"].default_value = 1.0
+    b.inputs["Subsurface Radius"].default_value = (1.0, .42, .26)
+    b.inputs["Subsurface Scale"].default_value = .0022
+    # oily on the nose and forehead, drier on the cheeks
+    oil = math_('MINIMUM', math_('ADD', blob(0, Y0 - .115, Z0 - .025, .015, .03, .03, False),
+                                 blob(0, Y0 - .095, Z0 + .045, .04, .03, .025, False)), 1.0)
+    rough = math_('SUBTRACT', .5, math_('MULTIPLY', oil, .14))
+    nt.links.new(rough, b.inputs["Roughness"])
+    b.inputs["Specular IOR Level"].default_value = .5
+    # pores and fine creases
+    pores = node(nt, "ShaderNodeTexVoronoi", Scale=3200.0)
+    nt.links.new(pos, pores.inputs["Vector"])
+    fine = node(nt, "ShaderNodeTexNoise", Scale=1400.0, Detail=4.0, Roughness=.7)
+    nt.links.new(pos, fine.inputs["Vector"])
+    hsum = math_('ADD', math_('MULTIPLY', pores.outputs["Distance"], .7), math_('MULTIPLY', fine.outputs["Fac"], .3))
+    bump = node(nt, "ShaderNodeBump", Strength=.16, Distance=.0003)
+    nt.links.new(hsum, bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], b.inputs["Normal"])
+    return m
     # warm olive skin, deeper red where the blood is close (cheeks, nose, lips, ears), the beard's shadow
     tc = nt.nodes.new("ShaderNodeTexCoord")
     sep = nt.nodes.new("ShaderNodeSeparateXYZ")
