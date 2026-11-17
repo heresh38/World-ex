@@ -367,7 +367,15 @@ def main():
                     e = HL.to_object(name, EV - c, EF, origin=tuple(c))
                     e.data.materials.append(HL.eye_material(name))
                 Nh = sdf.normals(hd, Vh)
-                mask = GR.groom(Vh, Nh, hd, log=log).astype(np.float32)
+                mask = GR.groom(Vh, Nh, hd, log=log).astype(np.float32)      # the base model: clean-shaven
+                Qhd = GR.to_head(Vh, hd)
+                mask = np.maximum(mask, (GR.beard_mask(Qhd, hd, soft=True) * (hd.ear(Qhd) > .6) * .3))   # shaved
+                mask = np.maximum(mask, .8 * GR.scalp_shade(Qhd, hd)).astype(np.float32)   # roots shade the scalp
+                import headbase as HB                                         # the lips' red part (headlab's)
+                lp = HB.lips(Qhd.astype(np.float32), hd.stom_z, hd.k)[0]
+                lw = (np.clip(1 - lp / .12, 0, 1) * (np.abs(Qhd[:, 0]) < HB.MOUTH_W + .1)).astype(np.float32)
+                la = ho.data.color_attributes.new("lip", 'FLOAT_COLOR', 'POINT')
+                la.data.foreach_set("color", np.c_[lw, lw, lw, np.ones_like(lw)].ravel())
                 a = ho.data.color_attributes.new("beard", 'FLOAT_COLOR', 'POINT')
                 a.data.foreach_set("color", np.c_[mask, mask, mask, np.ones_like(mask)].ravel())
                 sc.cycles_curves.shape = 'THICK'
