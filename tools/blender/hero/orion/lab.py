@@ -194,7 +194,7 @@ def turnaround(sc, path, samples=64):
     b.inputs["Base Color"].default_value = (.32, .30, .285, 1); b.inputs["Roughness"].default_value = .55
     skin = bpy.data.materials.get("skin")
     for o in sc.objects:                                              # the suit, the head, the eyes keep their own
-        if o.type == 'MESH' and o.name not in ("suit", "head", "eye_L", "eye_R"):
+        if o.type == 'MESH' and o.name not in ("suit", "collar", "head", "eye_L", "eye_R"):
             o.data.materials.clear(); o.data.materials.append(skin if (skin and o.get("skin")) else mat)
             for p in o.data.polygons:
                 p.use_smooth = True
@@ -269,6 +269,7 @@ def main():
                 fore = np.maximum(fore, ((q @ Ff.fw > FTM.MID_F + .004) & (Vc[:, 0] * Ff.sx > 0) & (Vc[:, 2] < .09)) * 1.0)
             free = np.array([1.0 if p.startswith("toe_") else 0.0 for p in C.part])
             free = np.maximum(free, fore * np.array([p in ("foot", "fore") for p in C.part]))
+            free = np.maximum(free, C.free())                     # the arm's windows' corners (body.py)
             X = B.solve_cage(C.V, C.F, log=log, free=free)
         o = make_object(X, C.F, "orion_male")
         # which toe each vertex is (carried through the subdivision, read back for the skin's last step)
@@ -319,19 +320,29 @@ def main():
             me.vertices.foreach_set("co", co.ravel())
             me.update()
             log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")
+            zb = None
+            if "--head" in flags or "--suit" in flags:
+                import suit as SU
+                zb = SU.neckline(o, log=log)                  # where the body turns up into the neck, round it
             if "--head" in flags:
                 # the body's neck goes up inside the head (head.py carries the neck from the head's cut down to it):
-                # whatever of it would show through the head's neck and jaw is drawn in under the head's skin
+                # from the neckline to the collar's top it is drawn in under the head's skin, more the higher (the
+                # back of the neck leaves the upper back at the 7th vertebra and meets the head's nape inside the
+                # collar); under the neckline the body is as built. A cut-off by distance from the head (the first
+                # way) left the back's top where it was and drew the rest in: a shelf at the nape
                 import head as HD
                 import sdf
                 hd = HD.Head()
                 me = o.data
                 n = len(me.vertices)
                 co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
-                up = np.nonzero((co[:, 2] > 1.525) & (np.abs(co[:, 0]) < .095) & (np.abs(co[:, 1]) < .12))[0]
-                up = up[hd(co[up]) < .045]                    # the neck (near the head), not the shoulders
+                th, r = SU.around(co)
+                z0 = SU.periodic(zb, th) + .004
+                z1 = SU.collar_top(th) - .006
+                w = SU.smooth01((co[:, 2] - z0) / np.maximum(z1 - z0, .01)) * (1 - SU.smooth01((r - .095) / .03))
+                up = np.nonzero((w > 0) & (co[:, 2] > 1.45))[0]
                 if len(up):
-                    P = co[up]
+                    P = co[up].astype(np.float64)
                     for _ in range(6):
                         d = hd(P)
                         g = sdf.grad(hd, P)
@@ -340,16 +351,13 @@ def main():
                         P = P - g * step[:, None]
                     mv = P - co[up]
                     ln = np.linalg.norm(mv, axis=1)
-                    P = co[up] + mv * np.minimum(1, .045 / np.maximum(ln, 1e-9))[:, None]
-                    t = np.clip((co[up, 2] - 1.525) / .02, 0, 1)
-                    t = t * t * (3 - 2 * t)
-                    co[up] = co[up] + (P - co[up]) * t[:, None]
+                    mv *= np.minimum(1, .06 / np.maximum(ln, 1e-9))[:, None]
+                    co[up] = co[up] + mv * w[up, None]
                     me.vertices.foreach_set("co", co.ravel())
                     me.update()
-                    log(f"the body's neck drawn in under the head: {len(up)} vertices")
+                    log(f"the body's neck drawn in under the head: {len(up)} vertices, up to {ln.max() * 100:.1f} cm")
             if "--suit" in flags:
-                import suit as SU
-                SU.build_suit(o, log=log)
+                SU.build_suit(o, log=log, zb=zb)
             if "--head" in flags:
                 # the head (head.py) on the body, groomed (groom.py), its skin and eyes (headlab.py's materials)
                 import sdf
@@ -382,6 +390,8 @@ def main():
                 # the body's skin: the head's, so hands and feet match the face
                 skin = ho.data.materials[0]
                 o["skin"] = 1
+                if "--suit" in flags:                        # the suit's high collar, sewn on at the neckline
+                    SU.build_collar(ho, bpy.data.objects["suit"], o, zb, log=log)
     log(f"built in {time.time() - t0:.1f} s")
     sc.render.engine = 'BLENDER_WORKBENCH'
     sc.render.resolution_x, sc.render.resolution_y = SIZE

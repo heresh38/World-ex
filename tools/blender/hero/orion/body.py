@@ -171,7 +171,7 @@ def torso_mod(theta, z):
     d -= .006 * band(z, 1.32, 1.54, .02) * bump(theta, 0, 7)                 # the sternum's groove
 
     d += .004 * band(z, 1.30, 1.43, .03) * bump(theta, 108, 22)              # lats behind the side (their form: anatomy.py)
-    d += .008 * band(z, 1.38, 1.58, .03) * bump(theta, 148, 20)              # the scapulae
+    d += .008 * band(z, 1.38, 1.52, .03) * bump(theta, 148, 20)              # the scapulae
     d -= .010 * band(z, 1.03, 1.57, .03) * bump(theta, 180, 9)               # the spine's groove
     d += .010 * band(z, 1.03, 1.26, .03) * bump(theta, 163, 12)              # the erectors either side
     d += .016 * band(z, 0.90, 1.03, .025) * bump(theta, 154, 24)             # glutes
@@ -200,7 +200,7 @@ def torso_depth(cc, z):
     yf, yb = cc.side(z)
     if z > 1.40:
         yf = max(yf, float(np.interp(z, [1.40, 1.49, 1.57], [-.176, -.150, -.110])))
-        yb = min(yb, float(np.interp(z, [1.40, 1.49, 1.57], [.122, .124, .112])))
+        yb = min(yb, float(np.interp(z, [1.40, 1.49, 1.57], [.122, .116, .100])))
     return yf, yb
 
 
@@ -240,6 +240,7 @@ class Cage:
 
     def __init__(self):
         self.V, self.F, self.part = [], [], []
+        self.soft = {}                     # vertex -> how free it is left in the limit fit (solve_cage's free)
 
     def add(self, p, part):
         self.V.append(np.asarray(p, float))
@@ -280,6 +281,14 @@ class Cage:
         self.V = [self.V[o] for o in used]
         self.part = [self.part[o] for o in used]
         self.F = [tuple(new[v] for v in f) for f in self.F]
+        self.soft = {new[o]: w for o, w in self.soft.items() if o in new}
+
+    def free(self):
+        """per vertex: how free it is left in the limit fit"""
+        f = np.zeros(len(self.V))
+        for v, w in self.soft.items():
+            f[v] = max(f[v], w)
+        return f
 
     def strip(self, r0, r1):
         n = len(r0)
@@ -336,6 +345,15 @@ def build(cc=None, log=print):
         T.append(ring)
     shoulder_socket(C, T)
     shoulder_top(C, T)
+    # the arm's window meets the torso's rings at four corners (the shoulder's top, front and back, and the armpit's
+    # front and back): a corner's target and the torso's beside it are out of line (the window is an ellipse, the
+    # rings run level), and the limit surface forced through them creased the skin there (QC: 28-38 degrees on the
+    # bare cage, 50 with the muscles; under the suit, a slit on the shoulder's top). They are left free in the fit
+    for sx in (1, -1):
+        col = (lambda k: k) if sx > 0 else (lambda k: N_T - k)
+        for r in (7, 9):
+            for k, w in ((4, 1.0), (8, 1.0), (3, .6), (9, .6)):
+                C.soft[T[r][col(k)]] = w
     for i in range(len(T) - 1):
         for k in range(N_T):
             kn = (k + 1) % N_T
@@ -387,7 +405,10 @@ def socket_point(psi, sx=1):
     p = math.radians(psi)
     c, s = math.cos(p), math.sin(p)
     x = WIN_C[0] - .012 * max(-s, 0) ** 1.5 + .004 * c - .006 * max(s, 0)     # the armpit sits in a little
-    return np.array([sx * x, WIN_C[1] + WIN_AY * c, WIN_C[2] + WIN_AZ * s])
+    # the upper corners lifted level with the torso's ring beside them (an ellipse put them 1.5-3 cm under it:
+    # the cage dented there and the skin creased on the shoulder's top, front and back)
+    lift = .012 * 4 * max(s, 0) * (1 - max(s, 0))
+    return np.array([sx * x, WIN_C[1] + WIN_AY * c, WIN_C[2] + WIN_AZ * s + lift])
 
 
 def window_loop(T, sx):
@@ -404,8 +425,10 @@ def shoulder_socket(C, T):
 
 # ring 9 away from the windows: the clavicles in front (rising gently to the shoulder), the trapezius and the
 # scapulae's spine behind (columns 0..3 and 9..12 of the left side; the right mirrors them)
-T9_FRONT = [(0.000, -.104, 1.512), (0.048, -.101, 1.520), (0.094, -.096, 1.531), (0.140, -.090, 1.545)]
-T9_BACK = [(0.150, .092, 1.574), (0.104, .110, 1.582), (0.052, .118, 1.586), (0.000, .112, 1.584)]
+T9_FRONT = [(0.000, -.104, 1.512), (0.048, -.101, 1.520), (0.094, -.096, 1.531), (0.140, -.090, 1.539)]
+T9_BACK = [(0.150, .080, 1.556), (0.104, .088, 1.566), (0.052, .091, 1.553), (0.000, .088, 1.546)]
+# (the back's top was a shelf 3-6 cm behind the sheet's line at the neck's height, up to 1.58: the back of the neck
+# now leaves the upper back at the 7th vertebra and the trapezius' crest is highest beside the neck)
 
 
 def shoulder_top(C, T):
@@ -425,9 +448,9 @@ def neck_rings(C):
     """the neck's base and two rings up it, tilted (the front from the sternum's notch, the back from the 7th
     vertebra up), the sternomastoids either side of the windpipe"""
     rings = []
-    for zf, zb, w, yf, yb in [(1.548, 1.630, .084, -.071, .078),
-                              (1.590, 1.672, .071, -.066, .068),
-                              (1.626, 1.712, .066, -.061, .062)]:
+    for zf, zb, w, yf, yb in [(1.548, 1.600, .084, -.071, .066),
+                              (1.590, 1.646, .071, -.066, .052),
+                              (1.626, 1.690, .066, -.061, .048)]:
         ring = []
         for k in range(N_T):
             a = 2 * math.pi * k / N_T                    # 0 front, pi/2 left, pi back

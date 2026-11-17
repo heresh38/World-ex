@@ -111,6 +111,23 @@ def ellipse2(u, v, a, b):
 
 # --- a muscle ----------------------------------------------------------------------------------------------------
 
+def ease(x):
+    """0 -> 1 with no slope at either end (smoothstep)"""
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def fillet(a, m, b, n=10):
+    """the corner of the path a - m - b rounded: a quadratic arc from halfway along the shorter leg before m to as
+    far after it (a sharp corner made the nearest segment, and with it the footprint's across-direction, jump on
+    the line out from the corner: a step in the relief)"""
+    f = .5 * min(float(np.linalg.norm(a - m)), float(np.linalg.norm(b - m)))
+    p1 = m + (a - m) * f / max(float(np.linalg.norm(a - m)), 1e-9)
+    p2 = m + (b - m) * f / max(float(np.linalg.norm(b - m)), 1e-9)
+    s = np.linspace(0, 1, n + 1)
+    return [(1 - q) ** 2 * p1 + 2 * q * (1 - q) * m + q * q * p2 for q in s]
+
+
 class Muscle:
     """a muscle as how far it raises the body over the deep layer under it: a footprint that runs along a path from
     its origin (a line o0-o1, or a point) through `mid` to its insertion (i0-i1), as wide as the origin's span at
@@ -133,7 +150,7 @@ class Muscle:
         self.u0 = unit(o1 - o0) if np.linalg.norm(o1 - o0) > 1e-6 else None
         self.u1 = unit(i1 - i0) if np.linalg.norm(i1 - i0) > 1e-6 else None
         a, b = (o0 + o1) / 2, (i0 + i1) / 2
-        self.path = [a] + ([V(*mid)] if mid is not None else []) + [b]
+        self.path = [a] + (fillet(a, V(*mid), b) if mid is not None else []) + [b]
         self.seg = [float(np.linalg.norm(self.path[k + 1] - self.path[k])) for k in range(len(self.path) - 1)]
         self.L = sum(self.seg)
         self.T, self.tb, self.wb, self.edge, self.depth = T, tb, w, edge, depth
@@ -144,13 +161,16 @@ class Muscle:
 
     def thickness(self, t):
         a = math.log(.5) / math.log(min(max(self.tb, .05), .95))
-        s = np.sin(np.pi * np.clip(t, 0, 1) ** a)
-        return self.T * np.maximum(s, 0) ** .7
+        t = np.clip(t, 0, 1)
+        s = np.sin(np.pi * t ** a)
+        # eased into its ends (the bare power rose from them with no limit to its slope: a crease along the origin's
+        # and the insertion's lines, the slit on the shoulder's top under the suit)
+        return self.T * np.maximum(s, 0) ** .7 * ease(t / .22) * ease((1 - t) / .22)
 
     def width(self, t):
         base = self.w0 + (self.w1 - self.w0) * t
         if self.wb is not None:
-            bell = np.maximum(np.sin(np.pi * np.clip(t, 0, 1)), 0) ** .6
+            bell = ease(np.sin(np.pi * np.clip(t, 0, 1)) / .6)
             base = base * (1 - bell) + self.wb * bell
         return np.maximum(base, .004)
 
@@ -205,7 +225,7 @@ class Muscle:
         s_ = np.abs(cu) / self.width(tc)
         prof = np.maximum(1 - s_ ** 2, 0) ** self.edge
         ends = np.clip(1 - np.maximum(-t, t - 1) * self.L / .015, 0, 1)
-        win = np.clip((cn + self.depth) / (self.depth * .6), 0, 1)       # only the side facing away
+        win = ease((cn + self.depth) / (self.depth * .6))               # only the side facing away
         out[m] = self.thickness(tc) * prof * ends * win
         return out
 
@@ -475,8 +495,12 @@ class Anatomy:
             out -= .0022 * np.exp(-((z - zz - .006 * x / .08) / .0105) ** 2) * front * (z < 1.30) *                 np.clip(x / .012, 0, 1)
         out -= .0022 * np.exp(-(x / .0095) ** 2) * front * (z > .98) * (z < 1.31)
         out -= .0034 * np.exp(-(x / .0125) ** 2) * (y > .05) * (z > 1.0) * (z < 1.55)        # the spine
-        pz = 1.338 + .55 * np.maximum(x - .02, 0) ** 2 / .03                                 # the pec's lower edge
-        out -= .0036 * np.exp(-((z - pz) / .0125) ** 2) * (y < -.05) * np.clip((x - .008) / .015, 0, 1) *             np.clip((.18 - x) / .02, 0, 1)
+        # the pec's lower edge: from the sternum (1.338) rising to the armpit (1.41 at 16 cm out). It was written
+        # .55 (x - .02)^2 / .03, five times as steep: the groove climbed diagonally across the chest to the top of
+        # the shoulder (a sawtooth V on the chest, a pit at the shoulder's front corner, a slit under the suit)
+        pz = 1.338 + 3.6 * np.maximum(x - .02, 0) ** 2
+        out -= (.0036 * np.exp(-((z - pz) / .0125) ** 2) * ease((-.05 - y) / .02) * np.clip((x - .008) / .015, 0, 1)
+                * np.clip((.18 - x) / .02, 0, 1))
         return out
 
 
