@@ -179,6 +179,39 @@ def tube(Q, pts, radii):
     return out
 
 
+def smooth_path(pts, radii, k=6):
+    """a Catmull-Rom curve through the points (k pieces a span), the radii along it: a tube through the points
+    themselves is a chain of straight cones, a polygon wherever the path bends (the ear's rim read as a decagon)"""
+    P = np.asarray(pts, float); R = np.asarray(radii, float)
+    Pe = np.vstack([2 * P[0] - P[1], P, 2 * P[-1] - P[-2]]); Re = np.r_[2 * R[0] - R[1], R, 2 * R[-1] - R[-2]]
+    out, rad = [], []
+    for i in range(len(P) - 1):
+        p0, p1, p2, p3 = Pe[i:i + 4]; r0, r1, r2, r3 = Re[i:i + 4]
+        for j in range(k):
+            t = j / k
+            w = np.array([-t + 2 * t * t - t ** 3, 2 - 5 * t * t + 3 * t ** 3, t + 4 * t * t - 3 * t ** 3,
+                          -t * t + t ** 3]) * .5
+            out.append(w[0] * p0 + w[1] * p1 + w[2] * p2 + w[3] * p3)
+            rad.append(w[0] * r0 + w[1] * r1 + w[2] * r2 + w[3] * r3)
+    out.append(P[-1]); rad.append(R[-1])
+    return [tuple(q) for q in out], rad
+
+
+def tube_smooth(Q, pts, radii, k=6):
+    """a round tube along a smooth curve through the points (round cones joined by their union: they share their
+    ends and radii, so nothing bulges at the joints)"""
+    S, Rr = smooth_path(pts, radii, k)
+    out = None
+    for i in range(len(S) - 1):
+        a, b = np.asarray(S[i], F32), np.asarray(S[i + 1], F32)
+        pa, ba = Q - a, b - a
+        L2 = max(float(ba @ ba), 1e-9)
+        h = np.clip((pa @ ba) / L2, 0, 1)
+        d = length(pa - h[:, None] * ba) - (Rr[i] + (Rr[i + 1] - Rr[i]) * h)
+        out = d if out is None else np.minimum(out, d)
+    return out
+
+
 def spow(x, p):
     """a power of something that may dip a hair below zero (a float32 sine of pi): never NaN"""
     return np.maximum(x, 0.0) ** p
@@ -201,17 +234,17 @@ def curve(xs, ys):
 # ---------------------------------------------------------------------------------------------------------------
 # the features
 
-EYE = np.array([2.95, -8.1, 0.0], F32)      # the left eyeball's centre (the portrait's eyes sit close)
+EYE = np.array([3.2, -7.45, 0.1], F32)      # the left eyeball's centre: 6.4 cm between the pupils, deep under the brow
 EYE_R = 1.2
 # the fissure in the front view (x, z) of the left eye: the canthi, the margins' highest / lowest points
-EN = (1.36, -0.06)                            # the inner canthus
-EX = (4.68, 0.12)                             # the outer canthus (a little higher: the male's slight upward tilt)
-LID_UP, LID_LO = 0.46, 0.42                   # the margins' rise / fall over the line between the canthi
+EN = (1.66, 0.02)                             # the inner canthus (3.3 cm between them: a man's, Farkas)
+EX = (4.6, 0.22)                              # the outer canthus (a little higher: the male's slight upward tilt)
+LID_UP, LID_LO = 0.5, 0.44                    # the margins' rise / fall over the line between the canthi (the upper over the iris's top: no stare)
 # the face's landmarks on the midline (z, y), from the owner's portrait: the nose shortish, the mouth high over a
 # long, strong chin. The nose and the lips are drawn from these, so moving one moves its whole feature.
 NASION = (0.55, -10.35)
 TIP = (-3.9, -12.95)                          # the pronasale
-SUBNASALE = (-5.0, -10.7)
+SUBNASALE = (-4.65, -11.15)
 STOMION_Z = -7.25
 
 
@@ -326,10 +359,10 @@ class Head:
     def alar_crease(self, Q):
         """the groove round the ala where it meets the cheek and the lip"""
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
-        u = (x - 1.35) / .82
-        v = (z - (self.subn[0] + .06)) / .66
+        u = (x - 1.2) / .72
+        v = (z + 4.32) / .6
         r = np.sqrt(u * u + v * v)
-        return np.exp(-((r - 1.0) / .16) ** 2) * (x > 1.25) * G(y, self.subn[1] + .25, .9)
+        return np.exp(-((r - 1.0) / .14) ** 2) * (x > 1.2) * G(y, -10.6, .7)
 
     # --- the lips -------------------------------------------------------------------------------------------
     def lips(self, Q):
@@ -358,11 +391,15 @@ class Head:
         return (prof * self.k("lips") * fade + roll + phil) * front
 
     def mouth_slit(self, Q):
+        """the line the lips meet on: through the lips only (it ran on past the corners into the cheek), thinning
+        into each corner"""
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
+        W = 2.62 * self.k("mouth_width")
+        u = np.clip(x / W, 0, 1.2)
         st = self.stom(np.clip(x, 0, 2.62))
-        slab = np.abs(z - st) - .028
-        slab = np.maximum(slab, y - (self.arch(np.clip(x, 0, 2.62)) + .9))
-        slab = np.maximum(slab, x - 2.66)
+        slab = np.abs(z - st) - (.008 + .022 * np.clip(1 - u ** 4, 0, 1))
+        slab = np.maximum(slab, y - (-10.2 + 1.1 * u * u))
+        slab = np.maximum(slab, x - (W - .1))
         return slab
 
     # --- the eyes -------------------------------------------------------------------------------------------
@@ -403,20 +440,23 @@ class Head:
         # the crease over the upper lid and the hood of the brow's skin coming down over it, more on the outside
         u = np.clip((xn - EN[0]) / (EX[0] - EN[0]), 0, 1)
         cz = up + .55 - .12 * u ** 2
-        crease = np.exp(-((zn - cz) / .085) ** 2) * spow(np.sin(np.pi * u), .6) * (yn < -8.0)
-        dn = dn + .055 * crease * self.k("crease")
+        crease = np.exp(-((zn - cz) / .11) ** 2) * spow(np.sin(np.pi * u), .6) * (yn < EYE[1] - .55)
+        dn = dn + .04 * crease * self.k("crease")
         hood = np.exp(-((zn - (cz + .18)) / .22) ** 2) * spow(np.sin(np.pi * np.clip(u * .9 + .12, 0, 1)), 1.2)
-        dn = dn - .09 * hood * self.k("hood") * (yn < -8.4)
+        dn = dn - .05 * hood * self.k("hood") * (yn < EYE[1] - .95)
         # under the lower lid: the lid's lower edge and the tear trough running down and out from the inner corner
         lz = lo - .55 + .1 * u
         dn = dn + .022 * np.exp(-((zn - lz) / .08) ** 2) * spow(np.sin(np.pi * u), .7)
-        tt = np.exp(-(((zn + 1.25) + .35 * (xn - 2.0)) / .22) ** 2) * G(xn, 2.2, .6)
+        tt = np.exp(-(((zn - EYE[2] + 1.25) + .35 * (xn - EN[0] - .34)) / .22) ** 2) * G(xn, EN[0] + .54, .6)
         dn = dn + .06 * tt * self.k("tear_trough")
+        # round the globe's sides the socket is closed (the conjunctiva: through the corners of a 3 cm opening
+        # the 2.4 cm globe's side is seen, and past it the empty socket was a black hole at the outer corner)
+        dn = smin(dn, np.maximum(length(Pn - EYE) - (EYE_R + .3), (EYE[1] - .35) - yn), .15)
         # the globe sits in its socket: nothing of the head inside it
         globe = length(Pn - EYE) - (EYE_R + .025)
         dn = smax(dn, -globe, .05)
         # the inner corner's caruncle
-        dn = smin(dn, length(Pn - np.array([EN[0] + .2, -8.86, -.07], F32)) - .16, .08)
+        dn = smin(dn, length(Pn - np.array([EN[0] + .2, EYE[1] - .76, EN[1] - .01], F32)) - .16, .08)
         out = d.copy()
         out[near] = dn
         return out
@@ -435,6 +475,11 @@ class Head:
         c, s_ = math.cos(out), math.sin(out)
         a_w = n0 * c - a_s * s_                                         # out, and a little forward
         a_s2 = a_s * c + n0 * s_                                        # back, and out (the shell leans off the head)
+        near = length(P - o) < 6.5
+        full = np.full(len(P), 10.0, F32)
+        if not near.any():
+            return full
+        P = P[near]
         d3 = P - o
         s = (d3 @ a_s2) * EARS
         t = (d3 @ a_t) * EARS
@@ -447,18 +492,18 @@ class Head:
         # the helix: a rolled rim from the crus over the top and down the back to the lobe
         hel = [(.25, 1.0, .55), (.55, 2.35, .75), (1.4, 3.3, .85), (2.45, 3.05, .95), (3.15, 2.0, 1.0),
                (3.25, .6, 1.0), (2.95, -.9, .95), (2.35, -2.05, .85)]
-        d = smin(d, tube(L, hel, [.17, .24, .30, .31, .31, .30, .27, .22]), .12)
+        d = smin(d, tube_smooth(L, hel, [.17, .24, .30, .31, .31, .30, .27, .22]), .12)
         # the lobe: soft, full, at the bottom
         d = smin(d, ell(L, (1.35, -2.45, .62), (.95, .78, .36)), .3)
         # the scapha: the groove inside the helix
-        sca = tube(L, [(1.0, 2.75, 1.1), (2.05, 2.75, 1.2), (2.7, 1.8, 1.25), (2.75, .5, 1.22), (2.45, -.8, 1.1)],
+        sca = tube_smooth(L, [(1.0, 2.75, 1.1), (2.05, 2.75, 1.2), (2.7, 1.8, 1.25), (2.75, .5, 1.22), (2.45, -.8, 1.1)],
                    [.16, .2, .22, .2, .16])
         d = smax(d, -sca, .1)
         # the antihelix and its crura
-        anti = tube(L, [(1.55, -1.55, .95), (2.0, -.4, 1.0), (2.15, .75, 1.0), (1.95, 1.6, .98), (1.5, 2.35, .9)],
+        anti = tube_smooth(L, [(1.55, -1.55, .95), (2.0, -.4, 1.0), (2.15, .75, 1.0), (1.95, 1.6, .98), (1.5, 2.35, .9)],
                     [.2, .25, .26, .23, .18])
         d = smin(d, anti, .15)
-        d = smin(d, tube(L, [(2.0, 1.25, .98), (1.25, 1.55, .9), (.65, 1.4, .82)], [.19, .17, .14]), .12)
+        d = smin(d, tube_smooth(L, [(2.0, 1.25, .98), (1.25, 1.55, .9), (.65, 1.4, .82)], [.19, .17, .14]), .12)
         # the concha: the bowl in front of the antihelix, down to the canal
         con = ell(L, (.9, -.2, 1.2), (.92, 1.05, .62))
         d = smax(d, -con, .18)
@@ -468,7 +513,8 @@ class Head:
         d = smin(d, ell(L, (1.45, -1.55, .92), (.36, .3, .28)), .12)
         # the canal
         d = smax(d, -capsule(L, (.35, -.25, .9), (.25, -.15, -.5), .3), .1)
-        return d / EARS
+        full[near] = d / EARS
+        return full
 
     # --- the neck -------------------------------------------------------------------------------------------
     def neck_detail(self, Q, d):
@@ -531,11 +577,11 @@ class Head:
             d = d - self.masses(Q) - self.jawline(Q)
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
         # the nasolabial fold: from beside the ala down and out past the mouth's corner
-        fa, fb = np.array([1.75, -4.75]), np.array([3.35, -8.2])
+        fa, fb = np.array([1.95, -4.95]), np.array([3.45, -8.3])
         t = np.clip(((x - fa[0]) * (fb[0] - fa[0]) + (z - fa[1]) * (fb[1] - fa[1])) / ((fb - fa) ** 2).sum(), 0, 1)
         dist = np.sqrt((x - fa[0] - t * (fb[0] - fa[0])) ** 2 + (z - fa[1] - t * (fb[1] - fa[1])) ** 2)
-        fold = np.exp(-(dist / .16) ** 2) * spow(np.sin(np.pi * np.clip(t * .95 + .05, 0, 1)), .5) * (y < -8.5)
-        d = d + .07 * fold * self.k("nasolabial")
+        fold = np.exp(-(dist / .32) ** 2) * spow(np.sin(np.pi * np.clip(t * .95 + .05, 0, 1)), .5) * (y < -8.5)
+        d = d + .05 * fold * self.k("nasolabial")
         if self.anatomy:
             import headbase as HB
             d = smin(d, HB.nose(Q, self.k), .42)

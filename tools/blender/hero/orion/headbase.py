@@ -41,17 +41,17 @@ MEASURES = np.array([
     [-10.66, -10.65, 5.898, -0.05, 7.449, 1.85, 2.05],
     [-10.05, -10.72, 6.117, -0.75, 7.502, 1.98, 2.15],
     [-9.354, -10.45, 6.386, -1.35, 7.569, 2.08, 2.2],
-    [-8.462, -10.3, 6.53, -1.7, 7.688, 2.08, 2.25],
-    [-7, -10.77, 6.655, -2.3, 7.98, 2.08, 2.3],
-    [-6, -10.84, 6.85, -2.55, 8.25, 2.12, 2.3],
-    [-5, -10.75, 7.1, -2.8, 8.55, 2.2, 2.3],
-    [-4, -10.5, 7.3, -3.2, 8.95, 2.26, 2.3],
-    [-3, -10.3, 7.48, -3.6, 9.4, 2.32, 2.3],
-    [-2, -10.15, 7.6, -3.8, 9.75, 2.36, 2.3],
-    [-1, -9.85, 7.625, -3.7, 9.9, 2.36, 2.3],
-    [0, -9.85, 7.601, -3.2, 9.95, 2.3, 2.3],
-    [0.8, -10.2, 7.727, -2.4, 10, 2.2, 2.3],
-    [1.8, -10.7, 8.037, -1.2, 10.05, 2.08, 2.3],
+    [-8.462, -10.35, 6.53, -1.7, 7.688, 2.08, 2.25],
+    [-7, -10.92, 6.655, -2.3, 7.98, 2.08, 2.3],
+    [-6, -11.02, 6.85, -2.55, 8.25, 2.12, 2.3],
+    [-5, -10.98, 7.1, -2.8, 8.55, 2.2, 2.3],
+    [-4, -10.05, 7.3, -3.2, 8.95, 2.26, 2.3],
+    [-3, -9.65, 7.48, -3.6, 9.4, 2.32, 2.3],
+    [-2, -9.35, 7.6, -3.8, 9.75, 2.36, 2.3],
+    [-1, -9.05, 7.625, -3.7, 9.9, 2.36, 2.3],
+    [0, -9.1, 7.601, -3.2, 9.95, 2.3, 2.3],
+    [0.8, -9.65, 7.727, -2.4, 10, 2.2, 2.3],
+    [1.8, -10.55, 8.037, -1.2, 10.05, 2.08, 2.3],
     [2.6, -10.75, 8.213, 0.4, 10.05, 2.02, 2.2],
     [3.6, -10.45, 8.15, 0.85, 10, 2, 2.15],
     [4.6, -10.02, 8.03, 1.05, 9.88, 1.99, 2.12],
@@ -171,7 +171,7 @@ def seg_dist(P, pts):
     return best, along
 
 
-ORBIT = ((2.95, -8.1, .05), (1.62, 1.36, 1.2))                  # each eye's socket: just the room the lids need
+ORBIT = ((3.2, -7.45, .15), (1.75, 1.6, 1.45))                  # each eye's socket: just the room the lids need
 JAW_BORDER = [(1.4, -10.6, -11.6), (3, -8.9, -11.2), (4.5, -6.4, -10.6), (5.55, -3.3, -9.96),
               (5.85, -1.9, -9.27), (5.75, -1, -6.8)]          # the mandible's lower border to the angle, up the ramus
 
@@ -190,16 +190,16 @@ class HeadBase:
         x, y, z = P[:, 0], P[:, 1], P[:, 2]
         front = np.clip((-y - 4.0) / 3.0, 0, 1)                       # only on the face
         # the brow's ridge over each eye (heavier at its middle, fading out to the temple) and the glabella
-        d = d - .26 * self.k("brow") * G3(P, (2.85, -10.45, 1.6), (1.9, .95, .85)) * front
+        d = d - .26 * self.k("brow") * G3(P, (3.1, -10.4, 1.68), (1.9, .95, .85)) * front
         d = d - .16 * self.k("brow") * G3(P, (0.0, -11.0, 1.5), (.9, .7, .75))
         # the cheekbones: the malar mass and the arch back toward the ear
-        d = d - .42 * self.k("cheekbones") * G3(P, (4.45, -8.55, -1.85), (1.5, 1.15, 1.2))
+        d = d - .42 * self.k("cheekbones") * G3(P, (4.45, -8.0, -1.85), (1.5, 1.15, 1.2))
         d = d - .2 * self.k("cheekbones") * G3(P, (6.25, -5.6, -1.4), (.8, 1.9, .7))
         # the hollow under the cheekbone, the temple's hollow
         d = d + .22 * self.k("cheek_hollow") * G3(P, (5.25, -6.9, -5.3), (1.0, 1.5, 1.3))
         d = d + .12 * self.k("temples") * G3(P, (6.85, -5.2, 2.6), (.9, 1.7, 1.6))
         # the cheek's soft pad beside the nose and above the mouth's corner
-        d = d - .22 * self.k("cheeks") * G3(P, (2.9, -10.2, -3.6), (1.2, .8, 1.4))
+        d = d - .22 * self.k("cheeks") * G3(P, (2.9, -9.6, -3.6), (1.2, .8, 1.4))
         # the mandible: its border a soft ridge from the chin round the angle, the angle itself, the masseter
         dist, along = seg_dist(P, JAW_BORDER)
         w = np.clip(along / 1.0, 0, 1) * np.clip((len(JAW_BORDER) - 1 - along) / .7, 0, 1)
@@ -209,8 +209,12 @@ class HeadBase:
         # the chin's mound and its two corners
         d = d - .2 * self.k("chin") * G3(P, (0.0, -11.0, -10.1), (1.4, .7, 1.0))
         d = d - .1 * self.k("chin") * G3(P, (1.55, -10.75, -10.88), (.6, .6, .55))
+        # the philtrum: two soft columns from the columella's foot down to the bow's peaks, a shallow groove between
+        ph = np.clip((-4.75 - z) / .4, 0, 1) * np.clip((z + 6.2) / .35, 0, 1) * (y < -9.8)
+        colx = .3 + .22 * np.clip((-4.8 - z) / 1.3, 0, 1)
+        d = d - .05 * ph * np.exp(-((x - colx) / .22) ** 2) + .035 * ph * np.exp(-(x / .25) ** 2)
         # the orbits: the eyes sit deep under the brow
-        d = smax(d, -ell(P, *ORBIT), .45)
+        d = smax(d, -ell(P, *ORBIT), .6)
         # the neck: the sternomastoids from behind the ears to the notch, the larynx
         dist, along = seg_dist(P, [(5.3, 1.9, -6.0), (4.2, -.8, -11.55), (2.6, -3.4, -16.55), (1.4, -4.8, -21.55)])
         d = d - .38 * np.exp(-(dist / 1.25) ** 2) * np.clip((along - .1) / .7, 0, 1) ** 2
@@ -219,82 +223,106 @@ class HeadBase:
 
 
 # --- the nose and the mouth as volumes (cm) ------------------------------------------------------------------------
-# A man's nose (Farkas): 5.6 cm from the nasion to the subnasale, the tip 2.3 cm out from the lip, 3.7 cm across the
-# wings; the bony bridge narrow, the cartilage wider down to a rounded lobule with two soft domes; the wings round
-# lobes set back on each side, joined to the cheek by their crease, the nostrils under them, the columella between.
-NOSE_DORSUM = [((0, -9.95, .45), .46), ((0, -10.45, -.6), .44), ((0, -10.85, -1.6), .46), ((0, -11.25, -2.7), .53),
-               ((0, -11.6, -3.4), .6)]
-NOSE_SIDE = [((0, -9.2, .1), .42), ((0, -9.5, -1.0), .5), ((0, -9.85, -2.3), .58), ((0, -10.1, -3.4), .64)]
-NOSE_TIP = ((0, -11.5, -3.82), (.84, .72, .72))
-NOSE_DOMES = ((.32, -11.76, -3.74), (.4, .36, .42))
-NOSE_WING = ((1.12, -10.85, -4.5), (.52, .9, .5))
-NOSE_BASE = ((0, -11.15, -4.58), (.66, .95, .4))
-NOSTRIL = ((.52, -11.5, -5.0), (.22, .48, .16))
-NOSE_WIDTH_SCALE = 1.33           # the bridge's round cones measured in a space narrower across: a ridge, not a pipe
+# A man's nose (Farkas): 5.35 cm from the nasion to the subnasale, the tip 2.0 cm out from the subnasale, the ridge at
+# 30 degrees to the face, 3.7 cm across the wings. Built as a WEDGE, not a rod on the face (the first nose: a ridge
+# 7 mm wide standing 1.2 cm proud of flat cheeks, then a ball for the tip and a ball for each wing; the template's,
+# measured beside it, is 1.2 cm across its ridge and opens back into the cheeks): the ridge rounded 5.5-8.5 mm (the
+# bony bridge the narrowest), the side walls opening at 28-33 degrees back to the cheeks and the eyes' inner
+# corners; the lobule two soft domes over the tip; the columella sloping back to the lip (the nasolabial angle
+# about 100 degrees); the wings round lobes either side, joined to the lobule by their groove; the nostrils under
+# them, turned in toward the tip.
+NOSE_RIDGE = np.array([   # z, the ridge's front (y), its rounding, the side walls' half angle (degrees), how deep
+    [1.60, -10.00, .55, 36, 1.6],
+    [0.55, -10.40, .55, 33, 1.7],
+    [0.00, -10.70, .58, 31, 2.0],
+    [-1.00, -11.36, .63, 29, 2.7],
+    [-2.00, -12.02, .68, 28, 3.1],
+    [-2.80, -12.50, .74, 28, 3.2],
+    [-3.30, -12.72, .80, 29, 3.2],
+    [-3.65, -12.80, .86, 30, 3.1],             # the tip (pronasale)
+    [-4.00, -12.70, .90, 31, 2.9],             # under it the front turns back: the infratip, the columella
+    [-4.20, -12.45, .88, 31, 2.6],
+    [-4.38, -12.05, .80, 32, 2.2],
+    [-4.52, -11.62, .66, 32, 1.7],
+    [-4.65, -11.20, .50, 32, 1.2],             # the subnasale
+], F32)
+NOSE_DOMES = ((.33, -12.44, -3.74), (.38, .3, .38))
+NOSE_ALA = ((1.02, -11.12, -4.3), (.76, .95, .48))
+NOSTRIL = ((.68, -11.68, -4.46), (.3, .55, .28), 24.0)   # centre, half sizes, turned in toward the tip (degrees)
+
+
+def _ridge(P, k):
+    """the nose as one solid: at each height a wedge opening backward from the ridge's line, rounded at its front,
+    as deep as the table says (behind that the eyes' corners and the cheeks), from the root down past the tip to
+    the subnasale; its underside sloping up toward the tip"""
+    x, y, z = P[:, 0], P[:, 1], P[:, 2]
+    T = NOSE_RIDGE[::-1]
+    col = lambda c, q: np.interp(q, T[:, 0], T[:, c]).astype(F32)
+    yd, r, al, depth = col(1, z), col(2, z), np.radians(col(3, z)), col(4, z)
+    slope = (col(1, z + .05) - col(1, z - .05)) / .1
+    ta = np.tan(al) * k("nose_width")
+    ca = 1.0 / np.sqrt(1 + ta * ta); sa = ta * ca
+    qx, qy = x, y - (yd + r)
+    front = qx * sa + qy * ca < 0
+    d = np.where(front, np.sqrt(qx * qx + qy * qy), qx * ca - qy * sa) - r
+    d = d / np.sqrt(1 + np.minimum(slope * slope, 4.0))       # the ridge leans: its true distance is shorter
+    d = smax(d, y - (yd + depth), .5)
+    d = smax(d, z - 1.6, .6)
+    under = -4.65 + .3 * np.clip(-11.2 - y, 0, 2.0)           # the underside, rising toward the tip
+    return smax(d, under - z, .2)
 
 
 def nose(Q, k=lambda n: 1.0):
     P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]].astype(F32)
-    S = P.copy(); S[:, 0] *= NOSE_WIDTH_SCALE / k("nose_width")
-    d = None
-    for (a, ra), (b, rb) in zip(NOSE_DORSUM, NOSE_DORSUM[1:]):
-        aa, bb = np.asarray(a, F32), np.asarray(b, F32)
-        pa, ba = S - aa, bb - aa
-        h = np.clip((pa @ ba) / float(ba @ ba), 0, 1)
-        dd = length(pa - h[:, None] * ba) - (ra + (rb - ra) * h)
-        d = dd if d is None else smin(d, dd, .25)
     w = k("nose_width")
-    # the nose's sidewalls: broad behind the ridge, sloping down into the cheeks (a pyramid, not a rod on the face)
-    side = None
-    for (a, ra), (b, rb) in zip(NOSE_SIDE, NOSE_SIDE[1:]):
-        aa, bb = np.asarray(a, F32), np.asarray(b, F32)
-        pa, ba = P - aa, bb - aa
-        h = np.clip((pa @ ba) / float(ba @ ba), 0, 1)
-        dd = length(pa - h[:, None] * ba) - (ra + (rb - ra) * h)
-        side = dd if side is None else smin(side, dd, .4)
-    d = smin(d, side, .45)
-    d = smin(d, ell(P, NOSE_TIP[0], np.array(NOSE_TIP[1]) * [w, 1, 1]), .45)
-    d = smin(d, ell(P, NOSE_DOMES[0], NOSE_DOMES[1]), .22)
-    wc, wr = NOSE_WING
-    d = smin(d, ell(P, (wc[0] * w, wc[1], wc[2]), wr), .55)
-    d = smin(d, ell(P, *NOSE_BASE), .35)
-    # the wing's rim: a soft groove where the ala meets the tip's lobule, round from the nostril up and back
-    u = (P[:, 0] - .95 * w) / .55; v = (P[:, 2] + 4.25) / .55
-    r = np.sqrt(u * u + v * v)
-    d = d + .05 * np.exp(-((r - 1.0) / .2) ** 2) * (v > -.4) * np.exp(-((P[:, 1] + 11.6) / .7) ** 2)
-    # the nostrils: openings under the tip, running back and out, the columella between them
-    nc, nr = NOSTRIL
-    d = smax(d, -ell(P, (nc[0] * w, nc[1], nc[2]), nr), .12)
-    # flat underneath, back into the lip at the subnasale
-    d = smax(d, -(P[:, 2] + 5.08), .18)
+    d = _ridge(P, k)
+    d = smin(d, ell(P, NOSE_DOMES[0], NOSE_DOMES[1]), .3)       # the lobule's two domes
+    ac, ar = NOSE_ALA
+    d = smin(d, ell(P, (ac[0] * w, ac[1], ac[2]), ar), .42)    # the wings, flaring out of the side walls
+    # the nostrils: into the underside, from beside the columella back and out, turned in toward the tip
+    nc, nr, turn = NOSTRIL
+    t = math.radians(turn)
+    dx, dy = P[:, 0] - nc[0] * w, P[:, 1] - nc[1]
+    L = np.c_[dx * math.cos(t) - dy * math.sin(t), dx * math.sin(t) + dy * math.cos(t), P[:, 2] - nc[2]]
+    d = smax(d, -ell(L, (0, 0, 0), nr), .1)
     return d
 
 
+def capsule_d(P, a, b, r):
+    a, b = np.asarray(a, F32), np.asarray(b, F32)
+    pa, ba = P - a, b - a
+    h = np.clip((pa @ ba) / float(ba @ ba), 0, 1)
+    return length(pa - h[:, None] * ba) - r
+
+
 def lips(Q, stom=-7.25, k=lambda n: 1.0):
-    """the upper and the lower lip as rolls swept along the mouth's arch: the upper with its bow and tubercle, the
-    lower fuller, both thinning into the corners (cm)"""
+    """the upper and the lower lip (their red parts), each fullest at its top and sloping back below it (the upper
+    lip pouts at its border and falls back to the stomion, the lower rolls out under the stomion and back into the
+    fold over the chin: the first lips were round rolls, two balls in profile), thinning into the corners (cm)"""
     P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]].astype(F32)
     x, y, z = P[:, 0], P[:, 1], P[:, 2]
     W = 2.62 * k("mouth_width")                                  # the corner
     u = np.clip(x / W, 0, 1.2)
-    arch = -11.42 + 1.3 * u ** 2 + 1.0 * u ** 4                   # the lips' front line seen from above
-    fade = np.clip(1 - u ** 2.2, 0, 1) ** .7
-    full = 1.18 * k("lips")
-    # the upper lip: from the stomion up to its border (the bow's peaks, the dip between them)
-    bow = .86 + .1 * np.exp(-((x - .55) / .32) ** 2) - .06 * np.exp(-(x / .22) ** 2)
-    hu = np.maximum(bow * fade * full, .08)
-    zu = stom + .52 * hu
-    au = np.maximum(.52 * fade * full, .1)
-    up = np.sqrt(((y - (arch + au * .95)) / au) ** 2 + ((z - zu) / (.58 * hu)) ** 2)
-    up = (up - 1) * np.minimum(au, .58 * hu)
+    curve = 1.1 * u ** 2                                          # the lips' front seen from above: a gentle arch
+    fade = np.clip(1 - u ** 3.2, 0, 1) ** .45                # full almost to the corners (the portrait's)
+    full = 1.2 * k("lips")
+    # the upper lip: from the stomion up to its border (the bow's peaks, the dip between them), sheared back
+    bow = .9 + .16 * np.exp(-((x - .55) / .34) ** 2) - .1 * np.exp(-(x / .24) ** 2)
+    hu = np.maximum(bow * fade, .08)
+    zu, bu = stom + .5 * hu, .52 * hu
+    au = np.maximum(.5 * fade * full, .08)
+    yu = -11.3 + curve + au + .45 * (zu - z)
+    up = np.sqrt(((y - yu) / au) ** 2 + ((z - zu) / bu) ** 2)
+    up = (up - 1) * np.minimum(au, bu)
     # the tubercle: the upper lip's middle a touch fuller and lower
-    up = smin(up, ell(P, (0, -10.9, stom + .22), (.42, .3, .2)), .12)
-    # the lower lip: fuller, rounder, from the stomion down
-    hl = np.maximum(1.08 * fade * full, .08)
-    zl = stom - .5 * hl
-    al = np.maximum(.58 * fade * full, .1)
-    lo = np.sqrt(((y - (arch + .12 + al * .95)) / al) ** 2 + ((z - zl) / (.55 * hl)) ** 2)
-    lo = (lo - 1) * np.minimum(al, .55 * hl)
+    up = smin(up, ell(P, (0, -11.08, stom + .2), (.6, .22, .2)), .22)
+    # the lower lip: fuller, from the stomion down, sheared back below its fullest
+    hl = np.maximum(1.15 * fade, .08)
+    zl, bl = stom - .5 * hl, .55 * hl
+    al = np.maximum(.55 * fade * full, .08)
+    yl = -11.05 + curve + al + .6 * (zl - z)
+    lo = np.sqrt(((y - yl) / al) ** 2 + ((z - zl) / bl) ** 2)
+    lo = (lo - 1) * np.minimum(al, bl)
     # each lip ends at the mouth's corner (round, no further)
     up = smax(up, x - W, .15); lo = smax(lo, x - W, .15)
     return smin(up, lo, .06), up, lo
