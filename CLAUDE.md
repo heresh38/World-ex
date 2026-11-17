@@ -79,6 +79,19 @@ existing classes, never second systems.
   interiors with floors, ceilings, furniture and light. Dark and cinematic but never too dark to see enemies. Audit
   first, plan, then work in its ten stages, testing after each; keep the route, encounters, collision and nav working;
   commit before each stage (the backup). Never call it AAA because it uses Nanite and Lumen.
+- **The whole world follows `docs/art/WORLD_ART_DIRECTION.md`** (the owner's master art direction for atmosphere,
+  lighting and world identity, 2026-11-16, word for word there: "Please remember and save this and consult it to
+  ensure our world is triple a and fits with the story"). Read it before any level, sky, light, weather,
+  post-process, colour grade, environment or faction work. In short: hopeful military science fiction; the world is
+  beautiful even where it is dangerous; darkness is intentional, never the default (no grey or brown monotony, no
+  permanent fog, no oppressive darkness, no bleak grade); lighting realistic, cinematic AND readable (enemies,
+  objects, weapon effects; species recognisable at a distance); every planet its own biome, palette and light;
+  Earth's protected settlements inside great walls are safe, advanced and alive, and outside them the invasion's
+  ruins keep colour and beauty; every species has its own architecture, materials, technology, palette and ships
+  (not every faction violet); the fractured empire shows in the world (species fighting each other, captured
+  installations under another insignia, wrecks of the fleet); weather comes and goes and never stands in for
+  detail; places look designed, never assembled from repeats. Its notes (ours) say how it sits with the story
+  (`docs/story/WORLD.md`) and the operations' rules; the games it names are a quality target only.
 
 ## Asset pipeline
 - `bash tools/blender/build_all.sh` builds the Blender sources Unreal's export reads into `assets/` (generated, not
