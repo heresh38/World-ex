@@ -464,17 +464,19 @@ class Anatomy:
         h = np.zeros(len(Q), F32)
         for m in self.M:
             depth, m.depth = m.depth, .09
-            h = -smin(-h, -m.raise_(Q) * (m.show or self.DEFINITION), .003)
+            h = -smin(-h, -m.raise_(Q) * (m.show or self.DEFINITION), .009)
             m.depth = depth
         out = h - self.GROOVE * self.k("definition")
         x, y, z = Q[:, 0], Q[:, 1], Q[:, 2]
         front = (y < -.06) & (x < .09)
+        # the separations are soft valleys a finger wide, never cuts (QC: no two faces of the skin turning more
+        # than a few degrees from each other)
         for zz in (1.170, 1.228, 1.284):
-            out -= .0030 * np.exp(-((z - zz - .006 * x / .08) / .0050) ** 2) * front * (x > .004) * (z < 1.30)
-        out -= .0030 * np.exp(-(x / .0045) ** 2) * front * (z > .98) * (z < 1.31)
-        out -= .0040 * np.exp(-(x / .0080) ** 2) * (y > .05) * (z > 1.0) * (z < 1.55)        # the spine
+            out -= .0022 * np.exp(-((z - zz - .006 * x / .08) / .0105) ** 2) * front * (z < 1.30) *                 np.clip(x / .012, 0, 1)
+        out -= .0022 * np.exp(-(x / .0095) ** 2) * front * (z > .98) * (z < 1.31)
+        out -= .0034 * np.exp(-(x / .0125) ** 2) * (y > .05) * (z > 1.0) * (z < 1.55)        # the spine
         pz = 1.338 + .55 * np.maximum(x - .02, 0) ** 2 / .03                                 # the pec's lower edge
-        out -= .0050 * np.exp(-((z - pz) / .0065) ** 2) * (y < -.05) * (x > .012) * (x < .17)
+        out -= .0036 * np.exp(-((z - pz) / .0125) ** 2) * (y < -.05) * np.clip((x - .008) / .015, 0, 1) *             np.clip((.18 - x) / .02, 0, 1)
         return out
 
 

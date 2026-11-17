@@ -259,8 +259,23 @@ def main():
         if "--cage" in flags:
             X = np.array(C.V)
         else:
-            X = B.solve_cage(C.V, C.F, log=log)
+            # the toes and the forefoot's last rings are left (partly) free: an exact fit there overshot between
+            # the toes and folded the skin; their targets stand out by what the subdivision takes back (foot.py)
+            import foot as FTM
+            Vc = np.array(C.V)
+            fore = np.zeros(len(Vc))
+            for Ff in info["feet"]:
+                q = Vc - np.array([Ff.A[0], Ff.A[1], 0.0])
+                fore = np.maximum(fore, ((q @ Ff.fw > FTM.MID_F + .004) & (Vc[:, 0] * Ff.sx > 0) & (Vc[:, 2] < .09)) * 1.0)
+            free = np.array([1.0 if p.startswith("toe_") else 0.0 for p in C.part])
+            free = np.maximum(free, fore * np.array([p in ("foot", "fore") for p in C.part]))
+            X = B.solve_cage(C.V, C.F, log=log, free=free)
         o = make_object(X, C.F, "orion_male")
+        # which toe each vertex is (carried through the subdivision, read back for the skin's last step)
+        import foot as FTM
+        for k, name in enumerate(FTM.TOE_NAMES):
+            at = o.data.attributes.new(f"toe{k}", 'FLOAT', 'POINT')
+            at.data.foreach_set("value", np.array([1.0 if p == f"toe_{name}" else 0.0 for p in C.part], np.float32))
         if "--cage" not in flags:
             m = o.modifiers.new("sub", 'SUBSURF')
             m.levels = m.render_levels = int(flags.get("--levels", 2))
@@ -276,9 +291,31 @@ def main():
             co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
             nr = np.zeros(n * 3, np.float32); me.vertices.foreach_get("normal", nr); nr = nr.reshape(n, 3)
             disp = AN.Anatomy().detail(co)
+            # the feet have their own anatomy (footshape.py): the muscles' detail fades out above the ankle
+            disp = disp * np.clip((co[:, 2] - .17) / .09, 0, 1) ** 2 * (3 - 2 * np.clip((co[:, 2] - .17) / .09, 0, 1))
             import hand as HM
             disp = disp + HM.detail(co, info["hands"])
             co += nr * disp[:, None]
+            # the feet: the skin laid onto the foot's anatomy (footshape.py)
+            import foot as FTM
+            if "--nofootskin" not in flags:
+                toe_w = np.zeros((n, len(FTM.TOE_NAMES)), np.float32)
+                for k in range(len(FTM.TOE_NAMES)):
+                    a = me.attributes.get(f"toe{k}")
+                    if a is not None:
+                        w = np.zeros(n, np.float32); a.data.foreach_get("value", w)
+                        toe_w[:, k] = w
+                ed = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", ed)
+                off = FTM.skin_offsets(co, nr, info["feet"], toe_w, ed.reshape(-1, 2))
+                log(f"feet laid on their anatomy: {off.min() * 1000:.1f} .. {off.max() * 1000:.1f} mm")
+                co = co + nr * off[:, None]
+                co = FTM.separate_toes(co, info["feet"], toe_w)
+            # the last pass: what still folds or crosses itself in the hands and feet is relaxed there (meshfix.py)
+            if "--nountangle" not in flags:
+                import meshfix as MF
+                qf = np.zeros(len(me.polygons) * 4, np.int64); me.polygons.foreach_get("vertices", qf)
+                digits = co[:, 2] < .23                                   # the feet (the hands are not yet checked)
+                co = MF.untangle(co, qf.reshape(-1, 4), digits, log=log).astype(np.float32)
             me.vertices.foreach_set("co", co.ravel())
             me.update()
             log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")

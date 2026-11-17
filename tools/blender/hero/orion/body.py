@@ -356,17 +356,19 @@ def build(cc=None, log=print):
     C.cap(neck[-1], "head", .10, (0, 0, 1))
     import hand as hand_mod
     import foot as foot_mod
-    frames = []
+    frames, feet = [], []
     for sx in (1, -1):
         S_, a, up, back = arm_axis(sx)
         F = hand_mod.Frame(S_ + a * (UPPER_ARM + FOREARM), a, up, sx)
         frames.append(F)
         hand_mod.build_hand(C, arms[sx][-1], F, log=log)
         ank = np.mean([C.V[v] for v in legs[sx][-1]], axis=0)
-        foot_mod.build_foot(C, legs[sx][-1], foot_mod.Frame((ank[0], ank[1] + .004, ank[2]), sx), log=log)
+        FF = foot_mod.Frame((ank[0], ank[1] + .004, ank[2]), sx)
+        feet.append(FF)
+        foot_mod.build_foot(C, legs[sx][-3:], FF, log=log)
     C.compact()
     log(f"cage: {len(C.V)} vertices, {len(C.F)} quads")
-    return C, dict(T=T, neck=neck, legs=legs, arms=arms, crotch=crotch, hands=frames)
+    return C, dict(T=T, neck=neck, legs=legs, arms=arms, crotch=crotch, hands=frames, feet=feet)
 
 
 # --- the shoulder: a window of 12 round each arm's socket ------------------------------------------------------------
@@ -612,14 +614,17 @@ def apply_op(op, X):
     return out
 
 
-def solve_cage(V, F, iters=80, log=print):
-    """cage positions whose limit surface passes through V (the targets)"""
+def solve_cage(V, F, iters=80, log=print, free=None):
+    """cage positions whose limit surface passes through V (the targets). free: per vertex 0..1, how much it is
+    left as its own target instead (the limit surface then runs a little inside it, never overshooting: toes
+    between toes, where an exact fit pushed neighbouring sides into each other)"""
     P = np.asarray(V, float)
     op = limit_operator(len(P), F)
     X = P.copy()
+    keep = 1.0 if free is None else (1.0 - np.asarray(free, float))[:, None]
     for it in range(iters):
         err = P - apply_op(op, X)
-        X += err
+        X += err * keep
         if it in (0, iters - 1):
             e = np.linalg.norm(err, axis=1)
             log(f"limit fit {it}: mean {e.mean() * 1000:.2f} mm, max {e.max() * 1000:.2f} mm")
