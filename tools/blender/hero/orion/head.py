@@ -359,10 +359,10 @@ class Head:
     def alar_crease(self, Q):
         """the groove round the ala where it meets the cheek and the lip"""
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
-        u = (x - 1.2) / .72
-        v = (z + 4.32) / .6
+        u = (x - 1.0) / .88                                   # round the wing where it is now (headbase.NOSE_ALA)
+        v = (z + 4.3) / .56
         r = np.sqrt(u * u + v * v)
-        return np.exp(-((r - 1.0) / .26) ** 2) * (x > 1.2) * G(y, -10.6, .7)     # a soft fold, not a cut line
+        return np.exp(-((r - 1.0) / .26) ** 2) * (x > 1.0) * G(y, -10.35, .6)    # a soft fold, not a cut line
 
     # --- the lips -------------------------------------------------------------------------------------------
     def lips(self, Q):

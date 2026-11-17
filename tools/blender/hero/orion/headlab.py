@@ -308,6 +308,8 @@ VIEWS = {  # yaw (degrees, positive = from his left), pitch, distance, lens
     "close": (-20, -3, .40, 85), "under": (10, -45, .55, 85),
     "face": (0, -2, .40, 85), "faceq": (32, -2, .40, 85), "faces": (90, -2, .42, 85),
     "eye": (-18, -2, .17, 85, (-.032, -.083, .001)), "skin": (-35, -4, .2, 85, (-.04, -.088, -.025)),
+    "nose": (0, -4, .24, 85, (0, -.11, -.022)), "noseq": (-38, -4, .24, 85, (0, -.11, -.022)),
+    "noses": (-90, -2, .26, 85, (0, -.105, -.022)), "noseu": (-15, -38, .24, 85, (0, -.11, -.03)),
 }
 
 
@@ -457,9 +459,10 @@ def main():
         import groom as GR
         N = sdf.normals(head, V)
         mask = GR.groom(V, N, head, log=log, beard_on="--beard" in flags).astype(np.float32)   # clean-shaven base
+        Qh = GR.to_head(V, head)
         if "--beard" not in flags:          # shaved: the beard's faint shadow under the skin
-            mask = (GR.beard_mask(GR.to_head(V, head), head, soft=True) * (head.ear(GR.to_head(V, head)) > .6)
-                    * .3).astype(np.float32)
+            mask = (GR.beard_mask(Qh, head, soft=True) * (head.ear(Qh) > .6) * .3).astype(np.float32)
+        mask = np.maximum(mask, .8 * GR.scalp_shade(Qh, head))    # the hair's roots shade the scalp (a fade reads)
         a = o.data.color_attributes.new("beard", 'FLOAT_COLOR', 'POINT')
         a.data.foreach_set("color", np.c_[mask, mask, mask, np.ones_like(mask)].ravel())
         sc.cycles_curves.shape = 'THICK'

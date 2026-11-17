@@ -251,15 +251,15 @@ NOSE_RIDGE = np.array([   # z, the ridge's front (y), its rounding, the side wal
     [-2.00, -12.02, .68, 28, 3.1],
     [-2.80, -12.50, .74, 28, 3.2],
     [-3.30, -12.72, .80, 29, 3.2],
-    [-3.65, -12.80, .86, 30, 3.1],             # the tip (pronasale)
-    [-4.00, -12.70, .90, 31, 2.9],             # under it the front turns back: the infratip, the columella
-    [-4.20, -12.45, .88, 31, 2.6],
-    [-4.38, -12.05, .80, 32, 2.2],
-    [-4.52, -11.62, .66, 32, 1.7],
-    [-4.65, -11.20, .50, 32, 1.2],             # the subnasale
+    [-3.65, -12.80, .8, 30, 3.1],              # the tip (pronasale)
+    [-4.00, -12.70, .78, 31, 2.9],             # under it the front turns back: the infratip, the columella
+    [-4.20, -12.45, .68, 31, 2.6],             # narrowing to the columella (a broad lobule read as a snout)
+    [-4.38, -12.05, .56, 32, 2.2],
+    [-4.52, -11.62, .46, 32, 1.7],
+    [-4.65, -11.20, .4, 32, 1.2],              # the subnasale
 ], F32)
-NOSE_ALA = ((.92, -11.34, -4.3), (.92, .95, .5))
-NOSTRIL = ((.62, -11.52, -4.52), (.36, .66, .3), 26.0)   # centre, half sizes, turned in toward the tip (degrees)
+NOSE_ALA = ((1.0, -10.95, -4.3), (.85, .72, .48))          # set back: the tip stands in front, narrow
+NOSTRIL = ((.58, -11.45, -4.55), (.27, .62, .26), 22.0)   # centre, half sizes, turned in toward the tip (degrees)
 
 
 def _ridge(P, k):
@@ -280,6 +280,8 @@ def _ridge(P, k):
     d = smax(d, y - (yd + depth), .5)
     d = smax(d, z - 1.6, .6)
     under = -4.65 + .3 * np.clip(-11.2 - y, 0, 2.0)           # the underside, rising toward the tip
+    under = under + .18 * np.clip((x - .35) / .9, 0, 1)        # and to the wings' rims (seen from the front a soft
+    #                                                            gull's wing, not a flat line)
     return smax(d, under - z, .2)
 
 
