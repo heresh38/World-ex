@@ -170,6 +170,11 @@ def smooth_vectors(F, edges, n_iter, lam=.5):
     return F
 
 
+def leg_any(z):
+    """the lower leg's height range (the calves' plates)"""
+    return (z > .12) & (z < .52)
+
+
 def panel_fields(P, N):
     """per vertex, in metres: (how far inside a panel, negative outside; how far from a drawn seam line) from its
     place on the body (world metres, the sheet's posture) and its smoothed normal. A panel is the intersection (min)
@@ -179,13 +184,13 @@ def panel_fields(P, N):
     sx = np.where(P[:, 0] < 0, -1.0, 1.0)
     nx, ny, nz = N[:, 0] * sx, N[:, 1], N[:, 2]
 
-    def I(*a):
-        """a panel's edges together, its corners rounded (1.2 cm): sharp corners where three edges met left
-        slivers of a panel (the back's, on the shoulder)"""
+    def I(*a, k=.012):
+        """a panel's edges together, its corners rounded (k: 1.2 cm for a panel; sharp corners where three edges
+        met left slivers of a panel, the back's on the shoulder; a few mm for the small plates)"""
         out = a[0]
         for v in a[1:]:
-            h = np.clip(.5 + .5 * (v - out) / .012, 0, 1)
-            out = v * (1 - h) + out * h - .012 * h * (1 - h)
+            h = np.clip(.5 + .5 * (v - out) / k, 0, 1)
+            out = v * (1 - h) + out * h - k * h * (1 - h)
         return out
     arm = np.minimum(x - .235, z - 1.25)                               # > 0 on the arms (the thighs' outsides
     # reach x .236 at their widest: by x alone a hole was cut in the thigh's panel)
@@ -216,6 +221,7 @@ def panel_fields(P, N):
     # the sides: a broad panel down the side of the trunk from under the arm, leaning forward as it falls, and from
     # the hip forward along the groin to the crotch (the sheet's taper)
     yc = -.050 - .09 * (1.36 - z)                                         # over the obliques, seen from the front
+    side_i = len(s)
     s.append(I(torso, z - .985, 1.37 - z, (nx - .30) * L, .058 - np.abs(y - yc)))
     gb, ga, gl = band((.165, 1.005), (.058, .885), .021)
     s.append(I(gb, ga + .01, gl - ga, (-ny + .35) * L, z - .86))
@@ -228,8 +234,10 @@ def panel_fields(P, N):
     # the knee: a rounded pad on its front only
     kz = np.abs(z - .515) / .055
     ky = np.clip(-ny - .45, 0, 1) / .55
+    knee_i = len(s)
     s.append(I(leg, (1 - (kz ** 2 + (1 - ky) ** 2)) * .03, (-ny - .25) * .05))
     # the shins' outsides: a strip narrowing to the ankle
+    shin_i = len(s)
     s.append(I(leg, z - .15, .43 - z, (-ny - .15) * .05, (nx - .05 - .25 * (.43 - z)) * .05))
     # the back: a broad V narrowing to the waist, split by the spine's dark strip and by a dark strap each side from
     # the shoulder blade's outer top down to the waist (the sheet's inner V)
@@ -238,24 +246,47 @@ def panel_fields(P, N):
     sb, sa, sl = band((.146, 1.50), (.048, 1.235), .016)
     s.append(I(bk, -I(sb, sa + .02, sl + .02 - sa)))
     pan = np.maximum.reduce(s)
-    # the seams drawn on their own: the pecs' plates' outlines (the lower edge along the pec's own, the outer edge),
-    # the abdomen's lines (down either side of the rectus, across at its three bands), the zip down the front, the
-    # seam down the back's strip; each a segment, so its ends are round
+    # the seams. A seam is drawn where a SIGNED field crosses zero (a panel's, a plate's, an outline's): the field
+    # is linear across a face, so the line is sharp and whole at any face size. An unsigned distance to a line
+    # reaches zero only at the vertices it passes through and broke into dashes; only the midlines, which run
+    # through the body's own midline vertices, are drawn that way (d)
     front = (ny < -.3) & (torso > 0)
     back = (ny > .3) & (torso > 0)
-    far = np.full(len(P), .05)
-    d = far.copy()
+    d = np.full(len(P), .05)
+    d = np.where(front, np.minimum(d, np.hypot(x, np.maximum(1.0 - z, 0))), d)       # the zip
+    d = np.where(back, np.minimum(d, np.hypot(x, np.maximum(1.0 - z, 0))), d)        # down the back's strip
+    K = .004                                                             # the small plates' corners
+    # outlines only (no tone of their own): the zip's strip, the pecs' plates under the wings (the lower edge along
+    # the pec's own), the knee pad's inner plate, the shins' strips cut in three
+    ol = []
+    ol.append(I(.016 - x, z - 1.15, (-ny - .3) * L, k=K))
     pz = 1.338 + 3.6 * np.maximum(x - .02, 0) ** 2 + .006                # just over the pec's lower edge
     wl = w_in[1] + (x - w_in[0]) * (w_out[1] - w_in[1]) / (w_out[0] - w_in[0]) - .027   # under the wing
-    pec = I(z - pz, wl - z, x - .022, .165 - x)
-    d = np.where(front & (z > 1.30), np.minimum(d, np.abs(pec)), d)
-    d = np.where(front, np.minimum(d, np.hypot(x - .078, np.maximum(np.maximum(1.0 - z, z - 1.33), 0))), d)
-    for zz in (1.17, 1.228, 1.284):
-        d = np.where(front, np.minimum(d, np.hypot(np.maximum(x - .078, 0), z - zz)), d)
-    d = np.where(front, np.minimum(d, np.hypot(x, np.maximum(1.0 - z, 0))), d)
-    d = np.where(front, np.minimum(d, np.hypot(x - .016, np.maximum(1.15 - z, 0))), d)   # the zip's strip
-    d = np.where(back, np.minimum(d, np.hypot(x, np.maximum(1.0 - z, 0))), d)
-    return pan, d
+    ol.append(I(z - pz, wl - z, x - .024, .165 - x, (-ny - .3) * L, k=K))
+    ol.append(I(s[knee_i] - .010, leg, k=K))
+    ol.append(I(s[shin_i], z - .238, .327 - z, k=K))
+    outline = np.maximum.reduce(ol)
+    # the finer plates (the sheet's angular plates over the muscles): a shade lighter than the dark base, set
+    # close together (each one's own edge is a seam: two plates side by side make the sheet's double line)
+    pl = []
+    # the rectus: a plate per block of the six-pack, and one below the navel narrowing down
+    for z_lo, z_hi in ((1.170, 1.228), (1.228, 1.284), (1.284, 1.330)):
+        pl.append(I((-ny - .3) * L, x - .010, .076 - x, z - z_lo - .0025, z_hi - .0025 - z, k=K))
+    low = .076 - .046 * np.clip((1.1675 - z) / .22, 0, 1)
+    pl.append(I((-ny - .3) * L, x - .010, low - x, 1.1675 - z, z - .945, k=K))
+    # the obliques: a ladder of plates, down and in toward the rectus
+    for z0 in (1.340, 1.262, 1.184, 1.106):
+        ob, oa, ol_ = band((.152, z0), (.084, z0 - .082), .021)
+        pl.append(I(ob, oa, ol_ - oa, (-ny - .05) * L, torso, .170 - x, x - .080, -s[side_i] - .004, k=K))
+    # the calves: the two heads of the calf behind, the inner one lower
+    for xc, zt, zb_ in ((.136, .455, .300), (.192, .470, .335)):
+        hw = .025 * (.40 + .60 * np.clip((z - zb_) / (zt - zb_) * 1.5, 0, 1))      # narrowing to the tendon
+        pl.append(I((ny - .30) * .06, hw - np.abs(x - xc), zt - z, z - zb_, .5 - z, k=K))
+    # the upper arm: the triceps behind; the forearm: a bracer on its top by the wrist
+    pl.append(I(arm, x - .275, .425 - x, (ny - .35 - .30 * np.clip((x - .275) / .15, 0, 1)) * .05, k=K))
+    pl.append(I(arm, x - .560, .680 - x, (nz - .35) * .04, k=K))
+    tone = np.maximum.reduce(pl)
+    return pan, d, tone, outline
 
 
 def build_suit(body, log=print, zb=None):
@@ -302,9 +333,10 @@ def build_suit(body, log=print, zb=None):
     ed = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", ed); ed = ed.reshape(-1, 2)
     Nn = smooth_vectors(Nn, ed, 160)
     Nn /= np.maximum(np.linalg.norm(Nn, axis=1), 1e-9)[:, None]
-    pan, d = panel_fields(P, Nn)
+    pan, d, tone, outline = panel_fields(P, Nn)
     m = me.color_attributes.new("suit", 'FLOAT_COLOR', 'POINT')
-    m.data.foreach_set("color", np.c_[np.clip(pan, -.05, .05), np.clip(d, 0, .05), np.zeros(nn), np.ones(nn)]
+    m.data.foreach_set("color", np.c_[np.clip(pan, -.05, .05), np.clip(d, 0, .05), np.clip(tone, -.05, .05),
+                                      np.clip(outline, -.05, .05)]
                        .astype(np.float32).ravel())
     mod = o.modifiers.new("thick", 'SOLIDIFY'); mod.thickness = THICK; mod.offset = 1.0
     o.data.materials.clear()
@@ -404,7 +436,7 @@ def build_collar(head, suit, body, zb, log=print, n_h=26):
     front = np.cos(th)[None, :] > .3
     d = np.where(front, np.minimum(d, np.abs(V[:, :, 0])), d)
     nn = n_h * N_ANG
-    col = np.c_[np.full(nn, -.05), np.clip(d.ravel(), 0, .05), np.zeros(nn), np.ones(nn)]
+    col = np.c_[np.full(nn, -.05), np.clip(d.ravel(), 0, .05), np.full(nn, -.05), np.full(nn, -.05)]
     m = me.color_attributes.new("suit", 'FLOAT_COLOR', 'POINT')
     m.data.foreach_set("color", col.astype(np.float32).ravel())
     vg = o.vertex_groups.new(name="thick")
@@ -457,10 +489,19 @@ def suit_material():
     pan.inputs["From Min"].default_value = -.0007; pan.inputs["From Max"].default_value = .0007
     # a seam: a groove between the two panels' edges, each edge turned down into it (bevelled: it catches the
     # light, so the seam reads on the dark base as on the grey, as the sheet's do)
-    seam = math('MAXIMUM', line(sep.outputs[0], W_SEAM * .7), line(sep.outputs[1], W_SEAM * .6))
-    lip = math('MAXIMUM', line(sep.outputs[0], W_SEAM * 2.4), line(sep.outputs[1], W_SEAM * 2.2))
+    seam = math('MAXIMUM', math('MAXIMUM', line(sep.outputs[0], W_SEAM * .7), line(sep.outputs[1], W_SEAM * .6)),
+                math('MAXIMUM', line(sep.outputs[2], W_SEAM * .7), line(attr.outputs["Alpha"], W_SEAM * .7)))
+    lip = math('MAXIMUM', math('MAXIMUM', line(sep.outputs[0], W_SEAM * 2.4), line(sep.outputs[1], W_SEAM * 2.2)),
+               math('MAXIMUM', line(sep.outputs[2], W_SEAM * 2.4), line(attr.outputs["Alpha"], W_SEAM * 2.4)))
+    tone = N.new("ShaderNodeMapRange"); tone.interpolation_type = 'SMOOTHSTEP'
+    L.new(sep.outputs[2], tone.inputs["Value"])
+    tone.inputs["From Min"].default_value = -.0007; tone.inputs["From Max"].default_value = .0007
+    dark = N.new("ShaderNodeMix"); dark.data_type = 'RGBA'               # the base, its plates a shade lighter
+    dark.inputs[6].default_value = (.028, .028, .032, 1)                # charcoal
+    dark.inputs[7].default_value = (.044, .043, .049, 1)                # a plate
+    L.new(tone.outputs[0], dark.inputs[0])
     base = N.new("ShaderNodeMix"); base.data_type = 'RGBA'
-    base.inputs[6].default_value = (.028, .028, .032, 1)                # charcoal
+    L.new(dark.outputs[2], base.inputs[6])
     base.inputs[7].default_value = (.105, .102, .112, 1)                # the grey panels
     L.new(pan.outputs[0], base.inputs[0])
     seamc = N.new("ShaderNodeMix"); seamc.data_type = 'RGBA'
