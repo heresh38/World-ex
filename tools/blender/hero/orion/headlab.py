@@ -84,7 +84,7 @@ def skin_material(clay=False):
     pores = node(nt, "ShaderNodeTexVoronoi", Scale=2600.0)
     nt.links.new(tc.outputs["Object"], pores.inputs["Vector"])
     base = node(nt, "ShaderNodeRGB")
-    base.outputs[0].default_value = (.50, .325, .235, 1)
+    base.outputs[0].default_value = (.40, .235, .16, 1)
     mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'
     nt.links.new(base.outputs[0], mix.inputs[6])
     ramp = nt.nodes.new("ShaderNodeValToRGB")
@@ -93,7 +93,16 @@ def skin_material(clay=False):
     nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
     nt.links.new(ramp.outputs[0], mix.inputs[7])
     mix.inputs[0].default_value = 1.0
-    nt.links.new(mix.outputs[2], b.inputs["Base Color"])
+    battr = nt.nodes.new("ShaderNodeAttribute"); battr.attribute_name = "beard"
+    bsep = nt.nodes.new("ShaderNodeSeparateColor")
+    nt.links.new(battr.outputs["Color"], bsep.inputs[0])
+    shade = nt.nodes.new("ShaderNodeMix"); shade.data_type = 'RGBA'
+    nt.links.new(mix.outputs[2], shade.inputs[6])
+    shade.inputs[7].default_value = (.12, .080, .058, 1)
+    fac = nt.nodes.new("ShaderNodeMath"); fac.operation = 'MULTIPLY'
+    nt.links.new(bsep.outputs[0], fac.inputs[0]); fac.inputs[1].default_value = .62
+    nt.links.new(fac.outputs[0], shade.inputs[0])
+    nt.links.new(shade.outputs[2], b.inputs["Base Color"])
     b.inputs["Subsurface Weight"].default_value = .35
     b.inputs["Subsurface Radius"].default_value = (.012, .005, .0028)
     b.inputs["Subsurface Scale"].default_value = 1.0
@@ -305,6 +314,14 @@ def main():
     log(f"meshed in {time.time() - t0:.1f} s: {len(V)} verts")
     o = to_object("head", V, Q)
     o.data.materials.append(skin_material("--clay" in flags))
+    if "--groom" in flags:
+        import groom as GR
+        N = sdf.normals(head, V)
+        mask = GR.groom(V, N, head, log=log).astype(np.float32)
+        a = o.data.color_attributes.new("beard", 'FLOAT_COLOR', 'POINT')
+        a.data.foreach_set("color", np.c_[mask, mask, mask, np.ones_like(mask)].ravel())
+        sc.cycles_curves.shape = 'THICK'
+        log("groomed")
     for name, (EV, EF, col) in head.extras():
         c = EV.mean(0)
         e = to_object(name, EV - c, EF, origin=tuple(c))

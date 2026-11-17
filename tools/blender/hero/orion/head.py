@@ -215,6 +215,8 @@ STOMION_Z = -7.25
 
 
 class Head:
+    Y0, Z0 = Y0, Z0                              # the head frame's origin in the world (metres)
+
     def __init__(self, params=None):
         self.p = dict(params or {})
         self.R, self.Rz, self.Rt = build_loft()

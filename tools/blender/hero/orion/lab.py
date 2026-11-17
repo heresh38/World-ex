@@ -192,9 +192,10 @@ def turnaround(sc, path, samples=64):
     mat = bpy.data.materials.new("clay"); mat.use_nodes = True
     b = mat.node_tree.nodes["Principled BSDF"]
     b.inputs["Base Color"].default_value = (.32, .30, .285, 1); b.inputs["Roughness"].default_value = .55
-    for o in sc.objects:
-        if o.type == 'MESH' and o.name != "suit":                     # the suit keeps its own material
-            o.data.materials.clear(); o.data.materials.append(mat)
+    skin = bpy.data.materials.get("skin")
+    for o in sc.objects:                                              # the suit, the head, the eyes keep their own
+        if o.type == 'MESH' and o.name not in ("suit", "head", "eye_L", "eye_R"):
+            o.data.materials.clear(); o.data.materials.append(skin if (skin and o.get("skin")) else mat)
             for p in o.data.polygons:
                 p.use_smooth = True
     tgt = Vector((0, 0, .95))
@@ -284,6 +285,30 @@ def main():
             if "--suit" in flags:
                 import suit as SU
                 SU.build_suit(o, log=log)
+            if "--head" in flags:
+                # the head (head.py) on the body, groomed (groom.py), its skin and eyes (headlab.py's materials)
+                import sdf
+                import head as HD
+                import headlab as HL
+                import groom as GR
+                hd = HD.Head()
+                lo, hi = hd.bounds()
+                lo[2] = max(lo[2], 1.53)
+                Vh, Qh = sdf.mesh(hd, lo, hi, float(flags.get("--head_h", .0011)), log=log)
+                ho = HL.to_object("head", Vh, Qh)
+                ho.data.materials.append(HL.skin_material(False))
+                for name, (EV, EF, col) in hd.extras():
+                    c = EV.mean(0)
+                    e = HL.to_object(name, EV - c, EF, origin=tuple(c))
+                    e.data.materials.append(HL.eye_material(name))
+                Nh = sdf.normals(hd, Vh)
+                mask = GR.groom(Vh, Nh, hd, log=log).astype(np.float32)
+                a = ho.data.color_attributes.new("beard", 'FLOAT_COLOR', 'POINT')
+                a.data.foreach_set("color", np.c_[mask, mask, mask, np.ones_like(mask)].ravel())
+                sc.cycles_curves.shape = 'THICK'
+                # the body's skin: the head's, so hands and feet match the face
+                skin = ho.data.materials[0]
+                o["skin"] = 1
     log(f"built in {time.time() - t0:.1f} s")
     sc.render.engine = 'BLENDER_WORKBENCH'
     sc.render.resolution_x, sc.render.resolution_y = SIZE
