@@ -50,15 +50,18 @@ ARCH = ((.040, -.044, -.006), (.058, .030, .021))              # what the arch l
 # per toe: the joint at its root (MTP: f, l, z), the ball's pad under it (radius), the bones' lengths, the joints'
 # bends (deg: the first raises the toe, the next curl it down), the yaw (deg, + outward), the half width and half
 # height at the root, at the last joint and at the tip
-TOES = [dict(name="big", mtp=(.134, -.0285, .023), pad=.0140, bones=(.032, .025), bend=(9.0, -6.0), yaw=-1.5,
+# the toes at rest: each slopes down from the ball of the foot to its pad on the floor (the big toe's first bone
+# rose 9 degrees and its tip stood 2 cm off the floor: the owner's "the toes are pointing upwards instead of
+# resting"; the others rose 12 and clawed down, their pads 5-6 mm up). Pads now ~2 mm off the floor
+TOES = [dict(name="big", mtp=(.134, -.0285, .023), pad=.0140, bones=(.032, .025), bend=(-8.0, -10.0), yaw=-1.5,
              w=(.0135, .0128, .0122), h=(.0110, .0100, .0090)),
-        dict(name="second", mtp=(.139, -.0055, .020), pad=.0110, bones=(.026, .013, .0095), bend=(12.0, -36.0, -18.0),
+        dict(name="second", mtp=(.139, -.0055, .020), pad=.0110, bones=(.026, .013, .0095), bend=(5.0, -32.0, -16.0),
              yaw=0.0, w=(.0100, .0094, .0097), h=(.0084, .0080, .0076)),
-        dict(name="third", mtp=(.132, .0135, .019), pad=.0105, bones=(.023, .0115, .009), bend=(12.0, -36.0, -18.0),
+        dict(name="third", mtp=(.132, .0135, .019), pad=.0105, bones=(.023, .0115, .009), bend=(5.0, -32.0, -16.0),
              yaw=1.5, w=(.0096, .0090, .0093), h=(.0080, .0076, .0072)),
-        dict(name="fourth", mtp=(.122, .0315, .0175), pad=.0100, bones=(.020, .0105, .0085), bend=(12.0, -36.0, -18.0),
+        dict(name="fourth", mtp=(.122, .0315, .0175), pad=.0100, bones=(.020, .0105, .0085), bend=(5.0, -32.0, -16.0),
              yaw=3.0, w=(.0092, .0086, .0088), h=(.0076, .0072, .0068)),
-        dict(name="little", mtp=(.108, .0475, .016), pad=.0096, bones=(.017, .009, .0078), bend=(11.0, -34.0, -17.0),
+        dict(name="little", mtp=(.108, .0475, .016), pad=.0096, bones=(.017, .009, .0078), bend=(5.0, -30.0, -15.0),
              yaw=4.5, w=(.0089, .0083, .0084), h=(.0072, .0066, .0062))]
 TOE_GAP = .0036                  # toes press together, never into each other: each is cut at the plane between them
 FLOOR_K = .006                   # how round the edge of what the floor flattens is

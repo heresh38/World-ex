@@ -111,7 +111,7 @@ def skin_material(clay=False):
     red = math_('ADD', math_('MULTIPLY', blob(.036, Y0 - .088, Z0 - .03, .02, .02, .018), .42),
                 math_('MULTIPLY', blob(0, Y0 - .12, Z0 - .038, .011, .014, .012, False), .38))   # the nose redder
     red = math_('ADD', red, math_('MULTIPLY', blob(0, Y0 - .108, Z0 - .102, .016, .01, .01, False), .14))  # the chin
-    red = math_('ADD', red, math_('MULTIPLY', blob(.072, Y0 + .005, Z0 - .01, .012, .025, .035), .5))
+    red = math_('ADD', red, math_('MULTIPLY', blob(.072, Y0 + .005, Z0 - .01, .012, .025, .035), .16))
     red = math_('ADD', red, math_('MULTIPLY', blob(.0186, Y0 - .0821, Z0 + .0002, .0024, .0024, .0024), .95))
     red = math_('MINIMUM', red, 1.0)
     # the eyes' hollows a little darker
@@ -172,10 +172,44 @@ def skin_material(clay=False):
     nt.links.new(math_('MULTIPLY', lsep.outputs[0], .85), lipc.inputs[0])
     nt.links.new(shade.outputs[2], lipc.inputs[6])
     lipc.inputs[7].default_value = (.25, .13, .115, 1)          # a man's lips: a deeper, browner red
-    nt.links.new(lipc.outputs[2], b.inputs["Base Color"])
+    # the line the lips meet on, dark and sharp at any mesh: from the position, along the head's own stomion curve
+    # (a ramp of it by the distance from the midline), shallowing out into the corners
+    hd_ = H.Head()
+    import headbase as HB
+    W = HB.MOUTH_W * hd_.k("mouth_width")
+    st0 = float(hd_.stom_z)
+    sramp = nt.nodes.new("ShaderNodeValToRGB")
+    els = sramp.color_ramp.elements
+    xs = np.linspace(0, 3.0, 13)
+    sts = hd_.stom(np.clip(xs, 0, W)) - st0
+    els[0].position, els[0].color = 0.0, (.5 + sts[0], 0, 0, 1)
+    els[1].position, els[1].color = 1.0, (.5 + sts[-1], 0, 0, 1)
+    for xv, sv in zip(xs[1:-1], sts[1:-1]):
+        e = els.new(float(xv / 3.0)); e.color = (.5 + float(sv), 0, 0, 1)
+    xc = math_('MULTIPLY', math_('ABSOLUTE', sep.outputs[0]), 100.0)
+    nt.links.new(math_('MINIMUM', math_('DIVIDE', xc, 3.0), 1.0), sramp.inputs["Fac"])
+    rsep = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(sramp.outputs["Color"], rsep.inputs[0])
+    stz = math_('ADD', math_('SUBTRACT', rsep.outputs[0], .5), st0)                  # cm, the head's frame
+    zc = math_('MULTIPLY', math_('SUBTRACT', sep.outputs[2], Z0), 100.0)
+    yc = math_('MULTIPLY', math_('SUBTRACT', sep.outputs[1], Y0), 100.0)
+    dist = math_('ABSOLUTE', math_('SUBTRACT', zc, stz))
+    along = math_('MINIMUM', math_('MAXIMUM', math_('DIVIDE', math_('SUBTRACT', W - .05, xc), .35), 0.0), 1.0)
+    frnt = math_('MINIMUM', math_('MAXIMUM', math_('DIVIDE', math_('SUBTRACT', -8.6, yc), .6), 0.0), 1.0)
+    where = math_('MULTIPLY', along, frnt)
+    core = math_('EXPONENT', math_('MULTIPLY', math_('POWER', math_('DIVIDE', dist, .028), 2.0), -1.0))
+    soft = math_('EXPONENT', math_('MULTIPLY', math_('POWER', math_('DIVIDE', dist, .10), 2.0), -1.0))
+    mline = math_('MULTIPLY', math_('MAXIMUM', math_('MULTIPLY', core, .92), math_('MULTIPLY', soft, .38)), where)
+    mouthc = nt.nodes.new("ShaderNodeMix"); mouthc.data_type = 'RGBA'
+    nt.links.new(mline, mouthc.inputs[0])
+    nt.links.new(lipc.outputs[2], mouthc.inputs[6])
+    mouthc.inputs[7].default_value = (.040, .016, .013, 1)       # the shadow between the lips
+    nt.links.new(mouthc.outputs[2], b.inputs["Base Color"])
     b.inputs["Subsurface Weight"].default_value = 1.0
     b.inputs["Subsurface Radius"].default_value = (1.0, .49, .33)
-    b.inputs["Subsurface Scale"].default_value = .0022
+    # less light through the ears (lit from behind they glowed a solid orange: the owner's "cookies")
+    ears = blob(.072, Y0 + .005, Z0 - .01, .016, .03, .04)
+    nt.links.new(math_('MULTIPLY', .0022, math_('SUBTRACT', 1.0, math_('MULTIPLY', ears, .82))),
+                 b.inputs["Subsurface Scale"])
     # oily on the nose and forehead, drier on the cheeks
     oil = math_('MINIMUM', math_('ADD', blob(0, Y0 - .115, Z0 - .025, .015, .03, .03, False),
                                  blob(0, Y0 - .095, Z0 + .045, .04, .03, .025, False)), 1.0)
@@ -185,9 +219,10 @@ def skin_material(clay=False):
     nt.links.new(pos, rvar.inputs["Vector"])
     rough = math_('ADD', rough, math_('MULTIPLY', math_('SUBTRACT', rvar.outputs["Fac"], .5), .14))
     nt.links.new(rough, b.inputs["Roughness"])
-    b.inputs["Coat Weight"].default_value = .12                 # a second, sharper sheen: the skin's oil
+    nt.links.new(math_('MULTIPLY', .12, math_('SUBTRACT', 1.0, mline)), b.inputs["Coat Weight"])   # the skin's oil
+    nt.links.new(math_('MULTIPLY', .5, math_('SUBTRACT', 1.0, math_('MULTIPLY', mline, .8))),
+                 b.inputs["Specular IOR Level"])                  # no sheen in the line between the lips
     b.inputs["Coat Roughness"].default_value = .34
-    b.inputs["Specular IOR Level"].default_value = .5
     # pores and fine creases
     pores = node(nt, "ShaderNodeTexVoronoi", Scale=2300.0)
     nt.links.new(pos, pores.inputs["Vector"])
@@ -310,6 +345,8 @@ VIEWS = {  # yaw (degrees, positive = from his left), pitch, distance, lens
     "eye": (-18, -2, .17, 85, (-.032, -.083, .001)), "skin": (-35, -4, .2, 85, (-.04, -.088, -.025)),
     "nose": (0, -4, .24, 85, (0, -.11, -.022)), "noseq": (-38, -4, .24, 85, (0, -.11, -.022)),
     "noses": (-90, -2, .26, 85, (0, -.105, -.022)), "noseu": (-15, -38, .24, 85, (0, -.11, -.03)),
+    "mouth": (-20, -2, .22, 85, (0, -.10, -.075)), "crown": (180, 40, .70, 85, (0, -.01, .02)),
+    "earb": (140, 2, .34, 85, (.065, .01, -.02)), "ear": (90, 0, .30, 85, (.07, -.005, -.02)),
 }
 
 

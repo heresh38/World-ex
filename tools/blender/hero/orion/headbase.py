@@ -65,8 +65,10 @@ MEASURES = np.array([
     [11.01, -2.25, 2.18, 0.86, 3.92, 1.98, 2.02],
     [11.2, -1.3, 1.45, 0.84, 3, 2, 2],
     [11.32, -0.62, 0.86, 0.82, 2.28, 2, 2],
-])
-CROWN_Z = 11.3                    # the cap: a hair under where the last sections close (no flat top)
+    [11.40, -0.72, 0.50, 0.40, 1.55, 2, 2],   # the dome closed to its top round the loft's axis (y -.5): the
+    [11.45, -0.64, 0.20, 0.05, 0.72, 2, 2],   # sections stopped 1.7 x 2.9 cm wide and a cap flattened what was left
+])                                            # into a disc the hair stacked on
+CROWN_Z = 11.47                   # the cap: at the top itself, blended wide
 
 
 _TABLE = {}

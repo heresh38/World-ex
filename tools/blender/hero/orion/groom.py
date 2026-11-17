@@ -121,6 +121,27 @@ def strands_from(roots, normals, flow, length, k, H, lift0=.9, lift1=.12, gravit
     return P
 
 
+def onto_scalp(P, H, hug, reach, iters=2):
+    """every point but the root of each strand (n x k x 3, cm) held between `hug` and `reach` cm off the skin"""
+    n, k, _ = P.shape
+    hug = np.broadcast_to(np.asarray(hug, F32), (n,))
+    reach = np.broadcast_to(np.asarray(reach, F32), (n,))
+    Q = P[:, 1:].reshape(-1, 3).copy()
+    hq, rq = np.repeat(hug, k - 1), np.repeat(reach, k - 1)
+    for _ in range(iters):
+        W = to_world(Q, H)
+        dist = H(W) * 100
+        bad = (dist < hq) | (dist > rq)
+        if not bad.any():
+            break
+        g = grad_world(H, W[bad])
+        target = np.clip(dist[bad], hq[bad], rq[bad])
+        Q[bad] += g * (target - dist[bad])[:, None]
+    out = P.copy()
+    out[:, 1:] = Q.reshape(n, k - 1, 3)
+    return out
+
+
 def grad_world(H, W, e=2e-4):
     g = np.zeros_like(W)
     for a in range(3):
@@ -169,13 +190,15 @@ def hair(V, N, H, n=120000, rng=None):
     # side of the head is almost bald ... too much hair at the top front"), then "add some style to it though like
     # do a fade": a FADE on the sides and the back, near the skin low down and growing smoothly to a couple of
     # centimetres at the top of the sides, dense all the way; the top longer, swept back, a soft lift at the front
-    topw = np.clip((z - 4.2) / 2.8, 0, 1) * np.clip((5.3 - ax) / 1.8, 0, 1) * np.clip((6.8 - y) / 3.2, 0, 1)
+    topw = np.clip((z - 4.0) / 3.0, 0, 1) * np.clip((5.8 - ax) / 2.8, 0, 1) * np.clip((7.0 - y) / 4.0, 0, 1)
     topw = topw * topw * (3 - 2 * topw)           # the top blends into the fade down the back (a block hung over it)
     top = topw
     zb = -2.6 - 3.0 * np.clip((y - 1.0) / 4.0, 0, 1)      # the fade's foot: round the ears, lower at the nape
     f = np.clip((z - zb) / (5.2 - zb), 0, 1)
     L_side = .12 + 1.9 * f ** 1.5                         # 1 mm at the foot, 2 cm at the top of the sides
-    L = L_side * (1 - topw) + 6.8 * topw
+    L_top = 3.0 + 3.8 * np.clip((5.0 - y) / 9.0, 0, 1)     # long at the front, shorter to the crown (the owner:
+    # "the hair on the top of the head looks like a building, 3 stories": the long top ended in a ledge there)
+    L = L_side * (1 - topw) + L_top * topw
     ear_r = H.ear(R)
     L *= np.where(ear_r < 2.0, .5 + .5 * np.clip((ear_r - .7) / 1.3, 0, 1), 1.0)     # tapered close round the ears
     L *= rng.uniform(.85, 1.12, len(L))
@@ -190,7 +213,8 @@ def hair(V, N, H, n=120000, rng=None):
     by_ear = ear_r < 2.5                          # round the ears the hair goes back, not down over them
     flow[by_ear] = np.c_[np.sign(x[by_ear]) * .1, np.ones(by_ear.sum()), -.2 * np.ones(by_ear.sum())]
     flow /= np.linalg.norm(flow, axis=1)[:, None]
-    lift0 = np.where(topw > .3, np.where(y < -5.0, .75, .65), .25)[:, None]
+    # the roots' rise follows the blend (switched at a line it stood the top's hair up as a wall over the fade)
+    lift0 = (.25 + (.40 + .10 * np.clip((-y - 4.0) / 2.0, 0, 1)) * topw)[:, None]
     # the volume: the fade close to the head (as far off it as it is long), the top full and even, a little more
     # at its front (a soft lift, not a pile)
     lift = np.clip((-y + 1.0) / 8.0, 0, 1)
@@ -205,6 +229,9 @@ def hair(V, N, H, n=120000, rng=None):
     from_seed = np.argmin(((R[:, None, :] - R[seeds][None, :, :]) ** 2).sum(2), axis=1)
     groups = [np.r_[seeds[i], np.nonzero(from_seed == i)[0]] for i in range(len(seeds))]
     P = clump(P, groups, .7)
+    # a lock follows its guide's path from its own root: on the crown's curve that path left the scalp and the locks
+    # stood up in a knob there; every point is held between the skin and the hair's own reach again
+    P = onto_scalp(P, H, .03 + .3 * topw, reach / np.where(stray, 1.2, 1.0))
     # and no strand lies on an ear
     n, k, _ = P.shape
     touch = (H.ear(P.reshape(-1, 3)).reshape(n, k) < .3).any(axis=1)

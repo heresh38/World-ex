@@ -318,8 +318,14 @@ class Head:
         # the vault of the skull above the forehead
         vault = supershape(Q, (0, -.2, 2.6), 9.2, 10.4, 8.0, 8.5, 12.0, 2.55) if self.anatomy else             supershape(Q, (0, -.9, 2.8), 9.55, 9.5, 7.55, 8.2, 12.0, 2.25)
         if self.anatomy:                            # the measured sections run up to the crown (headbase.py)
-            import headbase
-            return smax(d, z - headbase.CROWN_Z, .3)
+            # over the top the stack of sections is no distance: above its last one it repeats that one upward, so
+            # a point half a centimetre over the back of the crown read as 3-4 cm off the skin (the hair's hold on
+            # the scalp then stood its strands up there in a knob: the owner's "building"). The vault's top is an
+            # ellipsoid fitted to the last sections (within 1-3 mm of them), blended in above 10.4 cm
+            dome = ell(Q, (0.0, .8, 4.0), (7.71, 9.86, 7.4))
+            w = np.clip((z - 10.4) / .7, 0, 1)
+            w = w * w * (3 - 2 * w)
+            return d * (1 - w) + dome * w
         t = np.clip((z - 4.6) / 1.6, 0, 1)
         t = t * t * (3 - 2 * t)
         return d * (1 - t) + vault * t
@@ -402,6 +408,18 @@ class Head:
         slab = np.maximum(slab, y - (-10.2 + 1.1 * u * u))
         slab = np.maximum(slab, x - (W - .1))
         return slab
+
+    def mouth_groove(self, Q):
+        """how far the skin is pressed in along the line the lips meet on (cm): a soft valley 2.4 mm wide and 1 mm
+        deep on the lips' front, shallowing into each corner"""
+        x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
+        import headbase as HB
+        W = HB.MOUTH_W * self.k("mouth_width")
+        st = self.stom(np.clip(x, 0, W))
+        prof = np.clip(1 - ((z - st) / .12) ** 2, 0, 1) ** 2
+        along = np.clip((W - .05 - x) / .35, 0, 1)
+        front = np.clip((-8.6 - y) / .6, 0, 1)
+        return .10 * prof * along * front
 
     # --- the eyes -------------------------------------------------------------------------------------------
     def fissure(self, x, z):
@@ -486,9 +504,14 @@ class Head:
         t = (d3 @ a_t) * EARS
         w = (d3 @ a_w) * EARS
         L = np.c_[s, t, w]
-        # the auricle: a thin shell of an oval, thicker at its rim, its back on the head at the front
+        # the auricle: a shell of an oval, its back on the head at the front. Its back is convex (a cupped shell seen
+        # from behind: nearest the head in the middle, rising to the rim) and the concha's back grows out of the
+        # head as a rounded eminence; flat behind, it read from the back as a disc (the owner: "the ears look like
+        # cookies")
         oval = ell_2d(s - 1.55, t - .25, 1.75, 3.15)
-        plate = np.maximum(np.maximum(oval, np.abs(w - .55) - .42), .1 - s)
+        r2 = np.clip(((s - 1.55) / 1.75) ** 2 + ((t - .25) / 3.15) ** 2, 0, 1.3)
+        free = r2 * np.clip((s - .2) / 1.2, 0, 1) ** 2                # rises toward the free rim, not at the root
+        plate = np.maximum(np.maximum(oval, w - .97), np.maximum((.13 + .55 * free ** 1.5) - w, .1 - s))
         d = plate
         # the helix: a rolled rim from the crus over the top and down the back to the lobe
         hel = [(.25, 1.0, .55), (.55, 2.35, .75), (1.4, 3.3, .85), (2.45, 3.05, .95), (3.15, 2.0, 1.0),
@@ -496,6 +519,8 @@ class Head:
         d = smin(d, tube_smooth(L, hel, [.17, .24, .30, .31, .31, .30, .27, .22]), .12)
         # the lobe: soft, full, at the bottom
         d = smin(d, ell(L, (1.35, -2.45, .62), (.95, .78, .36)), .3)
+        # the concha's back, the ear's root seen from behind
+        d = smin(d, ell(L, (.95, -.15, .02), (.85, 1.0, .40)), .30)
         # the scapha: the groove inside the helix
         sca = tube_smooth(L, [(1.0, 2.75, 1.1), (2.05, 2.75, 1.2), (2.7, 1.8, 1.25), (2.75, .5, 1.22), (2.45, -.8, 1.1)],
                    [.16, .2, .22, .2, .16])
@@ -509,11 +534,13 @@ class Head:
         con = ell(L, (.9, -.2, 1.2), (.92, 1.05, .62))
         d = smax(d, -con, .18)
         d = smax(d, -ell(L, (1.15, 1.35, 1.12), (.55, .32, .35)), .08)    # the triangular fossa
-        # tragus and antitragus
-        d = smin(d, ell(L, (-.05, -.25, .78), (.32, .55, .3)), .14)
+        # tragus and antitragus (the tragus full enough to hide the canal from the side: a round black hole read
+        # as a hole in the ear)
+        d = smin(d, ell(L, (.02, -.25, .84), (.40, .60, .36)), .14)
         d = smin(d, ell(L, (1.45, -1.55, .92), (.36, .3, .28)), .12)
         # the canal
-        d = smax(d, -capsule(L, (.35, -.25, .9), (.25, -.15, -.5), .3), .1)
+        d = smax(d, -capsule(L, (.45, -.25, .70), (.30, -.15, -.5), .15), .08)
+        d = smax(d, -ell(L, (.44, -.22, .82), (.15, .30, .22)), .06)       # its opening: a tall oval, not a drilled ring
         full[near] = d / EARS
         return full
 
@@ -593,7 +620,10 @@ class Head:
             d = smin(d, self.nose(Q), .48)
             d = d + .085 * self.alar_crease(Q)
             d = d - self.lips(Q)
-        d = smax(d, -self.mouth_slit(Q), .04)
+        # the lips meet: a soft groove two of the mesh's cells wide along the line they meet on (a slit cut
+        # through them, thinner than a cell, broke into a row of holes: the owner's "small odd holes"); the dark line
+        # itself is the skin's shader's (headlab.skin_material: drawn from the position, sharp at any mesh)
+        d = d + self.mouth_groove(Q)
         # the corners of the mouth tucked in, the modiolus beside each
         d = d + .08 * np.exp(-(((x - 2.65) / .26) ** 2 + ((z + 7.4) / .22) ** 2)) * (y < -8)
         d = d - .05 * np.exp(-(((x - 3.08) / .45) ** 2 + ((z + 7.35) / .5) ** 2)) * (y < -8)
@@ -612,7 +642,9 @@ class Head:
         return (self.cm(Q) / 100).astype(F32)
 
     def bounds(self):
-        return (np.array([-.095, Y0 - .15, Z0 - .245], F32), np.array([.095, Y0 + .105, Z0 + .118], F32))
+        # wide enough for the ears: the helix's crest stands 9.6 cm out and a box of 9.5 sliced it open (the
+        # owner's "small odd holes" at the ear)
+        return (np.array([-.105, Y0 - .15, Z0 - .245], F32), np.array([.105, Y0 + .105, Z0 + .118], F32))
 
     def focus(self):
         return (0.0, Y0 - .06, Z0 - .02)
