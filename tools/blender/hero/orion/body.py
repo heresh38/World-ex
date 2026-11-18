@@ -174,22 +174,32 @@ def torso_mod(theta, z):
     d += .008 * band(z, 1.38, 1.52, .03) * bump(theta, 148, 20)              # the scapulae
     d -= .010 * band(z, 1.03, 1.57, .03) * bump(theta, 180, 9)               # the spine's groove
     d += .010 * band(z, 1.03, 1.26, .03) * bump(theta, 163, 12)              # the erectors either side
-    d += .016 * band(z, 0.90, 1.03, .025) * bump(theta, 154, 24)             # glutes
+    d += .010 * band(z, 0.90, 1.03, .025) * bump(theta, 154, 24)             # glutes (1.6 cm stood 1.2 behind the sheet)
     d -= .022 * band(z, 0.88, 1.015, .02) * bump(theta, 180, 7)              # the cleft between them
     return d
 
 
-WAIST_ADD = 0.012          # half width added at the waist (the owner: "widen the waist just a little")
+WAIST_ADD = -0.003         # half width added at the waist (the owner: "widen the waist just a little"; then, with the
+                           # anatomy's 4.9 mm floor gone, "still a little too bulky": it stood 2-3 cm over the
+                           # sheet's waist, the V of the back and chest lost; now a little under the sheet's, the
+                           # lats at its width: the V-taper of the sheet's hero)
 THIGH_ADD = -0.007         # round the thigh against the sheet's (the owner first asked for "more natural volume",
                            # then: "tone down the muscles ... not a tank, thighs seem very big")
 TONE = 0.96                # the lats', the arms' and the calves' bulk against the sheet's: athletic, not a tank
+LAT_TONE = 1.0             # the lats at the sheet's width (0.96 thinned the V: the chest narrower than the sheet's
+                           # over a waist wider than it read as one thick trunk)
+BELLY_IN = 0.006           # the stomach this much flatter than the sheet's side view (ours stood 0.4-0.8 cm before it)
+CALF_DEPTH = 0.93          # the calves' depth (front to back) against the sheet's: they stood 1 cm behind it
+# the legs leaner than the sheet's (the owner circled them, 2026-11-17: "too bulky"; at the sheet's own width they
+# still read heavy): the thigh's width and depth, the calf's, and the knee taken in, so the leg tapers from the hip
+LEG_SLIM = dict(thigh=(.91, .93), calf=(.94, .95), knee=.003)
 
 
 def torso_width(cc, z):
     """half the torso's own width: the sheet's below the armpits (the waist a little wider, the owner's note);
     above them its outline is the arms', so the chest narrows from the lats to the shoulder's socket"""
     if z <= 1.392:
-        lats = 1 - (1 - TONE) * band(z, 1.24, 1.40, .04)
+        lats = 1 - (1 - LAT_TONE) * band(z, 1.24, 1.40, .04)
         return cc.torso_w(z) * lats + WAIST_ADD * bump(z, 1.18, .075)
     return float(np.interp(z, [1.392, 1.405, 1.488, 1.568], [cc.torso_w(1.392), .212, .186, .172]))
 
@@ -198,6 +208,7 @@ def torso_depth(cc, z):
     """the side view's front and back; above the armpits the arm crosses the side view, so the upper chest is held
     within the chest's own front and the upper back within the scapulae"""
     yf, yb = cc.side(z)
+    yf = yf + BELLY_IN * band(z, 1.02, 1.25, .04)
     if z > 1.40:
         yf = max(yf, float(np.interp(z, [1.40, 1.49, 1.57], [-.176, -.150, -.110])))
         yb = min(yb, float(np.interp(z, [1.40, 1.49, 1.57], [.122, .116, .100])))
@@ -457,9 +468,11 @@ def neck_rings(C):
     """the neck's base and two rings up it, tilted (the front from the sternum's notch, the back from the 7th
     vertebra up), the sternomastoids either side of the windpipe"""
     rings = []
-    for zf, zb, w, yf, yb in [(1.548, 1.600, .084, -.071, .066),
-                              (1.590, 1.646, .071, -.066, .052),
-                              (1.626, 1.690, .066, -.061, .048)]:
+    # (slimmer at its base and less deep behind, the owner: "still a little too bulky ... neck": its base 16.8 cm
+    # across stood the collar wide and the back of the neck in a hump over the shoulders)
+    for zf, zb, w, yf, yb in [(1.548, 1.600, .078, -.069, .060),
+                              (1.590, 1.646, .066, -.064, .049),
+                              (1.626, 1.690, .062, -.060, .046)]:
         ring = []
         for k in range(N_T):
             a = 2 * math.pi * k / N_T                    # 0 front, pi/2 left, pi back
@@ -514,9 +527,12 @@ def leg_section(cc, z, sx, n=N_L, phi0=None):
     yc, b = .5 * (yf + yb), .5 * (yb - yf)
     full = THIGH_ADD * band(z, 0.58, 0.86, .06)            # the thigh's volume against the sheet's
     a, xc, b, yc = a + .75 * full, xc + .25 * full, b + full, yc - .3 * full
-    a = a + .007 * math.exp(-((z - .51) / .045) ** 2)                     # the knee: not pinched
+    a = a + LEG_SLIM["knee"] * math.exp(-((z - .51) / .045) ** 2)          # the knee: not pinched
+    th, cf = band(z, 0.56, 0.87, .05), band(z, 0.22, 0.46, .05)
+    a = a * (1 - (1 - LEG_SLIM["thigh"][0]) * th - (1 - LEG_SLIM["calf"][0]) * cf)
+    b = b * (1 - (1 - LEG_SLIM["thigh"][1]) * th - (1 - LEG_SLIM["calf"][1]) * cf)
     calf = 1 - (1 - TONE) * band(z, 0.20, 0.46, .05)
-    a, b = a * calf, b * calf
+    a, b = a * calf, b * calf * (1 - (1 - CALF_DEPTH) * band(z, 0.22, 0.44, .05))
     ank = smoothstep(0.27, 0.11, z) ** 1.3
     a, b = a + (.035 - a) * ank, b + (.045 - b) * ank
     xc, yc = xc + (.207 - xc) * ank, yc + (.030 - yc) * ank
@@ -573,7 +589,8 @@ def arm_axis(sx):
 def arm_mod(psi, s):
     """anatomy round the arm (metres): psi 0 back, 90 up (the outside when it hangs), 180 front, 270 down"""
     d = 0.0
-    d += .010 * band(s, 0.05, 0.15, .03) * bump(psi, 95, 45)             # the deltoid over the top
+    d += .006 * band(s, 0.05, 0.15, .03) * bump(psi, 95, 45)             # the deltoid over the top (1 cm stood
+    # 1 cm over the sheet's shoulder: its own form is the anatomy's)
     d += .006 * band(s, 0.12, 0.25, .03) * bump(psi, 185, 30)            # biceps
     d += .005 * band(s, 0.10, 0.23, .03) * bump(psi, 20, 35)             # triceps
     d -= .004 * band(s, 0.265, 0.30, .02) * bump(psi, 190, 25)           # the elbow's crease

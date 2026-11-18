@@ -136,9 +136,11 @@ class Muscle:
     groove between them. `inside` is the line it lies on (the bone, the trunk's axis): only the side facing away
     from it is raised."""
 
-    SHOW = {"delt_front": .38, "delt_side": .38, "delt_rear": .34, "trap_upper": .30, "pec_sternal": .32,
-            "pec_clav": .30, "pec_abd": .28, "rectus_abd": .34, "serratus0": .5, "serratus1": .5, "serratus2": .5,
-            "serratus3": .5, "biceps": .28, "triceps_long": .28, "triceps_lat": .28, "gastro_med": .28,
+    # (a step lower on the trapezius, the chest and the arms: the owner, "still a little too bulky"; the deltoids
+    # kept round: the shoulders' width makes the V that reads athletic rather than bulky)
+    SHOW = {"delt_front": .38, "delt_side": .38, "delt_rear": .34, "trap_upper": .22, "pec_sternal": .28,
+            "pec_clav": .26, "pec_abd": .24, "rectus_abd": .34, "serratus0": .5, "serratus1": .5, "serratus2": .5,
+            "serratus3": .5, "biceps": .24, "triceps_long": .24, "triceps_lat": .24, "gastro_med": .28,
             "gastro_lat": .28, "vast_med": .26}
 
     def __init__(self, name, o, i, T, tb=.45, mid=None, inside=None, w=None, edge=1.6, depth=.05):
@@ -473,6 +475,13 @@ class Anatomy:
     DEFINITION = .20           # how much of each muscle's bulk shows as its own form on the skin (toned down:
                                # the owner, "not a tank")
     GROOVE = .0034             # how far the skin sinks where no muscle raises it (the separations)
+    # how much of that relief the skin shows: with the 8.3 mm floor gone (see detail) every muscle stood its full
+    # height, the thighs and calves 11-13 mm (the owner circled the legs: "too bulky"): the body's at a little over
+    # half, the legs' lower still (a hero's legs read long and lean under the suit)
+    RELIEF, LEG_RELIEF = .55, .38
+    LEGS = {"glute_max", "glute_med", "tfl", "rect_fem", "vast_lat", "vast_med", "sartorius", "adductors",
+            "gracilis", "biceps_fem", "semis", "gastro_med", "gastro_lat", "soleus", "achilles", "tib_ant",
+            "peroneus"}
 
     def detail(self, P):
         """how far the anatomy moves the skin of a body of the right volume, along its normal (metres): each
@@ -484,17 +493,27 @@ class Anatomy:
         h = np.zeros(len(Q), F32)
         for m in self.M:
             depth, m.depth = m.depth, .09
-            h = -smin(-h, -m.raise_(Q) * (m.show or self.DEFINITION), .009)
+            r = m.raise_(Q) * (m.show or self.DEFINITION) * (self.LEG_RELIEF if m.name in self.LEGS else self.RELIEF)
+            # a smooth max that blends only where something stands: its radius shrinks with what it blends. A fixed
+            # 9 mm radius added up to a quarter of it each time it met nothing: after the 90 muscles the whole skin
+            # stood 8.3 mm out, the GROOVE took 3.4 back, and the body carried 4.9 mm everywhere (1 cm on every
+            # width and depth: the owner's "too bulky"), its muscles drowned under that floor (soft, undefined)
+            k = np.maximum(.009 * np.clip(np.maximum(h, r) / .009, 0, 1), 1e-6)
+            h = -smin(-h, -r, k)
             m.depth = depth
-        out = h - self.GROOVE * self.k("definition")
+        out = h - self.GROOVE * self.k("definition") * self.RELIEF
         x, y, z = Q[:, 0], Q[:, 1], Q[:, 2]
-        front = (y < -.06) & (x < .09)
         # the separations are soft valleys a finger wide, never cuts (QC: no two faces of the skin turning more
-        # than a few degrees from each other)
+        # than a few degrees from each other); each fades in and out (switched on and off by a hard bound they
+        # ended in a step, buried under the old floor and a crease without it)
+        ramp = lambda v: np.clip(v, 0, 1)
+        front = ramp((-.06 - y) / .02)
         for zz in (1.170, 1.228, 1.284):
-            out -= .0022 * np.exp(-((z - zz - .006 * x / .08) / .0105) ** 2) * front * (z < 1.30) *                 np.clip(x / .012, 0, 1)
-        out -= .0022 * np.exp(-(x / .0095) ** 2) * front * (z > .98) * (z < 1.31)
-        out -= .0034 * np.exp(-(x / .0125) ** 2) * (y > .05) * (z > 1.0) * (z < 1.55)        # the spine
+            out -= (.0022 * np.exp(-((z - zz - .006 * x / .08) / .0105) ** 2) * front * ramp((1.30 - z) / .02)
+                    * ramp(x / .012) * ramp((.095 - x) / .025))
+        out -= .0022 * np.exp(-(x / .0095) ** 2) * front * ramp((z - .98) / .03) * ramp((1.31 - z) / .03)
+        out -= (.0028 * np.exp(-(x / .014) ** 2) * ramp((y - .03) / .025) * ramp((z - 1.0) / .04)
+                * ramp((1.55 - z) / .04))                                                      # the spine
         # the pec's lower edge: from the sternum (1.338) rising to the armpit (1.41 at 16 cm out). It was written
         # .55 (x - .02)^2 / .03, five times as steep: the groove climbed diagonally across the chest to the top of
         # the shoulder (a sawtooth V on the chest, a pit at the shoulder's front corner, a slit under the suit)

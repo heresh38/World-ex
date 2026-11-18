@@ -148,6 +148,22 @@ def outline_report(view, sil, sm):
                 lines.append(f"z {z:.2f}: width {(a[1] - a[0]) * 100:5.1f} vs {(b[1] - b[0]) * 100:5.1f} "
                              f"({(a[1] - a[0] - b[1] + b[0]) * 100:+5.1f})")
         if view == "front":
+            # each leg on its own: its width and the gap between the two (the owner: legs "too bulky"; the outer
+            # span hid thighs pressed together)
+            for z in np.arange(0.10, 0.90, 0.04):
+                r = int(round((Z_MID - z) / MPP + H / 2 - .5))
+
+                def legs(m):
+                    sel = (hs > -.40) & (hs < .40)
+                    on = np.r_[0, (m[r] & sel).astype(np.int8), 0]
+                    e = np.flatnonzero(np.diff(on))
+                    runs = [(hs[e[i]], hs[e[i + 1] - 1]) for i in range(0, len(e), 2)]
+                    return runs if len(runs) == 2 else None
+                a, b = legs(sil), legs(sm)
+                if a and b:
+                    lines.append(f"leg z {z:.2f}: width {(a[1][1] - a[1][0]) * 100:5.1f} vs {(b[1][1] - b[1][0]) * 100:5.1f} "
+                                 f"({((a[1][1] - a[1][0]) - (b[1][1] - b[1][0])) * 100:+5.1f}), gap {(a[1][0] - a[0][1]) * 100:5.1f} "
+                                 f"vs {(b[1][0] - b[0][1]) * 100:5.1f}")
             for x in np.arange(0.22, 0.90, 0.04):
                 c = int(round(x / MPP + W / 2 - .5))
                 for side, cc in (("L", c), ("R", W - 1 - c)):
