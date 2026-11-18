@@ -411,13 +411,18 @@ def nail(P, a, b, up_hint, hw, near):
     u = (q @ side) / hw
     back = (q @ up > 0) & near & (t > -.2) & (t < 1.3)
     sd_side = (np.abs(u) - 1) * hw
-    sd_root = (.30 + .08 * u * u - t) * L
+    sd_root = (.30 + .16 * u * u - t) * L                           # the cuticle a clear U
     sd_tip = (t - 1.03) * L
     sd = np.maximum(np.maximum(sd_side, sd_root), sd_tip)          # signed distance to the nail's outline (m)
     plate = np.clip(-sd / .0009, 0, 1)
     plate = plate * plate * (3 - 2 * plate)
-    groove = np.exp(-((sd - .0001) / .0006) ** 2)
-    fold = np.exp(-((sd - .0014) / .0007) ** 2) * (sd > 0) * (sd_tip < np.maximum(sd_side, sd_root))
+    plate = plate * (.3 + .7 * np.clip((1.0 - t) / .18, 0, 1))      # thinning to its free edge (full to the tip,
+    # its corners stood out where the fingertip curves down)
+    # the free edge has no groove and no fold (a groove across the tip made each nail a square cap), and the side
+    # grooves fade out before it (run out over the tip's curve they notched its corners)
+    to_tip = np.clip((1.0 - t) / .10, 0, 1) * (sd_tip < np.maximum(sd_side, sd_root))
+    groove = np.exp(-((sd - .0001) / .0006) ** 2) * to_tip
+    fold = np.exp(-((sd - .0014) / .0007) ** 2) * (sd > 0) * to_tip
     # (a 1 mm mesh: the groove a hair narrower than an edge left the nail a faint line)
     return (.0007 * plate - .0006 * groove + .0003 * fold) * back
 
