@@ -20,7 +20,10 @@ const TArray<FName>& USOWardrobeData::ArmourSlots()
 
 bool USOWardrobeData::IsOptionalSlot(FName Slot)
 {
-	return Slot == TEXT("head") || Slot == TEXT("outer");
+	// every armour slot may be left empty: the undersuit (its own slot, "suit", never armour) is always worn and
+	// can never come off, and armour goes on over it (the owner, 2026-11-17: "the undersuit is on at all times and
+	// armor goes on top of that so the undersuit can't come off and the rest of the armor slots can be empty")
+	return ArmourSlots().Contains(Slot);
 }
 
 FText USOWardrobeData::SlotLabel(FName Slot)

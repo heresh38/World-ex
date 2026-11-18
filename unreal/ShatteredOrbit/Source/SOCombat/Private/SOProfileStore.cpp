@@ -84,6 +84,7 @@ bool USOProfileStore::Migrate(USOSaveGame* Save)
 	// its wardrobe's defaults the first time the player takes it, so nothing to do
 	// version 4 -> 5: the blades owned (hand to hand); none before, nothing to do
 	// version 5 -> 6: the melee slot; None (the fists) before, nothing to do
+	// version 6 -> 7: the face's sliders; none before (the base face), nothing to do
 	Save->Version = USOSaveGame::CurrentVersion;
 	return true;
 }

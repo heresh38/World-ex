@@ -131,13 +131,17 @@ class Concept:
 
 SHOULDER = np.array([0.178, -0.030, 1.486])     # the left glenohumeral joint
 ARM_DROP = math.radians(6.0)                      # the sheet's arms hang 6 degrees below level
-UPPER_ARM, FOREARM, HAND = 0.290, 0.252, 0.200    # joint to fingertip 0.742: arm span = stature; the hand 20 cm
+# the arm, joint to joint: an adult man's (Drillis and Contini: the shoulder to the wrist about .32 of the stature).
+# The sheet's canon (span = stature, the arm .290 + .252) left it 4 cm short of that: in the game the hand on a long
+# gun's fore end could not reach it in third person (the old body's arm was 59 cm) and slid back onto the receiver
+UPPER_ARM, FOREARM, HAND = 0.312, 0.272, 0.200
+DESIGN_UPPER, DESIGN_FORE = 0.290, 0.252          # the lengths the arm's sections (A_S, arm_mod) are written for
 SHEET_ARM = 0.760                                 # the sheet's own joint-to-fingertip (its arms are 2 % long)
 CROTCH_Z = 4 * HEAD
 
 T_Z = [0.968, 1.030, 1.095, 1.155, 1.215, 1.280, 1.345, 1.405, 1.488, 1.568]
 T_SHAPE = {        # z: (front squareness, back squareness, widest point as a share of the depth from the front)
-    0.96: (2.2, 2.6, .46), 1.09: (2.3, 2.5, .50), 1.21: (2.4, 2.5, .52), 1.35: (2.9, 2.6, .55), 1.50: (2.9, 2.5, .55),
+    0.96: (2.2, 2.6, .46), 1.09: (2.3, 2.5, .50), 1.21: (2.4, 2.4, .52), 1.35: (2.9, 2.3, .55), 1.50: (2.9, 2.5, .55),
 }
 N_T, N_L, N_A = 24, 16, 12                         # round the torso / neck / head's base, each leg, each arm
 WINDOW = (4, 8)                                    # the left arm's window: columns 4..8 of rings 7..9
@@ -170,7 +174,8 @@ def torso_mod(theta, z):
     d += .010 * band(z, 1.375, 1.52, .018) * bump(theta, 32, 20)            # the pectoral mass (its forms: anatomy.py)
     d -= .006 * band(z, 1.32, 1.54, .02) * bump(theta, 0, 7)                 # the sternum's groove
 
-    d += .004 * band(z, 1.30, 1.43, .03) * bump(theta, 108, 22)              # lats behind the side (their form: anatomy.py)
+    d += .002 * band(z, 1.30, 1.43, .03) * bump(theta, 135, 20)              # lats behind the side (their form: anatomy.py;
+    # at 108 degrees and 4 mm they widened the outline under the armpit from the front and from three quarters)
     d += .008 * band(z, 1.38, 1.52, .03) * bump(theta, 148, 20)              # the scapulae
     d -= .010 * band(z, 1.03, 1.57, .03) * bump(theta, 180, 9)               # the spine's groove
     d += .010 * band(z, 1.03, 1.26, .03) * bump(theta, 163, 12)              # the erectors either side
@@ -193,15 +198,35 @@ CALF_DEPTH = 0.93          # the calves' depth (front to back) against the sheet
 # the legs leaner than the sheet's (the owner circled them, 2026-11-17: "too bulky"; at the sheet's own width they
 # still read heavy): the thigh's width and depth, the calf's, and the knee taken in, so the leg tapers from the hip
 LEG_SLIM = dict(thigh=(.91, .93), calf=(.94, .95), knee=.003)
+KNEE_IN = .017             # the knee's centre in toward the hip-ankle line (leg_section)
+
+
+LAT_FLARE = 1.0           # how much of the sheet's lats over a straight V from the armpit to the waist is kept: the
+                          # sheet's own (the owner, 2026-11-17: "use our image as reference"); the bulge the owner
+                          # circled was the armpit pinched in under the sheet's line (ARMPIT_OUT), not the lats (.25
+                          # left the chest 1.6-2.4 cm narrower than the sheet under the arms)
+V_Z = (1.215, 1.404)      # the V: from the waist up to the armpit's floor
+
+
+def _sheet_width(cc, z):
+    lats = 1 - (1 - LAT_TONE) * band(z, 1.24, 1.40, .04)
+    return cc.torso_w(z) * lats + WAIST_ADD * bump(z, 1.18, .075)
 
 
 def torso_width(cc, z):
-    """half the torso's own width: the sheet's below the armpits (the waist a little wider, the owner's note);
-    above them its outline is the arms', so the chest narrows from the lats to the shoulder's socket"""
+    """half the torso's own width: the sheet's below the armpits (the waist a little wider, the owner's note), its
+    lats' flare under the arm brought most of the way in to a straight V (a muscular flank a little full, never a
+    swelling); above them its outline is the arms', so the chest narrows from the lats to the shoulder's socket"""
     if z <= 1.392:
-        lats = 1 - (1 - LAT_TONE) * band(z, 1.24, 1.40, .04)
-        return cc.torso_w(z) * lats + WAIST_ADD * bump(z, 1.18, .075)
-    return float(np.interp(z, [1.392, 1.405, 1.488, 1.568], [cc.torso_w(1.392), .212, .186, .172]))
+        w = _sheet_width(cc, z)
+        z0, z1 = V_Z
+        if z0 < z < z1:
+            t = (z - z0) / (z1 - z0)
+            v = _sheet_width(cc, z0) + (WIN_C[0] + ARMPIT_OUT - _sheet_width(cc, z0)) * t + .004 * math.sin(math.pi * t)
+            if w > v:
+                w = v + LAT_FLARE * (w - v)
+        return w
+    return float(np.interp(z, [1.392, 1.405, 1.488, 1.568], [torso_width(cc, 1.392), .212, .186, .172]))
 
 
 def torso_depth(cc, z):
@@ -293,6 +318,7 @@ class Cage:
         self.part = [self.part[o] for o in used]
         self.F = [tuple(new[v] for v in f) for f in self.F]
         self.soft = {new[o]: w for o, w in self.soft.items() if o in new}
+        self.renumbered = new                          # (old index -> new: for what was noted before, the eyes' rims)
 
     def free(self):
         """per vertex: how free it is left in the limit fit"""
@@ -417,6 +443,9 @@ def build(cc=None, log=print, game_head=False):
 # --- the shoulder: a window of 12 round each arm's socket ------------------------------------------------------------
 
 WIN_C = np.array([0.196, -0.024, 1.488])          # the left socket's centre on the chest's side
+ARMPIT_OUT = .009                                  # the armpit's floor against the socket's centre: at the sheet's own
+                                                   # line under the arm (20.5 cm out; -.012 pinched it 3 cm in, and
+                                                   # the lats under it stood out as a bulge)
 WIN_AY, WIN_AZ = 0.074, 0.084                      # its half depth (y) and half height (z)
 
 
@@ -429,7 +458,10 @@ def window_angles():
 def socket_point(psi, sx=1):
     p = math.radians(psi)
     c, s = math.cos(p), math.sin(p)
-    x = WIN_C[0] - .012 * max(-s, 0) ** 1.5 + .004 * c - .006 * max(s, 0)     # the armpit sits in a little
+    # the armpit's floor level with the torso's side under it: set 1.2 cm in (18.4 cm out, the lats' ring below at
+    # 20.1, the waist's under that at 16.4), the skin fitted through the three peaked at the lats' ring, a point
+    # sticking out of the chest's side under each arm in front and behind (the owner circled both, 2026-11-17)
+    x = WIN_C[0] + ARMPIT_OUT * max(-s, 0) ** 1.5 + .004 * c - .006 * max(s, 0)
     # the upper corners lifted level with the torso's ring beside them (an ellipse put them 1.5-3 cm under it:
     # the cage dented there and the skin creased on the shoulder's top, front and back)
     lift = .012 * 4 * max(s, 0) * (1 - max(s, 0))
@@ -529,6 +561,10 @@ def leg_section(cc, z, sx, n=N_L, phi0=None):
     xi, xo = cc.leg(z)
     yf, yb = cc.side(z)
     xc, a = .5 * (xi + xo), .5 * (xo - xi)
+    # the knee brought in onto the line from the hip's joint to the ankle's: traced from the sheet's stance it stood
+    # 1.9 cm outside it, a bow every pose carried (the owner: "the leg looks bend"; the knees 42 cm apart in the walk
+    # over feet 16 cm apart)
+    xc = xc - KNEE_IN * math.exp(-.5 * ((z - .50) / .14) ** 2)
     yc, b = .5 * (yf + yb), .5 * (yb - yf)
     full = THIGH_ADD * band(z, 0.58, 0.86, .06)            # the thigh's volume against the sheet's
     a, xc, b, yc = a + .75 * full, xc + .25 * full, b + full, yc - .3 * full
@@ -583,6 +619,14 @@ def leg(C, T0, crotch, sx, cc):
 A_S = [0.058, 0.097, 0.143, 0.195, 0.244, 0.290, 0.330, 0.384, 0.437, 0.490, 0.542]
 
 
+def arm_s(s):
+    """where a station written for the design arm (A_S, arm_mod's bands) lies on this arm: the upper arm's and the
+    forearm's own shares kept (the elbow's ring stays the elbow's, the wrist's the wrist's)"""
+    if s <= DESIGN_UPPER:
+        return s * UPPER_ARM / DESIGN_UPPER
+    return UPPER_ARM + (s - DESIGN_UPPER) * FOREARM / DESIGN_FORE
+
+
 def arm_axis(sx):
     a = np.array([sx * math.cos(ARM_DROP), 0.0, -math.sin(ARM_DROP)])
     up = np.array([sx * math.sin(ARM_DROP), 0.0, math.cos(ARM_DROP)])
@@ -608,7 +652,7 @@ def arm(C, T, sx, cc):
     S, a, up, back = arm_axis(sx)
     rings = [window_loop(T, sx)]
     for s in A_S:
-        P = S + a * s
+        P = S + a * arm_s(s)
         # the sheet's outline at the same share of the arm (its arms are 2 % long)
         x_sheet = SHOULDER[0] + (abs(P[0]) - SHOULDER[0]) * SHEET_ARM / (UPPER_ARM + FOREARM + HAND)
         zc, rv = cc.arm(x_sheet)
@@ -683,3 +727,73 @@ def solve_cage(V, F, iters=80, log=print, free=None):
             e = np.linalg.norm(err, axis=1)
             log(f"limit fit {it}: mean {e.mean() * 1000:.2f} mm, max {e.max() * 1000:.2f} mm")
     return X
+
+# ----------------------------------------------------------------------------------------------------------------
+# the body's regions (the game's: unreal import_assets, wardrobe pieces hide the regions they cover)
+
+REGIONS = ("head", "neck", "chest", "midriff", "pelvis", "upperarm", "forearm", "hand", "thigh", "shin", "foot")
+CHEST_Z, PELVIS_Z = 1.280, 1.095          # the torso's rings the chest / midriff / pelvis meet on (T_Z)
+ELBOW_S, KNEE_Z = UPPER_ARM, 0.500        # along the arm from the shoulder; the leg's ring at the knee (L_Z)
+
+
+def face_regions(C, X):
+    """the region of each cage face (an index into REGIONS): its corners' part by majority, then where it lies"""
+    X = np.asarray(X)
+    # a face's corners split between two parts (the band bridging two of them) goes to the first in this order: the
+    # wrist's band to the hand, the ankle's to the foot, so the forearm ends on the wrist's ring and the shin on the
+    # ankle's (and a piece cut there covers its regions wholly)
+    order = {"head": 0, "neck": 1, "torso": 2, "hand": 3, "arm": 4, "foot": 5, "leg": 6}
+    alias = lambda p: "hand" if p.startswith("finger_") or p == "thumb" else ("foot" if p.startswith("toe_") or p == "fore" else p)
+    out = np.zeros(len(C.F), np.int32)
+    for i, f in enumerate(C.F):
+        parts = [alias(C.part[v]) for v in f]
+        part = max(set(parts), key=lambda p: (parts.count(p), -order.get(p, 9)))
+        c = X[list(f)].mean(0)
+        if part == "head":
+            r = "head"
+        elif part == "neck":
+            r = "neck"
+        elif part == "torso":
+            r = "chest" if c[2] >= CHEST_Z else ("midriff" if c[2] >= PELVIS_Z else "pelvis")
+        elif part == "arm":
+            sx = 1 if c[0] > 0 else -1
+            S, a, _, _ = arm_axis(sx)
+            r = "upperarm" if (c - S) @ a < ELBOW_S else "forearm"
+        elif part == "hand":
+            r = "hand"
+        elif part == "leg":
+            r = "thigh" if c[2] >= KNEE_Z else "shin"
+        else:
+            r = "foot"
+        out[i] = REGIONS.index(r)
+    return out
+
+
+# the flank under each arm: where the armpit's floor, the lats and the chest's side meet (centre, half sizes, metres)
+FLANK_ZONES = [((.200, .005, 1.365), (.045, .075, .060)), ((-.200, .005, 1.365), (.045, .075, .060)),
+               # the armpit's corner, where the arm's underside turns down into the flank: rounded into a fillet (a
+               # sharp crease there made the flank under it read as a ball from the front)
+               ((.212, .000, 1.402), (.035, .070, .035)), ((-.212, .000, 1.402), (.035, .070, .035))]
+
+
+def smooth_zone(P, edges, zones, iters=16, lam=.5):
+    """each vertex moved toward its neighbours' middle, as much as it lies in one of the zones (a Gaussian round
+    each), a number of rounds: a sculptor's smooth brush over a patch, nothing outside it moves"""
+    P = np.asarray(P, np.float64).copy()
+    w = np.zeros(len(P))
+    for c, r in zones:
+        q = (P - np.asarray(c)) / np.asarray(r)
+        w = np.maximum(w, np.exp(-(q * q).sum(1)))
+    on = np.flatnonzero(w > .01)
+    if not len(on):
+        return P
+    e0, e1 = edges[:, 0], edges[:, 1]
+    n = len(P)
+    deg = np.maximum(np.bincount(e0, minlength=n) + np.bincount(e1, minlength=n), 1)
+    for _ in range(iters):
+        acc = np.zeros((n, 3))
+        for k in range(3):
+            acc[:, k] = np.bincount(e0, weights=P[e1, k], minlength=n) + np.bincount(e1, weights=P[e0, k], minlength=n)
+        L = acc[on] / deg[on, None] - P[on]
+        P[on] += lam * w[on, None] * L
+    return P

@@ -104,9 +104,15 @@ def idle_pose(b, t):
     br = math.sin(TAU * t / 3.6)
     late = math.sin(TAU * (t - .5) / 3.6)                     # the shoulders and head follow the chest
     drift = math.sin(TAU * t / 7.2)
-    stand_feet(b, p, .175 * b.scale, 14)
-    p.hips = Vector((.005 * drift, .002 * math.sin(TAU * t / 7.2 + 1.3), -.004 - .0015 * (1 + br)))
+    # (the ankles 26 cm apart: at 35, "feet past shoulder width", the owner saw the legs too far apart, 2026-11-17)
+    stand_feet(b, p, .13 * b.scale, 12)
+    p.hips = Vector((.005 * drift, .002 * math.sin(TAU * t / 7.2 + 1.3), 0.0))
     p.add("hips", (X, 2.0), (Y, .6 * drift))
+    # the legs nearly straight (a standing man's knees are not bent: at the rest pose's hip height, with the feet
+    # brought in, they bent 20 degrees, the owner's "the leg looks bend"), the breath a few millimetres on that
+    # (near a straight leg a millimetre of the hips is degrees at the knee: the breath moves them half a millimetre)
+    b.stand_tall(p, 3.0)
+    p.hips.z -= .00025 * (1 + br)
     p.add("spine", (X, -1.5 - .8 * br), (Y, -.5 * drift))
     p.add("chest", (X, -3.0 - 1.4 * br))
     p.add("neck", (X, 2.0 + .6 * late))
@@ -117,7 +123,7 @@ def idle_pose(b, t):
         p.add("forearm." + s, (b.elbow[s], -16 - 1.2 * math.sin(TAU * (t - .9) / 3.6)))
         p.add("hand." + s, (b.elbow[s], -6))
         p.curl(s, LOOSE, 12)
-    p.knee_out = {"L": .08, "R": .08}
+    p.knee_out = {"L": .03, "R": .03}
     return p
 
 
@@ -234,7 +240,7 @@ def clips(b):
     def Land(t):
         def down(z, hips, spine, chest, head, fwd, out, elbow, curl):
             p = Pose()
-            stand_feet(b, p, .17 * b.scale, 13, (-.03, .02))
+            stand_feet(b, p, .14 * b.scale, 13, (-.03, .02))
             trunk(p, hips=hips, spine=spine, chest=chest, head=head, z=z)
             for s in "LR":
                 arms(b, p, s, fwd, out, elbow, curl=curl)

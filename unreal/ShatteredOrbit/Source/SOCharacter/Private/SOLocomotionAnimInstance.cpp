@@ -229,6 +229,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bArmsOnly = Player && Mesh && Mesh == Player->GetFirstPersonArms();
 	// The arms mesh is already only arms; the whole body standing in for it gets everything else collapsed.
 	bCollapseBody = bArmsOnly && Mesh->GetSkeletalMeshAsset() == Player->GetMesh()->GetSkeletalMeshAsset();
+	{
+		const USOCharacterMovementComponent* Move = Player ? Cast<USOCharacterMovementComponent>(Player->GetCharacterMovement()) : nullptr;
+		bCarried = Player && ((Move && Move->IsSprinting()) || Player->IsDisplayCarry());
+	}
 	// anyone who fights holds their gun this way: the player, and the creatures that carry guns
 	const ASOCombatCharacter* Holder = Cast<ASOCombatCharacter>(Character);
 	const ASOWeapon* Held = Holder ? Holder->GetWeapon() : nullptr;
@@ -1912,6 +1916,7 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	bOneHand = Instance->bOneHand;
 	bArmsOnly = Instance->bArmsOnly;
 	bCollapseBody = Instance->bCollapseBody;
+	bCarried = Instance->bCarried;
 	AimPitch = Instance->AimPitch;
 	Blade = Instance->Blade;
 	Lean = Instance->Lean;
@@ -2548,7 +2553,10 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					const float Share = (bLeft ? ElbowToWrist : 1.0f) * FMath::SmoothStep(0.15f, 0.5f, Ask);
 					// (the support elbow stays LOW: swung up level with the gun, the whole forearm lay across the bottom
 					// of the first-person view, and stood out like a wing in third person)
-					const float Most = bLeft ? (bArmsOnly ? 0.6f : 0.9f) : 1.45f;
+					// (and the firing elbow of a gun carried low, at a sprint or by the armoury's stand-in, stays by the
+					// side: swung out to line the forearm up with the canted grip it stood out level with the shoulder,
+					// the owner's "arm seems very bend out", 2026-11-17)
+					const float Most = bLeft ? (bArmsOnly ? 0.6f : 0.9f) : (bCarried && !bArmsOnly ? 0.55f : 1.45f);
 					const float A = FMath::Clamp(A0 + (A1 - A0) * Share, -0.5f, Most);
 					Bend = Down * FMath::Cos(A) + Out * FMath::Sin(A);
 				}

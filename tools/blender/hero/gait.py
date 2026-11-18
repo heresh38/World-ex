@@ -71,6 +71,7 @@ class Pose:
         self.rot = {}
         self.feet = {"L": None, "R": None}
         self.knee_out = {"L": 0.0, "R": 0.0}     # m: the knee pole moved out (+) or in (-) from straight ahead
+        self.slack = None                        # m the legs keep short of full reach (None: the clip's default)
         self.local = {}                          # {bone: [(axis, deg)]} in the bone's own frame (finger curls)
 
     def curl(self, side, fingers, thumb=0.0):
@@ -100,7 +101,7 @@ class Body:
         self.hips0 = B["hips"].head_local.copy()
         self.hip, self.knee, self.ankle, self.ball, self.heel = {}, {}, {}, {}, {}
         import skeleton
-        F = skeleton.foot(T)
+        F = T["foot"] if "foot" in T else skeleton.foot(T)     # (a body's own foot points: the Orion male's)
         for s, sx in SIDES:
             self.hip[s] = B["thigh." + s].head_local.copy()
             self.knee[s] = B["shin." + s].head_local.copy()
@@ -141,6 +142,7 @@ class Body:
 
     def need_drop(self, pose, slack=.003):
         """how far the hips must come down for every IK foot to be within reach (keeping a little knee bend)"""
+        slack = slack if pose.slack is None else pose.slack
         drop = 0.0
         for s, _sx in SIDES:
             f = pose.feet[s]
@@ -154,8 +156,30 @@ class Body:
                 drop = max(drop, h.z - (f.ankle.z + math.sqrt(max(L * L - horiz * horiz, .04))))
         return drop
 
+    def stand_tall(self, pose, bend=5.0):
+        """the hips raised (or lowered) until the planted legs keep `bend` degrees at the knee (the stiffer leg
+        decides): feet brought in under the body shorten the hip-to-ankle line, and with the hips left where the rest
+        pose had them the knees bent 20 degrees in a standing idle"""
+        d = math.sqrt(self.thigh ** 2 + self.shin ** 2 + 2 * self.thigh * self.shin * math.cos(math.radians(bend)))
+        dz = None
+        for s, _sx in SIDES:
+            f = pose.feet[s]
+            if f is None:
+                continue
+            h = self.hip_joint(s, pose)
+            horiz = math.hypot(f.ankle.x - h.x, f.ankle.y - h.y)
+            z = f.ankle.z + math.sqrt(max(d * d - horiz * horiz, .04))
+            dz = z - h.z if dz is None else min(dz, z - h.z)
+        if dz is not None:
+            pose.hips.z += dz
+        # (and the hips are not brought down again for reach: the 3 mm the legs otherwise keep short of full reach
+        # is a bend of 8.6 degrees)
+        pose.slack = max(self.leg - d - .0002, 0.0)
+        return pose
+
     def reach(self, pose, slack=.002):
         """lower the hips until every IK foot is within reach (the knee keeps a little bend)"""
+        slack = slack if pose.slack is None else min(slack, pose.slack)
         for _ in range(3):
             drop = 0.0
             for s, _sx in SIDES:
@@ -373,6 +397,9 @@ def blend(a, c, k):
         else:
             out.feet[s] = fa if k < .5 else fc
         out.knee_out[s] = a.knee_out[s] + (c.knee_out[s] - a.knee_out[s]) * k
+    if a.slack is not None or c.slack is not None:
+        sa, sc = (.003 if a.slack is None else a.slack), (.003 if c.slack is None else c.slack)
+        out.slack = sa + (sc - sa) * k
     return out
 
 
@@ -455,20 +482,50 @@ def _setup(arm, body):
 
 
 def _calibrate_pole(arm, body):
-    """the pole angle that keeps the rest pose with the knee pole straight ahead (depends on the bones' rolls)"""
-    best = None
-    for ang in (-90, 0, 90, 180):
-        for s, _ in SIDES:
-            arm.pose.bones["shin." + s].constraints["mk_IK"].pole_angle = math.radians(ang)
-        for pb in arm.pose.bones:
+    """the pole angle (each side) that bends the knee straight toward its pole: the foot's target is drawn up toward
+    the hip so the knee must bend, the pole set straight ahead of it, and the angle searched (10, 1, then 0.1 degrees)
+    until the knee leaves the plane of hip, ankle and pole by nothing. (Tried at -90 / 0 / 90 / 180 against the rest
+    pose, the angle could be 45 degrees out: the Orion male's leg bones are not rolled a multiple of 90, and every one
+    of his clips bent the knees 18 degrees out, 25 to 30 in a crouch: the owner's "the leg looks bend")"""
+    PB = arm.pose.bones
+    for pb in PB:
+        pb.matrix_basis = Matrix()
+    bpy.context.view_layer.update()
+    found = {}
+    for s, _sx in SIDES:
+        ik = PB["shin." + s].constraints["mk_IK"]
+        mf, mk = PB["mk_foot." + s], PB["mk_knee." + s]
+        h, a0 = body.hip[s].copy(), body.ankle[s].copy()
+        target = a0.lerp(h, .18)                        # the ankle drawn 18 % of the way up toward the hip
+        M = mf.bone.matrix_local.copy()
+        M.translation = target
+        mf.matrix = M
+        ax = (target - h).normalized()
+        ahead = Vector((0, -1, 0))
+        ahead = (ahead - ax * ahead.dot(ax)).normalized()
+        pole = h.lerp(target, .5) + ahead * .5
+        P = mk.bone.matrix_local.copy()
+        P.translation = pole
+        mk.matrix = P
+        across = ax.cross(ahead).normalized()
+
+        def err(deg):
+            ik.pole_angle = math.radians(deg)
+            bpy.context.view_layer.update()
+            k = PB["shin." + s].head
+            off = (k - h) - ax * (k - h).dot(ax)
+            return abs(off.dot(across)) + (0.0 if off.dot(ahead) > 0 else 1.0)
+        best = min(range(-180, 180, 10), key=err)
+        for step in (1.0, .1):
+            best = min((best + step * i for i in range(-10, 11)), key=err)
+        ik.pole_angle = math.radians(best)
+        found[s] = (best, err(best))
+    for pb in PB:
+        if pb.name.startswith("mk_"):
             pb.matrix_basis = Matrix()
-        bpy.context.view_layer.update()
-        err = sum((arm.pose.bones["shin." + s].head - body.knee[s]).length for s, _ in SIDES)
-        if best is None or err < best[0]:
-            best = (err, ang)
-    for s, _ in SIDES:
-        arm.pose.bones["shin." + s].constraints["mk_IK"].pole_angle = math.radians(best[1])
-    return best
+    bpy.context.view_layer.update()
+    print("[gait] knee poles: " + ", ".join(f"{s} {a:.1f} deg ({e * 1000:.2f} mm off)" for s, (a, e) in found.items()))
+    return found
 
 
 def _apply(arm, body, pose, frame):

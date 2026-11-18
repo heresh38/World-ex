@@ -228,6 +228,9 @@ def build_head(C, neck, log=print, params=None):
             for v, q in zip(loops[k], Q):
                 put(v, q)
         feats[side] = loops
+        # where each of the rim's vertices lies on the opening: u from the inner corner to the outer, t 0 on the lower
+        # lid's margin, 1 on the upper (the bottom of the window runs along u, the top back)
+        feats[side + "_rim"] = (list(loops[3]), np.r_[u, u[::-1]], np.r_[np.zeros(nb), np.ones(nb)])
         for k, w in ((3, 1.0), (2, .6), (1, .25)):
             for v in loops[k]:
                 C.soft[v] = max(C.soft.get(v, 0.0), w)
@@ -268,6 +271,10 @@ def build_head(C, neck, log=print, params=None):
     tipv = list(range(before, len(C.V)))
     nb = n + 1
     zb_, zt_ = H.SUBNASALE[0] + .25, H.TIP[0] + .75                  # the wings' bottom, over the tip
+    # (both inside the window's own rings: over the window's top ring the tip's patch overlapped the band above it
+    # and the skin folded across the nose there, a dark line on each side of it)
+    zb_ = max(zb_, zr(RINGS[5], 0.0) + .15)
+    zt_ = min(zt_, zr(RINGS[6], 0.0) - .15)
     xb = np.linspace(-1, 1, nb) * float(hd.n_half(np.array([zb_]))[0]) * .92
     xt = np.linspace(-1, 1, nb) * float(hd.n_half(np.array([zt_]))[0]) * .92
     X = np.r_[xb, xt[::-1]]
@@ -280,9 +287,18 @@ def build_head(C, neck, log=print, params=None):
     feats["nose"] = (loop, frontl, tipv)
     for v in frontl + tipv:
         C.soft[v] = max(C.soft.get(v, 0.0), .4)
-    # ---- the ears: their windows' borders lifted out round the rim, capped over the auricle
+    # ---- the ears: their windows left OPEN; ear.py lays each ear (a ring grid on the sculpt's own ear) into the
+    # subdivided window and stitches it to the window's loop. (Lifted out round the rim, capped over and laid onto the
+    # sculpt by nearest points, the cage's ear crumpled over the helix and into the concha)
     for side, sx in (("ear_L", 1), ("ear_R", -1)):
         loop, n, m = window_loop(side)
+        if EAR_OPEN:
+            # a plain cap over the window (the cage's solve needs it closed: an open window's border was fitted 5 cm
+            # off the head); ear.py cuts its subdivided faces out again
+            f0 = len(C.F)
+            C.cap_rect(loop, m, n, "head")
+            feats[side] = (loop, [], list(range(f0, len(C.F))))
+            continue
         out = [C.add(C.V[v], "head") for v in loop]
         for i in range(len(out)):
             j = (i + 1) % len(out)
@@ -350,7 +366,140 @@ def build_head(C, neck, log=print, params=None):
     return dict(field=hf, rings=rings, feats=feats, top24=top24h, verts=head_vs)
 
 
-def lay_on_head(P, N, w, hf, edges=None, faces=None, rounds=12, log=print):
+EAR_OPEN = True                  # the cage leaves the ears' windows open (ear.py)
+
+
+RIM_OFF = .06                    # cm the eye's rim stands off the globe (the cage's innermost loop)
+
+
+def lid_outline(hd, u, t):
+    """the eye's opening in the front view (head cm, his left eye: x, z) at its places along it (u: inner corner 0 ->
+    outer 1, t: 0 the lower lid's margin -> 1 the upper's), for the sculpt hd as its sliders make it (head.Head.fissure:
+    eye_open its height, eye_size its scale round the eye)"""
+    u = np.asarray(u, np.float64); t = np.clip(np.asarray(t, np.float64), 0, 1)
+    es = hd.k("eye_size")
+    x = H.EN[0] + (H.EX[0] - H.EN[0]) * u
+    z0 = H.EN[1] + (H.EX[1] - H.EN[1]) * u
+    uc = np.clip(u, 0, 1)
+    up = z0 + H.LID_UP * hd.k("eye_open") * np.sin(np.pi * uc ** .82) ** .85
+    lo = z0 - H.LID_LO * hd.k("eye_open") * np.sin(np.pi * uc ** 1.28) ** 1.05
+    z = lo * (1 - t) + up * t
+    ex_, _ey, ez_ = H.EYE
+    return ex_ + (x - ex_) * es, ez_ + (z - ez_) * es
+
+
+def rim_points(hd, side, u, t):
+    """the eye's rim on the globe (world metres) at its places along the opening (lid_outline)"""
+    X, Z = lid_outline(hd, u, t)
+    ex_, ey_, ez_ = H.EYE
+    Rm = H.EYE_R + RIM_OFF
+    dx, dz = X - ex_, Z - ez_
+    Y = ey_ - np.sqrt(np.maximum(Rm * Rm - dx * dx - dz * dz, .01))
+    sx = 1.0 if side > 0 else -1.0
+    return np.c_[sx * X / 100, hd.Y0 + Y / 100, hd.Z0 + Z / 100]
+
+
+def unwarp(hd, Q):
+    """where the sliders' warp of the sculpt's space (head.Head.warp) shows a point of the sculpt (head cm, first
+    order)"""
+    Q = np.asarray(Q, np.float64)
+    return Q + (Q - hd.warp(Q.astype(F32)).astype(np.float64))
+
+
+def lid_rings(edges, rim, k=4):
+    """the rings of vertices straight out from an eye's rim (the opening's border), each in the rim's order: ring j's
+    i-th vertex is the one the rim's i-th reaches j steps out (-1 where the grid is not regular)"""
+    nb = {}
+    for a, b in np.asarray(edges):
+        nb.setdefault(int(a), []).append(int(b))
+        nb.setdefault(int(b), []).append(int(a))
+    rings = [np.asarray(rim, np.int64)]
+    seen = set(int(v) for v in rim)
+    for _ in range(k):
+        cur = rings[-1]
+        nxt = np.full(len(cur), -1, np.int64)
+        for i, v in enumerate(cur):
+            if v < 0:
+                continue
+            cand = [w for w in nb.get(int(v), []) if w not in seen]
+            if len(cand) == 1:
+                nxt[i] = cand[0]
+        seen.update(int(v) for v in nxt if v >= 0)
+        rings.append(nxt)
+    return rings[1:]
+
+
+LID_EDGE = .04                   # cm outside the opening where the lid's front edge is taken (its rounding is .035)
+
+
+def front_lids(P, hf, lids):
+    """the lids' fronts (rings 4 to 8 out from each rim: from the cage's lid loop out to the orbit's) put where a ray
+    from in front meets the sculpt, before the head is laid by nearest points: the subdivision drew them back toward
+    the rim on the globe, and from there the nearest skin was the lower lid's inside (folded faces along its outer
+    half). A ray that passes the opening into the eye's pocket is not taken"""
+    toQ = lambda X: np.c_[X[:, 0] * 100, (X[:, 1] - H.Y0) * 100, (X[:, 2] - H.Z0) * 100]
+    toW = lambda Q: np.c_[Q[:, 0] / 100, H.Y0 + Q[:, 1] / 100, H.Z0 + Q[:, 2] / 100]
+    for L in lids:
+        ids = np.concatenate([np.asarray(r) for r in L.get("front", [])] or [np.zeros(0, np.int64)])
+        ids = ids[ids >= 0]
+        if not len(ids):
+            continue
+        Q = toQ(P[ids])
+        hit = hf.front(Q[:, 0], Q[:, 2]).astype(np.float64)
+        ok = hit[:, 1] < H.EYE[1] - 1.0
+        P[ids[ok]] = toW(hit[ok])
+    return P
+
+
+def place_lids(P, hf, lids):
+    """the lids' bands laid by construction (P in metres, changed in place). head.py's lid is a shell cut along the
+    fissure: its margin a wall straight back from the front edge to the lid's inside. Ring 3 goes on the lid's front
+    halfway from the opening to ring 4, ring 2 on the front just outside the opening's edge, ring 1 on the outline at
+    the margin's back edge (never behind the rim, which stays pinned on the globe). Laid by nearest points the band's
+    inner rings found the lid's own inside and folded back on themselves along every lower lid"""
+    hd = hf.hd
+    toQ = lambda X: np.c_[X[:, 0] * 100, (X[:, 1] - H.Y0) * 100, (X[:, 2] - H.Z0) * 100]
+    toW = lambda Q: np.c_[Q[:, 0] / 100, H.Y0 + Q[:, 1] / 100, H.Z0 + Q[:, 2] / 100]
+    for L in lids:
+        sx, u, t = L["side"], np.asarray(L["u"], np.float64), np.asarray(L["t"], np.float64)
+        rim = np.asarray(L["rim"])
+        r1, r2, r3, r4 = (np.asarray(r) for r in L["rings"])
+        ok = (r1 >= 0) & (r2 >= 0) & (r3 >= 0) & (r4 >= 0)
+        if not ok.any():
+            continue
+        u, t, rim, r1, r2, r3, r4 = u[ok], t[ok], rim[ok], r1[ok], r2[ok], r3[ok], r4[ok]
+        n = len(u)
+        X, Z = lid_outline(hd, u, t)
+        W = unwarp(hd, np.c_[sx * X, np.full(n, -8.9), Z])
+        O = W[:, [0, 2]]
+        Xc, Zc = lid_outline(hd, np.clip(u, .15, .85), np.full(n, .5))      # the opening's middle line
+        Wc = unwarp(hd, np.c_[sx * Xc, np.full(n, -8.9), Zc])
+        out = O - Wc[:, [0, 2]]
+        out /= np.maximum(np.linalg.norm(out, axis=1), 1e-9)[:, None]
+        q4 = toQ(P[r4])
+        xz3 = O + .45 * (q4[:, [0, 2]] - O)
+        q3 = hf.front(xz3[:, 0], xz3[:, 1]).astype(np.float64)
+        xz2 = O + LID_EDGE * out
+        q2 = hf.front(xz2[:, 0], xz2[:, 1]).astype(np.float64)
+        # the margin's back edge: straight back along y just inside the cut, from where the lid begins to where it ends
+        xz1 = O + .012 * out
+        D = np.tile(np.array([0, 1, 0], F32), (n, 1))
+        S = np.c_[xz1[:, 0], q2[:, 1] - .2, xz1[:, 1]].astype(F32)
+        enter = hf.exit(S, D, t0=0.0, t1=.8, n=160, from_inside=False).astype(np.float64)
+        leave = hf.exit((enter + np.array([0, .01, 0])).astype(F32), D, t0=0.0, t1=.7, n=140,
+                        from_inside=True).astype(np.float64)
+        found = hf.f(leave.astype(F32)) > -1e-3
+        y1 = np.where(found, leave[:, 1] - .02, enter[:, 1] + .22)
+        qr = toQ(P[rim])
+        y1 = np.minimum(y1, qr[:, 1] - .03)
+        y2 = np.minimum(q2[:, 1], y1 - .02)
+        q1 = np.c_[O[:, 0], y1, O[:, 1]]
+        q2 = np.c_[q2[:, 0], y2, q2[:, 2]]
+        P[r1], P[r2], P[r3] = toW(q1), toW(q2), toW(q3)
+    return P
+
+
+def lay_on_head(P, N, w, hf, edges=None, faces=None, rounds=12, log=print, pins=None, band=None, lids=None):
     """the subdivided skin laid onto the sculpt: each vertex of the head (w its share, carried down from the cage)
     moved to the NEAREST point of the sculpt (steps down its gradient), then the vertices spaced evenly over it (each
     toward its neighbours' middle within the surface), again, a round at a time; the eyes' openings held. A step along
@@ -380,13 +529,31 @@ def lay_on_head(P, N, w, hf, edges=None, faces=None, rounds=12, log=print):
         return X
     n = len(P)
     hold = np.zeros(n, bool)
+    if pins is not None:                                              # vertices put in place and held (the ears' bases)
+        pi, pp = pins
+        P[pi] = pp
+        hold[pi] = True
+    # the lids' bands (from the eye's rim on the globe over the margin to the lid's front): never laid on the sculpt
+    # by nearest points (there the nearest skin is the lid's own inside: the band folded back on itself along every
+    # lower lid), filled after the rest as a membrane between the rim and the lid
+    fill = np.zeros(n, bool) if band is None else (np.asarray(band, bool) & ~hold)
+    hold = hold | fill
+    for L in lids or []:                                              # the lids' bands: laid by construction
+        for r in L["rings"][:3]:
+            r = np.asarray(r)
+            hold[r[r >= 0]] = True
     if faces is not None:                                             # the eyes' openings (edges with one face)
         F = np.asarray(faces)
         e = np.sort(np.c_[F.ravel(), np.roll(F, -1, axis=1).ravel()], axis=1)
         uniq, cnt = np.unique(e, axis=0, return_counts=True)
         hold[uniq[cnt == 1].ravel()] = True
     X0 = P[on].copy()
-    P[on] = project(P[on])
+    if lids:
+        front_lids(P, hf, lids)
+    free_on = on[~hold[on]]
+    P[free_on] = project(P[free_on])
+    if lids:
+        place_lids(P, hf, lids)
     if edges is not None:
         e0, e1 = edges[:, 0], edges[:, 1]
         deg = np.maximum(np.bincount(e0, minlength=n) + np.bincount(e1, minlength=n), 1).astype(np.float64)
@@ -400,9 +567,97 @@ def lay_on_head(P, N, w, hf, edges=None, faces=None, rounds=12, log=print):
             L -= g * (L * g).sum(1)[:, None]                          # within the surface
             P[moving] += .5 * L * w[moving, None]
             P[moving] = project(P[moving], steps=2)
+    if fill.any() and edges is not None:
+        e0, e1 = edges[:, 0], edges[:, 1]
+        deg = np.maximum(np.bincount(e0, minlength=n) + np.bincount(e1, minlength=n), 1).astype(np.float64)
+        fi = np.flatnonzero(fill)
+        for _ in range(300):
+            acc = np.zeros((n, 3))
+            for c in range(3):
+                acc[:, c] = np.bincount(e0, weights=P[e1, c], minlength=n) + np.bincount(e1, weights=P[e0, c], minlength=n)
+            P[fi] = acc[fi] / deg[fi, None]
+    if lids:
+        place_lids(P, hf, lids)
     # where the head's share fades (down the neck) the old place keeps its share
-    P[on] = X0 + (P[on] - X0) * w[on, None]
+    P[on] = X0 + (P[on] - X0) * np.where(hold[on], 1.0, w[on])[:, None]
     moved = np.linalg.norm(P[on] - X0, axis=1)
     log(f"head laid on its sculpt: {len(on)} vertices, moved {np.median(moved) * 1000:.1f} mm (median), "
         f"{moved.max() * 1000:.1f} at most; off it {np.abs(f_m(P[on])).max() * 1000:.2f} mm at most")
     return P
+
+
+# the face's sliders (the owner, 2026-11-16: "the face will be heavily customizable in game when the player first
+# starts"): each a parameter of the sculpt (head.py) and the value a full slider gives; the game plays each morph
+# both ways (a negative weight is the other way)
+FACE_SLIDERS = {
+    "jaw": 1.5, "chin": 1.6, "cheekbones": 1.7, "cheeks": 1.6, "cheek_hollow": 1.8, "temples": 1.8,
+    "brow": 1.7, "forehead": 1.8, "nose_width": 1.3, "nose_length": 1.2, "nose_tip": 1.3, "nasolabial": 2.0,
+    "mouth_width": 1.25, "lips": 1.5, "eye_open": 1.25, "eye_size": 1.12, "crease": 1.8, "hood": 1.8,
+    "tear_trough": 1.8, "eye_bags": 1.8, "ear_size": 1.2, "ear_out": 1.6,
+}
+
+
+def with_params(hf, params):
+    """the same sculpt with other face parameters (sharing its loft: building one takes seconds)"""
+    import copy
+    hd2 = copy.copy(hf.hd)
+    hd2.p = dict(params)
+    if getattr(hd2, "anatomy", False):
+        import headbase
+        hd2.hb = headbase.HeadBase(hd2.p)
+    hd2.set_landmarks(H.NASION, *hd2.nose_points(), H.STOMION_Z)
+    out = HeadField.__new__(HeadField)
+    out.hd = hd2
+    return out
+
+
+EAR_KEYS = ("ear_size", "ear_out")          # the sliders that move the ears (the others leave them where they are)
+
+
+def face_keys(P, N, w, hf, edges, log=print, ears=None, rims=None, band=None, lids=None):
+    """one morph per face slider: the head laid onto the sculpt with that parameter at its full value, less the
+    head laid the same way onto the unchanged sculpt (so whatever the laying itself does cancels). The eyes'
+    openings are laid too here (their lids move with the eye's sliders)"""
+    quiet = lambda *a: None
+    # ears: {side sx: (loop vertex indices, ring0 (n, 3), inner (m, 3), ...)} from ear.py for the unchanged field; the
+    # ears' new vertices follow the mesh's own (in the order of the sides given), their deltas appended
+    ears = ears or {}
+    sides = sorted(ears, reverse=True)
+
+    def pins_of(rings):
+        if not sides:
+            return None
+        return (np.concatenate([ears[s][0] for s in sides]), np.concatenate([rings[s] for s in sides]))
+    base_ring = {s: ears[s][1] for s in sides}
+
+    def with_rims(pins, hd):
+        """the ears' pins and the eyes' rims (rims: [(vertex ids, side, u, t)]) as one set of pins"""
+        if not rims:
+            return pins
+        ids = [r[0] for r in rims]
+        pts = [rim_points(hd, r[1], r[2], r[3]) for r in rims]
+        if pins is not None:
+            ids.insert(0, pins[0]); pts.insert(0, pins[1])
+        return np.concatenate(ids), np.concatenate(pts)
+    base = lay_on_head(P, N, w, hf, edges=edges, faces=None, log=quiet, pins=with_rims(pins_of(base_ring), hf.hd),
+                       band=band, lids=lids)
+    keys = {}
+    for name, val in FACE_SLIDERS.items():
+        hp = with_params(hf, {name: val})
+        rings, inners = base_ring, {s: ears[s][2] for s in sides}
+        if name in EAR_KEYS and sides:
+            import ear as EAR
+            rings, inners = {}, {}
+            for s in sides:
+                r0, inner, _ = EAR.build(hp, s, ears[s][1], log=quiet)
+                rings[s], inners[s] = r0, inner
+        X = lay_on_head(P, N, w, hp, edges=edges, faces=None, log=quiet, pins=with_rims(pins_of(rings), hp.hd),
+                        band=band, lids=lids)
+        D = X - base
+        if sides:
+            D = np.r_[D, np.concatenate([inners[s] - ears[s][2] for s in sides])]
+        D[np.linalg.norm(D, axis=1) < 2e-5] = 0
+        keys[name] = D
+        log(f"face key {name}: {np.linalg.norm(D, axis=1).max() * 1000:.1f} mm at most, "
+            f"{int((np.abs(D).sum(1) > 0).sum())} vertices")
+    return keys

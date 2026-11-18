@@ -410,6 +410,83 @@ def master_material(defaults):
 PARENT_FOR = {}
 
 
+def skin_material(defaults):
+    """/Game/Materials/M_SOSkin: the players' skin (skin, skin_face and every skin__<region> section): Unreal's
+    subsurface-profile shading (light carried under the skin: soft, red in the shadows' edges) with the profile
+    SP_SOSkin, the same parameter names as the master (BaseColorTex x BaseColorTint, NormalTex, MRTex: R occlusion,
+    G roughness x Roughness), a skin's specular (F0 .028 = .35), AOAmount (1) how much of the map's occlusion is used"""
+    path = "/Game/Materials/M_SOSkin"
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_SOSkin", "/Game/Materials", unreal.Material, unreal.MaterialFactoryNew())
+    sp_path = "/Game/Materials/SP_SOSkin"
+    if eal.does_asset_exist(sp_path):
+        sp = eal.load_asset(sp_path)
+    else:
+        sp = tools.create_asset("SP_SOSkin", "/Game/Materials", unreal.SubsurfaceProfile, unreal.SubsurfaceProfileFactory())
+    eal.save_loaded_asset(sp, only_if_is_dirty=False)
+    for prop, value in (("used_with_skeletal_mesh", True), ("used_with_morph_targets", True),
+                        ("shading_model", unreal.MaterialShadingModel.MSM_SUBSURFACE_PROFILE), ("subsurface_profile", sp)):
+        mat.set_editor_property(prop, value)
+    E = lambda cls, x, y: mel.create_material_expression(mat, cls, x, y)
+    S = unreal.MaterialSamplerType
+
+    def tex(name, sampler, t, y):
+        e = E(unreal.MaterialExpressionTextureSampleParameter2D, -900, y)
+        e.set_editor_property("parameter_name", name)
+        e.set_editor_property("texture", t)
+        e.set_editor_property("sampler_type", sampler)
+        return e
+
+    def scalar(name, value, y):
+        e = E(unreal.MaterialExpressionScalarParameter, -900, y)
+        e.set_editor_property("parameter_name", name)
+        e.set_editor_property("default_value", value)
+        return e
+
+    def mul(a, ao, b, bo, y):
+        e = E(unreal.MaterialExpressionMultiply, -500, y)
+        mel.connect_material_expressions(a, ao, e, "A")
+        mel.connect_material_expressions(b, bo, e, "B")
+        return e
+    base = tex("BaseColorTex", S.SAMPLERTYPE_COLOR, defaults["white"], -400)
+    tint = E(unreal.MaterialExpressionVectorParameter, -900, -160)
+    tint.set_editor_property("parameter_name", "BaseColorTint")
+    tint.set_editor_property("default_value", unreal.LinearColor(1, 1, 1, 1))
+    nrm = tex("NormalTex", S.SAMPLERTYPE_NORMAL, defaults["normal"], 0)
+    mel.connect_material_property(nrm, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    mr = tex("MRTex", S.SAMPLERTYPE_MASKS, defaults["mask"], 300)
+    # the hair drawn on the skin (the Orion male's brows, hair by hair: the mask's B is how much of a texel is hair,
+    # game.py brow_mask): the hair's own colour over the skin and its own roughness, by HairAmount (0 in the master:
+    # the import turns it on for a face whose map carries the hairs; the creator colours them with HairColor)
+    hair = mul(mr, "B", scalar("HairAmount", 0.0, 1100), "", 1000)
+    hair_col = E(unreal.MaterialExpressionVectorParameter, -900, 1200)
+    hair_col.set_editor_property("parameter_name", "HairColor")
+    hair_col.set_editor_property("default_value", unreal.LinearColor(*BROW_TONE, 1.0))
+    colour = E(unreal.MaterialExpressionLinearInterpolate, -300, -300)
+    mel.connect_material_expressions(mul(base, "RGB", tint, "", -300), "", colour, "A")
+    mel.connect_material_expressions(hair_col, "", colour, "B")
+    mel.connect_material_expressions(hair, "", colour, "Alpha")
+    mel.connect_material_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = E(unreal.MaterialExpressionLinearInterpolate, -300, 400)
+    mel.connect_material_expressions(mul(mr, "G", scalar("Roughness", 1.0, 520), "", 400), "", rough, "A")
+    mel.connect_material_expressions(scalar("HairRoughness", .45, 1300), "", rough, "B")
+    mel.connect_material_expressions(hair, "", rough, "Alpha")
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    ao = E(unreal.MaterialExpressionLinearInterpolate, -500, 650)
+    ao.set_editor_property("const_a", 1.0)
+    mel.connect_material_expressions(mr, "R", ao, "B")
+    mel.connect_material_expressions(scalar("AOAmount", 1.0, 700), "", ao, "Alpha")
+    mel.connect_material_property(ao, "", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
+    mel.connect_material_property(scalar("Specular", .35, 820), "", unreal.MaterialProperty.MP_SPECULAR)
+    mel.connect_material_property(scalar("Scatter", 1.0, 900), "", unreal.MaterialProperty.MP_OPACITY)   # (the profile's amount)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    return mat
+
+
 def hair_material(defaults):
     """/Game/Materials/M_SOHair: the hair cards (hair.py). Unreal's Hair shading model with the strand tangent along
     the card (the atlas strands run down V), dithered alpha (temporal AA blends the strand edges instead of a hard cut)
@@ -493,6 +570,8 @@ def make_instance(master, dest, name, m, tex, extra=None):
     mel.set_material_instance_scalar_parameter_value(mi, "Metallic", float(extra.get("metallic", m.get("metallic", 1.0))))
     mel.set_material_instance_scalar_parameter_value(mi, "Roughness", float(extra.get("roughness", m.get("roughness", 1.0))))
     mel.set_material_instance_scalar_parameter_value(mi, "VertexColorAmount", 1.0 if m.get("vertexColor") else 0.0)
+    if "hair" in extra:
+        mel.set_material_instance_scalar_parameter_value(mi, "HairAmount", float(extra["hair"]))
     em = m.get("emissive", [0, 0, 0])
     mel.set_material_instance_vector_parameter_value(mi, "EmissiveColor", unreal.LinearColor(em[0], em[1], em[2], 1.0))
     mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", float(m.get("emissiveStrength", 1.0)) * (4.0 if any(em) else 1.0))
@@ -794,12 +873,15 @@ def stalker_extra(key, m):
 
 
 HAIR_TONE = (0.020, 0.014, 0.010)     # dark brown, near black (the concept pair); the game may recolour it later
+BROW_TONE = (0.032, 0.022, 0.016)     # the brows drawn on the face's skin: a dark brown (M_SOSkin HairColor)
 
 
 def player_extra(key, m):
     if key in ("skin", "skin_face"):
-        # (the body's own skin maps carry the colour; the flat tone only for a body exported without them)
-        return {"tint": [1.0, 1.0, 1.0] if m.get("baseColorTex") else list(SKIN_TONE)}
+        # (the body's own skin maps carry the colour; the flat tone only for a body exported without them; the
+        # face's map carries the brows' hairs in its mask's B: HairAmount 1 shows them)
+        return {"tint": [1.0, 1.0, 1.0] if m.get("baseColorTex") else list(SKIN_TONE),
+                "hair": 1.0 if key == "skin_face" else 0.0}
     if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
     return None
@@ -3425,6 +3507,9 @@ def main():
     # SO_IMPORT_ONLY=arms,weapons,... re-imports just those steps (default: everything).
     only = {s.strip() for s in os.environ.get("SO_IMPORT_ONLY", "").split(",") if s.strip()}
     want = lambda step: not only or step in only
+    if want("player") or "player_skin" in only:
+        skin = skin_material(defaults)
+        PARENT_FOR.update({k: skin for k in ("skin", "skin_face")})                       # the players' skin
     if want("player"):
         for sex in ("male", "female"):
             player_wardrobe(sex, master)

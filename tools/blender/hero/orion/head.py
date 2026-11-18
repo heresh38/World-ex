@@ -260,7 +260,15 @@ class Head:
             self.R, self.Rz, self.Rt = build_loft(headbase.sections())
         else:
             self.R, self.Rz, self.Rt = build_loft()
-        self.set_landmarks(NASION, TIP, SUBNASALE, STOMION_Z)
+        self.set_landmarks(NASION, *self.nose_points(), STOMION_Z)
+
+    def nose_points(self):
+        """the tip and the subnasale with the face's nose parameters: nose_length draws the tip down (and the base a
+        little with it), nose_tip carries it forward (the game's face sliders, headcage.FACE_SLIDERS)"""
+        nl, nt = self.k("nose_length") - 1, self.k("nose_tip") - 1
+        tip = (TIP[0] - 2.0 * nl, TIP[1] - 1.2 * nl - 2.0 * nt)
+        sub = (SUBNASALE[0] - 1.0 * nl, SUBNASALE[1])
+        return tip, sub
 
     def set_landmarks(self, nasion, tip, subnasale, stomion_z):
         """the nose's and the lips' curves from the midline's landmarks"""
@@ -424,6 +432,9 @@ class Head:
     # --- the eyes -------------------------------------------------------------------------------------------
     def fissure(self, x, z):
         """signed: negative inside the left eye's opening (front view)"""
+        es = self.k("eye_size")                                     # the opening larger round the eye's middle
+        x = EYE[0] + (x - EYE[0]) / es
+        z = EYE[2] + (z - EYE[2]) / es
         u = (x - EN[0]) / (EX[0] - EN[0])
         uc = np.clip(u, 0, 1)
         z0 = EN[1] + (EX[1] - EN[1]) * uc
@@ -433,7 +444,8 @@ class Head:
         half = .5 * (up - lo)
         dz = np.abs(z - mid) - half
         dx = np.maximum(-u, u - 1) * (EX[0] - EN[0])
-        return np.maximum(dz, dx), up, lo
+        # (back to the face's own measure)
+        return np.maximum(dz, dx) * es, EYE[2] + (up - EYE[2]) * es, EYE[2] + (lo - EYE[2]) * es
 
     def eyes(self, Q, d):
         x, y, z = np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]
@@ -485,8 +497,8 @@ class Head:
         """the left ear in its own frame: s back along it, t up it, w out of its plane; mirrored"""
         P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]]
         o = np.array([7.05, 0.15, -1.6], F32)                 # the canal's opening
-        EARS = 1.0 / 1.06                                         # a man's ear, 6.7 cm long
-        tilt, out = math.radians(17), math.radians(19)
+        EARS = 1.0 / (1.06 * self.k("ear_size"))                  # a man's ear, 6.7 cm long
+        tilt, out = math.radians(17), math.radians(19 * self.k("ear_out"))
         # the ear's axes: up its length (tilted back), back across it, out of it (turned forward)
         a_t = np.array([0, math.sin(tilt), math.cos(tilt)], F32)
         n0 = np.array([1, 0, 0], F32)
@@ -596,8 +608,48 @@ class Head:
             out += a * self.k(key) * np.exp(-(q * q).sum(1))
         return out
 
+    # --- the face's sliders that change a FORM ---------------------------------------------------------------
+    # (headcage.FACE_SLIDERS: the jaw's width, the chin's reach, the forehead's slope, the eyes' bags ...): a smooth
+    # warp of the space the whole head is drawn in, so the bone, the soft forms on it and the features move as one.
+    # A relief term scaled up only swells a blob where a form should move (the jaw's slider moved its skin half a
+    # millimetre). Each: the key, the centre (cm, |x|), the half sizes (x None: growing from the midline out to
+    # the centre's side), the direction (x outward), cm for a whole unit of the key past 1
+    WARPS = (
+        ("jaw", (5.9, -2.6, -9.0), (None, 3.4, 2.8), (1, 0, 0), 1.2),           # the mandible's angle and ramus out
+        ("chin", (0.0, -10.8, -11.0), (2.2, 2.0, 1.7), (0, -.6, -.8), .7),      # forward and down
+        ("cheekbones", (4.6, -8.2, -1.8), (1.8, 1.8, 1.3), (.8, -.6, 0), .5),
+        ("cheeks", (3.6, -8.6, -5.6), (1.6, 1.6, 1.8), (.7, -.7, 0), .55),     # the lower cheek's fullness
+        ("temples", (5.9, -6.0, 3.0), (1.3, 2.0, 1.8), (-1, 0, 0), .3),         # (a deeper hollow)
+        ("forehead", (0.0, -9.5, 6.0), (4.5, 2.5, 2.2), (0, -1, 0), .5),         # its upper half forward
+        ("eye_bags", (3.3, -9.0, -1.15), (1.1, .6, .45), (0, -1, 0), .2),
+        ("tear_trough", (2.3, -9.3, -1.6), (1.0, .6, .35), (0, 1, 0), .2),
+        ("hood", (3.4, -9.9, 1.0), (1.4, .8, .45), (0, -.3, -1), .2),          # the skin under the brow lower
+    )
+
+    def warp(self, Q):
+        """the query moved back by the sliders' displacement (first order: millimetres over centimetres)"""
+        ts = [(w, self.k(w[0]) - 1) for w in self.WARPS]
+        ts = [(w, t) for w, t in ts if t != 0]
+        if not ts:
+            return Q
+        x, y, z = Q[:, 0], Q[:, 1], Q[:, 2]
+        ax, sx = np.abs(x), np.where(x < 0, -1.0, 1.0)
+        ss = lambda v: (lambda c: c * c * (3 - 2 * c))(np.clip(v, 0, 1))
+        D = np.zeros(Q.shape, np.float64)
+        for (key, c, r, dirn, a), t in ts:
+            g = np.exp(-(((y - c[1]) / r[1]) ** 2 + ((z - c[2]) / r[2]) ** 2))
+            g = g * (ss(ax / c[0]) if r[0] is None else np.exp(-((ax - c[0]) / r[0]) ** 2))
+            dv = np.asarray(dirn, np.float64) / np.linalg.norm(dirn)
+            if dv[0]:
+                g = g * ss(ax / 1.2)                                     # nothing crosses the midline
+            D[:, 0] += t * a * g * dv[0] * sx
+            D[:, 1] += t * a * g * dv[1]
+            D[:, 2] += t * a * g * dv[2]
+        return (Q - D).astype(Q.dtype)
+
     # --- all of it ------------------------------------------------------------------------------------------
     def cm(self, Q):
+        Q = self.warp(Q)
         d = self.base(Q)
         if self.anatomy:                            # the anatomical base's soft forms (headbase.py)
             d = self.hb.relief(Q, d)

@@ -119,6 +119,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	bool bOneHand = false;
 	bool bArmsOnly = false;
 	bool bCollapseBody = false;
+	bool bCarried = false;      // the gun carried low (a sprint, the armoury's stand-in): the firing elbow stays down
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
 	float Lean = 0.0f;
@@ -338,6 +339,8 @@ public:
 	/** First-person copy of the body: everything but the arms collapses. */
 	bool bArmsOnly = false;
 	bool bCollapseBody = false;
+	/** The gun is carried low (a sprint, the armoury's stand-in): the firing elbow stays by the side. */
+	bool bCarried = false;
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
 	float Lean = 0.0f;

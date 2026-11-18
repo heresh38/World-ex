@@ -426,7 +426,23 @@ void ASOCharacter::ApplyOutfit()
 	Dress(WornFirstPerson, FirstPersonArms, true);
 	ShowRegions(GetMesh(), HiddenRegions);
 	ShowRegions(FirstPersonArms, HiddenRegions);
+	ApplyFace();
 	ApplyViewMode();
+}
+
+void ASOCharacter::ApplyFace()
+{
+	// the face's sliders: each a morph target face_<key> of the body (tools/blender/hero/orion: headcage.FACE_SLIDERS)
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body)
+	{
+		return;
+	}
+	Body->ClearMorphTargets();
+	for (int32 i = 0; i < FMath::Min(Outfit.FaceKeys.Num(), Outfit.FaceValues.Num()); ++i)
+	{
+		Body->SetMorphTarget(FName(*(TEXT("face_") + Outfit.FaceKeys[i].ToString())), Outfit.FaceValues[i]);
+	}
 }
 
 void ASOCharacter::LoadContent()

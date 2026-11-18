@@ -26,6 +26,8 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(USOInventoryComponent, Items);
 	DOREPLIFETIME(USOInventoryComponent, Blades);
 	DOREPLIFETIME(USOInventoryComponent, MeleeSlot);
+	DOREPLIFETIME(USOInventoryComponent, FaceKeys);
+	DOREPLIFETIME(USOInventoryComponent, FaceValues);
 	DOREPLIFETIME(USOInventoryComponent, Equipped);
 	DOREPLIFETIME(USOInventoryComponent, ActiveSlot);
 	// what a player has in the bank is theirs to see (the copies themselves go to everyone: the guns on a player's
@@ -125,7 +127,53 @@ FSOOutfit USOInventoryComponent::GetOutfit() const
 		const FSOArmorInstance* A = GetEquippedArmor(Slot);
 		Outfit.Set(Slot, A ? A->Item : FName(TEXT("none")));
 	}
+	Outfit.FaceKeys = FaceKeys;
+	Outfit.FaceValues = FaceValues;
 	return Outfit;
+}
+
+void USOInventoryComponent::SetFace(FName Key, float Value)
+{
+	if (Key.IsNone())
+	{
+		return;
+	}
+	Value = FMath::Clamp(Value, -1.0f, 1.0f);
+	const int32 i = FaceKeys.IndexOfByKey(Key);
+	if (FMath::IsNearlyZero(Value, 1e-3f))
+	{
+		if (i == INDEX_NONE)
+		{
+			return;
+		}
+		FaceKeys.RemoveAt(i);
+		FaceValues.RemoveAt(i);
+	}
+	else if (i == INDEX_NONE)
+	{
+		FaceKeys.Add(Key);
+		FaceValues.Add(Value);
+	}
+	else if (FMath::IsNearlyEqual(FaceValues[i], Value, 1e-4f))
+	{
+		return;
+	}
+	else
+	{
+		FaceValues[i] = Value;
+	}
+	Changed(false, true);
+}
+
+float USOInventoryComponent::GetFace(FName Key) const
+{
+	const int32 i = FaceKeys.IndexOfByKey(Key);
+	return i != INDEX_NONE && FaceValues.IsValidIndex(i) ? FaceValues[i] : 0.0f;
+}
+
+void USOInventoryComponent::ServerSetFace_Implementation(FName Key, float Value)
+{
+	SetFace(Key, Value);
 }
 
 bool USOInventoryComponent::EquipArmor(const FString& Uid)
@@ -683,6 +731,13 @@ bool USOInventoryComponent::LoadProfile()
 	RestoreArmor(Save->Armor);
 	Blades = Save->Blades;
 	MeleeSlot = Blades.Contains(Save->MeleeSlot) ? Save->MeleeSlot : NAME_None;
+	FaceKeys.Reset();
+	FaceValues.Reset();
+	for (int32 i = 0; i < FMath::Min(Save->FaceKeys.Num(), Save->FaceValues.Num()); ++i)
+	{
+		FaceKeys.Add(Save->FaceKeys[i]);
+		FaceValues.Add(FMath::Clamp(Save->FaceValues[i], -1.0f, 1.0f));
+	}
 	FString Worn;
 	for (const FSOArmorInstance& A : Armor)
 	{
@@ -752,6 +807,8 @@ void USOInventoryComponent::SaveProfile() const
 	Save->Body = Body;
 	Save->Blades = Blades;
 	Save->MeleeSlot = MeleeSlot;
+	Save->FaceKeys = FaceKeys;
+	Save->FaceValues = FaceValues;
 	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	if (USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr)
 	{

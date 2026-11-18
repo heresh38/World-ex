@@ -444,6 +444,22 @@ STUD_R = .0034               # a stud's radius (metres)
 MUSCLE_FLOOR = .003          # metres of a muscle's raise below which the skin is no muscle's panel
 
 
+SUIT_WRIST = .522               # along the arm from the shoulder joint, where the sleeve ends (the game's: the wrist's
+SUIT_ANKLE = .118               # ring, .542, and the ankle's, .095, so the skin it hides is all under it)
+
+
+def cut_field(co, zb=None):
+    """where the suit ends (< 0 on the suit): its sleeves at SUIT_WRIST, its legs at SUIT_ANKLE, under the collar
+    (the neckline's line `zb` a little above its foot)"""
+    x, z = np.abs(co[:, 0]), co[:, 2]
+    a = np.array([math.cos(math.radians(6.0)), 0.0, -math.sin(math.radians(6.0))])
+    along = np.c_[x - .178, co[:, 1] + .030, z - 1.486] @ a              # along the arm from the shoulder joint
+    f = np.maximum(SUIT_ANKLE - z, np.where(x > .30, along - SUIT_WRIST, -1.0))
+    th, r = around(co)
+    ztop = (periodic(zb, th) if zb is not None else neckline_design(th)) + .012
+    return np.maximum(f, np.where((r < .16) & (z > 1.45), z - ztop, -1.0))
+
+
 def build_suit(body, log=print, zb=None):
     """the suit as its own object over `body` (its finished, subdivided mesh): the skin's copy subdivided once more,
     offset, cut along the neckline's line (`zb`: per angle round the neck; the collar covers the cut), the wrists
@@ -469,13 +485,7 @@ def build_suit(body, log=print, zb=None):
     me.vertices.foreach_set("co", co.ravel())
     log(f"suit: grooves spanned, up to {lift.max() * 1000:.1f} mm")
     # where it ends: under the collar (the neckline's line a little above its foot), the wrists, the ankles
-    x, z = np.abs(co[:, 0]), co[:, 2]
-    a = np.array([math.cos(math.radians(6.0)), 0.0, -math.sin(math.radians(6.0))])
-    along = np.c_[x - .178, co[:, 1] + .030, z - 1.486] @ a              # along the arm from the shoulder joint
-    f = np.maximum(.118 - z, np.where(x > .30, along - .522, -1.0))
-    th, r = around(co)
-    ztop = (periodic(zb, th) if zb is not None else neckline_design(th)) + .012
-    f = np.maximum(f, np.where((r < .16) & (z > 1.45), z - ztop, -1.0))
+    f = cut_field(co, zb)
     bm = bmesh.new(); bm.from_mesh(me)
     k = iso_cut(bm, f)
     bm.to_mesh(me); bm.free()

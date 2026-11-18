@@ -63,6 +63,7 @@
 void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set) {}
 void ASOPlayerController::CaptureStep() {}
 void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone) {}
+void ASOPlayerController::SOFace(const FString& Key, float Value) {}
 void ASOPlayerController::FinishBenchmark() {}
 void ASOPlayerController::DevTick(float DeltaTime) {}
 void ASOPlayerController::DevBegin() {}
@@ -3240,6 +3241,25 @@ void ASOPlayerController::CaptureStep()
 	CaptureWait = 0.0f;
 	++CaptureIndex;
 	Cue.Action();
+}
+
+void ASOPlayerController::SOFace(const FString& Key, float Value)
+{
+	ASOCharacter* Hero = Cast<ASOCharacter>(GetPawn());
+	USOInventoryComponent* Inventory = Hero ? Hero->GetInventory() : nullptr;
+	if (!Inventory)
+	{
+		return;
+	}
+	if (Key == TEXT("all"))
+	{
+		for (const FName K : Hero->GetOutfit().FaceKeys)
+		{
+			Inventory->ServerSetFace(K, Value);
+		}
+		return;
+	}
+	Inventory->ServerSetFace(FName(*Key), Value);
 }
 
 void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)

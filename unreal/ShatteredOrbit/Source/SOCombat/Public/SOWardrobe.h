@@ -102,8 +102,8 @@ public:
 
 	/** Armour slots in inventory order: head, top, vest, outer, hands, legs, feet. */
 	static const TArray<FName>& ArmourSlots();
-	/** Slots that may be left empty (head gear, the outer layer); every other armour slot always has a piece on,
-	 *  so a player can swap pieces but never be undressed. */
+	/** Slots that may be left empty: every armour slot (the undersuit, the "suit" slot, is always worn under the armour
+	 *  and is never armour: a player is never undressed). */
 	static bool IsOptionalSlot(FName Slot);
 
 	/** Head, Chest, Rig, Coat, Hands, Legs, Feet. */
@@ -168,6 +168,14 @@ struct SOCOMBAT_API FSOOutfit
 	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
 	TArray<FName> Items;
 
+	/** The face's sliders (the body's morph targets face_<key>, each -1..1; a key not set is the base face): the
+	 *  character builder's (the owner, 2026-11-16: "the face will be heavily customizable in game"). */
+	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
+	TArray<FName> FaceKeys;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
+	TArray<float> FaceValues;
+
 	FName Get(FName Slot) const
 	{
 		const int32 i = Slots.IndexOfByKey(Slot);
@@ -186,5 +194,8 @@ struct SOCOMBAT_API FSOOutfit
 			Items[i] = Item;
 		}
 	}
-	bool operator==(const FSOOutfit& O) const { return Body == O.Body && Slots == O.Slots && Items == O.Items; }
+	bool operator==(const FSOOutfit& O) const
+	{
+		return Body == O.Body && Slots == O.Slots && Items == O.Items && FaceKeys == O.FaceKeys && FaceValues == O.FaceValues;
+	}
 };

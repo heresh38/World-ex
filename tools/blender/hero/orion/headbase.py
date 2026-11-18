@@ -287,8 +287,29 @@ def _ridge(P, k):
     return smax(d, under - z, .2)
 
 
+NOSE_ROOT_Z, NOSE_TIP_Z, NOSE_BASE_Z = .55, -3.65, -4.65
+
+
+def _nose_warp(P, k):
+    """the nose's sliders (headcage.FACE_SLIDERS) as a warp of the space it is drawn in, so the whole nose moves as
+    one (its ridge, lobule, wings and nostrils): nose_length draws it down from its root, the tip 2 cm lower for a
+    whole unit and the base half as far (a long nose is a long dorsum: the lip under it keeps most of its height);
+    nose_tip carries the tip and its lobule forward (2 cm for a unit), the wings a little, the root not at all.
+    A query is moved by the displacement at the query (first order: the displacements are millimetres)"""
+    nl, nt = k("nose_length") - 1, k("nose_tip") - 1
+    if nl == 0 and nt == 0:
+        return P
+    x, y, z = P[:, 0], P[:, 1], P[:, 2]
+    ss = lambda t: (lambda c: c * c * (3 - 2 * c))(np.clip(t, 0, 1))
+    down = np.where(z > NOSE_TIP_Z, ss((NOSE_ROOT_Z - z) / (NOSE_ROOT_Z - NOSE_TIP_Z)),
+                    1 - .5 * ss((NOSE_TIP_Z - z) / (NOSE_TIP_Z - NOSE_BASE_Z)))
+    fwd = np.exp(-((z + 3.75) / 1.45) ** 2) * np.clip((-y - 10.6) / 1.6, 0, 1)
+    return np.c_[x, y + 2.0 * nt * fwd, z + 2.0 * nl * down].astype(F32)
+
+
 def nose(Q, k=lambda n: 1.0):
     P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]].astype(F32)
+    P = _nose_warp(P, k)
     w = k("nose_width")
     d = _ridge(P, k)
     ac, ar = NOSE_ALA

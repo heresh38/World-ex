@@ -36,6 +36,10 @@ public:
 	UFUNCTION(Exec)
 	void SOBenchmark(float Seconds = 15.0f, int32 bQuitWhenDone = 0);
 
+	/** Dev: one of the face's sliders (e.g. SOFace jaw 0.6; SOFace all 0 sets every one back), saved with the profile. */
+	UFUNCTION(Exec)
+	void SOFace(const FString& Key, float Value = 1.0f);
+
 	virtual void PlayerTick(float DeltaTime) override;
 
 protected:

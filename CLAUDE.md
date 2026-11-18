@@ -292,6 +292,62 @@ existing classes, never second systems.
   from `horror_textures.py`; the stalker is the only one in the game so far (`/Game/Characters/Stalker`).
 
 ## Characters
+**The male player is the Orion body** (`tools/blender/hero/orion`; in the game since 2026-11-17, the owner: "put the
+player in the game and delete the old male model"; nothing of the old male's rig, skin maps, head or clothing is
+used). `lab.py -- out.png --levels=2 --detail --gamehead --facekeys --save=x.blend` builds it: the cage (`body.py`)
+tags each face's game region (`body.face_regions`, `REGIONS`: a band between two parts goes to the hand / foot, so the
+forearm ends on the wrist's ring), the game head (`headcage.py`: a ring cage laid on the sculpt `head.py`; the ears'
+windows are capped through the cage's solve and cut out after the subdivision, each ear a ring grid on the sculpt's own
+ear, `ear.py`: cut where the ear's field takes over, laid flat by a harmonic map, rings down equal-length spokes), the
+face's 22 sliders as morph targets `face_<key>` (`headcage.FACE_SLIDERS`; a slider that moves a FORM is a warp of the
+sculpt's space, `head.WARPS`: jaw, chin, cheekbones, cheeks, temples, forehead, eye bags, tear trough, hood; the nose's
+two warp the nose's own field, `headbase._nose_warp`; the eyes' rims are pinned on the sculpt's own opening for every
+slider, `headcage.rim_points`, so eye_open / eye_size move the opening itself; the lids' bands are laid BY CONSTRUCTION,
+`headcage.place_lids` / `front_lids`: the four rings out from each rim (`lid_rings`) on the lid's front by rays from in
+front, its front edge, the margin straight back to the globe; laid by nearest points they found the lid's own inside
+and folded back along every lower lid; the nose tip's patch stays inside its window's rings, or it overlapped the band
+above and the skin folded across the nose, a dark line each side). The flank under each arm follows the
+sheet's line (the owner circled a bulge there: `ARMPIT_OUT`, `FLANK_ZONES`). The arm is an adult man's
+(`UPPER_ARM` .312, `FOREARM` .272: the sheet's canon left it 4 cm short and in third person the support hand could not
+reach a long gun's fore end; the arm's sections are written for the design arm and stretched, `body.arm_s`). `game.py` (in Blender on the saved build: stages normals, uv,
+skin, eyes, lashes, rig, suit, clips, export; `--stages=` picks some, `--save=` saves the build BEFORE the export splits
+it, and a build saved after its export can still run `clips,export`) makes it the game's: the head's normals from the
+sculpt's field; UVs on hidden seams in two maps (`skin_face`: the head and ears, 0.13 mm a texel; `skin`: the rest, the
+hands at 1.7x); the skin maps (`orion_male_skin_<face|body>_BaseColor / _Normal / _ORM`, R occlusion G roughness, B the
+brows) baked through the head lab's own skin shader FROM THE GAME MESH (from the sculpt, rays met the wrong side of the
+nose and missed under the jaw); the BROWS drawn hair by hair into the face's map (`brow_mask`: each of `groom.brows`'
+strands carried onto the mesh and drawn as a tapered line, the ORM's B = how much of a texel is hair; `M_SOSkin` puts
+`HairColor` over the skin by it, `HairAmount` 1 on the face, so the creator colours them with the hair: cards of six
+hairs read as shingles and a hairbrush; the export material wires EVERY channel of the packed map the glTF way, R
+through the exporter's `glTF Material Output` group's Occlusion, B to Metallic, or the exporter writes a map of its
+own with R and B white: the game's skin had no occlusion, and with the brows in B the whole face took their colour;
+check `SourceArt/Characters/PlayerMale/Textures/*_ORM.png` after an export); the lashes (`B_lashes`, `hair__lash`: cards of three or four of
+`groom.lashes`, each a ribbon along its lid); the eyes (the sculpt's eyeballs, the front half unwrapped,
+`orion_male_eye_BaseColor`); the rig (the shared player
+skeleton, its joints from this body's own construction: `body.arm_axis`, the hand's `joints_of`, the foot's toes, the
+knee 1.2 cm ahead of the hip-ankle line (behind it, the game's leg IK bent it backward in a sideways crouch-walk);
+heat weights solved on a closed voxel copy, the eyes' openings filled, then copied face by face); the undersuit
+(`C_suit__orion`, slot `suit`, ALWAYS worn and never armour: the owner, 2026-11-17, "the undersuit is on at all times
+and armor goes on top of that"; the body's own mesh offset and cut a hair past the wrists' and ankles' rings, its maps
+baked from the lab's detailed suit and collar, `orion_male_suit_*`, its weights copied in the REST pose); the clips
+(`hero/male/motion.py`, the approved style, baked by `gait.py` on this skeleton: `gait.Body` takes the body's own foot
+points; the knee's IK pole angle is SEARCHED to a tenth of a degree with the leg bent, `gait._calibrate_pole`: tried at
+-90 / 0 / 90 / 180 it was 14 degrees out on this skeleton and every clip bowed the knees 18 degrees out, the owner's
+"the leg looks bend"; a standing pose raises its hips to a set knee bend, `gait.Body.stand_tall`, the idle 3 degrees:
+feet brought in under the body with the hips left at the rest height bent the knees 20; measure with the scratch
+checks of the knee plane and the stance, idle knees 22 cm apart, ankles 26); the export (`B_<region>`, `B_eyes`,
+`B_lashes`, the suit, `worldex` meta). `export_unreal.sh` runs both into
+`SourceArt/Characters/src/orion_male.glb` (delete it to rebuild). In the game every armour slot may be empty
+(`USOWardrobeData::IsOptionalSlot`); the skin is `M_SOSkin` (subsurface profile `SP_SOSkin`, `import_assets.skin_material`);
+the face rides the outfit (`FSOOutfit::FaceKeys / FaceValues`, kept by the inventory, saves version 7) onto the body's
+morph targets (`ASOCharacter::ApplyFace`); console `SOFace <key> <value>` (dev). A gun carried low (a sprint, the
+armoury's stand-in: `USOLocomotionAnimInstance::bCarried`) keeps the third-person firing elbow by the side (the arm IK's
+swing toward the straightest wrist is held to 0.55 rad there: it stood out level with the shoulder, the owner's "arm
+seems very bend out"). Known: `vr_sniper`'s third-person support palm lands on its fore end's blade fins (the body's
+reach clamp slides it back from where the first-person arms hold it), `ShatteredOrbit.Hold.TheGunIsSolid` fails on it.
+The old male builder (`hero/build.py -- male`) is no longer exported: it stays only as the Sarketh's and the Void
+Sentinel's base until they move to this body.
+
 The old player bodies, heads, clothing, hair, first-person arms and the scripts that built them (players.py, anatomy.py,
 face.py, wardrobe.py, hair.py, skin.py, the old civilians / NPC kits) were deleted on 2026-11-07: the players are
 being rebuilt from zero as two separate professional base meshes (male, female): clean quad topology with edge

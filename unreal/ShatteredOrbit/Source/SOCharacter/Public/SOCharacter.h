@@ -627,6 +627,8 @@ protected:
 	UFUNCTION()
 	void OnRep_Outfit();
 	void ApplyOutfit();
+	/** The outfit's face sliders onto the body's morph targets (face_<key>). */
+	void ApplyFace();
 	void OutfitFromInventory();
 	FDelegateHandle OutfitHandle;
 	FName AppliedBody;

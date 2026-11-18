@@ -17,7 +17,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 6;
+	static constexpr int32 CurrentVersion = 7;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -58,6 +58,13 @@ public:
 	/** Version 6: the melee slot (a blade owned, or None: the fists). */
 	UPROPERTY(SaveGame)
 	FName MeleeSlot;
+
+	/** Version 7: the face's sliders (FSOOutfit::FaceKeys / FaceValues). */
+	UPROPERTY(SaveGame)
+	TArray<FName> FaceKeys;
+
+	UPROPERTY(SaveGame)
+	TArray<float> FaceValues;
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -109,6 +116,13 @@ public:
 	FName GetBody() const { return Body; }
 	/** Body + every slot: the wardrobe's defaults (hair, underwear) with the worn armour on top. */
 	FSOOutfit GetOutfit() const;
+
+	/** The face: one slider (a morph target face_<Key> of the body, clamped to -1..1; 0 removes it), server. */
+	void SetFace(FName Key, float Value);
+	float GetFace(FName Key) const;
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetFace(FName Key, float Value);
 
 	/** Wears (or, if it is worn, takes off) an armour piece (server). */
 	bool EquipArmor(const FString& Uid);
@@ -258,6 +272,12 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	FName MeleeSlot;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FName> FaceKeys;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<float> FaceValues;
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

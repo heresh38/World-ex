@@ -14,14 +14,25 @@ OUT="$ROOT/unreal/ShatteredOrbit/SourceArt"
 M="$ROOT/assets/models"
 run() { "$BLENDER" --background --python "$ROOT/tools/blender/export_fbx.py" -- "$@" 2>&1 | grep -E "^\[export_fbx\]|Error|Traceback" || true; }
 
-# Players: the hero base meshes (tools/blender/hero: rigged, the player clips, face_* morphs), built once into
-# SourceArt/Characters/src (delete the GLB to rebuild), then the body (one skin__<region> section per region) and
-# its first-person arms cut; the Orion outfit, hair (strand cards), brows and lashes come with it.
+# Players, built once into SourceArt/Characters/src (delete the GLB to rebuild), then the body (one skin__<region>
+# section per region) and its first-person arms cut. The male is the new body (Project Orion, tools/blender/hero/orion:
+# lab.py builds it with the game's head and the face's sliders, game.py gives it its UVs, its skin maps, its eyes, its
+# rig and its clips); the female is still the first hero base mesh (tools/blender/hero/build.py, with its outfit).
 mkdir -p "$OUT/Characters/src"
 for sex in male female; do
   Sex="$(echo "${sex:0:1}" | tr a-z A-Z)${sex:1}"
-  glb="$OUT/Characters/src/hero_$sex.glb"
-  [ -f "$glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/hero/build.py" -- "$sex" "--glb=$glb" 2>&1 | grep -E "^\[hero\]|Error|Traceback" || true
+  if [ "$sex" = male ]; then
+    glb="$OUT/Characters/src/orion_male.glb"
+    if [ ! -f "$glb" ]; then
+      work="$OUT/Characters/src/orion_male"
+      mkdir -p "$work"
+      "$BLENDER" --background --python "$ROOT/tools/blender/hero/orion/lab.py" -- "$work/lab.png" --levels=2 --detail         --gamehead --facekeys "--save=$work/lab.blend" 2>&1 | grep -E "^\[orion\] (built|ears|head laid)|Error|Traceback" || true
+      "$BLENDER" --background "$work/lab.blend" --python "$ROOT/tools/blender/hero/orion/game.py" -- "$work"         "--glb=$glb" 2>&1 | grep -E "^\[game\]|Error|Traceback" || true
+    fi
+  else
+    glb="$OUT/Characters/src/hero_$sex.glb"
+    [ -f "$glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/hero/build.py" -- "$sex" "--glb=$glb" 2>&1 | grep -E "^\[hero\]|Error|Traceback" || true
+  fi
   run "$glb" "$OUT/Characters/Player$Sex" --per-item
   run "$glb" "$OUT/Characters/Player${Sex}Arms" --per-item --arms-only
 done

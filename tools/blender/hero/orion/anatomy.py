@@ -43,7 +43,8 @@ def unit(v):
 
 STATURE = 1.84
 DROP = math.radians(6.0)
-UPPER_ARM, FOREARM, HAND = 0.290, 0.252, 0.200          # joint to fingertip .742: arm span = stature
+UPPER_ARM, FOREARM, HAND = 0.312, 0.272, 0.200          # (body.py's: an adult man's arm, 58.4 cm joint to wrist)
+UK = UPPER_ARM / 0.290                                     # the upper arm's muscles were placed on a .290 humerus
 A_DIR = V(math.cos(DROP), 0, -math.sin(DROP))            # along the left arm
 A_UP = V(math.sin(DROP), 0, math.cos(DROP))              # the arm's top (its outside when it hangs)
 FR, BK = V(0, -1, 0), V(0, 1, 0)
@@ -331,16 +332,16 @@ def muscles():
         .020, .35, mid=(0.218, 0.016, 0.280), inside=TIBIA, w=.012)
     # --- arm (T-pose, palms down, thumbs forward)
     add("biceps", (arm_pt(S, .035, -.005, .024), arm_pt(S, .045, .006, .022)),
-        (arm_pt(E, .025, 0, .016), arm_pt(E, .035, 0, .014)), .028, .58, mid=arm_pt(S, .17, 0, .040), inside=HUMERUS,
+        (arm_pt(E, .025, 0, .016), arm_pt(E, .035, 0, .014)), .028, .58, mid=arm_pt(S, .17 * UK, 0, .040), inside=HUMERUS,
         w=.022)
-    add("brachialis", (arm_pt(S, .15, -.004, .012), arm_pt(S, .16, -.012, .010)),
-        (arm_pt(E, .020, -.006, .008), arm_pt(E, .025, -.008, .006)), .014, .60, mid=arm_pt(S, .22, -.010, .026),
+    add("brachialis", (arm_pt(S, .15 * UK, -.004, .012), arm_pt(S, .16 * UK, -.012, .010)),
+        (arm_pt(E, .020, -.006, .008), arm_pt(E, .025, -.008, .006)), .014, .60, mid=arm_pt(S, .22 * UK, -.010, .026),
         inside=HUMERUS, w=.024)
     add("triceps_long", (arm_pt(S, 0, -.030, bk=.020), arm_pt(S, .02, -.032, bk=.020)),
-        (arm_pt(E, 0, 0, bk=.024), arm_pt(E, 0, .004, bk=.024)), .024, .45, mid=arm_pt(S, .14, -.012, bk=.042),
+        (arm_pt(E, 0, 0, bk=.024), arm_pt(E, 0, .004, bk=.024)), .024, .45, mid=arm_pt(S, .14 * UK, -.012, bk=.042),
         inside=HUMERUS, w=.020)
-    add("triceps_lat", (arm_pt(S, .05, .016, bk=.022), arm_pt(S, .09, .018, bk=.022)),
-        (arm_pt(E, 0, .008, bk=.024), arm_pt(E, 0, .010, bk=.020)), .022, .42, mid=arm_pt(S, .16, .012, bk=.040),
+    add("triceps_lat", (arm_pt(S, .05 * UK, .016, bk=.022), arm_pt(S, .09 * UK, .018, bk=.022)),
+        (arm_pt(E, 0, .008, bk=.024), arm_pt(E, 0, .010, bk=.020)), .022, .42, mid=arm_pt(S, .16 * UK, .012, bk=.040),
         inside=HUMERUS, w=.019)
     add("brachiorad", (arm_pt(E, -.07, .020, .012), arm_pt(E, -.04, .024, .010)),
         (arm_pt(W, 0, 0, .020), arm_pt(W, 0, .004, .020)), .020, .25, mid=arm_pt(E, .06, .012, .032),

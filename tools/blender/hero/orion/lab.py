@@ -289,6 +289,26 @@ def main():
             free = np.maximum(free, C.free())                     # the arm's windows' corners (body.py)
             X = B.solve_cage(C.V, C.F, log=log, free=free)
         o = make_object(X, C.F, "orion_male")
+        # each cage face's body region (the game hides the regions worn pieces cover): kept by every face the
+        # subdivision makes of it, so a region's border is one of the cage's own edge loops
+        reg = o.data.attributes.new("region", 'INT', 'FACE')
+        reg.data.foreach_set("value", B.face_regions(C, X))
+        if info.get("head") is not None:                     # the eyes' rims: where each lies on the opening, the band
+            rim = np.zeros(len(C.V), np.float32); ru = np.zeros(len(C.V), np.float32); rt = np.zeros(len(C.V), np.float32)
+            rs = np.zeros(len(C.V), np.float32)
+            for side, sxe in (("eye_L", 1), ("eye_R", -1)):
+                vs, u_, t_ = info["head"]["feats"][side + "_rim"]
+                ren = getattr(C, "renumbered", None)            # (noted before the cage was compacted)
+                if ren is not None:
+                    vs = [ren[v] for v in vs]
+                rim[vs] = 1.0; ru[vs] = u_; rt[vs] = t_; rs[vs] = sxe
+            for name, vals in (("rim", rim), ("rim_u", ru), ("rim_t", rt), ("rim_s", rs)):
+                o.data.attributes.new(name, 'FLOAT', 'POINT').data.foreach_set("value", vals)
+        if info.get("head") is not None:                     # the ears' windows' caps (ear.py cuts them out)
+            cap = np.zeros(len(C.F), np.int32)
+            for side, k in (("ear_L", 1), ("ear_R", 2)):
+                cap[info["head"]["feats"][side][2]] = k
+            o.data.attributes.new("earcap", 'INT', 'FACE').data.foreach_set("value", cap)
         if info.get("head") is not None:                     # the game head's vertices (headcage.py)
             hw = o.data.attributes.new("headw", 'FLOAT', 'POINT')
             hw.data.foreach_set("value", np.array([1.0 if p == "head" else 0.0 for p in C.part], np.float32))
@@ -312,6 +332,7 @@ def main():
             n = len(me.vertices)
             co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
             nr = np.zeros(n * 3, np.float32); me.vertices.foreach_get("normal", nr); nr = nr.reshape(n, 3)
+            face_d = {}
             disp = AN.Anatomy().detail(co)
             # the feet have their own anatomy (footshape.py): the muscles' detail fades out above the ankle
             disp = disp * np.clip((co[:, 2] - .17) / .09, 0, 1) ** 2 * (3 - 2 * np.clip((co[:, 2] - .17) / .09, 0, 1))
@@ -326,6 +347,10 @@ def main():
                 disp = disp * (1 - on * (t * t * (3 - 2 * t))).astype(np.float32)
             disp = disp + HM.detail(co, info["hands"])
             co += nr * disp[:, None]
+            # the flank under each arm smoothed like a sculptor's smooth brush (the owner circled a bulge there twice,
+            # 2026-11-17: "the bulge is huge please fix and smooth it out")
+            ed_s = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", ed_s)
+            co = B.smooth_zone(co, ed_s.reshape(-1, 2), B.FLANK_ZONES, iters=28, lam=.5).astype(np.float32)
             # the feet: the skin laid onto the foot's anatomy (footshape.py)
             import foot as FTM
             if "--nofootskin" not in flags:
@@ -346,8 +371,61 @@ def main():
                 hw = np.zeros(n, np.float32); a.data.foreach_get("value", hw)
                 edh = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", edh)
                 fqh = np.zeros(len(me.polygons) * 4, np.int64); me.polygons.foreach_get("vertices", fqh)
-                co = HCG.lay_on_head(co, nr, hw, info["head"]["field"], edges=edh.reshape(-1, 2),
-                                     faces=fqh.reshape(-1, 4), log=log).astype(np.float32)
+                hf = info["head"]["field"]
+                F4 = fqh.reshape(-1, 4)
+                co_pre = co.copy()
+                ears, pins = {}, None
+                capf = None
+                if HCG.EAR_OPEN:
+                    # the ears (ear.py): each a ring grid on the sculpt's own ear, the window's loop moved onto its base
+                    import ear as EAR
+                    capf = np.zeros(len(me.polygons), np.int32)
+                    me.attributes["earcap"].data.foreach_get("value", capf)
+                    for sxe, k in ((1, 1), (-1, 2)):
+                        lp = np.array(EAR.cap_loop(F4, capf == k))
+                        ring0, inner, ef = EAR.build(hf, sxe, co[lp].astype(np.float64), log=log)
+                        ears[sxe] = (lp, ring0, inner, ef)
+                    pins = (np.concatenate([ears[s][0] for s in (1, -1)]), np.concatenate([ears[s][1] for s in (1, -1)]))
+                # the eyes' rims (the openings' borders) on the sculpt's own opening, the lids' bands filled
+                rims, band = [], None
+                if me.attributes.get("rim") is not None:
+                    getv = lambda nm: (lambda a: (me.attributes[nm].data.foreach_get("value", a), a)[1])(np.zeros(n, np.float32))
+                    rimv, rim_u, rim_t, rim_s = getv("rim"), getv("rim_u"), getv("rim_t"), getv("rim_s")
+                    e2 = edh.reshape(-1, 2)
+                    cnt = np.bincount(F4.ravel(), minlength=n)
+                    a_, b_ = F4.ravel(), np.roll(F4, -1, axis=1).ravel()
+                    key = np.minimum(a_, b_) * (1 << 32) + np.maximum(a_, b_)
+                    uq, inv, kc = np.unique(key, return_inverse=True, return_counts=True)
+                    onb = np.zeros(n, bool); bk = uq[kc == 1]
+                    onb[(bk >> 32).astype(np.int64)] = True; onb[(bk & 0xFFFFFFFF).astype(np.int64)] = True
+                    for sxe in (1, -1):
+                        ids = np.flatnonzero(onb & (rim_s * sxe > .5))
+                        if len(ids):
+                            rims.append((ids, sxe, rim_u[ids], rim_t[ids]))
+                    # (the lids' bands filled as a membrane between the rim and the lid made creases sharper than the
+                    # folds it took away, 180 edges over 100 degrees against 112: the rim tucked into the eye under a
+                    # skirt is the way; until then the bands are laid like the rest)
+                    band = None
+                    rp = [HCG.rim_points(hf.hd, s_, u_, t_) for _, s_, u_, t_ in rims]
+                    if rims:
+                        rid = np.concatenate([r[0] for r in rims]); rpt = np.concatenate(rp)
+                        pins = (rid, rpt) if pins is None else (np.r_[pins[0], rid], np.r_[pins[1], rpt])
+                    log(f"eyes' rims: {sum(len(r[0]) for r in rims)} vertices on the sculpt's opening")
+                # the lids' bands (the four rings out from each rim): laid by construction (headcage.place_lids)
+                lids = []
+                for ids, s_, u_, t_ in rims:
+                    rg = HCG.lid_rings(edh.reshape(-1, 2), ids, 8)
+                    lids.append(dict(side=s_, u=u_, t=t_, rim=ids, rings=rg[:4], front=rg[3:8]))
+                    log(f"lid band ({'left' if s_ > 0 else 'right'}): {len(ids)} columns, "
+                        f"{int(sum((r >= 0).sum() for r in rg))} of {8 * len(ids)} ring vertices found")
+                co = HCG.lay_on_head(co, nr, hw, hf, edges=edh.reshape(-1, 2), faces=F4, log=log,
+                                     pins=pins, band=band, lids=lids).astype(np.float32)
+                if "--facekeys" in flags:                       # the face's sliders as morphs (headcage.py)
+                    face_d = HCG.face_keys(co_pre, nr, hw, hf, edh.reshape(-1, 2), log=log, ears=ears,
+                                           rims=rims, band=band, lids=lids)
+                if ears:
+                    me, co, face_d = EAR.attach(o, me, co, ears, capf > 0, keys=face_d, log=log)
+                    n = len(me.vertices)
             # the thumb's root rounded off (hand.py)
             ed2 = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", ed2)
             co = HM.smooth_root(co, ed2.reshape(-1, 2), info["hands"]).astype(np.float32)
@@ -359,6 +437,13 @@ def main():
                 co = MF.untangle(co, qf.reshape(-1, 4), digits, rounds=int(flags.get("--untangle", 6)), log=log).astype(np.float32)
             me.vertices.foreach_set("co", co.ravel())
             me.update()
+            if face_d:
+                o.shape_key_add(name="Basis", from_mix=False)
+                for name, D in face_d.items():
+                    kb = o.shape_key_add(name="face_" + name, from_mix=False)
+                    kb.value = 0.0                                # off (Blender adds new keys at 1.0)
+                    kb.data.foreach_set("co", (co + D).astype(np.float32).ravel())
+                log(f"face keys: {len(face_d)}")
             log(f"anatomy over {n} vertices: {disp.min() * 1000:.1f} .. {disp.max() * 1000:.1f} mm")
             zb = None
             if "--head" in flags or "--suit" in flags:
