@@ -325,46 +325,101 @@ def digit(C, F, base, J, wd, part, thumb=False):
     C.cap(rings[-1], part, wd * .30, tip_dir)
 
 
+TENDON = (.0004, .0006, .0008, .0008)       # the extensor tendons' ridge on the back (m): little, ring, middle, index
+NAIL_W, THUMB_NAIL_W = .30, .0072            # a nail's half width: a share of its finger's, the thumb's (m)
+# the veins on the back of the hand (cm in the hand's frame: along it from the wrist, across toward the thumb): the
+# arch, the veins from the webs into it, its two ends running up the thumb's side and the little finger's side, one
+# up the middle; how high they stand and how wide (m)
+VEINS = [[(8.0, -3.7), (6.8, -2.0), (6.1, 0.2), (6.3, 2.2), (7.0, 3.7)],
+         [(9.6, 2.3), (7.6, 2.4), (6.4, 2.1)], [(9.9, -0.1), (8.0, 0.0), (6.2, 0.3)], [(9.3, -2.6), (7.6, -2.5), (6.9, -2.2)],
+         [(7.0, 3.7), (5.0, 3.6), (2.6, 3.1), (0.0, 2.6)], [(8.0, -3.7), (5.2, -3.7), (2.4, -3.2), (0.0, -2.8)],
+         [(6.1, 0.2), (4.0, 0.6), (2.0, 0.9), (0.0, 1.1)]]
+VEIN_H, VEIN_W = .0007, .0017
+
+
 def detail(P, frames, log=None):
     """knuckles, the pads and creases, the nails' plates over the subdivided hands (metres along the normal)"""
     out = np.zeros(len(P), np.float32)
     for F in frames:
         rel = P - F.W
         x, y, z = rel @ F.ax, rel @ F.ay, rel @ F.az
-        near = (x > -.01) & (x < .23) & (np.abs(y) < .08) & (np.abs(z) < .06)
+        near = (x > -.01) & (x < .23) & (np.abs(y) < .11) & (np.abs(z) < .06)    # (the thumb's tip is 9 cm out)
         if not near.any():
             continue
-        for name, kx, ky, L, wd, spread in FINGERS:
+        dors = near & (z > .003)
+        for f_i, (name, kx, ky, L, wd, spread) in enumerate(FINGERS):
             J = joints_of(F, kx, ky, L, spread)
+            # the back of the hand as the references': each metacarpal's head a knuckle a little behind the joint,
+            # a soft valley between two, and the extensor tendon running from it toward the wrist's middle (the
+            # index's and the middle finger's the clearest, the little finger's faint)
+            k0 = J[0] - F.W
+            kxx, kyy = float(k0 @ F.ax), float(k0 @ F.ay)
+            ax_, ay_ = kxx - .007, kyy
+            bx_, by_ = .016, kyy * .35
+            sx_, sy_ = bx_ - ax_, by_ - ay_
+            t = np.clip(((x - ax_) * sx_ + (y - ay_) * sy_) / (sx_ * sx_ + sy_ * sy_), 0, 1)
+            dd = np.hypot(x - (ax_ + sx_ * t), y - (ay_ + sy_ * t))
+            fade = np.clip(t / .12, 0, 1) * np.clip((1 - t) / .45, 0, 1)
+            out += TENDON[f_i] * np.exp(-(dd / .0028) ** 2) * fade * dors
+            if f_i + 1 < len(FINGERS):                                  # the valley toward the next knuckle
+                k1 = joints_of(F, *FINGERS[f_i + 1][1:4], FINGERS[f_i + 1][5])[0] - F.W
+                mx, my = .5 * (kxx + float(k1 @ F.ax)) - .010, .5 * (kyy + float(k1 @ F.ay))
+                out -= .0007 * np.exp(-((x - mx) / .012) ** 2 - ((y - my) / .0045) ** 2) * dors
             # a relaxed, open hand shows its knuckles only a little (2.6 mm lumps read as swellings)
-            for k, (jp, amp, rad) in enumerate(((J[0], .0016, .010), (J[1], .0012, .007), (J[2], .0007, .0055))):
+            for k, (jp, amp, rad) in enumerate(((J[0] - F.ax * .003, .0022, .0095), (J[1], .0012, .007),
+                                                (J[2], .0007, .0055))):
                 q = P - jp
                 dn = q @ F.az
                 rr = np.sqrt(((q - np.outer(dn, F.az)) ** 2).sum(1))
                 out += amp * np.exp(-(rr / rad) ** 2) * (dn > 0) * near                   # knuckles on the back
                 out -= .0007 * np.exp(-(rr / (rad * .5)) ** 2) * (dn < 0) * near           # creases on the palm
-            # the nail: a low plate over the last bone's back half, a groove round it
-            a, b = J[2], J[3]
-            d = unit(b - a)
-            q = P - a
-            t = (q @ d) / float(np.linalg.norm(b - a))
-            up = unit(F.az - d * float(F.az @ d))
-            side = unit(np.cross(d, up))
-            u = (q @ side) / (wd * .38)
-            h = q @ up
-            # the nail: a plate on the last bone's back half (raised, its edge firm), the cuticle's groove across
-            # its root and the folds along its sides; it was a 0.5 mm step whose groove drew a ring round the tip
-            back = (h > 0) & near
-            e_side = np.clip((1.0 - np.abs(u)) / .14, 0, 1)
-            e_root = np.clip((t - .32) / .06, 0, 1)                  # long: two thirds of the last bone
-            e_tip = np.clip((1.04 - t) / .05, 0, 1)
-            plate = e_side * e_root * e_tip
-            plate = plate * plate * (3 - 2 * plate)
-            out += .00065 * plate * back
-            fold = np.exp(-((np.abs(u) - 1.06) / .10) ** 2) * np.clip((t - .30) / .1, 0, 1) * np.clip((.98 - t) / .1, 0, 1)
-            cut = np.exp(-((t - .30) / .025) ** 2) * np.clip((1.05 - np.abs(u)) / .2, 0, 1)
-            out -= .00045 * np.maximum(fold, cut) * back
+            out += nail(P, J[2], J[3], F.az, NAIL_W * wd, near)
+        tj = thumb_joints(F)
+        out += nail(P, tj[2], tj[3], F.ay + .6 * F.az, THUMB_NAIL_W, near)
+        # the veins on the back of the hand (the references': the dorsal venous arch across the metacarpals, fed from
+        # the webs, draining up the thumb's side and the little finger's side toward the wrist), low and soft
+        dors = near & (z > .003)
+        for line in VEINS:
+            V_ = np.array(line, float) / 100
+            best = np.full(len(P), 1e3); tt = np.zeros(len(P))
+            seg_len = np.hypot(*np.diff(V_, axis=0).T)
+            acc = np.r_[0, np.cumsum(seg_len)]
+            for i in range(len(V_) - 1):
+                (x0, y0), (x1, y1) = V_[i], V_[i + 1]
+                sx_, sy_ = x1 - x0, y1 - y0
+                ti = np.clip(((x - x0) * sx_ + (y - y0) * sy_) / (sx_ * sx_ + sy_ * sy_), 0, 1)
+                di = np.hypot(x - (x0 + sx_ * ti), y - (y0 + sy_ * ti))
+                m = di < best
+                best = np.where(m, di, best); tt = np.where(m, (acc[i] + ti * seg_len[i]) / acc[-1], tt)
+            ends = np.clip(tt / .12, 0, 1) * np.clip((1 - tt) / .12, 0, 1)
+            wrist = np.clip((x - .004) / .02, 0, 1)                      # gone into the wrist
+            out += VEIN_H * np.exp(-(best / VEIN_W) ** 2) * ends * wrist * dors
     return out
+
+
+def nail(P, a, b, up_hint, hw, near):
+    """a nail on the last bone from a (its joint) to b (its tip), as the references' sculpted fingers: a smooth plate
+    two thirds of the bone long and about three quarters of the finger wide (the first one spanned the whole width),
+    its root a curve (the cuticle, the corners further out), a groove all round it, the skin's folds standing just
+    outside it along the sides and the root (none at the free edge)"""
+    d = unit(b - a)
+    L = float(np.linalg.norm(b - a))
+    q = P - a
+    t = (q @ d) / L
+    up = unit(up_hint - d * float(up_hint @ d))
+    side = unit(np.cross(d, up))
+    u = (q @ side) / hw
+    back = (q @ up > 0) & near & (t > -.2) & (t < 1.3)
+    sd_side = (np.abs(u) - 1) * hw
+    sd_root = (.30 + .08 * u * u - t) * L
+    sd_tip = (t - 1.03) * L
+    sd = np.maximum(np.maximum(sd_side, sd_root), sd_tip)          # signed distance to the nail's outline (m)
+    plate = np.clip(-sd / .0009, 0, 1)
+    plate = plate * plate * (3 - 2 * plate)
+    groove = np.exp(-((sd - .0001) / .0006) ** 2)
+    fold = np.exp(-((sd - .0014) / .0007) ** 2) * (sd > 0) * (sd_tip < np.maximum(sd_side, sd_root))
+    # (a 1 mm mesh: the groove a hair narrower than an edge left the nail a faint line)
+    return (.0007 * plate - .0006 * groove + .0003 * fold) * back
 
 
 def smooth_root(P, edges, frames, iters=40, radius=.032):
