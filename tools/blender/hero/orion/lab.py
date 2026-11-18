@@ -264,6 +264,7 @@ def main():
     if "--anatomy" in flags:
         # the anatomy itself (anatomy.py), meshed straight from its field
         sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+        sys.path.insert(0, HERE)
         import sdf
         import anatomy as AN
         body = AN.Anatomy()
@@ -271,7 +272,7 @@ def main():
         Vv, Qq = sdf.mesh(body, lo, hi, float(flags.get("--h", .003)), log=log)
         o = make_object(Vv, Qq, "orion_anatomy")
     else:
-        C, info = B.build(log=log)
+        C, info = B.build(log=log, game_head="--gamehead" in flags)
         if "--cage" in flags:
             X = np.array(C.V)
         else:
@@ -288,6 +289,9 @@ def main():
             free = np.maximum(free, C.free())                     # the arm's windows' corners (body.py)
             X = B.solve_cage(C.V, C.F, log=log, free=free)
         o = make_object(X, C.F, "orion_male")
+        if info.get("head") is not None:                     # the game head's vertices (headcage.py)
+            hw = o.data.attributes.new("headw", 'FLOAT', 'POINT')
+            hw.data.foreach_set("value", np.array([1.0 if p == "head" else 0.0 for p in C.part], np.float32))
         # which toe each vertex is (carried through the subdivision, read back for the skin's last step)
         import foot as FTM
         for k, name in enumerate(FTM.TOE_NAMES):
@@ -299,6 +303,7 @@ def main():
         if "--detail" in flags:
             # the anatomy's forms over the subdivided body (anatomy.py): along each vertex's normal
             sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+            sys.path.insert(0, HERE)                     # (head.py puts the older hero folder first: its anatomy.py)
             import anatomy as AN
             dg = bpy.context.evaluated_depsgraph_get()
             me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
@@ -335,6 +340,14 @@ def main():
                 log(f"feet laid on their anatomy: {off.min() * 1000:.1f} .. {off.max() * 1000:.1f} mm")
                 co = co + nr * off[:, None]
                 co = FTM.separate_toes(co, info["feet"], toe_w, edges=ed.reshape(-1, 2))
+            if info.get("head") is not None:
+                import headcage as HCG
+                a = me.attributes.get("headw")
+                hw = np.zeros(n, np.float32); a.data.foreach_get("value", hw)
+                edh = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", edh)
+                fqh = np.zeros(len(me.polygons) * 4, np.int64); me.polygons.foreach_get("vertices", fqh)
+                co = HCG.lay_on_head(co, nr, hw, info["head"]["field"], edges=edh.reshape(-1, 2),
+                                     faces=fqh.reshape(-1, 4), log=log).astype(np.float32)
             # the thumb's root rounded off (hand.py)
             ed2 = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", ed2)
             co = HM.smooth_root(co, ed2.reshape(-1, 2), info["hands"]).astype(np.float32)

@@ -419,7 +419,8 @@ def relief(pan, tone, ex, G, shade):
     seam_m = np.min(np.abs(G), axis=1)                                  # to the nearest muscles' seam (metres)
     musc = (shade > -.5).astype(np.float32)
     h = .0005 * musc * ss(seam_m, .0004, .0020)                        # each muscle's panel, rounded over its edge
-    h -= .00045 * np.exp(-(seam_m / .0008) ** 2)                        # the seam pressed in
+    base = (pan < 0) & (tone < 0) & (ex["knee"] < 0)                   # (the base fabric's: not across a plate)
+    h -= .00045 * np.exp(-(seam_m / .0008) ** 2) * base                 # the seam pressed in
     h += RELIEF["panel"] * ss(pan, -.0002, .0014)
     h += RELIEF["plate"] * ss(tone, -.0002, .0011)
     h += RELIEF["shoulder"] * ss(ex["shoulder"], .0, .014)              # domed caps over the deltoids
@@ -764,8 +765,10 @@ def suit_material():
              M('MAXIMUM', line(tone, W * .7), line(outl, W * .7)))
     lip = M('MAXIMUM', M('MAXIMUM', line(pan, W * 2.4), line(mid, W * 2.2)),
             M('MAXIMUM', line(tone, W * 2.4), line(outl, W * 2.4)))
-    seam_all = M('MAXIMUM', seam, mseam)
-    lip_all = M('MAXIMUM', lip, mlip)
+    # the muscles' seams are the base fabric's: never across a panel, a plate or the knee's shell laid over it
+    over = M('SUBTRACT', 1.0, M('MAXIMUM', M('MAXIMUM', P, T), K))
+    seam_all = M('MAXIMUM', seam, M('MULTIPLY', mseam, over))
+    lip_all = M('MAXIMUM', lip, M('MULTIPLY', mlip, over))
     pipe = M('MULTIPLY', line(piped, .00085, -.0028), M('SUBTRACT', 1.0, P))
     dots = step(M('SUBTRACT', .23, voronoi(430.0)), -.02, .02)          # stitch holes, 2.3 mm apart
     stitch = M('MULTIPLY', M('MAXIMUM', line(pan, .00030, .0021), line(knee, .00030, .0021)), dots)

@@ -336,7 +336,7 @@ class Cage:
                 self.quad(G[(a, b)], G[(a + 1, b)], G[(a + 1, b + 1)], G[(a, b + 1)])
 
 
-def build(cc=None, log=print):
+def build(cc=None, log=print, game_head=False):
     cc = cc or Concept()
     C = Cage()
     T = []
@@ -390,8 +390,13 @@ def build(cc=None, log=print):
             C.soft[T[7][col(k)]] = max(C.soft.get(T[7][col(k)], 0.0), .6)
     legs = {sx: leg(C, T[0], crotch, sx, cc) for sx in (1, -1)}
     arms = {sx: arm(C, T, sx, cc) for sx in (1, -1)}
-    # placeholders until the head, hands and feet are grafted on
-    C.cap(neck[-1], "head", .10, (0, 0, 1))
+    # the head: the game's own cage (headcage.py) on the neck, or (the lab) a cap the sculpted head covers
+    head_info = None
+    if game_head:
+        import headcage
+        head_info = headcage.build_head(C, neck, log=log)
+    else:
+        C.cap(neck[-1], "head", .10, (0, 0, 1))
     import hand as hand_mod
     import foot as foot_mod
     frames, feet = [], []
@@ -406,7 +411,7 @@ def build(cc=None, log=print):
         foot_mod.build_foot(C, legs[sx][-3:], FF, log=log)
     C.compact()
     log(f"cage: {len(C.V)} vertices, {len(C.F)} quads")
-    return C, dict(T=T, neck=neck, legs=legs, arms=arms, crotch=crotch, hands=frames, feet=feet)
+    return C, dict(T=T, neck=neck, legs=legs, arms=arms, crotch=crotch, hands=frames, feet=feet, head=head_info)
 
 
 # --- the shoulder: a window of 12 round each arm's socket ------------------------------------------------------------
