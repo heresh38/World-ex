@@ -294,7 +294,15 @@ def main():
             disp = AN.Anatomy().detail(co)
             # the feet have their own anatomy (footshape.py): the muscles' detail fades out above the ankle
             disp = disp * np.clip((co[:, 2] - .17) / .09, 0, 1) ** 2 * (3 - 2 * np.clip((co[:, 2] - .17) / .09, 0, 1))
+            # ... and the hands have theirs (hand.py): the muscles' smooth union leaves the body's whole skin 4.9 mm
+            # out (the torso's and limbs' sections were tuned with it), which on a finger 1.6 cm across made it 2.6
+            # and fused the fingers up to their middle joints: faded out over the wrist into the palm
             import hand as HM
+            for Fh in info["hands"]:
+                xh = (co - Fh.W) @ Fh.ax
+                on = (co[:, 0] * Fh.sx > 0).astype(np.float32)
+                t = np.clip((xh - (-.010)) / .040, 0, 1)
+                disp = disp * (1 - on * (t * t * (3 - 2 * t))).astype(np.float32)
             disp = disp + HM.detail(co, info["hands"])
             co += nr * disp[:, None]
             # the feet: the skin laid onto the foot's anatomy (footshape.py)
@@ -311,6 +319,9 @@ def main():
                 log(f"feet laid on their anatomy: {off.min() * 1000:.1f} .. {off.max() * 1000:.1f} mm")
                 co = co + nr * off[:, None]
                 co = FTM.separate_toes(co, info["feet"], toe_w, edges=ed.reshape(-1, 2))
+            # the thumb's root rounded off (hand.py)
+            ed2 = np.zeros(len(me.edges) * 2, np.int64); me.edges.foreach_get("vertices", ed2)
+            co = HM.smooth_root(co, ed2.reshape(-1, 2), info["hands"]).astype(np.float32)
             # the last pass: what still folds or crosses itself in the hands and feet is relaxed there (meshfix.py)
             if "--nountangle" not in flags:
                 import meshfix as MF
