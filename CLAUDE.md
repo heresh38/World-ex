@@ -347,6 +347,37 @@ seems very bend out"). Known: `vr_sniper`'s third-person support palm lands on i
 reach clamp slides it back from where the first-person arms hold it), `ShatteredOrbit.Hold.TheGunIsSolid` fails on it.
 The old male builder (`hero/build.py -- male`) is no longer exported: it stays only as the Sarketh's and the Void
 Sentinel's base until they move to this body.
+**The passes of 2026-11-20** (the owner: "do 10 more passes ... ensure it is not just as good but better ... the body
+suit is still too flat"; judged against `art/reference/player/orion_tpose_bodysuit.png`): the BASE face is the
+portrait's (`headbase.BASE`: what each slider's key reads when nothing is set; a slider's morph is built from it,
+`headcage.FACE_DELTA` its range), the chin's rows wider and squarer (`headbase.MEASURES`); the body is CUT, not
+bulky (`anatomy.Muscle.SHOW` up, and `Anatomy.lines`: the separations and the bony ridges DRAWN as valleys a finger
+wide along polylines snapped onto the skin itself, deltopectoral, linea semilunaris, the groin, the iliac crest,
+the lat's border, the arm's and the thigh's heads, the calf, the shin: written to a centimetre, a line a centimetre
+under the skin drew nothing); the suit carries its relief IN THE GAME MESH (`game.make_suit`: each vertex takes the
+fine suit's relief at the nearest point; in the normal map alone nothing stood in the silhouette), its fine mesh is
+smooth-subdivided (`CATMULL_CLARK`: a SIMPLE cut kept the body's facets and the baked normals carried them as
+bands across every plate), the muscles' panels are OFF (`suit.MUSCLE_PANELS`: the sheet's suit is cut in angular
+plates and the body shows through), the knee's pad a hexagon, the thigh's plate wide at the hip, a plate down the
+shin, cuffs at the wrists and ankles, a stitched channel inside every rim, real ribs in the flex zones, charcoal
+base and grey plates at the sheet's contrast, matte woven; the hair (`hair_cards.py`, stage `hair`, `B_hair`,
+material `hair`): the groom's strands rooted on the game head's own surface (`head_surface`: its vertices alone
+gave 5000 roots), the long ones grouped into locks and drawn as cards in two layers (each lock's own line, and the
+same lock pressed onto the scalp from the atlas's dense columns), the scalp's short hair drawn into the face map's
+hair mask with the brows (`scalp_mask`: the fade is short hair on skin, a floor of hair under the top's cards).
+Look at a build close up under a studio light with the scratch `bodylook.py` (views per part, `--suit` keeps the
+suit) and at the head beside the portrait with `headlab.py --views=portrait,eye,mouth`; the skin's maps and the
+game's hair shading are judged IN THE GAME (capture set 37, files `SO_fc_*`: the head from the front, both three
+quarters, the side, the eye). Lessons of that: a stage run again on a saved build leaves the old material
+datablocks, so the new ones come out `eye.001` / `hair.002` (`game.fresh_material` removes them first, and the
+importer looks a material up by its base name: looked up by `eye` it found no maps, a white eye and opaque hair
+cards); the game draws a hair card's alpha MASKED (cut at a third), so the atlas needs gaps between its strands
+(`hair_atlas(per=(10, 16), coarse=.85)`: a dense column made every card an opaque tile, however it looked in Cycles);
+a card's width is in HEAD CM (`build_cards(width=1.0)`; written in metres they were hairlines); `M_SOStandard` has a
+`Specular` parameter now (0.5, the engine's default; the undersuit's instance .3: woven fabric, not satin) and the
+suit's baked roughness is .86 on the base; `M_SOSkin`'s Scatter is .65 and `SP_SOSkin` has a 0.75 cm radius with warm
+scattering colours (the engine's defaults made the face wax in daylight), the caruncle's flush is .5, the skin's base
+tone a shade deeper than the lab's first (it read pale under the game's sky).
 
 The old player bodies, heads, clothing, hair, first-person arms and the scripts that built them (players.py, anatomy.py,
 face.py, wardrobe.py, hair.py, skin.py, the old civilians / NPC kits) were deleted on 2026-11-07: the players are

@@ -589,19 +589,21 @@ def lay_on_head(P, N, w, hf, edges=None, faces=None, rounds=12, log=print, pins=
 # the face's sliders (the owner, 2026-11-16: "the face will be heavily customizable in game when the player first
 # starts"): each a parameter of the sculpt (head.py) and the value a full slider gives; the game plays each morph
 # both ways (a negative weight is the other way)
-FACE_SLIDERS = {
-    "jaw": 1.5, "chin": 1.6, "cheekbones": 1.7, "cheeks": 1.6, "cheek_hollow": 1.8, "temples": 1.8,
-    "brow": 1.7, "forehead": 1.8, "nose_width": 1.3, "nose_length": 1.2, "nose_tip": 1.3, "nasolabial": 2.0,
-    "mouth_width": 1.25, "lips": 1.5, "eye_open": 1.25, "eye_size": 1.12, "crease": 1.8, "hood": 1.8,
-    "tear_trough": 1.8, "eye_bags": 1.8, "ear_size": 1.2, "ear_out": 1.6,
+FACE_DELTA = {
+    "jaw": .5, "chin": .6, "cheekbones": .7, "cheeks": .6, "cheek_hollow": .8, "temples": .8,
+    "brow": .7, "forehead": .8, "nose_width": .3, "nose_length": .2, "nose_tip": .3, "nasolabial": 1.0,
+    "mouth_width": .25, "lips": .5, "eye_open": .25, "eye_size": .12, "crease": .8, "hood": .8,
+    "tear_trough": .8, "eye_bags": .8, "ear_size": .2, "ear_out": .6,
 }
+# each slider's full value: the BASE face's own value of its key (headbase.BASE) plus its range
+FACE_SLIDERS = {k: H.HBm.BASE.get(k, 1.0) + v for k, v in FACE_DELTA.items()}
 
 
 def with_params(hf, params):
     """the same sculpt with other face parameters (sharing its loft: building one takes seconds)"""
     import copy
     hd2 = copy.copy(hf.hd)
-    hd2.p = dict(params)
+    hd2.p = {**hf.hd.p, **params}                                 # (over the base face's own values, never instead)
     if getattr(hd2, "anatomy", False):
         import headbase
         hd2.hb = headbase.HeadBase(hd2.p)

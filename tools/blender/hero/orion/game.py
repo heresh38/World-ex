@@ -705,6 +705,9 @@ def skin_maps(o, out, size=SKIN_SIZE):
             out_[kind] = pixels(im)
         res[part] = out_
     brows = brow_mask(o, face_set, size)
+    import hair_cards as HC
+    scalp, _ = HC.scalp_mask(o, face_set, size, log=log)       # the scalp's short hair and the floor under the cards
+    brows = np.maximum(brows, scalp)
     for part, maps in res.items():
         stem = os.path.join(out, NAMES[part])
         save_png(maps["DIFFUSE"][..., :3], stem + "_BaseColor.png", srgb=True)
@@ -722,6 +725,17 @@ def skin_maps(o, out, size=SKIN_SIZE):
 # iris in the middle of the map), the lab's eye (headlab.eye_material) baked into one map both share
 
 EYE_SIZE = 1024
+
+
+def fresh_material(name):
+    """a material of this name with no older one left in the file (a stage run again on a saved build made
+    `eye.001`, and the game's import looks the maps up by the name)"""
+    for m in list(bpy.data.materials):
+        if m.name == name or (m.name.startswith(name + ".") and m.name[len(name) + 1:].isdigit()):
+            bpy.data.materials.remove(m)
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    return m
 
 
 def make_eyes(out, size=EYE_SIZE):
@@ -748,7 +762,8 @@ def make_eyes(out, size=EYE_SIZE):
         lt = np.zeros(len(me.polygons), np.int64); me.polygons.foreach_get("loop_total", lt)
         front = np.zeros(len(lv), bool)
         for s_, t_ in zip(ls, lt):
-            front[s_:s_ + t_] = P[s_:s_ + t_, 1].mean() < 0
+            front[s_:s_ + t_] = P[s_:s_ + t_, 1].mean() < .35 * r   # (past the equator: through a wide opening the
+            # globe's side shows, and the map's corner was a red patch at the outer corner)
         UVs = np.where(front[:, None], np.c_[.5 + .45 * P[:, 0] / r, .5 + .45 * P[:, 2] / r],
                        np.c_[.03 + .02 * P[:, 0] / r, .03 + .02 * P[:, 2] / r])
         uv.data.foreach_set("uv", UVs.astype(np.float32).ravel())
@@ -778,8 +793,7 @@ def make_eyes(out, size=EYE_SIZE):
     bpy.ops.object.join()
     eyes = objs[0]
     eyes.name = eyes.data.name = "B_eyes"
-    m = bpy.data.materials.new("eye")
-    m.use_nodes = True
+    m = fresh_material("eye")
     nt = m.node_tree
     b = nt.nodes["Principled BSDF"]
     t = nt.nodes.new("ShaderNodeTexImage")
@@ -805,7 +819,9 @@ HAIR_COLS = 8
 
 
 def hair_atlas(path, size=1024, cols=HAIR_COLS, seed=3, base=(.030, .021, .016), tip=(.075, .055, .042), coarse=1.0,
-               per=(14, 21)):
+               per=(14, 21), taper=.85, dense=0):
+    """(per: strands a column; taper: how much of a strand's root width is gone at its tip; dense: the last `dense`
+    columns carry twice the strands, close-packed: the base layer of a head of hair)"""
     """an atlas of hair clumps (RGBA, linear colour): `cols` columns, each a clump of tapered strands from the root
     (v = 0, the top of the image) to the tip, alpha their coverage, the colour lighter toward the tips"""
     rng = np.random.default_rng(seed)
@@ -817,17 +833,18 @@ def hair_atlas(path, size=1024, cols=HAIR_COLS, seed=3, base=(.030, .021, .016),
     for c in range(cols):
         # (a card of 2 mm is 128 px: a brow hair, about a tenth of a millimetre, is 5-7 px at its root; each starts
         # a little further in than the last and fades in, or every card's roots drew one hard line)
-        m = rng.integers(*per)
+        is_dense = c >= cols - dense
+        m = rng.integers(*per) * (2 if is_dense else 1)
         for _ in range(m):
             x0 = (c + rng.uniform(.12, .88)) * cw
             v0 = rng.uniform(0, .2) * H
             L = rng.uniform(.6, .98) * H
             bend = rng.uniform(-.12, .12) * cw
             wob = rng.uniform(-.03, .03) * cw
-            w0 = rng.uniform(4.0, 6.5) * coarse * size / 1024
+            w0 = rng.uniform(4.0, 6.5) * coarse * size / 1024 * (1.25 if is_dense else 1.0)
             t = np.clip((ys - v0) / max(L - v0, 1.0), 0, 1)
             xc = x0 + bend * t * t + wob * np.sin(t * 6.0 + rng.uniform(0, 6))
-            width = w0 * (1 - .85 * t) * (ys < L) * (ys > v0) * np.clip(t / .08, 0, 1)
+            width = w0 * (1 - taper * t) * (ys < L) * (ys > v0) * np.clip(t / .08, 0, 1)
             lo, hi = int(max(0, x0 - cw)), int(min(W, x0 + cw))
             xs = np.arange(lo, hi, dtype=np.float32) + .5
             d = np.abs(xs[None, :] - xc[:, None])
@@ -946,8 +963,7 @@ def make_lashes(body, out):
     o = bpy.data.objects.new("B_lashes", me)
     bpy.context.scene.collection.objects.link(o)
     for (V_, F_, UV_, mat_name, png) in parts:
-        m = bpy.data.materials.new(mat_name)
-        m.use_nodes = True
+        m = fresh_material(mat_name)
         nt = m.node_tree
         b = nt.nodes["Principled BSDF"]
         t = nt.nodes.new("ShaderNodeTexImage")
@@ -1263,6 +1279,25 @@ def make_suit(o, arm, out, size=SUIT_SIZE):
     # --- the lab's detailed suit and its collar on this body (the bake's sources)
     hi = SU.build_suit(o, log=log, zb=zb)
     hi.modifiers.clear()                                          # (its thickness: only its outside is baked)
+    # the relief itself onto the game's mesh (each of its vertices takes the fine suit's relief at the nearest point:
+    # the plates, the knee's shell, the shoulder caps and the studs stand in its silhouette; the bevels and the seams
+    # stay the normal map's)
+    if True:
+        from mathutils.kdtree import KDTree
+        hme = hi.data
+        nh = len(hme.vertices)
+        hco = np.zeros(nh * 3, np.float32); hme.vertices.foreach_get("co", hco); hco = hco.reshape(nh, 3)
+        hrel = np.zeros(nh, np.float32); hme.attributes["relief"].data.foreach_get("value", hrel)
+        kd = KDTree(nh)
+        for i in range(nh):
+            kd.insert(hco[i], i)
+        kd.balance()
+        co3 = coords(me).astype(np.float64)
+        nr3 = vertex_normals(me).astype(np.float64)
+        rel_lo = np.array([hrel[kd.find(tuple(p))[1]] for p in co3], np.float64)
+        me.vertices.foreach_set("co", (co3 + nr3 * rel_lo[:, None]).astype(np.float32).ravel())
+        me.update()
+        log(f"suit: the game's mesh carries the relief, {rel_lo.min() * 1000:.1f} .. {rel_lo.max() * 1000:.1f} mm")
     collar_hi = SU.build_collar(o, hi, o, zb, log=log)
     collar = collar_hi.copy()
     collar.data = collar_hi.data.copy()
@@ -1517,7 +1552,7 @@ def write_glb(path, arm, wardrobe=None, defaults=None):
 
 # ---------------------------------------------------------------------------------------------------------------
 
-STAGES = ("normals", "uv", "skin", "eyes", "lashes", "rig", "suit", "clips", "export")
+STAGES = ("normals", "uv", "skin", "eyes", "lashes", "hair", "rig", "suit", "clips", "export")
 
 
 def main():
@@ -1541,9 +1576,22 @@ def main():
     eyes = None
     if "eyes" in stages:
         eyes = make_eyes(out)
+        arm0 = next((ob for ob in bpy.context.scene.objects if ob.type == 'ARMATURE'), None)
+        if arm0 is not None and "rig" not in stages:
+            attach_eyes(eyes, arm0)
     lashes = None
     if "lashes" in stages:
         lashes = make_lashes(o, out)
+        arm0 = next((ob for ob in bpy.context.scene.objects if ob.type == 'ARMATURE'), None)
+        if arm0 is not None and "rig" not in stages:
+            attach_eyes(lashes, arm0)
+    hair = None
+    if "hair" in stages:
+        import hair_cards as HC
+        hair, _ = HC.make_hair(o, out, log=log)
+        arm0 = next((ob for ob in bpy.context.scene.objects if ob.type == 'ARMATURE'), None)
+        if arm0 is not None and "rig" not in stages:           # (grown again on a rigged build: onto its head bone)
+            attach_eyes(hair, arm0)
     arm = foot_pts = None
     if "rig" in stages:
         arm, J, foot_pts = make_rig(o)
@@ -1553,6 +1601,9 @@ def main():
         lashes = lashes or bpy.data.objects.get("B_lashes")
         if lashes is not None:
             attach_eyes(lashes, arm)                     # (on the head bone, as the eyes)
+        hair = hair or bpy.data.objects.get("B_hair")
+        if hair is not None:
+            attach_eyes(hair, arm)
     wardrobe, defaults = {}, {}
     if "suit" in stages:
         arm = arm or next(ob for ob in bpy.context.scene.objects if ob.type == 'ARMATURE')

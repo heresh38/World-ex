@@ -187,6 +187,61 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 37)
+	{
+		// The face up close in the range's daylight (files fc_<body>_<view>): the whole head from the front, both
+		// three-quarters and the side, then the eye and brow: the skin, the brows drawn into its map, the lids and the
+		// lashes as the game draws them (the armoury's stand-in is too small to judge them).
+		auto Head = [this, Hero](float Yaw, float Distance, float Up, float Fov, float Side)
+		{
+			ASOCharacter* H = Hero();
+			if (!H || !H->GetMesh())
+			{
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Fwd = H->GetActorForwardVector(), Right = H->GetActorRightVector();
+			const FVector Focus = H->GetMesh()->GetBoneLocation(TEXT("head")) + FVector(0.0f, 0.0f, 5.0f) + Fwd * 8.0f + Right * Side;
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + Yaw, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * Distance + FVector(0.0f, 0.0f, Up);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
+			{
+				Cam->GetCameraComponent()->SetFieldOfView(Fov);
+				Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		for (const TCHAR* Body : { TEXT("male") })
+		{
+			const FString B = Body;
+			Do(6.0f, [=, this]()
+			{
+				ConsoleCommand(TEXT("DisableAllScreenMessages"));
+				View(ESOViewMode::ThirdPerson);
+				if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SetBody(*B); }
+				if (ASOCharacter* H = Hero()) { H->SetDisplayCarry(true); }      // (the gun low across the chest: the face clear)
+			});
+			struct FShot { float Yaw, Distance, Up, Fov, Side; const TCHAR* Name; };
+			static const FShot Shots[] = {
+				{ 0.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("1_front") }, { 35.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("2_quarter_left") },
+				{ -35.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("3_quarter_right") }, { 90.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("4_side") },
+				{ 20.0f, 40.0f, 1.0f, 18.0f, 3.2f, TEXT("5_eye") } };
+			for (const FShot& S : Shots)
+			{
+				const FShot Shot1 = S;
+				Act([=]() { Head(Shot1.Yaw, Shot1.Distance, Shot1.Up, Shot1.Fov, Shot1.Side); });
+				// (the face's 4K maps stream in as the camera comes close)
+				Snap(2.5f, FString::Printf(TEXT("fc_%s_%s"), Body, Shot1.Name));
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 19)
 	{
 		// The armoury alone (files u*): the loadout as it opens, a card's quick look, a gun slot's armoury (the inspect

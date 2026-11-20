@@ -226,19 +226,21 @@ def panel_fields(P, N):
     gb, ga, gl = band((.165, 1.005), (.058, .885), .021)
     s.append(I(gb, ga + .01, gl - ga, (-ny + .35) * L, z - .86))
     # the thighs: a band across the front from the outer hip down to the inside above the knee
-    tb, ta, tl = band((.185, .935), (.112, .600), .028)
+    tb, ta, tl = band((.185, .935), (.112, .600), .052)
+    tb = tb - .016 * np.clip(ta / tl, 0, 1)                                # the sheet's thigh plate: wide at the hip
     s.append(I(tb, ta, tl - ta, (-ny + .05) * .07, .94 - z))
     # the hips' outsides behind: from the hip down the outer back of the thigh, narrowing toward the knee
     s.append(I(1.0 - z, z - .66, (nx - .25) * .08, (ny + .10) * .08, .03 + .06 * np.clip((z - .66) / .3, 0, 1)
                - np.abs(y - (.035 + .02 * np.clip((z - .66) / .3, 0, 1)))))
-    # the knee: a rounded pad on its front only
-    kz = np.abs(z - .515) / .055
-    ky = np.clip(-ny - .45, 0, 1) / .55
+    # the knee: a hexagonal pad on its front (the sheet's; a round pad read as a blob), its points up and down
+    kdx, kdz = np.abs(x - .150), np.abs(z - .518)
+    hexd = np.maximum(kdx, kdx * .5 + kdz * .866)                        # a pointy-top hexagon's own distance
     knee_i = len(s)
-    s.append(I(leg, (1 - (kz ** 2 + (1 - ky) ** 2)) * .03, (-ny - .25) * .05))
-    # the shins' outsides: a strip narrowing to the ankle
+    s.append(I(leg, .042 - hexd, (-ny - .30) * .05, k=.004))
+    # the shin: a long plate down its front from under the knee's pad to the ankle's cuff, tapering
     shin_i = len(s)
-    s.append(I(leg, z - .15, .43 - z, (-ny - .15) * .05, (nx - .05 - .25 * (.43 - z)) * .05))
+    xc_shin = .150 + np.clip((.50 - z) / .415, 0, 1) * .055
+    s.append(I(leg, z - .160, .448 - z, (-ny - .30) * .05, (.030 - .010 * np.clip((.448 - z) / .29, 0, 1)) - np.abs(x - xc_shin), k=.006))
     # the back: a broad V narrowing to the waist, split by the spine's dark strip and by a dark strap each side from
     # the shoulder blade's outer top down to the waist (the sheet's inner V)
     half = np.interp(z, [1.22, 1.30, 1.36, 1.42, 1.50], [.047, .100, .140, .165, .175])   # wide to the scapulae
@@ -342,7 +344,27 @@ def panel_fields(P, N):
     ex["zip"] = I(.0045 - x, z - 1.000, 1.520 - z, (-ny - .3) * L, k=.001)
     # (on an arm: its ribs run across it, along x)
     ex["armmask"] = np.clip((x - .235) / .02, 0, 1) * np.clip((z - 1.25) / .05, 0, 1)
+    # the cuffs: a raised band at each wrist and each ankle, a hair short of where the suit ends
+    along = (x - .178) * .9945 - (z - 1.486) * .1045                        # along the arm from the shoulder
+    cw = np.minimum(along - (SUIT_WRIST - .030), (SUIT_WRIST - .004) - along)
+    ca = np.minimum(z - (SUIT_ANKLE + .004), (SUIT_ANKLE + .034) - z)
+    ex["cuff"] = np.maximum(np.minimum(cw, arm), np.minimum(ca, leg))
     return pan, d, tone, outline, ex
+
+
+def _anatomy():
+    """this folder's anatomy.py (the Orion body's), by its file: `import anatomy` found the old hero folder's once
+    the rig stage had put that folder on the path (the clips' gait lives there)"""
+    import importlib.util
+    import os
+    import sys
+    mod = sys.modules.get("orion_anatomy")
+    if mod is None:
+        spec = importlib.util.spec_from_file_location("orion_anatomy", os.path.join(os.path.dirname(os.path.abspath(__file__)), "anatomy.py"))
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["orion_anatomy"] = mod
+        spec.loader.exec_module(mod)
+    return mod
 
 
 N_COL = 6                    # colours the muscles' panels are told apart by (each a signed field: a seam where it is 0)
@@ -356,8 +378,7 @@ def muscle_panels(P, edges, log=print):
     Returns those fields (n, N_COL) in metres and each vertex's panel tone (0..1, the panel's own; -1 the floor).
     Two passes over the muscles, keeping only running maxima (a table of every muscle at every vertex of the
     finer suit was 340 MB)"""
-    import anatomy as AN
-    A = AN.Anatomy()
+    A = _anatomy().Anatomy()
     Q = A.posture(np.asarray(P, np.float32))
     Q[:, 0] = np.abs(Q[:, 0])
     n, nm = len(Q), len(A.M)
@@ -410,7 +431,7 @@ def muscle_panels(P, edges, log=print):
     return G, shade[best]
 
 
-def relief(pan, tone, ex, G, shade):
+def relief(pan, tone, ex, G, shade, P=None):
     """how far each part of the suit stands off its fabric (metres, along the surface's own normal): the owner,
     2026-11-17, "more 3d and less flat". Each muscle's panel a little off the floor between them, the seams real
     grooves; the polymer panels a bonded layer with a bevelled edge; the plates; the shoulder caps and the knee's
@@ -418,11 +439,22 @@ def relief(pan, tone, ex, G, shade):
     ss = lambda v, lo, hi: (lambda t: t * t * (3 - 2 * t))(np.clip((v - lo) / (hi - lo), 0, 1))
     seam_m = np.min(np.abs(G), axis=1)                                  # to the nearest muscles' seam (metres)
     musc = (shade > -.5).astype(np.float32)
-    h = .0005 * musc * ss(seam_m, .0004, .0020)                        # each muscle's panel, rounded over its edge
+    h = .0008 * musc * ss(seam_m, .0004, .0024)                        # each muscle's panel, rounded over its edge
     base = (pan < 0) & (tone < 0) & (ex["knee"] < 0)                   # (the base fabric's: not across a plate)
-    h -= .00045 * np.exp(-(seam_m / .0008) ** 2) * base                 # the seam pressed in
-    h += RELIEF["panel"] * ss(pan, -.0002, .0014)
-    h += RELIEF["plate"] * ss(tone, -.0002, .0011)
+    h -= .0009 * np.exp(-(seam_m / .0011) ** 2) * base                  # the seam pressed in
+    # a bonded plate: up its bevel over 2.2 mm, a hair of rounding at the top (a steeper ramp read as a cut edge)
+    h += RELIEF["panel"] * ss(pan, -.0002, .0022)
+    h += RELIEF["plate"] * ss(tone, -.0002, .0016)
+    # a stitched channel a few millimetres inside each rim (a bonded plate's border): the layered read
+    h -= .0005 * np.exp(-((pan - .0042) / .0013) ** 2) * (pan > 0)
+    h -= .0004 * np.exp(-((tone - .0032) / .0011) ** 2) * (tone > 0)
+    # the flex zones' ribs (a rib every 6.5 mm across the limb), the cuffs' bands
+    if P is not None and "flex" in ex:
+        coord = np.where(ex.get("armmask", np.zeros(len(P))) > .5, np.abs(P[:, 0]), P[:, 2])
+        rib = .5 + .5 * np.cos(2 * np.pi * coord / .0065)
+        h += .0006 * rib * ss(ex["flex"], .0, .0035)
+    if "cuff" in ex:
+        h += .0022 * ss(ex["cuff"], -.0002, .0030) - .0004 * np.exp(-((ex["cuff"] - .0060) / .0012) ** 2) * (ex["cuff"] > 0)
     h += RELIEF["shoulder"] * ss(ex["shoulder"], .0, .014)              # domed caps over the deltoids
     h += RELIEF["knee"] * (.55 * ss(ex["knee"], -.0002, .0025) + .45 * ss(ex["knee"], .002, .016))   # a shell
     h += RELIEF["pipe"] * np.exp(-((ex["piped"] + .0028) / .0009) ** 2) * (pan < 0)
@@ -436,12 +468,13 @@ def relief(pan, tone, ex, G, shade):
     return h.astype(np.float32)
 
 
-RELIEF = dict(panel=.0016, plate=.0010, shoulder=.0016, knee=.0040, pipe=.0011, zip=.0006, housing=.0022,
-              bracer=.0018, stud=.0012)
+RELIEF = dict(panel=.0040, plate=.0026, shoulder=.0034, knee=.0060, pipe=.0014, zip=.0008, housing=.0028,
+              bracer=.0028, stud=.0015)
 
 
 STUD_R = .0034               # a stud's radius (metres)
 MUSCLE_FLOOR = .003          # metres of a muscle's raise below which the skin is no muscle's panel
+MUSCLE_PANELS = False        # a panel over each muscle (off: the sheet's suit is cut in angular plates, 2026-11-20)
 
 
 SUIT_WRIST = .522               # along the arm from the shoulder joint, where the sleeve ends (the game's: the wrist's
@@ -467,7 +500,9 @@ def build_suit(body, log=print, zb=None):
     import bpy, bmesh
     o = bpy.data.objects.new("suit", body.data.copy())
     bpy.context.scene.collection.objects.link(o)
-    sub = o.modifiers.new("sub", 'SUBSURF'); sub.subdivision_type = 'SIMPLE'; sub.levels = sub.render_levels = 1
+    # (smooth subdivision: the body is a Catmull-Clark surface already, one more level barely moves it; a SIMPLE cut
+    # kept the body's facets, and the baked normals carried the facets as bands across every plate)
+    sub = o.modifiers.new("sub", 'SUBSURF'); sub.subdivision_type = 'CATMULL_CLARK'; sub.levels = sub.render_levels = 1
     dg = bpy.context.evaluated_depsgraph_get()
     me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
     o.modifiers.clear(); o.data = me
@@ -507,18 +542,22 @@ def build_suit(body, log=print, zb=None):
     for name, keys in (("suit2", ("piped", "knee", "flex", "vent")), ("suit3", ("light", "emblem", "zip", "armmask"))):
         a2 = me.color_attributes.new(name, 'FLOAT_COLOR', 'POINT')
         a2.data.foreach_set("color", np.c_[tuple(c(ex[k]) for k in keys)].astype(np.float32).ravel())
-    G, shade = muscle_panels(P, ed, log=log)
+    if MUSCLE_PANELS:
+        G, shade = muscle_panels(P, ed, log=log)
+    else:
+        G, shade = np.full((nn, N_COL), -.05, np.float32), np.full(nn, -1.0, np.float32)
     a4 = me.color_attributes.new("suit4", 'FLOAT_COLOR', 'POINT')
     a4.data.foreach_set("color", c(G[:, :4]).astype(np.float32).ravel())
     a5 = me.color_attributes.new("suit5", 'FLOAT_COLOR', 'POINT')
     a5.data.foreach_set("color", np.c_[c(G[:, 4]), c(G[:, 5]), shade, c(ex["shoulder"])].astype(np.float32).ravel())
     a6 = me.color_attributes.new("suit6", 'FLOAT_COLOR', 'POINT')
-    a6.data.foreach_set("color", np.c_[c(ex["stud"]), c(ex["bracer"]), np.full(nn, -.05), np.full(nn, -.05)]
+    a6.data.foreach_set("color", np.c_[c(ex["stud"]), c(ex["bracer"]), c(ex["cuff"]), np.full(nn, -.05)]
                         .astype(np.float32).ravel())
     # twice as fine for the relief (1.4 mm: a raised edge needs it), the fields laid out above carried down
     # linearly (laid out on the finer mesh, the normals' smoothing would reach half as far and the muscles' forms
     # would punch holes in the panels again)
-    sub2 = o.modifiers.new("sub2", 'SUBSURF'); sub2.subdivision_type = 'SIMPLE'; sub2.levels = sub2.render_levels = 1
+    sub2 = o.modifiers.new("sub2", 'SUBSURF'); sub2.subdivision_type = 'CATMULL_CLARK'; sub2.levels = sub2.render_levels = 2
+    # (two levels, 0.7 mm: a plate's bevel is 2 mm wide and needs three vertices across it to be an edge, not a slope)
     dg = bpy.context.evaluated_depsgraph_get()
     me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
     o.modifiers.clear(); o.data = me
@@ -528,12 +567,13 @@ def build_suit(body, log=print, zb=None):
         v = np.zeros(nf * 4, np.float32); me.color_attributes[name].data.foreach_get("color", v)
         return v.reshape(nf, 4)
     s1, s2, s3, s4, s5, s6 = (read(k) for k in ("suit", "suit2", "suit3", "suit4", "suit5", "suit6"))
-    exf = dict(piped=s2[:, 0], knee=s2[:, 1], light=s3[:, 0], emblem=s3[:, 1], zip=s3[:, 2], shoulder=s5[:, 3],
-               stud=s6[:, 0], bracer=s6[:, 1])
-    rel = relief(s1[:, 0], s1[:, 2], exf, np.c_[s4, s5[:, :2]], s5[:, 2])
+    exf = dict(piped=s2[:, 0], knee=s2[:, 1], flex=s2[:, 2], light=s3[:, 0], emblem=s3[:, 1], zip=s3[:, 2],
+               armmask=s3[:, 3], shoulder=s5[:, 3], stud=s6[:, 0], bracer=s6[:, 1], cuff=s6[:, 2])
     Pf = np.zeros(nf * 3, np.float32); me.vertices.foreach_get("co", Pf); Pf = Pf.reshape(nf, 3)
+    rel = relief(s1[:, 0], s1[:, 2], exf, np.c_[s4, s5[:, :2]], s5[:, 2], P=Pf)
     Nf = np.zeros(nf * 3, np.float32); me.vertices.foreach_get("normal", Nf); Nf = Nf.reshape(nf, 3)
     me.vertices.foreach_set("co", (Pf + Nf * rel[:, None]).astype(np.float32).ravel())
+    me.attributes.new("relief", 'FLOAT', 'POINT').data.foreach_set("value", rel)   # (game.py lays it on its mesh)
     me.update()
     log(f"suit: {nf} vertices for its relief, {rel.min() * 1000:.1f} .. {rel.max() * 1000:.1f} mm")
     mod = o.modifiers.new("thick", 'SOLIDIFY'); mod.thickness = THICK; mod.offset = 1.0
@@ -759,7 +799,7 @@ def suit_material():
     light, emb, zipf, armm = attr("suit3")
     g0, g1, g2, g3 = attr("suit4")
     g4, g5, shade, _ = attr("suit5")
-    stud, bracer_f, _s6b, _s6c = attr("suit6")
+    stud, bracer_f, cuff, _s6c = attr("suit6")
     # --- where each thing is
     P = step(pan)
     T = step(tone)
@@ -772,9 +812,12 @@ def suit_material():
         mseam = M('MAXIMUM', mseam, line(g, W * 1.15))
         mlip = M('MAXIMUM', mlip, line(g, W * 3.0))
     seam = M('MAXIMUM', M('MAXIMUM', line(pan, W * .7), line(mid, W * .6)),
-             M('MAXIMUM', line(tone, W * .7), line(outl, W * .7)))
+             M('MAXIMUM', M('MAXIMUM', line(tone, W * .7), line(outl, W * .7)), line(cuff, W * .7)))
     lip = M('MAXIMUM', M('MAXIMUM', line(pan, W * 2.4), line(mid, W * 2.2)),
-            M('MAXIMUM', line(tone, W * 2.4), line(outl, W * 2.4)))
+            M('MAXIMUM', M('MAXIMUM', line(tone, W * 2.4), line(outl, W * 2.4)), line(cuff, W * 2.4)))
+    C = step(cuff)
+    # the stitched channel inside each plate's rim: two rows of thread either side of it
+    channel = M('MAXIMUM', line(pan, .0012, .0042), line(tone, .0010, .0032))
     # the muscles' seams are the base fabric's: never across a panel, a plate or the knee's shell laid over it
     over = M('SUBTRACT', 1.0, M('MAXIMUM', M('MAXIMUM', P, T), K))
     seam_all = M('MAXIMUM', seam, M('MULTIPLY', mseam, over))
@@ -782,6 +825,7 @@ def suit_material():
     pipe = M('MULTIPLY', line(piped, .00085, -.0028), M('SUBTRACT', 1.0, P))
     dots = step(M('SUBTRACT', .23, voronoi(430.0)), -.02, .02)          # stitch holes, 2.3 mm apart
     stitch = M('MULTIPLY', M('MAXIMUM', line(pan, .00030, .0021), line(knee, .00030, .0021)), dots)
+    chan_st = M('MULTIPLY', M('MAXIMUM', line(pan, .00030, .0030), line(pan, .00030, .0054)), dots)
     Z = step(zipf, -.0003, .0003)
     teeth = M('MULTIPLY', M('MULTIPLY', Z, step(M('SUBTRACT', .0019, M('ABSOLUTE', ox)), -.0002, .0002)),
               step(M('SUBTRACT', wave(125.0, 'Z'), .5), -.08, .08))
@@ -809,17 +853,19 @@ def suit_material():
     dust = step(M('SUBTRACT', noise(45.0, 4.0), .45), -.08, .08)
     # --- colour (linear)
     musc_c = mixc(shade, (.011, .012, .015, 1), (.032, .033, .040, 1))      # each muscle's panel its own shade
-    col = mixc(musc, (.0085, .0092, .0115, 1), musc_c)                         # the floor between: near black
-    col = mixc(T, col, (.026, .028, .033, 1))                                  # grip rubber plates
-    col = mixc(P, col, (.044, .052, .066, 1))                                  # steel-blue-grey polymer panels
-    col = mixc(M('MULTIPLY', P, hexl), col, (.066, .076, .094, 1))            # its ripstop grid
-    col = mixc(K, col, (.040, .042, .049, 1))                                  # the knee's shell
+    col = mixc(musc, (.0125, .0128, .0140, 1), musc_c)                         # the base: charcoal (the sheet's)
+    col = mixc(T, col, (.030, .030, .032, 1))                                  # grip rubber plates
+    col = mixc(P, col, (.054, .055, .059, 1))                                  # the grey polymer panels
+    col = mixc(M('MULTIPLY', P, hexl), col, (.074, .075, .080, 1))            # its ripstop grid
+    col = mixc(C, col, (.036, .037, .040, 1))                                  # the cuffs
+    col = mixc(K, col, (.036, .037, .040, 1))                                  # the knee's shell
     col = scale(col, M('ADD', .90, M('MULTIPLY', macro, .20)))                # a slow change of tone
     col = scale(col, M('ADD', .88, M('MULTIPLY', knit, .24)))                 # the knit
     col = mixc(F, col, scale(col, M('ADD', .75, M('MULTIPLY', rib, .55))))   # ribbed flex zones
     col = mixc(M('MULTIPLY', edge_wear, .55), col, (.11, .11, .12, 1))        # rubbed edges
-    col = mixc(pipe, col, (.045, .120, .240, 1))                               # steel-blue piping
-    col = mixc(stitch, col, (.085, .087, .095, 1))                             # thread
+    col = mixc(pipe, col, (.028, .060, .120, 1))                               # steel-blue piping, muted
+    col = mixc(M('MAXIMUM', stitch, chan_st), col, (.085, .087, .095, 1))      # thread
+    col = mixc(M('MULTIPLY', channel, .7), col, (.006, .006, .007, 1))         # the channel inside each rim
     col = mixc(seam_all, col, (.0020, .0020, .0026, 1))                        # the seams pressed in ...
     col = mixc(M('MULTIPLY', seam_all, M('MULTIPLY', dust, .45)), col, (.05, .046, .040, 1))   # ... dust in them
     col = mixc(holes, col, (.002, .002, .0025, 1))                             # vents
@@ -832,11 +878,12 @@ def suit_material():
     col = mixc(line(stud, .00025), col, (.004, .004, .005, 1))                 # the ring they sit in
     L.new(col, b.inputs["Base Color"])
     # --- the surface
-    r = mixf(musc, .58, .50)
-    r = mixf(T, r, .76)
-    r = mixf(P, r, .42)
-    r = mixf(M('MULTIPLY', P, hexl), r, .55)
-    r = mixf(K, r, .32)
+    r = mixf(musc, .86, .70)                                             # a woven base: matte (the game's stage
+    r = mixf(T, r, .72)                                                  # light made .74 a satin sheen still)
+    r = mixf(P, r, .68)
+    r = mixf(M('MULTIPLY', P, hexl), r, .76)
+    r = mixf(C, r, .68)
+    r = mixf(K, r, .52)
     r = mixf(pipe, r, .40)
     r = mixf(seam_all, r, .80)
     r = mixf(holes, r, .90)
@@ -849,16 +896,18 @@ def suit_material():
     met = mixf(E, met, .65)
     met = mixf(SD, met, .85)
     L.new(met, b.inputs["Metallic"])
-    L.new(mixf(P, 0.0, .15), b.inputs["Coat Weight"])
+    L.new(mixf(P, 0.0, .06), b.inputs["Coat Weight"])
     b.inputs["Coat Roughness"].default_value = .25
     b.inputs["Sheen Weight"].default_value = .30
     b.inputs["Sheen Roughness"].default_value = .45
-    b.inputs["Specular IOR Level"].default_value = .35                # fabric: a softer highlight than a plastic's
+    b.inputs["Specular IOR Level"].default_value = .30                # fabric: a softer highlight than a plastic's
     b.inputs["Emission Color"].default_value = (.20, .48, 1.0, 1)
     L.new(M('MULTIPLY', Lg, 7.0), b.inputs["Emission Strength"])
     # --- the relief: seams pressed in, their edges bevelled up, piping a cord, teeth, ribs, holes, grip, knit
-    h = M('MULTIPLY', knit, .12)
+    h = M('MULTIPLY', knit, .22)                                         # the weave stands (a matte, woven base)
     h = M('ADD', h, M('MULTIPLY', seam_all, -1.3))
+    h = M('ADD', h, M('MULTIPLY', channel, -.6))
+    h = M('ADD', h, M('MULTIPLY', chan_st, -.3))
     h = M('ADD', h, M('MULTIPLY', lip_all, .75))
     h = M('ADD', h, M('MULTIPLY', pipe, .45))
     h = M('ADD', h, M('MULTIPLY', stitch, -.35))
@@ -869,7 +918,7 @@ def suit_material():
     h = M('ADD', h, M('MULTIPLY', M('MULTIPLY', P, hexl), .20))          # the ripstop's threads stand
     h = M('ADD', h, M('MULTIPLY', E, .12))
     bump = N.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = .45
-    bump.inputs["Distance"].default_value = .0010
+    bump.inputs["Distance"].default_value = .0012
     L.new(h, bump.inputs["Height"])
     L.new(bump.outputs["Normal"], b.inputs["Normal"])
     return m

@@ -35,15 +35,15 @@ MEASURES = np.array([
     [-16.55, -3.861, 5.95, 1.952, 7.566, 2, 2.1],
     [-14.55, -4.35, 5.85, 1.5, 7.439, 1.9, 1.95],
     [-13.55, -5, 5.85, 1.3, 7.414, 1.75, 1.9],
-    [-12.85, -6.2, 5.88, 1.1, 7.402, 1.4, 1.9],
-    [-12.25, -9, 5.966, 0.9, 7.408, 1.3, 1.92],
-    [-11.57, -10.05, 5.902, 0.55, 7.414, 1.45, 1.97],
-    [-10.66, -10.65, 5.898, -0.05, 7.449, 1.85, 2.05],
-    [-10.05, -10.72, 6.117, -0.75, 7.502, 1.98, 2.15],
-    [-9.354, -10.45, 6.386, -1.35, 7.569, 2.08, 2.2],
-    [-8.462, -10.35, 6.53, -1.7, 7.688, 2.08, 2.25],
-    [-7, -10.92, 6.655, -2.3, 7.98, 2.08, 2.3],
-    [-6, -11.02, 6.85, -2.55, 8.25, 2.12, 2.3],
+    [-12.85, -6.2, 6.15, 1.1, 7.402, 1.75, 1.9],     # (the chin's rows wider and squarer in front, 2026-11-20:
+    [-12.25, -9, 6.30, 0.9, 7.408, 1.7, 1.92],       # the owner's portrait, a broad square chin and a straight
+    [-11.57, -10.05, 6.38, 0.55, 7.414, 1.95, 1.97], # jaw line from the angle to it)
+    [-10.66, -10.65, 6.45, -0.05, 7.449, 2.2, 2.05],
+    [-10.05, -10.72, 6.62, -0.75, 7.502, 2.3, 2.15],
+    [-9.354, -10.45, 6.80, -1.35, 7.569, 2.35, 2.2],
+    [-8.462, -10.35, 6.90, -1.7, 7.688, 2.35, 2.25],
+    [-7, -10.92, 6.95, -2.3, 7.98, 2.3, 2.3],
+    [-6, -11.02, 7.02, -2.55, 8.25, 2.2, 2.3],
     [-5, -10.98, 7.1, -2.8, 8.55, 2.2, 2.3],
     [-4, -10.05, 7.3, -3.2, 8.95, 2.26, 2.3],
     [-3, -9.65, 7.48, -3.6, 9.4, 2.32, 2.3],
@@ -177,6 +177,15 @@ ORBIT = ((3.2, -7.45, .15), (1.75, 1.6, 1.45))                  # each eye's soc
 JAW_BORDER = [(1.4, -10.6, -11.6), (3, -8.9, -11.2), (4.5, -6.4, -10.6), (5.55, -3.3, -9.96),
               (5.85, -1.9, -9.27), (5.75, -1, -6.8)]          # the mandible's lower border to the angle, up the ramus
 
+# the BASE face: what each slider's key reads when nothing is set (1.0 = the form as it was first drawn). The
+# owner's portrait beside the first head (2026-11-20): his jaw wider and squarer, the masseter and the chin heavier,
+# the brow's ridge heavier and lower, the cheekbones stronger over a deeper hollow, the upper lids heavier (the hood
+# and the crease), the lips fuller, the eyes a little narrower (an intense look, never a stare). A slider's morph
+# is built from THIS face (headcage.with_params keeps it), so the creator's range stays round it.
+BASE = {"jaw": 1.35, "chin": 1.15, "cheekbones": 1.2, "cheek_hollow": 1.3, "brow": 1.4, "lips": 1.45,
+        "mouth_width": 1.04, "hood": 1.35, "crease": 1.25, "eye_open": .93, "nose_width": .97, "temples": 1.1,
+        "nasolabial": 1.1}
+
 
 class HeadBase:
     """the soft forms over the lofted sections (cm in, cm out: positive pushes the skin in, negative out)"""
@@ -185,7 +194,7 @@ class HeadBase:
         self.p = dict(params or {})
 
     def k(self, name, default=1.0):
-        return float(self.p.get(name, default))
+        return float(self.p.get(name, BASE.get(name, default)))
 
     def relief(self, Q, d):
         P = np.c_[np.abs(Q[:, 0]), Q[:, 1], Q[:, 2]].astype(F32)
@@ -345,7 +354,7 @@ def lips(Q, stom=-7.25, k=lambda n: 1.0):
     fade = np.clip(1 - u ** 2.8, 0, 1) ** .5                 # full well out from the middle, tapering into each corner
     full = 1.2 * k("lips")
     # the upper lip: from the stomion up to its border (the bow's peaks, the dip between them), sheared back
-    bow = .98 + .14 * np.exp(-((x - .55) / .36) ** 2) - .06 * np.exp(-(x / .26) ** 2)   # the bow's peaks, a soft dip
+    bow = .98 + .19 * np.exp(-((x - .55) / .36) ** 2) - .08 * np.exp(-(x / .26) ** 2)   # the bow's peaks, a soft dip
     hu = np.maximum(1.1 * bow * fade, .08)
     zu, bu = stom + .5 * hu, .52 * hu
     au = np.maximum(.56 * fade * full, .08)

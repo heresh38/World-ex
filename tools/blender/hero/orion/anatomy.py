@@ -139,10 +139,14 @@ class Muscle:
 
     # (a step lower on the trapezius, the chest and the arms: the owner, "still a little too bulky"; the deltoids
     # kept round: the shoulders' width makes the V that reads athletic rather than bulky)
-    SHOW = {"delt_front": .38, "delt_side": .38, "delt_rear": .34, "trap_upper": .22, "pec_sternal": .28,
-            "pec_clav": .26, "pec_abd": .24, "rectus_abd": .34, "serratus0": .5, "serratus1": .5, "serratus2": .5,
-            "serratus3": .5, "biceps": .24, "triceps_long": .24, "triceps_lat": .24, "gastro_med": .28,
-            "gastro_lat": .28, "vast_med": .26}
+    # (then up again toward the owner's sheet, 2026-11-20: his man is lean and CUT, not bulky: the chest's plates and
+    # their lower edge, the abdomen's blocks, the deltoids' caps, the arms' heads told apart, the quads' heads)
+    SHOW = {"delt_front": .46, "delt_side": .46, "delt_rear": .42, "trap_upper": .30, "pec_sternal": .38,
+            "pec_clav": .34, "pec_abd": .32, "rectus_abd": .46, "serratus0": .6, "serratus1": .6, "serratus2": .6,
+            "serratus3": .6, "biceps": .32, "triceps_long": .30, "triceps_lat": .32, "gastro_med": .36,
+            "gastro_lat": .36, "vast_med": .34, "vast_lat": .32, "rect_fem": .32, "oblique": .30, "lat": .28,
+            "brachiorad": .28, "extensors": .26, "flexors": .26, "tib_ant": .28, "scm": .40, "glute_max": .30,
+            "infraspinatus": .30, "teres_major": .30, "trap_mid": .28, "trap_lower": .26, "erector": .28}
 
     def __init__(self, name, o, i, T, tb=.45, mid=None, inside=None, w=None, edge=1.6, depth=.05):
         self.name = name
@@ -252,20 +256,20 @@ def muscles():
     add = lambda *a, **k: M.append(Muscle(*a, **k))
     # --- chest and shoulder
     add("pec_clav", ((0.022, -0.080, 1.508), (0.095, -0.087, 1.518)),
-        (arm_pt(S, .06, .004, .026), arm_pt(S, .095, 0, .024)), .024, .45, mid=(0.125, -0.092, 1.498), inside=TRUNK)
+        (arm_pt(S, .06, .004, .026), arm_pt(S, .095, 0, .024)), .027, .45, mid=(0.125, -0.093, 1.498), inside=TRUNK)
     add("pec_sternal", ((0.012, -0.093, 1.482), (0.016, -0.113, 1.318)),
-        (arm_pt(S, .065, -.012, .022), arm_pt(S, .105, -.020, .018)), .033, .40, mid=(0.105, -0.115, 1.405),
+        (arm_pt(S, .065, -.012, .022), arm_pt(S, .105, -.020, .018)), .037, .40, mid=(0.105, -0.117, 1.405),
         inside=TRUNK)
     add("pec_abd", ((0.030, -0.112, 1.302), (0.090, -0.104, 1.312)),
         (arm_pt(S, .075, -.030, .012), arm_pt(S, .100, -.035, .008)), .014, .35, mid=(0.135, -0.098, 1.360),
         inside=TRUNK)
     add("delt_front", ((0.115, -0.074, 1.524), (0.170, -0.056, 1.538)),
-        (arm_pt(S, .120, .018, .012), arm_pt(S, .145, .016, .008)), .028, .40,
+        (arm_pt(S, .120, .018, .012), arm_pt(S, .145, .016, .008)), .032, .40,
         mid=arm_pt(S, .04, .030, .045), inside=HUMERUS)
     add("delt_side", ((0.185, -0.035, 1.548), (0.205, 0.005, 1.548)),
-        (arm_pt(S, .120, .024), arm_pt(S, .150, .022)), .034, .38, mid=arm_pt(S, .05, .050), inside=HUMERUS)
+        (arm_pt(S, .120, .024), arm_pt(S, .150, .022)), .039, .38, mid=arm_pt(S, .05, .052), inside=HUMERUS)
     add("delt_rear", ((0.110, 0.102, 1.500), (0.190, 0.032, 1.545)),
-        (arm_pt(S, .120, .018, bk=.012), arm_pt(S, .145, .016, bk=.008)), .026, .40,
+        (arm_pt(S, .120, .018, bk=.012), arm_pt(S, .145, .016, bk=.008)), .030, .40,
         mid=arm_pt(S, .03, .025, bk=.050), inside=HUMERUS)
     # --- back
     add("trap_upper", ((0.012, 0.058, 1.665), (0.012, 0.077, 1.558)), ((0.125, -0.035, 1.556), (0.195, 0.0, 1.552)),
@@ -479,7 +483,7 @@ class Anatomy:
     # how much of that relief the skin shows: with the 8.3 mm floor gone (see detail) every muscle stood its full
     # height, the thighs and calves 11-13 mm (the owner circled the legs: "too bulky"): the body's at a little over
     # half, the legs' lower still (a hero's legs read long and lean under the suit)
-    RELIEF, LEG_RELIEF = .55, .38
+    RELIEF, LEG_RELIEF = .55, .44
     LEGS = {"glute_max", "glute_med", "tfl", "rect_fem", "vast_lat", "vast_med", "sartorius", "adductors",
             "gracilis", "biceps_fem", "semis", "gastro_med", "gastro_lat", "soleus", "achilles", "tib_ant",
             "peroneus"}
@@ -510,9 +514,9 @@ class Anatomy:
         ramp = lambda v: np.clip(v, 0, 1)
         front = ramp((-.06 - y) / .02)
         for zz in (1.170, 1.228, 1.284):
-            out -= (.0022 * np.exp(-((z - zz - .006 * x / .08) / .0105) ** 2) * front * ramp((1.30 - z) / .02)
+            out -= (.0030 * np.exp(-((z - zz - .006 * x / .08) / .0105) ** 2) * front * ramp((1.30 - z) / .02)
                     * ramp(x / .012) * ramp((.095 - x) / .025))
-        out -= .0022 * np.exp(-(x / .0095) ** 2) * front * ramp((z - .98) / .03) * ramp((1.31 - z) / .03)
+        out -= .0028 * np.exp(-(x / .0095) ** 2) * front * ramp((z - .98) / .03) * ramp((1.31 - z) / .03)
         out -= (.0028 * np.exp(-(x / .014) ** 2) * ramp((y - .03) / .025) * ramp((z - 1.0) / .04)
                 * ramp((1.55 - z) / .04))                                                      # the spine
         # the pec's lower edge: from the sternum (1.338) rising to the armpit (1.41 at 16 cm out). It was written
@@ -521,7 +525,75 @@ class Anatomy:
         pz = 1.338 + 3.6 * np.maximum(x - .02, 0) ** 2
         out -= (.0036 * np.exp(-((z - pz) / .0125) ** 2) * ease((-.05 - y) / .02) * np.clip((x - .008) / .015, 0, 1)
                 * np.clip((.18 - x) / .02, 0, 1))
+        # the separations and the ridges a lean man shows (the owner's sheet: cut, not bulky), drawn as valleys a
+        # finger wide along each border and ridges where the bone lies just under the skin (metres, the upright
+        # frame the muscles are written in; each fades out over its ends)
+        snapped = []
+        for pts, amount, width in self.lines():
+            # each of the line's points onto the skin itself (the nearest of the body's own vertices): written to a
+            # centimetre or two of it, a line a centimetre under the skin drew nothing
+            pts = np.asarray(pts, F32)
+            far = 0.0
+            for i in range(len(pts)):
+                d2 = ((Q - pts[i]) ** 2).sum(1)
+                j = int(np.argmin(d2))
+                far = max(far, float(np.sqrt(d2[j])))
+                pts[i] = Q[j]
+            snapped.append(far)
+            dist, along = seg_dist3(Q, pts)
+            n_ = len(pts) - 1
+            fade = np.clip(along / .45, 0, 1) * np.clip((n_ - along) / .45, 0, 1)
+            out -= amount * np.exp(-(dist / width) ** 2) * fade
+        print(f"[orion] separations: {len(snapped)} lines, their points up to {max(snapped) * 1000:.1f} mm off the skin")
         return out
+
+    def lines(self):
+        """(polyline, metres down (+) or up (-), half width): the borders between the muscles and the bony ridges"""
+        ap = arm_pt
+        L = []
+        # the chest: the deltopectoral groove from the clavicle's outer third to the armpit's front
+        L.append(([(0.120, -0.078, 1.526), (0.150, -0.088, 1.505), (0.180, -0.088, 1.478), (0.205, -0.080, 1.455)], 0.0031, 0.012))
+        # the clavicle: a ridge from the notch out to the shoulder
+        L.append(([(0.015, -0.072, 1.503), (0.060, -0.080, 1.512), (0.110, -0.080, 1.522), (0.160, -0.062, 1.528)], -0.0018, 0.007))
+        # the rectus's outer border (the linea semilunaris), curving in to the pubis
+        L.append(([(0.085, -0.104, 1.318), (0.084, -0.108, 1.230), (0.078, -0.104, 1.150), (0.066, -0.096, 1.060),
+                   (0.048, -0.086, 0.980)], 0.0025, 0.012))
+        # the groin's line from the hip bone to the pubis
+        L.append(([(0.120, -0.084, 1.020), (0.085, -0.085, 0.985), (0.050, -0.078, 0.950), (0.028, -0.070, 0.935)], 0.0028, 0.012))
+        # the iliac crest: a ridge from the front of the hip bone up and round to the back
+        L.append(([(0.120, -0.082, 1.028), (0.145, -0.045, 1.055), (0.158, 0.000, 1.072), (0.140, 0.040, 1.070),
+                   (0.100, 0.070, 1.058), (0.050, 0.082, 1.045)], -0.0015, 0.012))
+        # under the arm: the lat's front border over the serratus and the obliques
+        L.append(([(0.165, 0.040, 1.400), (0.168, 0.015, 1.330), (0.160, -0.010, 1.260), (0.150, -0.030, 1.200)], 0.0022, 0.012))
+        # the arm: the biceps and the triceps told apart on its outside and its inside, the brachialis between
+        L.append(([ap(S, .10, .030, .008), ap(S, .18, .030, .010), ap(S, .26, .026, .010)], 0.0025, 0.012))
+        L.append(([ap(S, .10, -.030, .004), ap(S, .18, -.030, .006), ap(S, .27, -.026, .004)], 0.0020, 0.012))
+        # the forearm: the ridge muscles from the elbow told apart from the extensors on its top
+        L.append(([ap(E, .04, .022, .010), ap(E, .12, .020, .007), ap(E, .20, .017, .004)], 0.0017, 0.012))
+        # the thigh: the rectus femoris between the two vasti, the band down its outside, the hamstrings behind
+        L.append(([(0.150, -0.075, 0.860), (0.158, -0.068, 0.760), (0.163, -0.062, 0.660), (0.165, -0.058, 0.580)], 0.0025, 0.012))
+        L.append(([(0.100, -0.084, 0.820), (0.108, -0.082, 0.730), (0.117, -0.070, 0.630), (0.126, -0.060, 0.570)], 0.0022, 0.012))
+        L.append(([(0.178, -0.020, 0.820), (0.185, -0.018, 0.700), (0.188, -0.020, 0.600)], 0.0020, 0.012))
+        L.append(([(0.172, 0.030, 0.820), (0.180, 0.022, 0.700), (0.186, 0.018, 0.590)], 0.0017, 0.012))
+        # the calf's two heads, the shin bone's crest
+        L.append(([(0.165, 0.058, 0.470), (0.168, 0.068, 0.400), (0.170, 0.068, 0.330)], 0.0025, 0.012))
+        L.append(([(0.140, -0.052, 0.455), (0.150, -0.050, 0.350), (0.165, -0.044, 0.230), (0.182, -0.036, 0.120)], -0.0013, 0.009))
+        return [([tuple(float(c) for c in p) for p in pts], a, w) for pts, a, w in L]
+
+
+def seg_dist3(P, pts):
+    """the distance from each point to a polyline (metres) and where along it (0..len-1)"""
+    best = np.full(len(P), 1e9, F32)
+    along = np.zeros(len(P), F32)
+    for i in range(len(pts) - 1):
+        a, b = np.asarray(pts[i], F32), np.asarray(pts[i + 1], F32)
+        ba = b - a
+        h = np.clip(((P - a) @ ba) / float(ba @ ba), 0, 1)
+        dd = length(P - a - h[:, None] * ba)
+        m = dd < best
+        best = np.where(m, dd, best)
+        along = np.where(m, i + h, along)
+    return best, along
 
 
 def lab_body():

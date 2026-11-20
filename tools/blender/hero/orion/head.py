@@ -26,6 +26,7 @@ import math
 import os
 import sys
 import numpy as np
+import headbase as HBm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
@@ -310,7 +311,8 @@ class Head:
         self.arch = lambda x: (ys + .45) + .22 * x * x + .022 * x ** 4
 
     def k(self, name, default=1.0):
-        return float(self.p.get(name, default))
+        import headbase as HBm
+        return float(self.p.get(name, HBm.BASE.get(name, default)))
 
     # --- the base -------------------------------------------------------------------------------------------
     def base(self, Q):
@@ -462,7 +464,7 @@ class Head:
         # outer corner reaching round the globe's side
         L = Pn - EYE
         rq = length(L / np.array([1.0, 1.0, .96], F32))
-        thick = .15 + .08 * np.clip((zn - up) / .6, 0, 1) + .04 * np.clip((lo - zn) / .6, 0, 1)
+        thick = .17 + .11 * np.clip((zn - up) / .6, 0, 1) + .05 * np.clip((lo - zn) / .6, 0, 1)
         lid = np.abs(rq - (EYE_R + .2 + thick)) - thick
         lid = np.where(yn > EYE[1] + .35, np.maximum(lid, yn - (EYE[1] + .35)), lid)
         # cut along the fissure: the margins' edges are the lid's own thickness
@@ -472,12 +474,12 @@ class Head:
         u = np.clip((xn - EN[0]) / (EX[0] - EN[0]), 0, 1)
         cz = up + .55 - .12 * u ** 2
         crease = np.exp(-((zn - cz) / .11) ** 2) * spow(np.sin(np.pi * u), .6) * (yn < EYE[1] - .55)
-        dn = dn + .04 * crease * self.k("crease")
+        dn = dn + .055 * crease * self.k("crease")
         hood = np.exp(-((zn - (cz + .18)) / .22) ** 2) * spow(np.sin(np.pi * np.clip(u * .9 + .12, 0, 1)), 1.2)
-        dn = dn - .05 * hood * self.k("hood") * (yn < EYE[1] - .95)
+        dn = dn - .06 * hood * self.k("hood") * (yn < EYE[1] - .95)
         # under the lower lid: the lid's lower edge and the tear trough running down and out from the inner corner
         lz = lo - .55 + .1 * u
-        dn = dn + .022 * np.exp(-((zn - lz) / .08) ** 2) * spow(np.sin(np.pi * u), .7)
+        dn = dn + .030 * np.exp(-((zn - lz) / .08) ** 2) * spow(np.sin(np.pi * u), .7)
         tt = np.exp(-(((zn - EYE[2] + 1.25) + .35 * (xn - EN[0] - .34)) / .22) ** 2) * G(xn, EN[0] + .54, .6)
         dn = dn + .06 * tt * self.k("tear_trough")
         # round the globe's sides the socket is closed (the conjunctiva: through the corners of a 3 cm opening

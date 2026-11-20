@@ -98,8 +98,15 @@ def import_texture(file_path, dest, name, kind):
         tex.set_editor_property("srgb", False)
         tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
     if "_skin_" in name.lower():
-        # the players' skin maps are written at 4K; the game holds them at 2K (three per body: video memory)
-        tex.set_editor_property("max_texture_size", 2048)
+        if "_skin_face_" in name.lower():
+            # the face's maps are held at 4K (0.13 mm a texel): the brows are drawn into them hair by hair, a hair about
+            # a texel wide; at 2K, packed as BC1 (4 x 4 texel blocks of two values each), every hair came out a chain of
+            # millimetre blocks. Its packed map (R occlusion, G roughness, B the brows) is BC7: its channels kept apart
+            if "_orm" in name.lower():
+                tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
+        else:
+            # the body's skin maps are written at 4K; the game holds them at 2K (video memory)
+            tex.set_editor_property("max_texture_size", 2048)
     if "hair" in name.lower():
         # strand cards: smaller mips keep the strands' alpha coverage (plain averaging thins hair out with distance)
         try:
@@ -280,6 +287,8 @@ def master_material(defaults):
     mel.connect_material_expressions(bump, "", mr, "UVs")
     metal = mul(mr, "B", scalar("Metallic", 0.0, -900, 560), "", -650, 360)
     rough = mul(mr, "G", scalar("Roughness", 0.5, -900, 640), "", -650, 480)
+    # the specular level (0.5 the engine's default; a fabric's is lower: the undersuit sets .3, or it shone like satin)
+    mel.connect_material_property(scalar("Specular", 0.5, -900, 700), "", unreal.MaterialProperty.MP_SPECULAR)
 
     # Wear (guns): edges rubbed bare where the vertex colour alpha says (1 - edge wear), scratches and grime from the
     # shared wear mask (R scratches, G grime, B chip breakup). Every amount is 0 by default: no effect elsewhere.
@@ -426,6 +435,15 @@ def skin_material(defaults):
         sp = eal.load_asset(sp_path)
     else:
         sp = tools.create_asset("SP_SOSkin", "/Game/Materials", unreal.SubsurfaceProfile, unreal.SubsurfaceProfileFactory())
+    try:
+        # a skin's own scattering, not the engine's default wax: a shorter radius, warm where the light comes back out
+        st = sp.get_editor_property("settings")
+        st.set_editor_property("scatter_radius", 0.75)
+        st.set_editor_property("subsurface_color", unreal.LinearColor(0.78, 0.55, 0.45, 1.0))
+        st.set_editor_property("falloff_color", unreal.LinearColor(1.0, 0.42, 0.30, 1.0))
+        sp.set_editor_property("settings", st)
+    except Exception as e:
+        log(f"SP_SOSkin: default settings kept ({e})")
     eal.save_loaded_asset(sp, only_if_is_dirty=False)
     for prop, value in (("used_with_skeletal_mesh", True), ("used_with_morph_targets", True),
                         ("shading_model", unreal.MaterialShadingModel.MSM_SUBSURFACE_PROFILE), ("subsurface_profile", sp)):
@@ -481,7 +499,8 @@ def skin_material(defaults):
     mel.connect_material_expressions(scalar("AOAmount", 1.0, 700), "", ao, "Alpha")
     mel.connect_material_property(ao, "", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
     mel.connect_material_property(scalar("Specular", .35, 820), "", unreal.MaterialProperty.MP_SPECULAR)
-    mel.connect_material_property(scalar("Scatter", 1.0, 900), "", unreal.MaterialProperty.MP_OPACITY)   # (the profile's amount)
+    mel.connect_material_property(scalar("Scatter", .65, 900), "", unreal.MaterialProperty.MP_OPACITY)   # (the profile's amount:
+    # at 1 the face was wax in daylight)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     return mat
@@ -572,6 +591,8 @@ def make_instance(master, dest, name, m, tex, extra=None):
     mel.set_material_instance_scalar_parameter_value(mi, "VertexColorAmount", 1.0 if m.get("vertexColor") else 0.0)
     if "hair" in extra:
         mel.set_material_instance_scalar_parameter_value(mi, "HairAmount", float(extra["hair"]))
+    if "specular" in extra:
+        mel.set_material_instance_scalar_parameter_value(mi, "Specular", float(extra["specular"]))
     em = m.get("emissive", [0, 0, 0])
     mel.set_material_instance_vector_parameter_value(mi, "EmissiveColor", unreal.LinearColor(em[0], em[1], em[2], 1.0))
     mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", float(m.get("emissiveStrength", 1.0)) * (4.0 if any(em) else 1.0))
@@ -884,6 +905,8 @@ def player_extra(key, m):
                 "hair": 1.0 if key == "skin_face" else 0.0}
     if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
+    if key == "orion_suit":
+        return {"specular": 0.3}                       # a woven fabric, not satin
     return None
 
 
@@ -1062,6 +1085,9 @@ def player_wardrobe(sex, master):
         log(f"Player{Sex}: {src} is not a --per-item export, skipped")
         return None
     materials = load_json(os.path.join(src, "materials.json"))
+    # (by their base names: a build whose stages ran again on a saved file wrote `eye.001` and `hair.002`, and the
+    # lookups by `eye` and `hair` found no maps: a white eye, opaque hair cards)
+    materials = {re.sub(r"[._]\d{3}$", "", k): v for k, v in materials.items()}
     meta = load_json(os.path.join(src, "wardrobe.json"))
     # start clean: a re-import over an older mesh keeps its material slots (the per-region skin sections would fold
     # into them) and the pieces must bind to the new skeleton

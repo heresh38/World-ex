@@ -112,7 +112,8 @@ def skin_material(clay=False):
                 math_('MULTIPLY', blob(0, Y0 - .12, Z0 - .038, .011, .014, .012, False), .38))   # the nose redder
     red = math_('ADD', red, math_('MULTIPLY', blob(0, Y0 - .108, Z0 - .102, .016, .01, .01, False), .14))  # the chin
     red = math_('ADD', red, math_('MULTIPLY', blob(.072, Y0 + .005, Z0 - .01, .012, .025, .035), .16))
-    red = math_('ADD', red, math_('MULTIPLY', blob(.0186, Y0 - .0821, Z0 + .0002, .0024, .0024, .0024), .95))
+    red = math_('ADD', red, math_('MULTIPLY', blob(.0186, Y0 - .0821, Z0 + .0002, .0024, .0024, .0024), .5))   # (the
+    # caruncle: at .95 the game's light carried under the skin lit the inner corner a red patch)
     red = math_('MINIMUM', red, 1.0)
     # the eyes' hollows a little darker
     dark = math_('ADD', math_('MULTIPLY', blob(.032, Y0 - .09, Z0 + .002, .02, .012, .012), .5),
@@ -120,8 +121,9 @@ def skin_material(clay=False):
     # inside the nostrils: dark (the light carried under the skin lit them red)
     dark = math_('MINIMUM', math_('ADD', dark, math_('MULTIPLY', blob(.0068, Y0 - .1165, Z0 - .0442, .0035, .0058, .0028),
                                                        .95)), 1.0)
-    base = node(nt, "ShaderNodeRGB"); base.outputs[0].default_value = (.33, .215, .155, 1)   # olive, tanned
-    flush = node(nt, "ShaderNodeRGB"); flush.outputs[0].default_value = (.365, .19, .14, 1)
+    base = node(nt, "ShaderNodeRGB"); base.outputs[0].default_value = (.31, .195, .135, 1)   # olive, tanned (a
+    flush = node(nt, "ShaderNodeRGB"); flush.outputs[0].default_value = (.36, .18, .125, 1)   # shade deeper, 2026-11-20:
+    # the game's light under the skin made the first tone pale in daylight)
     mix_r = nt.nodes.new("ShaderNodeMix"); mix_r.data_type = 'RGBA'
     nt.links.new(red, mix_r.inputs[0]); nt.links.new(base.outputs[0], mix_r.inputs[6]); nt.links.new(flush.outputs[0], mix_r.inputs[7])
     shadow = node(nt, "ShaderNodeRGB"); shadow.outputs[0].default_value = (.19, .118, .085, 1)
