@@ -141,12 +141,15 @@ class Muscle:
     # kept round: the shoulders' width makes the V that reads athletic rather than bulky)
     # (then up again toward the owner's sheet, 2026-11-20: his man is lean and CUT, not bulky: the chest's plates and
     # their lower edge, the abdomen's blocks, the deltoids' caps, the arms' heads told apart, the quads' heads)
-    SHOW = {"delt_front": .46, "delt_side": .46, "delt_rear": .42, "trap_upper": .30, "pec_sternal": .38,
-            "pec_clav": .34, "pec_abd": .32, "rectus_abd": .46, "serratus0": .6, "serratus1": .6, "serratus2": .6,
-            "serratus3": .6, "biceps": .32, "triceps_long": .30, "triceps_lat": .32, "gastro_med": .36,
-            "gastro_lat": .36, "vast_med": .34, "vast_lat": .32, "rect_fem": .32, "oblique": .30, "lat": .28,
-            "brachiorad": .28, "extensors": .26, "flexors": .26, "tib_ant": .28, "scm": .40, "glute_max": .30,
-            "infraspinatus": .30, "teres_major": .30, "trap_mid": .28, "trap_lower": .26, "erector": .28}
+    # (the arm's muscles a step above the rest the same day: at .26-.32 on a thin cage the arm was a tube with a
+    # groove down it and the brachialis, with no entry here, showed at the .20 default: the owner, "the arms seem
+    # extremely unrealistic compared to rest of body"; body.ARM_VOL gives the volume, these the forms on it)
+    SHOW = {"delt_front": .42, "delt_side": .40, "delt_rear": .40, "trap_upper": .24, "pec_sternal": .36,
+            "pec_clav": .32, "pec_abd": .32, "rectus_abd": .46, "serratus0": .6, "serratus1": .6, "serratus2": .6,
+            "serratus3": .6, "biceps": .44, "brachialis": .40, "triceps_long": .40, "triceps_lat": .42,
+            "gastro_med": .36, "gastro_lat": .36, "vast_med": .34, "vast_lat": .32, "rect_fem": .32, "oblique": .30,
+            "lat": .28, "brachiorad": .42, "extensors": .36, "flexors": .36, "tib_ant": .28, "scm": .40, "glute_max": .30,
+            "infraspinatus": .26, "teres_major": .30, "trap_mid": .22, "trap_lower": .26, "erector": .28}
 
     def __init__(self, name, o, i, T, tb=.45, mid=None, inside=None, w=None, edge=1.6, depth=.05):
         self.name = name
@@ -255,11 +258,15 @@ def muscles():
     M = []
     add = lambda *a, **k: M.append(Muscle(*a, **k))
     # --- chest and shoulder
+    # (a man's pectoral is a PLATE: flat across, square at its outer lower corner where the fold before the armpit
+    # is thickest; peaking at .40 of the way from the sternum with a round profile it was a mound inside and below,
+    # a breast under the sheet's light: the owner, 2026-11-20)
     add("pec_clav", ((0.022, -0.080, 1.508), (0.095, -0.087, 1.518)),
-        (arm_pt(S, .06, .004, .026), arm_pt(S, .095, 0, .024)), .027, .45, mid=(0.125, -0.093, 1.498), inside=TRUNK)
+        (arm_pt(S, .06, .004, .026), arm_pt(S, .095, 0, .024)), .022, .50, mid=(0.125, -0.093, 1.498), inside=TRUNK,
+        edge=1.0)
     add("pec_sternal", ((0.012, -0.093, 1.482), (0.016, -0.113, 1.318)),
-        (arm_pt(S, .065, -.012, .022), arm_pt(S, .105, -.020, .018)), .037, .40, mid=(0.105, -0.117, 1.405),
-        inside=TRUNK)
+        (arm_pt(S, .065, -.012, .022), arm_pt(S, .105, -.020, .018)), .032, .60, mid=(0.120, -0.112, 1.408),
+        inside=TRUNK, edge=1.0)
     add("pec_abd", ((0.030, -0.112, 1.302), (0.090, -0.104, 1.312)),
         (arm_pt(S, .075, -.030, .012), arm_pt(S, .100, -.035, .008)), .014, .35, mid=(0.135, -0.098, 1.360),
         inside=TRUNK)
@@ -272,10 +279,12 @@ def muscles():
         (arm_pt(S, .120, .018, bk=.012), arm_pt(S, .145, .016, bk=.008)), .030, .40,
         mid=arm_pt(S, .03, .025, bk=.050), inside=HUMERUS)
     # --- back
+    # (the upper trapezius' belly ON the slope from the neck to the shoulder, lower and further out: at 1.588 beside
+    # the neck's base it stood a mound each side of the neck; the middle fibres flat between the shoulder blades)
     add("trap_upper", ((0.012, 0.058, 1.665), (0.012, 0.077, 1.558)), ((0.125, -0.035, 1.556), (0.195, 0.0, 1.552)),
-        .034, .45, mid=(0.085, 0.045, 1.588), inside=((0, 0, 1.45), (0, 0, 1.66)))
+        .028, .50, mid=(0.105, 0.040, 1.564), inside=((0, 0, 1.45), (0, 0, 1.66)))
     add("trap_mid", ((0.0, 0.088, 1.540), (0.0, 0.108, 1.430)), ((0.075, 0.118, 1.470), (0.190, 0.035, 1.545)),
-        .020, .40, mid=(0.090, 0.116, 1.490), inside=((0, 0, 1.3), (0, 0, 1.6)))
+        .012, .40, mid=(0.090, 0.116, 1.490), inside=((0, 0, 1.3), (0, 0, 1.6)), edge=1.0)
     add("trap_lower", ((0.0, 0.112, 1.420), (0.0, 0.098, 1.220)), ((0.070, 0.120, 1.468), (0.080, 0.120, 1.465)),
         .008, .45, mid=(0.050, 0.118, 1.360), inside=((0, 0, 1.2), (0, 0, 1.5)))
     add("lat", ((0.0, 0.108, 1.300), (0.120, 0.062, 1.065)), (arm_pt(S, .060, -.030, bk=.004), arm_pt(S, .085, -.030)),
@@ -284,8 +293,8 @@ def muscles():
         (arm_pt(S, .060, -.028, bk=.008), arm_pt(S, .070, -.028)), .018, .50, mid=(0.150, 0.085, 1.390),
         inside=((0, 0, 1.3), (0, 0, 1.5)))
     add("infraspinatus", ((0.068, 0.124, 1.450), (0.085, 0.122, 1.355)),
-        (arm_pt(S, 0, .008, bk=.032), arm_pt(S, 0, -.008, bk=.030)), .022, .40, mid=(0.130, 0.112, 1.430),
-        inside=((0, 0, 1.3), (0, 0, 1.5)))
+        (arm_pt(S, 0, .008, bk=.032), arm_pt(S, 0, -.008, bk=.030)), .016, .40, mid=(0.130, 0.112, 1.430),
+        inside=((0, 0, 1.3), (0, 0, 1.5)), edge=1.0)
     for k in range(4):                                      # the serratus' slips on the ribs under the arm
         z = 1.36 - .04 * k
         add(f"serratus{k}", ((0.118 + .006 * k, -0.080 + .006 * k, z), (0.122 + .006 * k, -0.076 + .006 * k, z - .018)),
@@ -338,9 +347,11 @@ def muscles():
     add("biceps", (arm_pt(S, .035, -.005, .024), arm_pt(S, .045, .006, .022)),
         (arm_pt(E, .025, 0, .016), arm_pt(E, .035, 0, .014)), .028, .58, mid=arm_pt(S, .17 * UK, 0, .040), inside=HUMERUS,
         w=.022)
-    add("brachialis", (arm_pt(S, .15 * UK, -.004, .012), arm_pt(S, .16 * UK, -.012, .010)),
-        (arm_pt(E, .020, -.006, .008), arm_pt(E, .025, -.008, .006)), .014, .60, mid=arm_pt(S, .22 * UK, -.010, .026),
-        inside=HUMERUS, w=.024)
+    # the brachialis shows on the OUTSIDE of the arm (up, in the T-pose), between the biceps and the triceps' lateral
+    # head below the deltoid's point (written on the front-inside it was under the biceps and drew nothing)
+    add("brachialis", (arm_pt(S, .14 * UK, .018, .010), arm_pt(S, .15 * UK, .012, .014)),
+        (arm_pt(E, .020, .006, .006), arm_pt(E, .025, .002, .008)), .016, .60, mid=arm_pt(S, .21 * UK, .026, .016),
+        inside=HUMERUS, w=.022)
     add("triceps_long", (arm_pt(S, 0, -.030, bk=.020), arm_pt(S, .02, -.032, bk=.020)),
         (arm_pt(E, 0, 0, bk=.024), arm_pt(E, 0, .004, bk=.024)), .024, .45, mid=arm_pt(S, .14 * UK, -.012, bk=.042),
         inside=HUMERUS, w=.020)
@@ -518,12 +529,15 @@ class Anatomy:
                     * ramp(x / .012) * ramp((.095 - x) / .025))
         out -= .0028 * np.exp(-(x / .0095) ** 2) * front * ramp((z - .98) / .03) * ramp((1.31 - z) / .03)
         out -= (.0028 * np.exp(-(x / .014) ** 2) * ramp((y - .03) / .025) * ramp((z - 1.0) / .04)
-                * ramp((1.55 - z) / .04))                                                      # the spine
+                * ramp((1.42 - z) / .06))                                                      # the spine (lumbar)
+        out += .0025 * np.exp(-(x / .012) ** 2) * np.exp(-((z - 1.556) / .015) ** 2) * ramp((y - .03) / .025)  # C7
         # the pec's lower edge: from the sternum (1.338) rising to the armpit (1.41 at 16 cm out). It was written
         # .55 (x - .02)^2 / .03, five times as steep: the groove climbed diagonally across the chest to the top of
         # the shoulder (a sawtooth V on the chest, a pit at the shoulder's front corner, a slit under the suit)
-        pz = 1.338 + 3.6 * np.maximum(x - .02, 0) ** 2
-        out -= (.0036 * np.exp(-((z - pz) / .0125) ** 2) * ease((-.05 - y) / .02) * np.clip((x - .008) / .015, 0, 1)
+        # (then, 2026-11-20: rising steadily from the sternum, 3.6 (x - .02)^2, it was the curve under a breast: a
+        # man's runs nearly level to the outer third of the chest and turns up into the armpit only there)
+        pz = 1.336 + .05 * x + 8.0 * np.maximum(x - .10, 0) ** 2
+        out -= (.0032 * np.exp(-((z - pz) / .0125) ** 2) * ease((-.05 - y) / .02) * np.clip((x - .008) / .015, 0, 1)
                 * np.clip((.18 - x) / .02, 0, 1))
         # the separations and the ridges a lean man shows (the owner's sheet: cut, not bulky), drawn as valleys a
         # finger wide along each border and ridges where the bone lies just under the skin (metres, the upright
@@ -554,7 +568,7 @@ class Anatomy:
         # the chest: the deltopectoral groove from the clavicle's outer third to the armpit's front
         L.append(([(0.120, -0.078, 1.526), (0.150, -0.088, 1.505), (0.180, -0.088, 1.478), (0.205, -0.080, 1.455)], 0.0031, 0.012))
         # the clavicle: a ridge from the notch out to the shoulder
-        L.append(([(0.015, -0.072, 1.503), (0.060, -0.080, 1.512), (0.110, -0.080, 1.522), (0.160, -0.062, 1.528)], -0.0018, 0.007))
+        L.append(([(0.015, -0.072, 1.503), (0.060, -0.080, 1.512), (0.110, -0.080, 1.522), (0.160, -0.062, 1.528)], -0.0012, 0.010))
         # the rectus's outer border (the linea semilunaris), curving in to the pubis
         L.append(([(0.085, -0.104, 1.318), (0.084, -0.108, 1.230), (0.078, -0.104, 1.150), (0.066, -0.096, 1.060),
                    (0.048, -0.086, 0.980)], 0.0025, 0.012))

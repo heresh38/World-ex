@@ -309,7 +309,19 @@ and folded back along every lower lid; the nose tip's patch stays inside its win
 above and the skin folded across the nose, a dark line each side). The flank under each arm follows the
 sheet's line (the owner circled a bulge there: `ARMPIT_OUT`, `FLANK_ZONES`). The arm is an adult man's
 (`UPPER_ARM` .312, `FOREARM` .272: the sheet's canon left it 4 cm short and in third person the support hand could not
-reach a long gun's fore end; the arm's sections are written for the design arm and stretched, `body.arm_s`). `game.py` (in Blender on the saved build: stages normals, uv,
+reach a long gun's fore end; the arm's sections are written for the design arm and stretched, `body.arm_s`). **The
+arm's volume is its own table** (`body.ARM_VOL`, cm at real stations along the arm; the owner, 2026-11-20: "the arms
+seem extremely unrealistic compared to rest of body"): the first two rings keep the sheet's deltoid, then the upper arm
+HOLDS its girth through the biceps' and triceps' bellies (12 cm from 14 to 20 cm out: the sheet's plateau) and tapers
+to a notch just above the elbow, the forearm SWELLS below the elbow (the extensors' ridge and the flexors: 9.6 x 11
+cm at 36 cm, wider than the elbow's 9 x 9.5, as the sheet's) and runs out to a wrist 4.6 x 6.4; before, a hand-written
+forearm table was 30 % thin and fell straight from the elbow, so the arm was a stick with a ball of a deltoid at its root.
+`body.arm_mod` carries only the masses that are not round (biceps, triceps, the brachialis on the OUTSIDE under the
+deltoid's point, the olecranon, the extensors' ridge rising ABOVE the elbow: begun below it there was a hollow at the
+elbow's outer front); the forms on them are `anatomy.py`'s, whose arm muscles sit at SHOW .36-.44 (at .26-.32 they drew
+nothing, and the brachialis had no entry: it ran at the .20 default on the inside, under the biceps). The anatomy's relief
+takes about 1.9 mm off every surface (`GROOVE`) and puts the bellies 3-7 mm back: the cage's table is written for what
+comes OUT (measure with `hero/orion/armsec.py`: vertical extent, depth, top and bottom of the arm every 2 cm). `game.py` (in Blender on the saved build: stages normals, uv,
 skin, eyes, lashes, rig, suit, clips, export; `--stages=` picks some, `--save=` saves the build BEFORE the export splits
 it, and a build saved after its export can still run `clips,export`) makes it the game's: the head's normals from the
 sculpt's field; UVs on hidden seams in two maps (`skin_face`: the head and ears, 0.13 mm a texel; `skin`: the rest, the
@@ -365,7 +377,7 @@ material `hair`): the groom's strands rooted on the game head's own surface (`he
 gave 5000 roots), the long ones grouped into locks and drawn as cards in two layers (each lock's own line, and the
 same lock pressed onto the scalp from the atlas's dense columns), the scalp's short hair drawn into the face map's
 hair mask with the brows (`scalp_mask`: the fade is short hair on skin, a floor of hair under the top's cards).
-Look at a build close up under a studio light with the scratch `bodylook.py` (views per part, `--suit` keeps the
+Look at a build close up under a studio light with `hero/orion/bodylook.py` (views per part, `--suit` keeps the
 suit) and at the head beside the portrait with `headlab.py --views=portrait,eye,mouth`; the skin's maps and the
 game's hair shading are judged IN THE GAME (capture set 37, files `SO_fc_*`: the head from the front, both three
 quarters, the side, the eye). Lessons of that: a stage run again on a saved build leaves the old material

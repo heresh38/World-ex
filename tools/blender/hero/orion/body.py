@@ -141,8 +141,8 @@ CROTCH_Z = 4 * HEAD
 
 T_Z = [0.968, 1.030, 1.095, 1.155, 1.215, 1.280, 1.345, 1.405, 1.488, 1.568]
 T_SHAPE = {        # z: (front squareness, back squareness, widest point as a share of the depth from the front)
-    0.96: (2.2, 2.6, .46), 1.09: (2.3, 2.5, .50), 1.21: (2.4, 2.4, .52), 1.35: (2.9, 2.3, .55), 1.50: (2.9, 2.5, .55),
-}
+    0.96: (2.2, 2.6, .46), 1.09: (2.3, 2.5, .50), 1.21: (2.4, 2.4, .52), 1.35: (2.9, 2.7, .55), 1.50: (2.9, 2.9, .55),
+}                  # (the upper back square: round, it domed between the shoulder blades, the owner's "hunchback")
 N_T, N_L, N_A = 24, 16, 12                         # round the torso / neck / head's base, each leg, each arm
 WINDOW = (4, 8)                                    # the left arm's window: columns 4..8 of rings 7..9
 
@@ -171,13 +171,19 @@ def torso_mod(theta, z):
     """anatomy on the torso's section (metres along its outward normal); theta in degrees: 0 the front midline,
     90 the side, 180 the back's midline"""
     d = 0.0
-    d += .010 * band(z, 1.375, 1.52, .018) * bump(theta, 32, 20)            # the pectoral mass (its forms: anatomy.py)
-    d -= .006 * band(z, 1.32, 1.54, .02) * bump(theta, 0, 7)                 # the sternum's groove
+    # the pectoral mass as a PLATE: level from beside the sternum to its outer edge, where it drops to the armpit's
+    # side (a bump at 32 degrees domed it, and with the sternum's cleft each side read as a breast: the owner,
+    # 2026-11-20, "looks like he has breasts"); its forms are anatomy.py's
+    d += .007 * band(z, 1.36, 1.515, .018) * band(theta, 8, 44, 9)
+    d -= .0035 * band(z, 1.32, 1.54, .02) * bump(theta, 0, 8)                # the sternum's furrow, shallow
 
     d += .002 * band(z, 1.30, 1.43, .03) * bump(theta, 135, 20)              # lats behind the side (their form: anatomy.py;
     # at 108 degrees and 4 mm they widened the outline under the armpit from the front and from three quarters)
-    d += .008 * band(z, 1.38, 1.52, .03) * bump(theta, 148, 20)              # the scapulae
-    d -= .010 * band(z, 1.03, 1.57, .03) * bump(theta, 180, 9)               # the spine's groove
+    d += .004 * band(z, 1.38, 1.52, .03) * band(theta, 132, 166, 14)         # the scapulae: a plate across the upper
+    # back (a ball of 8 mm at 148 degrees either side of the spine's cleft was the owner's "hunchback")
+    d -= .010 * band(z, 1.03, 1.36, .04) * bump(theta, 180, 9)               # the spine's groove: the erectors' valley
+    d -= .003 * band(z, 1.36, 1.50, .03) * bump(theta, 180, 7)               # a shallow furrow between the blades
+    d += .004 * band(z, 1.50, 1.575, .02) * bump(theta, 180, 8)              # the 7th vertebra at the neck's root
     d += .010 * band(z, 1.03, 1.26, .03) * bump(theta, 163, 12)              # the erectors either side
     d += .010 * band(z, 0.90, 1.03, .025) * bump(theta, 154, 24)             # glutes (1.6 cm stood 1.2 behind the sheet)
     d -= .022 * band(z, 0.88, 1.015, .02) * bump(theta, 180, 7)              # the cleft between them
@@ -465,6 +471,9 @@ def socket_point(psi, sx=1):
     # the upper corners lifted level with the torso's ring beside them (an ellipse put them 1.5-3 cm under it:
     # the cage dented there and the skin creased on the shoulder's top, front and back)
     lift = .012 * 4 * max(s, 0) * (1 - max(s, 0))
+    # the top raised toward the sheet's shoulder line: its corners are left free in the fit (build) and the skin
+    # sagged 1.5-2.5 cm under the line there, a notch on top of the shoulder between the trapezius and the deltoid
+    lift += .012 * max(s, 0) ** 2
     return np.array([sx * x, WIN_C[1] + WIN_AY * c, WIN_C[2] + WIN_AZ * s + lift])
 
 
@@ -483,7 +492,7 @@ def shoulder_socket(C, T):
 # ring 9 away from the windows: the clavicles in front (rising gently to the shoulder), the trapezius and the
 # scapulae's spine behind (columns 0..3 and 9..12 of the left side; the right mirrors them)
 T9_FRONT = [(0.000, -.104, 1.512), (0.048, -.101, 1.520), (0.094, -.096, 1.531), (0.140, -.090, 1.539)]
-T9_BACK = [(0.150, .080, 1.556), (0.104, .088, 1.566), (0.052, .091, 1.553), (0.000, .088, 1.546)]
+T9_BACK = [(0.150, .080, 1.556), (0.104, .088, 1.560), (0.052, .091, 1.553), (0.000, .088, 1.548)]
 # (the back's top was a shelf 3-6 cm behind the sheet's line at the neck's height, up to 1.58: the back of the neck
 # now leaves the upper back at the 7th vertebra and the trapezius' crest is highest beside the neck)
 
@@ -618,6 +627,21 @@ def leg(C, T0, crotch, sx, cc):
 
 A_S = [0.058, 0.097, 0.143, 0.195, 0.244, 0.290, 0.330, 0.384, 0.437, 0.490, 0.542]
 
+# the arm's base volume from the first belly ring on (the deltoid's two rings keep the sheet's own outline): the full
+# vertical extent of the front view (the arm's outside to its inside) and the full depth (the biceps' face to the
+# triceps'), cm, at REAL stations along this arm from the shoulder joint (m), as the CAGE must be for the skin to
+# come out right after the anatomy lays its relief on it (anatomy.detail: the bellies stand 3-7 mm proud where they
+# are, the skin sinks 1.9 mm everywhere between). Measured against an adult man's and the owner's sheet (the arm's
+# own outline in concept_male.json): the upper arm holds its girth through the biceps' and the triceps' bellies (the
+# sheet's 12.5 cm from 14 to 18 cm out), then tapers to a notch just above the elbow; the forearm SWELLS below the
+# elbow (the extensors' ridge on top, the flexors beneath; the sheet's forearm is thicker than its elbow) and runs
+# out long to a wrist 4.6 cm deep and 6.4 wide. Before this the forearm's own table was written 30 % thin and fell
+# straight from the elbow, and the upper arm was a cone from the deltoid to the elbow with no belly held (a stick
+# with a ball at its root: the owner, 2026-11-20, "the arms seem extremely unrealistic compared to rest of body")
+ARM_VOL = [  # (s m, vertical cm, depth cm)
+    (0.154, 12.7, 12.0), (0.210, 12.1, 11.8), (0.2625, 10.6, 10.2), (0.312, 9.4, 9.2),
+    (0.3552, 9.5, 10.9), (0.4135, 8.5, 9.9), (0.4707, 7.2, 8.7), (0.5279, 5.8, 7.2), (0.584, 5.0, 6.8)]
+
 
 def arm_s(s):
     """where a station written for the design arm (A_S, arm_mod's bands) lies on this arm: the upper arm's and the
@@ -636,36 +660,45 @@ def arm_axis(sx):
 
 
 def arm_mod(psi, s):
-    """anatomy round the arm (metres): psi 0 back, 90 up (the outside when it hangs), 180 front, 270 down"""
+    """the masses of the arm that are not round, on the cage's rings (metres, at REAL stations s along this arm;
+    psi 0 back, 90 up (the outside when it hangs), 180 front, 270 down). The anatomy's relief (anatomy.detail) draws
+    each one's own form on top of this: here is only the volume under it"""
     d = 0.0
-    d += .006 * band(s, 0.05, 0.15, .03) * bump(psi, 95, 45)             # the deltoid over the top (1 cm stood
-    # 1 cm over the sheet's shoulder: its own form is the anatomy's)
-    d += .006 * band(s, 0.12, 0.25, .03) * bump(psi, 185, 30)            # biceps
-    d += .005 * band(s, 0.10, 0.23, .03) * bump(psi, 20, 35)             # triceps
-    d -= .004 * band(s, 0.265, 0.30, .02) * bump(psi, 190, 25)           # the elbow's crease
-    d += .006 * band(s, 0.30, 0.41, .03) * bump(psi, 140, 30)            # brachioradialis and the extensors
-    d += .004 * band(s, 0.30, 0.42, .03) * bump(psi, 300, 30)            # the flexors underneath
+    d += .003 * band(s, 0.05, 0.14, .03) * bump(psi, 95, 45)             # the deltoid over the top (6 mm stood a
+    # ball on a stick: its own form is the anatomy's)
+    d += .004 * band(s, 0.13, 0.26, .03) * bump(psi, 180, 40)            # the biceps' belly in front
+    d += .003 * band(s, 0.09, 0.25, .03) * bump(psi, 10, 45)             # the triceps behind
+    d += .003 * band(s, 0.17, 0.29, .03) * bump(psi, 115, 30)            # the brachialis on the outside, under the
+    # deltoid's point: it carries the outline from the deltoid to the elbow
+    d -= .003 * band(s, 0.290, 0.325, .02) * bump(psi, 190, 22)          # the elbow's crease (the cubital hollow)
+    d += .003 * band(s, 0.300, 0.330, .015) * bump(psi, 0, 25)           # the olecranon
+    d += .005 * band(s, 0.28, 0.44, .03) * bump(psi, 135, 35)            # brachioradialis and the extensors' ridge,
+    # the top of the forearm toward its front: it rises on the humerus ABOVE the elbow and runs over its outside
+    # (begun below the joint it left a hollow at the elbow's outer front)
+    d += .004 * band(s, 0.33, 0.45, .03) * bump(psi, 265, 45)            # the flexors underneath
+    d -= .002 * band(s, 0.37, 0.56, .03) * bump(psi, 35, 15)             # the ulna's border, a line down the back
     return d
 
 
 def arm(C, T, sx, cc):
     S, a, up, back = arm_axis(sx)
     rings = [window_loop(T, sx)]
+    vol_s = [v[0] for v in ARM_VOL]
     for s in A_S:
-        P = S + a * arm_s(s)
-        # the sheet's outline at the same share of the arm (its arms are 2 % long)
+        sr = arm_s(s)                                         # the station on this arm (m from the joint)
+        P = S + a * sr
+        # the sheet's outline at the same share of the arm (its arms are 2 % long): the deltoid's rings and the
+        # arm's droop (its centre line) are the sheet's
         x_sheet = SHOULDER[0] + (abs(P[0]) - SHOULDER[0]) * SHEET_ARM / (UPPER_ARM + FOREARM + HAND)
         zc, rv = cc.arm(x_sheet)
         rv *= TONE
         rh = rv * float(np.interp(s, [0.058, 0.25, 0.29], [1.02, .97, .95]))
-        # from below the elbow: the forearm's own thickness (vertical, back to palm) and width (across)
-        fa_s = [0.29, 0.33, 0.38, 0.44, 0.49, 0.542]
-        fa_v = [.042, .040, .035, .029, .024, .020]
-        fa_h = [.040, .045, .042, .037, .034, .031]
-        k = smoothstep(0.27, 0.33, s)
-        rv = rv * (1 - k) + float(np.interp(s, fa_s, fa_v)) * k
-        rh = rh * (1 - k) + float(np.interp(s, fa_s, fa_h)) * k
-        zc = zc * (1 - k) + P[2] * k
+        # from the first belly ring on, the arm's own volume (ARM_VOL, half of each in metres)
+        k = smoothstep(0.10, 0.154, sr)
+        rv = rv * (1 - k) + .005 * float(np.interp(sr, vol_s, [v[1] for v in ARM_VOL])) * k
+        rh = rh * (1 - k) + .005 * float(np.interp(sr, vol_s, [v[2] for v in ARM_VOL])) * k
+        kf = smoothstep(0.27, 0.33, s)                        # the forearm's centre on the arm's axis
+        zc = zc * (1 - kf) + P[2] * kf
         centre = P.copy(); centre[2] = zc
         ring = []
         twist = 15.0 * smoothstep(0.30, 0.542, s)
@@ -673,7 +706,7 @@ def arm(C, T, sx, cc):
             psi = psi0 + twist
             p = math.radians(psi)
             off = back * (rh * math.cos(p)) + up * (rv * math.sin(p))
-            off = off + off / (np.linalg.norm(off) + 1e-9) * arm_mod(psi, s)
+            off = off + off / (np.linalg.norm(off) + 1e-9) * arm_mod(psi, sr)
             ring.append(C.add(centre + off, "arm"))
         rings.append(ring)
     for r0, r1 in zip(rings, rings[1:]):
