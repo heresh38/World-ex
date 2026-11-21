@@ -20,8 +20,8 @@
 namespace SOHudPaint
 {
 	// --- the palette (canvas colours) ---
-	const FLinearColor Glass(0.010f, 0.018f, 0.038f, 0.80f);     // a panel's body
-	const FLinearColor GlassDeep(0.005f, 0.009f, 0.020f, 0.90f); // a panel's lower half, the backs of bars
+	const FLinearColor Glass(0.022f, 0.027f, 0.036f, 0.80f);     // a panel's body (dark graphite, a breath of blue)
+	const FLinearColor GlassDeep(0.008f, 0.010f, 0.015f, 0.90f); // a panel's lower half, the backs of bars
 	const FLinearColor Line(0.30f, 0.80f, 1.0f, 0.42f);           // a panel's edge
 	const FLinearColor Cyan(0.30f, 0.85f, 1.0f, 1.0f);            // what is active
 	const FLinearColor Gold(1.0f, 0.80f, 0.32f, 1.0f);            // what matters
@@ -34,6 +34,125 @@ namespace SOHudPaint
 
 	inline FLinearColor A(const FLinearColor& C, float Alpha) { return FLinearColor(C.R, C.G, C.B, C.A * Alpha); }
 	inline FLinearColor Mix(const FLinearColor& X, const FLinearColor& Y, float T) { return FMath::Lerp(X, Y, T); }
+
+	/** A rectangle on the screen: the HUD's layout is cut from such regions (a panel's inner room, a column for the
+	 *  picture, a row for the name), so what is drawn in one never reaches into another. */
+	struct FRegion
+	{
+		float X = 0.0f, Y = 0.0f, W = 0.0f, H = 0.0f;
+		FRegion() {}
+		FRegion(float InX, float InY, float InW, float InH) : X(InX), Y(InY), W(InW), H(InH) {}
+		float Right() const { return X + W; }
+		float Bottom() const { return Y + H; }
+		FVector2D Centre() const { return FVector2D(X + W * 0.5f, Y + H * 0.5f); }
+		FRegion Inset(float DX, float DY) const { return FRegion(X + DX, Y + DY, FMath::Max(W - 2.0f * DX, 0.0f), FMath::Max(H - 2.0f * DY, 0.0f)); }
+		FRegion Inset(float D) const { return Inset(D, D); }
+		/** Cuts a strip V wide off this region's left (returned); this region keeps what is right of it and the gap. */
+		FRegion CutLeft(float V, float Gap = 0.0f) { const FRegion R(X, Y, V, H); X += V + Gap; W = FMath::Max(W - V - Gap, 0.0f); return R; }
+		FRegion CutRight(float V, float Gap = 0.0f) { const FRegion R(X + W - V, Y, V, H); W = FMath::Max(W - V - Gap, 0.0f); return R; }
+		FRegion CutTop(float V, float Gap = 0.0f) { const FRegion R(X, Y, W, V); Y += V + Gap; H = FMath::Max(H - V - Gap, 0.0f); return R; }
+		FRegion CutBottom(float V, float Gap = 0.0f) { const FRegion R(X, Y + H - V, W, V); H = FMath::Max(H - V - Gap, 0.0f); return R; }
+		bool Overlaps(const FRegion& O, float Slack = 0.0f) const
+		{
+			return X + Slack < O.Right() - Slack && O.X + Slack < Right() - Slack && Y + Slack < O.Bottom() - Slack && O.Y + Slack < Bottom() - Slack;
+		}
+		bool Contains(const FRegion& O, float Slack = 0.75f) const
+		{
+			return O.X >= X - Slack && O.Right() <= Right() + Slack && O.Y >= Y - Slack && O.Bottom() <= Bottom() + Slack;
+		}
+		FString ToString() const { return FString::Printf(TEXT("[%.0f,%.0f %.0fx%.0f]"), X, Y, W, H); }
+	};
+
+	/** The layout's audit (the owner, 2026-11-21: "fix all text, number and image overlapping ... zero visible
+	 *  overlaps"): while it is on, every string, picture and piece of glass the HUD draws notes its rectangle and
+	 *  the element it belongs to, and at the frame's end the pairs that may not overlap are checked: text on text,
+	 *  text on a picture, pictures on each other, text or a picture crossing a panel's or a cell's edge, a label on a
+	 *  bar, two panels, two cells, two bars. What a container holds whole is by design. */
+	struct FHudAudit
+	{
+		enum EKind : uint8 { Text, Number, Image, Panel, Bar, Cell };
+		struct FRect
+		{
+			EKind Kind;
+			FRegion R;
+			FString Name;
+			FString Element;
+		};
+		TArray<FRect> Rects;
+		FString Element;
+		bool bSuppress = false;
+
+		static const TCHAR* KindName(EKind K)
+		{
+			switch (K)
+			{
+			case Text: return TEXT("text");
+			case Number: return TEXT("number");
+			case Image: return TEXT("image");
+			case Panel: return TEXT("panel");
+			case Bar: return TEXT("bar");
+			default: return TEXT("cell");
+			}
+		}
+
+		void Note(EKind Kind, const FRegion& R, const FString& Name)
+		{
+			if (!bSuppress && R.W > 0.5f && R.H > 0.5f)
+			{
+				Rects.Add({ Kind, R, Name, Element });
+			}
+		}
+
+		static bool IsWords(EKind K) { return K == Text || K == Number; }
+
+		/** The overlaps this frame, one line each. */
+		TArray<FString> Check() const
+		{
+			TArray<FString> Lines;
+			for (int32 i = 0; i < Rects.Num(); ++i)
+			{
+				for (int32 j = i + 1; j < Rects.Num(); ++j)
+				{
+					const FRect& A0 = Rects[i];
+					const FRect& B0 = Rects[j];
+					// a string's measured box carries the face's own leading: judged a hair inside it
+					FRegion RA = A0.R, RB = B0.R;
+					if (IsWords(A0.Kind)) { RA = RA.Inset(0.0f, RA.H * 0.14f); }
+					if (IsWords(B0.Kind)) { RB = RB.Inset(0.0f, RB.H * 0.14f); }
+					if (!RA.Overlaps(RB, 1.0f))
+					{
+						continue;
+					}
+					const bool bWordsA = IsWords(A0.Kind), bWordsB = IsWords(B0.Kind);
+					const bool bContained = RA.Contains(RB) || RB.Contains(RA);
+					bool bBad = false;
+					if (bWordsA && bWordsB)
+					{
+						bBad = true;
+					}
+					else if ((bWordsA && B0.Kind == Image) || (bWordsB && A0.Kind == Image) || (A0.Kind == Image && B0.Kind == Image))
+					{
+						bBad = true;
+					}
+					else if ((bWordsA && B0.Kind == Bar) || (bWordsB && A0.Kind == Bar))
+					{
+						bBad = true;
+					}
+					else
+					{
+						// anything else may hold the other whole (a panel its words, a cell its glyph, a bar its panel)
+						bBad = !bContained;
+					}
+					if (bBad)
+					{
+						Lines.Add(FString::Printf(TEXT("%s %s '%s' %s  x  %s %s '%s' %s"), *A0.Element, KindName(A0.Kind), *A0.Name, *A0.R.ToString(),
+							*B0.Element, KindName(B0.Kind), *B0.Name, *B0.R.ToString()));
+					}
+				}
+			}
+			return Lines;
+		}
+	};
 
 	/** A batch of triangles, drawn in one go on Flush (or when the texture changes). */
 	struct FPainter
@@ -379,9 +498,9 @@ namespace SOHudPaint
 	 *  its shadow, and an alpha over all of it. */
 	struct FGlassStyle
 	{
-		FLinearColor FillA = FLinearColor(0.022f, 0.036f, 0.066f, 0.86f);
-		FLinearColor FillB = FLinearColor(0.005f, 0.009f, 0.019f, 0.93f);
-		FLinearColor Edge = FLinearColor(0.30f, 0.80f, 1.0f, 0.55f);
+		FLinearColor FillA = FLinearColor(0.030f, 0.036f, 0.048f, 0.82f);
+		FLinearColor FillB = FLinearColor(0.010f, 0.012f, 0.018f, 0.92f);
+		FLinearColor Edge = FLinearColor(0.30f, 0.80f, 1.0f, 0.45f);
 		FLinearColor Glow = FLinearColor(0.30f, 0.85f, 1.0f, 1.0f);
 		float GlowW = 16.0f;
 		float GlowA = 0.0f;
@@ -406,6 +525,7 @@ namespace SOHudPaint
 		int32* Used = nullptr;
 		UObject* Outer = nullptr;
 		float S = 1.0f;
+		FHudAudit* Audit = nullptr;
 
 		enum EShape : int32 { ShapePlate = 0, ShapePlate4 = 1, ShapeHexUp = 2, ShapeHexFlat = 3, ShapeDiamond = 4, ShapeRing = 5, ShapeDisc = 6, ShapeBar = 7 };
 
@@ -435,6 +555,12 @@ namespace SOHudPaint
 			if (!Canvas || W < 1.0f || H < 1.0f)
 			{
 				return;
+			}
+			if (Audit)
+			{
+				const FHudAudit::EKind K = Kind == ShapeBar ? FHudAudit::Bar : ((Kind == ShapePlate || Kind == ShapePlate4 || Kind == ShapeDisc) ? FHudAudit::Panel : FHudAudit::Cell);
+				static const TCHAR* Names[] = { TEXT("plate"), TEXT("plate4"), TEXT("hex"), TEXT("hex"), TEXT("diamond"), TEXT("ring"), TEXT("disc"), TEXT("bar") };
+				Audit->Note(K, FRegion(X, Y, W, H), Names[FMath::Clamp(Kind, 0, 7)]);
 			}
 			UMaterialInstanceDynamic* M = Next();
 			if (!M)
@@ -481,7 +607,7 @@ namespace SOHudPaint
 		/** A bar filled Frac of the way from the left, Fill over Trough; Segments > 0: cut into pieces that long (px)
 		 *  with Gap px between them. */
 		void Bar(float X, float Y, float W, float H, float Frac, const FLinearColor& Fill, const FLinearColor& Trough, float EdgeT, float Alpha = 1.0f,
-			float Segment = 0.0f, float Gap = 0.0f, float ShadowA = 0.3f) const
+			float Segment = 0.0f, float Gap = 0.0f, float ShadowA = 0.3f, int32 FillAxis = 1) const
 		{
 			FGlassStyle St;
 			St.FillA = Fill;
@@ -492,7 +618,7 @@ namespace SOHudPaint
 			St.ShadowBlur = H * 0.5f + 1.0f;
 			St.ShadowA = ShadowA;
 			St.Alpha = Alpha;
-			Shape(ShapeBar, X, Y, W, H, 0.0f, St, Frac, 1, FVector4(0.0f, 360.0f, Segment, Gap));
+			Shape(ShapeBar, X, Y, W, H, 0.0f, St, Frac, FillAxis, FVector4(0.0f, 360.0f, Segment, Gap));
 		}
 	};
 
@@ -513,8 +639,15 @@ namespace SOHudPaint
 		float Medium = 12.0f;
 		float Large = 20.0f;
 		mutable EFace Face = EFace::Auto;   // (the caller sets it before drawing and puts it back)
+		FHudAudit* Audit = nullptr;
 
-		explicit FType(UCanvas* InCanvas) : Canvas(InCanvas) {}
+		explicit FType(UCanvas* InCanvas, FHudAudit* InAudit = nullptr) : Canvas(InCanvas), Audit(InAudit) {}
+
+		static bool IsNumber(const FString& Text)
+		{
+			const int32 I = Text.Len() > 0 && (Text[0] == TEXT('+') || Text[0] == TEXT('-')) ? 1 : 0;
+			return Text.Len() > I && FChar::IsDigit(Text[I]);
+		}
 
 		FSlateFontInfo FontOf(float F, float Scale) const
 		{
@@ -579,7 +712,37 @@ namespace SOHudPaint
 			}
 			Item.BlendMode = SE_BLEND_Translucent;
 			Canvas->DrawItem(Item);
-			return Size(Text, F, Scale).X;
+			const FVector2D Sz = Size(Text, F, Scale);
+			if (Audit)
+			{
+				Audit->Note(IsNumber(Text) ? FHudAudit::Number : FHudAudit::Text, FRegion(X, Y, Sz.X, Sz.Y), Text);
+			}
+			return Sz.X;
+		}
+
+		/** Draws Text in Room px of width: shrunk from Scale toward MinScale, then cut short with an ellipsis. The
+		 *  text never leaves its region. Returns the scale used. */
+		float Fit(const FString& Text, float X, float Y, float Room, float F, float Scale, float MinScale, const FLinearColor& C, float Align = 0.0f) const
+		{
+			float Sc = Scale;
+			while (Size(Text, F, Sc).X > Room && Sc > MinScale + 0.001f)
+			{
+				Sc = FMath::Max(MinScale, Sc - 0.05f * Scale);
+			}
+			FString T = Text;
+			if (Size(T, F, Sc).X > Room)
+			{
+				const FString Dots(TEXT("\u2026"));
+				while (T.Len() > 1 && Size(T + Dots, F, Sc).X > Room)
+				{
+					T.LeftChopInline(1);
+				}
+				T.TrimEndInline();
+				T += Dots;
+			}
+			const float W = Size(T, F, Sc).X;
+			Draw(T, X - W * Align, Y, F, Sc, C);
+			return Sc;
 		}
 
 		float DrawRight(const FString& Text, float XRight, float Y, float F, float Scale, const FLinearColor& C) const
@@ -613,13 +776,47 @@ namespace SOHudPaint
 			const FString Up = Text.ToUpper();
 			const float W = CapsWidth(Text, F, Scale, Spacing);
 			float Cx = X - W * Align;
+			const bool bWas = Audit ? Audit->bSuppress : false;
+			if (Audit)
+			{
+				Audit->bSuppress = true;
+			}
 			for (int32 i = 0; i < Up.Len(); ++i)
 			{
 				const FString Ch = Up.Mid(i, 1);
 				Draw(Ch, Cx, Y, F, Scale, C);
 				Cx += Size(Ch, F, Scale).X + Spacing;
 			}
+			if (Audit)
+			{
+				Audit->bSuppress = bWas;
+				Audit->Note(FHudAudit::Text, FRegion(X - W * Align, Y, W, Size(TEXT("X"), F, Scale).Y), Up);
+			}
 			return W;
+		}
+
+		/** A label fitted into Room px: its scale and tracking shrink together toward MinScale, then it is cut short. */
+		float FitLabel(const FString& Text, float X, float Y, float Room, float F, float Scale, float MinScale, const FLinearColor& C, float Spacing, float Align = 0.0f) const
+		{
+			float Sc = Scale;
+			auto Track = [&](float K) { return Spacing * K / FMath::Max(Scale, 0.001f); };
+			while (LabelWidth(Text, F, Sc, Track(Sc)) > Room && Sc > MinScale + 0.001f)
+			{
+				Sc = FMath::Max(MinScale, Sc - 0.04f * Scale);
+			}
+			FString T = Text;
+			if (LabelWidth(T, F, Sc, Track(Sc)) > Room)
+			{
+				const FString Dots(TEXT("\u2026"));
+				while (T.Len() > 1 && LabelWidth(T + Dots, F, Sc, Track(Sc)) > Room)
+				{
+					T.LeftChopInline(1);
+				}
+				T.TrimEndInline();
+				T += Dots;
+			}
+			Label(T, X, Y, F, Sc, C, Track(Sc), Align);
+			return Sc;
 		}
 
 		/** A label: tracked capitals in the condensed face. */

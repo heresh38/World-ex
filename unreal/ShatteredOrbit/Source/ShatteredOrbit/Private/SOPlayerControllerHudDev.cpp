@@ -266,6 +266,47 @@ void ASOPlayerController::CaptureHud()
 		}
 	});
 	Snap(0.5f, TEXT("hud_23_elite_seen"));
+	// the layout's trials (the owner's brief, 2026-11-21): a long name with a big count in the held gun's panel,
+	// every kind of number at once with the rewards beside them, each of the three slots held
+	Act([=, this]() { if (ASOHUD* H = Hud()) { H->SetDebugWeapon(TEXT("The Long Silence of the Northern Approach"), 1000, 12000); } });
+	Snap(0.5f, TEXT("hud_24_long_name"));
+	Act([=, this]() { if (ASOHUD* H = Hud()) { H->SetDebugWeapon(TEXT("Old Winter"), 100, 999999); } });
+	Snap(0.3f, TEXT("hud_25_big_count"));
+	Act([=, this]() { if (ASOHUD* H = Hud()) { H->SetDebugWeapon(FString(), -1, -1); } });
+	Do(0.3f, [=, this]()
+	{
+		ASOHUD* H = Hud();
+		ASOCharacter* Me = Hero();
+		if (!H || !Me)
+		{
+			return;
+		}
+		const FVector C = Me->GetPawnViewLocation() + Ahead() * 600.0f;
+		const FVector R = Right();
+		const float Amounts[] = { 148.0f, 221.0f, 430.0f, 920.0f, 77.0f, 1240.0f, 305.0f, 64.0f };
+		for (int32 i = 0; i < 8; ++i)
+		{
+			FSOHitReport Hit;
+			Hit.Amount = Amounts[i];
+			Hit.Point = C + R * (i % 3 - 1) * 70.0f + FVector(0.0f, 0.0f, (i / 3) * 50.0f - 10.0f);
+			Hit.bShield = i % 4 == 1;
+			Hit.bCrit = i % 4 >= 2;
+			Hit.Precision = i % 4 == 3 ? 1.5f : 1.0f;
+			H->ShowHit(Hit);
+		}
+		if (USOInventoryComponent* Inv = SOFindInventory(this))
+		{
+			Inv->AddXp(431);
+			Inv->AddCredits(71);
+			Inv->AddAlloy(12);
+		}
+	});
+	Snap(0.22f, TEXT("hud_26_many_numbers"));
+	Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(1); } });
+	Snap(0.7f, TEXT("hud_27_slot_2"));
+	Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(2); } });
+	Snap(0.7f, TEXT("hud_28_slot_3"));
+	Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(0); } });
 	Do(0.5f, []() {});
 	GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 }

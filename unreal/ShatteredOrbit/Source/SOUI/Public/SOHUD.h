@@ -10,11 +10,30 @@ namespace SOHudPaint
 {
 	struct FPainter;
 	struct FGlass;
+	struct FHudAudit;
 }
 
 struct FSOProjectile;
 class USOInventoryWidget;
 class UTexture2D;
+
+/** Where one of the HUD's elements sits and how big it is, over its designed place: every element is adjustable on
+ *  its own (the owner's brief, 2026-11-21: "make all HUD elements independently adjustable"). The offset is in
+ *  pixels at 1080 lines and scales with the screen; the scale is about the element's own anchor. */
+USTRUCT(BlueprintType)
+struct FSOHudElementLayout
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD")
+	FVector2D Offset = FVector2D::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD")
+	float Scale = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD")
+	bool bVisible = true;
+};
 
 /**
  * The combat HUD, drawn on the canvas (the owner's two reference screens of 2026-11-20, `art/reference/ui/hud_*.webp`;
@@ -39,6 +58,42 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD")
 	float RespawnDelay = 4.0f;
 
+	/** Each element's place and size over its design (see FSOHudElementLayout). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout MinimapLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout CompassLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout ObjectiveLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout ConditionsLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout TrackedLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout ItemsLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout VitalsLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout AbilitiesLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout WeaponLayout;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|HUD|Layout")
+	FSOHudElementLayout InteractLayout;
+
+	/** Console (not in a shipping build): moves or scales one element (minimap, compass, objective, conditions,
+	 *  tracked, items, vitals, abilities, weapon, interact) by DX, DY px at 1080 lines and Scale; "reset" puts all back. */
+	UFUNCTION(Exec)
+	void SOHudLayout(FName Element, float DX = 0.0f, float DY = 0.0f, float Scale = 1.0f);
+
+	/** Console (not in a shipping build): the layout audit on or off: every overlap of words, pictures and glass is
+	 *  logged as HUDOVERLAP while it runs. Also on with -SOHudAudit on the command line. */
+	UFUNCTION(Exec)
+	void SOHudAudit(int32 On);
+
+	/** The capture series: the held gun's panel shows this name and count instead of the gun's (a long name, a big
+	 *  magazine); an empty name puts the gun's own back. */
+	void SetDebugWeapon(const FString& Name, int32 Mag, int32 Reserve);
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void DrawHUD() override;
@@ -60,7 +115,30 @@ public:
 	/** The glass painter for one draw function: shapes on M_HUDGlass over what the painter P has drawn so far. */
 	SOHudPaint::FGlass MakeGlass(SOHudPaint::FPainter& P, float S);
 
+	/** The audit while it is on (every FType and FGlass is given it), else null. */
+	SOHudPaint::FHudAudit* AuditPtr() const;
+
 private:
+	/** A picture (a gun's icon): DrawTexture, noted to the audit. */
+	void Picture(UTexture2D* Tex, float X, float Y, float W, float H, float Alpha, const FString& Name);
+
+	TSharedPtr<SOHudPaint::FHudAudit> Audit;
+	bool bAuditing = false;
+	bool bAuditLooked = false;
+	float AuditLoggedAt = -100.0f;
+	TArray<FString> AuditLast;
+
+	FString DebugWeaponName;
+	int32 DebugMag = -1;
+	int32 DebugReserve = -1;
+
+	/** The screen the fixed elements and the creatures' plates hold this frame and held last frame: what rises from
+	 *  the world (a damage number) is laid clear of it. */
+	TArray<FBox2D> Reserved;
+	TArray<FBox2D> ReservedLast;
+	FVector2D ElementOffset = FVector2D::ZeroVector;
+	void Reserve(float X, float Y, float W, float H) { Reserved.Add(FBox2D(FVector2D(X, Y) + ElementOffset, FVector2D(X + W, Y + H) + ElementOffset)); }
+
 	/** Where everything sits: the screen, the scale (1 at 1080 lines) and the frame the corners keep to on a wide
 	 *  screen (2200 units at most, in the middle, as the armoury). */
 	struct FLayout
@@ -70,6 +148,10 @@ private:
 		float CX = 0.0f;              // the screen's middle
 		float Now = 0.0f;
 	};
+
+	/** Draws one element in its own layout: moved by its offset (the canvas carried with it, so everything it draws
+	 *  moves together), its sizes scaled, named to the audit. */
+	void DrawElement(const FLayout& L, const FSOHudElementLayout& E, const TCHAR* Name, TFunctionRef<void(const FLayout&)> Draw);
 
 	/** A round of this player's went in (ASOCombatCharacter::OnHitConfirmed: on this machine, host or joined). */
 	void OnHitConfirmed(bool bCrit, bool bKilled);
@@ -138,7 +220,8 @@ private:
 	};
 	TArray<FItemCard> ItemCards;
 
-	/** A damage number: where the blow landed, how much, what kind, when; pellets of one shot add up into one. */
+	/** A damage number: where the blow landed, how much, what kind, when; pellets of one shot add up into one. Each
+	 *  keeps the place it was given on the screen (a lane clear of the others) so numbers never lie on each other. */
 	struct FDamageNumber
 	{
 		FVector Point;
@@ -147,6 +230,9 @@ private:
 		bool bKilled = false;
 		float Time = 0.0f;
 		float Drift = 0.0f;
+		float Lift = 0.0f;      // px it was moved up to clear another number (kept while it lives)
+		float Side = 0.0f;      // px it was moved sideways
+		bool bLaned = false;
 	};
 	TArray<FDamageNumber> DamageNumbers;
 

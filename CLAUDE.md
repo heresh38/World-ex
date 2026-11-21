@@ -807,7 +807,34 @@ heading, the power), names in Medium. The magazine's well has a tick for every r
 down a ring filling round its cell, the ultimate's diamond fills from its foot, the compass sits on a tinted strip,
 the mini-map on a dish with 36 ticks. Checked at 3840 x 2160 (`-ResX=3840 -ResY=2160 -ForceRes`): type, shapes and
 ticks crisp; the mini-map's picture is the area's own capture (`ASOMapInfo`: a texel of about half a metre, 1024 to
-2048 by the area's size). Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
+2048 by the area's size). **Round 4** (the owner, 2026-11-21, their two reference screens again with a written
+brief: "it should pretty much look exactly like the image"; "CRITICAL: fix all text, number and image overlapping ...
+zero visible overlaps"): the HUD is the reference's: the mini-map a dark radar dish (72 px) with a thin lit cyan rim,
+the few nearest markers and `N` alone above it; the compass a slim scale (no strip) with a gold diamond on its middle,
+the goal and the places as marks on the line; the conditions square cells with the time as m:ss and no word; the
+vitals with nothing behind the bars (the emblem a diamond with a cyan rim, SHIELD cyan and HEALTH a muted red with a
+mark and a word above each and the number at its end, the level a gold badge under the emblem); the abilities three
+hex cells a fifth bigger with a key badge under each, the cooling seconds in the cell and its ring round it, the
+ultimate a gold diamond between two bars filling OUTWARD from it (`FGlass::Bar(..., FillAxis)`: 3 = from the right)
+with its share or ULTIMATE READY under it and its key at the right; the weapon panel cut into REGIONS
+(`SOHudPaint::FRegion`: the picture's column at the right under the power, the name's row, the kind's row, the
+count's room, a heat row when the gun has heat), the name and the kind FITTED to their rows (`FType::Fit` /
+`FitLabel`: shrunk, then cut with an ellipsis), the magazine and the reserve shrunk together until they fit, the three
+cards each with its number in a column of its own. Damage numbers: plain white, on a shield cyan-blue, precise pale
+gold, critical gold with CRIT; each is laid, the first time it is drawn, where the WHOLE of its rise is clear of the
+others and of the screen the fixed elements and the creatures' plates hold (`ASOHUD::Reserve`: this frame's and
+last frame's), and keeps that lane; the rewards each on their own side (xp right of the crosshair, credits and alloy
+left) in lanes by birth. The glass is graphite (`FGlassStyle` defaults). **Every element is adjustable on its own**:
+`FSOHudElementLayout` (offset in px at 1080 lines, scale, visible) per element on the HUD (`MinimapLayout` ...),
+drawn through `DrawElement` (the canvas translated with it, `FCanvas::PushRelativeTransform`; its sizes scaled by its
+own S); console `SOHudLayout <element> <dx> <dy> [scale]` / `reset`. **The layout audit** (`SOHudPaint::FHudAudit`;
+console `SOHudAudit 1`, or `-SOHudAudit` on the command line; the capture series runs with it): every string,
+picture and piece of glass notes its rectangle and element, and at the frame's end the pairs that may not overlap
+are logged as `HUDOVERLAP` (text on text, text or a picture on a picture, a word on a bar, anything crossing a
+panel's or a cell's edge; what a container holds whole is by design); a loot beam's word is not drawn where it would
+lie on reserved screen or in the crosshair's band. Set 38 has `hud_24_long_name` (`ASOHUD::SetDebugWeapon`),
+`hud_25_big_count`, `hud_26_many_numbers` (eight kinds at once with the rewards), `hud_27/28_slot_2/3`; it is run at
+1920x1080, 2560x1440 and 3440x1440 (`Saved/Screenshots/hud1080|hud1440|hudwide`) to zero overlaps. Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
 in the middle, the armoury's rule; checked at 2560 x 1080). Top left the round mini-map (`ASOMapInfo`'s picture cut to a
 disc, north up, the look cone, map points, the operation's goal held at the rim, creatures this side knows of in red,
 the area's name and the nearest map point or the stage under it); top centre the compass strip (N / E / S / W, the

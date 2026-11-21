@@ -2808,7 +2808,7 @@ HUD_GLASS_HLSL = """
 // The HUD's glass (SOHUDPaint.h FGlass): one shape per quad, worked out as a signed distance in PIXELS, so its edge
 // is anti-aliased at any size and resolution, with its shadow, its body lit from above, an inner glow, a line of
 // light along its top and dark along its foot, and its edge. Size = (quad w, quad h, pad, shape); Geo = (corner cut
-// px, edge px, fill 0..1, fill axis: 0 none, 1 across, 2 up); FillA / FillB = the body's top / bottom (a bar: the fill
+// px, edge px, fill 0..1, fill axis: 0 none, 1 across, 2 up, 3 across from the right); FillA / FillB = the body's top / bottom (a bar: the fill
 // / the trough); EdgeCol; Glow = rgb + reach px; Shadow = (offset px, blur px, alpha, glow alpha); Arc = (from deg,
 // to deg, segment px, gap px). Shapes: 0 plate (top-left and bottom-right cut), 1 plate (all four), 2 hexagon point
 // up, 3 hexagon flat top, 4 diamond, 5 ring / arc (thickness = cut), 6 disc, 7 bar.
@@ -2872,8 +2872,8 @@ float fillMask = 1.0;
 float f = 0.0, px = 1.0;
 if (fillAxis > 0.5)
 {
-    f = fillAxis < 1.5 ? (q.x + hs.x) / max(2.0 * hs.x, 0.001) : 1.0 - (q.y + hs.y) / max(2.0 * hs.y, 0.001);
-    px = fillAxis < 1.5 ? 2.0 * hs.x : 2.0 * hs.y;
+    f = fillAxis < 1.5 ? (q.x + hs.x) / max(2.0 * hs.x, 0.001) : (fillAxis < 2.5 ? 1.0 - (q.y + hs.y) / max(2.0 * hs.y, 0.001) : 1.0 - (q.x + hs.x) / max(2.0 * hs.x, 0.001));
+    px = fillAxis > 1.5 && fillAxis < 2.5 ? 2.0 * hs.y : 2.0 * hs.x;
     float w = 0.6 / max(px, 1.0);
     fillMask = 1.0 - smoothstep(frac - w, frac + w, f);
 }
