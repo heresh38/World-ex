@@ -187,6 +187,77 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 40)
+	{
+		// The third-person hold through the aim's pitch (files hp_<pitch>_<view>; the owner, 2026-11-20: "when looking
+		// down completely and in third person the players hand splits and the gun moves weirdly"): the body at rest
+		// and aiming, the view pitched from straight down to high up, from a camera ahead and to the right of the body
+		// (both hands and the gun in the picture) and from beside it; the fit's report (HOLDFIT) at each.
+		// -SOGuns=<archetype> (the rifle by default).
+		FString Arch = TEXT("rifle");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), Arch, false);
+		auto Cam = [this, Hero](int32 Which)
+		{
+			ASOCharacter* H = Hero();
+			if (Which < 0 || !H)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
+			const FVector Rel = Which == 0 ? FVector(230.0f, 150.0f, 30.0f) : FVector(60.0f, 260.0f, 40.0f), Look(20.0f, 0.0f, 30.0f);
+			CaptureCamera->SetActorRelativeLocation(Rel);
+			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		auto Report = [this, Hero](const FString& Label)
+		{
+			ASOCharacter* H = Hero();
+			const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
+			const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr;
+			if (Rig && H->GetMesh())
+			{
+				const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(Rig, H->GetMesh());
+				UE_LOG(LogShatteredOrbit, Display, TEXT("HOLDPITCH %s: %s"), *Label, *R.ToString());
+			}
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			View(ESOViewMode::ThirdPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(FCrc::StrCrc32(*Arch));
+				FSOWeaponInstance Wi = USOLootLibrary::MakeWeapon(FName(*Arch), 2, 20, Rng);
+				Wi.Sight = TEXT("default");
+				H->EquipInstance(Wi);
+			}
+		});
+		const float Pitches[] = { -89.0f, -70.0f, -45.0f, 0.0f, 45.0f, 75.0f };
+		for (int32 Pass = 0; Pass < 2; ++Pass)                  // at rest, then aiming
+		{
+			for (float P : Pitches)
+			{
+				const FString Tag = FString::Printf(TEXT("%s%d"), Pass ? TEXT("aim_") : TEXT(""), FMath::RoundToInt(P));
+				Act([=, this]() { Look(P); Aim(Pass == 1); Cam(0); });
+				Snap(0.7f, *FString::Printf(TEXT("hp_%s_front"), *Tag));
+				Act([=, this]() { Cam(1); });
+				Snap(0.15f, *FString::Printf(TEXT("hp_%s_side"), *Tag), [=, this]() { Report(Tag); return true; });
+			}
+		}
+		Act([=, this]() { Aim(false); Look(0.0f); Cam(-1); });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 39)
 	{
 		// The movement flow (files mv_*): the guide's sprint, slide, dodge, jump, landing and strafe from the eye (the
