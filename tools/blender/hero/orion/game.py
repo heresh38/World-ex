@@ -1080,6 +1080,33 @@ def H_Z0():
     return HD.Z0
 
 
+def rigid_skull(o, z_head):
+    """the skull and the face whole on the head bone: the heat weights spread the neck's share up the face, so when
+    the head pitched 80 degrees (the aim) the sockets lagged behind the eyeballs, which are weighted whole to the
+    head, and the eyes stood out of the face (the owner, 2026-11-21: "the players eyes seem to be popping out of his
+    head"). From 2 cm under the skull's base joint up, blended in over 5 cm (the throat under the jaw stays the neck's)"""
+    names = {g.index: g.name for g in o.vertex_groups}
+    head = o.vertex_groups.get("head")
+    if head is None:
+        return
+    n = 0
+    for v in o.data.vertices:
+        k = (v.co.z - (z_head - .02)) / .05
+        if k <= 0.0:
+            continue
+        k = min(1.0, k)
+        k = k * k * (3 - 2 * k)
+        w = {g.group: g.weight for g in v.groups}
+        total = sum(w.values()) or 1.0
+        wh = w.get(head.index, 0.0)
+        for gi, wt in w.items():
+            if gi != head.index:
+                o.vertex_groups[gi].add([v.index], wt * (1 - k), 'REPLACE')
+        head.add([v.index], wh + (total - wh) * k, 'REPLACE')
+        n += 1
+    log(f"rig: the skull rigid on the head from {100 * (z_head - .02):.0f} cm up ({n} vertices)")
+
+
 def make_rig(o, log_=None):
     """the armature on THIS body's joints, the body skinned to it (automatic heat weights), the IK helpers the shared
     layout carries kept out of the deform set"""
@@ -1158,6 +1185,7 @@ def make_rig(o, log_=None):
     log(f"rig: heat weights on a closed copy ({len(proxy.data.vertices)} vertices), {unweighted} without a weight")
     copy_weights(proxy, o)
     bpy.data.objects.remove(proxy, do_unlink=True)
+    rigid_skull(o, float(J["neck"][1][2]))
     o.parent = arm
     mod = o.modifiers.new("Armature", 'ARMATURE')
     mod.object = arm

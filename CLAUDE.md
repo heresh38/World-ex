@@ -328,7 +328,10 @@ nothing, and the brachialis had no entry: it ran at the .20 default on the insid
 takes about 1.9 mm off every surface (`GROOVE`) and puts the bellies 3-7 mm back: the cage's table is written for what
 comes OUT (measure with `hero/orion/armsec.py`: vertical extent, depth, top and bottom of the arm every 2 cm). `game.py` (in Blender on the saved build: stages normals, uv,
 skin, eyes, lashes, rig, suit, clips, export; `--stages=` picks some, `--save=` saves the build BEFORE the export splits
-it, and a build saved after its export can still run `clips,export`) makes it the game's: the head's normals from the
+it, and a build saved after its export can still run `clips,export`; NEVER `rig` again on a saved build: it adds a
+second armature modifier to the eyes, hair and lashes and a second suit object beside the old one, and the
+export took the old suit with a dangling modifier, its sleeves in a T-pose in the game (2026-11-21); a change to
+the skinning is run from the LAB build, every stage) makes it the game's: the head's normals from the
 sculpt's field; UVs on hidden seams in two maps (`skin_face`: the head and ears, 0.13 mm a texel; `skin`: the rest, the
 hands at 1.7x); the skin maps (`orion_male_skin_<face|body>_BaseColor / _Normal / _ORM`, R occlusion G roughness, B the
 brows) baked through the head lab's own skin shader FROM THE GAME MESH (from the sculpt, rays met the wrong side of the
@@ -343,7 +346,12 @@ check `SourceArt/Characters/PlayerMale/Textures/*_ORM.png` after an export); the
 `orion_male_eye_BaseColor`); the rig (the shared player
 skeleton, its joints from this body's own construction: `body.arm_axis`, the hand's `joints_of`, the foot's toes, the
 knee 1.2 cm ahead of the hip-ankle line (behind it, the game's leg IK bent it backward in a sideways crouch-walk);
-heat weights solved on a closed voxel copy, the eyes' openings filled, then copied face by face); the undersuit
+heat weights solved on a closed voxel copy, the eyes' openings filled, then copied face by face; then the SKULL
+and the face weighted whole to the head bone, `game.rigid_skull`, blended in over 5 cm from 2 cm under the skull's
+base joint: the heat weights spread the neck's share up the face, and when the head pitched 80 degrees with the
+aim the sockets lagged behind the eyeballs, which are whole on the head, and the eyes stood out of the face: the
+owner, 2026-11-21, "the players eyes seem to be popping out of his head"; check with `SOCaptureSeries 1 40`'s
+`SO_hp_<pitch>_face` pictures, the face close from below looking down and from above looking up); the undersuit
 (`C_suit__orion`, slot `suit`, ALWAYS worn and never armour: the owner, 2026-11-17, "the undersuit is on at all times
 and armor goes on top of that"; the body's own mesh offset and cut a hair past the wrists' and ankles' rings, its maps
 baked from the lab's detailed suit and collar, `orion_male_suit_*`, its weights copied in the REST pose); the clips
