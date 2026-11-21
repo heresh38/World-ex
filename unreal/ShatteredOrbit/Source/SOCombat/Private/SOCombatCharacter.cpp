@@ -465,7 +465,7 @@ void ASOCombatCharacter::HandleMoveScaleChanged(const FOnAttributeChangeData& Ch
 	OnMoveScaleChanged();
 }
 
-void ASOCombatCharacter::ConfirmHit(bool bCrit, bool bKilled)
+void ASOCombatCharacter::ConfirmHit(bool bCrit, bool bKilled, const FSOHitReport& Report)
 {
 	if (!HasAuthority())
 	{
@@ -474,16 +474,34 @@ void ASOCombatCharacter::ConfirmHit(bool bCrit, bool bKilled)
 	if (IsLocallyControlled())
 	{
 		OnHitConfirmed.Broadcast(bCrit, bKilled); // the host's own shot, or a creature's (nobody listens)
+		OnHitReported.Broadcast(Report);
 	}
 	else if (IsPlayerControlled())
 	{
-		ClientHitConfirmed(bCrit, bKilled);
+		ClientHitConfirmed(bCrit, bKilled, Report);
 	}
 }
 
-void ASOCombatCharacter::ClientHitConfirmed_Implementation(bool bCrit, bool bKilled)
+void ASOCombatCharacter::ClientHitConfirmed_Implementation(bool bCrit, bool bKilled, const FSOHitReport& Report)
 {
 	OnHitConfirmed.Broadcast(bCrit, bKilled);
+	OnHitReported.Broadcast(Report);
+}
+
+float ASOCombatCharacter::GetStatusTimeLeft(const FGameplayTag& Tag) const
+{
+	if (!AbilitySystem || !AbilitySystem->HasMatchingGameplayTag(Tag))
+	{
+		return 0.0f;
+	}
+	FGameplayTagContainer StatusTags;
+	StatusTags.AddTag(Tag);
+	float Best = 0.0f;
+	for (const float Left : AbilitySystem->GetActiveEffectsTimeRemaining(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(StatusTags)))
+	{
+		Best = FMath::Max(Best, Left);
+	}
+	return Best;
 }
 
 void ASOCombatCharacter::ShowAbility(ESOAbilitySlot Slot, bool bWindUp)

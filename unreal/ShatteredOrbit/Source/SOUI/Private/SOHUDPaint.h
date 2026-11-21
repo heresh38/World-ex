@@ -1,0 +1,384 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "CanvasItem.h"
+#include "CanvasTypes.h"
+#include "Engine/Canvas.h"
+#include "Engine/Engine.h"
+#include "Engine/Font.h"
+
+/**
+ * The HUD's shapes, drawn as batches of vertex-coloured triangles on the canvas (nothing is a texture or a material:
+ * every plate, hexagon, ring and sweep is geometry, sharp at any resolution). All sizes are in screen pixels: the
+ * caller scales by its layout. The look is the armoury's: night-blue glass, cyan lines, gold for what matters.
+ */
+namespace SOHudPaint
+{
+	// --- the palette (canvas colours) ---
+	const FLinearColor Glass(0.010f, 0.018f, 0.038f, 0.80f);     // a panel's body
+	const FLinearColor GlassDeep(0.005f, 0.009f, 0.020f, 0.90f); // a panel's lower half, the backs of bars
+	const FLinearColor Line(0.30f, 0.80f, 1.0f, 0.42f);           // a panel's edge
+	const FLinearColor Cyan(0.30f, 0.85f, 1.0f, 1.0f);            // what is active
+	const FLinearColor Gold(1.0f, 0.80f, 0.32f, 1.0f);            // what matters
+	const FLinearColor Ink(0.93f, 0.96f, 1.0f, 0.95f);            // words
+	const FLinearColor Dim(0.62f, 0.70f, 0.82f, 0.85f);           // lesser words
+	const FLinearColor ShieldBlue(0.32f, 0.74f, 1.0f, 1.0f);
+	const FLinearColor HealthRed(0.96f, 0.30f, 0.26f, 1.0f);
+	const FLinearColor Hurt(1.0f, 0.35f, 0.25f, 0.95f);
+	const FLinearColor Lock(1.0f, 0.22f, 0.16f, 1.0f);
+
+	inline FLinearColor A(const FLinearColor& C, float Alpha) { return FLinearColor(C.R, C.G, C.B, C.A * Alpha); }
+	inline FLinearColor Mix(const FLinearColor& X, const FLinearColor& Y, float T) { return FMath::Lerp(X, Y, T); }
+
+	/** A batch of triangles, drawn in one go on Flush (or when the texture changes). */
+	struct FPainter
+	{
+		UCanvas* Canvas = nullptr;
+		TArray<FCanvasUVTri> Tris;
+		FTexture* Texture = nullptr;
+
+		explicit FPainter(UCanvas* InCanvas) : Canvas(InCanvas) {}
+		~FPainter() { Flush(); }
+
+		void Flush()
+		{
+			if (Tris.Num() > 0 && Canvas)
+			{
+				FCanvasTriangleItem Item(Tris, Texture ? Texture : GWhiteTexture);
+				Item.BlendMode = SE_BLEND_Translucent;
+				Canvas->DrawItem(Item);
+			}
+			Tris.Reset();
+			Texture = nullptr;
+		}
+
+		void Tri(const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FLinearColor& C0, const FLinearColor& C1, const FLinearColor& C2)
+		{
+			if (Texture)
+			{
+				Flush();
+			}
+			FCanvasUVTri T;
+			T.V0_Pos = P0; T.V1_Pos = P1; T.V2_Pos = P2;
+			T.V0_Color = C0; T.V1_Color = C1; T.V2_Color = C2;
+			T.V0_UV = T.V1_UV = T.V2_UV = FVector2D::ZeroVector;
+			Tris.Add(T);
+		}
+
+		void Tri(const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FLinearColor& C) { Tri(P0, P1, P2, C, C, C); }
+
+		/** A quad from edge A (A0-A1) to edge B (B0-B1) with a colour per edge. */
+		void Quad(const FVector2D& A0, const FVector2D& A1, const FVector2D& B0, const FVector2D& B1, const FLinearColor& CA, const FLinearColor& CB)
+		{
+			Tri(A0, B0, B1, CA, CB, CB);
+			Tri(A0, B1, A1, CA, CB, CA);
+		}
+
+		/** A filled convex polygon (a fan from its first point). */
+		void Fill(const TArray<FVector2D>& P, const FLinearColor& C)
+		{
+			for (int32 i = 1; i + 1 < P.Num(); ++i)
+			{
+				Tri(P[0], P[i], P[i + 1], C);
+			}
+		}
+
+		/** A filled polygon shaded from its centre (CC) to its edge (CE). */
+		void FillFan(const FVector2D& Centre, const TArray<FVector2D>& P, const FLinearColor& CC, const FLinearColor& CE)
+		{
+			for (int32 i = 0; i < P.Num(); ++i)
+			{
+				Tri(Centre, P[i], P[(i + 1) % P.Num()], CC, CE, CE);
+			}
+		}
+
+		/** A polygon filled from its top (CT) to its bottom (CB). */
+		void FillDown(const TArray<FVector2D>& P, const FLinearColor& CT, const FLinearColor& CB)
+		{
+			float Y0 = FLT_MAX, Y1 = -FLT_MAX;
+			for (const FVector2D& V : P) { Y0 = FMath::Min(Y0, static_cast<float>(V.Y)); Y1 = FMath::Max(Y1, static_cast<float>(V.Y)); }
+			auto ColourAt = [&](const FVector2D& V) { return Mix(CT, CB, FMath::Clamp((static_cast<float>(V.Y) - Y0) / FMath::Max(Y1 - Y0, 1.0f), 0.0f, 1.0f)); };
+			for (int32 i = 1; i + 1 < P.Num(); ++i)
+			{
+				Tri(P[0], P[i], P[i + 1], ColourAt(P[0]), ColourAt(P[i]), ColourAt(P[i + 1]));
+			}
+		}
+
+		/** A polygon filled from its left (CL) to its right (CR). */
+		void FillAcross(const TArray<FVector2D>& P, const FLinearColor& CL, const FLinearColor& CR)
+		{
+			float X0 = FLT_MAX, X1 = -FLT_MAX;
+			for (const FVector2D& V : P) { X0 = FMath::Min(X0, static_cast<float>(V.X)); X1 = FMath::Max(X1, static_cast<float>(V.X)); }
+			auto ColourAt = [&](const FVector2D& V) { return Mix(CL, CR, FMath::Clamp((static_cast<float>(V.X) - X0) / FMath::Max(X1 - X0, 1.0f), 0.0f, 1.0f)); };
+			for (int32 i = 1; i + 1 < P.Num(); ++i)
+			{
+				Tri(P[0], P[i], P[i + 1], ColourAt(P[0]), ColourAt(P[i]), ColourAt(P[i + 1]));
+			}
+		}
+
+		/** The outline of a polyline, T px wide, centred on the line. */
+		void Stroke(const TArray<FVector2D>& P, const FLinearColor& C, float T, bool bClosed = true)
+		{
+			const int32 N = bClosed ? P.Num() : P.Num() - 1;
+			for (int32 i = 0; i < N; ++i)
+			{
+				const FVector2D& A0 = P[i];
+				const FVector2D& A1 = P[(i + 1) % P.Num()];
+				const FVector2D D = (A1 - A0).GetSafeNormal();
+				const FVector2D Nrm(-D.Y, D.X);
+				// a hair past each end so the corners close
+				const FVector2D E0 = A0 - D * T * 0.5f, E1 = A1 + D * T * 0.5f;
+				Quad(E0 + Nrm * T * 0.5f, E1 + Nrm * T * 0.5f, E0 - Nrm * T * 0.5f, E1 - Nrm * T * 0.5f, C, C);
+			}
+		}
+
+		/** A line drawn as light: a soft halo under a sharp core. */
+		void Glow(const TArray<FVector2D>& P, const FLinearColor& C, float T, bool bClosed = true)
+		{
+			Stroke(P, A(C, 0.18f), T * 4.0f, bClosed);
+			Stroke(P, A(C, 0.45f), T * 2.0f, bClosed);
+			Stroke(P, C, T, bClosed);
+		}
+
+		void Segment(const FVector2D& P0, const FVector2D& P1, const FLinearColor& C, float T)
+		{
+			Stroke({ P0, P1 }, C, T, false);
+		}
+
+		/** A ring (or an arc from A0 to A1, radians, screen space) between radii R0 and R1, coloured inside (C0) to outside (C1). */
+		void Ring(const FVector2D& C, float R0, float R1, const FLinearColor& C0, const FLinearColor& C1, float A0 = 0.0f, float A1 = UE_TWO_PI, int32 N = 64)
+		{
+			const int32 Steps = FMath::Max(3, FMath::CeilToInt(N * FMath::Abs(A1 - A0) / UE_TWO_PI));
+			for (int32 i = 0; i < Steps; ++i)
+			{
+				const float T0 = A0 + (A1 - A0) * i / Steps, T1 = A0 + (A1 - A0) * (i + 1) / Steps;
+				const FVector2D D0(FMath::Cos(T0), FMath::Sin(T0)), D1(FMath::Cos(T1), FMath::Sin(T1));
+				Quad(C + D0 * R0, C + D1 * R0, C + D0 * R1, C + D1 * R1, C0, C1);
+			}
+		}
+
+		/** A disc. */
+		void Disc(const FVector2D& C, float R, const FLinearColor& CC, const FLinearColor& CE, int32 N = 64)
+		{
+			TArray<FVector2D> P;
+			for (int32 i = 0; i < N; ++i)
+			{
+				const float T = UE_TWO_PI * i / N;
+				P.Add(C + FVector2D(FMath::Cos(T), FMath::Sin(T)) * R);
+			}
+			FillFan(C, P, CC, CE);
+		}
+
+		/** A pie: the sector of a disc from A0 to A1 (radians, screen space). */
+		void Sector(const FVector2D& C, float R, float A0, float A1, const FLinearColor& CC, const FLinearColor& CE, int32 N = 48)
+		{
+			const int32 Steps = FMath::Max(2, FMath::CeilToInt(N * FMath::Abs(A1 - A0) / UE_TWO_PI));
+			for (int32 i = 0; i < Steps; ++i)
+			{
+				const float T0 = A0 + (A1 - A0) * i / Steps, T1 = A0 + (A1 - A0) * (i + 1) / Steps;
+				Tri(C, C + FVector2D(FMath::Cos(T0), FMath::Sin(T0)) * R, C + FVector2D(FMath::Cos(T1), FMath::Sin(T1)) * R, CC, CE, CE);
+			}
+		}
+
+		/** From C along angle T to the polygon's edge (C inside). */
+		static FVector2D Ray(const TArray<FVector2D>& P, const FVector2D& C, float T)
+		{
+			const FVector2D D(FMath::Cos(T), FMath::Sin(T));
+			float Best = FLT_MAX;
+			for (int32 i = 0; i < P.Num(); ++i)
+			{
+				const FVector2D& A0 = P[i];
+				const FVector2D E = P[(i + 1) % P.Num()] - A0;
+				const float Den = D.X * E.Y - D.Y * E.X;
+				if (FMath::Abs(Den) < KINDA_SMALL_NUMBER)
+				{
+					continue;
+				}
+				const FVector2D W = A0 - C;
+				const float Tt = (W.X * E.Y - W.Y * E.X) / Den;
+				const float U = (W.X * D.Y - W.Y * D.X) / Den;
+				if (Tt > 0.0f && U >= -0.001f && U <= 1.001f)
+				{
+					Best = FMath::Min(Best, Tt);
+				}
+			}
+			return Best < FLT_MAX ? D * Best : FVector2D::ZeroVector;
+		}
+
+		/** The part of a convex polygon swept from the top, clockwise, as far as Frac (a cooldown coming back). */
+		void Sweep(const TArray<FVector2D>& P, const FVector2D& C, float Frac, const FLinearColor& Col)
+		{
+			Frac = FMath::Clamp(Frac, 0.0f, 1.0f);
+			if (Frac <= 0.0f)
+			{
+				return;
+			}
+			const int32 Steps = 36;
+			const float A0 = -UE_HALF_PI, A1 = A0 + UE_TWO_PI * Frac;
+			FVector2D Prev = C + Ray(P, C, A0);
+			for (int32 i = 1; i <= Steps; ++i)
+			{
+				const float T = A0 + (A1 - A0) * i / Steps;
+				const FVector2D Next = C + Ray(P, C, T);
+				Tri(C, Prev, Next, Col);
+				Prev = Next;
+			}
+		}
+
+		/** A textured disc: the map's picture cut round (UVs about UVCentre, UVPerPx per pixel). */
+		void TexturedDisc(const FVector2D& C, float R, FTexture* Tex, const FVector2D& UVCentre, float UVPerPx, const FLinearColor& Tint, int32 N = 72)
+		{
+			Flush();
+			Texture = Tex;
+			for (int32 i = 0; i < N; ++i)
+			{
+				const float T0 = UE_TWO_PI * i / N, T1 = UE_TWO_PI * (i + 1) / N;
+				const FVector2D D0(FMath::Cos(T0), FMath::Sin(T0)), D1(FMath::Cos(T1), FMath::Sin(T1));
+				FCanvasUVTri T;
+				T.V0_Pos = C; T.V1_Pos = C + D0 * R; T.V2_Pos = C + D1 * R;
+				T.V0_UV = UVCentre; T.V1_UV = UVCentre + D0 * R * UVPerPx; T.V2_UV = UVCentre + D1 * R * UVPerPx;
+				T.V0_Color = T.V1_Color = T.V2_Color = Tint;
+				Tris.Add(T);
+			}
+			Flush();
+		}
+	};
+
+	// --- shapes ---
+	inline TArray<FVector2D> Diamond(const FVector2D& C, float RX, float RY)
+	{
+		return { C + FVector2D(0, -RY), C + FVector2D(RX, 0), C + FVector2D(0, RY), C + FVector2D(-RX, 0) };
+	}
+
+	/** A regular hexagon, a point up (Rot 0) or a flat top (Rot pi/6). */
+	inline TArray<FVector2D> Hex(const FVector2D& C, float R, float Rot = 0.0f)
+	{
+		TArray<FVector2D> P;
+		for (int32 i = 0; i < 6; ++i)
+		{
+			const float T = -UE_HALF_PI + Rot + i * UE_PI / 3.0f;
+			P.Add(C + FVector2D(FMath::Cos(T), FMath::Sin(T)) * R);
+		}
+		return P;
+	}
+
+	/** A rectangle with its top-left and bottom-right corners cut (the armoury's cards). */
+	inline TArray<FVector2D> Plate(float X, float Y, float W, float H, float Cut)
+	{
+		return { FVector2D(X + Cut, Y), FVector2D(X + W, Y), FVector2D(X + W, Y + H - Cut), FVector2D(X + W - Cut, Y + H), FVector2D(X, Y + H), FVector2D(X, Y + Cut) };
+	}
+
+	/** A rectangle with all four corners cut. */
+	inline TArray<FVector2D> Plate4(float X, float Y, float W, float H, float Cut)
+	{
+		return { FVector2D(X + Cut, Y), FVector2D(X + W - Cut, Y), FVector2D(X + W, Y + Cut), FVector2D(X + W, Y + H - Cut),
+			FVector2D(X + W - Cut, Y + H), FVector2D(X + Cut, Y + H), FVector2D(X, Y + H - Cut), FVector2D(X, Y + Cut) };
+	}
+
+	inline TArray<FVector2D> Rectangle(float X, float Y, float W, float H)
+	{
+		return { FVector2D(X, Y), FVector2D(X + W, Y), FVector2D(X + W, Y + H), FVector2D(X, Y + H) };
+	}
+
+	/** A glass panel: its body shaded down, its edge a thin line. */
+	inline void Panel(FPainter& P, const TArray<FVector2D>& Shape, float EdgeT, float Alpha = 1.0f, const FLinearColor& Edge = Line)
+	{
+		P.FillDown(Shape, A(Glass, Alpha), A(GlassDeep, Alpha));
+		P.Stroke(Shape, A(Edge, Alpha), EdgeT);
+	}
+
+	/** A bar: a dark back, the fill from the left, a thin frame. */
+	inline void Bar(FPainter& P, float X, float Y, float W, float H, float Frac, const FLinearColor& Fill, float Alpha = 1.0f, float EdgeT = 1.0f)
+	{
+		P.Fill(Rectangle(X, Y, W, H), A(GlassDeep, Alpha));
+		const float FW = W * FMath::Clamp(Frac, 0.0f, 1.0f);
+		if (FW > 0.5f)
+		{
+			P.FillAcross(Rectangle(X, Y, FW, H), A(Mix(Fill, FLinearColor::White, 0.0f), Alpha), A(Mix(Fill, FLinearColor::White, 0.25f), Alpha));
+			P.Fill(Rectangle(X, Y, FW, H * 0.35f), FLinearColor(1.0f, 1.0f, 1.0f, 0.10f * Alpha));
+		}
+		P.Stroke(Rectangle(X, Y, W, H), A(Line, Alpha * 0.8f), EdgeT);
+	}
+
+	// --- text (the engine's Roboto: the armoury's face) ---
+	struct FType
+	{
+		UCanvas* Canvas;
+		UFont* Small;   // 9
+		UFont* Medium;  // 11
+		UFont* Large;   // 20
+
+		/** The engine's medium and large fonts are one distance-field face (crisp at any scale); the small one is a
+		 *  bitmap that blurs when scaled, so every size here is the distance-field face scaled. */
+		explicit FType(UCanvas* InCanvas) : Canvas(InCanvas), Small(GEngine ? GEngine->GetMediumFont() : nullptr),
+			Medium(GEngine ? GEngine->GetMediumFont() : nullptr), Large(GEngine ? GEngine->GetLargeFont() : nullptr) {}
+
+		FVector2D Size(const FString& Text, UFont* F, float Scale) const
+		{
+			float W = 0.0f, H = 0.0f;
+			if (Canvas && F)
+			{
+				Canvas->TextSize(F, Text, W, H, Scale, Scale);
+			}
+			return FVector2D(W, H);
+		}
+
+		/** Draws at X, Y (top left); returns the width. */
+		float Draw(const FString& Text, float X, float Y, UFont* F, float Scale, const FLinearColor& C, bool bShadow = true) const
+		{
+			if (!Canvas || !F)
+			{
+				return 0.0f;
+			}
+			FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(Text), F, C);
+			Item.Scale = FVector2D(Scale, Scale);
+			if (bShadow)
+			{
+				Item.EnableShadow(FLinearColor(0.0f, 0.0f, 0.0f, C.A * 0.7f), FVector2D(1.0f, 1.0f));
+			}
+			Item.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Item);
+			return Size(Text, F, Scale).X;
+		}
+
+		float DrawRight(const FString& Text, float XRight, float Y, UFont* F, float Scale, const FLinearColor& C) const
+		{
+			const float W = Size(Text, F, Scale).X;
+			Draw(Text, XRight - W, Y, F, Scale, C);
+			return W;
+		}
+
+		float DrawCentred(const FString& Text, float XMid, float Y, UFont* F, float Scale, const FLinearColor& C) const
+		{
+			const float W = Size(Text, F, Scale).X;
+			Draw(Text, XMid - W * 0.5f, Y, F, Scale, C);
+			return W;
+		}
+
+		float CapsWidth(const FString& Text, UFont* F, float Scale, float Spacing) const
+		{
+			const FString Up = Text.ToUpper();
+			float W = 0.0f;
+			for (int32 i = 0; i < Up.Len(); ++i)
+			{
+				W += Size(Up.Mid(i, 1), F, Scale).X + (i + 1 < Up.Len() ? Spacing : 0.0f);
+			}
+			return W;
+		}
+
+		/** Letter-spaced capitals (a label); returns the width. Align: 0 left, 1 right, 0.5 centred on X. */
+		float Caps(const FString& Text, float X, float Y, UFont* F, float Scale, const FLinearColor& C, float Spacing, float Align = 0.0f) const
+		{
+			const FString Up = Text.ToUpper();
+			const float W = CapsWidth(Text, F, Scale, Spacing);
+			float Cx = X - W * Align;
+			for (int32 i = 0; i < Up.Len(); ++i)
+			{
+				const FString Ch = Up.Mid(i, 1);
+				Draw(Ch, Cx, Y, F, Scale, C);
+				Cx += Size(Ch, F, Scale).X + Spacing;
+			}
+			return W;
+		}
+	};
+}

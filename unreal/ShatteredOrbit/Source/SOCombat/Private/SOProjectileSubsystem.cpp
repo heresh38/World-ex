@@ -111,6 +111,7 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 		const ASOCombatCharacter* Struck = Cast<ASOCombatCharacter>(Hit.GetActor());
 		const float Precision = Struck ? Struck->PrecisionAt(Hit) : (IsPrecisionBone(Hit.BoneName) ? 1.0f : 0.0f);
 		const bool bCrit = Precision > 0.0f;
+		const bool bOnShield = Struck && Struck->GetShield() > 0.0f; // (before the damage: what the round met)
 		if (World->GetNetMode() != NM_Client && Hit.GetActor())
 		{
 			const float Distance = FVector::Dist(Round.Origin, Hit.ImpactPoint);
@@ -134,7 +135,14 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 			if (ASOCombatCharacter* Shooter = Cast<ASOCombatCharacter>(Round.Instigator.Get()))
 			{
 				const ASOCombatCharacter* Victim = Cast<ASOCombatCharacter>(Hit.GetActor());
-				Shooter->ConfirmHit(bCrit, Victim && Victim->IsDead());
+				FSOHitReport Report;
+				Report.Amount = Applied;
+				Report.Point = Hit.ImpactPoint;
+				Report.bShield = bOnShield;
+				Report.bCrit = bCrit;
+				Report.bKilled = Victim && Victim->IsDead();
+				Report.Precision = Precision;
+				Shooter->ConfirmHit(bCrit, Report.bKilled, Report);
 			}
 		}
 		if (OutHit)

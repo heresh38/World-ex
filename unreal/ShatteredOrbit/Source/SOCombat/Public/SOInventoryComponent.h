@@ -70,6 +70,27 @@ public:
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FSOOnLootFeed, const FString& /*Text*/, const FLinearColor& /*Color*/);
 
+/** A gun that just came in (the HUD's NEW ITEM card): its name, its archetype (for the icon and the class line),
+ *  rarity and power. */
+USTRUCT()
+struct SOCOMBAT_API FSOFeedItem
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString Name;
+
+	UPROPERTY()
+	FName Archetype;
+
+	UPROPERTY()
+	int32 Rarity = 0;
+
+	UPROPERTY()
+	int32 Power = 0;
+};
+DECLARE_MULTICAST_DELEGATE_OneParam(FSOOnFeedItem, const FSOFeedItem& /*Item*/);
+
 /**
  * The player's vault and loadout (lives on the player state, so it survives death): every owned copy, three equipped
  * slots (Primary / Special / Heavy) and the one in hand, credits / alloy / xp. Server-authoritative and replicated;
@@ -219,6 +240,8 @@ public:
 	FSOOnInventoryChanged OnChanged;
 	/** A line for the loot feed (pickups, dismantles) on the machine that owns the inventory. */
 	FSOOnLootFeed OnFeed;
+	/** A gun that came in, with what the HUD's card shows (on the machine that owns the inventory). */
+	FSOOnFeedItem OnFeedItem;
 	/** The equipped copy in the active slot changed: the pawn re-equips (server). */
 	FSOOnInventoryChanged OnLoadoutChanged;
 	/** The worn armour or the body changed: the pawn re-dresses (server). */
@@ -235,8 +258,12 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void ClientFeed(const FString& Text, FLinearColor Color);
 
+	UFUNCTION(Client, Reliable)
+	void ClientFeedItem(const FSOFeedItem& Item);
+
 	void Changed(bool bLoadout, bool bOutfit = false);
 	void Feed(const FString& Text, const FLinearColor& Color);
+	void FeedItem(const FSOFeedItem& Item);
 	FString UniqueUid(FString Uid) const;
 	int32 SlotOf(const FSOWeaponInstance& Weapon) const;
 

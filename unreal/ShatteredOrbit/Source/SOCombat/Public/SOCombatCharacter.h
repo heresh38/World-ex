@@ -18,6 +18,34 @@ class USOWeaponData;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FSOOnHitConfirmed, bool /*bCrit*/, bool /*bKilled*/);
 
+/** What the shooter's machine is told about a blow of theirs that went in (the HUD's damage numbers): how much,
+ *  where, whether the victim's shield took it, how precise it was (0 = not; over 1 = a weak point worth more than
+ *  the head). Rounds and blows land on the server only, so this travels with the hit's confirmation. */
+USTRUCT()
+struct SOCOMBAT_API FSOHitReport
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	float Amount = 0.0f;
+
+	UPROPERTY()
+	FVector_NetQuantize Point = FVector::ZeroVector;
+
+	UPROPERTY()
+	bool bShield = false;
+
+	UPROPERTY()
+	bool bCrit = false;
+
+	UPROPERTY()
+	bool bKilled = false;
+
+	UPROPERTY()
+	float Precision = 0.0f;
+};
+DECLARE_MULTICAST_DELEGATE_OneParam(FSOOnHitReported, const FSOHitReport& /*Report*/);
+
 /** Trace channel for rounds (DefaultEngine.ini: GameTraceChannel1 "SOBullet", blocks by default). */
 #define SO_TRACE_BULLET ECC_GameTraceChannel1
 
@@ -145,6 +173,9 @@ public:
 	/** Carries the condition (Status.*) or state (State.*) tag right now. */
 	bool HasStatus(const FGameplayTag& Tag) const;
 
+	/** Seconds the condition has left (the longest of its applications; 0 when it is not on): the HUD's timers. */
+	float GetStatusTimeLeft(const FGameplayTag& Tag) const;
+
 	/** Never takes this condition (a boss is not staggered by a punch). */
 	virtual bool ResistsStatus(const FGameplayTag& Status) const { return false; }
 
@@ -155,8 +186,11 @@ public:
 	 *  simulated on the server only, so the server tells the shooter's machine (ConfirmHit). */
 	mutable FSOOnHitConfirmed OnHitConfirmed;
 
-	/** Server: a round of this character's did damage. */
-	void ConfirmHit(bool bCrit, bool bKilled);
+	/** The same hit with its numbers (FSOHitReport): the HUD's damage numbers listen here. */
+	mutable FSOOnHitReported OnHitReported;
+
+	/** Server: a round or a blow of this character's did damage (Report: how much and where, for the shooter's HUD). */
+	void ConfirmHit(bool bCrit, bool bKilled, const FSOHitReport& Report = FSOHitReport());
 
 	/** An ability was used here: shows it on every machine exactly once (the user's own at once, the others through
 	 *  the server). Called by the ability where it ran. */
@@ -270,7 +304,7 @@ protected:
 	void MulticastAbility(ESOAbilitySlot Slot, bool bWindUp);
 
 	UFUNCTION(Client, Unreliable)
-	void ClientHitConfirmed(bool bCrit, bool bKilled);
+	void ClientHitConfirmed(bool bCrit, bool bKilled, const FSOHitReport& Report);
 
 	/** The kit this character's abilities came from (their numbers, for the abilities and the HUD). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SO|Combat")

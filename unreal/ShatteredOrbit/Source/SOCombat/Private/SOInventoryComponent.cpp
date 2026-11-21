@@ -395,9 +395,13 @@ FSOWeaponInstance USOInventoryComponent::AddWeapon(FSOWeaponInstance Weapon, boo
 	const USOLootTables* Tables = USOLootLibrary::GetTables();
 	if (bAnnounce)
 	{
-		const USOWeaponData* Data = Tables ? Tables->LoadArchetype(Weapon.Archetype) : nullptr;
-		Feed(FString::Printf(TEXT("%s  ·  %s  ·  %d"), *Weapon.Name, Data ? *Data->DisplayName.ToString() : *Weapon.Archetype.ToString(), Weapon.Power),
-			Tables ? Tables->GetRarity(Weapon.Rarity).Color : FLinearColor::White);
+		// the HUD's NEW ITEM card (the gun's own picture, its name, its class line, in its rarity's light)
+		FSOFeedItem Item;
+		Item.Name = Weapon.Name;
+		Item.Archetype = Weapon.Archetype;
+		Item.Rarity = Weapon.Rarity;
+		Item.Power = Weapon.Power;
+		FeedItem(Item);
 	}
 	// keep the vault bounded: only a plain old spare is broken down, and the player is told
 	if (Items.Num() > USOLootLibrary::VaultCap)
@@ -852,6 +856,22 @@ void USOInventoryComponent::Feed(const FString& Text, const FLinearColor& Color)
 void USOInventoryComponent::ClientFeed_Implementation(const FString& Text, FLinearColor Color)
 {
 	OnFeed.Broadcast(Text, Color);
+}
+
+void USOInventoryComponent::FeedItem(const FSOFeedItem& Item)
+{
+	OnFeedItem.Broadcast(Item);
+	const APlayerState* PS = Cast<APlayerState>(GetOwner());
+	const APlayerController* PC = PS ? PS->GetPlayerController() : nullptr;
+	if (PC && !PC->IsLocalController())
+	{
+		ClientFeedItem(Item);
+	}
+}
+
+void USOInventoryComponent::ClientFeedItem_Implementation(const FSOFeedItem& Item)
+{
+	OnFeedItem.Broadcast(Item);
 }
 
 void USOInventoryComponent::OnRep_Inventory()

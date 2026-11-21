@@ -56,6 +56,8 @@ private:
 	/** -SONetCheck=host|join on the command line starts the two-player check on this machine's own controller. */
 	void DevBegin();
 	void CaptureStep();
+	/** Set 38, the HUD in play (SOPlayerControllerHudDev.cpp). */
+	void CaptureHud();
 	/** A capture cue runs Action once Delay seconds have passed since the previous cue and Ready (if any) is true. */
 	struct FCaptureCue
 	{

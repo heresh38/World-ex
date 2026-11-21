@@ -92,6 +92,7 @@ int32 USOMeleeLibrary::Land(ASOCombatCharacter* User, const FSOMeleeBlow& Blow, 
 		float Dealt = 0.0f;
 		// a body already in the air takes more (a juggle)
 		const bool bAirborne = Other->GetCharacterMovement() && Other->GetCharacterMovement()->IsFalling();
+		const bool bOnShield = Other->GetShield() > 0.0f;
 		{
 			const FSOHitScope Where(TEXT("chest"), Near, To.GetSafeNormal(), false);
 			Dealt = USOCombatStatics::ApplyDamage(User, Other, Blow.Damage * User->GetAbilityDamageScale() * Scale * (bAirborne ? 1.2f : 1.0f), false);
@@ -101,6 +102,14 @@ int32 USOMeleeLibrary::Land(ASOCombatCharacter* User, const FSOMeleeBlow& Blow, 
 			continue;
 		}
 		++Hits;
+		{
+			FSOHitReport Report;
+			Report.Amount = Dealt;
+			Report.Point = Near;
+			Report.bShield = bOnShield;
+			Report.bKilled = Other->IsDead();
+			User->ConfirmHit(false, Report.bKilled, Report);
+		}
 		User->OnMeleeHit(Other, Near - To.GetSafeNormal() * Other->GetSimpleCollisionRadius() * 0.6f, Weight, Blow.HitStop);
 		if (!Blow.HitSound.IsNone())
 		{
