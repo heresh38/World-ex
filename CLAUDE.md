@@ -313,7 +313,7 @@ front, its front edge, the margin straight back to the globe; laid by nearest po
 and folded back along every lower lid; the nose tip's patch stays inside its window's rings, or it overlapped the band
 above and the skin folded across the nose, a dark line each side). The flank under each arm follows the
 sheet's line (the owner circled a bulge there: `ARMPIT_OUT`, `FLANK_ZONES`). The arm is an adult man's
-(`UPPER_ARM` .312, `FOREARM` .272: the sheet's canon left it 4 cm short and in third person the support hand could not
+(`UPPER_ARM` .332 since 2026-11-21 (the humerus at its norm, 0.18 x stature; .312 before), `FOREARM` .272: the sheet's canon left it 4 cm short and in third person the support hand could not
 reach a long gun's fore end; the arm's sections are written for the design arm and stretched, `body.arm_s`). **The
 arm's volume is its own table** (`body.ARM_VOL`, cm at real stations along the arm; the owner, 2026-11-20: "the arms
 seem extremely unrealistic compared to rest of body"): the first two rings keep the sheet's deltoid, then the upper arm
@@ -321,7 +321,12 @@ HOLDS its girth through the biceps' and triceps' bellies (12 cm from 14 to 20 cm
 to a notch just above the elbow, the forearm SWELLS below the elbow (the extensors' ridge and the flexors: 9.6 x 11
 cm at 36 cm, wider than the elbow's 9 x 9.5, as the sheet's) and runs out to a wrist 4.6 x 6.4; before, a hand-written
 forearm table was 30 % thin and fell straight from the elbow, so the arm was a stick with a ball of a deltoid at its root.
-`body.arm_mod` carries only the masses that are not round (biceps, triceps, the brachialis on the OUTSIDE under the
+**A hero's build** (the owner, 2026-11-21, "the players arms seem very skinny compared to the rest of the body"): the
+finished arm measured against the norms (`scratchpad` script `measure_body.py`'s stations: a 184 cm man) was ON them
+(upper arm 40 cm round, forearm 30, thigh 59, chest 104, waist 80) and still read thin beside the chest and shoulders,
+so `ARM_VOL` is a heroic build's (upper arm and forearm 10 % rounder, 43 and 33 cm; the deltoid 5 %, the wrist 6 %),
+the stations following the longer humerus; the rest of the body stays on the norms (every other station within a
+few percent). `body.arm_mod` carries only the masses that are not round (biceps, triceps, the brachialis on the OUTSIDE under the
 deltoid's point, the olecranon, the extensors' ridge rising ABOVE the elbow: begun below it there was a hollow at the
 elbow's outer front); the forms on them are `anatomy.py`'s, whose arm muscles sit at SHOW .36-.44 (at .26-.32 they drew
 nothing, and the brachialis had no entry: it ran at the .20 default on the inside, under the biceps). The anatomy's relief
@@ -351,7 +356,10 @@ and the face weighted whole to the head bone, `game.rigid_skull`, blended in ove
 base joint: the heat weights spread the neck's share up the face, and when the head pitched 80 degrees with the
 aim the sockets lagged behind the eyeballs, which are whole on the head, and the eyes stood out of the face: the
 owner, 2026-11-21, "the players eyes seem to be popping out of his head"; check with `SOCaptureSeries 1 40`'s
-`SO_hp_<pitch>_face` pictures, the face close from below looking down and from above looking up); the undersuit
+`SO_hp_<pitch>_face` pictures, the face close from below looking down and from above looking up; and from UNDER
+THE CHIN forward: the chin and jaw sit below the skull's joint and left in the neck's blend they lagged the head and
+the face stretched looking up or down, the owner's "the face distorts", 2026-11-21: `rigid_skull(o, z, y)` drops its
+line 11 cm toward the front); the undersuit
 (`C_suit__orion`, slot `suit`, ALWAYS worn and never armour: the owner, 2026-11-17, "the undersuit is on at all times
 and armor goes on top of that"; the body's own mesh offset and cut a hair past the wrists' and ankles' rings, its maps
 baked from the lab's detailed suit and collar, `orion_male_suit_*`, its weights copied in the REST pose); the clips
@@ -766,9 +774,11 @@ HUD: objective panel, stage banner, goal marker, boss bar, end screen. Tests `Sh
 pictures, the LAYOUT and the FEEL are the target, every word and glyph in them is theirs and never used: ours come
 from `Data/game_data.json` and the code's own data). It is the armoury's look (night-blue glass, cyan lines, gold for
 what matters) drawn as GEOMETRY: `SOHUDPaint.h` batches vertex-coloured triangles (`FPainter`: plates with cut
-corners, hexagons, diamonds, rings, sweeps, glowing lines, a textured disc) and `FType` draws the engine's
-distance-field Roboto at any scale (the engine's small font is a bitmap and blurs scaled: every size is the medium
-font scaled; the medium and large fonts are one face). No UI material is involved (a UI-domain material does not
+corners, hexagons, diamonds, rings, sweeps, glowing lines, a textured disc) and `FType` draws every string through Slate's font cache AT THE SIZE IT IS DRAWN (`FSlateFontInfo` on the canvas item,
+the engine's runtime-cached Roboto as the item's font object: without one the canvas draws nothing, and an offline
+font ignores the Slate info): a size is a face in pixels at scale 1 (Small 10, Medium 12, Large 20 bold), crisp at
+any scale and resolution. Before, the engine's bitmap Roboto and its distance-field face were scaled as pictures
+and the magazine's count was soft and pixelated (the owner, 2026-11-21: "the numbers are blurry"). No UI material is involved (a UI-domain material does not
 draw on a canvas). Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
 in the middle, the armoury's rule; checked at 2560 x 1080). Top left the round mini-map (`ASOMapInfo`'s picture cut to a
 disc, north up, the look cone, map points, the operation's goal held at the rim, creatures this side knows of in red,
@@ -837,7 +847,12 @@ stick. The keyboard / pad: the arrows, the d-pad and the left stick move the arm
 loadout, the list in an armoury, the armour's slots left / right; `NativeOnNavigation`), W / S the list, Enter / Space /
 A opens or equips, A / D and the triggers the tabs; every button is a `USOQuietButton` (never focused: the screen keeps
 the focus). The layout follows the screen's width (`UpdateLayout`): wider than 2200 units it keeps to a 2200 frame in the
-middle, narrower than 1650 (4:3) the attribute column gives way. Every card is `M_UI_Card`, every shape its own material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`:
+middle, narrower than 1650 (4:3) the attribute column gives way. The stand-in TURNS WHOLE on its turntable (`USOLocomotionAnimInstance`: no turn in place for a display-only body; the
+planted feet and the stepped turn twisted it against the drag with the head holding its heading, the owner's
+"chicken", 2026-11-21), and the head carries the clip's own motion under the aim everywhere (neck and head take the
+aim pitch ON TOP of the clip, about their pivots, not reset to the rest facing); the idle looks slowly about and
+shifts its weight (`hero/male/motion.py` `idle_pose`); `SpinStandIn` and the `u1_spin_*` pictures of set 19 show it.
+Every card is `M_UI_Card`, every shape its own material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`:
 0 emblem, 1 credits, 2 alloy, 3 vault, 4 power, 5-10 the attributes, 11 fists, 12 lock, 13 blade; the panels
 `M_UI_Plate`), one Custom node each drawn from the UV derivatives (`import_assets.ui_shape`, `SO_IMPORT_ONLY=ui`).
 **A UI material's colour is LINEAR**: the screen shows it through the sRGB curve, so a "dark" 0.03 is a mid grey
@@ -1039,7 +1054,15 @@ pointed down along it, the support hand beyond the arm), and below -20 degrees t
 `USOViewmodelComponent::ThirdPersonHoldTransform` blends the hold's point from the pocket to low and ahead of
 the chest (`Low`), the gun's middle hanging from it, both hands on it with the elbows bent; the support hand may
 slide 30 cm back along the gun (14 left it floating). Pictures `SOCaptureSeries 1 40` (files `SO_hp_<pitch>_*`,
-at rest and aiming, -89 to +75). **Pass 3** (2026-11-21): letting the sprint go eases down to the run over `SprintEaseTime` 0.35 s (it braked
+at rest and aiming, -89 to +75). **Pass 2 of the look-down** (the owner, 2026-11-21: "the third person gun placement is in the players
+face ... the wrist should not be twisting like that"): the gun's OWN pitch in third person is held within
+`ThirdPersonMaxDownPitch` 55 / `ThirdPersonMaxUpPitch` 65 degrees (pointed straight down from the chest the stock
+stood up along the face; the shot still goes along the eye's axis), it hangs from `ThirdPersonLowHold` (22 ahead, 10
+right, 27 under the chest point) canted `ThirdPersonLowCant` 20 degrees inward, and the trunk's share of the pitch
+stops at -40 (the head does the looking). The firing wrist at the full look-down went from 120 degrees to about 60-80;
+a hand round a raked pistol grip is 60-75 degrees from its forearm (`ShatteredOrbit.Hold.TheGunIsSolid` allows 75).
+Where the stock, the grip, the trigger and the fore end are comes from each gun's own shape (the rig's bounds and
+`FitGrip`), never from hand-written numbers per gun. **Pass 3** (2026-11-21): letting the sprint go eases down to the run over `SprintEaseTime` 0.35 s (it braked
 to it in a tenth: a lurch); the pad's B is one action (`IA_PadCrouchDodge`, `ASOCharacter::HandlePadCrouchDodgePressed`:
 tapped with the stick pushed at a walk or a run it is the dodge, at a sprint the slide, otherwise the crouch; every
 face button is taken); the third-person boom is `SprintArmExtra` longer at a sprint (eased: the view opens as the

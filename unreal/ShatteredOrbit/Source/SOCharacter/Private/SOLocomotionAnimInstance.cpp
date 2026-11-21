@@ -1785,7 +1785,15 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	LastActorYaw = ActorYaw;
 	bHaveYaw = true;
 	const bool bStanding = Speed2D < 25.0f && !bInAir && !bSliding && !bMantling;
-	if (bStanding && !bTurning)
+	const ASOCombatCharacter* Combat = Cast<ASOCombatCharacter>(Character);
+	if (Combat && Combat->IsDisplayOnly())
+	{
+		// the armoury's stand-in is turned on a turntable: the whole body turns with it (the planted feet and the
+		// stepped turn twisted it against the drag, the head holding its heading: the owner's "chicken")
+		StandYaw = 0.0f;
+		bTurning = false;
+	}
+	else if (bStanding && !bTurning)
 	{
 		StandYaw = FMath::Clamp(StandYaw - Turned, -TurnInPlaceAngle - 12.0f, TurnInPlaceAngle + 12.0f);
 		bTurning = FMath::Abs(StandYaw) > TurnInPlaceAngle;
@@ -2420,7 +2428,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	// (the trunk's share of the pitch stops at a lean: looking straight down the body folded 56 degrees at the waist
 	// and the gun pointed down along it with the hands at the hips; a man looking at his feet bends his neck and
 	// leans a little, the gun comes down in front of him instead: USOViewmodelComponent::ThirdPersonHoldTransform)
-	const float StancePitch = bArmsOnly ? 0.0f : FMath::DegreesToRadians(FMath::Clamp(AimPitch, -46.0f, 57.0f));
+	const float StancePitch = bArmsOnly ? 0.0f : FMath::DegreesToRadians(FMath::Clamp(AimPitch, -40.0f, 57.0f));
 	if (Spine != INDEX_NONE)
 	{
 		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * 0.3f - LeanRad * 0.5f));
@@ -2435,17 +2443,19 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			SetCS(Chest, FTransform(View * C.GetRotation(), EyeCS + View.RotateVector(C.GetLocation() - EyeCS), C.GetScale3D()));
 		}
 	}
-	// 2. The head looks along the aim regardless of the stance or the clip: neck and head take their rest-pose
-	//    facing (straight ahead) and share the aim pitch.
+	// 2. The head looks along the aim: neck and head share the aim pitch ON TOP of what the clip gave them (the
+	//    idle's breathing, a glance, a fidget's turn), about their own pivots. Set to the rest facing instead, the
+	//    head stood dead still over a body that breathed and shifted (the owner, 2026-11-21, on the armoury's
+	//    stand-in: "the head stays still like a chicken"). The trunk's stance (1.) carries under it unchanged.
 	if (Neck != INDEX_NONE && !bArmsOnly)
 	{
-		SetCS(Neck, FTransform(FQuat(Side, Pitch * 0.4f) * RefCS[Neck].GetRotation(), CS[Neck].GetLocation(), CS[Neck].GetScale3D()));
+		Turn(Neck, FQuat(Side, Pitch * 0.4f));
 		if (HeadBone != INDEX_NONE)
 		{
 			// aiming a long gun: the head cants toward the right shoulder and dips onto the stock (cheek weld)
 			const float Cant = FMath::DegreesToRadians(HeadCant);
 			const FQuat Weld = FQuat(FVector(0.0f, 1.0f, 0.0f), -Cant) * FQuat(Side, -Cant * 0.7f);
-			SetCS(HeadBone, FTransform(Weld * FQuat(Side, Pitch) * RefCS[HeadBone].GetRotation(), CS[HeadBone].GetLocation(), CS[HeadBone].GetScale3D()));
+			Turn(HeadBone, Weld * FQuat(Side, Pitch * 0.6f));
 		}
 	}
 

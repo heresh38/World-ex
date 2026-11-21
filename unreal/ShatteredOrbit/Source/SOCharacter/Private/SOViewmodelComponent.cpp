@@ -292,12 +292,22 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	}
 	else
 	{
-		const FVector Low = Chest + FVector(24.0f, 6.0f, -22.0f);          // low and ahead of the chest, a little right
+		const FVector Low = Chest + ThirdPersonLowHold;                     // low and ahead of the chest, a little right
 		// (at 10 cm ahead the gun hung against the belly and thighs with the hands stacked on it)
 		Start = Actor.TransformPosition(FMath::Lerp(Pocket + FMath::Lerp(FVector::ZeroVector, PocketAimShift, Ads), Low, Down));
 		Butt.X = FMath::Lerp(Butt.X, Butt.X + 16.0f, Down);               // (the butt no longer in a pocket: the gun's middle hangs from the point)
 	}
-	const FVector WantDir = (Target - Start).GetSafeNormal(1e-4f, Character->GetEyeTransform(true).GetRotation().GetForwardVector());
+	FVector WantDir = (Target - Start).GetSafeNormal(1e-4f, Character->GetEyeTransform(true).GetRotation().GetForwardVector());
+	// The gun's own pitch is held within what a body can do (a rifle at the low ready points down at most about 55
+	// degrees: the shooter bends to look at the ground, the stock stays under the arm): pointed straight down from
+	// the chest the stock stood up along the face (the owner, 2026-11-21: "the third person gun placement is in the
+	// players face"). The shot still goes where the eye looks (the server fires along the eye's axis).
+	if (!bHandgun)
+	{
+		FRotator R = WantDir.Rotation();
+		R.Pitch = FMath::Clamp(static_cast<float>(R.Pitch), -ThirdPersonMaxDownPitch, ThirdPersonMaxUpPitch);
+		WantDir = R.Vector();
+	}
 	if (!bHoldDirValid || Dt > 0.2f)
 	{
 		HoldDir = WantDir;
@@ -307,7 +317,14 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	{
 		HoldDir = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(HoldDir, WantDir), FMath::Min(1.0f, Dt * 30.0f)).RotateVector(HoldDir).GetSafeNormal();
 	}
-	const FQuat Aim = HoldDir.Rotation().Quaternion(); // level roll
+	FRotator AimRot = HoldDir.Rotation(); // level roll
+	if (!bHandgun)
+	{
+		// held low the gun cants a little inward (the top toward the body's left), as a rifle carried at the low
+		// ready does: the firing wrist stays nearer straight on the grip
+		AimRot.Roll = -ThirdPersonLowCant * Down;
+	}
+	const FQuat Aim = AimRot.Quaternion();
 	if (bHandgun)
 	{
 		// both arms out, the gun a little right of the middle, rising toward the eye line when aiming

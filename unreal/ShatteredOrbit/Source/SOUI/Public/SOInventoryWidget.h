@@ -232,6 +232,8 @@ public:
 	const FString& GetOpenSlot() const { return OpenSlotId; }
 	/** Opens a loadout card's quick look as a hover does (its slot's key; empty = closes it): the capture series. */
 	void PeekSlot(const FString& SlotKey);
+	/** Spins the stand-in as a flick does (degrees a second, settling); the capture series. */
+	void SpinStandIn(float DegreesPerSecond) { SpinVelocity = DegreesPerSecond; bDragging = false; }
 	/** The keyboard's / pad's highlight (the arrows, the d-pad, the left stick, W / S): in the loadout over the cards (a
 	 *  column and a row; the first press only shows where it is), in an armoury the list's choice (and, over the armour,
 	 *  its slot). Accept (Enter, Space, the pad's A) opens the slot or equips. */

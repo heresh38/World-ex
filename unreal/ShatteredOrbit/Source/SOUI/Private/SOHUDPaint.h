@@ -6,6 +6,9 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Styling/CoreStyle.h"
 
 /**
  * The HUD's shapes, drawn as batches of vertex-coloured triangles on the canvas (nothing is a texture or a material:
@@ -301,37 +304,66 @@ namespace SOHudPaint
 	}
 
 	// --- text (the engine's Roboto: the armoury's face) ---
+	/** The HUD's type. A size is a face in PIXELS at scale 1 (Small 10, Medium 12, Large 20: the large one bold), and
+	 *  every string is rasterised by Slate's font cache at the size it is drawn (size x scale), so it is crisp at any
+	 *  scale and resolution. Before, the engine's bitmap Roboto and its distance-field face were scaled as pictures:
+	 *  the magazine's count and every label were soft and pixelated (the owner, 2026-11-21: "the numbers are blurry
+	 *  ... fix this too so numbers/letters are crisp, not pixelated"). The face is Slate's own Roboto. */
 	struct FType
 	{
 		UCanvas* Canvas;
-		UFont* Small;   // 9
-		UFont* Medium;  // 11
-		UFont* Large;   // 20
+		float Small = 10.0f;
+		float Medium = 12.0f;
+		float Large = 20.0f;
 
-		/** The engine's medium and large fonts are one distance-field face (crisp at any scale); the small one is a
-		 *  bitmap that blurs when scaled, so every size here is the distance-field face scaled. */
-		explicit FType(UCanvas* InCanvas) : Canvas(InCanvas), Small(GEngine ? GEngine->GetMediumFont() : nullptr),
-			Medium(GEngine ? GEngine->GetMediumFont() : nullptr), Large(GEngine ? GEngine->GetLargeFont() : nullptr) {}
+		explicit FType(UCanvas* InCanvas) : Canvas(InCanvas) {}
 
-		FVector2D Size(const FString& Text, UFont* F, float Scale) const
+		static FSlateFontInfo FontOf(float F, float Scale)
 		{
-			float W = 0.0f, H = 0.0f;
-			if (Canvas && F)
+			return FCoreStyle::GetDefaultFontStyle(F >= 18.0f ? TEXT("Bold") : TEXT("Regular"), FMath::Max(6.0f, F * Scale));
+		}
+
+		/** The canvas draws nothing without a font object, and takes the Slate font info only through a RUNTIME-cached
+		 *  one: the engine's Roboto (the UMG default) is; the distance-field face is not. */
+		static UFont* RuntimeFont()
+		{
+			UFont* F = GEngine ? GEngine->GetMediumFont() : nullptr;
+			if (F && F->FontCacheType == EFontCacheType::Runtime)
 			{
-				Canvas->TextSize(F, Text, W, H, Scale, Scale);
+				return F;
 			}
-			return FVector2D(W, H);
+			F = FindObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
+			if (!F)
+			{
+				F = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
+			}
+			return F && F->FontCacheType == EFontCacheType::Runtime ? F : nullptr;
+		}
+
+		FVector2D Size(const FString& Text, float F, float Scale) const
+		{
+			if (!FSlateApplication::IsInitialized() || Text.IsEmpty())
+			{
+				return FVector2D::ZeroVector;
+			}
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			return Measure->Measure(Text, FontOf(F, Scale));
 		}
 
 		/** Draws at X, Y (top left); returns the width. */
-		float Draw(const FString& Text, float X, float Y, UFont* F, float Scale, const FLinearColor& C, bool bShadow = true) const
+		float Draw(const FString& Text, float X, float Y, float F, float Scale, const FLinearColor& C, bool bShadow = true) const
 		{
-			if (!Canvas || !F)
+			if (!Canvas || Text.IsEmpty())
 			{
 				return 0.0f;
 			}
-			FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(Text), F, C);
-			Item.Scale = FVector2D(Scale, Scale);
+			UFont* Font = RuntimeFont();
+			if (!Font)
+			{
+				return 0.0f;
+			}
+			FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(Text), Font, C);
+			Item.SlateFontInfo = FontOf(F, Scale);
 			if (bShadow)
 			{
 				Item.EnableShadow(FLinearColor(0.0f, 0.0f, 0.0f, C.A * 0.7f), FVector2D(1.0f, 1.0f));
@@ -341,21 +373,21 @@ namespace SOHudPaint
 			return Size(Text, F, Scale).X;
 		}
 
-		float DrawRight(const FString& Text, float XRight, float Y, UFont* F, float Scale, const FLinearColor& C) const
+		float DrawRight(const FString& Text, float XRight, float Y, float F, float Scale, const FLinearColor& C) const
 		{
 			const float W = Size(Text, F, Scale).X;
 			Draw(Text, XRight - W, Y, F, Scale, C);
 			return W;
 		}
 
-		float DrawCentred(const FString& Text, float XMid, float Y, UFont* F, float Scale, const FLinearColor& C) const
+		float DrawCentred(const FString& Text, float XMid, float Y, float F, float Scale, const FLinearColor& C) const
 		{
 			const float W = Size(Text, F, Scale).X;
 			Draw(Text, XMid - W * 0.5f, Y, F, Scale, C);
 			return W;
 		}
 
-		float CapsWidth(const FString& Text, UFont* F, float Scale, float Spacing) const
+		float CapsWidth(const FString& Text, float F, float Scale, float Spacing) const
 		{
 			const FString Up = Text.ToUpper();
 			float W = 0.0f;
@@ -367,7 +399,7 @@ namespace SOHudPaint
 		}
 
 		/** Letter-spaced capitals (a label); returns the width. Align: 0 left, 1 right, 0.5 centred on X. */
-		float Caps(const FString& Text, float X, float Y, UFont* F, float Scale, const FLinearColor& C, float Spacing, float Align = 0.0f) const
+		float Caps(const FString& Text, float X, float Y, float F, float Scale, const FLinearColor& C, float Spacing, float Align = 0.0f) const
 		{
 			const FString Up = Text.ToUpper();
 			const float W = CapsWidth(Text, F, Scale, Spacing);

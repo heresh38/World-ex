@@ -106,8 +106,10 @@ def idle_pose(b, t):
     drift = math.sin(TAU * t / 7.2)
     # (the ankles 26 cm apart: at 35, "feet past shoulder width", the owner saw the legs too far apart, 2026-11-17)
     stand_feet(b, p, .13 * b.scale, 12)
-    p.hips = Vector((.005 * drift, .002 * math.sin(TAU * t / 7.2 + 1.3), 0.0))
-    p.add("hips", (X, 2.0), (Y, .6 * drift))
+    # (the weight drifts from one foot toward the other over the 7.2 s and the head looks slowly about: a man
+    # standing, not a statue breathing; the owner, 2026-11-21, on the armoury's stand-in: "triple a idle animation")
+    p.hips = Vector((.011 * drift, .003 * math.sin(TAU * t / 7.2 + 1.3), 0.0))
+    p.add("hips", (X, 2.0), (Y, 1.2 * drift), (Z, -1.0 * drift))
     # the legs nearly straight (a standing man's knees are not bent: at the rest pose's hip height, with the feet
     # brought in, they bent 20 degrees, the owner's "the leg looks bend"), the breath a few millimetres on that
     # (near a straight leg a millimetre of the hips is degrees at the knee: the breath moves them half a millimetre)
@@ -115,8 +117,9 @@ def idle_pose(b, t):
     p.hips.z -= .00025 * (1 + br)
     p.add("spine", (X, -1.5 - .8 * br), (Y, -.5 * drift))
     p.add("chest", (X, -3.0 - 1.4 * br))
-    p.add("neck", (X, 2.0 + .6 * late))
-    p.add("head", (X, 1.0 + .5 * late), (Z, 1.6 * math.sin(TAU * t / 7.2 + .8)))
+    look = math.sin(TAU * t / 7.2 + .8)                          # a slow look to one side and back
+    p.add("neck", (X, 2.0 + 1.0 * late), (Z, 1.5 * look))
+    p.add("head", (X, 1.0 + 1.2 * late + .8 * math.sin(TAU * t / 7.2 + 2.4)), (Z, 3.5 * look), (Y, .8 * look))
     for s, sx in gait.SIDES:
         p.add("clavicle." + s, (Z, sx * -3.0), (Y, sx * -1.0 * (1 + late) * .5))   # shoulders back, rising with the breath
         p.add("upperarm." + s, (Y, -sx * (9 + .6 * late)), (X, 4))

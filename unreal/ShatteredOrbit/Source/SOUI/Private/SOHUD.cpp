@@ -2043,7 +2043,7 @@ void ASOHUD::DrawOperation(const FLayout& L)
 	const float Age = Op->GetStageAge();
 
 	// text broken into lines no wider than MaxW, centred, from Y down; returns the Y under the last line
-	auto Wrapped = [&](const FString& Text, float Y, float MaxW, UFont* F, float Scale, FLinearColor C)
+	auto Wrapped = [&](const FString& Text, float Y, float MaxW, float F, float Scale, FLinearColor C)
 	{
 		TArray<FString> Words;
 		Text.ParseIntoArray(Words, TEXT(" "));

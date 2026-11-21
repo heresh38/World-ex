@@ -424,13 +424,21 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			static const FShot Shots[] = {
 				{ 0.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("1_front") }, { 35.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("2_quarter_left") },
 				{ -35.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("3_quarter_right") }, { 90.0f, 90.0f, 2.0f, 22.0f, 0.0f, TEXT("4_side") },
-				{ 20.0f, 40.0f, 1.0f, 18.0f, 3.2f, TEXT("5_eye") } };
+				{ 20.0f, 40.0f, 1.0f, 18.0f, 3.2f, TEXT("5_eye") }, { 0.0f, 12.0f, 85.0f, 24.0f, 0.0f, TEXT("6_top") },
+				{ 0.0f, 30.0f, 250.0f, 40.0f, 0.0f, TEXT("7_top_far") } };
 			for (const FShot& S : Shots)
 			{
 				const FShot Shot1 = S;
 				Act([=]() { Head(Shot1.Yaw, Shot1.Distance, Shot1.Up, Shot1.Fov, Shot1.Side); });
 				// (the face's 4K maps stream in as the camera comes close)
 				Snap(2.5f, FString::Printf(TEXT("fc_%s_%s"), Body, Shot1.Name));
+			}
+			// the head alive in the idle: four moments 0.8 s apart from the three-quarter view (it must not stand dead
+			// still over a body that breathes: the owner's "chicken")
+			Act([=]() { Head(35.0f, 110.0f, 2.0f, 24.0f, 0.0f); });
+			for (int32 i = 1; i <= 4; ++i)
+			{
+				Snap(0.8f, FString::Printf(TEXT("fc_%s_idle_%d"), Body, i));
 			}
 		}
 		Do(0.5f, []() {});
@@ -448,6 +456,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		auto Nav = [Hud](int32 DX, int32 DY) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->MoveFocus(DX, DY); } };
 		Do(5.0f, [=, this]() { ConsoleCommand(TEXT("DisableAllScreenMessages")); if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
 		Snap(2.0f, TEXT("u1_loadout"));
+		Snap(0.9f, TEXT("u1_loadout_2"));                                      // (the stand-in's idle: three moments)
+		Snap(0.9f, TEXT("u1_loadout_3"));
+		// a flick: the stand-in spins on its turntable, whole (no turn on the spot, the head with it)
+		Act([=]() { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->SpinStandIn(260.0f); } });
+		Snap(0.25f, TEXT("u1_spin_1"));
+		Snap(0.3f, TEXT("u1_spin_2"));
+		Snap(0.3f, TEXT("u1_spin_3"));
 		Act([=]() { Nav(0, 1); Nav(1, 0); Nav(0, 1); Nav(0, 1); });            // (the pad: the highlight over the armour's third card)
 		Snap(0.6f, TEXT("u1b_pad_focus"));
 		Act([=]() { Peek(TEXT("0")); });

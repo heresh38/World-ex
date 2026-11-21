@@ -134,7 +134,9 @@ ARM_DROP = math.radians(6.0)                      # the sheet's arms hang 6 degr
 # the arm, joint to joint: an adult man's (Drillis and Contini: the shoulder to the wrist about .32 of the stature).
 # The sheet's canon (span = stature, the arm .290 + .252) left it 4 cm short of that: in the game the hand on a long
 # gun's fore end could not reach it in third person (the old body's arm was 59 cm) and slid back onto the receiver
-UPPER_ARM, FOREARM, HAND = 0.312, 0.272, 0.200
+UPPER_ARM, FOREARM, HAND = 0.332, 0.272, 0.200     # (the humerus at the adult norm, joint to elbow 0.18 x stature:
+                                                   # at .312 it was 2 cm short; the owner, 2026-11-21, "ensure all body
+                                                   # parts are correct and proportional in length/width/height/mass")
 DESIGN_UPPER, DESIGN_FORE = 0.290, 0.252          # the lengths the arm's sections (A_S, arm_mod) are written for
 SHEET_ARM = 0.760                                 # the sheet's own joint-to-fingertip (its arms are 2 % long)
 CROTCH_Z = 4 * HEAD
@@ -638,9 +640,13 @@ A_S = [0.058, 0.097, 0.143, 0.195, 0.244, 0.290, 0.330, 0.384, 0.437, 0.490, 0.5
 # out long to a wrist 4.6 cm deep and 6.4 wide. Before this the forearm's own table was written 30 % thin and fell
 # straight from the elbow, and the upper arm was a cone from the deltoid to the elbow with no belly held (a stick
 # with a ball at its root: the owner, 2026-11-20, "the arms seem extremely unrealistic compared to rest of body")
+# A hero's arm (the owner, 2026-11-21: "the players arms seem very skinny compared to the rest of the body"): the
+# finished arm measured against the norms came out ON them (upper arm 40 cm round, forearm 30, a 184 cm man's athletic
+# figures) and still read thin beside the chest and the shoulders, so the volume is a heroic build's: upper arm and
+# forearm 10 % rounder (43 and 33 cm), the deltoid 5 %, the wrist 6 %; the stations follow the longer humerus.
 ARM_VOL = [  # (s m, vertical cm, depth cm)
-    (0.154, 12.7, 12.0), (0.210, 12.1, 11.8), (0.2625, 10.6, 10.2), (0.312, 9.4, 9.2),
-    (0.3552, 9.5, 10.9), (0.4135, 8.5, 9.9), (0.4707, 7.2, 8.7), (0.5279, 5.8, 7.2), (0.584, 5.0, 6.8)]
+    (0.164, 13.3, 12.6), (0.2235, 13.3, 13.0), (0.279, 11.7, 11.2), (0.332, 10.2, 9.9),
+    (0.3752, 10.5, 12.0), (0.4335, 9.4, 10.9), (0.4907, 7.8, 9.4), (0.5479, 6.3, 7.8), (0.604, 5.3, 7.2)]
 
 
 def arm_s(s):
@@ -666,17 +672,17 @@ def arm_mod(psi, s):
     d = 0.0
     d += .003 * band(s, 0.05, 0.14, .03) * bump(psi, 95, 45)             # the deltoid over the top (6 mm stood a
     # ball on a stick: its own form is the anatomy's)
-    d += .004 * band(s, 0.13, 0.26, .03) * bump(psi, 180, 40)            # the biceps' belly in front
-    d += .003 * band(s, 0.09, 0.25, .03) * bump(psi, 10, 45)             # the triceps behind
-    d += .003 * band(s, 0.17, 0.29, .03) * bump(psi, 115, 30)            # the brachialis on the outside, under the
+    d += .004 * band(s, 0.14, 0.28, .03) * bump(psi, 180, 40)            # the biceps' belly in front
+    d += .003 * band(s, 0.10, 0.27, .03) * bump(psi, 10, 45)             # the triceps behind
+    d += .003 * band(s, 0.18, 0.31, .03) * bump(psi, 115, 30)            # the brachialis on the outside, under the
     # deltoid's point: it carries the outline from the deltoid to the elbow
-    d -= .003 * band(s, 0.290, 0.325, .02) * bump(psi, 190, 22)          # the elbow's crease (the cubital hollow)
-    d += .003 * band(s, 0.300, 0.330, .015) * bump(psi, 0, 25)           # the olecranon
-    d += .005 * band(s, 0.28, 0.44, .03) * bump(psi, 135, 35)            # brachioradialis and the extensors' ridge,
+    d -= .003 * band(s, 0.310, 0.345, .02) * bump(psi, 190, 22)          # the elbow's crease (the cubital hollow)
+    d += .003 * band(s, 0.320, 0.350, .015) * bump(psi, 0, 25)           # the olecranon
+    d += .005 * band(s, 0.30, 0.46, .03) * bump(psi, 135, 35)            # brachioradialis and the extensors' ridge,
     # the top of the forearm toward its front: it rises on the humerus ABOVE the elbow and runs over its outside
     # (begun below the joint it left a hollow at the elbow's outer front)
-    d += .004 * band(s, 0.33, 0.45, .03) * bump(psi, 265, 45)            # the flexors underneath
-    d -= .002 * band(s, 0.37, 0.56, .03) * bump(psi, 35, 15)             # the ulna's border, a line down the back
+    d += .004 * band(s, 0.35, 0.47, .03) * bump(psi, 265, 45)            # the flexors underneath
+    d -= .002 * band(s, 0.39, 0.58, .03) * bump(psi, 35, 15)             # the ulna's border, a line down the back
     return d
 
 

@@ -1080,18 +1080,23 @@ def H_Z0():
     return HD.Z0
 
 
-def rigid_skull(o, z_head):
+def rigid_skull(o, z_head, y_head=-.024):
     """the skull and the face whole on the head bone: the heat weights spread the neck's share up the face, so when
     the head pitched 80 degrees (the aim) the sockets lagged behind the eyeballs, which are weighted whole to the
     head, and the eyes stood out of the face (the owner, 2026-11-21: "the players eyes seem to be popping out of his
-    head"). From 2 cm under the skull's base joint up, blended in over 5 cm (the throat under the jaw stays the neck's)"""
+    head"). At the nape from 2 cm under the skull's base joint up, blended in over 5 cm; toward the FRONT the line
+    drops to under the chin (11 cm lower, blended over 2.5 cm): the chin and the jaw sit below the skull's joint,
+    and left in the neck's blend they lagged the head and the face stretched when it looked up or down (the owner,
+    2026-11-21: "the face distorts when looking fully up or down"). The throat under the jaw stays the neck's."""
     names = {g.index: g.name for g in o.vertex_groups}
     head = o.vertex_groups.get("head")
     if head is None:
         return
     n = 0
     for v in o.data.vertices:
-        k = (v.co.z - (z_head - .02)) / .05
+        t = min(1.0, max(0.0, (y_head - v.co.y) / .09))      # 0 at the neck's axis and behind, 1 at the chin's front
+        z0 = z_head - .02 - .11 * t
+        k = (v.co.z - z0) / (.05 - .025 * t)
         if k <= 0.0:
             continue
         k = min(1.0, k)
@@ -1185,7 +1190,7 @@ def make_rig(o, log_=None):
     log(f"rig: heat weights on a closed copy ({len(proxy.data.vertices)} vertices), {unweighted} without a weight")
     copy_weights(proxy, o)
     bpy.data.objects.remove(proxy, do_unlink=True)
-    rigid_skull(o, float(J["neck"][1][2]))
+    rigid_skull(o, float(J["neck"][1][2]), float(J["neck"][1][1]))
     o.parent = arm
     mod = o.modifiers.new("Armature", 'ARMATURE')
     mod.object = arm

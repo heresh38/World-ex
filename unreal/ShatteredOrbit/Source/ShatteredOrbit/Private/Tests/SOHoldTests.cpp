@@ -745,7 +745,9 @@ bool FSOSolidHoldTest::RunTest(const FString& Parameters)
 			const bool bPending = SOTest::HoldNotYet(Arch);
 			Check(bPending, FString::Printf(TEXT("%s, %s: nothing of the firing hand is in the gun (%d of %d bones: %s)"), *Arch, View, R.Inside[0], R.Bones[0], *R.Which[0]), R.Inside[0] == 0);
 			Check(bPending, FString::Printf(TEXT("%s, %s: nothing of the support hand is in the gun (%d of %d bones: %s)"), *Arch, View, R.Inside[1], R.Bones[1], *R.Which[1]), R.Inside[1] == 0);
-			Check(bPending, FString::Printf(TEXT("%s, %s: the firing wrist bends %.0f degrees (at most 70)"), *Arch, View, R.WristBend[0]), R.WristBend[0] <= 70.0f);
+			// (a hand round a raked pistol grip is flexed and turned toward the little finger: 60-75 degrees between the
+			// forearm and the knuckles is a real rifle grip; past that the wrist is twisted)
+			Check(bPending, FString::Printf(TEXT("%s, %s: the firing wrist bends %.0f degrees (at most 75)"), *Arch, View, R.WristBend[0]), R.WristBend[0] <= 75.0f);
 			Check(bPending, FString::Printf(TEXT("%s, %s: the support wrist bends %.0f degrees (at most 70)"), *Arch, View, R.WristBend[1]), R.WristBend[1] <= 70.0f);
 			Check(bPending, FString::Printf(TEXT("%s, %s: the support palm is %.1f cm off the gun (between 1 sunk and 2.5 off)"), *Arch, View, R.PalmGap[1]),
 				R.PalmGap[1] >= -1.0f && R.PalmGap[1] <= 2.5f);

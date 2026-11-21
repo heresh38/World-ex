@@ -115,6 +115,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float ThirdPersonMinAimDistance = 400.0f;
 
+	/** Third person, a long gun pointed steeply down: where its middle hangs from, in actor space off the chest point
+	 *  (ahead, right, up); the gun's own pitch is held within these (degrees), and it cants inward this much at the
+	 *  full low hold. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	FVector ThirdPersonLowHold = FVector(22.0f, 10.0f, -27.0f);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float ThirdPersonMaxDownPitch = 55.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float ThirdPersonMaxUpPitch = 65.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float ThirdPersonLowCant = 20.0f;
+
 	/** Third person, sprinting: the grip from the shoulders' middle (cm, actor axes: forward, right, up) and the gun's
 	 *  turn (pitch, yaw, roll) against the facing: carried low across the chest, muzzle down and to the left. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
