@@ -753,6 +753,41 @@ spawn groups, checkpoints (the game mode respawns there) and boss adds keyed to 
 `ASOOperationBarrier` energy walls keep the route linear until their stage; finishing grants every player ONE random
 piece of the reward sets (`AddArmorPiece` for armour: wardrobe items with a `Set` are earned, never handed out).
 HUD: objective panel, stage banner, goal marker, boss bar, end screen. Tests `ShatteredOrbit.Operation.*`.
+**The HUD** (`SOUI/SOHUD.*`, drawn on the canvas; rebuilt 2026-11-20 on the owner's two reference screens,
+`art/reference/ui/hud_1.webp` / `hud_2.webp`: "i need a new hud, images one and 2 show what we need"; they are AI
+pictures, the LAYOUT and the FEEL are the target, every word and glyph in them is theirs and never used: ours come
+from `Data/game_data.json` and the code's own data). It is the armoury's look (night-blue glass, cyan lines, gold for
+what matters) drawn as GEOMETRY: `SOHUDPaint.h` batches vertex-coloured triangles (`FPainter`: plates with cut
+corners, hexagons, diamonds, rings, sweeps, glowing lines, a textured disc) and `FType` draws the engine's
+distance-field Roboto at any scale (the engine's small font is a bitmap and blurs scaled: every size is the medium
+font scaled; the medium and large fonts are one face). No UI material is involved (a UI-domain material does not
+draw on a canvas). Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
+in the middle, the armoury's rule; checked at 2560 x 1080). Top left the round mini-map (`ASOMapInfo`'s picture cut to a
+disc, north up, the look cone, map points, the operation's goal held at the rim, creatures this side knows of in red,
+the area's name and the nearest map point or the stage under it); top centre the compass strip (N / E / S / W, the
+goal's bearing in gold, map points) and, in an operation, the objective banner (the stage's objective, its count /
+clock / distance / the boss's health, a gold bar); top right the conditions on the player as hexagons with their
+timers (`ASOCombatCharacter::GetStatusTimeLeft`), the TRACKED panel (the stage before, this one, the next, from
+`ASOOperation::Stages`), the NEW ITEM card (a gun that came in: `USOInventoryComponent::OnFeedItem` / `FSOFeedItem`,
+with the armoury's icon, the rarity · class · kind line) and the feed; over a hurt or aimed-at creature its level
+(the player's level x its variant's damage scale), name and bar; bottom left the kit's emblem (the broken orbit) with
+SHIELD and HEALTH, the kit's name, the level and its xp; bottom centre the abilities as hexagons (G V Q), the cooldown
+a sweep with the seconds, a gold pulse as one comes ready, the ultimate a diamond that fills, its meter and ULTIMATE
+READY; bottom right the three weapon cards (icons), the held gun's panel (name, rarity · class · kind, magazine big,
+reserve, power, its picture, the Sarketh heat gauge with VENTING / CONDENSING, the reload along its foot) and under
+it the grenade's charges, the melee style and F. Feedback: damage numbers at the hit (`FSOHitReport` travels with
+`ConfirmHit` from the projectile subsystem and a melee blow: white, on a shield blue, precise yellow, critical orange
+with CRIT = a weak point worth more than the head or the precise shot that ended it; pellets of one shot add up), the
+crosshair's four states (tight, open on the move, closed to a point aimed over the shoulder, red with brackets on a
+hostile under the eye's line: `Locked`), loot beams by rarity over every core in view (the FX subsystem's streaks
+are the world's part), the screen's edge (shield hit: hexagon cells in blue; the body hit: red; low health: a red
+pulse; braced: the kit's light; an ability or the ultimate coming ready: gold). Kept as they were: every set's scope
+glass, the boss bar (restyled under the banner), the melee counters, the operation's banners and end screen (gold,
+not the species' violet), the AI debug view. Pictures `SOCaptureSeries 1 38` (`SOPlayerControllerHudDev.cpp`, files
+`SO_hud_01..19_*`: idle, moving, aiming, locked, hits, the number kinds, shield hit, health hit, low health, the
+ability cooling and ready, loot beams, new item, the ultimate's pulse and ready, conditions, flashlight, fists, third
+person); run it in the range and on `/Game/Maps/L_Meridian` (the objective banner and tracked panel are only there),
+from Git Bash with `MSYS_NO_PATHCONV=1` (it turns `/Game/...` into a Windows path).
 **The armoury** (the loadout screen, I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word:
 "upgrade it ready for a triple a game release on steam", their mockup and reference screens as the bar, every look
 and word ours). LOADOUT: the backdrop (`M_UI_Backdrop`: night blue lit from the stage, the broken orbit faint behind

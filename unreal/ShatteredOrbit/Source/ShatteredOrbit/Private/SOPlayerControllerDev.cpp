@@ -187,6 +187,11 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 38)
+	{
+		CaptureHud();   // the HUD in play (SOPlayerControllerHudDev.cpp)
+		return;
+	}
 	if (Set == 37)
 	{
 		// The face up close in the range's daylight (files fc_<body>_<view>): the whole head from the front, both
