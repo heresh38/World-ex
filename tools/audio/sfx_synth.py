@@ -2516,6 +2516,42 @@ SOUNDS.update({"marksman_aim": marksman_aim, "marksman_shot": marksman_shot})
 MARKSMAN = [n for n in SOUNDS if n.startswith("marksman_")]
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# The loop's beats on the HUD (the owner, 2026-11-20): a reward coming in, a level reached, an elite seen
+
+
+def reward_xp():
+    """A point of experience coming in: one small glass tick."""
+    out = silence(0.16)
+    out = place(out, bell(2093.0, 0.14, 0.03, partials=((1.0, 1.0, 1.0), (2.76, 0.25, 0.5))), 0.0, 0.5)
+    out = place(out, filt(noise(0.02, 4101), "high", 6000) * env_exp(0.02, 0.003, 0.0005), 0.0, 0.25)
+    return finish(out, -16, 0.005)
+
+
+def level_up():
+    """A level reached: three bells climbing a chord, a fourth on top, a shimmer rising under them."""
+    out = silence(1.8)
+    for i, f in enumerate((587.33, 739.99, 880.0)):              # D5 F#5 A5
+        out = place(out, bell(f, 1.2, 0.22, attack=0.004), i * 0.11, 0.55)
+    out = place(out, bell(1174.66, 1.4, 0.3, attack=0.004), 0.33, 0.35)
+    out = place(out, svf_sweep(noise(0.6, 4111), "band", 800, 6000, 1.5) * env_ad(0.6, 0.05, 0.12), 0.0, 0.18)
+    return finish(room(out, 0.28), -6)
+
+
+def elite_seen():
+    """A named enemy stepping into view: a low sting with a dissonant bell over it."""
+    out = silence(1.3)
+    out = place(out, thump(90, 55, 0.5, 0.14, 1.6), 0.0, 0.8)
+    out = place(out, tone(146.8, 138.6, 0.7, 0.2, 0.01, "tri"), 0.0, 0.3)
+    out = place(out, bell(466.2, 0.9, 0.2), 0.06, 0.3)                          # Bb4 against the D: the warning
+    out = place(out, bell(622.3, 0.8, 0.18), 0.12, 0.2)
+    return finish(room(out, 0.3), -7)
+
+
+SOUNDS.update({"reward_xp": reward_xp, "level_up": level_up, "elite_seen": elite_seen})
+LOOP = ["reward_xp", "level_up", "elite_seen"]
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unreal", "ShatteredOrbit", "SourceArt", "Audio")
     only = set(sys.argv[2:])  # optional: build just these names
@@ -2529,6 +2565,8 @@ def main():
         only = set(BOSS)
     if only == {"marksman"}:
         only = set(MARKSMAN)
+    if only == {"loop"}:
+        only = set(LOOP)
     os.makedirs(out_dir, exist_ok=True)
     for name, fn in SOUNDS.items():
         if only and name not in only:

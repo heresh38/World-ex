@@ -9,6 +9,7 @@
 #include "SOInventoryComponent.h"
 #include "SOLog.h"
 #include "SOLootActors.h"
+#include "SOProgression.h"
 #include "SOSpecies.h"
 #include "SOWeapon.h"
 #include "Engine/World.h"
@@ -202,6 +203,59 @@ void ASOPlayerController::CaptureHud()
 	Act([=]() { if (ASOCharacter* H = Hero()) { H->HandleFists(); } View(ESOViewMode::ThirdPerson); });
 	Snap(0.8f, TEXT("hud_19_third_person"));
 	Act([=]() { View(ESOViewMode::FirstPerson); });
+	// the loop's beats: the kill paid on screen (xp, credits, the marker's burst), the level reached, an elite seen
+	Act([=, this]()
+	{
+		if (ASOEnemy* E = Victim->Get())
+		{
+			const FVector Eye = Hero() ? Hero()->GetPawnViewLocation() : FVector::ZeroVector;
+			SetControlRotation((E->GetActorLocation() + FVector(0.0f, 0.0f, 20.0f) - Eye).Rotation());
+		}
+	});
+	Do(0.4f, [=, this]()
+	{
+		ASOCharacter* H = Hero();
+		ASOEnemy* E = Victim->Get();
+		if (H && E)
+		{
+			USOCombatStatics::ApplyDamage(H, E, 100000.0f, true);
+			H->ConfirmHit(true, true);   // (a round's kill is confirmed by the projectile subsystem; this blow is direct)
+		}
+	});
+	Snap(0.2f, TEXT("hud_20_kill_paid"));
+	Do(0.5f, [=, this]()
+	{
+		if (USOInventoryComponent* Inv = SOFindInventory(this))
+		{
+			Inv->AddXp(USOProgressionTable::Get().XpForLevel(Inv->GetLevel()) - Inv->GetXp() + 1);
+		}
+	});
+	Snap(0.35f, TEXT("hud_21_level_up"));
+	Snap(0.9f, TEXT("hud_22_level_up_settled"));
+	Do(0.8f, [=, this]()
+	{
+		ASOCharacter* H = Hero();
+		if (!H)
+		{
+			return;
+		}
+		FSOSpeciesVariant V;
+		V.Id = TEXT("captain");
+		V.DisplayName = FText::FromString(TEXT("Remnant Captain"));
+		FSOSpawnOptions Options;
+		Options.bOnNav = false;
+		Options.Variant = &V;
+		const FVector Feet = H->GetActorLocation() + Ahead() * 900.0f + Right() * 120.0f - FVector(0.0f, 0.0f, H->GetSimpleCollisionHalfHeight());
+		if (ASOEnemy* E = USOSpeciesLibrary::Spawn(GetWorld(), TEXT("remnant"), Feet, GetControlRotation().Yaw + 180.0f, Options))
+		{
+			if (AController* Brain = E->GetController())
+			{
+				Brain->UnPossess();
+				Brain->Destroy();
+			}
+		}
+	});
+	Snap(0.5f, TEXT("hud_23_elite_seen"));
 	Do(0.5f, []() {});
 	GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 }

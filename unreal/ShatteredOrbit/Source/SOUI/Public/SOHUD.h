@@ -68,6 +68,8 @@ private:
 	void BindInventory();
 	void OnFeed(const FString& Text, const FLinearColor& Color);
 	void OnFeedItem(const FSOFeedItem& Item);
+	void OnReward(ESORewardKind Kind, int32 Amount);
+	void OnLevelUp(int32 NewLevel);
 	UTexture2D* IconOf(FName Archetype);
 
 	void DrawMinimap(const FLayout& L);
@@ -83,6 +85,11 @@ private:
 	void DrawCrosshair(const FLayout& L);
 	void DrawMelee(const FLayout& L);
 	void DrawDamageNumbers(const FLayout& L);
+	/** The loop's beats (the owner, 2026-11-20): what a kill or a pickup paid, popping up by the crosshair; the level
+	 *  reached, announced in the upper middle; an elite seen for the first time, named under the compass. */
+	void DrawRewards(const FLayout& L);
+	void DrawLevelUp(const FLayout& L);
+	void DrawEliteIntro(const FLayout& L);
 	void DrawLootBeams(const FLayout& L);
 	void DrawScreenEdge(const FLayout& L);
 	void DrawInteract(const FLayout& L);
@@ -147,6 +154,32 @@ private:
 	TWeakObjectPtr<USOInventoryComponent> FeedInventory;
 	FDelegateHandle FeedHandle;
 	FDelegateHandle FeedItemHandle;
+	FDelegateHandle RewardHandle;
+	FDelegateHandle LevelHandle;
+
+	/** A reward as it came in: xp, credits or alloy; one kind within a moment adds up into one popup. */
+	struct FRewardPop
+	{
+		uint8 Kind = 0;
+		int32 Amount = 0;
+		int32 Lane = 0;
+		float Time = 0.0f;
+		float Bump = 0.0f;
+	};
+	TArray<FRewardPop> Rewards;
+	float LevelUpAt = -100.0f;
+	int32 LevelUpTo = 0;
+	float XpShown = -1.0f;   // the level bar's shown fill, eased toward the real one: a kill is SEEN to fill it
+	float HudDt = 0.0f;
+	float LastFrameTime = 0.0f;
+	/** A kill confirmed: the marker bursts; kills within a few seconds of each other count up beside it. */
+	float KillAt = -100.0f;
+	int32 KillStreak = 0;
+	/** The elites this player has been told of, and the one being announced. */
+	TSet<TWeakObjectPtr<const AActor>> Introduced;
+	float EliteAt = -100.0f;
+	FString EliteName;
+	int32 EliteLevel = 1;
 	TWeakObjectPtr<APawn> BoundPawn;
 
 	float LastHitTime = -100.0f;

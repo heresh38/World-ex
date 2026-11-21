@@ -91,6 +91,17 @@ struct SOCOMBAT_API FSOFeedItem
 };
 DECLARE_MULTICAST_DELEGATE_OneParam(FSOOnFeedItem, const FSOFeedItem& /*Item*/);
 
+/** What a kill, a pickup or a chest pays. The HUD shows each as it comes in (the owner's loop, 2026-11-20: "every
+ *  15-30 seconds the player should get: kill, loot, xp, level ..."). */
+enum class ESORewardKind : uint8
+{
+	Xp,
+	Credits,
+	Alloy,
+};
+DECLARE_MULTICAST_DELEGATE_TwoParams(FSOOnReward, ESORewardKind /*Kind*/, int32 /*Amount*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FSOOnLevelUp, int32 /*Level*/);
+
 /**
  * The player's vault and loadout (lives on the player state, so it survives death): every owned copy, three equipped
  * slots (Primary / Special / Heavy) and the one in hand, credits / alloy / xp. Server-authoritative and replicated;
@@ -242,6 +253,10 @@ public:
 	FSOOnLootFeed OnFeed;
 	/** A gun that came in, with what the HUD's card shows (on the machine that owns the inventory). */
 	FSOOnFeedItem OnFeedItem;
+	/** Xp, credits or alloy that came in (on the machine that owns the inventory): the HUD's popups. */
+	FSOOnReward OnReward;
+	/** A level reached (on the machine that owns the inventory): the HUD's moment. */
+	FSOOnLevelUp OnLevelUp;
 	/** The equipped copy in the active slot changed: the pawn re-equips (server). */
 	FSOOnInventoryChanged OnLoadoutChanged;
 	/** The worn armour or the body changed: the pawn re-dresses (server). */
@@ -260,6 +275,15 @@ protected:
 
 	UFUNCTION(Client, Reliable)
 	void ClientFeedItem(const FSOFeedItem& Item);
+
+	UFUNCTION(Client, Reliable)
+	void ClientReward(uint8 Kind, int32 Amount);
+
+	UFUNCTION(Client, Reliable)
+	void ClientLevelUp(int32 NewLevel);
+
+	/** Tells the owning machine what came in (as Feed: here, and over the wire to a joined player). */
+	void Reward(ESORewardKind Kind, int32 Amount);
 
 	void Changed(bool bLoadout, bool bOutfit = false);
 	void Feed(const FString& Text, const FLinearColor& Color);

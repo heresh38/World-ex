@@ -574,12 +574,14 @@ void USOInventoryComponent::AddAmmoPickup()
 void USOInventoryComponent::AddCredits(int32 Amount)
 {
 	Credits += Amount;
+	Reward(ESORewardKind::Credits, Amount);
 	Changed(false);
 }
 
 void USOInventoryComponent::AddAlloy(int32 Amount)
 {
 	Alloy += Amount;
+	Reward(ESORewardKind::Alloy, Amount);
 	Changed(false);
 }
 
@@ -587,11 +589,19 @@ void USOInventoryComponent::AddXp(int32 Amount)
 {
 	const USOProgressionTable& Rules = USOProgressionTable::Get();
 	Xp += FMath::Max(Amount, 0);
+	Reward(ESORewardKind::Xp, Amount);
 	while (Level < Rules.MaxLevel && Xp >= Rules.XpForLevel(Level))
 	{
 		Xp -= Rules.XpForLevel(Level);
 		++Level;
 		Feed(FString::Printf(TEXT("Level %d  ·  gear can now be raised to %d"), Level, Rules.PowerCap(Level)), FLinearColor(1.0f, 0.85f, 0.3f));
+		OnLevelUp.Broadcast(Level);
+		const APlayerState* PS = Cast<APlayerState>(GetOwner());
+		const APlayerController* PC = PS ? PS->GetPlayerController() : nullptr;
+		if (PC && !PC->IsLocalController())
+		{
+			ClientLevelUp(Level);
+		}
 	}
 	if (Level >= Rules.MaxLevel)
 	{
@@ -856,6 +866,31 @@ void USOInventoryComponent::Feed(const FString& Text, const FLinearColor& Color)
 void USOInventoryComponent::ClientFeed_Implementation(const FString& Text, FLinearColor Color)
 {
 	OnFeed.Broadcast(Text, Color);
+}
+
+void USOInventoryComponent::Reward(ESORewardKind Kind, int32 Amount)
+{
+	if (Amount <= 0)
+	{
+		return;
+	}
+	OnReward.Broadcast(Kind, Amount);
+	const APlayerState* PS = Cast<APlayerState>(GetOwner());
+	const APlayerController* PC = PS ? PS->GetPlayerController() : nullptr;
+	if (PC && !PC->IsLocalController())
+	{
+		ClientReward(static_cast<uint8>(Kind), Amount);
+	}
+}
+
+void USOInventoryComponent::ClientReward_Implementation(uint8 Kind, int32 Amount)
+{
+	OnReward.Broadcast(static_cast<ESORewardKind>(Kind), Amount);
+}
+
+void USOInventoryComponent::ClientLevelUp_Implementation(int32 NewLevel)
+{
+	OnLevelUp.Broadcast(NewLevel);
 }
 
 void USOInventoryComponent::FeedItem(const FSOFeedItem& Item)

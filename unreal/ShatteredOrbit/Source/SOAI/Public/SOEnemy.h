@@ -43,6 +43,8 @@ public:
 	 *  which scales them. */
 	int32 ApplyNumbers(const TMap<FName, float>& Numbers);
 	FName GetVariantId() const { return VariantId; }
+	/** A level's named dressing (a variant with a name of its own): the HUD announces it the first time it is seen. */
+	bool IsElite() const { return bElite; }
 
 	/** What its special moves multiply their damage by (a variant's). */
 	float GetDamageScale() const { return DamageScale; }
@@ -382,6 +384,8 @@ protected:
 	UAnimSequenceBase* LoadClip(const TCHAR* Name) const;
 
 	FName VariantId;
+	UPROPERTY(Replicated)
+	bool bElite = false;
 	float DamageScale = 1.0f;
 
 	UPROPERTY(Replicated)

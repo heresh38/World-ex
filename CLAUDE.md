@@ -796,6 +796,23 @@ not the species' violet), the AI debug view. Pictures `SOCaptureSeries 1 38` (`S
 ability cooling and ready, loot beams, new item, the ultimate's pulse and ready, conditions, flashlight, fists, third
 person); run it in the range and on `/Game/Maps/L_Meridian` (the objective banner and tracked panel are only there),
 from Git Bash with `MSYS_NO_PATHCONV=1` (it turns `/Game/...` into a Windows path).
+**The loop's beats reach the screen** (the owner's game loop, `docs/orion/GAME_LOOP.md`: "every 15-30 seconds the
+player should get: kill, loot, xp, level, objective update, explosion, ability ready, new enemy, damage numbers";
+the gameplay pass of 2026-11-21). The inventory tells its owner's machine what came in (`USOInventoryComponent::
+OnReward` from `AddXp` / `AddCredits` / `AddAlloy` through `Reward`, `OnLevelUp` from `AddXp`; a joined player's
+come by `ClientReward` / `ClientLevelUp`, as the feed does) and the HUD draws them: a reward pops up by the crosshair
+(`DrawRewards`: +xp in gold, credits in cyan, alloy dim; one kind within a moment adds up into one number with a bump;
+the sound `reward_xp`), the level bar's fill is EASED toward the real one so a kill is seen to fill it, and a level
+reached runs it to the end with a flare and starts it again; the level-up moment (`DrawLevelUp`: a line of gold
+opening out from the middle under LEVEL N, what gear may now be raised to, gold at the screen's edge, the sound
+`level_up`); a kill confirmed bursts a ring out of the marker and kills within 4 s of each other count up beside it
+(`KillStreak`, "x3"); an ELITE (a creature a level's variant gave a name of its own: `ASOEnemy::IsElite`, replicated)
+is announced the first time it is in view (`DrawEliteIntro`: a plate under the compass with its name and level, red
+marks either side, the sound `elite_seen`; `Introduced` remembers which). Sounds `sfx_synth.py ... loop`, import
+`SO_IMPORT_ONLY=audio SO_AUDIO_ONLY=reward_,level_up,elite_`. Pictures `hud_20_kill_paid`, `hud_21/22_level_up`,
+`hud_23_elite_seen` in set 38; test `ShatteredOrbit.Loop.AKillPaysOnScreen`. Still to do of the owner's brief: the
+effect system (`art/reference/effects/effects_guide.webp`) and the inventory of collected items
+(`art/reference/ui/armoury_arsenal.webp`).
 **The armoury** (the loadout screen, I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word:
 "upgrade it ready for a triple a game release on steam", their mockup and reference screens as the bar, every look
 and word ours). LOADOUT: the backdrop (`M_UI_Backdrop`: night blue lit from the stage, the broken orbit faint behind

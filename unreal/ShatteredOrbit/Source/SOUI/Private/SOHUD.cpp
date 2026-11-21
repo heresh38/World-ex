@@ -329,10 +329,14 @@ void ASOHUD::BindInventory()
 		{
 			FeedInventory->OnFeed.Remove(FeedHandle);
 			FeedInventory->OnFeedItem.Remove(FeedItemHandle);
+			FeedInventory->OnReward.Remove(RewardHandle);
+			FeedInventory->OnLevelUp.Remove(LevelHandle);
 		}
 		FeedInventory = Inventory;
 		FeedHandle = Inventory->OnFeed.AddUObject(this, &ASOHUD::OnFeed);
 		FeedItemHandle = Inventory->OnFeedItem.AddUObject(this, &ASOHUD::OnFeedItem);
+		RewardHandle = Inventory->OnReward.AddUObject(this, &ASOHUD::OnReward);
+		LevelHandle = Inventory->OnLevelUp.AddUObject(this, &ASOHUD::OnLevelUp);
 	}
 }
 
@@ -348,6 +352,41 @@ void ASOHUD::OnFeed(const FString& Text, const FLinearColor& Color)
 void ASOHUD::OnFeedItem(const FSOFeedItem& Item)
 {
 	ShowItemCard(Item);
+}
+
+void ASOHUD::OnReward(ESORewardKind Kind, int32 Amount)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (FRewardPop& R : Rewards)
+	{
+		if (R.Kind == static_cast<uint8>(Kind) && Now - R.Time < 0.8f)
+		{
+			R.Amount += Amount;   // the same kind within a moment adds up ("+120 xp"), with a bump
+			R.Bump = Now;
+			return;
+		}
+	}
+	FRewardPop Pop;
+	Pop.Kind = static_cast<uint8>(Kind);
+	Pop.Amount = Amount;
+	Pop.Lane = Rewards.Num() > 0 ? (Rewards.Last().Lane + 1) % 4 : 0;
+	Pop.Time = Pop.Bump = Now;
+	Rewards.Add(Pop);
+	if (Rewards.Num() > 6)
+	{
+		Rewards.RemoveAt(0);
+	}
+	if (Kind == ESORewardKind::Xp)
+	{
+		USOSoundLibrary::Play2D(this, TEXT("reward_xp"), 0.4f, 0.04f);
+	}
+}
+
+void ASOHUD::OnLevelUp(int32 NewLevel)
+{
+	LevelUpAt = GetWorld()->GetTimeSeconds();
+	LevelUpTo = NewLevel;
+	USOSoundLibrary::Play2D(this, TEXT("level_up"), 0.85f, 0.0f);
 }
 
 void ASOHUD::ShowItemCard(const FSOFeedItem& Item)
@@ -959,6 +998,20 @@ void ASOHUD::DrawCreatures(const FLayout& L)
 			}
 			continue;
 		}
+		// an elite (a variant with a name of its own) in view for the first time: announced
+		if (Creature && Creature->IsElite() && !Introduced.Contains(TWeakObjectPtr<const AActor>(Other))
+			&& FVector::Dist(Other->GetActorLocation(), Player->GetActorLocation()) < 4500.0f)
+		{
+			const FVector Sc = Project(Other->GetActorLocation() + FVector(0, 0, 60.0f), true);
+			if (Sc.Z > 0.0f && Sc.X > 0.0f && Sc.X < L.W && Sc.Y > 0.0f && Sc.Y < L.H)
+			{
+				Introduced.Add(TWeakObjectPtr<const AActor>(Other));
+				EliteAt = L.Now;
+				EliteName = Creature->DisplayName.ToString();
+				EliteLevel = FMath::Max(1, FMath::RoundToInt(MyLevel * Creature->GetDamageScale()));
+				USOSoundLibrary::Play2D(this, TEXT("elite_seen"), 0.7f, 0.0f);
+			}
+		}
 		const bool bLocked = Locked.Get() == Other;
 		const bool bHurt = Other->GetHealth() < Other->GetMaxHealth() || (Other->GetMaxShield() > 0.0f && Other->GetShield() < Other->GetMaxShield());
 		if (!bHurt && !bLocked)
@@ -1067,7 +1120,21 @@ void ASOHUD::DrawVitals(const FLayout& L)
 	if (Inventory)
 	{
 		const float XpFrac = static_cast<float>(Inventory->GetXp()) / FMath::Max(Rules.XpForLevel(Inventory->GetLevel()), 1);
-		Bar(P, BX, L.H - 146.0f * S, BW, 2.0f * S, XpFrac, A(Gold, 0.8f), 0.8f, 0.5f * S);
+		// eased toward the real fill (a kill is SEEN to fill it); at a level-up it runs to the end, flares, and starts
+		// again from nothing
+		const float LevelAge = L.Now - LevelUpAt;
+		const bool bFilling = LevelAge >= 0.0f && LevelAge < 0.45f;
+		if (XpShown < 0.0f)
+		{
+			XpShown = XpFrac;
+		}
+		if (!bFilling && XpShown > XpFrac + 0.5f)
+		{
+			XpShown = 0.0f;
+		}
+		XpShown += ((bFilling ? 1.0f : XpFrac) - XpShown) * (1.0f - FMath::Exp(-9.0f * HudDt));
+		const float Flare = LevelAge >= 0.0f && LevelAge < 0.8f ? 1.0f - LevelAge / 0.8f : 0.0f;
+		Bar(P, BX, L.H - 146.0f * S - Flare * 1.0f * S, BW, (2.0f + 2.5f * Flare) * S, XpShown, A(Gold, 0.8f + 0.2f * Flare), 0.8f, 0.5f * S);
 	}
 	P.Flush();
 	// the words
@@ -1514,6 +1581,22 @@ void ASOHUD::DrawCrosshair(const FLayout& L)
 			}
 		}
 	}
+	// a kill: the marker bursts outward; kills close on each other count up beside it
+	const float KillAge = L.Now - KillAt;
+	if (KillAge >= 0.0f && KillAge < 0.35f)
+	{
+		const float K = KillAge / 0.35f;
+		const float R = (12.0f + 30.0f * (1.0f - FMath::Square(1.0f - K))) * S;
+		const FLinearColor KC = A(Hurt, (1.0f - K) * 0.9f);
+		P.Ring(FVector2D(CX, CY), R - 2.0f * S, R, KC, KC);
+	}
+	if (KillStreak >= 2 && KillAge >= 0.0f && KillAge < 1.4f)
+	{
+		P.Flush();
+		FType KillType(Canvas);
+		KillType.Caps(FString::Printf(TEXT("x%d"), KillStreak), CX + 24.0f * S, CY - 32.0f * S, KillType.Medium, 1.1f * S,
+			A(Gold, FMath::Clamp((1.4f - KillAge) / 0.4f, 0.0f, 1.0f)), 2.0f * S);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1559,6 +1642,11 @@ void ASOHUD::OnHitConfirmed(bool bCrit, bool bKilled)
 	LastHitTime = GetWorld()->GetTimeSeconds();
 	bLastHitCrit = bCrit;
 	bLastHitKill = bKilled;
+	if (bKilled)
+	{
+		KillStreak = LastHitTime - KillAt < 4.0f ? KillStreak + 1 : 1;
+		KillAt = LastHitTime;
+	}
 	USOSoundLibrary::Play2D(this, bLastHitKill ? TEXT("hit_kill") : (bLastHitCrit ? TEXT("hit_crit") : TEXT("hit_tick")), 0.55f, 0.02f);
 }
 
@@ -1646,6 +1734,99 @@ void ASOHUD::DrawDamageNumbers(const FLayout& L)
 			Type.Caps(TEXT("Crit"), X + 2.0f * S, Y - 14.0f * S, Type.Small, 1.0f * S, A(Col, Alpha), 2.0f * S);
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The loop's beats (the owner, 2026-11-20): what a kill paid, the level reached, an elite seen
+
+void ASOHUD::DrawRewards(const FLayout& L)
+{
+	const float S = L.S;
+	FType Type(Canvas);
+	const float Life = 1.5f;
+	const float X = L.CX + 56.0f * S, Y0 = L.H * 0.5f + 46.0f * S;   // (Y is each popup's baseline)
+	for (int32 i = 0; i < Rewards.Num(); ++i)
+	{
+		const FRewardPop& R = Rewards[i];
+		const float Age = L.Now - R.Time;
+		if (Age > Life)
+		{
+			Rewards.RemoveAt(i--);
+			continue;
+		}
+		const float T = Age / Life;
+		const float Alpha = FMath::Min(1.0f, Age / 0.08f) * FMath::Clamp((1.0f - T) / 0.35f, 0.0f, 1.0f);
+		const float Rise = (1.0f - FMath::Pow(1.0f - T, 2.5f)) * 34.0f * S;
+		const float Pop = 1.0f + 0.3f * FMath::Clamp(1.0f - (L.Now - R.Bump) / 0.12f, 0.0f, 1.0f);
+		FLinearColor Col;
+		FString Word;
+		switch (R.Kind)
+		{
+		case 1: Col = Cyan; Word = TEXT("credits"); break;
+		case 2: Col = Dim; Word = TEXT("alloy"); break;
+		default: Col = Gold; Word = TEXT("xp"); break;
+		}
+		const float Y = Y0 + R.Lane * 30.0f * S - Rise;
+		// the number at the damage numbers' size, the word small on its baseline
+		const FString Number = FString::Printf(TEXT("+%d"), R.Amount);
+		const FVector2D NS = Type.Size(Number, Type.Large, 1.45f * S * Pop);
+		const float WordH = Type.Size(TEXT("X"), Type.Small, 0.95f * S).Y;
+		Type.Draw(Number, X, Y - NS.Y, Type.Large, 1.45f * S * Pop, A(Col, Alpha));
+		Type.Caps(Word, X + NS.X + 7.0f * S, Y - WordH - 3.0f * S, Type.Small, 0.95f * S, A(Col, Alpha * 0.85f), 1.8f * S);
+	}
+}
+
+void ASOHUD::DrawLevelUp(const FLayout& L)
+{
+	const float Age = L.Now - LevelUpAt;
+	if (Age < 0.0f || Age > 3.0f)
+	{
+		return;
+	}
+	const float S = L.S;
+	FPainter P(Canvas);
+	FType Type(Canvas);
+	const float In = FMath::Clamp(Age / 0.3f, 0.0f, 1.0f);
+	const float Ease = 1.0f - FMath::Pow(1.0f - In, 3.0f);
+	const float Out = FMath::Clamp((3.0f - Age) / 0.5f, 0.0f, 1.0f);
+	const float Y = L.H * 0.34f;   // (under the elite's plate, over the crosshair: both may show at once)
+	// a line of gold opening out from the middle, a soft light over it, the level above and what it allows under
+	const float Half = 170.0f * S * Ease;
+	P.Quad(FVector2D(L.CX - Half, Y - 1.0f * S), FVector2D(L.CX - Half, Y + 1.0f * S), FVector2D(L.CX, Y - 1.0f * S), FVector2D(L.CX, Y + 1.0f * S), A(Gold, 0.0f), A(Gold, 0.9f * Out));
+	P.Quad(FVector2D(L.CX, Y - 1.0f * S), FVector2D(L.CX, Y + 1.0f * S), FVector2D(L.CX + Half, Y - 1.0f * S), FVector2D(L.CX + Half, Y + 1.0f * S), A(Gold, 0.9f * Out), A(Gold, 0.0f));
+	P.Quad(FVector2D(L.CX - Half, Y - 48.0f * S), FVector2D(L.CX + Half, Y - 48.0f * S), FVector2D(L.CX - Half, Y), FVector2D(L.CX + Half, Y), A(Gold, 0.0f), A(Gold, 0.10f * Out * Ease));
+	P.Flush();
+	const float Scale = 1.0f + 0.25f * (1.0f - Ease);
+	Type.Caps(FString::Printf(TEXT("Level %d"), LevelUpTo), L.CX, Y - 40.0f * S, Type.Large, 1.5f * S * Scale, A(Gold, Out * In), 6.0f * S, 0.5f);
+	const USOProgressionTable& Rules = USOProgressionTable::Get();
+	Type.Caps(FString::Printf(TEXT("Gear can be raised to %d"), Rules.PowerCap(LevelUpTo)), L.CX, Y + 8.0f * S, Type.Small, 1.0f * S,
+		A(Ink, 0.8f * Out * FMath::Clamp((Age - 0.25f) / 0.3f, 0.0f, 1.0f)), 2.4f * S, 0.5f);
+}
+
+void ASOHUD::DrawEliteIntro(const FLayout& L)
+{
+	const float Age = L.Now - EliteAt;
+	if (Age < 0.0f || Age > 3.2f)
+	{
+		return;
+	}
+	const float S = L.S;
+	FPainter P(Canvas);
+	FType Type(Canvas);
+	const float In = 1.0f - FMath::Pow(1.0f - FMath::Clamp(Age / 0.25f, 0.0f, 1.0f), 3.0f);
+	const float Out = FMath::Clamp((3.2f - Age) / 0.4f, 0.0f, 1.0f);
+	const float Alpha = In * Out;
+	const float Y = L.H * 0.20f - (1.0f - In) * 12.0f * S;
+	const float W = FMath::Max(Type.CapsWidth(EliteName, Type.Medium, 1.15f * S, 3.0f * S) + 64.0f * S, 240.0f * S);
+	const TArray<FVector2D> Body = Plate(L.CX - W * 0.5f, Y, W, 44.0f * S, 8.0f * S);
+	P.Fill(Body, A(Glass, Alpha));
+	P.Stroke(Body, A(Lock, 0.7f * Alpha), 1.2f * S);
+	// a red mark either side: the thing to fear
+	P.Fill(Diamond(FVector2D(L.CX - W * 0.5f + 16.0f * S, Y + 22.0f * S), 4.0f * S, 7.0f * S), A(Lock, Alpha));
+	P.Fill(Diamond(FVector2D(L.CX + W * 0.5f - 16.0f * S, Y + 22.0f * S), 4.0f * S, 7.0f * S), A(Lock, Alpha));
+	P.Flush();
+	Type.Caps(FString::Printf(TEXT("Elite  ·  %d"), EliteLevel), L.CX, Y + 5.0f * S, Type.Small, 0.9f * S, A(Lock, Alpha), 2.6f * S, 0.5f);
+	Type.Caps(EliteName, L.CX, Y + 20.0f * S, Type.Medium, 1.15f * S, A(Ink, Alpha), 3.0f * S, 0.5f);
 }
 
 void ASOHUD::DrawLootBeams(const FLayout& L)
@@ -1786,6 +1967,11 @@ void ASOHUD::DrawScreenEdge(const FLayout& L)
 	if (UltAge >= 0.0f && UltAge < 1.0f)
 	{
 		Ready = FMath::Max(Ready, (1.0f - UltAge) * 0.38f);
+	}
+	const float LevelAge = L.Now - LevelUpAt;
+	if (LevelAge >= 0.0f && LevelAge < 1.2f)
+	{
+		Ready = FMath::Max(Ready, (1.0f - LevelAge / 1.2f) * 0.45f);
 	}
 	if (Ready > 0.0f)
 	{
@@ -2363,6 +2549,8 @@ void ASOHUD::DrawHUD()
 	L.X1 = L.X0 + Frame;
 	L.CX = L.W * 0.5f;
 	L.Now = GetWorld()->GetTimeSeconds();
+	HudDt = FMath::Clamp(L.Now - LastFrameTime, 0.0f, 0.1f);
+	LastFrameTime = L.Now;
 	RightFlowY = 112.0f * L.S;
 
 	BindInventory();
@@ -2444,6 +2632,7 @@ void ASOHUD::DrawHUD()
 		DrawItemCards(L);
 		DrawLootBeams(L);
 		DrawCreatures(L);
+		DrawEliteIntro(L);
 	}
 	DrawOperation(L);
 	DrawAIDebug(L.W, L.H, L.S);
@@ -2453,6 +2642,8 @@ void ASOHUD::DrawHUD()
 		return;
 	}
 	DrawDamageNumbers(L);
+	DrawRewards(L);
+	DrawLevelUp(L);
 	DrawCrosshair(L);
 	DrawMelee(L);
 	DrawInteract(L);

@@ -80,6 +80,7 @@ void ASOEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(ASOEnemy, bImmune);
 	DOREPLIFETIME(ASOEnemy, ImmuneReason);
 	DOREPLIFETIME(ASOEnemy, DisplayName);
+	DOREPLIFETIME(ASOEnemy, bElite);
 	DOREPLIFETIME(ASOEnemy, BossId);
 	DOREPLIFETIME(ASOEnemy, BossPhase);
 	DOREPLIFETIME(ASOEnemy, BossWeakBroken);
@@ -143,6 +144,7 @@ void ASOEnemy::ApplyVariant(const FSOSpeciesVariant& Variant)
 	if (!Variant.DisplayName.IsEmpty())
 	{
 		DisplayName = Variant.DisplayName;
+		bElite = true;
 	}
 	StartMaxHealth *= Variant.Health;
 	if (IsActorInitialized() && Attributes)
