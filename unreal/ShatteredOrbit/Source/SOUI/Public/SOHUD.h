@@ -6,6 +6,12 @@
 #include "SOInventoryComponent.h"
 #include "SOHUD.generated.h"
 
+namespace SOHudPaint
+{
+	struct FPainter;
+	struct FGlass;
+}
+
 struct FSOProjectile;
 class USOInventoryWidget;
 class UTexture2D;
@@ -50,6 +56,9 @@ public:
 
 	/** Shows a hit as if a round of the player's had landed there (the capture series). */
 	void ShowHit(const FSOHitReport& Report);
+
+	/** The glass painter for one draw function: shapes on M_HUDGlass over what the painter P has drawn so far. */
+	SOHudPaint::FGlass MakeGlass(SOHudPaint::FPainter& P, float S);
 
 private:
 	/** Where everything sits: the screen, the scale (1 at 1080 lines) and the frame the corners keep to on a wide
@@ -146,6 +155,14 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class USOMapWidget> MapWidget;
+
+	/** The glass (M_HUDGlass): its base, and a dynamic instance per shape drawn this frame, reused next frame. */
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInterface> GlassBase;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UMaterialInstanceDynamic>> GlassPool;
+	int32 GlassUsed = 0;
+	bool bGlassLooked = false;
 
 	/** The guns' pictures (the armoury's icons), by archetype, held while the HUD lives. */
 	UPROPERTY(Transient)

@@ -8,6 +8,8 @@
 #include "Engine/Font.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Styling/CoreStyle.h"
 
 /**
@@ -373,24 +375,161 @@ namespace SOHudPaint
 		P.Stroke(Rectangle(X, Y, W, H), A(Line, Alpha * 0.8f), EdgeT);
 	}
 
+	/** How a piece of glass looks: its body top and bottom, its edge, an inner glow (reach in px, GlowA 0 = none),
+	 *  its shadow, and an alpha over all of it. */
+	struct FGlassStyle
+	{
+		FLinearColor FillA = FLinearColor(0.022f, 0.036f, 0.066f, 0.86f);
+		FLinearColor FillB = FLinearColor(0.005f, 0.009f, 0.019f, 0.93f);
+		FLinearColor Edge = FLinearColor(0.30f, 0.80f, 1.0f, 0.55f);
+		FLinearColor Glow = FLinearColor(0.30f, 0.85f, 1.0f, 1.0f);
+		float GlowW = 16.0f;
+		float GlowA = 0.0f;
+		float EdgeT = 1.0f;
+		float ShadowOff = 5.0f;
+		float ShadowBlur = 7.0f;
+		float ShadowA = 0.38f;
+		float Alpha = 1.0f;
+	};
+
+	/** The HUD's glass (the owner, 2026-11-21: "a triple a hud ... everything must be very crisp like 4k"): every shape
+	 *  is one quad of M_HUDGlass drawn on the canvas, worked out as a signed distance in pixels, so its edge is
+	 *  anti-aliased at any size and resolution, with a shadow, a body lit from above, an inner glow, light along
+	 *  its top and its edge. A dynamic instance per shape per frame from a pool the HUD keeps. The painter it is
+	 *  given is flushed first, so what was drawn before lies under the glass. */
+	struct FGlass
+	{
+		UCanvas* Canvas = nullptr;
+		FPainter* Painter = nullptr;
+		UMaterialInterface* Base = nullptr;
+		TArray<TObjectPtr<UMaterialInstanceDynamic>>* Pool = nullptr;
+		int32* Used = nullptr;
+		UObject* Outer = nullptr;
+		float S = 1.0f;
+
+		enum EShape : int32 { ShapePlate = 0, ShapePlate4 = 1, ShapeHexUp = 2, ShapeHexFlat = 3, ShapeDiamond = 4, ShapeRing = 5, ShapeDisc = 6, ShapeBar = 7 };
+
+		UMaterialInstanceDynamic* Next() const
+		{
+			if (!Base || !Pool || !Used || !Outer)
+			{
+				return nullptr;
+			}
+			while (Pool->Num() <= *Used)
+			{
+				Pool->Add(UMaterialInstanceDynamic::Create(Base, Outer));
+			}
+			return (*Pool)[(*Used)++];
+		}
+
+		/** The shape in the box X, Y, W, H (the box is the shape's extent; the quad drawn is bigger by the shadow's
+		 *  reach). Cut: a plate's corner, a ring's thickness. Frac / FillAxis: a fill (1 across, 2 up). Arc: a ring's
+		 *  from / to (degrees, screen space, -90 the top), a bar's segment length and gap (px). */
+		void Shape(int32 Kind, float X, float Y, float W, float H, float Cut, const FGlassStyle& St, float Frac = 1.0f, int32 FillAxis = 0,
+			const FVector4& Arc = FVector4(0.0f, 360.0f, 0.0f, 0.0f)) const
+		{
+			if (Painter)
+			{
+				Painter->Flush();
+			}
+			if (!Canvas || W < 1.0f || H < 1.0f)
+			{
+				return;
+			}
+			UMaterialInstanceDynamic* M = Next();
+			if (!M)
+			{
+				// (the material is not imported: the flat shapes of before)
+				if (!Painter)
+				{
+					return;
+				}
+				const FVector2D C(X + W * 0.5f, Y + H * 0.5f);
+				switch (Kind)
+				{
+				case ShapePlate: Panel(*Painter, SOHudPaint::Plate(X, Y, W, H, Cut), St.EdgeT, St.Alpha, St.Edge); break;
+				case ShapePlate4: Panel(*Painter, SOHudPaint::Plate4(X, Y, W, H, Cut), St.EdgeT, St.Alpha, St.Edge); break;
+				case ShapeBar: SOHudPaint::Bar(*Painter, X, Y, W, H, Frac, St.FillA, St.Alpha, St.EdgeT); break;
+				case ShapeHexUp: Painter->Fill(Hex(C, W * 0.5f), A(St.FillA, St.Alpha)); Painter->Stroke(Hex(C, W * 0.5f), A(St.Edge, St.Alpha), St.EdgeT); break;
+				case ShapeHexFlat: Painter->Fill(Hex(C, W * 0.5f, UE_PI / 6.0f), A(St.FillA, St.Alpha)); Painter->Stroke(Hex(C, W * 0.5f, UE_PI / 6.0f), A(St.Edge, St.Alpha), St.EdgeT); break;
+				case ShapeDiamond: Painter->Fill(SOHudPaint::Diamond(C, W * 0.5f, H * 0.5f), A(St.FillA, St.Alpha)); Painter->Stroke(SOHudPaint::Diamond(C, W * 0.5f, H * 0.5f), A(St.Edge, St.Alpha), St.EdgeT); break;
+				case ShapeRing: Painter->Ring(C, W * 0.5f - Cut, W * 0.5f, A(St.FillA, St.Alpha), A(St.FillA, St.Alpha), FMath::DegreesToRadians(Arc.X), FMath::DegreesToRadians(Arc.Y)); break;
+				default: Painter->Disc(C, W * 0.5f, A(St.FillA, St.Alpha), A(St.FillB, St.Alpha)); break;
+				}
+				return;
+			}
+			const float Pad = FMath::CeilToFloat(St.ShadowOff + St.ShadowBlur + 2.0f);
+			const float QW = W + 2.0f * Pad, QH = H + 2.0f * Pad;
+			M->SetVectorParameterValue(TEXT("Size"), FLinearColor(QW, QH, Pad, static_cast<float>(Kind)));
+			M->SetVectorParameterValue(TEXT("Geo"), FLinearColor(Cut, St.EdgeT, Frac, static_cast<float>(FillAxis)));
+			M->SetVectorParameterValue(TEXT("FillA"), A(St.FillA, St.Alpha));
+			M->SetVectorParameterValue(TEXT("FillB"), A(St.FillB, St.Alpha));
+			M->SetVectorParameterValue(TEXT("EdgeCol"), A(St.Edge, St.Alpha));
+			M->SetVectorParameterValue(TEXT("Glow"), FLinearColor(St.Glow.R, St.Glow.G, St.Glow.B, St.GlowW));
+			M->SetVectorParameterValue(TEXT("Shadow"), FLinearColor(St.ShadowOff, St.ShadowBlur, St.ShadowA * St.Alpha, St.GlowA * St.Alpha));
+			M->SetVectorParameterValue(TEXT("Arc"), FLinearColor(Arc.X, Arc.Y, Arc.Z, Arc.W));
+			Canvas->K2_DrawMaterial(M, FVector2D(X - Pad, Y - Pad), FVector2D(QW, QH), FVector2D(0.0f, 0.0f), FVector2D(1.0f, 1.0f));
+		}
+		void Plate(float X, float Y, float W, float H, float Cut, const FGlassStyle& St) const { Shape(ShapePlate, X, Y, W, H, Cut, St); }
+		void Plate4(float X, float Y, float W, float H, float Cut, const FGlassStyle& St) const { Shape(ShapePlate4, X, Y, W, H, Cut, St); }
+		void HexUp(const FVector2D& C, float R, const FGlassStyle& St, float Frac = 1.0f, int32 FillAxis = 0) const { Shape(ShapeHexUp, C.X - R, C.Y - R, 2.0f * R, 2.0f * R, 0.0f, St, Frac, FillAxis); }
+		void HexFlat(const FVector2D& C, float R, const FGlassStyle& St) const { Shape(ShapeHexFlat, C.X - R, C.Y - R, 2.0f * R, 2.0f * R, 0.0f, St); }
+		void Diamond(const FVector2D& C, float RX, float RY, const FGlassStyle& St, float Frac = 1.0f, int32 FillAxis = 0) const { Shape(ShapeDiamond, C.X - RX, C.Y - RY, 2.0f * RX, 2.0f * RY, 0.0f, St, Frac, FillAxis); }
+		void Disc(const FVector2D& C, float R, const FGlassStyle& St) const { Shape(ShapeDisc, C.X - R, C.Y - R, 2.0f * R, 2.0f * R, 0.0f, St); }
+		/** A ring of outer radius R and thickness T, from A0 to A1 degrees (screen space: -90 is the top, clockwise). */
+		void Ring(const FVector2D& C, float R, float T, float A0, float A1, const FGlassStyle& St) const { Shape(ShapeRing, C.X - R, C.Y - R, 2.0f * R, 2.0f * R, T, St, 1.0f, 0, FVector4(A0, A1, 0.0f, 0.0f)); }
+		/** A bar filled Frac of the way from the left, Fill over Trough; Segments > 0: cut into pieces that long (px)
+		 *  with Gap px between them. */
+		void Bar(float X, float Y, float W, float H, float Frac, const FLinearColor& Fill, const FLinearColor& Trough, float EdgeT, float Alpha = 1.0f,
+			float Segment = 0.0f, float Gap = 0.0f, float ShadowA = 0.3f) const
+		{
+			FGlassStyle St;
+			St.FillA = Fill;
+			St.FillB = Trough;
+			St.Edge = A(Line, 0.6f);
+			St.EdgeT = EdgeT;
+			St.ShadowOff = H * 0.35f;
+			St.ShadowBlur = H * 0.5f + 1.0f;
+			St.ShadowA = ShadowA;
+			St.Alpha = Alpha;
+			Shape(ShapeBar, X, Y, W, H, 0.0f, St, Frac, 1, FVector4(0.0f, 360.0f, Segment, Gap));
+		}
+	};
+
 	// --- text (the engine's Roboto: the armoury's face) ---
 	/** The HUD's type. A size is a face in PIXELS at scale 1 (Small 10, Medium 12, Large 20: the large one bold), and
 	 *  every string is rasterised by Slate's font cache at the size it is drawn (size x scale), so it is crisp at any
 	 *  scale and resolution. Before, the engine's bitmap Roboto and its distance-field face were scaled as pictures:
 	 *  the magazine's count and every label were soft and pixelated (the owner, 2026-11-21: "the numbers are blurry
 	 *  ... fix this too so numbers/letters are crisp, not pixelated"). The face is Slate's own Roboto. */
+	/** The faces (the engine's own Roboto, every weight it ships): Auto = Regular, Bold from the large size on;
+	 *  Cond = the bold condensed face for labels in tracked capitals; Light for the big numbers. */
+	enum class EFace : uint8 { Auto, Regular, Light, Medium, Bold, Cond, Black };
+
 	struct FType
 	{
 		UCanvas* Canvas;
 		float Small = 10.0f;
 		float Medium = 12.0f;
 		float Large = 20.0f;
+		mutable EFace Face = EFace::Auto;   // (the caller sets it before drawing and puts it back)
 
 		explicit FType(UCanvas* InCanvas) : Canvas(InCanvas) {}
 
-		static FSlateFontInfo FontOf(float F, float Scale)
+		FSlateFontInfo FontOf(float F, float Scale) const
 		{
-			return FCoreStyle::GetDefaultFontStyle(F >= 18.0f ? TEXT("Bold") : TEXT("Regular"), FMath::Max(6.0f, F * Scale));
+			const TCHAR* Name = TEXT("Regular");
+			switch (Face)
+			{
+			case EFace::Light: Name = TEXT("Light"); break;
+			case EFace::Medium: Name = TEXT("Medium"); break;
+			case EFace::Bold: Name = TEXT("Bold"); break;
+			case EFace::Cond: Name = TEXT("BoldCondensed"); break;
+			case EFace::Black: Name = TEXT("Black"); break;
+			case EFace::Regular: Name = TEXT("Regular"); break;
+			default: Name = F >= 18.0f ? TEXT("Bold") : TEXT("Regular"); break;
+			}
+			return FCoreStyle::GetDefaultFontStyle(Name, FMath::Max(6.0f, F * Scale));
 		}
 
 		/** The canvas draws nothing without a font object, and takes the Slate font info only through a RUNTIME-cached
@@ -481,6 +620,43 @@ namespace SOHudPaint
 				Cx += Size(Ch, F, Scale).X + Spacing;
 			}
 			return W;
+		}
+
+		/** A label: tracked capitals in the condensed face. */
+		float Label(const FString& Text, float X, float Y, float F, float Scale, const FLinearColor& C, float Spacing, float Align = 0.0f) const
+		{
+			const EFace Was = Face;
+			Face = EFace::Cond;
+			const float W = Caps(Text, X, Y, F, Scale, C, Spacing, Align);
+			Face = Was;
+			return W;
+		}
+		float LabelWidth(const FString& Text, float F, float Scale, float Spacing) const
+		{
+			const EFace Was = Face;
+			Face = EFace::Cond;
+			const float W = CapsWidth(Text, F, Scale, Spacing);
+			Face = Was;
+			return W;
+		}
+
+		/** A number: the light face, big. Returns the width. */
+		float Number(const FString& Text, float X, float Y, float F, float Scale, const FLinearColor& C, float Align = 0.0f) const
+		{
+			const EFace Was = Face;
+			Face = EFace::Light;
+			const float W = Size(Text, F, Scale).X;
+			Draw(Text, X - W * Align, Y, F, Scale, C);
+			Face = Was;
+			return W;
+		}
+		FVector2D NumberSize(const FString& Text, float F, float Scale) const
+		{
+			const EFace Was = Face;
+			Face = EFace::Light;
+			const FVector2D Sz = Size(Text, F, Scale);
+			Face = Was;
+			return Sz;
 		}
 	};
 }

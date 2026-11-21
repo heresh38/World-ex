@@ -2804,7 +2804,163 @@ def meridian(master):
     log(f"Meridian: {len(manifest['assets'])} pieces")
 
 
+HUD_GLASS_HLSL = """
+// The HUD's glass (SOHUDPaint.h FGlass): one shape per quad, worked out as a signed distance in PIXELS, so its edge
+// is anti-aliased at any size and resolution, with its shadow, its body lit from above, an inner glow, a line of
+// light along its top and dark along its foot, and its edge. Size = (quad w, quad h, pad, shape); Geo = (corner cut
+// px, edge px, fill 0..1, fill axis: 0 none, 1 across, 2 up); FillA / FillB = the body's top / bottom (a bar: the fill
+// / the trough); EdgeCol; Glow = rgb + reach px; Shadow = (offset px, blur px, alpha, glow alpha); Arc = (from deg,
+// to deg, segment px, gap px). Shapes: 0 plate (top-left and bottom-right cut), 1 plate (all four), 2 hexagon point
+// up, 3 hexagon flat top, 4 diamond, 5 ring / arc (thickness = cut), 6 disc, 7 bar.
+float2 q = (UV - 0.5) * Size.xy;
+float2 hs = Size.xy * 0.5 - Size.z;
+float shape = Size.w;
+float cut = Geo.x, edge = max(Geo.y, 0.5), frac = saturate(Geo.z), fillAxis = Geo.w;
+float d = 1e5, dsh = 1e5;
+for (int pass = 0; pass < 2; ++pass)
+{
+    float2 p = pass == 0 ? q : q - float2(Shadow.x * 0.3, Shadow.x);
+    float dd = 1e5;
+    if (shape < 1.5)
+    {
+        float2 a = abs(p) - hs;
+        dd = max(a.x, a.y);
+        float s = hs.x + hs.y - cut;
+        dd = max(dd, max(-p.x - p.y - s, p.x + p.y - s) * 0.70710678);
+        if (shape > 0.5) dd = max(dd, max(p.x - p.y - s, -p.x + p.y - s) * 0.70710678);
+    }
+    else if (shape < 3.5)
+    {
+        float2 h = shape < 2.5 ? float2(p.y, p.x) : p;
+        float r = shape < 2.5 ? hs.y : hs.x;
+        float2 ah = abs(h);
+        dd = max(ah.y, ah.x * 0.8660254 + ah.y * 0.5) - r * 0.8660254;
+    }
+    else if (shape < 4.5)
+    {
+        float2 ap = abs(p);
+        dd = (ap.x * hs.y + ap.y * hs.x - hs.x * hs.y) / max(length(hs), 0.001);
+    }
+    else if (shape < 5.5)
+    {
+        float r = hs.x - cut * 0.5;
+        dd = abs(length(p) - r) - cut * 0.5;
+        float span = Arc.y - Arc.x;
+        if (span < 359.9)
+        {
+            float ang = degrees(atan2(p.y, p.x));
+            float rel = ang - Arc.x;
+            rel = rel - 360.0 * floor(rel / 360.0);
+            float m = min(rel, span - rel) * r * 0.01745329;
+            dd = max(dd, -m);
+        }
+    }
+    else if (shape < 6.5)
+    {
+        dd = length(p) - hs.x;
+    }
+    else
+    {
+        float2 a = abs(p) - hs;
+        dd = max(a.x, a.y);
+    }
+    if (pass == 0) d = dd; else dsh = dd;
+}
+float aa = max(fwidth(d), 0.02) * 0.8;
+float inside = 1.0 - smoothstep(-aa, aa, d);
+float fillMask = 1.0;
+float f = 0.0, px = 1.0;
+if (fillAxis > 0.5)
+{
+    f = fillAxis < 1.5 ? (q.x + hs.x) / max(2.0 * hs.x, 0.001) : 1.0 - (q.y + hs.y) / max(2.0 * hs.y, 0.001);
+    px = fillAxis < 1.5 ? 2.0 * hs.x : 2.0 * hs.y;
+    float w = 0.6 / max(px, 1.0);
+    fillMask = 1.0 - smoothstep(frac - w, frac + w, f);
+}
+float segM = 1.0;
+if (shape > 6.5 && Arc.z > 0.5)
+{
+    float seg = fmod(q.x + hs.x + 1e4 * Arc.z, Arc.z);
+    segM = 1.0 - smoothstep(Arc.z - Arc.w - 0.7, Arc.z - Arc.w + 0.7, seg);
+}
+inside *= segM;
+float3 col = float3(0, 0, 0);
+float a = 0.0, t = 0.0;
+float sh = (1.0 - smoothstep(-Shadow.y, Shadow.y, dsh)) * Shadow.z * (shape > 6.5 ? segM : 1.0);
+t = saturate(sh); col = lerp(col, float3(0, 0, 0), t); a = a + t * (1.0 - a);
+float grad = saturate((q.y + hs.y) / max(2.0 * hs.y, 1.0));
+float4 body = lerp(FillA, FillB, grad);
+if (fillAxis > 0.5)
+{
+    float4 fillC = float4(lerp(FillA.rgb * 1.35, FillA.rgb * 0.72, grad), FillA.a);
+    body = lerp(FillB, fillC, fillMask);
+    float head = (1.0 - smoothstep(0.0, 1.8, abs(f - frac) * px)) * step(0.002, frac) * step(frac, 0.998);
+    body.rgb = lerp(body.rgb, saturate(FillA.rgb * 0.5 + 0.55), head * 0.9);
+}
+t = saturate(body.a * inside); col = lerp(col, body.rgb, t); a = a + t * (1.0 - a);
+float ig = d < 0.0 ? exp(d / max(Glow.w, 0.5)) : 0.0;
+t = saturate(ig * Shadow.w * inside); col = lerp(col, Glow.rgb, t); a = a + t * (1.0 - a);
+float top = saturate(1.0 - (q.y + hs.y) / (edge * 2.2)) * inside;
+t = saturate(top * 0.22); col = lerp(col, float3(0.85, 0.94, 1.0), t); a = a + t * (1.0 - a);
+float foot = saturate(1.0 - (hs.y - q.y) / (edge * 2.2)) * inside;
+t = saturate(foot * 0.22); col = lerp(col, float3(0, 0, 0), t); a = a + t * (1.0 - a);
+float e = 1.0 - smoothstep(edge * 0.5 - aa, edge * 0.5 + aa, abs(d));
+t = saturate(e * EdgeCol.a * (shape > 6.5 ? segM : 1.0)); col = lerp(col, EdgeCol.rgb, t); a = a + t * (1.0 - a);
+return float4(col, a);
+"""
+
+
+def hud_glass():
+    """/Game/UI/M_HUDGlass: the HUD's glass (SOHUDPaint.h FGlass), drawn on the canvas with DrawMaterial: a SURFACE
+    domain, unlit, translucent material whose whole picture is one Custom node working in pixels (a signed distance:
+    crisp at any size and resolution; the owner, 2026-11-21: "everything must be very crisp like 4k with no
+    pixilation or blurry parts"). A UI-domain material does not draw on a canvas."""
+    ensure_dir("/Game/UI")
+    path = "/Game/UI/M_HUDGlass"
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_HUDGlass", "/Game/UI", unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_SURFACE)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("two_sided", True)
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -900, 0)
+    shape = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -450, 0)
+    shape.set_editor_property("code", HUD_GLASS_HLSL)
+    shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+    vectors = dict(Size=(100, 40, 8, 0), Geo=(8, 1, 1, 0), FillA=(.022, .036, .066, .86), FillB=(.005, .009, .019, .93),
+                   EdgeCol=(.3, .8, 1, .55), Glow=(.3, .85, 1, 16), Shadow=(5, 7, .38, 0), Arc=(0, 360, 0, 0))
+    inputs = []
+    for n in ["UV"] + list(vectors):
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    shape.set_editor_property("inputs", inputs)
+    mel.connect_material_expressions(uv, "", shape, "UV")
+    for k, (n, value) in enumerate(vectors.items()):
+        v = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -900, 120 + k * 200)
+        v.set_editor_property("parameter_name", n)
+        v.set_editor_property("default_value", unreal.LinearColor(*value))
+        mel.connect_material_expressions(v, "RGBA", shape, n)
+    rgb = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, -150, -60)
+    for ch, on in (("r", True), ("g", True), ("b", True), ("a", False)):
+        rgb.set_editor_property(ch, on)
+    alpha = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, -150, 120)
+    for ch, on in (("r", False), ("g", False), ("b", False), ("a", True)):
+        alpha.set_editor_property(ch, on)
+    mel.connect_material_expressions(shape, "", rgb, "")
+    mel.connect_material_expressions(shape, "", alpha, "")
+    mel.connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.connect_material_property(alpha, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    log("M_HUDGlass")
+
+
 def ui_materials():
+    hud_glass()
     """/Game/UI/M_UI_Stage: the loadout screen's live character picture. The scene capture stores inverse opacity in
     alpha (1 where it drew nothing), so the material shows the colour with opacity = 1 - alpha."""
     ensure_dir("/Game/UI")

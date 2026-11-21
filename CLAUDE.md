@@ -789,7 +789,25 @@ at its floor, a fill lit from above with a gloss and a bright head; the cells, t
 take the same (`Shadow` + `Bevel`); the held gun's count stands in its own darker well with ROUNDS / RESERVE under
 it, and the vitals' bars lie on a plate of their own. Everything is smaller and out of the middle: the minimap 84
 px, the weapon panel 330 x 98 with 86 x 38 cards, the abilities' cells 22, the ultimate 30, the emblem 42, the bars
-250 wide. Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
+250 wide. **Round 3** (the owner, 2026-11-21: "the hud still looks too bland too indie ... a triple a hud worthy of our
+world ... everything must be very crisp like 4k with no pixilation or blurry parts"): every shape is GLASS drawn by
+one material, `/Game/UI/M_HUDGlass` (`import_assets.hud_glass`, `SO_IMPORT_ONLY=ui`): a SURFACE-domain, unlit,
+translucent material (a UI-domain one does not draw on a canvas) whose whole picture is one Custom node working in
+PIXELS as a signed distance (a plate with two or four cut corners, a hexagon point-up / flat-top, a diamond, a ring /
+arc, a disc, a bar), so its edge is anti-aliased at any size and resolution, with its shadow, its body lit from above,
+an INNER GLOW in a colour of its own (the kit's light in the emblem and a ready cell, the rarity's in the weapon panel
+and a new item's card, a condition's in its cell, red for the boss, the elite and the downed screen, gold for the
+objective, the ultimate and a level reached), a line of light along its top, dark at its foot, its edge, and for a bar
+its fill (lit, with a bright head) in a trough, in segments (the shield in five, the ultimate's meter in ten).
+`SOHudPaint::FGlass` draws them (`ASOHUD::MakeGlass(P, S)`: one dynamic instance per shape per frame from a pool,
+`K2_DrawMaterial`; `FGlassStyle` the colours and amounts; without the material it falls back to the flat shapes).
+`FType` has FACES (`EFace`: Light, Medium, Bold, Cond = the engine's BoldCondensed, Black): `Label` = tracked
+condensed caps (every heading and key), `Number` = the light face (every count: the magazine, the vitals, the
+heading, the power), names in Medium. The magazine's well has a tick for every round (up to 40), an ability cooling
+down a ring filling round its cell, the ultimate's diamond fills from its foot, the compass sits on a tinted strip,
+the mini-map on a dish with 36 ticks. Checked at 3840 x 2160 (`-ResX=3840 -ResY=2160 -ForceRes`): type, shapes and
+ticks crisp; the mini-map's picture is the area's own capture (`ASOMapInfo`: a texel of about half a metre, 1024 to
+2048 by the area's size). Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
 in the middle, the armoury's rule; checked at 2560 x 1080). Top left the round mini-map (`ASOMapInfo`'s picture cut to a
 disc, north up, the look cone, map points, the operation's goal held at the rim, creatures this side knows of in red,
 the area's name and the nearest map point or the stage under it); top centre the compass strip (N / E / S / W, the

@@ -121,7 +121,10 @@ void ASOMapInfo::BeginPlay()
 	MapTexture = NewObject<UTextureRenderTarget2D>(this);
 	MapTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB;
 	MapTexture->ClearColor = FLinearColor(0.02f, 0.03f, 0.05f, 1.0f);
-	MapTexture->InitAutoFormat(1024, 1024);
+	// a texel of about half a metre, 1024 to 2048 by the area's size (a 3 km operation at 1024 was 3 m a texel: soft on a
+	// 4K screen's mini-map)
+	const int32 Res = FMath::Clamp(static_cast<int32>(FMath::RoundUpToPowerOfTwo(static_cast<uint32>(FMath::CeilToInt(HalfSize * 2.0f / 50.0f)))), 1024, 2048);
+	MapTexture->InitAutoFormat(Res, Res);
 	MapTexture->UpdateResourceImmediate(true);
 
 	MapCamera = NewObject<USceneCaptureComponent2D>(this, TEXT("MapCamera"));
