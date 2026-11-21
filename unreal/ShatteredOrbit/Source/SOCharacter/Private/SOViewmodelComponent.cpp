@@ -279,14 +279,23 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	}
 	FVector Start;
 	const FBox B = Rig && Rig->IsBuilt() ? Rig->GetRigBounds() : FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
-	const FVector Butt(B.Min.X + 1.0f, 0.0f, FMath::Clamp(ButtHeight, B.Min.Z + 4.0f, B.Max.Z - 4.0f));
+	FVector Butt(B.Min.X + 1.0f, 0.0f, FMath::Clamp(ButtHeight, B.Min.Z + 4.0f, B.Max.Z - 4.0f));
+	// Pointed steeply down the stock comes off the shoulder: the gun is held lower, in front of the body and nearer
+	// its middle, both hands on it with the elbows bent (a man pointing a rifle at the ground); from the shoulder
+	// pocket it pointed down along the body, the support hand beyond reach and the firing hand at the hip (the
+	// owner, 2026-11-20: "looking down completely ... the players hand splits and the gun moves weirdly").
+	const float PitchDeg = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
+	const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f) * (1.0f - Ads * 0.35f);
 	if (bHandgun)
 	{
-		Start = Actor.TransformPosition(Chest);
+		Start = Actor.TransformPosition(Chest + FVector(6.0f, 0.0f, -14.0f) * Down);
 	}
 	else
 	{
-		Start = Actor.TransformPosition(Pocket + FMath::Lerp(FVector::ZeroVector, PocketAimShift, Ads));
+		const FVector Low = Chest + FVector(24.0f, 6.0f, -22.0f);          // low and ahead of the chest, a little right
+		// (at 10 cm ahead the gun hung against the belly and thighs with the hands stacked on it)
+		Start = Actor.TransformPosition(FMath::Lerp(Pocket + FMath::Lerp(FVector::ZeroVector, PocketAimShift, Ads), Low, Down));
+		Butt.X = FMath::Lerp(Butt.X, Butt.X + 16.0f, Down);               // (the butt no longer in a pocket: the gun's middle hangs from the point)
 	}
 	const FVector WantDir = (Target - Start).GetSafeNormal(1e-4f, Character->GetEyeTransform(true).GetRotation().GetForwardVector());
 	if (!bHoldDirValid || Dt > 0.2f)

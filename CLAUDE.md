@@ -1007,7 +1007,14 @@ crouch, slide and stand (`CameraRollVel`, `EyeVel`); standing still the gun and 
 acceleration into the run is a curve (`GetMaxAcceleration`: quick first step, soft arrival) and the dodge's
 speed falls on one; the body has its own dodge clips (`hero/male/motion.py` `dodge(dx, dy)`: `DodgeL / R / B /
 F`, 0.32 s, the step out of the line in place, played whole over the gait while the burst runs and fading as
-it plays out: `USOLocomotionAnimInstance` layer `Dodge`, `ActiveDodge` picked by the dodge's direction). Still
+it plays out: `USOLocomotionAnimInstance` layer `Dodge`, `ActiveDodge` picked by the dodge's direction). **Looking steeply down in third person** (the owner, 2026-11-20: "the players hand splits and the gun moves weirdly"):
+the trunk's share of the aim pitch stops at a lean (`USOLocomotionAnimInstance` hold pass, the stance pitch clamped
+-46..+57 degrees: at 70 % of -80 the body folded 56 degrees at the waist and the gun from the shoulder pocket
+pointed down along it, the support hand beyond the arm), and below -20 degrees the stock comes off the shoulder:
+`USOViewmodelComponent::ThirdPersonHoldTransform` blends the hold's point from the pocket to low and ahead of
+the chest (`Low`), the gun's middle hanging from it, both hands on it with the elbows bent; the support hand may
+slide 30 cm back along the gun (14 left it floating). Pictures `SOCaptureSeries 1 40` (files `SO_hp_<pitch>_*`,
+at rest and aiming, -89 to +75). Still
 the guide's: no grapple, the ground slam is the melee's air slam, no pad key for the dodge. Built sprint, coyote time,
 buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal

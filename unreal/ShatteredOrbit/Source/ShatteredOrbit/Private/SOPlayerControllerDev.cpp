@@ -209,7 +209,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
 			}
 			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
-			const FVector Rel = Which == 0 ? FVector(230.0f, 150.0f, 30.0f) : FVector(60.0f, 260.0f, 40.0f), Look(20.0f, 0.0f, 30.0f);
+			// 0 ahead and to the right, 1 beside, 2 close on the face from below (a view pitched down), 3 from above (up)
+			const FVector Rel = Which == 0 ? FVector(230.0f, 150.0f, 30.0f) : Which == 1 ? FVector(60.0f, 260.0f, 40.0f)
+				: Which == 2 ? FVector(80.0f, 30.0f, 20.0f) : FVector(75.0f, 30.0f, 125.0f);
+			const FVector Look = Which >= 2 ? FVector(0.0f, 0.0f, 68.0f) : FVector(20.0f, 0.0f, 30.0f);
 			CaptureCamera->SetActorRelativeLocation(Rel);
 			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
 			SetViewTarget(CaptureCamera);
@@ -251,6 +254,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				Snap(0.7f, *FString::Printf(TEXT("hp_%s_front"), *Tag));
 				Act([=, this]() { Cam(1); });
 				Snap(0.15f, *FString::Printf(TEXT("hp_%s_side"), *Tag), [=, this]() { Report(Tag); return true; });
+				Act([=, this]() { Cam(P < 0.0f ? 2 : 3); });          // close on the face: the eyes in their sockets
+				Snap(0.15f, *FString::Printf(TEXT("hp_%s_face"), *Tag));
 			}
 		}
 		Act([=, this]() { Aim(false); Look(0.0f); Cam(-1); });

@@ -2417,7 +2417,10 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	// 1. Stance: the torso follows the aim pitch (70 %), leans into the gun and turns the off shoulder forward.
 	//    First person: the shoulders turn with the whole view about the eye instead, so looking down never shows the
 	//    shoulders from above and looking up never leaves the gun out of the arms' reach.
-	const float StancePitch = bArmsOnly ? 0.0f : Pitch;
+	// (the trunk's share of the pitch stops at a lean: looking straight down the body folded 56 degrees at the waist
+	// and the gun pointed down along it with the hands at the hips; a man looking at his feet bends his neck and
+	// leans a little, the gun comes down in front of him instead: USOViewmodelComponent::ThirdPersonHoldTransform)
+	const float StancePitch = bArmsOnly ? 0.0f : FMath::DegreesToRadians(FMath::Clamp(AimPitch, -46.0f, 57.0f));
 	if (Spine != INDEX_NONE)
 	{
 		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * 0.3f - LeanRad * 0.5f));
@@ -2539,7 +2542,8 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				const float Disc = Va * Va - static_cast<float>(V.SizeSquared() - Most * Most);
 				if (Disc > 0.0f)
 				{
-					Target.AddToTranslation(-GunAxis * FMath::Clamp(Va - FMath::Sqrt(Disc), 0.0f, 14.0f));
+					// (up to 30 cm: at 14 a gun pointed steeply down left the hand floating short of it)
+					Target.AddToTranslation(-GunAxis * FMath::Clamp(Va - FMath::Sqrt(Disc), 0.0f, 30.0f));
 				}
 			}
 		}
