@@ -281,7 +281,12 @@ existing classes, never second systems.
   opening. Pictures `SOCaptureSeries 1 34 -SOGuns=<arch>,...` (files `SO_lr_<gun>_first|side|close_<n>`). Effects: reload events
   `fx` (Arg = vent / intake / cellpop / charge, Count = thousandths of the segment, ms once scaled) ->
   `ASOWeapon::PlayReloadFx` -> `USOFxSubsystem::ReloadVent / ReloadIntake / ReloadCellPop / ReloadCharge` (in the
-  view that shows the gun, carrying the holder's velocity). **Overheat**: a light gun that fired a long burst (half
+  view that shows the gun, HELD to the gun: every particle carries an `FSOFxAnchor` (the gun, a point in its rig
+  frame, where that point was last frame) and `Tick` moves it by however far the point moved, through
+  `ASOWeapon::RigPointToWorld` (the viewmodel's space for the first-person gun); spawned with the holder's
+  velocity of the moment, the cloud hung in the air where the reload began when the player turned, stopped or the
+  gun swayed: the owner, 2026-11-20. `SOCaptureSeries 1 34 -SOReloadTurn` turns 30 degrees between the moments to
+  show it). **Overheat**: a light gun that fired a long burst (half
   its cell, 8 to 40 bolts) vents a little by itself as the trigger is let go (`HeatShots`). Sounds `sfx_synth.py`
   `cell_pop cell_lock light_charge flap_open flap_close light_vent light_vent_small light_intake`. Test
   `ShatteredOrbit.Loot.LightGunsReloadTheirOwnWay`. Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.

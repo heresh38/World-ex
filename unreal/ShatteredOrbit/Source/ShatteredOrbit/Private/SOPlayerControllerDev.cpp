@@ -729,6 +729,9 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
 		TArray<FString> Guns;
 		List.ParseIntoArray(Guns, TEXT(","));
+		// -SOReloadTurn: the player turns 30 degrees between one moment and the next, so the pictures show whether the
+		// reload's effect stays ON the gun (held to it) or hangs in the air where the reload began
+		const bool bTurn = FParse::Param(FCommandLine::Get(), TEXT("SOReloadTurn"));
 		auto Progress = [Weapon](float F) { return [Weapon, F]() { const ASOWeapon* W = Weapon(); return W && W->IsReloading() && W->GetReloadProgress() > F; }; };
 		auto Beside = [this, Hero](bool bOn)
 		{
@@ -780,6 +783,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				for (int32 i = 0; i < UE_ARRAY_COUNT(Moments); ++i)
 				{
 					auto Ready = Progress(Moments[i]);
+					if (bTurn)
+					{
+						Act([this]() { SetControlRotation(GetControlRotation() + FRotator(0.0f, 30.0f, 0.0f)); });
+					}
 					Snap(0.0f, *FString::Printf(TEXT("lr_%s_%s_%d"), *Gun, V, i), [=, this]()
 					{
 						if (!Ready())
