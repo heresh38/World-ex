@@ -208,10 +208,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{
 				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
 			}
-			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
-			// 0 ahead and to the right, 1 beside, 2 close on the face from below (a view pitched down), 3 from above (up)
+			// (attached afresh each time: moved while attached, the camera stayed where its first view put it)
+			CaptureCamera->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			// 0 ahead and to the right, 1 beside, 2 close on the face from below (a view pitched down), 3 from above (up);
+			// the face from the support side: from the right the gun is in front of it
 			const FVector Rel = Which == 0 ? FVector(230.0f, 150.0f, 30.0f) : Which == 1 ? FVector(60.0f, 260.0f, 40.0f)
-				: Which == 2 ? FVector(80.0f, 30.0f, 20.0f) : FVector(75.0f, 30.0f, 125.0f);
+				: Which == 2 ? FVector(65.0f, -45.0f, 10.0f) : FVector(50.0f, -60.0f, 118.0f);
 			const FVector Look = Which >= 2 ? FVector(0.0f, 0.0f, 68.0f) : FVector(20.0f, 0.0f, 30.0f);
 			CaptureCamera->SetActorRelativeLocation(Rel);
 			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
@@ -3476,7 +3479,16 @@ void ASOPlayerController::CaptureStep()
 	{
 		return;                                 // (the travelling screen is still up)
 	}
-	CaptureWait += 0.02f;
+	// One cue a frame at most: the timer catches up by firing several times in a slow frame, and an Act 0.05 s after
+	// a Snap moved the camera before the screenshot (taken at the end of the frame) was drawn: every picture showed
+	// the step after its own.
+	static uint64 LastFrame = 0;
+	if (GFrameCounter == LastFrame)
+	{
+		return;
+	}
+	LastFrame = GFrameCounter;
+	CaptureWait += FMath::Max(0.02f, GetWorld()->GetDeltaSeconds());
 	if (!CaptureCues.IsValidIndex(CaptureIndex))
 	{
 		GetWorldTimerManager().ClearTimer(CaptureTimer);

@@ -29,6 +29,7 @@ public:
 	float SavedSlideCooldownLeft = 0.0f;
 	float SavedLandRecoverLeft = 0.0f;
 	float SavedLandStateLeft = 0.0f;
+	float SavedSprintEaseLeft = 0.0f;
 	ESOTraversal SavedTraversal = ESOTraversal::None;
 	FVector SavedMantleStart = FVector::ZeroVector;
 	FVector SavedMantleTarget = FVector::ZeroVector;
@@ -68,6 +69,7 @@ public:
 		SavedSlideCooldownLeft = 0.0f;
 		SavedLandRecoverLeft = 0.0f;
 		SavedLandStateLeft = 0.0f;
+		SavedSprintEaseLeft = 0.0f;
 		SavedTraversal = ESOTraversal::None;
 		SavedMantleStart = FVector::ZeroVector;
 		SavedMantleTarget = FVector::ZeroVector;
@@ -136,6 +138,7 @@ public:
 			SavedSlideCooldownLeft = Move->SlideCooldownLeft;
 			SavedLandRecoverLeft = Move->LandRecoverLeft;
 			SavedLandStateLeft = Move->LandStateLeft;
+			SavedSprintEaseLeft = Move->SprintEaseLeft;
 			SavedTraversal = Move->Traversal;
 			SavedMantleStart = Move->MantleStart;
 			SavedMantleTarget = Move->MantleTarget;
@@ -167,6 +170,7 @@ public:
 			Move->SlideCooldownLeft = SavedSlideCooldownLeft;
 			Move->LandRecoverLeft = SavedLandRecoverLeft;
 			Move->LandStateLeft = SavedLandStateLeft;
+			Move->SprintEaseLeft = SavedSprintEaseLeft;
 			Move->Traversal = SavedTraversal;
 			Move->MantleStart = SavedMantleStart;
 			Move->MantleTarget = SavedMantleTarget;
@@ -320,6 +324,12 @@ float USOCharacterMovementComponent::GetUnscaledMaxSpeed() const
 		{
 			return SprintSpeed * Land;
 		}
+		if (SprintEaseLeft > 0.0f && SprintEaseTime > 0.0f && !bWantsToAim)
+		{
+			// the sprint let go: down to the run on a curve, not a brake
+			const float K = FMath::Clamp(SprintEaseLeft / SprintEaseTime, 0.0f, 1.0f);
+			return FMath::Lerp(MaxWalkSpeed, SprintSpeed, K * K * (3.0f - 2.0f * K)) * Land;
+		}
 		return (bWantsToAim ? MaxWalkSpeed * AimSpeedScale : MaxWalkSpeed) * Land;
 	}
 	return Super::GetMaxSpeed();
@@ -447,6 +457,7 @@ void USOCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float Del
 	}
 	LandRecoverLeft = FMath::Max(0.0f, LandRecoverLeft - DeltaSeconds);
 	LandStateLeft = FMath::Max(0.0f, LandStateLeft - DeltaSeconds);
+	SprintEaseLeft = IsSprinting() ? SprintEaseTime : FMath::Max(0.0f, SprintEaseLeft - DeltaSeconds);
 	FallTime = IsFalling() ? FallTime + DeltaSeconds : 0.0f;
 
 	// Crouch / uncrouch (the slide counts as moving on ground, so it stays crouched).

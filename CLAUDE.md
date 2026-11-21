@@ -1022,8 +1022,15 @@ pointed down along it, the support hand beyond the arm), and below -20 degrees t
 `USOViewmodelComponent::ThirdPersonHoldTransform` blends the hold's point from the pocket to low and ahead of
 the chest (`Low`), the gun's middle hanging from it, both hands on it with the elbows bent; the support hand may
 slide 30 cm back along the gun (14 left it floating). Pictures `SOCaptureSeries 1 40` (files `SO_hp_<pitch>_*`,
-at rest and aiming, -89 to +75). Still
-the guide's: no grapple, the ground slam is the melee's air slam, no pad key for the dodge. Built sprint, coyote time,
+at rest and aiming, -89 to +75). **Pass 3** (2026-11-21): letting the sprint go eases down to the run over `SprintEaseTime` 0.35 s (it braked
+to it in a tenth: a lurch); the pad's B is one action (`IA_PadCrouchDodge`, `ASOCharacter::HandlePadCrouchDodgePressed`:
+tapped with the stick pushed at a walk or a run it is the dodge, at a sprint the slide, otherwise the crouch; every
+face button is taken); the third-person boom is `SprintArmExtra` longer at a sprint (eased: the view opens as the
+body stretches out). The capture's stepper runs ONE cue a frame (`CaptureStep`: the timer catches up by firing
+several times in a slow frame, and an Act 0.05 s after a Snap moved the camera before the screenshot was drawn:
+every picture showed the step after its own; set 40's face cameras are on the support side, where the gun is not).
+Still the guide's: no grapple (the owner, 2026-11-21: "don't add grapple yet, we will do that much later"), the ground
+slam is the melee's air slam. Built sprint, coyote time,
 buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
 measured from the obstacle (`ESOTraversal`: low / medium vault over a thin obstacle met at speed, automatic at a sprint;

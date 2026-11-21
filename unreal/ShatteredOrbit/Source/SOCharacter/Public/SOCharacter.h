@@ -156,6 +156,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float DodgeCameraRoll = 5.0f;
 
+	/** Third person: the shoulder camera's arm is this much longer at a sprint (eased: the view opens as the body
+	 *  stretches out). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float SprintArmExtra = 40.0f;
+	float SprintView = 0.0f;      // 0..1, eased: how far into the sprint the cameras are
+
 	/** At a sprint the view leans forward this many degrees (the guide: "camera leans forward"). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float SprintCameraPitch = 1.2f;
@@ -226,6 +232,10 @@ public:
 	TSoftObjectPtr<UInputAction> SprintAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> CrouchAction;
+	/** The pad's B: crouch (held, or tapped standing or at a sprint, where it slides) and, tapped while the stick is
+	 *  pushed at a walk or a run, the dodge (every face button is taken: the two share one). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> PadCrouchDodgeAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> DodgeAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
@@ -316,6 +326,9 @@ public:
 	void HandleSprintReleased();
 	void HandleCrouchPressed();
 	void HandleCrouchReleased();
+	void HandlePadCrouchDodgePressed();
+	void HandlePadCrouchDodgeReleased();
+	bool bPadPressWasDodge = false;
 	void HandleDodgePressed();
 	void HandleToggleView();
 	void HandleInteract();

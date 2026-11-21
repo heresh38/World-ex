@@ -127,6 +127,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Sprint", meta = (Units = "cm/s"))
 	float WalkStateSpeed = 250.0f;
 
+	/** Letting the sprint go, the speed eases down to the run over this long (it braked to it in a tenth of a second:
+	 *  a lurch; the owner's "fluid, like water"). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Sprint", meta = (Units = "s"))
+	float SprintEaseTime = 0.35f;
+
 	// --- Jump ---
 	/** A jump is still allowed this long after walking off a ledge. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Jump", meta = (Units = "s"))
@@ -459,6 +464,7 @@ protected:
 	float SlideCooldownLeft = 0.0f;
 	float LandRecoverLeft = 0.0f;
 	float LandStateLeft = 0.0f;
+	float SprintEaseLeft = 0.0f;
 	float LastLandSpeed = 0.0f;
 
 	// the current traversal (saved per move)

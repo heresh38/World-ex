@@ -42,6 +42,8 @@ ACTIONS = {
     "IA_Fists": unreal.InputActionValueType.BOOLEAN,
     # the dodge: a quick step out of the way (the owner's movement guide, 2026-11-20)
     "IA_Dodge": unreal.InputActionValueType.BOOLEAN,
+    # the pad's B: crouch, or the dodge when tapped on the move (ASOCharacter::HandlePadCrouchDodgePressed decides)
+    "IA_PadCrouchDodge": unreal.InputActionValueType.BOOLEAN,
     # the pad's two shoulders: each alone is an ability (right: grenade, left: melee), both together the ultimate
     # (ASOCharacter::HandlePadShoulder waits a moment for the second one)
     "IA_PadShoulderRight": unreal.InputActionValueType.BOOLEAN,
@@ -64,8 +66,8 @@ MAPPINGS = [
     ("IA_Sprint", "Gamepad_LeftThumbstick", []),
     ("IA_Crouch", "C", []),
     ("IA_Crouch", "LeftControl", []),
-    ("IA_Crouch", "Gamepad_FaceButton_Right", []),
-    ("IA_Dodge", "LeftAlt", []),                       # (the pad's face buttons are all taken: no pad key yet)
+    ("IA_PadCrouchDodge", "Gamepad_FaceButton_Right", []),
+    ("IA_Dodge", "LeftAlt", []),
     ("IA_ToggleView", "T", []),
     ("IA_Interact", "E", []),
     ("IA_Interact", "Gamepad_FaceButton_Top", []),

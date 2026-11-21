@@ -58,6 +58,7 @@ namespace SOInputPaths
 	static const TCHAR* Sprint = TEXT("/Game/Input/IA_Sprint.IA_Sprint");
 	static const TCHAR* Crouch = TEXT("/Game/Input/IA_Crouch.IA_Crouch");
 	static const TCHAR* Dodge = TEXT("/Game/Input/IA_Dodge.IA_Dodge");
+	static const TCHAR* PadCrouchDodge = TEXT("/Game/Input/IA_PadCrouchDodge.IA_PadCrouchDodge");
 	static const TCHAR* ToggleView = TEXT("/Game/Input/IA_ToggleView.IA_ToggleView");
 	static const TCHAR* Interact = TEXT("/Game/Input/IA_Interact.IA_Interact");
 	static const TCHAR* Fire = TEXT("/Game/Input/IA_Fire.IA_Fire");
@@ -1105,7 +1106,12 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	const float ShoulderFov = MoveFov / FMath::Lerp(1.0f, FMath::Clamp(Zoom, 1.0f, ThirdPersonMaxZoom), Ads);
 	FirstPersonCamera->SetFieldOfView(EyeFov);
 	ThirdPersonCamera->SetFieldOfView(ShoulderFov);
-	ThirdPersonBoom->TargetArmLength = FMath::Lerp(HipArmLength, AimArmLength, Ads);
+	{
+		const USOCharacterMovementComponent* SOMove = GetSOMovement();
+		const float Want = SOMove && SOMove->IsSprinting() ? FMath::Clamp((GetVelocity().Size2D() - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f;
+		SprintView = FMath::FInterpTo(SprintView, Want, DeltaSeconds, 4.0f);
+	}
+	ThirdPersonBoom->TargetArmLength = FMath::Lerp(HipArmLength, AimArmLength, Ads) + SprintArmExtra * SprintView * (1.0f - Ads);
 	ThirdPersonBoom->SocketOffset = FMath::Lerp(HipSocketOffset, AimSocketOffset, Ads);
 
 	// Magnified optics: fully aimed, the scope picture replaces the gun (viewmodel.js inScope); third person cuts to
@@ -1187,6 +1193,11 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	{
 		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleCrouchPressed);
 		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleCrouchReleased);
+	}
+	if (UInputAction* A = Load(PadCrouchDodgeAction))
+	{
+		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandlePadCrouchDodgePressed);
+		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandlePadCrouchDodgeReleased);
 	}
 	if (UInputAction* A = Load(DodgeAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleDodgePressed); }
 	if (UInputAction* A = Load(ToggleViewAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleToggleView); }
@@ -1347,6 +1358,33 @@ void ASOCharacter::HandleCrouchReleased()
 	{
 		UnCrouch();
 	}
+}
+
+void ASOCharacter::HandlePadCrouchDodgePressed()
+{
+	// the dodge when the stick is pushed at a walk or a run (not at a sprint: that is the slide, as before; not
+	// crouched, in the air or already stepping out)
+	const USOCharacterMovementComponent* Move = GetSOMovement();
+	const bool bOnTheMove = Move && Move->IsMovingOnGround() && !Move->IsSprinting() && !Move->IsSliding() && !Move->IsDodging()
+		&& !bIsCrouched && !bCrouchLatched && GetVelocity().Size2D() < Move->SlideEnterSpeed
+		&& Move->GetCurrentAcceleration().SizeSquared() > FMath::Square(Move->GetMaxAcceleration() * 0.4f);
+	bPadPressWasDodge = bOnTheMove && !bDead;
+	if (bPadPressWasDodge)
+	{
+		HandleDodgePressed();
+		return;
+	}
+	HandleCrouchPressed();
+}
+
+void ASOCharacter::HandlePadCrouchDodgeReleased()
+{
+	if (bPadPressWasDodge)
+	{
+		bPadPressWasDodge = false;
+		return;
+	}
+	HandleCrouchReleased();
 }
 
 void ASOCharacter::HandleDodgePressed()
