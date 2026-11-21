@@ -107,6 +107,7 @@ int32 USOMeleeLibrary::Land(ASOCombatCharacter* User, const FSOMeleeBlow& Blow, 
 			Report.Amount = Dealt;
 			Report.Point = Near;
 			Report.bShield = bOnShield;
+			Report.bShieldBroken = bOnShield && Other->GetShield() <= 0.0f;
 			Report.bKilled = Other->IsDead();
 			User->ConfirmHit(false, Report.bKilled, Report);
 		}

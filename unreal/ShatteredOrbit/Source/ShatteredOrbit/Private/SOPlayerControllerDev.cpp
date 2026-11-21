@@ -187,6 +187,139 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 41)
+	{
+		// The effect system on the owner's guide (files fx_*): a round's impact on each surface, the flash of each
+		// kind of gun, casings in the air, the hit kinds on a body (a shield hit, a shield broken, a critical, a weak
+		// point), a grenade's and a rocket's blast, the fire a rocket leaves, an energy burst. Time nearly stopped
+		// for each still.
+		auto Fx = [this]() { return GetWorld()->GetSubsystem<USOFxSubsystem>(); };
+		auto Frame = [this](FVector& Eye, FVector& F, FVector& R, FVector& U)
+		{
+			FRotator Look;
+			GetPlayerViewPoint(Eye, Look);
+			F = Look.Vector();
+			R = FRotationMatrix(Look).GetUnitAxis(EAxis::Y);
+			U = FRotationMatrix(Look).GetUnitAxis(EAxis::Z);
+		};
+		auto Ground = [this](const FVector& Over) -> FVector
+		{
+			FHitResult Hit;
+			return GetWorld()->LineTraceSingleByChannel(Hit, Over + FVector(0, 0, 100.0f), Over - FVector(0, 0, 600.0f), ECC_Visibility) ? FVector(Hit.ImpactPoint) : Over;
+		};
+		auto Slow = [this]() { UGameplayStatics::SetGlobalTimeDilation(this, 0.03f); };
+		auto Normal = [this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.0f); };
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			View(ESOViewMode::FirstPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				SetControlRotation(FRotator(-6.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f));   // the open side of the range
+			}
+		});
+		// 1. a round on each surface, in a row 2.5 m ahead facing the eye: concrete, metal, dirt, wood, water, grass, flesh
+		Do(0.6f, [=, this]()
+		{
+			USOFxSubsystem* X = Fx();
+			FVector Eye, F, R, U;
+			Frame(Eye, F, R, U);
+			if (!X) { return; }
+			const USOFxSubsystem::ESurface S[] = { USOFxSubsystem::ESurface::Concrete, USOFxSubsystem::ESurface::Metal, USOFxSubsystem::ESurface::Dirt,
+				USOFxSubsystem::ESurface::Wood, USOFxSubsystem::ESurface::Water, USOFxSubsystem::ESurface::Grass };
+			for (int32 i = 0; i < 6; ++i)
+			{
+				X->Impact(Eye + F * 250.0f + R * (i - 3.0f) * 44.0f - U * 8.0f, -F, false, FLinearColor::Black, 0.0f, false, S[i]);
+			}
+			X->Impact(Eye + F * 250.0f + R * 3.0f * 44.0f - U * 8.0f, -F, true, FLinearColor(0.35f, 0.04f, 0.03f), 0.0f, false);
+		});
+		Do(0.06f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_01_impacts"));
+		Act([=]() { Normal(); });
+		Snap(0.3f, TEXT("fx_01b_impacts_later"));                 // (the dust and the bits a third of a second on)
+		// 2. the flash of each kind of gun from the side: rifle, short, long, shotgun, heavy, launcher
+		Do(0.8f, [=, this]()
+		{
+			USOFxSubsystem* X = Fx();
+			FVector Eye, F, R, U;
+			Frame(Eye, F, R, U);
+			if (!X) { return; }
+			for (int32 i = 0; i < 6; ++i)
+			{
+				X->MuzzleFlash(Eye + F * 200.0f + R * (i - 2.5f) * 60.0f - R * 16.0f + U * (i % 2 ? -18.0f : 18.0f), R, 1.0f, false, FLinearColor(1.0f, 0.74f, 0.4f), false,
+					static_cast<USOFxSubsystem::EFlash>(i));
+			}
+		});
+		Do(0.0f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_02_flashes"));
+		Act([=]() { Normal(); });
+		// 3. casings: the rifle fired, the brass in the air to the right
+		Do(0.8f, [=, this]() { if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { H->GetWeapon()->SetAmmo(30, 120); H->HandleFirePressed(); } });
+		Do(0.1f, [=, this]() { if (ASOCharacter* H = Hero()) { H->HandleFireReleased(); } Slow(); });
+		Snap(0.0f, TEXT("fx_03_casings"));
+		Act([=]() { Normal(); });
+		// (and from beside the body in third person, where the brass is seen to fly and land)
+		Act([=]() { View(ESOViewMode::ThirdPerson); });
+		Do(0.8f, [=, this]() { if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { H->HandleFirePressed(); } });
+		Do(0.35f, [=, this]() { if (ASOCharacter* H = Hero()) { H->HandleFireReleased(); } Slow(); });
+		Snap(0.0f, TEXT("fx_03b_casings_third"));
+		Act([=]() { Normal(); View(ESOViewMode::FirstPerson); });
+		// 4. the hit kinds on a body: a shield hit, a shield broken, a critical, a weak point, in a row 2 m ahead
+		Do(1.0f, [=, this]()
+		{
+			USOFxSubsystem* X = Fx();
+			FVector Eye, F, R, U;
+			Frame(Eye, F, R, U);
+			if (!X) { return; }
+			const FVector Base = Eye + F * 200.0f - U * 4.0f;
+			X->HitKind(Base - R * 75.0f, -F, true, false, false, false, FLinearColor(0.35f, 0.72f, 1.0f));
+			X->HitKind(Base - R * 25.0f, -F, true, true, false, false, FLinearColor(0.35f, 0.72f, 1.0f));
+			X->HitKind(Base + R * 25.0f, -F, false, false, true, false, FLinearColor(1.0f, 0.55f, 0.15f));
+			X->HitKind(Base + R * 75.0f, -F, false, false, false, true, FLinearColor(1.0f, 0.85f, 0.25f));
+		});
+		Do(0.05f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_04_hit_kinds"));
+		Act([=]() { Normal(); });
+		// 5. a grenade's blast on the ground 6 m ahead, 6. a rocket's 9 m ahead, 7. the fire it leaves, 8. an energy burst
+		Do(1.5f, [=, this]()
+		{
+			USOFxSubsystem* X = Fx();
+			FVector Eye, F, R, U;
+			Frame(Eye, F, R, U);
+			if (X) { X->Blast(Ground(Eye + F * 600.0f), FVector::UpVector, 150.0f, USOFxSubsystem::EBlast::Fire, FLinearColor(1.0f, 0.7f, 0.3f)); }
+		});
+		Do(0.1f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_05_grenade"));
+		Act([=]() { Normal(); });
+		Do(2.5f, [=, this]()
+		{
+			USOFxSubsystem* X = Fx();
+			FVector Eye, F, R, U;
+			Frame(Eye, F, R, U);
+			if (X) { X->Blast(Ground(Eye + F * 900.0f + R * 150.0f), FVector::UpVector, 300.0f, USOFxSubsystem::EBlast::Fire, FLinearColor(1.0f, 0.7f, 0.3f)); }
+		});
+		Do(0.14f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_06_rocket"));
+		Act([=]() { Normal(); });
+		Snap(1.6f, TEXT("fx_07_fire_after"));
+		Do(2.5f, [=, this]()
+		{
+			USOFxSubsystem* X = Fx();
+			FVector Eye, F, R, U;
+			Frame(Eye, F, R, U);
+			if (X) { X->Blast(Ground(Eye + F * 500.0f - R * 120.0f), FVector::UpVector, 150.0f, USOFxSubsystem::EBlast::Zap, FLinearColor(0.6f, 0.4f, 1.0f)); }
+		});
+		Do(0.05f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_08_energy_burst"));
+		Act([=]() { Normal(); });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 40)
 	{
 		// The third-person hold through the aim's pitch (files hp_<pitch>_<view>; the owner, 2026-11-20: "when looking
@@ -229,6 +362,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{
 				const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(Rig, H->GetMesh());
 				UE_LOG(LogShatteredOrbit, Display, TEXT("HOLDPITCH %s: %s"), *Label, *R.ToString());
+				const float* Sw = USOLocomotionAnimInstance::DebugSwing[0];
+				UE_LOG(LogShatteredOrbit, Display, TEXT("HOLDSWING %s: firing elbow pole %.2f straight %.2f taken %.2f ask %.2f most %.2f"), *Label, Sw[0], Sw[1], Sw[2], Sw[3], Sw[4]);
 			}
 		};
 		Do(6.0f, [=, this]()

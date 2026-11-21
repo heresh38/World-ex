@@ -129,7 +129,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	bool bOneHand = false;
 	bool bArmsOnly = false;
 	bool bCollapseBody = false;
-	bool bCarried = false;      // the gun carried low (a sprint, the armoury's stand-in): the firing elbow stays down
+	bool bCarried = false;
+	bool bHeadFree = false;     // the head carries its clip's own motion under the aim (a player's body, the stand-in); a creature's is held on its aim      // the gun carried low (a sprint, the armoury's stand-in): the firing elbow stays down
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
 	float Lean = 0.0f;
@@ -354,6 +355,7 @@ public:
 	bool bCollapseBody = false;
 	/** The gun is carried low (a sprint, the armoury's stand-in): the firing elbow stays by the side. */
 	bool bCarried = false;
+	bool bHeadFree = false;     // the head carries its clip's own motion under the aim (a player's body, the stand-in); a creature's is held on its aim
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
 	float Lean = 0.0f;
@@ -400,6 +402,10 @@ public:
 		SOCHARACTER_API FString ToString() const;
 	};
 	static FHoldReport MeasureHold(const class USOGunRigComponent* Rig, const class USkeletalMeshComponent* Mesh);
+	/** The last elbow swing solved (not in shipping; a measurement aid for the capture series): per side the swing
+	 *  the pole asked (rad from straight down, + outward), the one that straightens the wrist, what was taken, how
+	 *  much the hand asked, and the most allowed. */
+	static float DebugSwing[2][5];
 	/** The turn that brings a finger's line (FingerDir) Amount of the way toward the middle finger's, in the palm's plane. */
 	static FQuat FingersTogether(const FVector& FingerDir, const FVector& MiddleDir, const FVector& Palm, float Amount);
 	/** How far the snug way brings the fingers together (FSOFingerPose::Together). */

@@ -582,8 +582,33 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		}
 		else
 		{
+			// the flash of its kind of gun (the owner's guide: each kind its own)
+			const FString Arch = Data->Archetype.ToString().ToLower();
+			USOFxSubsystem::EFlash Style = USOFxSubsystem::EFlash::Rifle;
+			if (Arch.Contains(TEXT("shotgun"))) { Style = USOFxSubsystem::EFlash::Shotgun; }
+			else if (Arch.Contains(TEXT("rocket")) || Arch.Contains(TEXT("launcher")) || Arch.Contains(TEXT("cannon")) && !Arch.Contains(TEXT("handcannon"))) { Style = USOFxSubsystem::EFlash::Launcher; }
+			else if (Arch.Contains(TEXT("sniper")) || Arch.Contains(TEXT("scout")) || Arch.Contains(TEXT("bolt")) || Arch.Contains(TEXT("lance"))) { Style = USOFxSubsystem::EFlash::Long; }
+			else if (Arch.Contains(TEXT("hmg")) || Arch.Contains(TEXT("lmg")) || Arch.Contains(TEXT("heavy"))) { Style = USOFxSubsystem::EFlash::Heavy; }
+			else if (Arch.Contains(TEXT("smg")) || Arch.Contains(TEXT("sidearm")) || Arch.Contains(TEXT("pistol")) || Arch.Contains(TEXT("handcannon")) || Arch.Contains(TEXT("revolver"))) { Style = USOFxSubsystem::EFlash::Short; }
 			Fx->MuzzleFlash(Muzzle, Aim, (bFirstPerson ? 0.6f : 1.0f) * (Data->Projectile == ESOProjectileKind::Rocket ? 1.8f : 1.0f), bFirstPerson,
-				FlashColor, bThroughScope);
+				FlashColor, bThroughScope, Style);
+		}
+		if (Data->Projectile == ESOProjectileKind::Round && Data->WeaponClass == ESOWeaponClass::Kinetic)
+		{
+			// the spent casing out of the ejection port on the receiver's right (found on the gun's own bounds: ahead
+			// of the grip, on its right flank, high), landing on whatever floor is under it
+			const USOGunRigComponent* R = bFirstPerson ? FirstPersonRig : ThirdPersonRig;
+			const FBox B = R && R->IsBuilt() ? R->GetRigBounds() : FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
+			const FVector Local(B.Min.X + (B.Max.X - B.Min.X) * 0.42f, B.Max.Y + 0.5f, B.Min.Z + (B.Max.Z - B.Min.Z) * 0.62f);
+			const FVector Port = RigPointToWorld(Local, bFirstPerson);
+			const FVector Out = (RigPointToWorld(Local + FVector(0.0f, 1.0f, 0.0f), bFirstPerson) - Port).GetSafeNormal();
+			const FVector Up = (RigPointToWorld(Local + FVector(0.0f, 0.0f, 1.0f), bFirstPerson) - Port).GetSafeNormal();
+			FHitResult Floor;
+			FCollisionQueryParams FloorParams(SCENE_QUERY_STAT(SOCasingFloor), false, Holder);
+			FloorParams.AddIgnoredActor(this);
+			const float FloorZ = World->LineTraceSingleByChannel(Floor, Port, Port - FVector(0.0f, 0.0f, 400.0f), ECC_Visibility, FloorParams)
+				? static_cast<float>(Floor.ImpactPoint.Z) + 0.8f : static_cast<float>(Port.Z) - 400.0f;
+			Fx->Casing(Port, Out, Up, Holder->GetVelocity(), FMath::Clamp(FMath::Sqrt(Data->Damage / 25.0f), 0.7f, 1.6f), FloorZ);
 		}
 	}
 
@@ -673,7 +698,8 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			if (bHit)
 			{
 				// (a blow that armour turns sparks and rings; one that goes in bleeds)
-				Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, Victim != nullptr && !Victim->TurnsBlow(Muzzle), Victim ? Victim->BloodColor : FLinearColor::Black, Flight, bDecal);
+				Fx->Impact(Hit.ImpactPoint, Hit.ImpactNormal, Victim != nullptr && !Victim->TurnsBlow(Muzzle), Victim ? Victim->BloodColor : FLinearColor::Black, Flight, bDecal,
+					USOFxSubsystem::SurfaceOf(Hit));
 			}
 			break;
 		}
@@ -724,7 +750,7 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 			Fx->Blast(End, bHit ? FVector(Hit.ImpactNormal) : FVector::UpVector, Data->Splash * 100.0f, USOFxSubsystem::EBlast::Fire, Data->TracerColor, Flight);
 			if (bHit)
 			{
-				Fx->Impact(End, Hit.ImpactNormal, false, FLinearColor::Black, Flight, bDecal);
+				Fx->Impact(End, Hit.ImpactNormal, false, FLinearColor::Black, Flight, bDecal, USOFxSubsystem::SurfaceOf(Hit));
 			}
 			{
 				TWeakObjectPtr<ASOWeapon> Self(this);

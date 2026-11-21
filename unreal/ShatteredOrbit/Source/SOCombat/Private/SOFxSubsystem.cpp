@@ -9,15 +9,23 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
+#include "Components/PrimitiveComponent.h"
+#include "Engine/HitResult.h"
 #include "SOSound.h"
 #include "SOWeapon.h"
 
 namespace
 {
 	const TCHAR* CardMeshes[] = { TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/SM_FX_Streak.SM_FX_Streak"),
-		TEXT("/Game/FX/SM_FX_Star.SM_FX_Star"), TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad") };
+		TEXT("/Game/FX/SM_FX_Star.SM_FX_Star"), TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad") };
 	const TCHAR* CardMaterials[] = { TEXT("/Game/FX/MI_FxGlow.MI_FxGlow"), TEXT("/Game/FX/MI_FxStreak.MI_FxStreak"),
-		TEXT("/Game/FX/MI_FxFlash.MI_FxFlash"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke") };
+		TEXT("/Game/FX/MI_FxFlash.MI_FxFlash"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke"), TEXT("/Game/FX/MI_FxCell.MI_FxCell") };
+	const FLinearColor Brass(0.85f, 0.62f, 0.25f);
+	const FLinearColor Dust(0.46f, 0.43f, 0.39f);
+	const FLinearColor Earth(0.36f, 0.27f, 0.18f);
+	const FLinearColor Wood(0.62f, 0.45f, 0.26f);
+	const FLinearColor Water(0.75f, 0.85f, 0.95f);
 	const TCHAR* DecalMaterial = TEXT("/Game/FX/M_SOBulletHole.M_SOBulletHole");
 	const TCHAR* WarnMaterial = TEXT("/Game/FX/M_SOWarn.M_SOWarn");
 	const float WarnFade = 0.2f; // seconds a warning takes to go once it has landed
@@ -85,6 +93,65 @@ bool USOFxSubsystem::EnsureHost()
 	return true;
 }
 
+USOFxSubsystem::ESurface USOFxSubsystem::SurfaceOf(const FHitResult& Hit)
+{
+	FString Key;
+	if (const UPhysicalMaterial* Phys = Hit.PhysMaterial.Get())
+	{
+		Key = Phys->GetName();
+	}
+	if (const UPrimitiveComponent* Comp = Hit.GetComponent())
+	{
+		const UMaterialInterface* Material = Comp->GetNumMaterials() > 0 ? Comp->GetMaterial(FMath::Max(0, static_cast<int32>(Hit.ElementIndex))) : nullptr;
+		Key += TEXT(" ") + (Material ? Material->GetName() : FString()) + TEXT(" ") + Comp->GetName() + TEXT(" ") + GetNameSafe(Comp->GetOwner());
+	}
+	else if (const AActor* Actor = Hit.GetActor())
+	{
+		Key += TEXT(" ") + Actor->GetName();
+	}
+	const FString Lower = Key.ToLower();
+	auto Has = [&Lower](std::initializer_list<const TCHAR*> Words)
+	{
+		for (const TCHAR* Word : Words)
+		{
+			if (Lower.Contains(Word))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	if (Has({ TEXT("water"), TEXT("puddle"), TEXT("pool") })) { return ESurface::Water; }
+	if (Has({ TEXT("metal"), TEXT("steel"), TEXT("grate"), TEXT("plate"), TEXT("hull"), TEXT("alloy"), TEXT("rail"), TEXT("pipe"), TEXT("catwalk"), TEXT("iron"), TEXT("container"), TEXT("vehicle"), TEXT("wreck") })) { return ESurface::Metal; }
+	if (Has({ TEXT("grass"), TEXT("moss"), TEXT("lawn"), TEXT("leaf"), TEXT("park"), TEXT("flora"), TEXT("plant") })) { return ESurface::Grass; }
+	if (Has({ TEXT("dirt"), TEXT("soil"), TEXT("mud"), TEXT("sand"), TEXT("gravel"), TEXT("rubble"), TEXT("ash"), TEXT("hive"), TEXT("chitin"), TEXT("heap") })) { return ESurface::Dirt; }
+	if (Has({ TEXT("wood"), TEXT("plank"), TEXT("crate"), TEXT("timber"), TEXT("furniture"), TEXT("desk"), TEXT("shelf") })) { return ESurface::Wood; }
+	return ESurface::Concrete;
+}
+
+FName USOFxSubsystem::SurfaceName(ESurface Surface)
+{
+	switch (Surface)
+	{
+	case ESurface::Metal: return TEXT("metal");
+	case ESurface::Dirt: return TEXT("dirt");
+	case ESurface::Grass: return TEXT("grass");
+	case ESurface::Wood: return TEXT("wood");
+	case ESurface::Water: return TEXT("water");
+	default: return TEXT("concrete");
+	}
+}
+
+float USOFxSubsystem::LowestParticleZ() const
+{
+	float Z = 1.0e9f;
+	for (const FSOFxParticle& P : Particles)
+	{
+		Z = FMath::Min(Z, static_cast<float>(P.Position.Z));
+	}
+	return Z;
+}
+
 void USOFxSubsystem::Spawn(const FSOFxParticle& Particle)
 {
 	if (Particles.Num() >= MaxParticles)
@@ -106,7 +173,7 @@ int32 USOFxSubsystem::GetNumDecals() const
 
 // --- Effects -------------------------------------------------------------------------------------
 
-void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope)
+void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope, EFlash Style)
 {
 	const FVector D = Dir.GetSafeNormal();
 	if (bThroughScope)
@@ -115,6 +182,19 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 		// there (the shot is felt in the kick and seen in the tracer)
 		return;
 	}
+	// Each kind of gun its own flash (the owner's guide): how long and wide the blades are, the core, the smoke,
+	// the light, and how much burning powder it throws out (a shotgun's is a wide burst, a rifle's clean and sharp,
+	// an SMG's small and quick, a long gun's a jet with a ring of pressure, a launcher's back-blast is smoke).
+	struct FProfile { float Length, Width, Core, Smoke, Light, Sparks; bool bRing; };
+	static const FProfile Profiles[] = {
+		{ 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, false },   // Rifle: sharp and punchy
+		{ 0.65f, 0.8f, 0.8f, 0.6f, 0.7f, 0.0f, false },  // Short: fast and small
+		{ 1.9f, 0.9f, 1.1f, 1.6f, 1.5f, 3.0f, true },    // Long: loud, a jet, a ring of pressure
+		{ 1.3f, 1.8f, 1.5f, 2.0f, 1.6f, 14.0f, true },   // Shotgun: massive and wide, powder burning in the air
+		{ 1.25f, 1.3f, 1.3f, 1.2f, 1.3f, 4.0f, false },  // Heavy: big and steady
+		{ 1.1f, 1.6f, 1.6f, 2.5f, 1.4f, 6.0f, true },    // Launcher: a back-blast of smoke
+	};
+	const FProfile& P = Profiles[FMath::Clamp(static_cast<int32>(Style), 0, 5)];
 	// Tongues of flame: the card is five thin blades about the bore (the shader shapes each to a point and tears
 	// it), a different length and turn every shot, gone in three frames.
 	FSOFxParticle Star;
@@ -122,8 +202,8 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 	Star.Position = Muzzle;
 	Star.Axis = D;
 	Star.Life = Random.FRandRange(0.035f, 0.055f);
-	Star.Length = Random.FRandRange(20.0f, 34.0f) * Scale;
-	Star.Size0 = Star.Size1 = Random.FRandRange(9.0f, 14.0f) * Scale;
+	Star.Length = Random.FRandRange(20.0f, 34.0f) * Scale * P.Length;
+	Star.Size0 = Star.Size1 = Random.FRandRange(9.0f, 14.0f) * Scale * P.Width;
 	Star.Intensity0 = 13.0f;                  // (more than this burns every colour to white)
 	Star.Intensity1 = 0.0f;
 	Star.Color = Color;
@@ -134,33 +214,114 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 	Core.Kind = ESOFxKind::Glow;
 	Core.Position = Muzzle + D * 3.0f * Scale;
 	Core.Life = 0.04f;
-	Core.Size0 = 15.0f * Scale;
-	Core.Size1 = 6.0f * Scale;
+	Core.Size0 = 15.0f * Scale * P.Core;
+	Core.Size1 = 6.0f * Scale * P.Core;
 	Core.Intensity0 = 11.0f;
 	Core.Color = FMath::Lerp(Color, FLinearColor::White, 0.25f);
 	Spawn(Core);
 
-	for (int32 i = 0; i < 2; ++i)
+	const int32 Wisps = FMath::Max(1, FMath::RoundToInt(2.0f * P.Smoke));
+	for (int32 i = 0; i < Wisps; ++i)
 	{
 		FSOFxParticle Wisp;
 		Wisp.Kind = ESOFxKind::Smoke;
 		Wisp.Position = Muzzle + D * (6.0f + i * 8.0f) * Scale;
 		Wisp.Velocity = D * Random.FRandRange(60.0f, 140.0f) + FVector(0, 0, 25.0f) + Random.VRand() * 15.0f;
 		Wisp.Drag = 2.5f;
-		Wisp.Life = Random.FRandRange(0.5f, 0.8f);
+		Wisp.Life = Random.FRandRange(0.5f, 0.8f) * FMath::Sqrt(P.Smoke);
 		Wisp.Size0 = 6.0f * Scale;
-		Wisp.Size1 = 34.0f * Scale;
+		Wisp.Size1 = 34.0f * Scale * FMath::Sqrt(P.Smoke);
 		Wisp.Intensity0 = 0.22f;
 		Wisp.Color = FLinearColor(0.55f, 0.55f, 0.56f);
 		Wisp.Spin = Random.FRandRange(0.0f, 360.0f);
 		Spawn(Wisp);
 	}
+	// burning powder: sparks thrown out along the bore, falling
+	for (int32 i = 0; i < FMath::RoundToInt(P.Sparks); ++i)
+	{
+		FSOFxParticle S;
+		S.Kind = ESOFxKind::Streak;
+		S.Position = Muzzle + D * 4.0f * Scale;
+		S.Velocity = Random.VRandCone(D, FMath::DegreesToRadians(Style == EFlash::Shotgun ? 16.0f : 7.0f)) * Random.FRandRange(700.0f, 1500.0f) * Scale;
+		S.Gravity = 980.0f;
+		S.Drag = 3.0f;
+		S.Life = Random.FRandRange(0.08f, 0.22f);
+		S.Size0 = S.Size1 = 1.1f * Scale;
+		S.Intensity0 = 22.0f;
+		S.Color = Spark;
+		Spawn(S);
+	}
+	if (P.bRing)
+	{
+		// the pressure of the shot: a faint ring of vapour across the bore, gone as it opens
+		FSOFxParticle Ring;
+		Ring.Kind = ESOFxKind::Smoke;
+		Ring.Position = Muzzle + D * 10.0f * Scale;
+		Ring.Axis = D;
+		Ring.bFlat = true;
+		Ring.Life = 0.07f;
+		Ring.Size0 = 10.0f * Scale;
+		Ring.Size1 = 75.0f * Scale * P.Width;
+		Ring.Intensity0 = 0.5f;
+		Ring.Color = FLinearColor(0.8f, 0.8f, 0.82f);
+		Spawn(Ring);
+	}
 	// The flash lights the surroundings; for the gun in your own hands it sits well ahead of the muzzle and gentler,
 	// so the gun itself does not flare white on every shot.
 	// the light of the flash, in its own colour. In first person it stands well ahead of the muzzle and under the
 	// bore: beside the muzzle it raked along the top of the gun and every grain of its finish sparkled.
-	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 220.0f * Scale * (bViewmodel ? 0.25f : 1.0f),
+	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 220.0f * Scale * P.Light * (bViewmodel ? 0.25f : 1.0f),
 		FMath::Lerp(Color, Fire, 0.35f), 0.05f);
+}
+
+void USOFxSubsystem::Casing(const FVector& Port, const FVector& Out, const FVector& Up, const FVector& Carry, float Size, float FloorZ)
+{
+	// the brass: a small bright bit that tumbles out to the right and up, arcs over, lands and skitters to rest
+	const FVector V = Out * Random.FRandRange(240.0f, 420.0f) + Up * Random.FRandRange(170.0f, 320.0f) + Random.VRand() * 40.0f + Carry;
+	FSOFxParticle B;
+	B.Kind = ESOFxKind::Smoke;
+	B.Position = Port;
+	B.Velocity = V;
+	B.Gravity = 980.0f;
+	B.Drag = 0.25f;
+	B.Life = Random.FRandRange(1.4f, 2.0f);
+	B.Size0 = B.Size1 = 1.3f * Size;
+	B.Intensity0 = B.Intensity1 = 1.0f;
+	B.Color = Brass;
+	B.Spin = Random.FRandRange(0.0f, 360.0f);
+	B.FloorZ = FloorZ;
+	B.Bounce = 0.35f;
+	Spawn(B);
+	// the case itself: a short brass bar (a rifle's is 4 cm long), turned any way, flying with the dot
+	FSOFxParticle Case;
+	Case.Kind = ESOFxKind::Streak;
+	Case.Position = Port;
+	Case.Velocity = V;
+	Case.Gravity = 980.0f;
+	Case.Drag = 0.25f;
+	Case.Axis = Random.VRand();
+	Case.Length = 3.8f * Size;
+	Case.bWhole = true;
+	Case.Life = B.Life;
+	Case.Size0 = Case.Size1 = 1.1f * Size;
+	Case.Intensity0 = Case.Intensity1 = 2.6f;
+	Case.Color = Brass;
+	Case.FloorZ = FloorZ;
+	Case.Bounce = 0.35f;
+	Spawn(Case);
+	// its glint: a point of light that flies with it for its first hand's breadths
+	FSOFxParticle G;
+	G.Kind = ESOFxKind::Glow;
+	G.Position = Port;
+	G.Velocity = V;
+	G.Gravity = 980.0f;
+	G.Drag = 0.25f;
+	G.Life = 0.14f;
+	G.Size0 = 2.2f * Size;
+	G.Size1 = 1.0f * Size;
+	G.Intensity0 = 7.0f;
+	G.Color = FMath::Lerp(Brass, FLinearColor::White, 0.5f);
+	Spawn(G);
 }
 
 void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Speed, const FLinearColor& Color, float Size, const FVector& Carry)
@@ -978,6 +1139,118 @@ void USOFxSubsystem::Blast(const FVector& Point, const FVector& Normal, float Ra
 	}
 	const float Light = Kind == EBlast::Fire ? 2600.0f : 500.0f;
 	PendingLights.Add({ Point + N * 30.0f, Kind == EBlast::Fire ? Fire : Color, Light, Kind == EBlast::Fire ? 0.25f : 0.12f, Delay });
+	const bool bOnGround = N.Z > 0.6f;
+	if (Kind == EBlast::Fire)
+	{
+		// the owner's guide: "powerful area damage ... large and cinematic ... reactive environment": debris thrown
+		// out and landing, embers, a column of smoke standing after it, the ground scorched, the shock racing out
+		// along the ground, and fire left burning on a big one
+		for (int32 i = 0; i < 14; ++i)
+		{
+			FSOFxParticle D;
+			D.Kind = ESOFxKind::Smoke;
+			D.Position = Point + N * 10.0f;
+			D.Velocity = Random.VRandCone(N, FMath::DegreesToRadians(60.0f)) * Random.FRandRange(R * 3.0f, R * 8.0f);
+			D.Gravity = 980.0f;
+			D.Drag = 0.4f;
+			D.Delay = Delay;
+			D.Life = Random.FRandRange(1.0f, 2.2f);
+			D.Size0 = D.Size1 = Random.FRandRange(2.5f, 6.0f) * FMath::Sqrt(R / 100.0f);
+			D.Intensity0 = D.Intensity1 = 1.0f;
+			D.Color = FLinearColor(0.12f, 0.1f, 0.09f);
+			D.Spin = Random.FRandRange(0.0f, 360.0f);
+			if (bOnGround)
+			{
+				D.FloorZ = Point.Z + 2.0f;
+				D.Bounce = 0.3f;
+			}
+			Spawn(D);
+		}
+		for (int32 i = 0; i < 16; ++i)
+		{
+			FSOFxParticle E;
+			E.Kind = ESOFxKind::Glow;
+			E.Position = Point + N * 10.0f;
+			E.Velocity = Random.VRandCone(N, FMath::DegreesToRadians(70.0f)) * Random.FRandRange(R * 2.0f, R * 6.0f);
+			E.Gravity = 400.0f;
+			E.Drag = 1.2f;
+			E.Delay = Delay;
+			E.Life = Random.FRandRange(0.7f, 1.5f);
+			E.Size0 = E.Size1 = 1.6f;
+			E.Intensity0 = 14.0f;
+			E.Color = Spark;
+			Spawn(E);
+		}
+		for (int32 i = 0; i < 6; ++i)
+		{
+			FSOFxParticle Column;
+			Column.Kind = ESOFxKind::Smoke;
+			Column.Position = Point + N * R * 0.3f + Random.VRand() * R * 0.2f;
+			Column.Velocity = N * Random.FRandRange(R * 0.5f, R * 0.9f) + FVector(0, 0, 60.0f) + Random.VRand() * 20.0f;
+			Column.Drag = 1.0f;
+			Column.Delay = Delay + 0.1f + i * 0.05f;
+			Column.Life = Random.FRandRange(2.5f, 4.0f);
+			Column.Size0 = R * 0.4f;
+			Column.Size1 = R * Random.FRandRange(1.6f, 2.4f);
+			Column.Intensity0 = 0.55f;
+			Column.Color = FLinearColor(0.12f, 0.11f, 0.1f);
+			Column.Spin = Random.FRandRange(0.0f, 360.0f);
+			Spawn(Column);
+		}
+		if (bOnGround)
+		{
+			if (Delay <= 0.0f)
+			{
+				AddDecal(Point, N, R * 0.9f);
+			}
+			Shockwave(Point, R * 1.6f, Fire, Delay);
+			if (R >= 120.0f)
+			{
+				// (a rocket's, a grenade's: it burns on for a while)
+				Burns.Add({ Point, N, R * 0.45f, -Delay, R >= 200.0f ? 4.0f : 2.0f, 0.0f });
+			}
+		}
+	}
+	else if (Kind == EBlast::Zap)
+	{
+		// an energy burst: arcs of light stepping out from the point in jagged chains, a ring opening on the surface
+		for (int32 Arc = 0; Arc < 8; ++Arc)
+		{
+			FVector At = Point + N * 4.0f;
+			FVector Dir = Random.VRandCone(N, FMath::DegreesToRadians(80.0f));
+			for (int32 Step = 0; Step < 4; ++Step)
+			{
+				const float Len = Random.FRandRange(R * 0.15f, R * 0.35f);
+				FSOFxParticle S;
+				S.Kind = ESOFxKind::Streak;
+				S.Position = At + Dir * Len;
+				S.Axis = Dir;
+				S.Length = Len;
+				S.bWhole = true;
+				S.Delay = Delay + Step * 0.012f;
+				S.Life = Random.FRandRange(0.06f, 0.12f);
+				S.Size0 = S.Size1 = Random.FRandRange(1.5f, 3.0f);
+				S.Intensity0 = 30.0f;
+				S.bHold = true;
+				S.Color = FMath::Lerp(Color, FLinearColor::White, 0.4f);
+				Spawn(S);
+				At += Dir * Len;
+				Dir = (Dir + Random.VRand() * 0.7f).GetSafeNormal();
+			}
+		}
+		FSOFxParticle Ring;
+		Ring.Kind = ESOFxKind::Glow;
+		Ring.Position = Point + N * 2.0f;
+		Ring.Axis = N;
+		Ring.bFlat = true;
+		Ring.Delay = Delay;
+		Ring.Life = 0.25f;
+		Ring.Size0 = R * 0.2f;
+		Ring.Size1 = R * 2.2f;
+		Ring.Intensity0 = 7.0f;
+		Ring.Color = Color;
+		Spawn(Ring);
+	}
 }
 
 void USOFxSubsystem::Shockwave(const FVector& Point, float Radius, const FLinearColor& Color, float Delay)
@@ -1236,11 +1509,11 @@ void USOFxSubsystem::Ward(const FVector& Feet, float Height, const FLinearColor&
 	PendingLights.Add({ Feet + Up * H * 0.6f, Color, 900.0f, 0.3f, 0.0f });
 }
 
-void USOFxSubsystem::Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay, bool bDecal)
+void USOFxSubsystem::Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay, bool bDecal, ESurface Surface)
 {
 	if (Delay > 0.0f)
 	{
-		Pending.Add({ Point, Normal.GetSafeNormal(), Blood, Delay, bFlesh, bDecal });
+		Pending.Add({ Point, Normal.GetSafeNormal(), Blood, Delay, bFlesh, bDecal, Surface });
 		return;
 	}
 	++ImpactsPlayed;
@@ -1281,50 +1554,254 @@ void USOFxSubsystem::Impact(const FVector& Point, const FVector& Normal, bool bF
 		return;
 	}
 
-	for (int32 i = 0; i < 10; ++i)
+	// what the surface gives (the owner's guide: each its own look and sound)
+	auto Sparks = [&](int32 Count, float Speed, float Life, float Cone, float Bright, float Width = 1.3f)
 	{
-		FSOFxParticle S;
-		S.Kind = ESOFxKind::Streak;
-		S.Position = Point + N * 1.0f;
-		S.Velocity = Random.VRandCone(N, FMath::DegreesToRadians(65.0f)) * Random.FRandRange(500.0f, 1700.0f);
-		S.Gravity = 980.0f;
-		S.Drag = 2.0f;
-		S.Life = Random.FRandRange(0.15f, 0.4f);
-		S.Size0 = S.Size1 = 1.3f;
-		S.Intensity0 = 35.0f;
-		S.Color = Spark;
-		Spawn(S);
-	}
-	FSOFxParticle Hot;
-	Hot.Kind = ESOFxKind::Glow;
-	Hot.Position = Point + N * 2.0f;
-	Hot.Life = 0.07f;
-	Hot.Size0 = 18.0f;
-	Hot.Size1 = 6.0f;
-	Hot.Intensity0 = 25.0f;
-	Hot.Color = Spark;
-	Spawn(Hot);
-	for (int32 i = 0; i < 3; ++i)
+		for (int32 i = 0; i < Count; ++i)
+		{
+			FSOFxParticle S;
+			S.Kind = ESOFxKind::Streak;
+			S.Position = Point + N * 1.0f;
+			S.Velocity = Random.VRandCone(N, FMath::DegreesToRadians(Cone)) * Random.FRandRange(Speed * 0.35f, Speed);
+			S.Gravity = 980.0f;
+			S.Drag = 2.0f;
+			S.Life = Random.FRandRange(Life * 0.5f, Life);
+			S.Size0 = S.Size1 = Width;
+			S.Intensity0 = Bright;
+			S.Color = Spark;
+			Spawn(S);
+		}
+	};
+	auto Hot = [&](float Size, float Bright, const FLinearColor& Col)
 	{
-		FSOFxParticle Dust;
-		Dust.Kind = ESOFxKind::Smoke;
-		Dust.Position = Point + N * 4.0f;
-		Dust.Velocity = N * Random.FRandRange(60.0f, 170.0f) + Random.VRand() * 40.0f;
-		Dust.Drag = 3.0f;
-		Dust.Gravity = -10.0f;
-		Dust.Life = Random.FRandRange(0.7f, 1.1f);
-		Dust.Size0 = 10.0f;
-		Dust.Size1 = Random.FRandRange(45.0f, 70.0f);
-		Dust.Intensity0 = 0.5f;
-		Dust.Color = FLinearColor(0.46f, 0.43f, 0.39f);
-		Dust.Spin = Random.FRandRange(0.0f, 360.0f);
-		Spawn(Dust);
+		FSOFxParticle H;
+		H.Kind = ESOFxKind::Glow;
+		H.Position = Point + N * 2.0f;
+		H.Life = 0.07f;
+		H.Size0 = Size;
+		H.Size1 = Size * 0.33f;
+		H.Intensity0 = Bright;
+		H.Color = Col;
+		Spawn(H);
+	};
+	auto Puff = [&](int32 Count, const FLinearColor& Col, float Size, float Life, float Speed, float Opacity)
+	{
+		for (int32 i = 0; i < Count; ++i)
+		{
+			FSOFxParticle D;
+			D.Kind = ESOFxKind::Smoke;
+			D.Position = Point + N * 4.0f;
+			D.Velocity = N * Random.FRandRange(Speed * 0.4f, Speed) + Random.VRand() * Speed * 0.25f;
+			D.Drag = 3.0f;
+			D.Gravity = -10.0f;
+			D.Life = Random.FRandRange(Life * 0.7f, Life);
+			D.Size0 = Size * 0.2f;
+			D.Size1 = Random.FRandRange(Size * 0.7f, Size);
+			D.Intensity0 = Opacity;
+			D.Color = Col;
+			D.Spin = Random.FRandRange(0.0f, 360.0f);
+			Spawn(D);
+		}
+	};
+	// bits thrown off (chips, crumbs, splinters, drops): small, with weight, in the surface's own colour
+	auto Bits = [&](int32 Count, const FLinearColor& Col, float Size, float Speed, float Cone, bool bStreak = false)
+	{
+		for (int32 i = 0; i < Count; ++i)
+		{
+			FSOFxParticle B;
+			B.Kind = bStreak ? ESOFxKind::Streak : ESOFxKind::Smoke;
+			B.Position = Point + N * 2.0f;
+			B.Velocity = Random.VRandCone(N, FMath::DegreesToRadians(Cone)) * Random.FRandRange(Speed * 0.3f, Speed);
+			B.Gravity = 980.0f;
+			B.Drag = 0.8f;
+			B.Life = Random.FRandRange(0.35f, 0.7f);
+			B.Size0 = B.Size1 = Random.FRandRange(Size * 0.6f, Size);
+			B.Intensity0 = bStreak ? 1.6f : 1.0f;
+			B.Intensity1 = bStreak ? 0.8f : 0.8f;
+			B.Color = Col;
+			B.Spin = Random.FRandRange(0.0f, 360.0f);
+			Spawn(B);
+		}
+	};
+	const TCHAR* Sound = TEXT("impact_hard");
+	bool bHole = bDecal;
+	switch (Surface)
+	{
+	case ESurface::Metal:
+		// sparks and metal debris: a hard bright shower, ricochets skating off at a glance, a bright hot point
+		Sparks(16, 1500.0f, 0.45f, 70.0f, 40.0f);
+		Sparks(3, 1800.0f, 0.3f, 88.0f, 30.0f, 2.0f);
+		Hot(22.0f, 34.0f, FMath::Lerp(Spark, FLinearColor::White, 0.4f));
+		Bits(5, FLinearColor(0.5f, 0.5f, 0.52f), 1.6f, 500.0f, 60.0f);
+		Puff(2, FLinearColor(0.5f, 0.5f, 0.52f), 40.0f, 0.7f, 100.0f, 0.5f);
+		Sound = TEXT("impact_metal");
+		break;
+	case ESurface::Dirt:
+	case ESurface::Grass:
+		// a clod thrown up: no spark in earth; dust and crumbs, and torn grass where there is grass
+		Puff(6, Surface == ESurface::Grass ? FLinearColor(0.34f, 0.32f, 0.2f) : Earth, 85.0f, 1.2f, 170.0f, 0.95f);
+		Bits(10, Surface == ESurface::Grass ? FLinearColor(0.25f, 0.33f, 0.14f) : Earth * 0.8f, 3.6f, 420.0f, 45.0f);
+		Sound = TEXT("impact_dirt");
+		bHole = false;
+		break;
+	case ESurface::Wood:
+		// splinters: pale slivers spinning off, a little dust, one or two sparks off a nail
+		Bits(8, Wood, 2.2f, 650.0f, 50.0f, true);
+		Puff(3, FLinearColor(0.55f, 0.48f, 0.38f), 50.0f, 0.9f, 120.0f, 0.7f);
+		Sparks(2, 900.0f, 0.2f, 60.0f, 20.0f);
+		Sound = TEXT("impact_wood");
+		break;
+	case ESurface::Water:
+	{
+		// a splash: white drops thrown up, a ring opening on the surface, a mist hanging over it
+		Bits(12, Water, 2.4f, 520.0f, 28.0f);
+		Puff(2, Water, 40.0f, 0.5f, 120.0f, 0.35f);
+		FSOFxParticle Ring;
+		Ring.Kind = ESOFxKind::Smoke;
+		Ring.Position = Point + N * 1.0f;
+		Ring.Axis = N;
+		Ring.bFlat = true;
+		Ring.Life = 0.45f;
+		Ring.Size0 = 6.0f;
+		Ring.Size1 = 70.0f;
+		Ring.Intensity0 = 0.55f;
+		Ring.Color = Water;
+		Spawn(Ring);
+		Sound = TEXT("impact_water");
+		bHole = false;
+		break;
 	}
-	if (bDecal)
+	default:
+		// concrete: dust and fragments; a few sparks off the aggregate, chips of the surface
+		Sparks(6, 1100.0f, 0.35f, 65.0f, 30.0f);
+		Hot(16.0f, 20.0f, Spark);
+		Puff(5, Dust, 90.0f, 1.2f, 170.0f, 0.9f);
+		Bits(8, Dust * 0.85f, 3.0f, 480.0f, 50.0f);
+		break;
+	}
+	if (bHole)
 	{
 		AddDecal(Point, N);
 	}
-	USOSoundLibrary::PlayAt(this, TEXT("impact_hard"), Point, 0.8f, 0.1f, ESOSoundRange::Near);
+	USOSoundLibrary::PlayAt(this, Sound, Point, 0.8f, 0.1f, ESOSoundRange::Near);
+}
+
+void USOFxSubsystem::HitKind(const FVector& Point, const FVector& Normal, bool bShield, bool bShieldBroken, bool bCrit, bool bWeak, const FLinearColor& Color)
+{
+	const FVector N = Normal.GetSafeNormal(1e-4f, FVector::UpVector);
+	const FVector Side = FVector::CrossProduct(N, FMath::Abs(N.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	const FVector Up2 = FVector::CrossProduct(Side, N);
+	if (bShield || bShieldBroken)
+	{
+		// the shield's skin: a hexagonal cell at the hit and a ring of six round it, lit and gone; broken, every cell
+		// is thrown off the body and the whole skin flashes
+		const float Cell = 9.0f;
+		for (int32 i = 0; i < 7; ++i)
+		{
+			const float A = FMath::DegreesToRadians(60.0f * (i - 1));
+			const FVector Off = i == 0 ? FVector::ZeroVector : (Side * FMath::Cos(A) + Up2 * FMath::Sin(A)) * Cell * 1.75f;
+			FSOFxParticle C;
+			C.Kind = ESOFxKind::Cell;
+			C.Position = Point + N * 1.5f + Off;
+			C.Axis = N;
+			C.bFlat = true;
+			C.Spin = FMath::RadiansToDegrees(FMath::Atan2(Up2.Z, Side.Z)); // (the cells share one lattice)
+			C.Life = bShieldBroken ? 0.5f : (i == 0 ? 0.3f : 0.22f);
+			C.Size0 = C.Size1 = Cell;
+			C.Intensity0 = i == 0 ? 9.0f : 5.0f;
+			C.Color = Color;
+			if (bShieldBroken)
+			{
+				C.Velocity = Off.GetSafeNormal(1e-4f, N) * 180.0f + N * 90.0f + Random.VRand() * 40.0f;
+				C.Gravity = 400.0f;
+				C.Drag = 1.0f;
+				C.bFlat = false;
+			}
+			Spawn(C);
+		}
+		FSOFxParticle Flash;
+		Flash.Kind = ESOFxKind::Glow;
+		Flash.Position = Point + N * 3.0f;
+		Flash.Life = bShieldBroken ? 0.16f : 0.08f;
+		Flash.Size0 = bShieldBroken ? 60.0f : 26.0f;
+		Flash.Size1 = bShieldBroken ? 90.0f : 10.0f;
+		Flash.Intensity0 = bShieldBroken ? 14.0f : 8.0f;
+		Flash.Color = FMath::Lerp(Color, FLinearColor::White, bShieldBroken ? 0.6f : 0.3f);
+		Spawn(Flash);
+		if (bShieldBroken)
+		{
+			for (int32 i = 0; i < 10; ++i)
+			{
+				const float A = Random.FRandRange(0.0f, UE_TWO_PI);
+				FSOFxParticle Shard;
+				Shard.Kind = ESOFxKind::Cell;
+				Shard.Position = Point + N * 2.0f + (Side * FMath::Cos(A) + Up2 * FMath::Sin(A)) * Random.FRandRange(8.0f, 30.0f);
+				Shard.Velocity = (Shard.Position - Point).GetSafeNormal() * Random.FRandRange(120.0f, 260.0f) + N * Random.FRandRange(40.0f, 120.0f);
+				Shard.Gravity = 500.0f;
+				Shard.Drag = 1.2f;
+				Shard.Life = Random.FRandRange(0.4f, 0.7f);
+				Shard.Size0 = Shard.Size1 = Random.FRandRange(5.0f, 9.0f);
+				Shard.Intensity0 = 6.0f;
+				Shard.Color = Color;
+				Shard.Spin = Random.FRandRange(0.0f, 360.0f);
+				Spawn(Shard);
+			}
+			USOSoundLibrary::PlayAt(this, TEXT("shield_break"), Point, 0.9f, 0.05f, ESOSoundRange::Near);
+		}
+		else
+		{
+			USOSoundLibrary::PlayAt(this, TEXT("shield_hit"), Point, 0.6f, 0.08f, ESOSoundRange::Near);
+		}
+	}
+	if (bCrit || bWeak)
+	{
+		// larger: a flare, and lines of light out of it; a weak point bursts in its own colour with a ring opening
+		// on the surface
+		FSOFxParticle Flare;
+		Flare.Kind = ESOFxKind::Glow;
+		Flare.Position = Point + N * 3.0f;
+		Flare.Life = 0.12f;
+		Flare.Size0 = bWeak ? 52.0f : 38.0f;
+		Flare.Size1 = 12.0f;
+		Flare.Intensity0 = bWeak ? 26.0f : 20.0f;
+		Flare.Color = FMath::Lerp(Color, FLinearColor::White, 0.35f);
+		Spawn(Flare);
+		for (int32 i = 0; i < (bWeak ? 10 : 6); ++i)
+		{
+			const float A = UE_TWO_PI * i / (bWeak ? 10.0f : 6.0f) + Random.FRandRange(-0.2f, 0.2f);
+			FSOFxParticle L;
+			L.Kind = ESOFxKind::Streak;
+			L.Position = Point + N * 3.0f;
+			L.Axis = (Side * FMath::Cos(A) + Up2 * FMath::Sin(A) + N * 0.3f).GetSafeNormal();
+			L.Velocity = L.Axis * Random.FRandRange(500.0f, 900.0f);
+			L.Length = bWeak ? 40.0f : 26.0f;
+			L.Life = 0.14f;
+			L.Size0 = L.Size1 = bWeak ? 2.6f : 2.0f;
+			L.Intensity0 = 24.0f;
+			L.Color = Color;
+			Spawn(L);
+		}
+		if (bWeak)
+		{
+			FSOFxParticle Ring;
+			Ring.Kind = ESOFxKind::Glow;
+			Ring.Position = Point + N * 2.0f;
+			Ring.Axis = N;
+			Ring.bFlat = true;
+			Ring.Life = 0.22f;
+			Ring.Size0 = 14.0f;
+			Ring.Size1 = 95.0f;
+			Ring.Intensity0 = 6.0f;
+			Ring.Color = Color;
+			Spawn(Ring);
+		}
+		FlashLight(Point + N * 25.0f, bWeak ? 900.0f : 500.0f, Color, 0.1f);
+	}
+}
+
+void USOFxSubsystem::Burn(const FVector& Point, const FVector& Normal, float Radius, float Duration)
+{
+	Burns.Add({ Point, Normal.GetSafeNormal(1e-4f, FVector::UpVector), FMath::Max(Radius, 20.0f), 0.0f, FMath::Max(Duration, 0.3f), 0.0f });
 }
 
 void USOFxSubsystem::Pool(const FVector& Point, const FVector& Normal, float Radius, const FLinearColor& Color, float Delay, float Duration)
@@ -1423,7 +1900,7 @@ void USOFxSubsystem::Pool(const FVector& Point, const FVector& Normal, float Rad
 	}
 }
 
-void USOFxSubsystem::AddDecal(const FVector& Point, const FVector& Normal)
+void USOFxSubsystem::AddDecal(const FVector& Point, const FVector& Normal, float Size)
 {
 	if (!EnsureHost())
 	{
@@ -1451,7 +1928,8 @@ void USOFxSubsystem::AddDecal(const FVector& Point, const FVector& Normal)
 	FRotator Rot = (-Normal).Rotation();
 	Rot.Roll = Random.FRandRange(0.0f, 360.0f);
 	Decal->SetWorldLocationAndRotation(Point, Rot);
-	Decal->SetWorldScale3D(FVector(1.0f, Random.FRandRange(0.8f, 1.2f), Random.FRandRange(0.8f, 1.2f)));
+	const float K = Size / 4.5f;
+	Decal->SetWorldScale3D(FVector(FMath::Max(1.0f, K * 0.5f), K * Random.FRandRange(0.8f, 1.2f), K * Random.FRandRange(0.8f, 1.2f)));
 	Decal->SetVisibility(true);
 	Decal->SetFadeOut(25.0f, 4.0f, false);
 }
@@ -1497,7 +1975,7 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		{
 			const FPendingImpact P = Pending[i];
 			Pending.RemoveAtSwap(i, 1, EAllowShrinking::No);
-			Impact(P.Point, P.Normal, P.bFlesh, P.Blood, 0.0f, P.bDecal);
+			Impact(P.Point, P.Normal, P.bFlesh, P.Blood, 0.0f, P.bDecal, P.Surface);
 		}
 	}
 	for (int32 i = PendingLights.Num() - 1; i >= 0; --i)
@@ -1594,6 +2072,82 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		}
 	}
 
+	for (int32 i = Burns.Num() - 1; i >= 0; --i)
+	{
+		FBurn& B = Burns[i];
+		B.Age += DeltaTime;
+		if (B.Age >= B.Life)
+		{
+			Burns.RemoveAtSwap(i, 1, EAllowShrinking::No);
+			continue;
+		}
+		const float Left = FMath::Clamp((B.Life - B.Age) / (B.Life * 0.35f), 0.0f, 1.0f); // (it dies down in its last third)
+		B.Due -= DeltaTime;
+		while (B.Due <= 0.0f)
+		{
+			B.Due += 0.02f / FMath::Max(Left, 0.15f);
+			const FVector Side = FVector::CrossProduct(B.Normal, FMath::Abs(B.Normal.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+			const FVector Up2 = FVector::CrossProduct(Side, B.Normal);
+			const float A = Random.FRandRange(0.0f, UE_TWO_PI), R = B.Radius * FMath::Sqrt(Random.FRand());
+			const FVector At = B.Point + (Side * FMath::Cos(A) + Up2 * FMath::Sin(A)) * R + B.Normal * 3.0f;
+			// a flame: a tongue of light rising off the patch, orange to a dull red as it goes
+			FSOFxParticle F;
+			F.Kind = ESOFxKind::Star;
+			F.Position = At;
+			F.Axis = (B.Normal + FVector(0, 0, 0.6f) + Random.VRand() * 0.25f).GetSafeNormal();
+			F.Velocity = F.Axis * Random.FRandRange(40.0f, 90.0f);
+			F.Drag = 1.0f;
+			F.Life = Random.FRandRange(0.25f, 0.45f);
+			const float Tall = Random.FRandRange(30.0f, 55.0f) * (0.6f + 0.4f * Left) * FMath::Sqrt(B.Radius / 70.0f);
+			F.Length = Tall;
+			F.Size0 = Tall * 0.35f;
+			F.Size1 = Tall * 0.2f;
+			F.Intensity0 = 12.0f * Left;
+			F.Intensity1 = 0.0f;
+			F.Color = FLinearColor(1.0f, Random.FRandRange(0.45f, 0.7f), 0.15f);
+			F.Spin = Random.FRandRange(0.0f, 360.0f);
+			Spawn(F);
+			FSOFxParticle Core; // the heat at its root
+			Core.Kind = ESOFxKind::Glow;
+			Core.Position = At;
+			Core.Velocity = F.Velocity * 0.5f;
+			Core.Life = F.Life;
+			Core.Size0 = Tall * 0.45f;
+			Core.Size1 = Tall * 0.25f;
+			Core.Intensity0 = 8.0f * Left;
+			Core.Color = FLinearColor(1.0f, 0.62f, 0.2f);
+			Spawn(Core);
+			if (Random.FRand() < 0.35f)
+			{
+				FSOFxParticle E; // an ember carried up, falling back
+				E.Kind = ESOFxKind::Glow;
+				E.Position = At;
+				E.Velocity = FVector(0, 0, Random.FRandRange(120.0f, 220.0f)) + Random.VRand() * 50.0f;
+				E.Gravity = 180.0f;
+				E.Drag = 0.6f;
+				E.Life = Random.FRandRange(0.8f, 1.6f);
+				E.Size0 = E.Size1 = 1.4f;
+				E.Intensity0 = 12.0f;
+				E.Color = Spark;
+				Spawn(E);
+			}
+			if (Random.FRand() < 0.3f)
+			{
+				FSOFxParticle S; // smoke off the fire
+				S.Kind = ESOFxKind::Smoke;
+				S.Position = At + B.Normal * 12.0f;
+				S.Velocity = FVector(0, 0, Random.FRandRange(45.0f, 80.0f)) + Random.VRand() * 20.0f;
+				S.Drag = 0.8f;
+				S.Life = Random.FRandRange(1.4f, 2.4f);
+				S.Size0 = 10.0f;
+				S.Size1 = Random.FRandRange(45.0f, 80.0f);
+				S.Intensity0 = 0.45f;
+				S.Color = FLinearColor(0.14f, 0.13f, 0.12f);
+				S.Spin = Random.FRandRange(0.0f, 360.0f);
+				Spawn(S);
+			}
+		}
+	}
 	for (int32 i = Particles.Num() - 1; i >= 0; --i)
 	{
 		FSOFxParticle& P = Particles[i];
@@ -1624,6 +2178,24 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		P.Velocity.Z -= P.Gravity * DeltaTime;
 		P.Velocity *= FMath::Exp(-P.Drag * DeltaTime);
 		P.Position += P.Velocity * DeltaTime;
+		if (P.Bounce > 0.0f && P.Position.Z < P.FloorZ)
+		{
+			// landed: it bounces, loses most of its run, and comes to rest on the floor
+			P.Position.Z = P.FloorZ;
+			if (P.Velocity.Z < 0.0f)
+			{
+				P.Velocity.Z = -P.Velocity.Z * P.Bounce;
+				P.Velocity.X *= 0.55f;
+				P.Velocity.Y *= 0.55f;
+				P.Spin *= 0.5f;
+				if (P.Velocity.Z < 30.0f)
+				{
+					P.Velocity = FVector::ZeroVector;
+					P.Gravity = 0.0f;
+					P.Bounce = 0.0f;
+				}
+			}
+		}
 	}
 
 	if (Particles.Num() == 0 && !Host.IsValid())
@@ -1664,7 +2236,7 @@ void USOFxSubsystem::Tick(float DeltaTime)
 			// Card along +Y (tail at the origin), facing the eye around its own axis.
 			const FVector Dir = (P.Length > 0.0f ? P.Axis : P.Velocity.GetSafeNormal());
 			const float Length = P.bWhole ? P.Length
-				: (P.Length > 0.0f ? FMath::Min(P.Length, P.Velocity.Size() * P.Age + 1.0f) : FMath::Clamp(P.Velocity.Size() * 0.03f, 2.0f, 60.0f));
+				: (P.Length > 0.0f ? FMath::Min(P.Length, P.Velocity.Size() * P.Age + 1.0f) : FMath::Clamp(P.Velocity.Size() * 0.025f, 2.0f, 42.0f));
 			T = FTransform(FRotationMatrix::MakeFromYX(Dir, ToEye).ToQuat(), P.Position - Dir * Length, FVector(1.0f, Length / 100.0f, Size / 100.0f));
 			break;
 		}

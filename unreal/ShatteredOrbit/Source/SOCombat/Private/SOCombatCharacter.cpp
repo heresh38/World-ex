@@ -1,4 +1,6 @@
 #include "SOCombatCharacter.h"
+
+#include "SOFxSubsystem.h"
 #include "SOAttributes.h"
 #include "SOProjectileSubsystem.h"
 
@@ -475,6 +477,7 @@ void ASOCombatCharacter::ConfirmHit(bool bCrit, bool bKilled, const FSOHitReport
 	{
 		OnHitConfirmed.Broadcast(bCrit, bKilled); // the host's own shot, or a creature's (nobody listens)
 		OnHitReported.Broadcast(Report);
+		ShowHitKind(Report);
 	}
 	else if (IsPlayerControlled())
 	{
@@ -486,6 +489,26 @@ void ASOCombatCharacter::ClientHitConfirmed_Implementation(bool bCrit, bool bKil
 {
 	OnHitConfirmed.Broadcast(bCrit, bKilled);
 	OnHitReported.Broadcast(Report);
+	ShowHitKind(Report);
+}
+
+void ASOCombatCharacter::ShowHitKind(const FSOHitReport& Report) const
+{
+	// on the shooter's own machine, where the hit's kind is known: the shield's cells, its break, a critical's flare,
+	// a weak point's burst (the owner's guide: each hit kind distinct)
+	const bool bWeak = Report.Precision > 1.01f;
+	if (!Report.bShield && !Report.bShieldBroken && !Report.bCrit && !bWeak)
+	{
+		return;
+	}
+	USOFxSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr;
+	if (!Fx)
+	{
+		return;
+	}
+	const FVector Normal = (GetPawnViewLocation() - FVector(Report.Point)).GetSafeNormal(1e-4f, FVector::UpVector);
+	const FLinearColor Color = bWeak ? FLinearColor(1.0f, 0.85f, 0.25f) : (Report.bCrit ? FLinearColor(1.0f, 0.55f, 0.15f) : FLinearColor(0.35f, 0.72f, 1.0f));
+	Fx->HitKind(Report.Point, Normal, Report.bShield, Report.bShieldBroken, Report.bCrit, bWeak, Color);
 }
 
 float ASOCombatCharacter::GetStatusTimeLeft(const FGameplayTag& Tag) const

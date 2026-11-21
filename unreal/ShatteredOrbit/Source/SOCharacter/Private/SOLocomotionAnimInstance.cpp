@@ -244,6 +244,8 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		const USOCharacterMovementComponent* Move = Player ? Cast<USOCharacterMovementComponent>(Player->GetCharacterMovement()) : nullptr;
 		bCarried = Player && ((Move && Move->IsSprinting()) || Player->IsDisplayCarry());
+		// (a creature's head stays on its aim whatever its clip twitches; a player's and the stand-in's breathe with the clip)
+		bHeadFree = Character->IsPlayerControlled() || !Character->GetController();
 	}
 	// anyone who fights holds their gun this way: the player, and the creatures that carry guns
 	const ASOCombatCharacter* Holder = Cast<ASOCombatCharacter>(Character);
@@ -1592,6 +1594,8 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 	UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %d fingers fitted on %d parts, offsets %s / %s"), Fitted, Parts.Num(), *FitOffset[0].ToCompactString(), *FitOffset[1].ToCompactString());
 }
 
+float USOLocomotionAnimInstance::DebugSwing[2][5] = {};
+
 FString USOLocomotionAnimInstance::FHoldReport::ToString() const
 {
 	FString Out;
@@ -1949,6 +1953,7 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	bArmsOnly = Instance->bArmsOnly;
 	bCollapseBody = Instance->bCollapseBody;
 	bCarried = Instance->bCarried;
+	bHeadFree = Instance->bHeadFree;
 	AimPitch = Instance->AimPitch;
 	Blade = Instance->Blade;
 	Lean = Instance->Lean;
@@ -2449,13 +2454,25 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	//    stand-in: "the head stays still like a chicken"). The trunk's stance (1.) carries under it unchanged.
 	if (Neck != INDEX_NONE && !bArmsOnly)
 	{
-		Turn(Neck, FQuat(Side, Pitch * 0.4f));
-		if (HeadBone != INDEX_NONE)
+		// aiming a long gun: the head cants toward the right shoulder and dips onto the stock (cheek weld)
+		const float Cant = FMath::DegreesToRadians(HeadCant);
+		const FQuat Weld = FQuat(FVector(0.0f, 1.0f, 0.0f), -Cant) * FQuat(Side, -Cant * 0.7f);
+		if (bHeadFree)
 		{
-			// aiming a long gun: the head cants toward the right shoulder and dips onto the stock (cheek weld)
-			const float Cant = FMath::DegreesToRadians(HeadCant);
-			const FQuat Weld = FQuat(FVector(0.0f, 1.0f, 0.0f), -Cant) * FQuat(Side, -Cant * 0.7f);
-			Turn(HeadBone, Weld * FQuat(Side, Pitch * 0.6f));
+			Turn(Neck, FQuat(Side, Pitch * 0.4f));
+			if (HeadBone != INDEX_NONE)
+			{
+				Turn(HeadBone, Weld * FQuat(Side, Pitch * 0.6f));
+			}
+		}
+		else
+		{
+			// (a creature: its clip's twitches never take its eyes off its target)
+			SetCS(Neck, FTransform(FQuat(Side, Pitch * 0.4f) * RefCS[Neck].GetRotation(), CS[Neck].GetLocation(), CS[Neck].GetScale3D()));
+			if (HeadBone != INDEX_NONE)
+			{
+				SetCS(HeadBone, FTransform(Weld * FQuat(Side, Pitch) * RefCS[HeadBone].GetRotation(), CS[HeadBone].GetLocation(), CS[HeadBone].GetScale3D()));
+			}
 		}
 	}
 
@@ -2597,6 +2614,12 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					const float Most = bLeft ? (bArmsOnly ? 0.6f : 0.9f) : (bCarried && !bArmsOnly ? 0.55f : 1.45f);
 					const float A = FMath::Clamp(A0 + (A1 - A0) * Share, -0.5f, Most);
 					Bend = Down * FMath::Cos(A) + Out * FMath::Sin(A);
+#if !UE_BUILD_SHIPPING
+					if (!bArmsOnly)
+					{
+						float* Sw = USOLocomotionAnimInstance::DebugSwing[SideIndex]; Sw[0] = A0; Sw[1] = A1; Sw[2] = A; Sw[3] = Ask; Sw[4] = Most;
+					}
+#endif
 				}
 			}
 		}

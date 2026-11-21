@@ -121,11 +121,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	FVector ThirdPersonLowHold = FVector(22.0f, 10.0f, -27.0f);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float ThirdPersonMaxDownPitch = 55.0f;
+	float ThirdPersonMaxDownPitch = 48.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float ThirdPersonMaxUpPitch = 65.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float ThirdPersonLowCant = 20.0f;
+	float ThirdPersonLowCant = 28.0f;
 
 	/** Third person, sprinting: the grip from the shoulders' middle (cm, actor axes: forward, right, up) and the gun's
 	 *  turn (pitch, yaw, roll) against the facing: carried low across the chest, muzzle down and to the left. */

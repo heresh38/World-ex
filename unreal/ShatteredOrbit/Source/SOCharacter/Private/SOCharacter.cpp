@@ -1973,35 +1973,8 @@ void ASOCharacter::OnJumped_Implementation()
 
 FName ASOCharacter::GetFloorSurface() const
 {
-	const FHitResult& Floor = GetCharacterMovement()->CurrentFloor.HitResult;
-	FString Key;
-	if (const UPhysicalMaterial* Phys = Floor.PhysMaterial.Get(); Phys && Phys->SurfaceType != SurfaceType_Default)
-	{
-		Key = Phys->GetName();
-	}
-	else if (const UPrimitiveComponent* Comp = Floor.GetComponent())
-	{
-		const UMaterialInterface* Material = Comp->GetNumMaterials() > 0 ? Comp->GetMaterial(0) : nullptr;
-		Key = (Material ? Material->GetName() : FString()) + TEXT(" ") + Comp->GetName() + TEXT(" ") + GetNameSafe(Comp->GetOwner());
-	}
-	Key.ToLowerInline();
-	auto Has = [&Key](std::initializer_list<const TCHAR*> Words)
-	{
-		for (const TCHAR* Word : Words)
-		{
-			if (Key.Contains(Word))
-			{
-				return true;
-			}
-		}
-		return false;
-	};
-	if (Has({ TEXT("water"), TEXT("puddle"), TEXT("pool") })) { return TEXT("water"); }
-	if (Has({ TEXT("metal"), TEXT("steel"), TEXT("grate"), TEXT("plate"), TEXT("hull"), TEXT("alloy"), TEXT("rail"), TEXT("pipe"), TEXT("catwalk") })) { return TEXT("metal"); }
-	if (Has({ TEXT("grass"), TEXT("moss"), TEXT("lawn"), TEXT("leaf"), TEXT("park") })) { return TEXT("grass"); }
-	if (Has({ TEXT("dirt"), TEXT("soil"), TEXT("mud"), TEXT("sand"), TEXT("gravel"), TEXT("rubble"), TEXT("ash"), TEXT("hive"), TEXT("chitin") })) { return TEXT("dirt"); }
-	if (Has({ TEXT("wood"), TEXT("plank"), TEXT("crate"), TEXT("timber") })) { return TEXT("wood"); }
-	return TEXT("concrete");
+	// (one rule for the feet and the rounds: USOFxSubsystem::SurfaceOf reads the floor's own names)
+	return USOFxSubsystem::SurfaceName(USOFxSubsystem::SurfaceOf(GetCharacterMovement()->CurrentFloor.HitResult));
 }
 
 FName ASOCharacter::SurfaceSound(FName Surface, const TCHAR* Kind, int32 Takes)

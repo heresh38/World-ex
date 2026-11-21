@@ -719,9 +719,17 @@ bool FSOHitShowsWhereTest::RunTest(const FString& Parameters)
 
 	// And it is on the body, not only in the numbers behind it: the bones themselves move.
 	{
+		// (each bone against its root: the head against the chest, the chest against the hips. In component space the
+		// whole body's turn toward the player was in the number, and the head carries the trunk's turn under the aim
+		// now instead of being reset to the rest facing)
+		auto Rel = [&](const TCHAR* Bone)
+		{
+			const TCHAR* Root = FCString::Strcmp(Bone, TEXT("head")) == 0 ? TEXT("chest") : TEXT("hips");
+			return E->GetMesh()->GetBoneQuaternion(Root, EBoneSpaces::ComponentSpace).Inverse() * E->GetMesh()->GetBoneQuaternion(Bone, EBoneSpaces::ComponentSpace);
+		};
 		auto Turned = [&](const TCHAR* Bone, const FQuat& Before)
 		{
-			return FMath::RadiansToDegrees(static_cast<float>(Before.AngularDistance(E->GetMesh()->GetBoneQuaternion(Bone, EBoneSpaces::ComponentSpace))));
+			return FMath::RadiansToDegrees(static_cast<float>(Before.AngularDistance(Rel(Bone))));
 		};
 		auto Blow = [&](const TCHAR* Bone)
 		{
@@ -730,20 +738,20 @@ bool FSOHitShowsWhereTest::RunTest(const FString& Parameters)
 		};
 		W.Run(1.5f);
 		// (how much the clip alone moves these in the same time: the creature twitches by itself)
-		FQuat Head = E->GetMesh()->GetBoneQuaternion(TEXT("head"), EBoneSpaces::ComponentSpace);
-		FQuat Chest = E->GetMesh()->GetBoneQuaternion(TEXT("chest"), EBoneSpaces::ComponentSpace);
+		FQuat Head = Rel(TEXT("head"));
+		FQuat Chest = Rel(TEXT("chest"));
 		float Hips = static_cast<float>(E->GetMesh()->GetBoneLocation(TEXT("hips"), EBoneSpaces::ComponentSpace).Z);
 		W.Run(0.06f);
 		const float HeadIdle = Turned(TEXT("head"), Head), ChestIdle = Turned(TEXT("chest"), Chest);
 		const float HipsIdle = FMath::Abs(Hips - static_cast<float>(E->GetMesh()->GetBoneLocation(TEXT("hips"), EBoneSpaces::ComponentSpace).Z));
 
-		Head = E->GetMesh()->GetBoneQuaternion(TEXT("head"), EBoneSpaces::ComponentSpace);
+		Head = Rel(TEXT("head"));
 		Blow(TEXT("head"));
 		W.Run(0.06f);
 		const float HeadHit = Turned(TEXT("head"), Head);
 		TestTrue(FString::Printf(TEXT("the head bone turns %.1f degrees in the moment after a hit to it (%.1f by itself)"), HeadHit, HeadIdle), HeadHit > HeadIdle + 6.0f);
 		W.Run(1.5f);
-		Chest = E->GetMesh()->GetBoneQuaternion(TEXT("chest"), EBoneSpaces::ComponentSpace);
+		Chest = Rel(TEXT("chest"));
 		Blow(TEXT("chest"));
 		W.Run(0.06f);
 		const float ChestHit = Turned(TEXT("chest"), Chest);

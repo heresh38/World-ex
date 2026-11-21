@@ -1926,7 +1926,13 @@ float w = saturate(UV.x * 8.0) * pow(saturate(1.0 - UV.x), 0.75);
 float body = saturate(1.0 - abs(d.y) * 2.0 / max(w, 0.02));
 float tear = 0.6 + 0.4 * sin(d.y * 37.0 + Seed * 40.0 + UV.x * 11.0) * sin(UV.x * (19.0 + Seed * 9.0) + Seed * 23.0);
 float tongue = body * body * tear * saturate((1.0 - UV.x) * 2.5);
-float s = Mode < 0.5 ? dotS : (Mode < 1.5 ? across * head : (Mode < 2.5 ? across * root : tongue));
+// 4: a hexagonal cell (a shield's skin): a flat-topped hexagon filling the card, bright at its rim
+float2 hp = abs(d) * 2.0;
+float hexd = max(hp.x * 0.8660254 + hp.y * 0.5, hp.y);
+float cell = 1.0 - smoothstep(0.86, 0.96, hexd);
+float rim = smoothstep(0.6, 0.84, hexd);
+float hex = cell * (0.28 + 0.72 * rim);
+float s = Mode < 0.5 ? dotS : (Mode < 1.5 ? across * head : (Mode < 2.5 ? across * root : (Mode < 3.5 ? tongue : hex)));
 return pow(s, Softness);
 """
 
@@ -2101,6 +2107,7 @@ def fx_master():
     instance("MI_FxStreak", 1.0, 1.0, False)
     instance("MI_FxFlash", 3.0, 0.9, False)
     instance("MI_FxSmoke", 0.0, 1.2, True)
+    instance("MI_FxCell", 4.0, 1.0, False)
     log("effect materials ready")
 
 

@@ -580,6 +580,8 @@ arm really needs and fitting again from it was tried and dropped: it fires while
 hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
 reached behind its grip and the Requiem LMG's belt box stood where the fingers wrap; both were moved forward in the
 model (weapons.py `heavy_mg`, requiem_guns.py `vr_lmg`)); close-ups `SOCaptureSeries 1 30 -SOGuns=<arch>` (files `SO_k_<gun>_*`).
+A CREATURE's head is held on its aim whatever its clip twitches (`bHeadFree` false: the old reset to the rest facing);
+a player's body and the armoury's stand-in carry the clip's own head motion under the aim (`bHeadFree`).
 **The hands are on the gun in the SAME frame** (the owner, 2026-11-16: "the player hand keeps moving and feels like the
 player is not properly gripping the guns"): the engine calls an anim proxy's `PreUpdate` BEFORE `NativeUpdateAnimation`,
 so everything the instance worked out (the hand targets, the aim, the blends) reached the pose a frame late and the
@@ -823,6 +825,26 @@ marks either side, the sound `elite_seen`; `Introduced` remembers which). Sounds
 `hud_23_elite_seen` in set 38; test `ShatteredOrbit.Loop.AKillPaysOnScreen`. Still to do of the owner's brief: the
 effect system (`art/reference/effects/effects_guide.webp`) and the inventory of collected items
 (`art/reference/ui/armoury_arsenal.webp`).
+**The effect system** (the owner's guide, `art/reference/effects/effects_guide.webp`: "our effects are dull and one
+dimensional"; what of it exists is `docs/orion/reports/EFFECTS.md`, keep it honest; first pass 2026-11-21). Everything
+is `USOFxSubsystem` (pooled CPU particles on instanced cards: glow, streak, star, smoke, and the hexagonal CELL
+`MI_FxCell`, shape mode 4 of `M_SOFx`). What a round hits is read from the hit's own names (`USOFxSubsystem::SurfaceOf`:
+physical material, material, component, actor: concrete / metal / dirt / grass / wood / water; the floor's footsteps
+read the same rule, `ASOCharacter::GetFloorSurface`) and the impact takes its look and sound from it (`Impact(...,
+Surface)`: metal sparks and ricochets `impact_metal`, concrete dust and chips `impact_hard`, dirt a clod `impact_dirt`,
+wood splinters `impact_wood`, water a splash `impact_water`; bullet holes only where one stays). The muzzle flash is
+shaped by the kind of gun (`EFlash` Rifle / Short / Long / Shotgun / Heavy / Launcher, from the archetype's name in
+`ASOWeapon`). A kinetic gun throws its CASING from the ejection port found on its own bounds (`Casing`; a particle
+with `FloorZ` / `Bounce` lands and comes to rest). A hit on a body shows its KIND on the shooter's machine
+(`ASOCombatCharacter::ShowHitKind` from the hit's confirmation, `FSOHitReport::bShieldBroken` new): a shield's cells
+lit round the point, thrown off when it breaks, a critical's flare with lines, a weak point's gold burst and ring
+(`HitKind`). A fire blast throws debris that lands, embers, a column of smoke, scorches the ground, races its shock
+out along it and leaves a `Burn` (tongues of flame = the torn-blade card standing up, embers, smoke, for 2-4 s); a
+zap steps arcs out in jagged chains. Sounds `sfx_synth.py ... impacts`, import `SO_IMPORT_ONLY=fx,audio
+SO_AUDIO_ONLY=impact_metal,impact_dirt,impact_wood,impact_water,shield_hit`. Pictures `SOCaptureSeries 1 41` (files
+`SO_fx_*`: time nearly stopped for each still); tests `ShatteredOrbit.Fx.*`. Lessons: a spark's streak is its speed
+x 0.025 s capped at 42 cm (at 60 they were rays); dust must be nearly opaque and large to be seen at 2.5 m; a flame
+is a tongue, never a dot.
 **The armoury** (the loadout screen, I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word:
 "upgrade it ready for a triple a game release on steam", their mockup and reference screens as the bar, every look
 and word ours). LOADOUT: the backdrop (`M_UI_Backdrop`: night blue lit from the stage, the broken orbit faint behind

@@ -2552,6 +2552,65 @@ SOUNDS.update({"reward_xp": reward_xp, "level_up": level_up, "elite_seen": elite
 LOOP = ["reward_xp", "level_up", "elite_seen"]
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# A round on each surface (the owner's effects guide, 2026-11-20): the look and the sound both come from the surface
+
+
+def impact_metal(seed=151):
+    """A round on steel: a hard ping with a ring left in the plate, the whine of a ricochet, sparks."""
+    out = silence(0.55)
+    out = place(out, click(seed, 4200.0, 1.0, 0.02), 0.0)
+    out = place(out, modal(0.4, [(2350, 0.09, 1.0), (3900, 0.05, 0.7), (5600, 0.03, 0.5), (1150, 0.04, 0.6)], seed + 1), 0.0, 0.6)
+    out = place(out, fm_zap(0.18, 3200, 900, 1.9, 2.5, 0.05, 0.05, seed + 2), 0.01, 0.25)                 # the ricochet's whine
+    out = place(out, crackle(0.3, seed + 3, 60, 3000, 11000, 0.2), 0.0, 0.3)                               # sparks
+    ir = impulse_response(0.5, seed + 4, decay=0.12, damping=6000)
+    return finish(reverb(out, ir, 0.2), -4)
+
+
+def impact_dirt(seed=161):
+    """A round into earth: a dull thud, a clod breaking, grit raining down. No ring in it."""
+    out = silence(0.5)
+    out = place(out, saturate(osc(sweep(120, 55, 0.09)) * env_exp(0.09, 0.02), 1.6), 0.0, 0.7)
+    out = place(out, filt(noise(0.14, seed), "low", 700) * env_ad(0.14, 0.001, 0.03), 0.0, 0.9)
+    out = place(out, rustle(0.35, seed + 1, 1500, 6000, 40, 0.3) * np.linspace(1, 0.05, secs(0.35)), 0.02)
+    ir = impulse_response(0.4, seed + 2, decay=0.1, damping=2500)
+    return finish(reverb(out, ir, 0.15), -5)
+
+
+def impact_wood(seed=171):
+    """A round into timber: a sharp crack, the fibres splitting, splinters pattering."""
+    out = silence(0.5)
+    out = place(out, click(seed, 2600.0, 1.0, 0.025), 0.0)
+    out = place(out, modal(0.2, [(900, 0.04, 0.6), (1500, 0.025, 0.4), (2800, 0.015, 0.3)], seed + 1), 0.0, 0.5)
+    out = place(out, filt(noise(0.08, seed + 2), "band", (1200, 5000)) * env_ad(0.08, 0.001, 0.02), 0.0, 0.6)   # the split
+    out = place(out, crackle(0.3, seed + 3, 40, 1500, 6000, 0.25), 0.03, 0.35)                                   # splinters
+    ir = impulse_response(0.45, seed + 4, decay=0.11, damping=4000)
+    return finish(reverb(out, ir, 0.18), -5)
+
+
+def impact_water(seed=181):
+    """A round into water: a plop, the splash rising and falling back, drops."""
+    out = silence(0.7)
+    out = place(out, squelch(0.08, 900, 250, seed, 2.0, 0.01, 0.03), 0.0, 0.8)
+    out = place(out, filt(noise(0.35, seed + 1, "pink"), "band", (800, 6000)) * env_ad(0.35, 0.02, 0.08), 0.02, 0.6)
+    out = place(out, crackle(0.4, seed + 2, 30, 2000, 7000, 0.3), 0.12, 0.3)                                     # drops
+    ir = impulse_response(0.5, seed + 3, decay=0.12, damping=5000)
+    return finish(reverb(out, ir, 0.2), -6)
+
+
+def shield_hit(seed=191):
+    """A round on a shield: a glassy tick and a short shimmer, the field taking it."""
+    out = silence(0.3)
+    out = place(out, bell(2637.0, 0.2, 0.04, partials=((1.0, 1.0, 1.0), (2.4, 0.3, 0.5), (3.9, 0.12, 0.3))), 0.0, 0.6)
+    out = place(out, fm_zap(0.12, 1800, 2600, 2.1, 3.0, 0.04, 0.04, seed), 0.0, 0.3)
+    return finish(out, -10, 0.005)
+
+
+SOUNDS.update({"impact_metal": impact_metal, "impact_dirt": impact_dirt, "impact_wood": impact_wood, "impact_water": impact_water,
+               "shield_hit": shield_hit})
+IMPACTS = ["impact_metal", "impact_dirt", "impact_wood", "impact_water", "shield_hit"]
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unreal", "ShatteredOrbit", "SourceArt", "Audio")
     only = set(sys.argv[2:])  # optional: build just these names
@@ -2567,6 +2626,8 @@ def main():
         only = set(MARKSMAN)
     if only == {"loop"}:
         only = set(LOOP)
+    if only == {"impacts"}:
+        only = set(IMPACTS)
     os.makedirs(out_dir, exist_ok=True)
     for name, fn in SOUNDS.items():
         if only and name not in only:

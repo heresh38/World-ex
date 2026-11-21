@@ -35,6 +35,10 @@ struct SOCOMBAT_API FSOHitReport
 	UPROPERTY()
 	bool bShield = false;
 
+	/** This blow took the last of the shield. */
+	UPROPERTY()
+	bool bShieldBroken = false;
+
 	UPROPERTY()
 	bool bCrit = false;
 
@@ -191,6 +195,8 @@ public:
 
 	/** Server: a round or a blow of this character's did damage (Report: how much and where, for the shooter's HUD). */
 	void ConfirmHit(bool bCrit, bool bKilled, const FSOHitReport& Report = FSOHitReport());
+	/** The hit's kind drawn where it landed (on the shooter's machine, where it is known): USOFxSubsystem::HitKind. */
+	void ShowHitKind(const FSOHitReport& Report) const;
 
 	/** An ability was used here: shows it on every machine exactly once (the user's own at once, the others through
 	 *  the server). Called by the ability where it ran. */

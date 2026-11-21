@@ -18,6 +18,7 @@ enum class ESOFxKind : uint8
 	Streak, // additive card stretched along the velocity (tracers, spark streaks)
 	Star,   // additive muzzle-flash star, along a direction
 	Smoke,  // translucent soft dot (dust, smoke, blood mist)
+	Cell,   // a hexagonal cell of light (a shield's skin), lying on the surface it was hit on
 	Count
 };
 
@@ -56,6 +57,8 @@ struct FSOFxParticle
 	bool bFlat = false;  // lies on the surface whose normal is Axis (pools) instead of facing the eye
 	bool bHold = false;  // Intensity0 held over the life with a short fade in / out (instead of Intensity0 -> 1)
 	bool bWhole = false; // a streak drawn at its whole Length from the start (it lies where it is, it does not grow out of a muzzle)
+	float FloorZ = -1.0e9f; // a floor it lands on (casings, debris): below it, it bounces and comes to rest
+	float Bounce = 0.0f;    // how much of its fall it keeps on landing (0: no floor, it falls through)
 };
 
 /**
@@ -69,11 +72,23 @@ class SOCOMBAT_API USOFxSubsystem : public UTickableWorldSubsystem
 	GENERATED_BODY()
 
 public:
+	/** What a round hit, read from the hit's own names (the physical material, the material, the component, the
+	 *  actor; the floor's footsteps read the same): the impact takes its look and its sound from it (the owner's
+	 *  guide, 2026-11-20: "bullet impact (metal): sparks and metal debris; (concrete): dust and fragments"). */
+	enum class ESurface : uint8 { Concrete, Metal, Dirt, Grass, Wood, Water };
+	static ESurface SurfaceOf(const FHitResult& Hit);
+	static FName SurfaceName(ESurface Surface);
+
+	/** How a muzzle flash is shaped, by the kind of gun (the guide: "assault rifle: sharp and punchy; SMG: fast and
+	 *  aggressive; battle rifle: controlled and powerful; sniper: loud and impactful; shotgun: massive close-range
+	 *  impact"). The light guns' plasma bloom and the Sarketh's rail flash are their own (PlasmaFlash, SlugFlash). */
+	enum class EFlash : uint8 { Rifle, Short, Long, Shotgun, Heavy, Launcher };
+
 	/** Muzzle flash along Dir (star + light + a wisp of smoke). */
 	/** The flash at the muzzle: tongues of flame in the gun's own colour, a hot core, a wisp of smoke. bThroughScope:
 	 * the shooter is looking down a magnified optic (a flash at arm's length fills the lens: only a flicker is drawn). */
 	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f, bool bViewmodel = false,
-		const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), bool bThroughScope = false);
+		const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), bool bThroughScope = false, EFlash Style = EFlash::Rifle);
 
 	// --- Plasma: what a light gun fires. Not a bullet: a bolt you can see fly. -------------------------------------
 	/** A bolt of plasma from the muzzle to where it lands, at its own speed (cm/s): a white-hot core in a corona of
@@ -166,9 +181,29 @@ public:
 	/** A field coming up round a body standing at Feet: lines of light rising in a ring to about Height. */
 	void Ward(const FVector& Feet, float Height, const FLinearColor& Color);
 
-	/** A round hitting something: sparks + dust + a bullet hole on hard surfaces, a mist of Blood on creatures.
-	 *  Delay = flight time. */
-	void Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay = 0.0f, bool bDecal = true);
+	/** A round hitting something: on a creature a mist of Blood; on the world what the SURFACE gives (metal: sparks
+	 *  and ricochets; concrete: dust and chips; dirt and grass: a clod thrown up; wood: splinters; water: a splash)
+	 *  and a bullet hole where one stays. Delay = flight time. */
+	void Impact(const FVector& Point, const FVector& Normal, bool bFlesh, const FLinearColor& Blood, float Delay = 0.0f, bool bDecal = true,
+		ESurface Surface = ESurface::Concrete);
+
+	/** A spent casing thrown from the ejection port (Port, world) out to the gun's right (Out) and up (Up), tumbling,
+	 *  carried with the shooter, landing and bouncing on FloorZ (the guide: "shell ejection (ballistic)"). Size
+	 *  scales a rifle's. */
+	void Casing(const FVector& Port, const FVector& Out, const FVector& Up, const FVector& Carry, float Size, float FloorZ);
+
+	/** What a hit on a BODY shows beyond its blood (the guide: "shield hit: shield break effect; critical hit: larger
+	 *  hit effect; weak point hit: distinct visual feedback"): at Point, the surface facing Normal. A shield hit
+	 *  lights the shield's cells round the point; a shield broken throws them off; a critical flares larger; a weak
+	 *  point bursts in its own colour with a ring. */
+	void HitKind(const FVector& Point, const FVector& Normal, bool bShield, bool bShieldBroken, bool bCrit, bool bWeak, const FLinearColor& Color);
+
+	/** Fire that stays (the guide: "fire: spreads and persists"): flames and embers over a patch of Radius round
+	 *  Point on the surface facing Normal for Duration seconds, smoke rising off it. */
+	void Burn(const FVector& Point, const FVector& Normal, float Radius, float Duration);
+	int32 GetNumBurns() const { return Burns.Num(); }
+	/** The lowest particle right now (tests: what landed on a floor stays on it). */
+	float LowestParticleZ() const;
 
 	/** Poison lying on the floor at Point for Duration seconds (glowing goo, bubbles, fumes), Delay seconds from now.
 	 *  A splash onto a puddle that is still fresh adds nothing new. */
@@ -197,7 +232,7 @@ protected:
 
 private:
 	bool EnsureHost();
-	void AddDecal(const FVector& Point, const FVector& Normal);
+	void AddDecal(const FVector& Point, const FVector& Normal, float Size = 4.5f);
 	void FlashLight(const FVector& Point, float Intensity, const FLinearColor& Color, float Duration);
 
 	struct FPendingImpact
@@ -206,7 +241,16 @@ private:
 		FLinearColor Blood;
 		float Delay;
 		bool bFlesh, bDecal;
+		ESurface Surface;
 	};
+
+	/** Fire burning on a patch: it breathes out flames, embers and smoke while it lives. */
+	struct FBurn
+	{
+		FVector Point, Normal;
+		float Radius, Age, Life, Due;
+	};
+	TArray<FBurn> Burns;
 
 	struct FLightFlash
 	{

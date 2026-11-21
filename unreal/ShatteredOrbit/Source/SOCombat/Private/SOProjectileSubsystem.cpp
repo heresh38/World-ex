@@ -139,6 +139,7 @@ bool USOProjectileSubsystem::StepRound(FSOProjectile& Round, float DeltaTime, FH
 				Report.Amount = Applied;
 				Report.Point = Hit.ImpactPoint;
 				Report.bShield = bOnShield;
+				Report.bShieldBroken = bOnShield && Victim && Victim->GetShield() <= 0.0f;
 				Report.bCrit = bCrit;
 				Report.bKilled = Victim && Victim->IsDead();
 				Report.Precision = Precision;
