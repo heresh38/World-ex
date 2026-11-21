@@ -9,6 +9,7 @@
 #include "SOInventoryComponent.h"
 #include "SOLog.h"
 #include "SOLootActors.h"
+#include "SOLootLibrary.h"
 #include "SOProgression.h"
 #include "SOSpecies.h"
 #include "SOWeapon.h"
@@ -60,6 +61,15 @@ void ASOPlayerController::CaptureHud()
 		ConsoleCommand(TEXT("DisableAllScreenMessages"));
 		View(ESOViewMode::FirstPerson);
 		SetControlRotation(FRotator(0.0f, GetControlRotation().Yaw, 0.0f));
+		if (ASOCharacter* H = Hero())
+		{
+			// the rifle in hand whatever the profile last held (a rocket launcher from a saved loadout fired rockets at
+			// the creature seven metres off and the player with it)
+			FRandomStream Rng(1);
+			FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(TEXT("rifle"), 2, 20, Rng);
+			Copy.Sight = TEXT("default");
+			H->EquipInstance(Copy);
+		}
 	});
 	Snap(1.0f, TEXT("hud_01_idle"));
 	// on the move: the crosshair opens

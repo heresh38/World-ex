@@ -539,6 +539,10 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 void ASOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	if (USOFxSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr)
+	{
+		BlastHandle = Fx->OnBlast.AddUObject(this, &ASOCharacter::OnBlastNearby);
+	}
 	// the eye's height, the arms' place under it and the camera's roll are set in this actor's tick; the gun is laid on
 	// the eye (the viewmodel) and the arms reach for it after that, in the same frame, never from the frame before
 	if (Viewmodel)
@@ -1066,7 +1070,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		Camera->ClearAdditiveOffset();
 		const bool bEyeCam = Camera == FirstPersonCamera.Get();
 		const float Roll = bEyeCam ? CameraRoll + ShakeRoll : 0.0f;
-		const float Pitch = GetRecoilPitch() + AbilityKick + (bEyeCam ? FeelPitch : 0.0f);
+		const float Pitch = GetRecoilPitch() + AbilityKick + (bEyeCam ? FeelPitch + BlastPunch : 0.0f);
 		if (FMath::Abs(Pitch) > 1e-3f || FMath::Abs(Roll) > 1e-3f)
 		{
 			Camera->AddAdditiveOffset(FTransform(FRotator(Pitch, 0.0f, Roll)), 0.0f);
@@ -1906,8 +1910,31 @@ void ASOCharacter::UnPossessed()
 	Super::UnPossessed();
 }
 
+void ASOCharacter::OnBlastNearby(const FVector& Point, float Radius)
+{
+	if (!IsLocallyControlled() || IsDisplayOnly())
+	{
+		return;
+	}
+	// felt out to five times the blast's radius, hardest at the blast
+	const float Reach = FMath::Max(Radius, 50.0f) * 5.0f;
+	const float K = FMath::Pow(FMath::Clamp(1.0f - static_cast<float>(FVector::Dist(Point, GetActorLocation())) / Reach, 0.0f, 1.0f), 1.5f);
+	if (K <= 0.0f)
+	{
+		return;
+	}
+	ShakeRollVel += BlastShakeRoll * 36.0f * K * (FMath::RandBool() ? 1.0f : -1.0f);
+	BlastPunch = -2.5f * K;
+	LastBlastTime = GetWorld()->GetTimeSeconds();
+	LastBlastStrength = K;
+}
+
 void ASOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (USOFxSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr)
+	{
+		Fx->OnBlast.Remove(BlastHandle);
+	}
 	if (BoundInventory.IsValid())
 	{
 		BoundInventory->OnLoadoutChanged.Remove(LoadoutHandle);
@@ -2179,6 +2206,7 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	const float ShakeStiff = 520.0f, ShakeDamp = 2.0f * FMath::Sqrt(ShakeStiff) * 0.32f;
 	ShakeRollVel += (-ShakeStiff * ShakeRoll - ShakeDamp * ShakeRollVel) * Dt;
 	ShakeRoll = FMath::Clamp(ShakeRoll + ShakeRollVel * Dt, -4.0f, 4.0f);
+	BlastPunch = FMath::FInterpTo(BlastPunch, 0.0f, Dt, 7.0f);
 
 	// 5. Field of view widens with speed (the guide: walk 95, sprint 103-108), and the view leans into a sprint.
 	const float SprintK = Move->IsSprinting() ? FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f;

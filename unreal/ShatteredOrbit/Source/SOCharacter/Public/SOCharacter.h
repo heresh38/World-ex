@@ -169,6 +169,11 @@ public:
 	/** A hard landing shakes the view: degrees of roll it is knocked by at the hardest (a wobble that settles). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float LandShakeRoll = 1.6f;
+	/** A blast within five times its radius knocks the view: this many degrees of roll at the blast itself. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float BlastShakeRoll = 6.0f;
+	float GetLastBlastTime() const { return LastBlastTime; }
+	float GetLastBlastStrength() const { return LastBlastStrength; }
 
 	/** Current camera dip (cm, negative = down) from landings and jumps; the viewmodel lags it a little. */
 	float GetLandDip() const { return LandDip; }
@@ -705,6 +710,13 @@ private:
 	float CameraRollVel = 0.0f;   // (the roll is a spring: it leans in and settles, never a straight line)
 	float EyeVel = 0.0f;          // (so is the eye's height across crouch, slide and stand)
 	float FeelPitch = 0.0f;       // degrees: the sprint's forward lean
+	float BlastPunch = 0.0f;      // degrees: a nearby blast's punch on the view (decays)
+	float LastBlastTime = -100.0f;
+	float LastBlastStrength = 0.0f;
+	FDelegateHandle BlastHandle;
+	/** A blast went off near this body (USOFxSubsystem::OnBlast): the view is knocked and the screen's edge flashes
+	 *  by how near it was. */
+	void OnBlastNearby(const FVector& Point, float Radius);
 	float ShakeRoll = 0.0f;       // degrees: a landing's wobble (a spring)
 	float ShakeRollVel = 0.0f;
 	float FovBoost = 0.0f;

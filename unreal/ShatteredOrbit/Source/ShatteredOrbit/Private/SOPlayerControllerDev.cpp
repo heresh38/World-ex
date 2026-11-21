@@ -220,6 +220,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			if (ASOCharacter* H = Hero())
 			{
 				SetControlRotation(FRotator(-6.0f, H->GetActorRotation().Yaw + 90.0f, 0.0f));   // the open side of the range
+				FRandomStream Rng(1);
+				FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(TEXT("rifle"), 2, 20, Rng);   // (the rifle, whatever the profile held)
+				Copy.Sight = TEXT("default");
+				H->EquipInstance(Copy);
 			}
 		});
 		// 1. a round on each surface, in a row 2.5 m ahead facing the eye: concrete, metal, dirt, wood, water, grass, flesh
@@ -304,6 +308,9 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		});
 		Do(0.14f, [=]() { Slow(); });
 		Snap(0.0f, TEXT("fx_06_rocket"));
+		Act([=]() { Normal(); });
+		Do(0.35f, [=]() { Slow(); });
+		Snap(0.0f, TEXT("fx_06b_rocket_later"));
 		Act([=]() { Normal(); });
 		Snap(1.6f, TEXT("fx_07_fire_after"));
 		Do(2.5f, [=, this]()

@@ -202,6 +202,11 @@ public:
 	 *  Point on the surface facing Normal for Duration seconds, smoke rising off it. */
 	void Burn(const FVector& Point, const FVector& Normal, float Radius, float Duration);
 	int32 GetNumBurns() const { return Burns.Num(); }
+
+	/** A blast went off (the moment it did, not when it was asked for): what shakes a camera and flashes a screen
+	 *  listens here (ASOCharacter for the local player). Point, radius (cm). */
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FSOOnBlast, const FVector&, float);
+	FSOOnBlast OnBlast;
 	/** The lowest particle right now (tests: what landed on a floor stays on it). */
 	float LowestParticleZ() const;
 
@@ -244,13 +249,23 @@ private:
 		ESurface Surface;
 	};
 
-	/** Fire burning on a patch: it breathes out flames, embers and smoke while it lives. */
+	/** Fire burning on a patch: it breathes out flames, embers and smoke while it lives. Age runs from -Delay: nothing
+	 *  burns before the blast that lights it has landed; at ignition the ground is scorched (Scorch = the decal's size). */
 	struct FBurn
 	{
 		FVector Point, Normal;
 		float Radius, Age, Life, Due;
+		bool bLit;
+		float Scorch;
 	};
 	TArray<FBurn> Burns;
+
+	struct FPendingShake
+	{
+		FVector Point;
+		float Radius, Delay;
+	};
+	TArray<FPendingShake> PendingShakes;
 
 	struct FLightFlash
 	{

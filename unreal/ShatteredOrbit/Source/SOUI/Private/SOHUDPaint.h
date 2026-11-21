@@ -283,22 +283,92 @@ namespace SOHudPaint
 		return { FVector2D(X, Y), FVector2D(X + W, Y), FVector2D(X + W, Y + H), FVector2D(X, Y + H) };
 	}
 
-	/** A glass panel: its body shaded down, its edge a thin line. */
+	/** The shape moved by D. */
+	inline TArray<FVector2D> Shifted(const TArray<FVector2D>& P, const FVector2D& D)
+	{
+		TArray<FVector2D> Out;
+		for (const FVector2D& V : P)
+		{
+			Out.Add(V + D);
+		}
+		return Out;
+	}
+
+	/** The shape drawn in by D toward its middle (a convex shape's inner line). */
+	inline TArray<FVector2D> Inset(const TArray<FVector2D>& P, float D)
+	{
+		FVector2D C(0, 0);
+		for (const FVector2D& V : P)
+		{
+			C += V;
+		}
+		C /= FMath::Max(P.Num(), 1);
+		TArray<FVector2D> Out;
+		for (const FVector2D& V : P)
+		{
+			const FVector2D R = V - C;
+			const float L = static_cast<float>(R.Size());
+			Out.Add(L > D ? C + R * ((L - D) / L) : C);
+		}
+		return Out;
+	}
+
+	/** The shadow a shape casts on the world behind it: two soft steps down from it. */
+	inline void Shadow(FPainter& P, const TArray<FVector2D>& Shape, float Depth, float Alpha = 1.0f)
+	{
+		P.Fill(Shifted(Shape, FVector2D(0.0f, Depth * 1.6f)), FLinearColor(0.0f, 0.0f, 0.0f, 0.18f * Alpha));
+		P.Fill(Shifted(Shape, FVector2D(0.0f, Depth * 0.8f)), FLinearColor(0.0f, 0.0f, 0.0f, 0.26f * Alpha));
+	}
+
+	/** What gives a shape its thickness: a dark line a step inside its edge (the glass's own depth) and a line of
+	 *  light along the edges that run near level across its top (lit from above). */
+	inline void Bevel(FPainter& P, const TArray<FVector2D>& Shape, float EdgeT, float Alpha = 1.0f)
+	{
+		P.Stroke(Inset(Shape, EdgeT * 2.6f), FLinearColor(0.0f, 0.004f, 0.012f, 0.55f * Alpha), EdgeT);
+		float Y0 = FLT_MAX, Y1 = -FLT_MAX;
+		for (const FVector2D& V : Shape)
+		{
+			Y0 = FMath::Min(Y0, static_cast<float>(V.Y));
+			Y1 = FMath::Max(Y1, static_cast<float>(V.Y));
+		}
+		for (int32 i = 0; i < Shape.Num(); ++i)
+		{
+			const FVector2D& A0 = Shape[i];
+			const FVector2D& A1 = Shape[(i + 1) % Shape.Num()];
+			const bool bLevel = FMath::Abs(A1.Y - A0.Y) < FMath::Abs(A1.X - A0.X) * 0.6f;
+			const bool bTop = (A0.Y + A1.Y) * 0.5f < Y0 + (Y1 - Y0) * 0.34f;
+			if (bLevel && bTop)
+			{
+				P.Segment(A0 + FVector2D(0.0f, EdgeT * 1.3f), A1 + FVector2D(0.0f, EdgeT * 1.3f), FLinearColor(0.78f, 0.9f, 1.0f, 0.24f * Alpha), EdgeT);
+			}
+		}
+	}
+
+	/** A glass panel with depth (the owner, 2026-11-21: "the hud still looks flat, it needs more depth, more
+	 *  definition, more volume"): the shadow it casts, its body lit from above and shaded down, an inner line a
+	 *  step inside its edge, the edge, and light along its top. */
 	inline void Panel(FPainter& P, const TArray<FVector2D>& Shape, float EdgeT, float Alpha = 1.0f, const FLinearColor& Edge = Line)
 	{
-		P.FillDown(Shape, A(Glass, Alpha), A(GlassDeep, Alpha));
+		Shadow(P, Shape, EdgeT * 4.0f, Alpha);
+		P.FillDown(Shape, A(Mix(Glass, Line, 0.10f), Alpha), A(GlassDeep, Alpha));
+		Bevel(P, Shape, EdgeT, Alpha);
 		P.Stroke(Shape, A(Edge, Alpha), EdgeT);
 	}
 
-	/** A bar: a dark back, the fill from the left, a thin frame. */
+	/** A bar with depth: a trough darker at its floor, the fill lit from above with a gloss along its top, brighter
+	 *  toward its head, a bright head, and a thin frame. */
 	inline void Bar(FPainter& P, float X, float Y, float W, float H, float Frac, const FLinearColor& Fill, float Alpha = 1.0f, float EdgeT = 1.0f)
 	{
-		P.Fill(Rectangle(X, Y, W, H), A(GlassDeep, Alpha));
+		P.Fill(Rectangle(X, Y + H * 0.4f, W, H), FLinearColor(0.0f, 0.0f, 0.0f, 0.28f * Alpha));
+		P.FillDown(Rectangle(X, Y, W, H), A(GlassDeep, Alpha), A(Mix(GlassDeep, FLinearColor::Black, 0.55f), Alpha));
 		const float FW = W * FMath::Clamp(Frac, 0.0f, 1.0f);
 		if (FW > 0.5f)
 		{
-			P.FillAcross(Rectangle(X, Y, FW, H), A(Mix(Fill, FLinearColor::White, 0.0f), Alpha), A(Mix(Fill, FLinearColor::White, 0.25f), Alpha));
-			P.Fill(Rectangle(X, Y, FW, H * 0.35f), FLinearColor(1.0f, 1.0f, 1.0f, 0.10f * Alpha));
+			P.FillDown(Rectangle(X, Y, FW, H), A(Mix(Fill, FLinearColor::White, 0.28f), Alpha), A(Mix(Fill, FLinearColor::Black, 0.28f), Alpha));
+			P.FillAcross(Rectangle(X, Y, FW, H), A(Fill, 0.0f), A(Mix(Fill, FLinearColor::White, 0.4f), 0.4f * Alpha));
+			P.Fill(Rectangle(X, Y, FW, H * 0.32f), FLinearColor(1.0f, 1.0f, 1.0f, 0.17f * Alpha));
+			const float Head = FMath::Min(EdgeT * 2.0f, FW);
+			P.Fill(Rectangle(X + FW - Head, Y, Head, H), A(Mix(Fill, FLinearColor::White, 0.75f), Alpha));
 		}
 		P.Stroke(Rectangle(X, Y, W, H), A(Line, Alpha * 0.8f), EdgeT);
 	}

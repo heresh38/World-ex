@@ -36,9 +36,12 @@ Status per bullet of the guide: DONE / PART / TO DO.
   the surface.
 
 ## Explosions and destruction
-- Grenade (powerful area damage), rocket (large and cinematic): DONE. `Blast(Fire)`: the fireball, debris thrown out
-  and landing, embers, a column of smoke standing after it, the ground scorched (the decal, sized), the shock racing
-  out along the ground, and fire left burning.
+- Grenade (powerful area damage), rocket (large and cinematic): DONE (pass 2, 2026-11-21). `Blast(Fire)`: a white-hot
+  flash the size of the blast, the fireball rolling up and out to its radius with torn tongues, black smoke boiling
+  after it, a ring of dust racing out along the ground, debris and embers thrown to the edge and landing, a column of
+  smoke standing for seconds, the ground scorched, the shock along it, and fire left burning; nothing of it before
+  the round lands. A blast that lands knocks the local player's view and pulses fire at the screen's edge
+  (`OnBlast` -> `ASOCharacter::OnBlastNearby`).
 - Energy explosion (sci-fi): DONE. `Blast(Zap)`: arcs of light stepping out in jagged chains, a ring on the surface.
 - Environmental explosion (reactive environment), vehicle explosion: TO DO (nothing in the world explodes yet).
 
@@ -54,8 +57,10 @@ Status per bullet of the guide: DONE / PART / TO DO.
 ## Environmental
 - Dust and debris (reactive to explosions): DONE (debris, dust, the column).
 - Smoke lingering: DONE (the column lives 2.5-4 s; impacts leave dust).
-- Fire spreads and persists: DONE. `Burn`: tongues of flame (the torn-blade card standing up), embers rising and
-  falling, smoke, over a patch for its time (a grenade 2 s, a rocket 4 s), dying down in its last third.
+- Fire spreads and persists: DONE (pass 2). `Burn`: licks of flame (streak cards standing up, short-lived and many,
+  orange going red, a glow at each root, a bed of embers), embers rising and falling, smoke, over a patch for its
+  time (a grenade 2.2 s, a rocket 4.5 s), thicker toward the middle, dying down in its last third; lit only when
+  the blast lands.
 - Sparks (metal and electrical): DONE (metal impacts, the zap's arcs).
 - Weather: TO DO (a level's own: the Meridian storm exists as a sky, not as particles).
 
@@ -68,7 +73,7 @@ Status per bullet of the guide: DONE / PART / TO DO.
 
 ## Pictures and tests
 `SOCaptureSeries 1 41` (files `SO_fx_01_impacts`, `01b_impacts_later`, `02_flashes`, `03_casings`,
-`03b_casings_third`, `04_hit_kinds`, `05_grenade`, `06_rocket`, `07_fire_after`, `08_energy_burst`).
+`03b_casings_third`, `04_hit_kinds`, `05_grenade`, `06_rocket`, `06b_rocket_later`, `07_fire_after`, `08_energy_burst`).
 Tests `ShatteredOrbit.Fx.SurfaceOfAHit`, `ImpactsPerSurfaceAndHitKinds`, `CasingsLandOnTheFloor`.
 Budget: the pool holds 1500 particles, oldest dropped first; a rocket's blast spends about 60, a burn about 20 a
 second, a metal impact 30.

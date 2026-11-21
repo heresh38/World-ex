@@ -781,7 +781,15 @@ the engine's runtime-cached Roboto as the item's font object: without one the ca
 font ignores the Slate info): a size is a face in pixels at scale 1 (Small 10, Medium 12, Large 20 bold), crisp at
 any scale and resolution. Before, the engine's bitmap Roboto and its distance-field face were scaled as pictures
 and the magazine's count was soft and pixelated (the owner, 2026-11-21: "the numbers are blurry"). No UI material is involved (a UI-domain material does not
-draw on a canvas). Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
+draw on a canvas). **Round 2** (the owner, 2026-11-21: "the hud still looks flat, it needs more depth, more definition,
+more volume, more reason and now the icons are too big and obstructing the player view"): every `Panel` casts a
+shadow (`Shadow`: two soft steps down), its body is lit from above, a dark line runs a step inside its edge and a
+line of light along its top (`Bevel`: the edges that run near level across the top); a `Bar` has a trough darker
+at its floor, a fill lit from above with a gloss and a bright head; the cells, the diamonds and the minimap's bezel
+take the same (`Shadow` + `Bevel`); the held gun's count stands in its own darker well with ROUNDS / RESERVE under
+it, and the vitals' bars lie on a plate of their own. Everything is smaller and out of the middle: the minimap 84
+px, the weapon panel 330 x 98 with 86 x 38 cards, the abilities' cells 22, the ultimate 30, the emblem 42, the bars
+250 wide. Layout: `FLayout` (scale = height / 1080; wider than 2200 units the corners keep to a 2200 frame
 in the middle, the armoury's rule; checked at 2560 x 1080). Top left the round mini-map (`ASOMapInfo`'s picture cut to a
 disc, north up, the look cone, map points, the operation's goal held at the rim, creatures this side knows of in red,
 the area's name and the nearest map point or the stage under it); top centre the compass strip (N / E / S / W, the
@@ -842,9 +850,20 @@ lit round the point, thrown off when it breaks, a critical's flare with lines, a
 out along it and leaves a `Burn` (tongues of flame = the torn-blade card standing up, embers, smoke, for 2-4 s); a
 zap steps arcs out in jagged chains. Sounds `sfx_synth.py ... impacts`, import `SO_IMPORT_ONLY=fx,audio
 SO_AUDIO_ONLY=impact_metal,impact_dirt,impact_wood,impact_water,shield_hit`. Pictures `SOCaptureSeries 1 41` (files
-`SO_fx_*`: time nearly stopped for each still); tests `ShatteredOrbit.Fx.*`. Lessons: a spark's streak is its speed
-x 0.025 s capped at 42 cm (at 60 they were rays); dust must be nearly opaque and large to be seen at 2.5 m; a flame
-is a tongue, never a dot.
+`SO_fx_*`: time nearly stopped for each still); tests `ShatteredOrbit.Fx.*`. **Pass 2** (the owner, 2026-11-21: "the explosion sometimes comes before the rocket even hits the ground and it's just
+like spikes coming out of the ground instead of a large explosion with a large blast radius"): a `Blast(Fire)` is a
+white-hot flash the size of the blast, a fireball rolling up and out to its radius (soft cards and torn tongues),
+black smoke boiling after it, a ring of dust racing out along the ground, debris and embers to the edge, a column
+of smoke for seconds, the scorch, the shock, and fire left burning; NOTHING of it before the round lands (a burn's
+Age runs from -Delay and it emits only from 0: the fire had started under the rocket in flight); the fire is licks
+(streak cards standing up, short-lived and many, orange going red, a glow at the root, an ember bed) not spikes; a
+blast that lands knocks the local player's view (`USOFxSubsystem::OnBlast` at the moment it lands ->
+`ASOCharacter::OnBlastNearby`: `BlastShakeRoll`, `BlastPunch`, out to five radii) and pulses fire at the screen's
+edge. Lessons: a spark's streak is its speed x 0.025 s capped at 42 cm (at 60 they were rays); dust must be nearly
+opaque and large to be seen at 2.5 m; a flame is a tongue, never a dot, and never a tall bright blade; a blast's
+light scales with the root of its radius (squared, a rocket flooded the range); a capture that fires must EQUIP the
+gun it means (the profile's held gun was a rocket launcher, and the HUD capture's burst at a creature seven metres
+off killed the player).
 **The armoury** (the loadout screen, I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word:
 "upgrade it ready for a triple a game release on steam", their mockup and reference screens as the bar, every look
 and word ours). LOADOUT: the backdrop (`M_UI_Backdrop`: night blue lit from the stage, the broken orbit faint behind

@@ -508,8 +508,8 @@ void ASOHUD::DrawMinimap(const FLayout& L)
 	const float S = L.S;
 	FPainter P(Canvas);
 	FType Type(Canvas);
-	const FVector2D C(L.X0 + 150.0f * S, 150.0f * S);
-	const float R = 104.0f * S;
+	const FVector2D C(L.X0 + 128.0f * S, 128.0f * S);
+	const float R = 84.0f * S;
 	// a 300 m window round the player, north up; the window stops at the map's edges (no wrapping), so near an edge
 	// the player stands off the middle
 	const float Window = FMath::Min(1.0f, 30000.0f / FMath::Max(Info->HalfSize * 2.0f, 1.0f));
@@ -518,10 +518,14 @@ void ASOHUD::DrawMinimap(const FLayout& L)
 	const FVector2D UVc(FMath::Clamp(static_cast<float>(Me.X), Window * 0.5f, 1.0f - Window * 0.5f), FMath::Clamp(static_cast<float>(Me.Y), Window * 0.5f, 1.0f - Window * 0.5f));
 	auto OnMap = [&](const FVector& World) { return C + (Info->WorldToMap(World) - UVc) / UVPerPx; };
 
-	// the glass round it, the picture, a dark edge into the rim
-	P.Disc(C, R + 9.0f * S, A(Glass, 0.9f), A(GlassDeep, 0.9f));
+	// the shadow it casts, the bezel (a ring of glass darker at its outer edge, a line of light inside it), the
+	// picture, a dark edge into the rim
+	P.Disc(C + FVector2D(0.0f, 5.0f * S), R + 11.0f * S, FLinearColor(0, 0, 0, 0.3f), FLinearColor(0, 0, 0, 0.0f));
+	P.Ring(C, R + 1.0f * S, R + 9.0f * S, A(Mix(Glass, Line, 0.12f), 0.95f), A(GlassDeep, 0.95f));
+	P.Ring(C, R + 8.0f * S, R + 9.5f * S, A(Line, 0.9f), A(Line, 0.9f));
+	P.Ring(C, R + 1.5f * S, R + 2.8f * S, FLinearColor(0.78f, 0.9f, 1.0f, 0.22f), FLinearColor(0.78f, 0.9f, 1.0f, 0.22f), FMath::DegreesToRadians(-170.0f), FMath::DegreesToRadians(-10.0f));
 	P.TexturedDisc(C, R, Map->GetResource(), UVc, UVPerPx, FLinearColor(0.50f, 0.60f, 0.80f, 0.96f));
-	P.Ring(C, R * 0.80f, R, FLinearColor(0, 0, 0, 0), FLinearColor(0.0f, 0.004f, 0.012f, 0.75f));
+	P.Ring(C, R * 0.78f, R, FLinearColor(0, 0, 0, 0), FLinearColor(0.0f, 0.004f, 0.012f, 0.8f));
 
 	// where the player looks: a soft cone
 	const float Yaw = FMath::DegreesToRadians(Player->GetControlRotation().Yaw);
@@ -786,7 +790,7 @@ void ASOHUD::DrawConditions(const FLayout& L)
 	FPainter P(Canvas);
 	FType Type(Canvas);
 	float X = L.X1 - 40.0f * S;
-	const float Y = 40.0f * S, R = 22.0f * S;
+	const float Y = 36.0f * S, R = 18.0f * S;
 	for (int32 i = UE_ARRAY_COUNT(Conditions) - 1; i >= 0; --i)
 	{
 		const FConditionLook& Cnd = Conditions[i];
@@ -798,16 +802,18 @@ void ASOHUD::DrawConditions(const FLayout& L)
 		const float Pulse = Left > 0.0f && Left < 1.5f ? 0.6f + 0.4f * FMath::Abs(FMath::Sin(L.Now * 8.0f)) : 1.0f;
 		const FVector2D C(X - R - 4.0f * S, Y + R);
 		const TArray<FVector2D> Cell = Hex(C, R, UE_PI / 6.0f);
+		Shadow(P, Cell, 4.0f * S);
 		P.FillFan(C, Cell, A(Cnd.Color, 0.22f * Pulse), A(Glass, 0.9f));
+		Bevel(P, Cell, 1.0f * S);
 		P.Stroke(Cell, A(Cnd.Color, 0.9f * Pulse), 1.2f * S);
-		ConditionGlyph(P, Cnd.Glyph, C, 9.5f * S, A(Cnd.Color, Pulse), 1.7f * S);
+		ConditionGlyph(P, Cnd.Glyph, C, 8.0f * S, A(Cnd.Color, Pulse), 1.5f * S);
 		P.Flush();
 		Type.Caps(Cnd.Word, C.X, Y + 2.0f * R + 5.0f * S, Type.Small, 0.85f * S, A(Dim, Pulse), 1.0f * S, 0.5f);
 		if (Left > 0.0f)
 		{
 			Type.DrawCentred(Left >= 10.0f ? FString::Printf(TEXT("%d s"), FMath::CeilToInt(Left)) : FString::Printf(TEXT("%.1f s"), Left), C.X, Y + 2.0f * R + 17.0f * S, Type.Small, 0.95f * S, A(Ink, Pulse));
 		}
-		X -= 2.0f * R + 26.0f * S;
+		X -= 2.0f * R + 22.0f * S;
 	}
 }
 
@@ -1039,7 +1045,8 @@ void ASOHUD::DrawCreatures(const FLayout& L)
 		const float BoxW = Type.Size(LevelText, Type.Small, 1.0f * S).X + 12.0f * S;
 		const float Total = BoxW + 6.0f * S + NameW;
 		const float NX = Screen.X - Total * 0.5f, NY = BY - 24.0f * S;
-		P.Fill(Rectangle(NX - 2.0f * S, NY - 2.0f * S, BoxW, 18.0f * S), A(Glass, Alpha));
+		P.Fill(Rectangle(NX - 2.0f * S, NY, BoxW, 18.0f * S), A(FLinearColor::Black, 0.3f * Alpha));
+		P.FillDown(Rectangle(NX - 2.0f * S, NY - 2.0f * S, BoxW, 18.0f * S), A(Mix(Glass, Line, 0.1f), Alpha), A(GlassDeep, Alpha));
 		P.Stroke(Rectangle(NX - 2.0f * S, NY - 2.0f * S, BoxW, 18.0f * S), A(bLocked ? Lock : Line, Alpha), 1.0f * S);
 		// the bar: health red, the shield as a thin line over it
 		P.Fill(Rectangle(BX - 1.5f * S, BY - 1.5f * S, BW + 3.0f * S, 9.0f * S), A(GlassDeep, Alpha));
@@ -1092,29 +1099,31 @@ void ASOHUD::DrawVitals(const FLayout& L)
 	FPainter P(Canvas);
 	FType Type(Canvas);
 	const USOInventoryComponent* Inventory = FeedInventory.Get();
-	const FVector2D E(L.X0 + 96.0f * S, L.H - 92.0f * S);
-	const float R = 52.0f * S;
+	const FVector2D E(L.X0 + 82.0f * S, L.H - 82.0f * S);
+	const float R = 42.0f * S;
 	const float HealthFrac = Player->GetHealth() / FMath::Max(Player->GetMaxHealth(), 1.0f);
 	const bool bLow = HealthFrac < 0.35f;
 	const float LowPulse = bLow ? 0.7f + 0.3f * FMath::Abs(FMath::Sin(L.Now * 5.0f)) : 1.0f;
 
 	// the emblem: a diamond of glass, the broken orbit in it; the kit's light at its rim
 	const TArray<FVector2D> Outer = Diamond(E, R, R);
-	P.FillFan(E, Outer, A(Glass, 0.95f), A(GlassDeep, 0.95f));
+	Shadow(P, Outer, 5.0f * S);
+	P.FillFan(E, Outer, A(Mix(Glass, Line, 0.1f), 0.95f), A(GlassDeep, 0.95f));
+	Bevel(P, Outer, 1.0f * S);
 	P.Stroke(Outer, Line, 1.5f * S);
 	P.Stroke(Diamond(E, R * 0.82f, R * 0.82f), A(Player->GetAbilityColor(), 0.55f), 1.0f * S);
-	OrbitMark(P, E, 15.0f * S, bLow ? A(Hurt, LowPulse) : Ink, 2.2f * S);
-	// the bracket under the bars
-	const float BX = E.X + R + 20.0f * S, BW = 300.0f * S;
-	P.Segment(FVector2D(BX - 6.0f * S, L.H - 56.0f * S), FVector2D(BX + BW + 50.0f * S, L.H - 56.0f * S), A(Line, 0.6f), 1.0f * S);
-	P.Segment(FVector2D(BX + BW + 50.0f * S, L.H - 56.0f * S), FVector2D(BX + BW + 50.0f * S, L.H - 64.0f * S), A(Line, 0.6f), 1.0f * S);
+	OrbitMark(P, E, 12.0f * S, bLow ? A(Hurt, LowPulse) : Ink, 2.0f * S);
+	// the plate the bars lie on (what they belong to), and the bracket under them
+	const float BX = E.X + R + 16.0f * S, BW = 250.0f * S;
+	Panel(P, Plate(BX - 12.0f * S, L.H - 152.0f * S, BW + 72.0f * S, 96.0f * S, 8.0f * S), 1.0f * S, 0.85f);
+	P.Segment(FVector2D(BX - 6.0f * S, L.H - 64.0f * S), FVector2D(BX + BW + 48.0f * S, L.H - 64.0f * S), A(Line, 0.5f), 1.0f * S);
 	// the bars
-	const float ShieldY = L.H - 122.0f * S, HealthY = L.H - 84.0f * S;
+	const float ShieldY = L.H - 110.0f * S, HealthY = L.H - 80.0f * S;
 	if (Player->GetMaxShield() > 0.0f)
 	{
-		Bar(P, BX, ShieldY, BW, 14.0f * S, Player->GetShield() / Player->GetMaxShield(), ShieldBlue, 1.0f, 1.0f * S);
+		Bar(P, BX, ShieldY, BW, 11.0f * S, Player->GetShield() / Player->GetMaxShield(), ShieldBlue, 1.0f, 1.0f * S);
 	}
-	Bar(P, BX, HealthY, BW, 14.0f * S, HealthFrac, bLow ? A(Hurt, LowPulse) : HealthRed, 1.0f, 1.0f * S);
+	Bar(P, BX, HealthY, BW, 11.0f * S, HealthFrac, bLow ? A(Hurt, LowPulse) : HealthRed, 1.0f, 1.0f * S);
 	// the level's bar: thin, under the kit's name
 	const USOProgressionTable& Rules = USOProgressionTable::Get();
 	if (Inventory)
@@ -1134,25 +1143,25 @@ void ASOHUD::DrawVitals(const FLayout& L)
 		}
 		XpShown += ((bFilling ? 1.0f : XpFrac) - XpShown) * (1.0f - FMath::Exp(-9.0f * HudDt));
 		const float Flare = LevelAge >= 0.0f && LevelAge < 0.8f ? 1.0f - LevelAge / 0.8f : 0.0f;
-		Bar(P, BX, L.H - 146.0f * S - Flare * 1.0f * S, BW, (2.0f + 2.5f * Flare) * S, XpShown, A(Gold, 0.8f + 0.2f * Flare), 0.8f, 0.5f * S);
+		Bar(P, BX, L.H - 134.0f * S - Flare * 1.0f * S, BW, (2.5f + 2.5f * Flare) * S, XpShown, A(Gold, 0.8f + 0.2f * Flare), 0.8f, 0.5f * S);
 	}
 	P.Flush();
 	// the words
 	if (Player->GetMaxShield() > 0.0f)
 	{
-		Type.Caps(TEXT("Shield"), BX, ShieldY - 17.0f * S, Type.Small, 0.95f * S, Dim, 2.2f * S);
-		Type.Draw(FString::Printf(TEXT("%d"), FMath::CeilToInt(Player->GetShield())), BX + BW + 10.0f * S, ShieldY - 7.0f * S, Type.Large, 1.5f * S, Ink);
+		Type.Caps(TEXT("Shield"), BX, ShieldY - 14.0f * S, Type.Small, 0.9f * S, Dim, 2.0f * S);
+		Type.Draw(FString::Printf(TEXT("%d"), FMath::CeilToInt(Player->GetShield())), BX + BW + 8.0f * S, ShieldY - 6.0f * S, Type.Large, 1.15f * S, Ink);
 	}
-	Type.Caps(TEXT("Health"), BX, HealthY - 17.0f * S, Type.Small, 0.95f * S, Dim, 2.2f * S);
-	Type.Draw(FString::Printf(TEXT("%d"), FMath::CeilToInt(Player->GetHealth())), BX + BW + 10.0f * S, HealthY - 7.0f * S, Type.Large, 1.5f * S, bLow ? A(Hurt, LowPulse) : Ink);
+	Type.Caps(TEXT("Health"), BX, HealthY - 14.0f * S, Type.Small, 0.9f * S, Dim, 2.0f * S);
+	Type.Draw(FString::Printf(TEXT("%d"), FMath::CeilToInt(Player->GetHealth())), BX + BW + 8.0f * S, HealthY - 6.0f * S, Type.Large, 1.15f * S, bLow ? A(Hurt, LowPulse) : Ink);
 	const USOAbilitySet* Kit = Player->GetAbilitySet();
 	if (Kit && !Kit->DisplayName.IsEmpty())
 	{
-		Type.Caps(Kit->DisplayName.ToString(), BX, L.H - 164.0f * S, Type.Small, 1.05f * S, Gold, 3.0f * S);
+		Type.Caps(Kit->DisplayName.ToString(), BX, L.H - 148.0f * S, Type.Small, 1.0f * S, Gold, 2.8f * S);
 	}
 	if (Inventory)
 	{
-		Type.Caps(FString::Printf(TEXT("Level %d"), Inventory->GetLevel()), BX + BW, L.H - 164.0f * S, Type.Small, 1.0f * S, Dim, 2.0f * S, 1.0f);
+		Type.Caps(FString::Printf(TEXT("Level %d"), Inventory->GetLevel()), BX + BW, L.H - 148.0f * S, Type.Small, 0.95f * S, Dim, 2.0f * S, 1.0f);
 	}
 }
 
@@ -1171,7 +1180,7 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 	FType Type(Canvas);
 	const bool bJammed = Player->HasStatus(SOTags::Status_Jam);
 	const FLinearColor KitLight = Player->GetAbilityColor();
-	const float Y = L.H - 100.0f * S;
+	const float Y = L.H - 86.0f * S;
 	const float UltFrac = Player->GetMaxUltimate() > 0.0f ? Player->GetUltimate() / Player->GetMaxUltimate() : 0.0f;
 	const bool bUltFull = UltFrac >= 0.995f;
 	// the three cells left of the middle, the ultimate's diamond right of them
@@ -1192,19 +1201,21 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 			SlotReadyAt[i] = L.Now;
 		}
 		bSlotWasReady[i] = bReady;
-		const FVector2D C(L.CX - 128.0f * S + k * 70.0f * S, Y);
-		const float R = 28.0f * S;
+		const FVector2D C(L.CX - 104.0f * S + k * 58.0f * S, Y);
+		const float R = 22.0f * S;
 		const TArray<FVector2D> Cell = Hex(C, R);
-		P.FillFan(C, Cell, bReady ? A(KitLight, 0.26f) : A(Glass, 0.95f), bReady ? A(KitLight, 0.05f) : A(GlassDeep, 0.95f));
+		Shadow(P, Cell, 4.0f * S);
+		P.FillFan(C, Cell, bReady ? A(KitLight, 0.3f) : A(Mix(Glass, Line, 0.08f), 0.95f), bReady ? A(KitLight, 0.06f) : A(GlassDeep, 0.95f));
 		if (!bReady && Cooldown > 0.0f)
 		{
 			P.Sweep(Cell, C, FMath::Clamp(1.0f - Left / Cooldown, 0.0f, 1.0f), A(KitLight, 0.18f));
 		}
+		Bevel(P, Cell, 1.0f * S);
 		P.Stroke(Cell, bReady ? KitLight : (bJammed ? A(Hurt, 0.8f) : A(Line, 0.9f)), 1.4f * S);
-		SlotGlyph(P, Slot, C, 11.0f * S, bReady ? Ink : A(Dim, 0.55f), 1.9f * S);
+		SlotGlyph(P, Slot, C, 9.0f * S, bReady ? Ink : A(Dim, 0.55f), 1.7f * S);
 		if (bJammed)
 		{
-			ConditionGlyph(P, 4, C, 10.0f * S, A(Hurt, 0.9f), 2.2f * S);
+			ConditionGlyph(P, 4, C, 8.0f * S, A(Hurt, 0.9f), 2.0f * S);
 		}
 		// the pulse as it comes ready
 		const float Age = L.Now - SlotReadyAt[i];
@@ -1215,7 +1226,7 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 		P.Flush();
 		if (!bReady && Left > 0.0f)
 		{
-			Type.DrawCentred(Left >= 10.0f ? FString::Printf(TEXT("%d"), FMath::CeilToInt(Left)) : FString::Printf(TEXT("%.1f"), Left), C.X, C.Y + 10.0f * S, Type.Small, 1.05f * S, Ink);
+			Type.DrawCentred(Left >= 10.0f ? FString::Printf(TEXT("%d"), FMath::CeilToInt(Left)) : FString::Printf(TEXT("%.1f"), Left), C.X, C.Y + 7.0f * S, Type.Small, 1.0f * S, Ink);
 		}
 		if (MaxCharges > 1)
 		{
@@ -1237,11 +1248,12 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 				USOSoundLibrary::Play2D(this, TEXT("ui_open"), 0.4f, 0.4f);
 			}
 			bUltimateWasReady = bReady;
-			const FVector2D C(L.CX + 116.0f * S, Y);
-			const float R = 38.0f * S;
+			const FVector2D C(L.CX + 92.0f * S, Y);
+			const float R = 30.0f * S;
 			const float Pulse = bReady ? 0.75f + 0.25f * FMath::Abs(FMath::Sin(L.Now * 3.0f)) : 1.0f;
 			const TArray<FVector2D> Cell = Diamond(C, R, R);
-			P.FillFan(C, Cell, bReady ? A(Gold, 0.35f * Pulse) : A(Glass, 0.95f), bReady ? A(Gold, 0.08f) : A(GlassDeep, 0.95f));
+			Shadow(P, Cell, 4.0f * S);
+			P.FillFan(C, Cell, bReady ? A(Gold, 0.35f * Pulse) : A(Mix(Glass, Line, 0.08f), 0.95f), bReady ? A(Gold, 0.08f) : A(GlassDeep, 0.95f));
 			if (!bReady)
 			{
 				// the charge rising from the diamond's foot
@@ -1264,10 +1276,11 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 					P.Fill(Cut, A(Gold, 0.22f));
 				}
 			}
+			Bevel(P, Cell, 1.0f * S);
 			P.Stroke(Cell, bReady ? A(Gold, Pulse) : A(Line, 0.9f), 1.6f * S);
 			if (bReady)
 			{
-				SlotGlyph(P, ESOAbilitySlot::Ultimate, C, 14.0f * S, A(FLinearColor::White, Pulse), 2.0f * S);
+				SlotGlyph(P, ESOAbilitySlot::Ultimate, C, 11.0f * S, A(FLinearColor::White, Pulse), 1.8f * S);
 			}
 			const float Age = L.Now - UltimateReadyAt;
 			if (Age >= 0.0f && Age < 0.8f)
@@ -1284,7 +1297,7 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 		// its meter under the row, and the word
 		if (bHas)
 		{
-			const float MX = L.CX - 160.0f * S, MY = L.H - 40.0f * S, MW = 320.0f * S;
+			const float MX = L.CX - 130.0f * S, MY = L.H - 38.0f * S, MW = 260.0f * S;
 			Bar(P, MX, MY, MW, 4.0f * S, UltFrac, bUltFull ? Gold : A(Cyan, 0.9f), 1.0f, 0.8f * S);
 			if (bUltFull)
 			{
@@ -1293,11 +1306,11 @@ void ASOHUD::DrawAbilities(const FLayout& L)
 			P.Flush();
 			if (bUltFull)
 			{
-				Type.Caps(TEXT("Ultimate ready"), L.CX, L.H - 30.0f * S, Type.Small, 1.0f * S, A(Gold, 0.8f + 0.2f * FMath::Abs(FMath::Sin(L.Now * 3.0f))), 3.0f * S, 0.5f);
+				Type.Caps(TEXT("Ultimate ready"), L.CX, L.H - 29.0f * S, Type.Small, 1.0f * S, A(Gold, 0.8f + 0.2f * FMath::Abs(FMath::Sin(L.Now * 3.0f))), 3.0f * S, 0.5f);
 			}
 			else
 			{
-				Type.Caps(TEXT("Ultimate"), L.CX, L.H - 30.0f * S, Type.Small, 0.9f * S, Dim, 2.6f * S, 0.5f);
+				Type.Caps(TEXT("Ultimate"), L.CX, L.H - 29.0f * S, Type.Small, 0.9f * S, Dim, 2.6f * S, 0.5f);
 			}
 		}
 	}
@@ -1320,7 +1333,7 @@ void ASOHUD::DrawWeapon(const FLayout& L)
 	const USOInventoryComponent* Inventory = FeedInventory.Get();
 	const USOWeaponData* Data = Weapon->GetData();
 	const USOLootTables* Tables = USOLootLibrary::GetTables();
-	const float W = 400.0f * S, H = 124.0f * S;
+	const float W = 330.0f * S, H = 98.0f * S;
 	const float X = L.X1 - 40.0f * S - W, Y = L.H - 50.0f * S - H;
 	const FSOWeaponInstance& Held = Weapon->GetInstance();
 	const FLinearColor HeldCol = RarityColour(Held.Rarity);
@@ -1330,28 +1343,31 @@ void ASOHUD::DrawWeapon(const FLayout& L)
 	{
 		const FSOWeaponInstance* Copy = Inventory ? Inventory->GetEquipped(Slot) : nullptr;
 		const bool bActive = Inventory ? Inventory->GetActiveSlot() == Slot : Slot == 0;
-		const float CW = 112.0f * S, CH = 50.0f * S, CX = X + W - (3 - Slot) * (CW + 8.0f * S) + 8.0f * S, CY = Y - CH - 10.0f * S;
+		const float CW = 86.0f * S, CH = 38.0f * S, CX = X + W - (3 - Slot) * (CW + 6.0f * S) + 6.0f * S, CY = Y - CH - 12.0f * S;
 		const float Alpha = bActive ? 1.0f : 0.6f;
 		const FLinearColor Col = Copy ? RarityColour(Copy->Rarity) : A(Dim, 0.5f);
 		Panel(P, Plate(CX, CY, CW, CH, 6.0f * S), 1.0f * S, Alpha, bActive ? A(Cyan, 0.9f) : Line);
 		P.Fill(Rectangle(CX + 6.0f * S, CY + CH - 2.0f * S, CW - 8.0f * S, 2.0f * S), A(Col, Alpha));
 		P.Flush();
-		Type.Draw(FString::FromInt(Slot + 1), CX + 5.0f * S, CY + 3.0f * S, Type.Small, 0.95f * S, bActive ? Ink : Dim);
+		Type.Draw(FString::FromInt(Slot + 1), CX + 4.0f * S, CY + 2.0f * S, Type.Small, 0.9f * S, bActive ? Ink : Dim);
 		const FName Arch = Copy ? Copy->Archetype : (Slot == 0 && Data ? Data->Archetype : NAME_None);
 		if (UTexture2D* Icon = IconOf(Arch))
 		{
-			DrawTexture(Icon, CX + 18.0f * S, CY + 4.0f * S, 88.0f * S, 44.0f * S, 0.0f, 0.0f, 1.0f, 1.0f, FLinearColor(1, 1, 1, bActive ? 1.0f : 0.5f));
+			DrawTexture(Icon, CX + 14.0f * S, CY + 3.0f * S, 68.0f * S, 34.0f * S, 0.0f, 0.0f, 1.0f, 1.0f, FLinearColor(1, 1, 1, bActive ? 1.0f : 0.5f));
 		}
 		else if (!Copy)
 		{
-			Type.DrawCentred(TEXT("—"), CX + CW * 0.55f, CY + 14.0f * S, Type.Medium, 1.0f * S, A(Dim, 0.5f));
+			Type.DrawCentred(TEXT("—"), CX + CW * 0.55f, CY + 10.0f * S, Type.Medium, 1.0f * S, A(Dim, 0.5f));
 		}
 	}
 
 	// the held gun's panel
-	Panel(P, Plate(X, Y, W, H, 10.0f * S), 1.0f * S);
-	P.Segment(FVector2D(X + W - 80.0f * S, Y), FVector2D(X + W, Y), A(HeldCol, 0.9f), 1.5f * S);
-	P.Fill(Diamond(FVector2D(X + W - 62.0f * S, Y + 19.0f * S), 5.0f * S, 5.0f * S), Gold);
+	Panel(P, Plate(X, Y, W, H, 9.0f * S), 1.0f * S);
+	P.Segment(FVector2D(X + W - 70.0f * S, Y), FVector2D(X + W, Y), A(HeldCol, 0.9f), 1.5f * S);
+	P.Fill(Diamond(FVector2D(X + W - 54.0f * S, Y + 15.0f * S), 4.0f * S, 4.0f * S), Gold);
+	// the count's own field: a darker well the magazine stands in (what the number belongs to)
+	P.FillDown(Plate4(X + 8.0f * S, Y + 40.0f * S, 118.0f * S, H - 48.0f * S, 4.0f * S), A(GlassDeep, 0.8f), A(Mix(GlassDeep, FLinearColor::Black, 0.5f), 0.8f));
+	P.Stroke(Plate4(X + 8.0f * S, Y + 40.0f * S, 118.0f * S, H - 48.0f * S, 4.0f * S), A(Line, 0.35f), 1.0f * S);
 	// the reload along the panel's foot; the heat under the count
 	if (Weapon->IsReloading())
 	{
@@ -1363,43 +1379,45 @@ void ASOHUD::DrawWeapon(const FLayout& L)
 		const float Heat = Weapon->GetHeat();
 		const FLinearColor Cool(1.0f, 0.5f, 0.1f), Hot(1.0f, 0.93f, 0.8f);
 		const FLinearColor C = FMath::Lerp(Cool, Hot, FMath::Clamp((Heat - ASOWeapon::HeatMedium) / (1.0f - ASOWeapon::HeatMedium), 0.0f, 1.0f));
-		Bar(P, X + 16.0f * S, Y + H - 16.0f * S, 150.0f * S, 4.0f * S, Heat, C, 1.0f, 0.8f * S);
+		Bar(P, X + 134.0f * S, Y + H - 14.0f * S, 110.0f * S, 4.0f * S, Heat, C, 1.0f, 0.8f * S);
 	}
 	P.Flush();
 	const FString Name = Held.Name.IsEmpty() ? (Data ? Data->DisplayName.ToString() : FString(TEXT("-"))) : Held.Name;
-	Type.Draw(Name, X + 16.0f * S, Y + 8.0f * S, Type.Large, 1.35f * S, Ink);
+	Type.Draw(Name, X + 12.0f * S, Y + 4.0f * S, Type.Large, 1.0f * S, Ink);
 	const FSORarityInfo* Rar = RarityOf(Held.Rarity);
 	FString LineText = Rar ? Rar->Name.ToString() : FString();
 	if (Data)
 	{
 		LineText += (LineText.IsEmpty() ? TEXT("") : TEXT("  ·  ")) + Data->ClassName.ToString() + TEXT("  ·  ") + Data->DisplayName.ToString();
 	}
-	Type.Caps(LineText, X + 16.0f * S, Y + 38.0f * S, Type.Small, 0.85f * S, A(HeldCol, 0.9f), 1.4f * S);
-	Type.Draw(FString::FromInt(Held.Power), X + W - 52.0f * S, Y + 8.0f * S, Type.Medium, 1.3f * S, Gold);
-	// the count: the magazine big, the reserve after it
+	Type.Caps(LineText, X + 12.0f * S, Y + 28.0f * S, Type.Small, 0.78f * S, A(HeldCol, 0.9f), 1.2f * S);
+	Type.Draw(FString::FromInt(Held.Power), X + W - 46.0f * S, Y + 6.0f * S, Type.Medium, 1.15f * S, Gold);
+	// the count in its well: the magazine big, the reserve after it, each with its word
 	const FString Mag = FString::FromInt(Weapon->GetMag());
-	const float MagW = Type.Draw(Mag, X + 14.0f * S, Y + 54.0f * S, Type.Large, 2.6f * S, Weapon->GetMag() == 0 ? Hurt : Ink);
-	Type.Draw(FString::Printf(TEXT("/ %d"), Weapon->GetReserve()), X + 22.0f * S + MagW, Y + 78.0f * S, Type.Medium, 1.25f * S, Dim);
+	const float MagW = Type.Draw(Mag, X + 14.0f * S, Y + 41.0f * S, Type.Large, 1.7f * S, Weapon->GetMag() == 0 ? Hurt : Ink);
+	Type.Draw(FString::Printf(TEXT("/ %d"), Weapon->GetReserve()), X + 20.0f * S + MagW, Y + 57.0f * S, Type.Medium, 1.0f * S, Dim);
+	Type.Caps(TEXT("Rounds"), X + 14.0f * S, Y + H - 17.0f * S, Type.Small, 0.7f * S, A(Dim, 0.8f), 1.4f * S);
+	Type.Caps(TEXT("Reserve"), X + 20.0f * S + MagW, Y + H - 17.0f * S, Type.Small, 0.7f * S, A(Dim, 0.8f), 1.4f * S);
 	if (Weapon->GetRampageStacks() > 0)
 	{
-		Type.Caps(FString::Printf(TEXT("Rampage x%d"), Weapon->GetRampageStacks()), X + 16.0f * S, Y + H - 30.0f * S, Type.Small, 0.85f * S, FLinearColor(1.0f, 0.5f, 0.2f), 1.2f * S);
+		Type.Caps(FString::Printf(TEXT("Rampage x%d"), Weapon->GetRampageStacks()), X + 134.0f * S, Y + H - 30.0f * S, Type.Small, 0.8f * S, FLinearColor(1.0f, 0.5f, 0.2f), 1.2f * S);
 	}
 	if (bHeat)
 	{
 		const FLinearColor Cool(1.0f, 0.5f, 0.1f), Hot(1.0f, 0.93f, 0.8f);
 		if (Weapon->IsVenting())
 		{
-			Type.Caps(TEXT("Venting"), X + 174.0f * S, Y + H - 20.0f * S, Type.Small, 0.85f * S, Hot, 1.4f * S);
+			Type.Caps(TEXT("Venting"), X + 134.0f * S, Y + H - 26.0f * S, Type.Small, 0.8f * S, Hot, 1.4f * S);
 		}
 		else if (Weapon->IsCondensing())
 		{
 			// rounds condensing from the reserve (the Sarketh's guns never reload): the word pulses with them
-			Type.Caps(TEXT("Condensing"), X + 174.0f * S, Y + H - 20.0f * S, Type.Small, 0.85f * S, A(Cool, 0.55f + 0.45f * FMath::Sin(L.Now * 6.0f)), 1.4f * S);
+			Type.Caps(TEXT("Condensing"), X + 134.0f * S, Y + H - 26.0f * S, Type.Small, 0.8f * S, A(Cool, 0.55f + 0.45f * FMath::Sin(L.Now * 6.0f)), 1.4f * S);
 		}
 	}
 	if (UTexture2D* Icon = IconOf(Data ? Data->Archetype : NAME_None))
 	{
-		DrawTexture(Icon, X + W - 180.0f * S, Y + 40.0f * S, 168.0f * S, 84.0f * S, 0.0f, 0.0f, 1.0f, 1.0f, FLinearColor(1, 1, 1, 0.95f));
+		DrawTexture(Icon, X + W - 126.0f * S, Y + 40.0f * S, 112.0f * S, 56.0f * S, 0.0f, 0.0f, 1.0f, 1.0f, FLinearColor(1, 1, 1, 0.95f));
 	}
 
 	// under the panel: the grenade's charges, the melee style, the flashlight
@@ -1420,8 +1438,8 @@ void ASOHUD::DrawWeapon(const FLayout& L)
 		UTexture2D* StyleIcon = Style && !Style->Icon.IsNull() ? Style->Icon.LoadSynchronous() : nullptr;
 		if (StyleIcon)
 		{
-			DrawTexture(StyleIcon, RX, RY - 4.0f * S, 56.0f * S, 28.0f * S, 0.0f, 0.0f, 1.0f, 1.0f, FLinearColor(1, 1, 1, Player->IsFists() ? 1.0f : 0.7f));
-			RX += 60.0f * S;
+			DrawTexture(StyleIcon, RX, RY - 2.0f * S, 44.0f * S, 22.0f * S, 0.0f, 0.0f, 1.0f, 1.0f, FLinearColor(1, 1, 1, Player->IsFists() ? 1.0f : 0.7f));
+			RX += 48.0f * S;
 		}
 		else
 		{
@@ -1952,6 +1970,12 @@ void ASOHUD::DrawScreenEdge(const FLayout& L)
 		P.Fill(Rectangle(0, L.H - T, L.W, T), Frame);
 		P.Fill(Rectangle(0, T, T, L.H - 2.0f * T), Frame);
 		P.Fill(Rectangle(L.W - T, T, T, L.H - 2.0f * T), Frame);
+	}
+	// a blast near the player: a pulse of fire at the edge, by how near it was
+	const float BlastAge = L.Now - Player->GetLastBlastTime();
+	if (BlastAge >= 0.0f && BlastAge < 0.45f)
+	{
+		Bands(240.0f * S, A(FLinearColor(1.0f, 0.62f, 0.3f), 0.55f * Player->GetLastBlastStrength() * (1.0f - BlastAge / 0.45f)));
 	}
 	// an ability coming ready: a breath of gold at the edge; the ultimate a longer one
 	float Ready = 0.0f;
