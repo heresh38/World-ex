@@ -10,6 +10,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "SOSound.h"
+#include "SOWeapon.h"
 
 namespace
 {
@@ -251,8 +252,10 @@ void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Sp
 	}
 }
 
-void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel)
+void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel,
+	const FSOFxAnchor& Anchor)
 {
+	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
 	const FVector N = Out.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
 	const float S = (bViewmodel ? 0.42f : 1.0f) * FMath::Clamp(Strength, 0.1f, 1.5f);
 	const float T = FMath::Max(Duration, 0.1f);
@@ -275,7 +278,7 @@ void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLi
 		Gas.Intensity0 = Random.FRandRange(3.0f, 5.5f) * (1.0f - At01 * 0.6f) * (bViewmodel ? 0.7f : 1.0f);
 		Gas.Intensity1 = 0.0f;
 		Gas.Color = FMath::Lerp(Color, Hot, Random.FRand() * 0.5f);
-		Spawn(Gas);
+		Put(Gas);
 		// and what it leaves: haze that hangs a moment and drifts up
 		if (i % 3 == 0)
 		{
@@ -291,7 +294,7 @@ void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLi
 			Haze.Intensity0 = 0.35f;
 			Haze.Color = Color * 0.45f;
 			Haze.Spin = Random.FRandRange(0.0f, 360.0f);
-			Spawn(Haze);
+			Put(Haze);
 		}
 	}
 	// the core at the opening, white-hot while it runs
@@ -304,7 +307,7 @@ void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLi
 	Core.Size0 = Core.Size1 = 9.0f * S;
 	Core.Intensity0 = Core.Intensity1 = 14.0f * FMath::Min(Strength, 1.0f);
 	Core.Color = Hot;
-	Spawn(Core);
+	Put(Core);
 	// sparks thrown out of it as it blows
 	for (int32 i = 0; i < FMath::RoundToInt(10.0f * FMath::Min(Strength, 1.0f)); ++i)
 	{
@@ -321,13 +324,15 @@ void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLi
 		Ember.Intensity0 = 20.0f;
 		Ember.Intensity1 = 0.0f;
 		Ember.Color = Hot;
-		Spawn(Ember);
+		Put(Ember);
 	}
 	PendingLights.Add({ At + N * 12.0f * S, Color, (bViewmodel ? 6.0f : 40.0f) * FMath::Min(Strength, 1.0f), T * 0.8f, 0.0f });   // (at the hands: hundreds flooded the view)
 }
 
-void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel)
+void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel,
+	const FSOFxAnchor& Anchor)
 {
+	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
 	const FVector N = Out.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
 	const float S = bViewmodel ? 0.42f : 1.0f;
 	const float T = FMath::Max(Duration, 0.15f);
@@ -357,7 +362,7 @@ void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const F
 		Mote.Intensity0 = 1.5f;
 		Mote.Intensity1 = 9.0f;
 		Mote.Color = FMath::Lerp(Color, FLinearColor::White, Random.FRand() * 0.4f);
-		Spawn(Mote);
+		Put(Mote);
 	}
 	// the opening fills: a glow that grows while it draws, brightest as it closes
 	for (int32 k = 0; k < 3; ++k)
@@ -373,13 +378,14 @@ void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const F
 		Fill.Intensity0 = 1.5f + 2.0f * k;
 		Fill.Intensity1 = 3.0f + 2.0f * k;   // (stronger, it washed the hands in its colour)
 		Fill.Color = FMath::Lerp(Color, FLinearColor::White, 0.2f * k);
-		Spawn(Fill);
+		Put(Fill);
 	}
 	PendingLights.Add({ At + N * 10.0f * S, Color, bViewmodel ? 4.0f : 25.0f, T, 0.0f });
 }
 
-void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel)
+void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor)
 {
+	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
 	const float S = bViewmodel ? 0.42f : 1.0f;
 	for (int32 i = 0; i < 5; ++i)
 	{
@@ -394,7 +400,7 @@ void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color,
 		Puff.Intensity0 = 0.4f;
 		Puff.Color = FMath::Lerp(Color, FLinearColor::White, 0.5f) * 0.6f;
 		Puff.Spin = Random.FRandRange(0.0f, 360.0f);
-		Spawn(Puff);
+		Put(Puff);
 	}
 	FSOFxParticle Spit;
 	Spit.Kind = ESOFxKind::Glow;
@@ -406,11 +412,12 @@ void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color,
 	Spit.Intensity0 = 14.0f;
 	Spit.Intensity1 = 0.0f;
 	Spit.Color = FMath::Lerp(Color, FLinearColor::White, 0.5f);
-	Spawn(Spit);
+	Put(Spit);
 }
 
-void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel)
+void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor)
 {
+	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
 	const float S = bViewmodel ? 0.42f : 1.0f;
 	const float T = FMath::Max(Duration, 0.08f);
 	FSOFxParticle Swell;
@@ -423,14 +430,14 @@ void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, 
 	Swell.Intensity0 = 4.0f;
 	Swell.Intensity1 = 0.0f;
 	Swell.Color = Color;
-	Spawn(Swell);
+	Put(Swell);
 	FSOFxParticle Flash = Swell;
 	Flash.Life = 0.07f;
 	Flash.Size0 = 10.0f * S;
 	Flash.Size1 = 4.0f * S;
 	Flash.Intensity0 = 18.0f;
 	Flash.Color = FMath::Lerp(Color, FLinearColor::White, 0.7f);
-	Spawn(Flash);
+	Put(Flash);
 	PendingLights.Add({ At, Color, bViewmodel ? 5.0f : 30.0f, 0.12f, 0.0f });
 }
 
@@ -1593,6 +1600,12 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		if (P.Delay > 0.0f)
 		{
 			P.Delay -= DeltaTime;
+			if (P.Anchor.IsSet())
+			{
+				const FVector Now = P.Anchor.Gun->RigPointToWorld(P.Anchor.Local, P.Anchor.bViewmodel);
+				P.Position += Now - P.Anchor.Last;
+				P.Anchor.Last = Now;
+			}
 			continue;
 		}
 		P.Age += DeltaTime;
@@ -1600,6 +1613,13 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		{
 			Particles.RemoveAtSwap(i, 1, EAllowShrinking::No);
 			continue;
+		}
+		if (P.Anchor.IsSet())
+		{
+			// held to its gun: moved by however far the gun's point moved since last frame (its own motion on top)
+			const FVector Now = P.Anchor.Gun->RigPointToWorld(P.Anchor.Local, P.Anchor.bViewmodel);
+			P.Position += Now - P.Anchor.Last;
+			P.Anchor.Last = Now;
 		}
 		P.Velocity.Z -= P.Gravity * DeltaTime;
 		P.Velocity *= FMath::Exp(-P.Drag * DeltaTime);

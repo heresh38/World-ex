@@ -775,6 +775,18 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 	USOSoundLibrary::PlayFor(Holder, Sound, Muzzle, bOwn ? 0.85f : 1.0f, ESOSoundRange::Far, 0.035f);
 }
 
+FVector ASOWeapon::RigPointToWorld(const FVector& RigLocal, bool bFirstPerson) const
+{
+	const USOGunRigComponent* Rig = bFirstPerson ? FirstPersonRig.Get() : ThirdPersonRig.Get();
+	if (!Rig)
+	{
+		return RigLocal;
+	}
+	const FVector P = Rig->GetComponentTransform().TransformPosition(RigLocal);
+	const ASOCombatCharacter* Holder = GetHolder();
+	return bFirstPerson && Holder ? Holder->ViewmodelToWorld(P) : P;
+}
+
 void ASOWeapon::PlayReloadFx(FName Kind, float Seconds)
 {
 	UWorld* World = GetWorld();
@@ -798,29 +810,36 @@ void ASOWeapon::PlayReloadFx(FName Kind, float Seconds)
 	const UStaticMeshComponent* Flap = Rig->GetPart(TEXT("hatch"));
 	const UStaticMeshComponent* Cell = Rig->GetPart(TEXT("mag"));
 	const FVector AtFlap = Flap ? ToWorld(Flap->Bounds.Origin) + Out * 1.5f : Centre + Out * 3.0f;
-	const FVector Carry = Holder->GetVelocity();
+	// the whole effect is HELD to the gun (FSOFxAnchor: the rig's centre, followed every frame), not sent off with the
+	// holder's velocity of this moment: a turn, a stop or the viewmodel's sway left it hanging where the reload began
+	const FVector Carry = FVector::ZeroVector;
+	FSOFxAnchor Anchor;
+	Anchor.Gun = this;
+	Anchor.Local = Rig->GetRigBounds().GetCenter();
+	Anchor.Last = Centre;
+	Anchor.bViewmodel = bFirstPerson;
 	const FLinearColor Color = Data->TracerColor;
 	if (Kind == TEXT("vent"))
 	{
-		Fx->ReloadVent(AtFlap, Out, Color, Seconds, 1.0f, Carry, bFirstPerson);
+		Fx->ReloadVent(AtFlap, Out, Color, Seconds, 1.0f, Carry, bFirstPerson, Anchor);
 	}
 	else if (Kind == TEXT("overheat"))
 	{
 		// (a gun without a flap breathes it out of its muzzle end)
 		const FVector At = Flap ? AtFlap : ToWorld(Rig->GetMuzzleLocation());
-		Fx->ReloadVent(At, Flap ? Out : Frame.GetUnitAxis(EAxis::X), Color, Seconds, 0.35f, Carry, bFirstPerson);
+		Fx->ReloadVent(At, Flap ? Out : Frame.GetUnitAxis(EAxis::X), Color, Seconds, 0.35f, Carry, bFirstPerson, Anchor);
 	}
 	else if (Kind == TEXT("intake"))
 	{
-		Fx->ReloadIntake(AtFlap, Out, Color, Seconds, Carry, bFirstPerson);
+		Fx->ReloadIntake(AtFlap, Out, Color, Seconds, Carry, bFirstPerson, Anchor);
 	}
 	else if (Kind == TEXT("cellpop"))
 	{
-		Fx->ReloadCellPop(Cell ? ToWorld(Cell->Bounds.Origin) : Centre, Color, Carry, bFirstPerson);
+		Fx->ReloadCellPop(Cell ? ToWorld(Cell->Bounds.Origin) : Centre, Color, Carry, bFirstPerson, Anchor);
 	}
 	else if (Kind == TEXT("charge"))
 	{
-		Fx->ReloadCharge(Centre, Color, Seconds, Carry, bFirstPerson);
+		Fx->ReloadCharge(Centre, Color, Seconds, Carry, bFirstPerson, Anchor);
 	}
 }
 

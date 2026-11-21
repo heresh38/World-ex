@@ -21,9 +21,25 @@ enum class ESOFxKind : uint8
 	Count
 };
 
+class ASOWeapon;
+
+/** A particle's hold on a gun: a point in the gun's rig frame it keeps its place against. Each frame the particle is
+ *  moved by however far that point moved, so what a gun breathes out, draws in or spits stays WITH the gun through a
+ *  turn, a stop or the viewmodel's sway (spawned with the holder's velocity of the moment, a reload's cloud hung in the
+ *  air where the reload began: the owner, 2026-11-20). Its own velocity is on top of that. */
+struct FSOFxAnchor
+{
+	TWeakObjectPtr<const ASOWeapon> Gun;
+	FVector Local = FVector::ZeroVector;  // the point, in the gun's rig frame
+	FVector Last = FVector::ZeroVector;   // where it was last frame (world)
+	bool bViewmodel = false;              // the first-person gun (its rig is drawn in the viewmodel's space)
+	bool IsSet() const { return Gun.IsValid(); }
+};
+
 struct FSOFxParticle
 {
 	ESOFxKind Kind = ESOFxKind::Glow;
+	FSOFxAnchor Anchor;
 	FVector Position = FVector::ZeroVector;
 	FVector Velocity = FVector::ZeroVector;
 	FVector Axis = FVector::ForwardVector; // Star / fixed streak direction
@@ -72,14 +88,16 @@ public:
 	/** The heat purged out of an open flap At, along Out, for Duration seconds: a jet of glowing gas that blooms and
 	 *  rises, a white-hot core at the opening, sparks thrown out, its light on the hands. Strength 1 = a reload's
 	 *  purge; a little after a long burst (the gun venting its heat by itself). */
-	void ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel);
+	void ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel,
+		const FSOFxAnchor& Anchor = FSOFxAnchor());
 	/** Energy drawn in from the air through an open flap At (Out = the way it faces) for Duration seconds: motes of
 	 *  light appearing all round and streaming in, a glow at the opening that grows as it fills. */
-	void ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel);
+	void ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel,
+		const FSOFxAnchor& Anchor = FSOFxAnchor());
 	/** A battery's lock releasing: a puff of vapour and a spit of light round its seat. */
-	void ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel);
+	void ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor = FSOFxAnchor());
 	/** The gun charging up as it closes: a ring of its light swelling round it and a flash. */
-	void ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel);
+	void ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor = FSOFxAnchor());
 
 	/** Plasma landing: it splashes: a flare, drops of it thrown out ALONG the surface, a breath of vapour, a glow on
 	 *  the place that cools over half a second, and light by its size (a pellet's is small: a shotgun's pattern must

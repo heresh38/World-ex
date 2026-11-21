@@ -105,6 +105,9 @@ public:
 	const FSOReloadPose& GetPose() const { return Reload.GetPose(); }
 	USOGunRigComponent* GetFirstPersonRig() const { return FirstPersonRig; }
 	USOGunRigComponent* GetThirdPersonRig() const { return ThirdPersonRig; }
+	/** A point in the gun's rig frame as the world shows it now: through the viewmodel's space for the first-person
+	 *  gun (an effect anchored to the gun asks this every frame: USOFxSubsystem's FSOFxAnchor). */
+	FVector RigPointToWorld(const FVector& RigLocal, bool bFirstPerson) const;
 
 	/** Reload and shot events (seat, drop, sfx, fired) for audio / effects. */
 	FSOOnWeaponEvent OnWeaponEvent;
