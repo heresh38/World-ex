@@ -57,7 +57,7 @@ public:
 
 	/** Horizontal field of view in degrees. */
 	UPROPERTY(config, EditAnywhere, BlueprintReadWrite, Category = "Look", meta = (ClampMin = "70", ClampMax = "120"))
-	float FieldOfView = 90.0f;
+	float FieldOfView = 95.0f;      // (the owner's movement guide, 2026-11-20: walk FOV 95, sprint 103-108)
 
 	// --- Graphics ---
 	UPROPERTY(config, EditAnywhere, BlueprintReadWrite, Category = "Graphics")

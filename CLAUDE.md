@@ -986,7 +986,29 @@ BORE LINE inside the shoulders' width, never by their outline (a gun with fins w
 handguns at the hips; the gun in hand is stowed while mantling); pictures `SOCaptureSeries 1 12|13`. The waist never
 twists far (`USOLocomotionAnimInstance::MaxWaistTwist`, 20 degrees): strafing or standing while the aim turns, the
 pelvis takes half the turn up to that and the legs the rest about their own hip joints (a bare waist shows every degree).
-Movement (`USOCharacterMovementComponent`, the owner's brief of 2026-11-09): instant run, built sprint, coyote time,
+Movement (`USOCharacterMovementComponent`, the owner's brief of 2026-11-09, and their movement guide of 2026-11-20,
+`art/reference/movement/movement_guide.webp`, read in `docs/orion/GAME_LOOP.md`: the run in 0.15 s and the stop in
+0.10 (`MaxAcceleration` 3000, `BrakingDecelerationWalking` 4400; before, instant), a slide of 0.8-1.2 s, the view at
+95 degrees (`USOGameUserSettings::FieldOfView`) widening to 105 at a sprint (`SprintFovBoost`) and leaning into it
+(`SprintCameraPitch`), a 2.5 degree lean into a strafe (`StrafeCameraRoll`), a hard landing's wobble (`LandShakeRoll`:
+a spring knocked by the impact), and **the dodge** (`ESOCustomMovementMode::Dodge`, `IA_Dodge` = Left Alt, no pad key
+yet: a burst of `DodgeSpeed` along the stick or straight back for `DodgeTime` that eases into the run, `DodgeCooldown`;
+the press is kept `DodgeBufferTime` when the feet cannot yet; its state `ESOMovementState::Dodge`, its event
+`DodgeStarted` (Strength = its side), the view rolls into it, the gun trails it through the viewmodel's strafe
+inertia; it travels in the saved move's `FLAG_Custom_3` with its elapsed, cooldown, buffer and direction saved per
+move). Pictures `SOCaptureSeries 1 39` (files `SO_mv_*`: idle, sprint, slide, dodge, jump, landing, strafe from the
+eye; the slide and the dodge from beside the body, the dodge slowed to a tenth: at the capture's frame rate a
+0.22 s move is one frame). **Fluid, like water** (the owner, 2026-11-20, on the first pass: "very fluid, like
+water, truly perfect triple a and not some sprite sheet"): nothing moves on a straight line and stops dead:
+the gun's sprint carry, its trail behind a strafe or a dodge, its sway behind a turn, its slide and mantle
+tucks are damped SPRINGS (`SOViewmodelComponent.cpp` `Spring`: a little overshoot, then settled; the
+`FInterpConstantTo` they ran on was the machine's motion), so are the camera's roll and the eye's height across
+crouch, slide and stand (`CameraRollVel`, `EyeVel`); standing still the gun and the view breathe (3.6 s); the
+acceleration into the run is a curve (`GetMaxAcceleration`: quick first step, soft arrival) and the dodge's
+speed falls on one; the body has its own dodge clips (`hero/male/motion.py` `dodge(dx, dy)`: `DodgeL / R / B /
+F`, 0.32 s, the step out of the line in place, played whole over the gait while the burst runs and fading as
+it plays out: `USOLocomotionAnimInstance` layer `Dodge`, `ActiveDodge` picked by the dodge's direction). Still
+the guide's: no grapple, the ground slam is the melee's air slam, no pad key for the dodge. Built sprint, coyote time,
 buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
 measured from the obstacle (`ESOTraversal`: low / medium vault over a thin obstacle met at speed, automatic at a sprint;

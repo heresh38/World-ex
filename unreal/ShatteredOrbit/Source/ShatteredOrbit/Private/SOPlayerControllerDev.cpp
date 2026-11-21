@@ -187,6 +187,117 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 39)
+	{
+		// The movement flow (files mv_*): the guide's sprint, slide, dodge, jump, landing and strafe from the eye (the
+		// field of view, the lean, the roll, the dip), then the slide and the dodge from a camera beside the body.
+		auto Dilate = [this](float Rate) { UGameplayStatics::SetGlobalTimeDilation(this, Rate); };
+		TSharedRef<FTransform> Start = MakeShared<FTransform>();
+		auto Reset = [this, Hero, Start]()
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				H->TeleportTo(Start->GetLocation(), Start->Rotator());
+				H->GetCharacterMovement()->StopMovementImmediately();
+				H->HandleSprintReleased();
+				H->UnCrouch();
+			}
+			CaptureMove = FVector2D::ZeroVector;
+		};
+		auto Beside = [this, Hero](bool bOn)
+		{
+			ASOCharacter* H = Hero();
+			if (!bOn || !H)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
+			const FVector Rel(120.0f, 300.0f, 60.0f), Look(60.0f, 0.0f, 20.0f);    // (on the right: the dodge goes left, away)
+			CaptureCamera->SetActorRelativeLocation(Rel);
+			CaptureCamera->SetActorRelativeRotation((Look - Rel).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		auto InState = [Hero](ESOMovementState S) { return [Hero, S]() { const ASOCharacter* H = Hero(); const USOCharacterMovementComponent* M = H ? H->GetSOMovement() : nullptr; return M && M->GetMovementState() == S; }; };
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			Look(0.0f);
+			SetControlRotation(GetControlRotation() + FRotator(0.0f, 180.0f, 0.0f));
+			if (ASOCharacter* H = Hero())
+			{
+				*Start = H->GetActorTransform();
+			}
+			View(ESOViewMode::FirstPerson);
+		});
+		Snap(0.5f, TEXT("mv_0_idle"));
+		// sprint: the view widens and leans forward
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } CaptureMove = FVector2D(0.0f, 1.0f); });
+		Snap(1.3f, TEXT("mv_1_sprint"));
+		// slide out of the sprint: low, rolled, wide
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleCrouchPressed(); } });
+		Snap(0.0f, TEXT("mv_2_slide"), InState(ESOMovementState::Slide));
+		Snap(0.3f, TEXT("mv_2_slide_b"));
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleCrouchReleased(); H->HandleCrouchPressed(); H->HandleCrouchReleased(); } Reset(); });
+		// a dodge to the left (away from the pillar the range starts beside: into it the gun went into the wall):
+		// the view rolls into it, the gun trails
+		// (first six metres back from the pillar the range starts beside: against a wall the gun went into it)
+		Do(0.3f, [=, this]() { CaptureMove = FVector2D(0.0f, -1.0f); });
+		Do(1.6f, [=, this]() { CaptureMove = FVector2D(-1.0f, 0.0f); });
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleDodgePressed(); } Dilate(0.1f); });   // (0.22 s: slowed to catch it)
+		Snap(0.0f, TEXT("mv_3_dodge"), InState(ESOMovementState::Dodge));
+		Snap(0.008f, TEXT("mv_3_dodge_b"), [=, this]()
+		{
+			// (what the picture shows: the dodge's state, the gun and the arms, the eye)
+			if (ASOCharacter* H = Hero())
+			{
+				const USOCharacterMovementComponent* M = H->GetSOMovement();
+				const ASOWeapon* W = H->GetWeapon();
+				const USOGunRigComponent* R = W ? W->GetFirstPersonRig() : nullptr;
+				const FVector Eye = H->GetEyeTransform(true).GetLocation();
+				UE_LOG(LogShatteredOrbit, Display, TEXT("MVDODGE state=%d mode=%d custom=%d vel=%s arms vis=%d at=%s rig=%s shown=%d fov=%.1f eye=%s stowed=%d fists=%d"),
+					M ? static_cast<int32>(M->GetMovementState()) : -1, M ? static_cast<int32>(M->MovementMode.GetValue()) : -1, M ? M->CustomMovementMode : -1,
+					*H->GetVelocity().ToString(), H->GetFirstPersonArms() ? H->GetFirstPersonArms()->IsVisible() : -1,
+					H->GetFirstPersonArms() ? *H->GetFirstPersonArms()->GetComponentLocation().ToString() : TEXT("-"),
+					R ? *R->GetComponentLocation().ToString() : TEXT("-"), R ? R->IsVisible() : -1,
+					H->GetFirstPersonCamera() ? H->GetFirstPersonCamera()->FieldOfView : -1.0f, *Eye.ToString(), H->IsWeaponStowed(), H->IsFists());
+			}
+			return true;
+		});
+		Snap(0.008f, TEXT("mv_3_dodge_c"));
+		Act([=, this]() { Dilate(1.0f); Reset(); });
+		// a jump and its landing: the dip (in the open, six metres back)
+		Do(0.3f, [=, this]() { CaptureMove = FVector2D(0.0f, -1.0f); });
+		Do(1.6f, [=, this]() { CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->HandleJumpPressed(); } });
+		Snap(0.0f, TEXT("mv_4_jump"), InState(ESOMovementState::Jump));
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleJumpReleased(); } });
+		Snap(0.0f, TEXT("mv_5_land"), InState(ESOMovementState::Land));
+		// a strafe: the lean
+		Do(0.8f, [=, this]() { CaptureMove = FVector2D(-1.0f, 0.0f); });
+		Snap(0.5f, TEXT("mv_6_strafe"));
+		Act([=, this]() { Reset(); });
+		// the body from beside it: the slide, the dodge
+		Do(0.5f, [=, this]() { View(ESOViewMode::ThirdPerson); Beside(true); });
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleSprintPressed(); } CaptureMove = FVector2D(0.0f, 1.0f); });
+		Do(1.2f, [=, this]() { if (ASOCharacter* H = Hero()) { H->HandleCrouchPressed(); } });
+		Snap(0.0f, TEXT("mv_t_slide"), InState(ESOMovementState::Slide));
+		Snap(0.25f, TEXT("mv_t_slide_b"));
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleCrouchReleased(); H->HandleCrouchPressed(); H->HandleCrouchReleased(); } Reset(); });
+		Do(0.3f, [=, this]() { CaptureMove = FVector2D(0.0f, -1.0f); });
+		Do(1.6f, [=, this]() { CaptureMove = FVector2D(-1.0f, 0.0f); });
+		Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleDodgePressed(); } Dilate(0.1f); });
+		Snap(0.0f, TEXT("mv_t_dodge"), InState(ESOMovementState::Dodge));
+		Snap(0.008f, TEXT("mv_t_dodge_b"));
+		Snap(0.008f, TEXT("mv_t_dodge_c"));
+		Act([=, this]() { Dilate(1.0f); Reset(); Beside(false); });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 38)
 	{
 		CaptureHud();   // the HUD in play (SOPlayerControllerHudDev.cpp)

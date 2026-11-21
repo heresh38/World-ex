@@ -268,6 +268,32 @@ def clips(b):
                       (.30, brake(-.04, .03, 2, -1, 6, 22)), (.5, idle_pose(b, 0.0))], ease=smooth)
         return stop.at(t, dict(chest=.02, head=.04, arm=.03, forearm=.05, hand=.07))
 
+    # --- the dodge (the owner's movement guide, 2026-11-20: "quick evasive movement"): a step out of the line, 0.32 s.
+    # The game bursts the body along the stick (USOCharacterMovementComponent, the Dodge mode); the clip is the body
+    # thrown that way IN PLACE: the leg on that side out to catch it, bent, the other pushing and then drawn in, the
+    # trunk leaning with it, the head level, the hands kept for the gun (the arm IK holds it)
+    def dodge(dx, dy):
+        """dx: -1 his left .. 1 his right; dy: -1 back .. 1 ahead (one of them)"""
+        lat = -dx                                            # + = his left (the feet's x)
+        lead = ("L" if dx < 0 else "R") if dx != 0 else "R"
+        def lunge(k):
+            p = Pose()
+            for s, sx in gait.SIDES:
+                a = b.ankle[s]
+                x = sx * .14 * b.scale + (lat * .24 * k if s == lead else lat * .08 * k) * b.scale
+                y = a.y + (-dy * .18 * k if s == lead else dy * .10 * k) * b.scale
+                p.feet[s] = Foot(b.planted(s, (x, y), 0.0, 10), 0.0, 10)
+            trunk(p, hips=dy * 7 * k + 3 * k, spine=2 * k, chest=1.5 * k, head=-(dy * 7 + 3) * k * .7,
+                  roll=lat * 11 * k, z=-.09 * k, x=lat * .06 * k, y=-dy * .06 * k)
+            for s in "LR":
+                arms(b, p, s, 18, 14, 40, curl=LOOSE)
+            p.knee_out = {"L": .06, "R": .06}
+            return p
+        def Dodge(t):
+            track = Track([(0.0, lunge(.15)), (.10, lunge(1.0)), (.22, lunge(.55)), (.32, lunge(.1))], ease=smooth)
+            return track.at(t, dict(chest=.02, head=.04, arm=.03, forearm=.05, hand=.07))
+        return Dodge
+
     # --- over and onto things: poses by how far through the move the body is ----------------------------------------
     def Vault(t):
         def run_in():
@@ -649,6 +675,8 @@ def clips(b):
             "Jump": (Jump, .5, False), "Land": (Land, .5, False), "Stop": (Stop, .5, False), "Vault": (Vault, 1.0, False), "Mantle": (Mantle, 1.0, False),
             "Climb": (Climb, 1.0, False), "Crouch": (Crouch, 7.2, True), "CrouchWalk": (CrouchWalk, crouch.T, True),
             "Slide": (Slide, .8, True), "Death": (Death, 1.2, False),
+            "DodgeL": (dodge(-1, 0), .32, False), "DodgeR": (dodge(1, 0), .32, False), "DodgeB": (dodge(0, -1), .32, False),
+            "DodgeF": (dodge(0, 1), .32, False),
             "Throw": (Throw, .7, False), "Strike": (Strike, .6, False), "Brace": (Brace, .9, False), "Slam": (Slam, 1.0, False),
             "FistGuard": (FistGuard, 2.4, True), "Jab": (Jab, .40, False), "Cross": (Cross, .50, False), "Hook": (Hook, .55, False), "Haymaker": (Haymaker, .95, False), "BladeGuard": (BladeGuard, 2.8, True), "SlashA": (SlashA, .50, False), "SlashB": (SlashB, .50, False), "Thrust": (Thrust, .55, False), "Cleave": (Cleave, 1.0, False),
             "Uppercut": (Uppercut, .70, False), "Rising": (Rising, .72, False), "Sweep": (Sweep, .55, False),

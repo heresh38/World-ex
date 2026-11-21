@@ -19,7 +19,7 @@
 
 namespace
 {
-	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Crouch, CrouchWalk, Stop, Count };
+	enum ELayer { Idle = 0, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault, Mantle, Climb, Crouch, CrouchWalk, Stop, Dodge, Count };
 }
 
 void USOLocomotionAnimInstance::Flinch(float Roll, float Pitch)
@@ -186,6 +186,18 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		LandImpact = Lander ? Lander->GetLastLandSpeed() : 0.0f;
 		const USOCharacterMovementComponent* SOMove = Cast<USOCharacterMovementComponent>(Move);
 		bSliding = SOMove && SOMove->IsSliding();
+		const bool bWasDodging = bDodging;
+		bDodging = SOMove && SOMove->IsDodging();
+		if (bDodging && !bWasDodging)
+		{
+			// the clip for the way it goes: the body's left or right, back, or ahead
+			const FVector Dir = SOMove->GetDodgeDir();
+			const float Side = static_cast<float>(FVector::DotProduct(Dir, Character->GetActorRightVector()));
+			const float Fore = static_cast<float>(FVector::DotProduct(Dir, Character->GetActorForwardVector()));
+			ActiveDodge = FMath::Abs(Side) > 0.5f ? (Side > 0.0f ? Clips.DodgeR : Clips.DodgeL) : (Fore < 0.0f ? Clips.DodgeB : Clips.DodgeF);
+			DodgeTime = 0.0f;
+		}
+		DodgeTime += DeltaSeconds;
 		bMantling = SOMove && SOMove->IsMantling();
 		TraversalAlpha = SOMove ? SOMove->GetMantleAlpha() : 0.0f;
 		TraversalKind = !bMantling ? 0 : (SOMove->IsVaulting() ? 1 : 2);
@@ -471,6 +483,17 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			}
 			Target[Land] = Landing;
 		}
+		// the dodge over whatever the legs are doing: its clip whole while the burst runs, fading as it plays out
+		const float DodgeLength = ActiveDodge ? ActiveDodge->GetPlayLength() : 0.0f;
+		const float Dodging = DodgeLength > 0.0f && DodgeTime < DodgeLength ? 1.0f - FMath::SmoothStep(DodgeLength * 0.55f, DodgeLength, DodgeTime) : 0.0f;
+		if (Dodging > 0.0f)
+		{
+			for (float& T : Target)
+			{
+				T *= 1.0f - Dodging;
+			}
+			Target[Dodge] = Dodging;
+		}
 	}
 
 	// The first-person arms holding a gun play no walk, run or landing: the gun has its own bob and sway, and shoulders
@@ -576,6 +599,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	Times[Crouch] += DeltaSeconds;
 	Times[Land] = LandTime;
 	Times[Stop] = StopTime;
+	Times[Dodge] = DodgeTime;
 	// over and onto things: the pose for how far through the move the body is
 	for (const int32 Layer : { static_cast<int32>(Vault), static_cast<int32>(Mantle), static_cast<int32>(Climb) })
 	{
@@ -1900,7 +1924,7 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	const UAnimSequenceBase* ClipList[Count] = { Instance->Clips.Idle, Instance->Clips.Walk, Instance->Clips.Run, Instance->Clips.Jump,
 		Instance->Clips.Death, Instance->ActiveAttack ? Instance->ActiveAttack.Get() : Instance->Clips.Attack.Get(), Instance->Clips.Slide, Instance->FidgetClip,
 		Instance->Clips.Stroll, Instance->Clips.Land, Instance->Clips.Vault, Instance->Clips.Mantle, Instance->Clips.Climb,
-		Instance->Clips.Crouch, Instance->Clips.CrouchWalk, Instance->Clips.Stop };
+		Instance->Clips.Crouch, Instance->Clips.CrouchWalk, Instance->Clips.Stop, Instance->GetActiveDodge() };
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FSOLocomotionLayer& Layer = Layers[i];

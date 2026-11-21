@@ -40,6 +40,18 @@ void USOViewmodelComponent::BeginPlay()
 	}
 }
 
+namespace
+{
+	/** A damped spring: X toward Target with its own velocity V (Omega: how fast, Zeta: 1 = no overshoot, less = a
+	 *  little; the owner, 2026-11-20: "very fluid, like water": nothing moves on a straight line and stops dead). */
+	void Spring(float& X, float& V, float Target, float Omega, float Zeta, float Dt)
+	{
+		const float Accel = Omega * Omega * (Target - X) - 2.0f * Zeta * Omega * V;
+		V += Accel * Dt;
+		X += V * Dt;
+	}
+}
+
 void USOViewmodelComponent::Kick(float Strength)
 {
 	KickBack = FMath::Min(0.12f, KickBack + 0.03f * Strength);
@@ -68,8 +80,9 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float A = Character->GetAimProgress();
 	Ads = A * A * (3.0f - 2.0f * A);
 	const FVector2D Look = Character->GetLook() ? Character->GetLook()->GetLastDelta() / 0.07f : FVector2D::ZeroVector; // ~mouse counts (0.07 deg each)
-	SwayX += ((-Look.X * 0.0006f) - SwayX) * FMath::Min(1.0f, Dt * 10.0f);
-	SwayY += ((Look.Y * 0.0006f) - SwayY) * FMath::Min(1.0f, Dt * 10.0f);
+	// the gun trails a turn and settles with a touch of overshoot (a spring; on a straight exponential it stopped dead)
+	Spring(SwayX, SwayVX, -Look.X * 0.0006f, 14.0f, 0.75f, Dt);
+	Spring(SwayY, SwayVY, Look.Y * 0.0006f, 14.0f, 0.75f, Dt);
 	const float Speed = Character->GetVelocity().Size2D() / 100.0f; // m/s
 	const bool bGrounded = Move && Move->IsMovingOnGround();
 	const bool bRunning = (Move && Move->IsSprinting()) || Character->IsDisplayCarry();
@@ -83,23 +96,37 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	KickBack *= FMath::Pow(0.0005f, Dt);
 	KickPitch *= FMath::Pow(0.0008f, Dt);
 	Lower = FMath::Max(0.0f, Lower - Dt * 4.0f);
-	RunK = FMath::FInterpConstantTo(RunK, bRunning ? 1.0f : 0.0f, Dt, 1.0f / FMath::Max(Data ? Data->SprintToFireTime : 0.2f, 0.05f));
-	const float RunT = RunK * RunK * (3.0f - 2.0f * RunK);
+	// the sprint carry: the gun swings down into it and back up in the gun's sprint-to-fire time, as a spring (it ran
+	// on a straight line before: a machine's motion)
+	Spring(RunK, RunV, bRunning ? 1.0f : 0.0f, 4.2f / FMath::Max(Data ? Data->SprintToFireTime : 0.2f, 0.05f), 0.82f, Dt);
+	RunK = FMath::Clamp(RunK, -0.15f, 1.15f);
+	const float RunC = FMath::Clamp(RunK, 0.0f, 1.0f);
+	const float RunT = RunC * RunC * (3.0f - 2.0f * RunC) + (RunK - RunC) * 0.5f;   // (the overshoot kept, halved)
+	// standing: the gun rises and falls with the breath (the guide's idle: "subtle breathing"), gone on the move
+	Breath = Speed < 0.3f && bGrounded ? Breath + Dt : FMath::Max(0.0f, Breath - Dt * 3.0f);
+	const float BreathK = FMath::Min(Breath / 1.5f, 1.0f) * (1.0f - Ads * 0.85f);
+	const float BreathY = 0.0022f * BreathK * FMath::Sin(Character->GetWorld()->GetTimeSeconds() * (2.0f * PI / 3.6f));
+	const float BreathRoll = 0.006f * BreathK * FMath::Sin(Character->GetWorld()->GetTimeSeconds() * (2.0f * PI / 3.6f) + 0.9f);
 
 	// Movement inertia: the gun trails strafes and landings, tucks in for a slide, drops away for a mantle.
 	const FVector Vel = Character->GetVelocity();
-	const float Strafe = FMath::Clamp(static_cast<float>(FVector::DotProduct(Vel, Character->GetActorRightVector())) / 440.0f, -1.2f, 1.2f);
-	StrafeK = FMath::FInterpTo(StrafeK, bGrounded ? Strafe : Strafe * 0.5f, Dt, 6.0f);
+	const float Strafe = FMath::Clamp(static_cast<float>(FVector::DotProduct(Vel, Character->GetActorRightVector())) / 440.0f, -1.6f, 1.6f);
+	// the trail: the gun is left behind by a strafe or a dodge and swings back (a spring with a little overshoot)
+	Spring(StrafeK, StrafeV, bGrounded ? Strafe : Strafe * 0.5f, 9.0f, 0.62f, Dt);
+	StrafeK = FMath::Clamp(StrafeK, -2.0f, 2.0f);
 	const float AirLift = Move && Move->IsFalling() ? FMath::Clamp(static_cast<float>(Vel.Z) / 900.0f, -1.0f, 1.0f) : 0.0f;
 	AirK = FMath::FInterpTo(AirK, AirLift, Dt, 8.0f);
-	SlideK = FMath::FInterpConstantTo(SlideK, Move && Move->IsSliding() ? 1.0f : 0.0f, Dt, 5.0f);
-	MantleK = FMath::FInterpConstantTo(MantleK, Move && Move->IsMantling() ? 1.0f : 0.0f, Dt, 7.0f);
-	const float SlideT = SlideK * SlideK * (3.0f - 2.0f * SlideK), MantleT = MantleK * MantleK * (3.0f - 2.0f * MantleK);
+	Spring(SlideK, SlideV, Move && Move->IsSliding() ? 1.0f : 0.0f, 13.0f, 0.85f, Dt);
+	Spring(MantleK, MantleV, Move && Move->IsMantling() ? 1.0f : 0.0f, 16.0f, 0.9f, Dt);
+	SlideK = FMath::Clamp(SlideK, -0.1f, 1.1f);
+	MantleK = FMath::Clamp(MantleK, -0.1f, 1.1f);
+	const float SlideT = SlideK, MantleT = FMath::Clamp(MantleK, 0.0f, 1.0f);
+	const float DodgeT = Move && Move->IsDodging() ? FMath::Sin(Move->GetDodgeAlpha() * PI) : 0.0f;
 	const float Free = 1.0f - Ads * 0.85f;
 	const float InX = (-StrafeK * 0.006f + SlideT * 0.008f) * Free;
-	const float InY = (Character->GetLandDip() * 0.0025f - AirK * 0.008f - SlideT * 0.012f - MantleT * 0.09f) * Free;
-	const float InPitch = (-MantleT * 0.5f + AirK * 0.03f) * Free;
-	const float InRoll = (StrafeK * 0.05f + SlideT * 0.22f + MantleT * 0.35f) * Free;
+	const float InY = (Character->GetLandDip() * 0.0025f - AirK * 0.008f - SlideT * 0.012f - MantleT * 0.09f - DodgeT * 0.012f) * Free + BreathY;
+	const float InPitch = (-MantleT * 0.5f + AirK * 0.03f + DodgeT * 0.06f) * Free;
+	const float InRoll = (StrafeK * 0.05f + SlideT * 0.22f + MantleT * 0.35f) * Free + BreathRoll;
 
 	// Reloads: the gun comes up and cants toward the view so the magazine well and the hands are in sight
 	// (it used to stay at the hip, the work happening under the camera).

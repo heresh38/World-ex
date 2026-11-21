@@ -57,6 +57,7 @@ namespace SOInputPaths
 	static const TCHAR* Jump = TEXT("/Game/Input/IA_Jump.IA_Jump");
 	static const TCHAR* Sprint = TEXT("/Game/Input/IA_Sprint.IA_Sprint");
 	static const TCHAR* Crouch = TEXT("/Game/Input/IA_Crouch.IA_Crouch");
+	static const TCHAR* Dodge = TEXT("/Game/Input/IA_Dodge.IA_Dodge");
 	static const TCHAR* ToggleView = TEXT("/Game/Input/IA_ToggleView.IA_ToggleView");
 	static const TCHAR* Interact = TEXT("/Game/Input/IA_Interact.IA_Interact");
 	static const TCHAR* Fire = TEXT("/Game/Input/IA_Fire.IA_Fire");
@@ -508,6 +509,10 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 		Anim->Clips.Crouch = Own(TEXT("Crouch"));
 		Anim->Clips.CrouchWalk = Own(TEXT("CrouchWalk"));
 		Anim->Clips.Stop = Own(TEXT("Stop"));
+		Anim->Clips.DodgeL = Own(TEXT("DodgeL"));
+		Anim->Clips.DodgeR = Own(TEXT("DodgeR"));
+		Anim->Clips.DodgeB = Own(TEXT("DodgeB"));
+		Anim->Clips.DodgeF = Own(TEXT("DodgeF"));
 		Anim->Clips.StrollSpeed = 150.0f;
 		Anim->Clips.CrouchSpeed = GetCharacterMovement() ? GetCharacterMovement()->MaxWalkSpeedCrouched : 270.0f;
 		Anim->Clips.Fidgets.Reset();
@@ -1058,15 +1063,23 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	for (UCameraComponent* Camera : { FirstPersonCamera.Get(), ThirdPersonCamera.Get() })
 	{
 		Camera->ClearAdditiveOffset();
-		const float Roll = Camera == FirstPersonCamera.Get() ? CameraRoll : 0.0f;
-		if (RecoilKick > 0.0f || FMath::Abs(Roll) > 1e-3f || FMath::Abs(AbilityKick) > 1e-3f)
+		const bool bEyeCam = Camera == FirstPersonCamera.Get();
+		const float Roll = bEyeCam ? CameraRoll + ShakeRoll : 0.0f;
+		const float Pitch = GetRecoilPitch() + AbilityKick + (bEyeCam ? FeelPitch : 0.0f);
+		if (FMath::Abs(Pitch) > 1e-3f || FMath::Abs(Roll) > 1e-3f)
 		{
-			Camera->AddAdditiveOffset(FTransform(FRotator(GetRecoilPitch() + AbilityKick, 0.0f, Roll)), 0.0f);
+			Camera->AddAdditiveOffset(FTransform(FRotator(Pitch, 0.0f, Roll)), 0.0f);
 		}
 	}
 
-	// Eye height eases across crouch / slide transitions; steps, landings and the head bob ride on top.
-	EyeOffset = FMath::FInterpTo(EyeOffset, GetTargetEyeOffset(), DeltaSeconds, EyeHeightInterpSpeed);
+	// Eye height eases across crouch / slide transitions (a damped spring: it drops into a slide and comes up out of
+	// it with a settle, the owner's "fluid, like water"); steps, landings and the head bob ride on top.
+	{
+		const float Dt = FMath::Min(DeltaSeconds, 0.05f);
+		const float Omega = EyeHeightInterpSpeed * 1.1f, Zeta = 0.86f;
+		EyeVel += (Omega * Omega * (GetTargetEyeOffset() - EyeOffset) - 2.0f * Zeta * Omega * EyeVel) * Dt;
+		EyeOffset += EyeVel * Dt;
+	}
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset) + FeelOffset);
 	// The first-person arms hang from the eye, not from the capsule. Crouched (or sliding) the capsule's centre drops
 	// and the eye comes down to it: left on the capsule, the arms' shoulders ended up above the camera and the arms
@@ -1175,6 +1188,7 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleCrouchPressed);
 		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleCrouchReleased);
 	}
+	if (UInputAction* A = Load(DodgeAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleDodgePressed); }
 	if (UInputAction* A = Load(ToggleViewAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleToggleView); }
 	if (UInputAction* A = Load(InteractAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInteract); }
 	if (UInputAction* A = Load(FireAction))
@@ -1332,6 +1346,14 @@ void ASOCharacter::HandleCrouchReleased()
 	else
 	{
 		UnCrouch();
+	}
+}
+
+void ASOCharacter::HandleDodgePressed()
+{
+	if (USOCharacterMovementComponent* Move = GetSOMovement(); Move && !bDead)
+	{
+		Move->SetWantsToDodge(true);
 	}
 }
 
@@ -2023,9 +2045,18 @@ void ASOCharacter::HandleMovementEvent(ESOMovementEvent Event, float Strength)
 		{
 			KickDust(Hard, Flat);
 		}
+		if (Hard > 0.2f)
+		{
+			ShakeRollVel += LandShakeRoll * 36.0f * Hard;        // a knock the view wobbles out of (UpdateCameraFeel)
+		}
 		StepDistance = 0.0f;
 		break;
 	}
+	case ESOMovementEvent::DodgeStarted:
+		USOSoundLibrary::PlayFor(this, TEXT("move_airjump"), Feet, 0.4f, ESOSoundRange::Near, 0.05f);
+		LandDipVel -= 16.0f;                                     // the push off
+		KickDust(0.4f, -Flat);
+		break;
 	case ESOMovementEvent::SlideStarted:
 		if (HasAuthority())
 		{
@@ -2075,7 +2106,7 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 		StepSmooth = bShoulder ? FMath::FInterpTo(StepSmooth, 0.0f, Dt, 11.0f) : 0.0f;
 		ThirdPersonBoom->TargetOffset = FVector(0.0f, 0.0f, StepSmooth);
 		FeelOffset = FVector::ZeroVector;
-		LandDip = LandDipVel = CameraRoll = FovBoost = BobAmp = 0.0f;
+		LandDip = LandDipVel = CameraRoll = CameraRollVel = FovBoost = BobAmp = FeelPitch = ShakeRoll = ShakeRollVel = 0.0f;
 		LastFeelZ = Z;
 		bHaveFeelZ = true;
 		return;
@@ -2120,19 +2151,35 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	const float BobZ = -FMath::Abs(FMath::Sin(BobPhase)) * BobAmp + BobAmp * 0.5f;
 	const float BobY = FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.45f;
 
-	// 4. Roll: into a slide, a touch toward a strafe, a whisper with the stride.
+	// 4. Roll: into a slide, into a dodge, a lean toward a strafe (the guide's 3-5 degrees), a whisper with the stride;
+	//    and a hard landing's wobble (a spring knocked by the impact, settling in a cycle or two).
 	const FVector Right = GetActorRightVector();
-	const float Strafe = Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(FVector::DotProduct(Velocity, Right)) / 440.0f, -1.0f, 1.0f) : 0.0f;
+	const float Strafe = Move->IsMovingOnGround() && !Move->IsDodging() ? FMath::Clamp(static_cast<float>(FVector::DotProduct(Velocity, Right)) / 440.0f, -1.0f, 1.0f) : 0.0f;
 	const float VaultArc = Move->IsVaulting() ? FMath::Sin(Move->GetMantleAlpha() * PI) : 0.0f;
+	const float DodgeSide = Move->IsDodging() ? static_cast<float>(FVector::DotProduct(Move->GetDodgeDir(), Right)) * FMath::Sin(Move->GetDodgeAlpha() * PI) : 0.0f;
 	const float WantRoll = (Move->IsSliding() ? -SlideCameraRoll : 0.0f) + VaultArc * VaultCameraRoll + Strafe * StrafeCameraRoll * (1.0f - Ads)
-		+ FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.25f;
-	CameraRoll = FMath::FInterpTo(CameraRoll, WantRoll, Dt, 7.0f);
+		+ DodgeSide * DodgeCameraRoll + FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.25f;
+	{
+		// a spring (at a straight exponential the lean stopped dead: a machine's motion)
+		const float Omega = 9.0f, Zeta = 0.78f, SDt = FMath::Min(Dt, 0.05f);
+		CameraRollVel += (Omega * Omega * (WantRoll - CameraRoll) - 2.0f * Zeta * Omega * CameraRollVel) * SDt;
+		CameraRoll += CameraRollVel * SDt;
+	}
+	const float ShakeStiff = 520.0f, ShakeDamp = 2.0f * FMath::Sqrt(ShakeStiff) * 0.32f;
+	ShakeRollVel += (-ShakeStiff * ShakeRoll - ShakeDamp * ShakeRollVel) * Dt;
+	ShakeRoll = FMath::Clamp(ShakeRoll + ShakeRollVel * Dt, -4.0f, 4.0f);
 
-	// 5. Field of view widens with speed.
-	const float WantFov = Move->IsSliding() ? SlideFovBoost : Move->IsVaulting() ? SprintFovBoost : (Move->IsSprinting() ? SprintFovBoost * FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f);
+	// 5. Field of view widens with speed (the guide: walk 95, sprint 103-108), and the view leans into a sprint.
+	const float SprintK = Move->IsSprinting() ? FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f;
+	const float WantFov = Move->IsSliding() ? SlideFovBoost : Move->IsVaulting() ? SprintFovBoost : Move->IsDodging() ? DodgeFovBoost : SprintFovBoost * SprintK;
 	FovBoost = FMath::FInterpTo(FovBoost, WantFov, Dt, 5.0f);
+	FeelPitch = FMath::FInterpTo(FeelPitch, SprintCameraPitch * SprintK * (1.0f - Ads), Dt, 4.0f);
 
-	FeelOffset = FVector(0.0f, BobY, StepSmooth + LandDip + BobZ);
+	// 6. Standing still the view breathes (the guide's idle: "subtle breathing, small weight shifts"): a few millimetres
+	//    over 3.6 seconds, gone the moment the body moves.
+	const float Still = FMath::Clamp(1.0f - Speed / 30.0f, 0.0f, 1.0f) * (bGrounded ? 1.0f : 0.0f) * (1.0f - Ads * 0.7f);
+	const float BreathZ = 0.35f * Still * FMath::Sin(GetWorld()->GetTimeSeconds() * (2.0f * PI / 3.6f));
+	FeelOffset = FVector(0.0f, BobY, StepSmooth + LandDip + BobZ + BreathZ);
 }
 
 void ASOCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)

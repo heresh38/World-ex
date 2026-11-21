@@ -66,6 +66,16 @@ struct SOCHARACTER_API FSOLocomotionClips
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clips")
 	TObjectPtr<UAnimSequenceBase> Climb;
+	/** The dodge: a step out of the line to his left, right, back or ahead (0.32 s, played over the gait by the
+	 *  movement's dodge; a body without them dodges on its gait and lean). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Clips")
+	TObjectPtr<UAnimSequenceBase> DodgeL;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Clips")
+	TObjectPtr<UAnimSequenceBase> DodgeR;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Clips")
+	TObjectPtr<UAnimSequenceBase> DodgeB;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Clips")
+	TObjectPtr<UAnimSequenceBase> DodgeF;
 
 	/** Idle variations (Fidget1..n): one plays now and then while standing still and not aiming; each starts and ends
 	 *  on the idle pose. */
@@ -111,7 +121,7 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 
 	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget, 8 Stroll, 9 Land, 10 Vault, 11 Mantle,
 	 *  12 Climb, 13 Crouch, 14 CrouchWalk, 15 Stop */
-	FSOLocomotionLayer Layers[16];
+	FSOLocomotionLayer Layers[17];
 
 	// Held gun (players): copied from the instance each update.
 	bool bHold = false;
@@ -239,6 +249,7 @@ public:
 	bool bInAir = false;
 	bool bDead = false;
 	bool bSliding = false;
+	bool bDodging = false;
 	bool bMantling = false;
 
 	// --- Body motion (how Unreal's sample characters stay fluid without a clip per direction) ---
@@ -296,6 +307,8 @@ public:
 	/** How far the hips are sunk below the clip's (cm) and the body's pitch from leaning (deg): for tests. */
 	float GetPelvisDrop() const { return PelvisDrop; }
 	float GetLeanPitch() const { return LeanPitch; }
+	/** The dodge's clip, picked as it began (for the proxy). */
+	const UAnimSequenceBase* GetActiveDodge() const { return ActiveDodge; }
 
 	/** A blow: the trunk is knocked this far (degrees: roll to its left, pitch back) and comes back by itself.
 	 *  It lies over whatever clip is playing: nothing is interrupted. */
@@ -400,8 +413,8 @@ public:
 
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
 	 *  Mantle, Climb, Crouch, CrouchWalk, Stop. */
-	float Weights[16] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-	float Times[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Weights[17] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Times[17] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 	/** Seconds of standing still before an idle variation, picked between these (random each time). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
@@ -468,13 +481,17 @@ protected:
 	bool bLanded = false;
 	float LandImpact = 0.0f;
 	/** Linear cross-fade progress per layer; the weights are its eased shape. */
-	float Ramp[16] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float Ramp[17] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	/** Where in the jump clip the air pose is read (s): take-off at 0, the tuck at JumpTuckTime, the reach for the
 	 *  ground at the end. */
 	float JumpPose = 0.0f;
 	/** The landing layer: how strong this landing is (0..1) and how far through its clip. */
 	float LandStrength = 0.0f;
 	float LandTime = 100.0f;
+	/** The dodge's clip (picked by its direction as it begins) and the time into it. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> ActiveDodge;
+	float DodgeTime = 100.0f;
 	/** 0 standing, 1 crouched: the hips sink over bent legs and the chest comes forward. */
 	float CrouchAlpha = 0.0f;
 	/** Crouched on the ground right now (the crouch clips play). */

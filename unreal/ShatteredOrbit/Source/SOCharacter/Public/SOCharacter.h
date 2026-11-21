@@ -135,19 +135,34 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Camera")
 	float HeadBobScale = 1.0f;
 
-	/** Extra field of view while sprinting / sliding (degrees, eased in and out). */
+	/** Extra field of view while sprinting / sliding / dodging (degrees, eased in and out). The owner's movement guide
+	 *  (2026-11-20): walk 95, sprint 103-108. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	float SprintFovBoost = 5.0f;
+	float SprintFovBoost = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	float SlideFovBoost = 8.0f;
+	float SlideFovBoost = 10.0f;
 
-	/** The view tilts this many degrees into a slide, and a little toward a strafe. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float DodgeFovBoost = 4.0f;
+
+	/** The view tilts this many degrees into a slide, toward a strafe (the guide: a lean of 3-5 degrees) and into a dodge. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float SlideCameraRoll = 3.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	float StrafeCameraRoll = 0.7f;
+	float StrafeCameraRoll = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float DodgeCameraRoll = 5.0f;
+
+	/** At a sprint the view leans forward this many degrees (the guide: "camera leans forward"). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float SprintCameraPitch = 1.2f;
+
+	/** A hard landing shakes the view: degrees of roll it is knocked by at the hardest (a wobble that settles). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float LandShakeRoll = 1.6f;
 
 	/** Current camera dip (cm, negative = down) from landings and jumps; the viewmodel lags it a little. */
 	float GetLandDip() const { return LandDip; }
@@ -211,6 +226,8 @@ public:
 	TSoftObjectPtr<UInputAction> SprintAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> CrouchAction;
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> DodgeAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> ToggleViewAction;
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
@@ -299,6 +316,7 @@ public:
 	void HandleSprintReleased();
 	void HandleCrouchPressed();
 	void HandleCrouchReleased();
+	void HandleDodgePressed();
 	void HandleToggleView();
 	void HandleInteract();
 	void HandleFirePressed();
@@ -671,6 +689,11 @@ private:
 	float BobPhase = 0.0f;
 	float BobAmp = 0.0f;
 	float CameraRoll = 0.0f;
+	float CameraRollVel = 0.0f;   // (the roll is a spring: it leans in and settles, never a straight line)
+	float EyeVel = 0.0f;          // (so is the eye's height across crouch, slide and stand)
+	float FeelPitch = 0.0f;       // degrees: the sprint's forward lean
+	float ShakeRoll = 0.0f;       // degrees: a landing's wobble (a spring)
+	float ShakeRollVel = 0.0f;
 	float FovBoost = 0.0f;
 	FVector FeelOffset = FVector::ZeroVector;
 	float CurrentFov = 90.0f;

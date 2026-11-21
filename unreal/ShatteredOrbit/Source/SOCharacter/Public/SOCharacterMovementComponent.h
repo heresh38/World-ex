@@ -11,7 +11,10 @@ enum class ESOCustomMovementMode : uint8
 	None = 0 UMETA(Hidden),
 	Slide = 1,
 	/** Every traversal over or onto an obstacle (see ESOTraversal). */
-	Mantle = 2
+	Mantle = 2,
+	/** A quick step out of the way on the ground (the owner's movement guide, 2026-11-20: "dodge: quick evasive
+	 *  movement"): a burst along the stick (or back, with no stick) that flows into the run. */
+	Dodge = 3
 };
 
 /** How an obstacle is taken. */
@@ -47,6 +50,7 @@ enum class ESOMovementState : uint8
 	/** The moment after touching down. */
 	Land,
 	Slide,
+	Dodge,
 	Vault,
 	Mantle,
 	Climb
@@ -62,6 +66,8 @@ enum class ESOMovementEvent : uint8
 	Landed,
 	SlideStarted,
 	SlideEnded,
+	/** Strength: which way, as the dodge's direction dotted with the body's right (-1 left .. 1 right; 0 back / ahead). */
+	DodgeStarted,
 	/** Strength: the speed it was entered at (cm/s). */
 	VaultStarted,
 	MantleStarted,
@@ -200,10 +206,10 @@ public:
 
 	/** Velocity decays by exp(-SlideFriction * t). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Slide")
-	float SlideFriction = 1.35f;
+	float SlideFriction = 1.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Slide", meta = (Units = "s"))
-	float SlideMaxTime = 0.9f;
+	float SlideMaxTime = 1.1f;              // (the owner's movement guide: a slide of 0.8-1.2 s)
 
 	/** The slide ends below this speed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Slide", meta = (Units = "cm/s"))
@@ -219,6 +225,25 @@ public:
 	/** Downhill steeper than this (degrees) a slide keeps going past SlideMaxTime while it still has speed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Slide")
 	float SlideDownhillAngle = 8.0f;
+
+	// --- Dodge: a burst on the ground along the stick (back, with none), then the run (the owner's movement guide:
+	// "quick evasive movement"; "fluid transitions": it never stops the body) ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Dodge", meta = (Units = "cm/s"))
+	float DodgeSpeed = 1150.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Dodge", meta = (Units = "s"))
+	float DodgeTime = 0.22f;
+
+	/** The speed it leaves the dodge with, along the dodge (the run's: it flows on). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Dodge", meta = (Units = "cm/s"))
+	float DodgeExitSpeed = 440.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Dodge", meta = (Units = "s"))
+	float DodgeCooldown = 0.9f;
+
+	/** A press in the air or mid-slide is kept this long and taken as soon as the feet allow. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Dodge", meta = (Units = "s"))
+	float DodgeBufferTime = 0.15f;
 
 	// --- Vault (over a thin obstacle) ---
 	/** Obstacles up to this high are a low vault. */
@@ -328,6 +353,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SO|Movement")
 	void SetWantsToAim(bool bWants) { bWantsToAim = bWants; }
 
+	/** The dodge key was pressed (taken on the next move that can; kept DodgeBufferTime if it cannot yet). */
+	UFUNCTION(BlueprintCallable, Category = "SO|Movement")
+	void SetWantsToDodge(bool bWants) { bWantsToDodge = bWants; }
+
 	bool WantsToAim() const { return bWantsToAim; }
 
 	bool WantsToSprint() const { return bWantsToSprint; }
@@ -348,6 +377,14 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SO|Movement")
 	bool IsSliding() const { return IsCustomMode(ESOCustomMovementMode::Slide); }
+
+	UFUNCTION(BlueprintPure, Category = "SO|Movement")
+	bool IsDodging() const { return IsCustomMode(ESOCustomMovementMode::Dodge); }
+
+	/** The dodge's direction (flat, unit) and 0..1 through it (0 when not dodging). */
+	FVector GetDodgeDir() const { return DodgeDir; }
+	float GetDodgeAlpha() const { return IsDodging() && DodgeTime > 0.0f ? FMath::Clamp(DodgeElapsed / DodgeTime, 0.0f, 1.0f) : 0.0f; }
+	float GetDodgeCooldownLeft() const { return DodgeCooldownLeft; }
 
 	/** In any traversal (vault, mantle, climb). */
 	UFUNCTION(BlueprintPure, Category = "SO|Movement")
@@ -394,6 +431,8 @@ protected:
 
 	void EnterSlide();
 	void PhysSlide(float DeltaTime, int32 Iterations);
+	void EnterDodge();
+	void PhysDodge(float DeltaTime, int32 Iterations);
 	void PhysMantle(float DeltaTime, int32 Iterations);
 
 	/** Where the body is Alpha (0..1) through the current traversal, in the frame it began in. */
@@ -408,6 +447,12 @@ protected:
 	uint8 bWantsToSprint : 1;
 	uint8 bWantsToMantle : 1;
 	uint8 bWantsToAim : 1;
+	uint8 bWantsToDodge : 1;
+
+	float DodgeElapsed = 0.0f;
+	float DodgeCooldownLeft = 0.0f;
+	float DodgeBufferLeft = 0.0f;
+	FVector DodgeDir = FVector::ForwardVector;
 
 	float FallTime = 0.0f;
 	float SlideElapsed = 0.0f;

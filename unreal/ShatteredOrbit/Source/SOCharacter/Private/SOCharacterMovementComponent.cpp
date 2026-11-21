@@ -19,6 +19,11 @@ public:
 	uint8 bSavedWantsToSprint : 1;
 	uint8 bSavedWantsToMantle : 1;
 	uint8 bSavedWantsToAim : 1;
+	uint8 bSavedWantsToDodge : 1;
+	float SavedDodgeElapsed = 0.0f;
+	float SavedDodgeCooldownLeft = 0.0f;
+	float SavedDodgeBufferLeft = 0.0f;
+	FVector SavedDodgeDir = FVector::ForwardVector;
 	float SavedFallTime = 0.0f;
 	float SavedSlideElapsed = 0.0f;
 	float SavedSlideCooldownLeft = 0.0f;
@@ -43,6 +48,7 @@ public:
 		: bSavedWantsToSprint(false)
 		, bSavedWantsToMantle(false)
 		, bSavedWantsToAim(false)
+		, bSavedWantsToDodge(false)
 	{
 	}
 
@@ -52,6 +58,11 @@ public:
 		bSavedWantsToSprint = false;
 		bSavedWantsToMantle = false;
 		bSavedWantsToAim = false;
+		bSavedWantsToDodge = false;
+		SavedDodgeElapsed = 0.0f;
+		SavedDodgeCooldownLeft = 0.0f;
+		SavedDodgeBufferLeft = 0.0f;
+		SavedDodgeDir = FVector::ForwardVector;
 		SavedFallTime = 0.0f;
 		SavedSlideElapsed = 0.0f;
 		SavedSlideCooldownLeft = 0.0f;
@@ -88,6 +99,10 @@ public:
 		{
 			Result |= FLAG_Custom_2;
 		}
+		if (bSavedWantsToDodge)
+		{
+			Result |= FLAG_Custom_3;
+		}
 		return Result;
 	}
 
@@ -95,7 +110,8 @@ public:
 	{
 		const FSOSavedMove* Other = static_cast<const FSOSavedMove*>(NewMove.Get());
 		if (bSavedWantsToSprint != Other->bSavedWantsToSprint || bSavedWantsToMantle != Other->bSavedWantsToMantle
-			|| bSavedWantsToAim != Other->bSavedWantsToAim || SavedTraversal != Other->SavedTraversal)
+			|| bSavedWantsToAim != Other->bSavedWantsToAim || bSavedWantsToDodge != Other->bSavedWantsToDodge
+			|| SavedTraversal != Other->SavedTraversal)
 		{
 			return false;
 		}
@@ -110,6 +126,11 @@ public:
 			bSavedWantsToSprint = Move->bWantsToSprint;
 			bSavedWantsToMantle = Move->bWantsToMantle;
 			bSavedWantsToAim = Move->bWantsToAim;
+			bSavedWantsToDodge = Move->bWantsToDodge;
+			SavedDodgeElapsed = Move->DodgeElapsed;
+			SavedDodgeCooldownLeft = Move->DodgeCooldownLeft;
+			SavedDodgeBufferLeft = Move->DodgeBufferLeft;
+			SavedDodgeDir = Move->DodgeDir;
 			SavedFallTime = Move->FallTime;
 			SavedSlideElapsed = Move->SlideElapsed;
 			SavedSlideCooldownLeft = Move->SlideCooldownLeft;
@@ -138,6 +159,10 @@ public:
 		if (USOCharacterMovementComponent* Move = Cast<USOCharacterMovementComponent>(C->GetCharacterMovement()))
 		{
 			Move->FallTime = SavedFallTime;
+			Move->DodgeElapsed = SavedDodgeElapsed;
+			Move->DodgeCooldownLeft = SavedDodgeCooldownLeft;
+			Move->DodgeBufferLeft = SavedDodgeBufferLeft;
+			Move->DodgeDir = SavedDodgeDir;
 			Move->SlideElapsed = SavedSlideElapsed;
 			Move->SlideCooldownLeft = SavedSlideCooldownLeft;
 			Move->LandRecoverLeft = SavedLandRecoverLeft;
@@ -182,12 +207,15 @@ USOCharacterMovementComponent::USOCharacterMovementComponent()
 	: bWantsToSprint(false)
 	, bWantsToMantle(false)
 	, bWantsToAim(false)
+	, bWantsToDodge(false)
 {
-	// Fast, responsive and weighty: at run speed in under a tenth of a second, a harder stop than start.
+	// Responsive and weighty: the run in 0.15 s, the stop in 0.10 (the owner's movement guide, 2026-11-20: acceleration
+	// time 0.15 s, deceleration 0.10 s; before, 0.08 and 0.06: "grounded ... heavy and deliberate" asks for a step
+	// into it, a harder stop than start keeps it precise).
 	MaxWalkSpeed = 440.0f;
 	MaxWalkSpeedCrouched = 270.0f;
-	MaxAcceleration = 5500.0f;              // walk speed in ~0.08 s
-	BrakingDecelerationWalking = 7000.0f;   // stop / reverse
+	MaxAcceleration = 3000.0f;              // walk speed in ~0.15 s
+	BrakingDecelerationWalking = 4400.0f;   // stop in ~0.10 s
 	bUseSeparateBrakingFriction = true;
 	BrakingFriction = 0.0f;
 	GroundFriction = 8.0f;
@@ -275,6 +303,10 @@ float USOCharacterMovementComponent::GetUnscaledMaxSpeed() const
 	{
 		return SlideMaxSpeed;
 	}
+	if (IsDodging())
+	{
+		return DodgeSpeed;
+	}
 	if (MovementMode == MOVE_Walking || MovementMode == MOVE_NavWalking)
 	{
 		// a very hard landing: a moment to get the legs back under the body
@@ -299,6 +331,14 @@ float USOCharacterMovementComponent::GetMaxAcceleration() const
 	if (IsSprinting() && Velocity.Size2D() >= MaxWalkSpeed * 0.95f)
 	{
 		return SprintBuildAcceleration;
+	}
+	// into the run on a curve, not a straight line: the first step quick, the arrival at the run's speed soft (the
+	// owner, 2026-11-20: "fluid, like water"); braking is the engine's own (a harder stop than start)
+	if (MovementMode == MOVE_Walking && !Acceleration.IsNearlyZero())
+	{
+		const float Top = FMath::Max(GetMaxSpeed(), 1.0f);
+		const float K = FMath::Clamp(static_cast<float>(Velocity.Size2D()) / Top, 0.0f, 1.0f);
+		return Super::GetMaxAcceleration() * FMath::Lerp(1.4f, 0.55f, FMath::Pow(K, 1.5f));
 	}
 	return Super::GetMaxAcceleration();
 }
@@ -331,13 +371,13 @@ float USOCharacterMovementComponent::GetFallDamage(float ImpactSpeed) const
 
 bool USOCharacterMovementComponent::IsMovingOnGround() const
 {
-	return Super::IsMovingOnGround() || IsSliding();
+	return Super::IsMovingOnGround() || IsSliding() || IsDodging();
 }
 
 bool USOCharacterMovementComponent::CanAttemptJump() const
 {
-	// A slide is crouched, but jumping out of it is allowed (it keeps the momentum).
-	if (IsSliding())
+	// A slide is crouched, but jumping out of it is allowed (it keeps the momentum); so is a jump out of a dodge.
+	if (IsSliding() || IsDodging())
 	{
 		return IsJumpAllowed();
 	}
@@ -397,6 +437,14 @@ void USOCharacterMovementComponent::ProcessLanded(const FHitResult& Hit, float R
 void USOCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 {
 	SlideCooldownLeft = FMath::Max(0.0f, SlideCooldownLeft - DeltaSeconds);
+	DodgeCooldownLeft = FMath::Max(0.0f, DodgeCooldownLeft - DeltaSeconds);
+	DodgeBufferLeft = FMath::Max(0.0f, DodgeBufferLeft - DeltaSeconds);
+	if (bWantsToDodge)
+	{
+		// the press is an edge: taken by the first move that can, or kept a moment (in the air, mid-slide)
+		bWantsToDodge = false;
+		DodgeBufferLeft = DodgeBufferTime;
+	}
 	LandRecoverLeft = FMath::Max(0.0f, LandRecoverLeft - DeltaSeconds);
 	LandStateLeft = FMath::Max(0.0f, LandStateLeft - DeltaSeconds);
 	FallTime = IsFalling() ? FallTime + DeltaSeconds : 0.0f;
@@ -414,6 +462,12 @@ void USOCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float Del
 		&& Velocity.Size2D() >= SlideEnterSpeed)
 	{
 		EnterSlide();
+	}
+	// The dodge: on the feet, not crouched, its cooldown over.
+	if (DodgeBufferLeft > 0.0f && MovementMode == MOVE_Walking && !IsCrouching() && DodgeCooldownLeft <= 0.0f)
+	{
+		DodgeBufferLeft = 0.0f;
+		EnterDodge();
 	}
 
 	// Jump held toward a ledge: take it (works from the ground and in the air). Sprinting into something that can be
@@ -457,6 +511,10 @@ ESOMovementState USOCharacterMovementComponent::ComputeState() const
 	{
 		return ESOMovementState::Slide;
 	}
+	if (IsDodging())
+	{
+		return ESOMovementState::Dodge;
+	}
 	if (IsFalling())
 	{
 		return Velocity.Z > 0.0f && CharacterOwner && CharacterOwner->JumpCurrentCount > 0 ? ESOMovementState::Jump : ESOMovementState::Falling;
@@ -487,6 +545,7 @@ void USOCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 	bWantsToSprint = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
 	bWantsToMantle = (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
 	bWantsToAim = (Flags & FSavedMove_Character::FLAG_Custom_2) != 0;
+	bWantsToDodge = (Flags & FSavedMove_Character::FLAG_Custom_3) != 0;
 }
 
 FNetworkPredictionData_Client* USOCharacterMovementComponent::GetPredictionData_Client() const
@@ -548,9 +607,89 @@ void USOCharacterMovementComponent::PhysCustom(float DeltaTime, int32 Iterations
 	case ESOCustomMovementMode::Mantle:
 		PhysMantle(DeltaTime, Iterations);
 		break;
+	case ESOCustomMovementMode::Dodge:
+		PhysDodge(DeltaTime, Iterations);
+		break;
 	default:
 		Super::PhysCustom(DeltaTime, Iterations);
 		break;
+	}
+}
+
+void USOCharacterMovementComponent::EnterDodge()
+{
+	// along the stick; with no stick, straight back (out of the line of fire)
+	FVector Dir = Acceleration.GetSafeNormal2D();
+	if (Dir.IsNearlyZero() && UpdatedComponent)
+	{
+		Dir = -UpdatedComponent->GetForwardVector().GetSafeNormal2D();
+	}
+	DodgeDir = Dir.IsNearlyZero() ? FVector::ForwardVector : Dir;
+	DodgeElapsed = 0.0f;
+	DodgeCooldownLeft = DodgeCooldown;
+	Velocity = DodgeDir * DodgeSpeed;
+	SetMovementMode(MOVE_Custom, static_cast<uint8>(ESOCustomMovementMode::Dodge));
+	const float Side = UpdatedComponent ? static_cast<float>(FVector::DotProduct(DodgeDir, UpdatedComponent->GetRightVector().GetSafeNormal2D())) : 0.0f;
+	Notify(ESOMovementEvent::DodgeStarted, Side);
+}
+
+void USOCharacterMovementComponent::PhysDodge(float DeltaTime, int32 Iterations)
+{
+	if (DeltaTime < MIN_TICK_TIME || !CharacterOwner || !UpdatedComponent)
+	{
+		return;
+	}
+	float RemainingTime = DeltaTime;
+	while (RemainingTime >= MIN_TICK_TIME && Iterations < MaxSimulationIterations)
+	{
+		++Iterations;
+		const float TimeTick = GetSimulationTimeStep(RemainingTime, Iterations);
+		RemainingTime -= TimeTick;
+		const FVector OldLocation = UpdatedComponent->GetComponentLocation();
+		FFindFloorResult Floor;
+		FindFloor(OldLocation, Floor, false);
+		if (!Floor.IsWalkableFloor())
+		{
+			SetMovementMode(MOVE_Falling);           // off an edge: the burst carries on through the air
+			StartNewPhysics(RemainingTime + TimeTick, Iterations - 1);
+			return;
+		}
+		// the burst: fast at first, easing out to the run's speed by the end (it flows into the run, never stops): the
+		// speed falls on a curve, most of it early
+		const float A = FMath::Clamp(DodgeElapsed / FMath::Max(DodgeTime, 1e-3f), 0.0f, 1.0f);
+		const float Speed = DodgeExitSpeed + (DodgeSpeed - DodgeExitSpeed) * FMath::Square(1.0f - A);
+		Velocity = FVector::VectorPlaneProject(DodgeDir * Speed, Floor.HitResult.ImpactNormal);
+		const FVector Delta = Velocity * TimeTick;
+		FHitResult Hit(1.0f);
+		SafeMoveUpdatedComponent(Delta, UpdatedComponent->GetComponentQuat(), true, Hit);
+		if (Hit.Time < 1.0f)
+		{
+			HandleImpact(Hit, TimeTick, Delta);
+			SlideAlongSurface(Delta, 1.0f - Hit.Time, Hit.Normal, Hit, true);
+		}
+		FindFloor(UpdatedComponent->GetComponentLocation(), CurrentFloor, false);
+		if (!CurrentFloor.IsWalkableFloor())
+		{
+			SetMovementMode(MOVE_Falling);
+			StartNewPhysics(RemainingTime, Iterations);
+			return;
+		}
+		AdjustFloorHeight();
+		SetBaseFromFloor(CurrentFloor);
+		if (!bJustTeleported)
+		{
+			const FVector Moved = UpdatedComponent->GetComponentLocation() - OldLocation;
+			Velocity = FVector::VectorPlaneProject(Moved / TimeTick, CurrentFloor.HitResult.ImpactNormal);
+		}
+		DodgeElapsed += TimeTick;
+		// done, or stopped by a wall: back on the feet at the run's speed along the dodge
+		if (DodgeElapsed >= DodgeTime || Velocity.Size2D() < DodgeExitSpeed * 0.5f)
+		{
+			Velocity = DodgeDir * FMath::Min(static_cast<float>(Velocity.Size2D()), DodgeExitSpeed);
+			SetMovementMode(MOVE_Walking);
+			StartNewPhysics(RemainingTime, Iterations);
+			return;
+		}
 	}
 }
 

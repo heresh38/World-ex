@@ -165,7 +165,12 @@ private:
 	float BobT = 0.0f;
 	float Lower = 1.0f;
 	float RunK = 0.0f;
+	float RunV = 0.0f;       // (the carries, the trail and the sway are springs: a little overshoot, then settled)
 	float StrafeK = 0.0f;
+	float StrafeV = 0.0f;
+	float SwayVX = 0.0f, SwayVY = 0.0f;
+	float SlideV = 0.0f, MantleV = 0.0f;
+	float Breath = 0.0f;     // seconds of standing still: the gun rises and falls with the breath
 	float AirK = 0.0f;
 	float SlideK = 0.0f;
 	float MantleK = 0.0f;
