@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "SOLootTypes.h"
 #include "SOProgression.generated.h"
 
 /**
@@ -54,11 +55,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Upgrade")
 	TArray<float> UpgradeRarityCost = { 1.0f, 1.2f, 1.5f, 2.0f, 2.6f };
 
+	/** What a raise takes beside credits and alloy (Data/game_data.json "progression.upgrade.goods"): a gun's class's
+	 *  material (class id -> goods id) or an armour piece's, UpgradeGoodsCount of it by rarity; and from some rarity
+	 *  on UpgradeRareCount of UpgradeRareGoods. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Upgrade")
+	TMap<FName, FName> UpgradeGunGoods;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Upgrade")
+	FName UpgradeArmourGoods;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Upgrade")
+	TArray<int32> UpgradeGoodsCount;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Upgrade")
+	FName UpgradeRareGoods;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Upgrade")
+	TArray<int32> UpgradeRareCount;
+
 	int32 XpForLevel(int32 Level) const { return XpBase + Level * XpPerLevel; }
 	int32 PowerCap(int32 Level) const { return PowerCapBase + FMath::Max(Level, 1) * PowerCapPerLevel; }
 
 	/** What raising a piece of this rarity from this power costs. */
 	void UpgradeCost(int32 Rarity, int32 Power, int32& OutCredits, int32& OutAlloy) const;
+	/** What raising a piece of this rarity also takes: ClassId = a gun's class (energy, kinetic, horror), None for
+	 *  an armour piece. */
+	void UpgradeGoods(FName ClassId, int32 Rarity, TArray<FSOGoodsCost>& Out) const;
 
 	/** The imported table (/Game/Data/DA_Progression), or the class's own defaults if it was never imported. */
 	static const USOProgressionTable& Get();

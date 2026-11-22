@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "SOCombatTypes.h"
 #include "SOLootTypes.h"
 #include "SOLootLibrary.generated.h"
 
@@ -88,4 +89,15 @@ public:
 
 	/** A fresh unique id. */
 	static FString NewUid(FRandomStream& Rng);
+
+	/** A gun class's id in the data (energy, kinetic, horror). */
+	static FName ClassId(ESOWeaponClass Class);
+
+	/** Rolls one of the loot tables' goods drop lists (kill, elite, boss, reliquary, a creature's own key) into Out,
+	 *  each item once with its amounts added up. */
+	static void RollGoods(FName ListKey, FRandomStream& Rng, TArray<FSOGoodsCost>& Out);
+
+	/** What breaking a copy down gives beside its alloy: its class's material by rarity, and void crystal from
+	 *  Legendary on (Data/game_data.json "dismantleGoods"). */
+	static TArray<FSOGoodsCost> DismantleGoods(const FSOWeaponInstance& Weapon);
 };

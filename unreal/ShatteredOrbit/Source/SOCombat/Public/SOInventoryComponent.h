@@ -17,7 +17,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 7;
+	static constexpr int32 CurrentVersion = 8;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -65,6 +65,11 @@ public:
 
 	UPROPERTY(SaveGame)
 	TArray<float> FaceValues;
+
+	/** Version 8: collected items (materials, consumables, keys, relics). A save from before them starts with the
+	 *  loot tables' StarterGoods (USOProfileStore::Migrate). */
+	UPROPERTY(SaveGame)
+	TArray<FSOGoodsStack> Goods;
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -204,6 +209,27 @@ public:
 	void AddXp(int32 Amount);
 	void AddAlloy(int32 Amount);
 
+	// --- Collected items (goods: USOLootTables::Goods) ---
+	const TArray<FSOGoodsStack>& GetGoods() const { return Goods; }
+	int32 CountOf(FName Id) const;
+	/** Holds all of them. */
+	bool HasGoods(const TArray<FSOGoodsCost>& Costs) const;
+	/** Server: adds up to the item's stack (what is past it is lost); returns how many went in. bAnnounce: a line in
+	 *  the feed. */
+	int32 AddGoods(FName Id, int32 Count, bool bAnnounce = true);
+	/** Server: takes all of them, or none (false). */
+	bool TakeGoods(const TArray<FSOGoodsCost>& Costs);
+	/** Would using one do anything for this player's body now (a consumable held, the body alive and short of what
+	 *  it gives)? */
+	bool CanUseGoods(FName Id) const;
+	/** Server: uses one consumable on this player's body; false (nothing taken) when it could do nothing. */
+	bool UseGoods(FName Id);
+	void MarkGoodsSeen(FName Id);
+	/** What raising a gun or a piece takes beside credits and alloy (empty when it cannot be raised). */
+	void GetUpgradeGoods(const FString& Uid, TArray<FSOGoodsCost>& Out) const;
+	/** What a new profile starts with (the loot tables' StarterGoods), into Out. */
+	static void StarterGoods(TArray<FSOGoodsStack>& Out);
+
 	// --- Spending and upgrades (USOProgressionTable) ---
 	/** Pays both or neither: false (and nothing taken) if either is short. The one way anything is paid for. */
 	bool Spend(int32 InCredits, int32 InAlloy);
@@ -246,6 +272,12 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetBody(FName NewBody);
+
+	UFUNCTION(Server, Reliable)
+	void ServerUseGoods(FName Id);
+
+	UFUNCTION(Server, Reliable)
+	void ServerMarkGoodsSeen(FName Id);
 
 	/** Anything changed (all machines). */
 	FSOOnInventoryChanged OnChanged;
@@ -329,6 +361,9 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	TArray<float> FaceValues;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FSOGoodsStack> Goods;
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

@@ -1371,7 +1371,85 @@ def gun_words(a):
     game = load_json(GAME_DATA)
     trait = (game.get("traits") or {}).get(a.get("set") or a["cls"]) or {}
     return dict(lore=unreal.Text(a.get("lore", "")), class_name=unreal.Text((game.get("classNames") or {}).get(a["cls"], a["cls"].title())),
-                trait_name=unreal.Text(trait.get("name", "")), trait_text=unreal.Text(trait.get("text", "")))
+                trait_name=unreal.Text(trait.get("name", "")), trait_text=unreal.Text(trait.get("text", "")),
+                family=unreal.Name(a.get("family", "")), origin=unreal.Name(a.get("origin", "")))
+
+
+GOODS_KIND = {"material": "MATERIAL", "consumable": "CONSUMABLE", "key": "KEY", "relic": "RELIC"}
+
+
+def goods_values(game):
+    """Data/game_data.json "families", "origins", "goods", "goodsDrops", "dismantleGoods", "starterGoods" as the loot
+    tables' properties (the armoury's gun groups and the collected items). An item's picture is its render
+    (SourceArt/Icons/goods/icon_goods_<id>.png: tools/blender/goods.py + icons.py goods) where there is one."""
+    def group(g):
+        info = unreal.SOGunGroup()
+        info.set_editor_property("id", g["id"])
+        info.set_editor_property("name", unreal.Text(g["name"]))
+        info.set_editor_property("slot", int(g.get("slot", -1)))
+        info.set_editor_property("text", unreal.Text(g.get("text", "")))
+        return info
+    families = [group(g) for g in game.get("families", []) if "id" in g]
+    origins = [group(g) for g in game.get("origins", []) if "id" in g]
+    goods = []
+    for g in game.get("goods", []):
+        if "id" not in g:
+            continue
+        info = unreal.SOGoodsInfo()
+        info.set_editor_property("id", g["id"])
+        info.set_editor_property("name", unreal.Text(g["name"]))
+        info.set_editor_property("kind", getattr(unreal.SOGoodsKind, GOODS_KIND[g.get("kind", "material")]))
+        info.set_editor_property("rarity", int(g.get("rarity", 0)))
+        info.set_editor_property("stack", int(g.get("stack", 9999)))
+        info.set_editor_property("lore", unreal.Text(g.get("lore", "")))
+        info.set_editor_property("use", unreal.Text(g.get("use", "")))
+        info.set_editor_property("source", unreal.Text(g.get("source", "")))
+        info.set_editor_property("heal", float(g.get("heal", 0.0)))
+        info.set_editor_property("shield", float(g.get("shield", 0.0)))
+        info.set_editor_property("ultimate", float(g.get("ultimate", 0.0)))
+        icon = os.path.join(ICONS, "goods", f"icon_goods_{g['id']}.png")
+        if os.path.exists(icon):
+            info.set_editor_property("icon", import_ui_texture(icon, "/Game/UI/Goods", f"T_Goods_{g['id']}"))
+        goods.append(info)
+    drops = {}
+    for key, lines in (game.get("goodsDrops") or {}).items():
+        if key.startswith("_"):
+            continue
+        lst = unreal.SOGoodsDropList()
+        rows = []
+        for x in lines:
+            d = unreal.SOGoodsDrop()
+            d.set_editor_property("item", x["item"])
+            d.set_editor_property("chance", float(x.get("chance", 1.0)))
+            d.set_editor_property("min", int(x.get("min", 1)))
+            d.set_editor_property("max", int(x.get("max", x.get("min", 1))))
+            rows.append(d)
+        lst.set_editor_property("drops", rows)
+        drops[unreal.Name(key)] = lst
+    dis = game.get("dismantleGoods") or {}
+    starter = {unreal.Name(k): int(v) for k, v in (game.get("starterGoods") or {}).items() if not k.startswith("_")}
+    return dict(families=families, origins=origins, goods=goods, goods_drops=drops,
+                dismantle_goods={unreal.Name(c): unreal.Name(dis[c]) for c in ("energy", "kinetic", "horror") if c in dis},
+                dismantle_count=[int(x) for x in dis.get("count", [])], dismantle_crystal_item=unreal.Name(dis.get("crystalItem", "")),
+                dismantle_crystal=[int(x) for x in dis.get("crystal", [])], starter_goods=starter)
+
+
+def goods_only():
+    """Only the collected items and the armoury's gun groups again (SO_IMPORT_ONLY=goods): onto the loot tables that
+    are there, with each item's picture; the guns' own family and origin come with SO_IMPORT_ONLY=gunnumbers."""
+    path = "/Game/Data/DA_LootTables"
+    if not eal.does_asset_exist(path):
+        log("DA_LootTables: not imported yet (run the weapons step), skipped")
+        return
+    tables = eal.load_asset(path)
+    ensure_dir("/Game/UI/Goods")
+    values = goods_values(load_json(GAME_DATA))
+    for key, value in values.items():
+        tables.set_editor_property(key, value)
+    eal.save_loaded_asset(tables, only_if_is_dirty=False)
+    pictures = len(glob.glob(os.path.join(ICONS, "goods", "icon_goods_*.png")))
+    log(f"DA_LootTables: {len(values['goods'])} goods ({pictures} with pictures), {len(values['goods_drops'])} drop lists, "
+        f"{len(values['families'])} families, {len(values['origins'])} origins")
 
 
 def weapon(master, arch, a, clear):
@@ -1616,6 +1694,8 @@ def loot_tables(datas, sight_meshes):
                   slot_names=[unreal.Text(s) for s in game["slots"]], prefix=n["prefix"], noun=n["noun"], maker=n["maker"],
                   model_code={unreal.Name(k): v for k, v in n["modelCode"].items()}, bio_prefix=n["bioPrefix"], bio_noun=n["bioNoun"],
                   exotic_names={unreal.Name(k): v for k, v in n["exotic"].items()})
+    ensure_dir("/Game/UI/Goods")
+    values.update(goods_values(game))
     for key, value in values.items():
         tables.set_editor_property(key, value)
     eal.save_loaded_asset(tables, only_if_is_dirty=False)
@@ -3561,6 +3641,12 @@ def progression():
     table.set_editor_property("upgrade_alloy", float(up.get("alloy", 3)))
     table.set_editor_property("upgrade_alloy_per_power", float(up.get("alloyPerPower", 0.1)))
     table.set_editor_property("upgrade_rarity_cost", [float(x) for x in up.get("rarityCost", [1.0])])
+    goods = up.get("goods") or {}
+    table.set_editor_property("upgrade_gun_goods", {unreal.Name(k): unreal.Name(v) for k, v in (goods.get("gun") or {}).items()})
+    table.set_editor_property("upgrade_armour_goods", unreal.Name(goods.get("armour", "")))
+    table.set_editor_property("upgrade_goods_count", [int(x) for x in goods.get("count", [])])
+    table.set_editor_property("upgrade_rare_goods", unreal.Name(goods.get("rare", "")))
+    table.set_editor_property("upgrade_rare_count", [int(x) for x in goods.get("rareCount", [])])
     eal.save_loaded_asset(table, only_if_is_dirty=False)
     log(f"DA_Progression: max level {xp.get('maxLevel', 40)}, upgrade step {up.get('step', 2)}")
 
@@ -3756,6 +3842,8 @@ def main():
         progression()
     if "perks" in only:
         perks_only()
+    if "goods" in only:
+        goods_only()
     if "bodies" in only:
         bodies()
     if want("nexus"):

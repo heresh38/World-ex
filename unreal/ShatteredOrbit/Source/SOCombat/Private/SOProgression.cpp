@@ -7,6 +7,21 @@ void USOProgressionTable::UpgradeCost(int32 Rarity, int32 Power, int32& OutCredi
 	OutAlloy = FMath::Max(1, FMath::RoundToInt((UpgradeAlloy + FMath::Max(Power, 0) * UpgradeAlloyPerPower) * ByRarity));
 }
 
+void USOProgressionTable::UpgradeGoods(FName ClassId, int32 Rarity, TArray<FSOGoodsCost>& Out) const
+{
+	Out.Reset();
+	auto ByRarity = [Rarity](const TArray<int32>& Counts) { return Counts.Num() > 0 ? Counts[FMath::Clamp(Rarity, 0, Counts.Num() - 1)] : 0; };
+	const FName* Material = ClassId.IsNone() ? &UpgradeArmourGoods : UpgradeGunGoods.Find(ClassId);
+	if (const int32 Count = ByRarity(UpgradeGoodsCount); Material && !Material->IsNone() && Count > 0)
+	{
+		Out.Add({ *Material, Count });
+	}
+	if (const int32 Rare = ByRarity(UpgradeRareCount); !UpgradeRareGoods.IsNone() && Rare > 0)
+	{
+		Out.Add({ UpgradeRareGoods, Rare });
+	}
+}
+
 const USOProgressionTable& USOProgressionTable::Get()
 {
 	static TWeakObjectPtr<const USOProgressionTable> Loaded;

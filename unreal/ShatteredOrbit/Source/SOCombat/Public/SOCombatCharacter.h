@@ -159,6 +159,12 @@ public:
 	 *  wound). The damage is the gate's business (ScaleIncomingDamage); this is only how the hit is shown. */
 	virtual bool TurnsBlow(const FVector& From) const { return false; }
 
+	/** What it drops in goods beside credits and cores (USOLootSubsystem): its own drop list's key (a creature's
+	 *  variant, or its boss), and its tier (0 a soldier, 1 an elite, 2 a boss: the "elite" / "boss" lists on top of
+	 *  "kill"). */
+	virtual FName GetLootKey() const { return NAME_None; }
+	virtual int32 GetLootTier() const { return 0; }
+
 	/** A hand to hand blow of this character's landed on Victim at Point (server; USOMeleeLibrary::Land): how it is
 	 *  shown everywhere (the freeze, the sparks, the count). */
 	virtual void OnMeleeHit(ASOCombatCharacter* Victim, const FVector& Point, float Weight, float HitStop) {}

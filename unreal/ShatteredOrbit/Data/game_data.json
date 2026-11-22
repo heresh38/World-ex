@@ -17,6 +17,8 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
+      "family": "automatic",
+      "origin": "institute",
       "vel": 250,
       "grav": 0,
       "kick": 1,
@@ -51,6 +53,8 @@
       "auto": true,
       "zoom": 1.4,
       "slot": 0,
+      "family": "burst",
+      "origin": "institute",
       "vel": 270,
       "grav": 0,
       "kick": 1,
@@ -83,6 +87,8 @@
       "auto": false,
       "zoom": 2.2,
       "slot": 0,
+      "family": "marksman",
+      "origin": "institute",
       "vel": 380,
       "grav": 0,
       "kick": 1.4,
@@ -115,6 +121,8 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 1,
+      "family": "handcannon",
+      "origin": "institute",
       "vel": 240,
       "grav": 0,
       "kick": 2.2,
@@ -148,6 +156,8 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
+      "family": "shotgun",
+      "origin": "institute",
       "vel": 170,
       "grav": 0,
       "kick": 3,
@@ -179,6 +189,8 @@
       "auto": false,
       "zoom": 4.5,
       "slot": 1,
+      "family": "sniper",
+      "origin": "institute",
       "vel": 900,
       "grav": 0,
       "kick": 3,
@@ -211,6 +223,8 @@
       "auto": true,
       "zoom": 1.25,
       "slot": 0,
+      "family": "smg",
+      "origin": "institute",
       "vel": 215,
       "grav": 0,
       "kick": 0.7,
@@ -242,6 +256,8 @@
       "auto": false,
       "zoom": 1.2,
       "slot": 1,
+      "family": "pistol",
+      "origin": "institute",
       "vel": 225,
       "grav": 0,
       "kick": 1,
@@ -274,6 +290,8 @@
       "auto": false,
       "zoom": 1.6,
       "slot": 1,
+      "family": "charge",
+      "origin": "institute",
       "vel": 300,
       "grav": 0,
       "kick": 2.2,
@@ -305,6 +323,8 @@
       "auto": true,
       "zoom": 1.3,
       "slot": 2,
+      "family": "machinegun",
+      "origin": "institute",
       "vel": 235,
       "grav": 0,
       "kick": 0.7,
@@ -337,6 +357,8 @@
       "auto": false,
       "zoom": 1.5,
       "slot": 2,
+      "family": "launcher",
+      "origin": "institute",
       "projectile": true,
       "splash": 6,
       "kick": 3,
@@ -368,6 +390,8 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
+      "family": "automatic",
+      "origin": "nexus",
       "vel": 715,
       "grav": 1,
       "kick": 1.3,
@@ -401,6 +425,8 @@
       "auto": true,
       "zoom": 1.4,
       "slot": 0,
+      "family": "automatic",
+      "origin": "nexus",
       "vel": 880,
       "grav": 1,
       "kick": 1,
@@ -433,6 +459,8 @@
       "auto": false,
       "zoom": 1.5,
       "slot": 0,
+      "family": "marksman",
+      "origin": "nexus",
       "vel": 850,
       "grav": 1,
       "kick": 1.8,
@@ -466,6 +494,8 @@
       "auto": true,
       "zoom": 1.25,
       "slot": 0,
+      "family": "smg",
+      "origin": "nexus",
       "vel": 400,
       "grav": 1,
       "kick": 0.7,
@@ -497,6 +527,8 @@
       "auto": false,
       "zoom": 2,
       "slot": 1,
+      "family": "sniper",
+      "origin": "nexus",
       "vel": 900,
       "grav": 1,
       "kick": 3.2,
@@ -529,6 +561,8 @@
       "auto": false,
       "zoom": 1.2,
       "slot": 1,
+      "family": "pistol",
+      "origin": "nexus",
       "vel": 360,
       "grav": 1,
       "kick": 1.2,
@@ -560,6 +594,8 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 1,
+      "family": "handcannon",
+      "origin": "nexus",
       "vel": 420,
       "grav": 1,
       "kick": 2.4,
@@ -593,6 +629,8 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
+      "family": "shotgun",
+      "origin": "nexus",
       "vel": 400,
       "grav": 1,
       "kick": 3,
@@ -624,6 +662,8 @@
       "auto": true,
       "zoom": 1.3,
       "slot": 0,
+      "family": "automatic",
+      "origin": "grown",
       "goo": "spit",
       "vel": 74,
       "splash": 1.4,
@@ -658,6 +698,8 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
+      "family": "shotgun",
+      "origin": "grown",
       "goo": "bile",
       "vel": 34,
       "splash": 0.8,
@@ -691,6 +733,8 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 2,
+      "family": "launcher",
+      "origin": "grown",
       "goo": "brood",
       "vel": 58,
       "splash": 6,
@@ -725,6 +769,8 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
+      "family": "automatic",
+      "origin": "void_requiem",
       "vel": 250,
       "grav": 0,
       "kick": 1,
@@ -760,6 +806,8 @@
       "auto": false,
       "zoom": 4.5,
       "slot": 1,
+      "family": "sniper",
+      "origin": "void_requiem",
       "vel": 900,
       "grav": 0,
       "kick": 3,
@@ -795,6 +843,8 @@
       "auto": true,
       "zoom": 1.25,
       "slot": 0,
+      "family": "smg",
+      "origin": "void_requiem",
       "vel": 215,
       "grav": 0,
       "kick": 0.7,
@@ -830,6 +880,8 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
+      "family": "shotgun",
+      "origin": "void_requiem",
       "vel": 170,
       "grav": 0,
       "kick": 3,
@@ -864,6 +916,8 @@
       "auto": true,
       "zoom": 1.3,
       "slot": 2,
+      "family": "machinegun",
+      "origin": "void_requiem",
       "vel": 235,
       "grav": 0,
       "kick": 0.7,
@@ -899,6 +953,8 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 1,
+      "family": "handcannon",
+      "origin": "void_requiem",
       "vel": 240,
       "grav": 0,
       "kick": 2.2,
@@ -934,6 +990,8 @@
       "auto": false,
       "zoom": 1.2,
       "slot": 1,
+      "family": "pistol",
+      "origin": "void_requiem",
       "vel": 225,
       "grav": 0,
       "kick": 1,
@@ -969,6 +1027,8 @@
       "auto": false,
       "zoom": 1.6,
       "slot": 1,
+      "family": "charge",
+      "origin": "void_requiem",
       "vel": 300,
       "grav": 0,
       "kick": 2.2,
@@ -1003,6 +1063,8 @@
       "auto": false,
       "zoom": 1.5,
       "slot": 2,
+      "family": "launcher",
+      "origin": "void_requiem",
       "projectile": true,
       "splash": 6,
       "kick": 3,
@@ -1038,6 +1100,8 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
+      "family": "automatic",
+      "origin": "sarketh",
       "vel": 320,
       "grav": 0.12,
       "kick": 1.2,
@@ -1080,6 +1144,8 @@
       "auto": true,
       "zoom": 1.35,
       "slot": 0,
+      "family": "automatic",
+      "origin": "sarketh",
       "vel": 320,
       "grav": 0.12,
       "kick": 1.2,
@@ -1122,6 +1188,8 @@
       "auto": false,
       "zoom": 4.0,
       "slot": 0,
+      "family": "marksman",
+      "origin": "sarketh",
       "vel": 900,
       "grav": 0.05,
       "kick": 2.8,
@@ -1165,6 +1233,8 @@
       "auto": false,
       "zoom": 1.4,
       "slot": 2,
+      "family": "launcher",
+      "origin": "sarketh",
       "vel": 80,
       "grav": 0.25,
       "kick": 3.4,
@@ -1207,6 +1277,8 @@
       "auto": false,
       "zoom": 1.15,
       "slot": 1,
+      "family": "shotgun",
+      "origin": "sarketh",
       "vel": 320,
       "grav": 0.1,
       "kick": 3.0,
@@ -1249,6 +1321,8 @@
       "auto": false,
       "zoom": 1.2,
       "slot": 1,
+      "family": "pistol",
+      "origin": "sarketh",
       "vel": 300,
       "grav": 0.1,
       "kick": 1.1,
@@ -1292,6 +1366,8 @@
       "auto": false,
       "zoom": 1.3,
       "slot": 1,
+      "family": "handcannon",
+      "origin": "sarketh",
       "vel": 220,
       "grav": 0.15,
       "kick": 3.2,
@@ -1855,7 +1931,7 @@
     }
   },
   "progression": {
-    "note": "Two things kept apart: the character's level (from experience) and each piece of gear's power (from finding better, or from upgrading). 'xp': the experience the next level takes = base + level x perLevel, up to maxLevel. 'powerCap': how far an upgrade may take a piece = base + level x perLevel (a level's worth: gear can go further). 'upgrade': one raises a piece's power by 'step' and costs (credits + power x creditsPerPower) x rarityCost[rarity] credits and (alloy + power x alloyPerPower) x the same in alloy.",
+    "note": "Two things kept apart: the character's level (from experience) and each piece of gear's power (from finding better, or from upgrading). 'xp': the experience the next level takes = base + level x perLevel, up to maxLevel. 'powerCap': how far an upgrade may take a piece = base + level x perLevel (a level's worth: gear can go further). 'upgrade': one raises a piece's power by 'step' and costs (credits + power x creditsPerPower) x rarityCost[rarity] credits and (alloy + power x alloyPerPower) x the same in alloy. 'upgrade.goods': a raise also takes the piece's material (its gun class's, or armour's) by rarity, and void crystal for Legendary and Sovereign.",
     "xp": {
       "base": 600,
       "perLevel": 250,
@@ -1877,7 +1953,31 @@
         1.5,
         2.0,
         2.6
-      ]
+      ],
+      "goods": {
+        "_doc": "What raising takes beside credits and alloy: a gun's class's material ('gun', by class), an armour piece's ('armour'), 'count' of it by rarity; and 'rareCount' of 'rare' by rarity (Legendary and Sovereign).",
+        "gun": {
+          "energy": "amber",
+          "kinetic": "parts",
+          "horror": "resin"
+        },
+        "armour": "plate",
+        "count": [
+          1,
+          1,
+          2,
+          3,
+          4
+        ],
+        "rare": "void_crystal",
+        "rareCount": [
+          0,
+          0,
+          0,
+          1,
+          2
+        ]
+      }
     }
   },
   "bosses": {
@@ -2705,5 +2805,435 @@
     "energy": "Light",
     "kinetic": "Ballistic",
     "horror": "Living"
+  },
+  "families": [
+    {
+      "_doc": "What kind of gun: the armoury's categories, in this order, each in its slot (0 primary, 1 special, 2 heavy). Every archetype names its own 'family'. -> USOLootTables::Families, USOWeaponData::Family"
+    },
+    {
+      "id": "automatic",
+      "name": "Automatic Rifle",
+      "slot": 0
+    },
+    {
+      "id": "burst",
+      "name": "Burst Rifle",
+      "slot": 0
+    },
+    {
+      "id": "marksman",
+      "name": "Marksman Rifle",
+      "slot": 0
+    },
+    {
+      "id": "smg",
+      "name": "Submachine Gun",
+      "slot": 0
+    },
+    {
+      "id": "pistol",
+      "name": "Pistol",
+      "slot": 1
+    },
+    {
+      "id": "handcannon",
+      "name": "Hand Cannon",
+      "slot": 1
+    },
+    {
+      "id": "shotgun",
+      "name": "Shotgun",
+      "slot": 1
+    },
+    {
+      "id": "sniper",
+      "name": "Sniper Rifle",
+      "slot": 1
+    },
+    {
+      "id": "charge",
+      "name": "Charge Rifle",
+      "slot": 1
+    },
+    {
+      "id": "machinegun",
+      "name": "Machine Gun",
+      "slot": 2
+    },
+    {
+      "id": "launcher",
+      "name": "Launcher",
+      "slot": 2
+    }
+  ],
+  "origins": [
+    {
+      "_doc": "Who made it: the armoury's second list. An archetype's 'origin' is its set, or by its class: light guns the Institute's, ballistic Nexus Prime's, living ones grown. -> USOLootTables::Origins, USOWeaponData::Origin"
+    },
+    {
+      "id": "institute",
+      "name": "The Institute",
+      "text": "Light guns built on Sarketh patterns taken off the dead."
+    },
+    {
+      "id": "nexus",
+      "name": "Nexus Prime",
+      "text": "Ballistic steel from the city's own workshops."
+    },
+    {
+      "id": "sarketh",
+      "name": "Sarketh",
+      "text": "Their own guns: crystal slugs, condensed and never reloaded."
+    },
+    {
+      "id": "void_requiem",
+      "name": "Void Requiem",
+      "text": "Made by a people no human has met."
+    },
+    {
+      "id": "grown",
+      "name": "Grown",
+      "text": "Living weapons: grown, not made."
+    }
+  ],
+  "goods": [
+    {
+      "_doc": "Everything collected that is not a gun or a piece of armour (the armoury's INVENTORY), in the order shown. kind: material (raises gear: progression.upgrade.goods), consumable (used from the inventory: heal / shield / ultimate = the share of the full amount given back at once), key, relic (a trophy, one of each). stack = the most carried. -> USOLootTables::Goods (SO_IMPORT_ONLY=goods)"
+    },
+    {
+      "id": "amber",
+      "name": "Amber Condensate",
+      "kind": "material",
+      "rarity": 1,
+      "stack": 9999,
+      "lore": "The crystal the Sarketh's guns condense their slugs from, chipped off the fallen. The Institute's light guns burn it in their cells.",
+      "use": "Raises Light guns.",
+      "source": "Sarketh soldiers  ·  dismantled Light guns"
+    },
+    {
+      "id": "parts",
+      "name": "Machined Parts",
+      "kind": "material",
+      "rarity": 0,
+      "stack": 9999,
+      "lore": "Springs, pins and milled steel from the workshops of Nexus Prime, and from every ballistic gun taken apart.",
+      "use": "Raises Ballistic guns.",
+      "source": "Dismantled Ballistic guns  ·  reliquaries"
+    },
+    {
+      "id": "resin",
+      "name": "Brood Resin",
+      "kind": "material",
+      "rarity": 1,
+      "stack": 9999,
+      "lore": "A living gun's sap, set hard. It keeps a slow pulse for days after it is cut.",
+      "use": "Raises Living guns.",
+      "source": "Dismantled Living guns  ·  reliquaries"
+    },
+    {
+      "id": "plate",
+      "name": "Forged Plate",
+      "kind": "material",
+      "rarity": 0,
+      "stack": 9999,
+      "lore": "Shards of the pale shells the Sarketh wear: enamel over forged iron. Good armour can be beaten out of them.",
+      "use": "Raises armour.",
+      "source": "Sarketh soldiers  ·  reliquaries"
+    },
+    {
+      "id": "void_crystal",
+      "name": "Void Crystal",
+      "kind": "material",
+      "rarity": 3,
+      "stack": 999,
+      "lore": "The empire's power, grown and never mined. Nobody on Earth knows how to make it: we only know how to take it.",
+      "use": "Raises Legendary and Sovereign gear.",
+      "source": "Elites  ·  bosses  ·  reliquaries  ·  dismantled Legendary guns"
+    },
+    {
+      "id": "stim",
+      "name": "Field Stim",
+      "kind": "consumable",
+      "rarity": 1,
+      "stack": 9,
+      "heal": 0.6,
+      "lore": "An Institute auto-injector: a clotting agent and a fast stimulant. It stings, and then it doesn't.",
+      "use": "Gives back 60 % of your health at once.",
+      "source": "Sarketh soldiers  ·  reliquaries"
+    },
+    {
+      "id": "cell",
+      "name": "Shield Cell",
+      "kind": "consumable",
+      "rarity": 1,
+      "stack": 9,
+      "shield": 1.0,
+      "lore": "A charged cell keyed to your suit's emitters. Snap it in two and the shield is back.",
+      "use": "Refills your shield at once.",
+      "source": "Sarketh soldiers  ·  reliquaries"
+    },
+    {
+      "id": "overcharge",
+      "name": "Overcharge",
+      "kind": "consumable",
+      "rarity": 2,
+      "stack": 5,
+      "ultimate": 0.35,
+      "lore": "A splinter of void crystal sealed in glass. Crushed in the palm, it pours into the suit's reserve.",
+      "use": "Charges your ultimate by 35 %.",
+      "source": "Elites  ·  bosses  ·  reliquaries"
+    },
+    {
+      "id": "command_core",
+      "name": "Sarketh Command Core",
+      "kind": "key",
+      "rarity": 4,
+      "stack": 1,
+      "lore": "The commander's core: the order of battle of every Sarketh landing force in the system. The Institute is waiting for it.",
+      "use": "Brought out of Meridian Fall: what the operation was for.",
+      "source": "The commander, in the Crown"
+    },
+    {
+      "id": "seal",
+      "name": "Gatekeeper's Seal",
+      "kind": "relic",
+      "rarity": 3,
+      "stack": 1,
+      "lore": "The seal of the Galleria's gate, struck in their gold. Whoever holds it holds the way north.",
+      "use": "A trophy of Meridian Fall.",
+      "source": "The Gatekeeper, at the Galleria's service gate"
+    },
+    {
+      "id": "cord",
+      "name": "Levy Captain's Cord",
+      "kind": "relic",
+      "rarity": 2,
+      "stack": 1,
+      "lore": "Red thread and gold, cut from a Levy Captain's belt. Every Sarketh in the street knew who wore it.",
+      "use": "A trophy of Meridian Fall.",
+      "source": "The Levy Captain"
+    },
+    {
+      "id": "lens",
+      "name": "Senior Speaker's Lens",
+      "kind": "relic",
+      "rarity": 2,
+      "stack": 1,
+      "lore": "The lens a Speaker reads the beam's orders through. It still flickers with half a message.",
+      "use": "A trophy of Meridian Fall.",
+      "source": "The Senior Speaker"
+    },
+    {
+      "id": "brand",
+      "name": "Lead Runner's Brand",
+      "kind": "relic",
+      "rarity": 2,
+      "stack": 1,
+      "lore": "The brass plate a pack of Runners follows. Take it and the pack scatters.",
+      "use": "A trophy of Meridian Fall.",
+      "source": "The Lead Runner"
+    },
+    {
+      "id": "tally",
+      "name": "Veteran Hunter's Tally",
+      "kind": "relic",
+      "rarity": 2,
+      "stack": 1,
+      "lore": "A string of notched crystal beads, one for every hunt. Not one of them was for a Sarketh.",
+      "use": "A trophy of Meridian Fall.",
+      "source": "The Veteran Hunter"
+    }
+  ],
+  "goodsDrops": {
+    "_doc": "What a kill and a cache pay in goods beside credits and cores, straight into the inventory: 'kill' for every creature, 'elite' and 'boss' on top of it, 'reliquary' for a cache; and by a creature's own key (its variant, or its boss) what only it carries. Each line: chance, then min..max of the item. -> USOLootTables::GoodsDrops",
+    "kill": [
+      {
+        "item": "amber",
+        "chance": 0.35,
+        "min": 1,
+        "max": 2
+      },
+      {
+        "item": "plate",
+        "chance": 0.3,
+        "min": 1,
+        "max": 2
+      },
+      {
+        "item": "stim",
+        "chance": 0.05,
+        "min": 1,
+        "max": 1
+      },
+      {
+        "item": "cell",
+        "chance": 0.05,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "elite": [
+      {
+        "item": "void_crystal",
+        "chance": 1,
+        "min": 1,
+        "max": 2
+      },
+      {
+        "item": "amber",
+        "chance": 1,
+        "min": 3,
+        "max": 5
+      },
+      {
+        "item": "plate",
+        "chance": 1,
+        "min": 3,
+        "max": 5
+      },
+      {
+        "item": "overcharge",
+        "chance": 0.5,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "boss": [
+      {
+        "item": "void_crystal",
+        "chance": 1,
+        "min": 3,
+        "max": 5
+      },
+      {
+        "item": "amber",
+        "chance": 1,
+        "min": 8,
+        "max": 12
+      },
+      {
+        "item": "plate",
+        "chance": 1,
+        "min": 8,
+        "max": 12
+      },
+      {
+        "item": "overcharge",
+        "chance": 1,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "reliquary": [
+      {
+        "item": "parts",
+        "chance": 1,
+        "min": 4,
+        "max": 8
+      },
+      {
+        "item": "resin",
+        "chance": 0.5,
+        "min": 2,
+        "max": 4
+      },
+      {
+        "item": "void_crystal",
+        "chance": 0.6,
+        "min": 1,
+        "max": 1
+      },
+      {
+        "item": "stim",
+        "chance": 0.5,
+        "min": 1,
+        "max": 2
+      },
+      {
+        "item": "cell",
+        "chance": 0.5,
+        "min": 1,
+        "max": 2
+      }
+    ],
+    "remnant_captain": [
+      {
+        "item": "cord",
+        "chance": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "veilborn_seer": [
+      {
+        "item": "lens",
+        "chance": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "stalker_alpha": [
+      {
+        "item": "brand",
+        "chance": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "stalker_hunter": [
+      {
+        "item": "tally",
+        "chance": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "warden": [
+      {
+        "item": "seal",
+        "chance": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "colossus": [
+      {
+        "item": "command_core",
+        "chance": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    ]
+  },
+  "dismantleGoods": {
+    "_doc": "What dismantling a gun gives beside its alloy: its class's material, 'count' of it by rarity, and 'crystal' void crystals by rarity. -> USOLootTables::DismantleGoods / DismantleCount / DismantleCrystal",
+    "energy": "amber",
+    "kinetic": "parts",
+    "horror": "resin",
+    "count": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "crystalItem": "void_crystal",
+    "crystal": [
+      0,
+      0,
+      0,
+      1,
+      2
+    ]
+  },
+  "starterGoods": {
+    "_doc": "What a new profile, and one saved before collected items (save version 8), starts with. -> USOLootTables::StarterGoods",
+    "amber": 12,
+    "parts": 12,
+    "resin": 6,
+    "plate": 12,
+    "void_crystal": 2,
+    "stim": 2,
+    "cell": 2
   }
 }

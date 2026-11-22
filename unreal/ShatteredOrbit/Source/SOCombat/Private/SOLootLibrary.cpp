@@ -36,6 +36,81 @@ const FSOSightInfo* USOLootTables::FindSight(FName Id) const
 	return Sights.FindByPredicate([Id](const FSOSightInfo& S) { return S.Id == Id; });
 }
 
+const FSOGoodsInfo* USOLootTables::FindGoods(FName Id) const
+{
+	return Goods.FindByPredicate([Id](const FSOGoodsInfo& G) { return G.Id == Id; });
+}
+
+const FSOGunGroup* USOLootTables::FindFamily(FName Id) const
+{
+	return Families.FindByPredicate([Id](const FSOGunGroup& G) { return G.Id == Id; });
+}
+
+const FSOGunGroup* USOLootTables::FindOrigin(FName Id) const
+{
+	return Origins.FindByPredicate([Id](const FSOGunGroup& G) { return G.Id == Id; });
+}
+
+FName USOLootLibrary::ClassId(ESOWeaponClass Class)
+{
+	switch (Class)
+	{
+	case ESOWeaponClass::Energy: return TEXT("energy");
+	case ESOWeaponClass::Horror: return TEXT("horror");
+	default: return TEXT("kinetic");
+	}
+}
+
+void USOLootLibrary::RollGoods(FName ListKey, FRandomStream& Rng, TArray<FSOGoodsCost>& Out)
+{
+	const USOLootTables* Tables = GetTables();
+	const FSOGoodsDropList* List = Tables && !ListKey.IsNone() ? Tables->GoodsDrops.Find(ListKey) : nullptr;
+	if (!List)
+	{
+		return;
+	}
+	for (const FSOGoodsDrop& Drop : List->Drops)
+	{
+		if (Drop.Item.IsNone() || Rng.FRand() >= Drop.Chance)
+		{
+			continue;
+		}
+		const int32 Count = Rng.RandRange(FMath::Max(1, Drop.Min), FMath::Max(Drop.Min, Drop.Max));
+		if (FSOGoodsCost* Had = Out.FindByPredicate([&Drop](const FSOGoodsCost& C) { return C.Item == Drop.Item; }))
+		{
+			Had->Count += Count;                                 // (two lines of one item: one amount)
+		}
+		else
+		{
+			Out.Add({ Drop.Item, Count });
+		}
+	}
+}
+
+TArray<FSOGoodsCost> USOLootLibrary::DismantleGoods(const FSOWeaponInstance& Weapon)
+{
+	TArray<FSOGoodsCost> Out;
+	const USOLootTables* Tables = GetTables();
+	const USOWeaponData* Data = Tables ? Tables->LoadArchetype(Weapon.Archetype) : nullptr;
+	if (!Data)
+	{
+		return Out;
+	}
+	auto ByRarity = [&Weapon](const TArray<int32>& Counts) { return Counts.Num() > 0 ? Counts[FMath::Clamp(Weapon.Rarity, 0, Counts.Num() - 1)] : 0; };
+	if (const FName* Material = Tables->DismantleGoods.Find(ClassId(Data->WeaponClass)))
+	{
+		if (const int32 Count = ByRarity(Tables->DismantleCount); Count > 0 && !Material->IsNone())
+		{
+			Out.Add({ *Material, Count });
+		}
+	}
+	if (const int32 Crystal = ByRarity(Tables->DismantleCrystal); Crystal > 0 && !Tables->DismantleCrystalItem.IsNone())
+	{
+		Out.Add({ Tables->DismantleCrystalItem, Crystal });
+	}
+	return Out;
+}
+
 USOWeaponData* USOLootTables::LoadArchetype(FName Id) const
 {
 	const FSOArchetypeEntry* Entry = Archetypes.FindByPredicate([Id](const FSOArchetypeEntry& E) { return E.Id == Id; });

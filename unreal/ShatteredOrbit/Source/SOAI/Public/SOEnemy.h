@@ -46,6 +46,10 @@ public:
 	/** A level's named dressing (a variant with a name of its own): the HUD announces it the first time it is seen. */
 	bool IsElite() const { return bElite; }
 
+	//~ ASOCombatCharacter: a variant's own drops (its relic), a boss's, the elites' and the bosses' lists
+	virtual FName GetLootKey() const override { return !VariantId.IsNone() ? VariantId : BossId; }
+	virtual int32 GetLootTier() const override { return !BossId.IsNone() ? 2 : (bElite ? 1 : 0); }
+
 	/** What its special moves multiply their damage by (a variant's). */
 	float GetDamageScale() const { return DamageScale; }
 

@@ -333,6 +333,12 @@ void ASOReliquary::Interact(APawn* User)
 	Inventory->AddCredits(900 + Inventory->GetLevel() * 30);
 	Inventory->AddAlloy(10 + FMath::RandRange(0, 8));
 	Inventory->AddXp(1800);
+	TArray<FSOGoodsCost> Goods;
+	USOLootLibrary::RollGoods(TEXT("reliquary"), Rng, Goods);
+	for (const FSOGoodsCost& G : Goods)
+	{
+		Inventory->AddGoods(G.Item, G.Count);
+	}
 	OnRep_Open();
 }
 
@@ -429,6 +435,20 @@ void USOLootSubsystem::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld
 	const int32 Level = FMath::Max(1, Inventory->GetPower());
 	Inventory->AddCredits(FMath::RoundToInt(8.0f + Rng.FRand() * 10.0f + Level * 2.0f));
 	Inventory->AddXp(60);
+	// goods, straight into the inventory: what every creature may carry, an elite's or a boss's on top, and what only
+	// this one carries (a named creature's relic)
+	TArray<FSOGoodsCost> Goods;
+	USOLootLibrary::RollGoods(TEXT("kill"), Rng, Goods);
+	const int32 Tier = Victim->GetLootTier();
+	if (Tier >= 1)
+	{
+		USOLootLibrary::RollGoods(Tier >= 2 ? FName(TEXT("boss")) : FName(TEXT("elite")), Rng, Goods);
+	}
+	USOLootLibrary::RollGoods(Victim->GetLootKey(), Rng, Goods);
+	for (const FSOGoodsCost& G : Goods)
+	{
+		Inventory->AddGoods(G.Item, G.Count);
+	}
 	const FVector At = Victim->GetActorLocation();
 	if (Rng.FRand() < AmmoChance)
 	{

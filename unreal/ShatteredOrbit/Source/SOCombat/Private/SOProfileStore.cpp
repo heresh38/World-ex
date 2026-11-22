@@ -85,6 +85,11 @@ bool USOProfileStore::Migrate(USOSaveGame* Save)
 	// version 4 -> 5: the blades owned (hand to hand); none before, nothing to do
 	// version 5 -> 6: the melee slot; None (the fists) before, nothing to do
 	// version 6 -> 7: the face's sliders; none before (the base face), nothing to do
+	if (Save->Version < 8)
+	{
+		// version 7 -> 8: collected items; a profile from before them starts with what a new one does
+		USOInventoryComponent::StarterGoods(Save->Goods);
+	}
 	Save->Version = USOSaveGame::CurrentVersion;
 	return true;
 }

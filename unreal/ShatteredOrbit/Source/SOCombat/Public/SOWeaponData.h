@@ -78,6 +78,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FText TraitText;
 
+	/** What kind of gun it is and who made it: the armoury's two lists (USOLootTables::Families / Origins). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName Family;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName Origin;
+
 	/** data.js archetype key (rifle, carbine, ...): picks the reload choreography. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	FName Archetype = TEXT("rifle");

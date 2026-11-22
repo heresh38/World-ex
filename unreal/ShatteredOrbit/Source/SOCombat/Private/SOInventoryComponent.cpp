@@ -9,6 +9,7 @@
 #include "Net/UnrealNetwork.h"
 #include "SOCombatTypes.h"
 #include "SOLootLibrary.h"
+#include "SOCombatCharacter.h"
 #include "SOProfileStore.h"
 #include "SOWeaponData.h"
 
@@ -28,6 +29,7 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(USOInventoryComponent, MeleeSlot);
 	DOREPLIFETIME(USOInventoryComponent, FaceKeys);
 	DOREPLIFETIME(USOInventoryComponent, FaceValues);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, Goods, COND_OwnerOnly);
 	DOREPLIFETIME(USOInventoryComponent, Equipped);
 	DOREPLIFETIME(USOInventoryComponent, ActiveSlot);
 	// what a player has in the bank is theirs to see (the copies themselves go to everyone: the guns on a player's
@@ -488,9 +490,14 @@ int32 USOInventoryComponent::Dismantle(const FString& Uid)
 	}
 	const int32 Gained = USOLootLibrary::DismantleAlloy(*W);
 	const FString Name = W->Name;
+	const TArray<FSOGoodsCost> Parts = USOLootLibrary::DismantleGoods(*W);
 	Items.RemoveAll([&Uid](const FSOWeaponInstance& X) { return X.Uid == Uid; });
 	Alloy += Gained;
 	Feed(FString::Printf(TEXT("%s dismantled  ·  +%d alloy"), *Name, Gained), FLinearColor(0.6f, 0.63f, 0.66f));
+	for (const FSOGoodsCost& Part : Parts)
+	{
+		AddGoods(Part.Item, Part.Count);
+	}
 	Changed(false);
 	return Gained;
 }
@@ -641,13 +648,32 @@ bool USOInventoryComponent::GetUpgrade(const FString& Uid, int32& OutPower, int3
 	return OutPower > Power;
 }
 
+void USOInventoryComponent::GetUpgradeGoods(const FString& Uid, TArray<FSOGoodsCost>& Out) const
+{
+	Out.Reset();
+	const USOProgressionTable& Rules = USOProgressionTable::Get();
+	if (const FSOWeaponInstance* W = Find(Uid))
+	{
+		const USOLootTables* Tables = USOLootLibrary::GetTables();
+		const USOWeaponData* Data = Tables ? Tables->LoadArchetype(W->Archetype) : nullptr;
+		Rules.UpgradeGoods(USOLootLibrary::ClassId(Data ? Data->WeaponClass : ESOWeaponClass::Kinetic), W->Rarity, Out);
+	}
+	else if (const FSOArmorInstance* A = FindArmor(Uid))
+	{
+		Rules.UpgradeGoods(NAME_None, A->Rarity, Out);
+	}
+}
+
 bool USOInventoryComponent::Upgrade(const FString& Uid)
 {
 	int32 NewPower = 0, CostCredits = 0, CostAlloy = 0;
-	if (!GetUpgrade(Uid, NewPower, CostCredits, CostAlloy) || !Spend(CostCredits, CostAlloy))
+	TArray<FSOGoodsCost> Takes;
+	GetUpgradeGoods(Uid, Takes);
+	if (!GetUpgrade(Uid, NewPower, CostCredits, CostAlloy) || !HasGoods(Takes) || !Spend(CostCredits, CostAlloy))
 	{
 		return false;
 	}
+	TakeGoods(Takes);                                        // (held: checked above)
 	if (FSOWeaponInstance* W = const_cast<FSOWeaponInstance*>(Find(Uid)))
 	{
 		W->Power = NewPower;
@@ -676,6 +702,7 @@ void USOInventoryComponent::NewProfile()
 	Level = 1;
 	Armor.Reset();
 	Body = TEXT("male");
+	StarterGoods(Goods);
 	GrantWardrobe(true);
 	Dress();
 	// state.js newSave: the three starters (names as the browser build gives them)...
@@ -745,6 +772,17 @@ bool USOInventoryComponent::LoadProfile()
 	RestoreArmor(Save->Armor);
 	Blades = Save->Blades;
 	MeleeSlot = Blades.Contains(Save->MeleeSlot) ? Save->MeleeSlot : NAME_None;
+	Goods.Reset();
+	for (const FSOGoodsStack& Stack : Save->Goods)
+	{
+		// (items that no longer exist are dropped; none past its stack)
+		const FSOGoodsInfo* Info = Tables ? Tables->FindGoods(Stack.Id) : nullptr;
+		if (Stack.Count > 0 && (Info || !Tables) && !Goods.ContainsByPredicate([&Stack](const FSOGoodsStack& G) { return G.Id == Stack.Id; }))
+		{
+			FSOGoodsStack& Kept = Goods.Add_GetRef(Stack);
+			Kept.Count = Info ? FMath::Min(Stack.Count, FMath::Max(1, Info->Stack)) : Stack.Count;
+		}
+	}
 	FaceKeys.Reset();
 	FaceValues.Reset();
 	for (int32 i = 0; i < FMath::Min(Save->FaceKeys.Num(), Save->FaceValues.Num()); ++i)
@@ -823,6 +861,7 @@ void USOInventoryComponent::SaveProfile() const
 	Save->MeleeSlot = MeleeSlot;
 	Save->FaceKeys = FaceKeys;
 	Save->FaceValues = FaceValues;
+	Save->Goods = Goods;
 	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	if (USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr)
 	{
@@ -849,6 +888,158 @@ void USOInventoryComponent::Changed(bool bLoadout, bool bOutfit)
 	if (bOutfit)
 	{
 		OnOutfitChanged.Broadcast();
+	}
+}
+
+// --- Collected items ----------------------------------------------------------------------------------
+
+int32 USOInventoryComponent::CountOf(FName Id) const
+{
+	const FSOGoodsStack* Stack = Goods.FindByPredicate([Id](const FSOGoodsStack& G) { return G.Id == Id; });
+	return Stack ? Stack->Count : 0;
+}
+
+bool USOInventoryComponent::HasGoods(const TArray<FSOGoodsCost>& Costs) const
+{
+	for (const FSOGoodsCost& Cost : Costs)
+	{
+		// (one item named twice is counted together)
+		int32 Want = 0;
+		for (const FSOGoodsCost& Each : Costs)
+		{
+			Want += Each.Item == Cost.Item ? FMath::Max(Each.Count, 0) : 0;
+		}
+		if (CountOf(Cost.Item) < Want)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+int32 USOInventoryComponent::AddGoods(FName Id, int32 Count, bool bAnnounce)
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	const FSOGoodsInfo* Info = Tables ? Tables->FindGoods(Id) : nullptr;
+	if (!Info || Count <= 0)
+	{
+		return 0;
+	}
+	FSOGoodsStack* Stack = Goods.FindByPredicate([Id](const FSOGoodsStack& G) { return G.Id == Id; });
+	if (!Stack)
+	{
+		Stack = &Goods.AddDefaulted_GetRef();
+		Stack->Id = Id;
+	}
+	const int32 Room = FMath::Max(0, FMath::Max(1, Info->Stack) - Stack->Count);
+	const int32 Added = FMath::Min(Count, Room);
+	if (Added <= 0)
+	{
+		return 0;                                            // (full: what came in is lost)
+	}
+	Stack->Count += Added;
+	Stack->bNew = true;
+	if (bAnnounce)
+	{
+		const FLinearColor Color = Tables->GetRarity(Info->Rarity).Color;
+		Feed(Added > 1 || Info->Stack > 1 ? FString::Printf(TEXT("+%d  %s"), Added, *Info->Name.ToString()) : FString::Printf(TEXT("+  %s"), *Info->Name.ToString()),
+			FLinearColor(Color.R, Color.G, Color.B, 1.0f));
+	}
+	Changed(false);
+	return Added;
+}
+
+bool USOInventoryComponent::TakeGoods(const TArray<FSOGoodsCost>& Costs)
+{
+	if (!HasGoods(Costs))
+	{
+		return false;
+	}
+	for (const FSOGoodsCost& Cost : Costs)
+	{
+		if (FSOGoodsStack* Stack = Goods.FindByPredicate([&Cost](const FSOGoodsStack& G) { return G.Id == Cost.Item; }))
+		{
+			Stack->Count -= FMath::Max(Cost.Count, 0);
+		}
+	}
+	Goods.RemoveAll([](const FSOGoodsStack& G) { return G.Count <= 0; });
+	Changed(false);
+	return true;
+}
+
+namespace
+{
+	ASOCombatCharacter* BodyOf(const USOInventoryComponent* Inventory)
+	{
+		const APlayerState* PS = Inventory ? Cast<APlayerState>(Inventory->GetOwner()) : nullptr;
+		return PS ? Cast<ASOCombatCharacter>(PS->GetPawn()) : nullptr;
+	}
+}
+
+bool USOInventoryComponent::CanUseGoods(FName Id) const
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	const FSOGoodsInfo* Info = Tables ? Tables->FindGoods(Id) : nullptr;
+	const ASOCombatCharacter* User = BodyOf(this);
+	if (!Info || Info->Kind != ESOGoodsKind::Consumable || CountOf(Id) <= 0 || !User || User->IsDead())
+	{
+		return false;
+	}
+	// it does something: what it gives is short somewhere
+	return (Info->Heal > 0.0f && User->GetHealth() < User->GetMaxHealth() - 0.5f)
+		|| (Info->Shield > 0.0f && User->GetShield() < User->GetMaxShield() - 0.5f)
+		|| (Info->Ultimate > 0.0f && User->GetUltimate() < User->GetMaxUltimate() - 0.01f);
+}
+
+bool USOInventoryComponent::UseGoods(FName Id)
+{
+	if (!CanUseGoods(Id))
+	{
+		return false;
+	}
+	const FSOGoodsInfo* Info = USOLootLibrary::GetTables()->FindGoods(Id);
+	ASOCombatCharacter* User = BodyOf(this);
+	if (Info->Heal > 0.0f)
+	{
+		User->Heal(User->GetMaxHealth() * Info->Heal);
+	}
+	if (Info->Shield > 0.0f)
+	{
+		User->AddShield(User->GetMaxShield() * Info->Shield);
+	}
+	if (Info->Ultimate > 0.0f)
+	{
+		User->AddUltimate(User->GetMaxUltimate() * Info->Ultimate);
+	}
+	TakeGoods({ { Id, 1 } });
+	Feed(FString::Printf(TEXT("%s used"), *Info->Name.ToString()), FLinearColor(0.42f, 0.95f, 0.55f));
+	return true;
+}
+
+void USOInventoryComponent::MarkGoodsSeen(FName Id)
+{
+	if (FSOGoodsStack* Stack = Goods.FindByPredicate([Id](const FSOGoodsStack& G) { return G.Id == Id; }); Stack && Stack->bNew)
+	{
+		Stack->bNew = false;
+		Changed(false);
+	}
+}
+
+void USOInventoryComponent::StarterGoods(TArray<FSOGoodsStack>& Out)
+{
+	Out.Reset();
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!Tables)
+	{
+		return;
+	}
+	// in the goods' own order, so the starting stock reads like the inventory
+	for (const FSOGoodsInfo& Info : Tables->Goods)
+	{
+		if (const int32* Count = Tables->StarterGoods.Find(Info.Id); Count && *Count > 0)
+		{
+			Out.Add({ Info.Id, FMath::Min(*Count, FMath::Max(1, Info.Stack)), false });
+		}
 	}
 }
 
@@ -924,6 +1115,8 @@ namespace
 }
 void USOInventoryComponent::ServerEquip_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { Equip(Uid); } }
 void USOInventoryComponent::ServerSelectSlot_Implementation(int32 Slot) { SelectSlot(Slot); }
+void USOInventoryComponent::ServerUseGoods_Implementation(FName Id) { UseGoods(Id); }
+void USOInventoryComponent::ServerMarkGoodsSeen_Implementation(FName Id) { MarkGoodsSeen(Id); }
 void USOInventoryComponent::ServerSetKeep_Implementation(const FString& Uid, bool bKeep) { if (PlausibleUid(Uid)) { SetKeep(Uid, bKeep); } }
 void USOInventoryComponent::ServerDismantle_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { Dismantle(Uid); } }
 void USOInventoryComponent::ServerMarkSeen_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { MarkSeen(Uid); } }

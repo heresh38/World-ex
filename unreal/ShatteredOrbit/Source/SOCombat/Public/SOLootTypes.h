@@ -227,6 +227,149 @@ struct SOCOMBAT_API FSOArchetypeEntry
 	TSoftObjectPtr<USOWeaponData> Data;
 };
 
+/** What kind of thing a collected item is: the inventory's categories. */
+UENUM(BlueprintType)
+enum class ESOGoodsKind : uint8
+{
+	/** Raises gear (USOProgressionTable: what a raise takes beside credits and alloy). */
+	Material,
+	/** Used from the inventory: health, shield or the ultimate's charge back at once. */
+	Consumable,
+	/** What an operation was for. */
+	Key,
+	/** A trophy: one of each, kept. */
+	Relic,
+};
+
+/** A collected item that is not a gun or a piece of armour (Data/game_data.json "goods" -> DA_LootTables): its words,
+ *  its picture, how many are carried at most, and what using one does. */
+USTRUCT(BlueprintType)
+struct SOCOMBAT_API FSOGoodsInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FName Id;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FText Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	ESOGoodsKind Kind = ESOGoodsKind::Material;
+
+	/** Its rarity (the loot tables' Rarities): its colour on the screen. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	int32 Rarity = 0;
+
+	/** The most carried: what comes in past it is lost. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	int32 Stack = 9999;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FText Lore;
+
+	/** What it is for, in a line. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FText Use;
+
+	/** Where it comes from, in a line. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FText Source;
+
+	/** The armoury's picture of it (tools/blender/goods.py + icons.py goods). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TSoftObjectPtr<UTexture2D> Icon;
+
+	/** A consumable: the share of its user's full health, shield and ultimate given back at once. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	float Heal = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	float Shield = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	float Ultimate = 0.0f;
+};
+
+/** How many of one collected item a player holds. */
+USTRUCT(BlueprintType)
+struct SOCOMBAT_API FSOGoodsStack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Goods")
+	FName Id;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Goods")
+	int32 Count = 0;
+
+	/** Wears a NEW tag until it is looked at in the inventory. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Goods")
+	bool bNew = false;
+};
+
+/** One line of a drop list: the item, the chance, and Min..Max of it. */
+USTRUCT(BlueprintType)
+struct SOCOMBAT_API FSOGoodsDrop
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FName Item;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	float Chance = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	int32 Min = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	int32 Max = 1;
+};
+
+USTRUCT(BlueprintType)
+struct SOCOMBAT_API FSOGoodsDropList
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TArray<FSOGoodsDrop> Drops;
+};
+
+/** So many of one collected item (what a raise takes, what a dismantle or a drop gives). */
+USTRUCT(BlueprintType)
+struct SOCOMBAT_API FSOGoodsCost
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FName Item;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	int32 Count = 0;
+};
+
+/** A name the armoury sorts guns by: a family (what kind of gun, in its slot) or an origin (who made it). */
+USTRUCT(BlueprintType)
+struct SOCOMBAT_API FSOGunGroup
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armoury")
+	FName Id;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armoury")
+	FText Name;
+
+	/** A family's slot (0 primary .. 2 heavy); an origin's -1. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armoury")
+	int32 Slot = -1;
+
+	/** An origin's line. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armoury")
+	FText Text;
+};
+
 /**
  * Everything loot rolls from (data.js RARITY, PERKS, SIGHTS, SHADERS, the name pools and every archetype).
  * /Game/Data/DA_LootTables, written by Content/Python/import_assets.py from Data/game_data.json.
@@ -278,10 +421,47 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Names")
 	TMap<FName, FString> ExoticNames;
 
+	// --- the armoury's lists: families (what kind of gun) and origins (who made it), in the order shown ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armoury")
+	TArray<FSOGunGroup> Families;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Armoury")
+	TArray<FSOGunGroup> Origins;
+
+	// --- collected items (Data/game_data.json "goods", "goodsDrops", "dismantleGoods", "starterGoods") ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TArray<FSOGoodsInfo> Goods;
+
+	/** "kill" (every creature), "elite" and "boss" (on top of it), "reliquary"; and by a creature's own key (its
+	 *  variant, or its boss) what only it carries. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TMap<FName, FSOGoodsDropList> GoodsDrops;
+
+	/** What dismantling a gun gives beside alloy: its class's material (by class id: energy, kinetic, horror), so
+	 *  many by rarity; and so many of DismantleCrystalItem by rarity. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TMap<FName, FName> DismantleGoods;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TArray<int32> DismantleCount;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	FName DismantleCrystalItem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TArray<int32> DismantleCrystal;
+
+	/** What a new profile (and one saved before collected items: version 8) starts with. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Goods")
+	TMap<FName, int32> StarterGoods;
+
 	const FSORarityInfo& GetRarity(int32 Index) const;
 	const FSOPerkInfo* FindPerk(FName Id) const;
 	const FSOSightInfo* FindSight(FName Id) const;
 	USOWeaponData* LoadArchetype(FName Id) const;
+	const FSOGoodsInfo* FindGoods(FName Id) const;
+	const FSOGunGroup* FindFamily(FName Id) const;
+	const FSOGunGroup* FindOrigin(FName Id) const;
 };
 
 /** state.js stat rolls: dmg / stability / range / handling 0.9..1.1, rpm 0.95..1.05. */
