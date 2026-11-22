@@ -4,7 +4,8 @@ every creature reaches the game (SourceArt/Characters/<Folder>: export_fbx.py --
 Content/Python/import_assets.py `character()`):
 
     blender -b -P tools/blender/skr/game.py -- male|female <Folder> [--h=.0045] [--budget=40000] [--save=x.blend]
-            [--glb=<path>]       (the GLB defaults to SourceArt/Characters/src/skr_<sex>.glb)
+            [--glb=<path>] [--rank=heavy]       (the GLB defaults to SourceArt/Characters/src/skr_<sex>[_<rank>].glb)
+    the heavy ranks (the Warden, the Bearer, the commander): male SarkethHeavy --rank=heavy
     blender -b -P tools/blender/export_fbx.py -- <glb> unreal/ShatteredOrbit/SourceArt/Characters/<Folder> --single
     blender -b -P tools/blender/asset_check.py -- <glb> --class=enemy --flat-ok=skr_glow
 
@@ -51,7 +52,7 @@ def tris(o):
 def opts():
     a = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     o = {'sex': 'male', 'folder': 'Sarketh', 'h': .0045, 'budget': 40000, 'save': None, 'glb': None, 'look': None,
-         'views': ''}
+         'views': '', 'rank': None}
     pos = []
     for x in a:
         if x.startswith('--'):
@@ -182,7 +183,8 @@ def main():
     arm.name = 'Armature'
 
     # the export: the armature and the mesh only
-    out = o['glb'] or os.path.join(ROOT, 'unreal', 'ShatteredOrbit', 'SourceArt', 'Characters', 'src', f'skr_{o["sex"]}.glb')
+    tag = o['sex'] + (f'_{o["rank"]}' if o['rank'] else '')
+    out = o['glb'] or os.path.join(ROOT, 'unreal', 'ShatteredOrbit', 'SourceArt', 'Characters', 'src', f'skr_{tag}.glb')
     os.makedirs(os.path.dirname(out), exist_ok=True)
     keep = bl.MODELS
     bl.MODELS = os.path.dirname(out)

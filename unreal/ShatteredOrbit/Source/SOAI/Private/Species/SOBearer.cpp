@@ -11,7 +11,7 @@ ASOBearer::ASOBearer(const FObjectInitializer& ObjectInitializer)
 {
 	// (its numbers are data: Data/species.json. These stand in for whatever that file does not name.)
 	SpeciesId = TEXT("bearer");
-	SOAltered::Configure(this, TEXT("Bearer"), 42.0f, 106.0f);
+	SOAltered::Configure(this, TEXT("SarkethHeavy"), 40.0f, 104.0f, 1.06f);   // (a Bearer: the heavy Sarketh)
 	VoicePrefix = TEXT("bearer");
 	DisplayName = NSLOCTEXT("SO", "Bearer", "Bearer");
 	WeaponArchetype = TEXT("hmg");

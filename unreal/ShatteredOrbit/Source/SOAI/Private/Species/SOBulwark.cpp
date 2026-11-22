@@ -26,7 +26,8 @@ ASOBulwark::ASOBulwark(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	SpeciesId = TEXT("bulwark");
-	SOAltered::Configure(this, TEXT("Bulwark"), 44.0f, 108.0f);
+	// (a Warden: the heavy Sarketh, a shield on its forearm, a little bigger in its powered armour; the old husk is gone)
+	SOAltered::Configure(this, TEXT("SarkethHeavy"), 40.0f, 104.0f, 1.08f);
 	VoicePrefix = TEXT("bulwark");
 	WeaponArchetype = TEXT("shotgun");
 	WeaponDamageScale = 0.2f;

@@ -14,7 +14,9 @@ namespace SOAltered
 	extern const TCHAR* const GlowMaterial;
 
 	/** Mesh, clips and capsule of one of the Altered (/Game/Characters/<Name>/SK_<Name>). */
-	void Configure(ASOEnemy* E, const TCHAR* Name, float Radius, float HalfHeight);
+	// the body /Game/Characters/<Name>/SK_<Name> with its clips, on a capsule Radius x HalfHeight at its own size, all of
+	// it made Scale times bigger (the heavy ranks wear the heavy Sarketh larger: the sheet's "bigger boss version")
+	void Configure(ASOEnemy* E, const TCHAR* Name, float Radius, float HalfHeight, float Scale = 1.0f);
 
 	float Now(const UObject* O);
 

@@ -34,14 +34,14 @@ mel = unreal.MaterialEditingLibrary
 # Weapon and loot numbers come from Data/game_data.json: that file is their source (edit it, then re-import).
 
 # Creature flesh: the GLBs ship without images; enemies.js applies these hx_* sets by material name.
-FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac",
-         # the Altered (altered.py)
-         "alt_skin": "hx_skin", "alt_flesh": "hx_flesh", "alt_plate": "hx_chitin", "alt_bone": "hx_bone", "alt_rag": "hx_rag"}
-ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer")
+FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac"}
+# the first enemies' bodies (altered.py's husks) were deleted on 2026-11-22 at the owner's word ("delete the old models
+# ... for the sarketh"): every rank is a Sarketh now (SARKETH)
+ALTERED = ()
 # The Sarketh (the owner's own design, tools/blender/skr: game.py writes these folders): the male and the female, each
 # material on its own set from the texture engine (assets/textures/<set>_c.jpg, _m.png = occlusion / roughness /
 # metal, _n.png OpenGL normal)
-SARKETH = ("Sarketh", "SarkethFemale")
+SARKETH = ("Sarketh", "SarkethFemale", "SarkethHeavy")      # (Heavy: the Warden, the Bearer and the commander)
 SKR_SETS = {"skr_skin": "skr_skin", "skr_armour": "skr_armour", "skr_armour_dark": "skr_dark", "skr_claw": "skr_armour"}
 
 SKIN_TONE = (0.55, 0.32, 0.22)

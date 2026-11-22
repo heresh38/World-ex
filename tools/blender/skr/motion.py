@@ -20,6 +20,12 @@ Clips (seconds, loop):
   Death   1.5         the legs fold, the body falls back and to its side
   Cast    0.8         the right arm drawn back and thrust out (a bolt thrown)
   Blink   0.36        a crouch and a spring to the side
+  Slam    1.3         both fists raised overhead and brought down into the ground in front (lands at .82 s)
+  Sweep   1.2         the right arm drawn back across the body and swept round wide (lands at .78 s)
+  Barrage 1.0         set, the right arm raised and thrust out as the volley goes (at .55 s)
+  Shield  1.2         the forearms brought up crossed before the chest, the body set behind them
+  Brace   0.8         the feet set wide, the weight forward and down behind the gun (a heavy gunner opening fire)
+(the last five are the heavy ranks': their times are the kits' clipLead, Data/game_data.json "kits")
 """
 import math
 
@@ -223,9 +229,80 @@ def blink(p):
     return d, 'both'
 
 
+def slam(p):
+    up = ramp(p, 0.0, .50) * (1 - ramp(p, .52, .63))
+    down = ramp(p, .52, .63) * (1 - ramp(p, .82, 1.0))
+    d = {
+        'spine': [(X, 6 - 16 * up + 30 * down)],
+        'chest': [(X, 4 - 10 * up + 16 * down)],
+        'neck': [(X, -6 + 8 * up - 14 * down)], 'head': [(X, -4 + 4 * up - 8 * down)],
+        'upperarm.L': [(X, -20 - 140 * up - 34 * down), (Y, -12 + 8 * up)], 'forearm.L': [(X, -40 + 22 * up - 8 * down)],
+        'upperarm.R': [(X, -20 - 140 * up - 34 * down), (Y, 12 - 8 * up)], 'forearm.R': [(X, -40 + 22 * up - 8 * down)],
+        'hand.L': [(X, -20)], 'hand.R': [(X, -20)],
+    }
+    stance_legs(d, crouch=.15 * up + .85 * down, wide=8)
+    return d, 'both'
+
+
+def sweep(p):
+    wind = ramp(p, 0.0, .55) * (1 - ramp(p, .55, .66))
+    swing = ramp(p, .55, .70) * (1 - ramp(p, .84, 1.0))
+    d = {
+        'hips': [(Z, 14 * wind - 18 * swing)],
+        'spine': [(X, 8), (Z, 26 * wind - 34 * swing)],
+        'chest': [(X, 6), (Z, 22 * wind - 30 * swing)],
+        'neck': [(X, -8), (Z, -16 * wind + 20 * swing)], 'head': [(X, -4), (Z, -12 * wind + 16 * swing)],
+        'upperarm.R': [(X, -60 - 10 * swing), (Y, 20 + 34 * wind - 12 * swing)], 'forearm.R': [(X, -20 - 24 * wind)],
+        'upperarm.L': [(X, -40), (Y, -20)], 'forearm.L': [(X, -60)],
+    }
+    stance_legs(d, crouch=.3 * wind + .5 * swing, wide=10)
+    return d, 'both'
+
+
+def barrage(p):
+    set_ = ramp(p, 0.0, .40) * (1 - ramp(p, .82, 1.0))
+    fire = ramp(p, .45, .58) * (1 - ramp(p, .75, 1.0))
+    d = {
+        'spine': [(X, 6 - 6 * set_ + 4 * fire)],
+        'chest': [(X, 4 - 8 * set_ + 6 * fire)],
+        'neck': [(X, -6 + 6 * set_)], 'head': [(X, -4 + 4 * set_)],
+        'upperarm.R': [(X, -20 - 80 * set_ - 10 * fire), (Y, 10)], 'forearm.R': [(X, -30 + 20 * set_ - 16 * fire)],
+        'upperarm.L': [(X, -20 - 50 * set_), (Y, -10)], 'forearm.L': [(X, -50 + 10 * set_)],
+    }
+    stance_legs(d, crouch=.35 * set_ + .2 * fire, wide=10)
+    return d, 'both'
+
+
+def shield(p):
+    up = ramp(p, 0.0, .35)
+    d = {
+        'spine': [(X, 10 + 10 * up)], 'chest': [(X, 6 + 6 * up)],
+        'neck': [(X, -8 - 8 * up)], 'head': [(X, -6 - 4 * up)],
+        'upperarm.L': [(X, -20 - 50 * up), (Y, -10 + 30 * up)], 'forearm.L': [(X, -40 - 70 * up)],
+        'upperarm.R': [(X, -20 - 50 * up), (Y, 10 - 30 * up)], 'forearm.R': [(X, -40 - 70 * up)],
+    }
+    stance_legs(d, crouch=.5 * up, wide=10)
+    return d, 'both'
+
+
+def brace(p):
+    set_ = ramp(p, 0.0, .45)
+    d = {
+        'hips': [(X, 4 * set_)],
+        'spine': [(X, 10 + 8 * set_)], 'chest': [(X, 6 + 4 * set_)],
+        'neck': [(X, -8 - 6 * set_)], 'head': [(X, -6 - 4 * set_)],
+        'upperarm.L': [(X, -30 - 10 * set_), (Y, -14)], 'forearm.L': [(X, -55)],
+        'upperarm.R': [(X, -20), (Y, 14)], 'forearm.R': [(X, -40)],
+    }
+    stance_legs(d, crouch=.45 * set_, wide=8 + 8 * set_)
+    return d, 'both'
+
+
 CLIPS = {
     'Idle': (3.2, True, idle), 'Walk': (1.0, True, walk), 'Run': (.62, True, run), 'Attack': (.9, False, attack),
     'Death': (1.5, False, death), 'Cast': (.8, False, cast), 'Blink': (.36, False, blink),
+    'Slam': (1.3, False, slam), 'Sweep': (1.2, False, sweep), 'Barrage': (1.0, False, barrage), 'Shield': (1.2, False, shield),
+    'Brace': (.8, False, brace),
 }
 
 

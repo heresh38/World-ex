@@ -170,6 +170,38 @@ def layout(A, J):
         A.claw(f'toeclaw{dx:+.3f}', tip_ + (0, .018, .006), tip_ + (dx * .4, -.068, -.032), .0150, 'toes.L', up=(0, 0, 1), hook=.55)
     A.slot = 'body'
     A.claw('dewclaw', ba + (-.040, .040, -.030), ba + (-.054, .086, -.050), .010, 'toes.L', up=(0, 0, 1), hook=.4)
+    if getattr(A, 'rank', None) == 'heavy':
+        heavy_parts(A, J)
+
+
+def heavy_parts(A, J):
+    """The heavy ranks (the Warden, the Bearer, the commander: the story's officers and heavy weapons in powered armour,
+    a soldier inside; until the owner designs their suits): his set made heavier. A tall shield on the outside of the
+    left forearm, lying close along it; a power unit on the back between the shoulder blades with two fins rising
+    from it; a fourth, outer pauldron layer with a point; a plate down the breastbone."""
+    j = lambda b, e=0: np.asarray(J[b][e], float)
+    sh, el, wr = j('upperarm.L'), j('forearm.L'), j('hand.L')
+    A.slot = 'shield'
+    A.shard('shield', [el + (.060, .010, .120), (el + wr) * .5 + (.074, -.004, 0), wr + (.066, -.016, -.120)], .260, (1, -.30, 0),
+            'forearm.L', thick=.016, base=.80, peak=.30, point=1.0, lower=.92, mat='armour', mirror=False, n=(30, 11), edge=.30)
+    A.shard('shield_rim', [el + (.054, .014, .100), (el + wr) * .5 + (.066, -.002, 0), wr + (.058, -.014, -.100)], .300, (1, -.30, 0),
+            'forearm.L', thick=.010, base=.80, peak=.30, point=1.0, lower=.92, mat='dark', mirror=False, n=(30, 11), edge=.30)
+    A.stud('shieldlight', (el + wr) * .5 + (.090, -.010, .020), .0060, 'forearm.L', mirror=False, mat='amber', lift=.040)
+    A.slot = 'back'
+    A.blade('pack', (0, .150, 1.650), (0, .168, 1.400), .200, 'chest', lift=.030, ridge=.016, thick=.030, peak=.30, base=.85, point=.8,
+            mirror=False, mat='dark', angular=.3)
+    A.blade('pack_top', (0, .168, 1.660), (0, .190, 1.500), .150, 'chest', lift=.064, ridge=.012, thick=.016, peak=.30, base=.85, point=.9,
+            mirror=False, angular=.3)
+    A.shard('pack_fin', [(.050, .190, 1.560), (.070, .230, 1.660), (.082, .260, 1.760)], .070, (1, .2, 0), 'chest', thick=.012, base=.72,
+            peak=.3, point=.95, lower=.6, edge=.22)
+    A.slot = 'shoulders'
+    A.blade('pauldron4', sh + (.060, .018, -.020), sh + (.170, .036, -.250), .170, 'upperarm.L', lift=.060, ridge=.009, thick=.012,
+            peak=.45, base=.75, point=.75, tip=.024, mat='dark', angular=.15)
+    A.shard('pauldron_hpt', [sh + (.040, .010, .040), sh + (.090, .020, .110), sh + (.130, .030, .170)], .070, (0, -1, .3), 'upperarm.L',
+            thick=.011, base=.72, peak=.32, point=.95, lower=.6, edge=.22)
+    A.slot = 'chest'
+    A.blade('breast', (0, -.120, 1.700), (0, -.130, 1.500), .110, 'chest', lift=.016, ridge=.012, thick=.012, peak=.25, base=.85, point=1.0,
+            mirror=False, angular=.4)
 
 
 def head_parts(A, J):

@@ -93,6 +93,7 @@ def main():
     objs = [body]
     if not o['bare']:
         A = chitin.Armour(S, M, seed=11 if sex == 'male' else 13)
+        A.rank = o.get('rank')                       # (--rank=heavy: the heavy ranks' set)
         if o['part'] == 'head' and hasattr(layout_mod, 'head_parts'):
             layout_mod.head_parts(A, J)
         else:

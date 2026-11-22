@@ -872,7 +872,7 @@ bool FSOBearerTest::RunTest(const FString& Parameters)
 	W.Run(0.6f);
 	if (!E->GetMesh()->GetSkeletalMeshAsset() || E->GetMesh()->GetBoneIndex(TEXT("thigh_R")) == INDEX_NONE)
 	{
-		AddWarning(TEXT("the Bearer's body is not imported (altered.py bearer, export, SO_IMPORT_ONLY=altered): its hold was not checked"));
+		AddWarning(TEXT("the Bearer's body is not imported (skr/game.py male SarkethHeavy --rank=heavy, export, SO_IMPORT_ONLY=sarketh): its hold was not checked"));
 		return true;
 	}
 	const ASOWeapon* Gun = E->GetWeapon();

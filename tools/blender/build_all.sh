@@ -22,7 +22,6 @@ done
 run weapons                       # every gun (gun_<archetype>.glb, with its reload parts) and the optics (gun_attach.glb)
 run requiem_guns                  # the Void Requiem raid set (gun_vr_*.glb), the first operation's reward guns
 run aliens stalker                # the stalker (fleshkit SDF sculpt, skinned, 5 clips)
-run altered                       # the Altered: remnant, veilborn, bulwark, the bearer and the Hollow Colossus (the operation)
 run nexus                         # Nexus Prime's hub kit
 run nexus_city --kit              # the big city's building / street kit (the tiles are baked by export_unreal.sh)
 run city_trees                    # the city's trees and shrubs

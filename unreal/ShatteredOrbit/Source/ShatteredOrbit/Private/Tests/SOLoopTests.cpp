@@ -51,7 +51,7 @@ bool FSOLoopKillPaysTest::RunTest(const FString& Parameters)
 	Options.bOnNav = false;
 	Options.Variant = &V;
 	ASOEnemy* E = USOSpeciesLibrary::Spawn(W.World, TEXT("remnant"), FVector(600, 0, 0), 180.0f, Options);
-	if (!TestNotNull(TEXT("a remnant spawned (/Game/Characters/Remnant imported)"), E))
+	if (!TestNotNull(TEXT("a remnant spawned (/Game/Characters/Sarketh imported)"), E))
 	{
 		return false;
 	}

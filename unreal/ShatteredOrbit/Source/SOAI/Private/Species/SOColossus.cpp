@@ -114,7 +114,8 @@ ASOColossus::ASOColossus(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	SpeciesId = TEXT("colossus");
-	SOAltered::Configure(this, TEXT("Colossus"), 50.0f, 128.0f);
+	// (the commander: the heavy Sarketh made big, the sheet's "bigger boss version", until its walking war suit is designed)
+	SOAltered::Configure(this, TEXT("SarkethHeavy"), 40.0f, 104.0f, 1.32f);
 	DisplayName = NSLOCTEXT("SO", "Colossus", "The Colossus");
 	VoicePrefix = TEXT("colossus");
 	WeaponArchetype = TEXT("hmg");

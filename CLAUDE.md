@@ -99,7 +99,7 @@ existing classes, never second systems.
   `nexus_textures.py`, `world_maps.py`, `detail_maps.py`, `nexus_city_textures.py`, `city_maps.py`, `ruins_textures.py`,
   `ruins_maps.py`: the `*_maps.py` are the texture engine's sets and overwrite the older scripts' of the same
   names), the guns and optics (`weapons.py` + `gunkit.py`),
-  the stalker (`aliens.py`, `fleshkit.py`), the Altered (`altered.py`), Nexus Prime (`nexus.py`, `nexus_city.py` kit),
+  the stalker (`aliens.py`, `fleshkit.py`), Nexus Prime (`nexus.py`, `nexus_city.py` kit),
   the city trees (`city_trees.py`), loot props (`loot_props.py`), the reliquary (`vanthos.py`), Meridian (`meridian.py`)
   and effect cards (`fx_kit.py`). Then `bash tools/blender/export_unreal.sh` builds the players and turns everything into
   `unreal/ShatteredOrbit/SourceArt` (FBX + textures + json), and `Content/Python/import_assets.py` imports it.
@@ -1063,7 +1063,9 @@ bigger creatures. Ids, classes and asset folders keep the first names (an API); 
 (below: "The Sarketh in the game"). The old `tools/blender/hero/sarketh.py` set is built on the HUMAN male and is NOT
 the Sarketh: the owner made it a human player armour set (2026-11-15); never bring it into the game as them (on
 2026-11-21 it was taken for them and the owner corrected it: "that one is the human model"). The first bodies
-(`altered.py`: husks grown through with crystal) still stand in for the ranks not yet made of the owner's design.
+(`altered.py`'s husks grown through with crystal) were DELETED on 2026-11-22 at the owner's word ("delete the old
+models like these two in the picture for the sarketh": the Warden's and the Bearer's), every one of them, with the
+script that made them: every rank is a Sarketh.
 Other species are designed only when the owner asks for the place they hold (some humanoid, some nothing like us),
 each with names of our own.
 **The Sarketh in the game** (the owner's design; 2026-11-21, the owner: "work on getting the new sarketh models we
@@ -1081,11 +1083,15 @@ their set's metal: fully metal they mirrored the ground and read dark bronze in 
 satin grey; the armour set itself drawn pale, `skr/textures.py` armour `#a39e94`: at `#59564f` a steel plate read
 black). Who wears which: the male the Levy (`ASORemnant`) and the Veteran (`ASOArmedStalker`), the female the Speaker
 (`ASOVeilborn`) and the Runner (the feral stalker, `ASOEnemy`'s own body); their capsules as tall as they stand (the
-male 36 x 104, the female 34 x 98). They hold the light guns, which are the Sarketh's own technology (the story).
+male 36 x 104, the female 34 x 98). The heavy ranks wear the HEAVY Sarketh (`skr/game.py -- male SarkethHeavy
+--rank=heavy`, `male.heavy_parts`: his set with a tall shield along the left forearm, a power unit on the back with
+fins, a fourth pauldron layer, a plate down the breastbone), a little bigger in powered armour
+(`SOAltered::Configure(..., Scale)`): the Warden (`ASOBulwark`) 1.08, the Bearer 1.06, the commander (`ASOColossus`)
+1.32 (the sheet's "bigger boss version" until its war suit is designed). The heavy ranks' moves play the Sarketh's own
+clips (`skr/motion.py`: Slam, Sweep, Barrage, Shield, Brace, timed to the kits' `clipLead`). They hold the light guns, which are the Sarketh's own technology (the story).
 Pictures `SOCaptureSeries 1 42` (files `SO_k*`: the seven ranks in a line on open floor the capture finds for itself,
-then each close). Still to do: the Warden, the Bearer and the commander (powered armour and a war suit on the owner's
-design: the sheet asks for "a bigger boss version"; the Altered stand in), the motion's other clips (Slam, Sweep,
-Barrage, Shield, Brace), levels of detail, baked own maps (the gate's own-maps check), voices of their own, the
+then each close). Still to do: the Warden's, the Bearer's and the commander's own powered armour and war suit on
+the owner's design (the heavy Sarketh stands in), levels of detail, baked own maps (the gate's own-maps check), voices of their own, the
 female's and the male's sets told apart by rank (the armour is modular by slot: a rank is a set).
 **Made to the sheet** (the owner, 2026-11-21: "work more on the sarketh model to make it exactly like the image I send";
 `skr/lab.py -- male|female --part=head|full [--bare] [--pose=Idle:1] --views=sheet,head,headside,back,torso,legs,...`
@@ -1310,7 +1316,7 @@ to it; left on the capsule the shoulders ended up above the camera and the arms 
 a turn on the spot is stepped (`TurnLift`: the foot on the side of the turn comes off the ground first); on a vault,
 mantle or climb the gun is put away in both views and the first-person hands go onto the edge too. Test
 `ShatteredOrbit.Anim.StopsAndTurns`.
-Enemies, the Altered (`altered.py` + `SOAltered.h`), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
+Enemies, the Altered (`SOAltered.h`; the name stays an API: their bodies are the Sarketh now), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
 by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as
 they track): Remnant (SMG, pushes in), armed Stalker (auto rifle, cover), Veilborn (scout rifle from cover, the odd void
 bolt, blinks), Bulwark (frontal shield, shotgun, ground slam), the Hollow Colossus (boss, ~2.6 m: heavy machine gun,
@@ -1425,8 +1431,9 @@ arrives it breaks off once (`bBrokeOff`); after a stumble an armed one looks for
 impact is shown), still fills the stumble meter, and the plate is down while it reels: hammering the plate opens it.
 A test whose creature has a brain and a player-controlled target must expect it to move when aimed at (remove the
 brain if the test is not about it). Tests `ShatteredOrbit.AI.FireBreaksACharge`, `AHitShowsWhereItLands`.
-**The Bearer** (the heavy gunner's own species, 2026-11-13; `altered.py` `bearer`, `ASOBearer` in
-`Species/SOBearer.cpp`, `/Game/Characters/Bearer`, voice set `bearer`): a broad plated husk (a breastplate in three
+**The Bearer** (the heavy gunner's own species, 2026-11-13; `ASOBearer` in `Species/SOBearer.cpp`, voice set
+`bearer`; its body the heavy Sarketh since 2026-11-22, the old husk deleted; what follows is how the husk was): a broad
+plated husk (a breastplate in three
 lames with light in the seams, a collar round a small sunken head, a swept pauldron over the gun arm, a drum of
 crystal-fused bone across the back whose feed comes round to a port on the belt) that carries the heavy machine gun
 LOW AT THE RIGHT HIP in both hands (`ASOEnemy::HoldsAtHip` -> `UpdateGunHold`: the rear grip beside the hip joint,
@@ -1435,9 +1442,9 @@ the barrel laid on the target from there). Slow, no cover, a suppressor; its pla
 fire. Meridian Fall's waves name it directly (the Boulevard, the Concord Ring); the `bulwark_gunner` variant is kept
 for a level that wants one. Sculpt lessons: thighs thicker than `legs(..., 1.5)` fuse and the hide stretches between
 them in a stride; a bracer or tasset is a shell a finger off the limb and only its outer side, never a drum round it
-(it stood out at hip height like a shelf). Build one creature: `altered.py -- bearer`, then `export_fbx.py --
-assets/models/altered_bearer.glb SourceArt/Characters/Bearer --single`, then `SO_IMPORT_ONLY=altered
-SO_ALTERED_ONLY=Bearer`. Test `ShatteredOrbit.Altered.TheBearer`; pictures `SOCaptureSeries 1 27` (files `SO_g*`).
+(it stood out at hip height like a shelf). Its body now: `skr/game.py -- male SarkethHeavy --rank=heavy`,
+`export_fbx.py ... SourceArt/Characters/SarkethHeavy --single`, `SO_IMPORT_ONLY=sarketh SO_SARKETH_ONLY=SarkethHeavy`.
+Test `ShatteredOrbit.Altered.TheBearer`; pictures `SOCaptureSeries 1 27` (files `SO_g*`).
 **A boss is a species with a table** (Project Orion phase 3; `SOBoss.h`, `Data/game_data.json` "bosses" ->
 `SO_IMPORT_ONLY=bosses` -> `/Game/Data/DA_Boss_<Id>`; report `docs/orion/reports/PHASE_3.md`): `ASOEnemy::BossId` (a
 species' own, or a variant's `"boss"`: a level makes a boss of any species with data alone) makes a `USOBossComponent`

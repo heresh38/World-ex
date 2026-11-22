@@ -30,13 +30,13 @@ namespace SOAltered
 	const TCHAR* const GlowMaterial = TEXT("/Game/Shared/Operation/MI_ru_glow.MI_ru_glow");
 
 	/** Mesh, clips and capsule of one of the Altered (/Game/Characters/<Name>/SK_<Name>). */
-	void Configure(ASOEnemy* E, const TCHAR* Name, float Radius, float HalfHeight)
+	void Configure(ASOEnemy* E, const TCHAR* Name, float Radius, float HalfHeight, float Scale)
 	{
 		E->BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/Characters/%s/SK_%s.SK_%s"), Name, Name, Name)));
 		E->ClipPathPrefix = FString::Printf(TEXT("/Game/Characters/%s/Anims/A_%s_"), Name, Name);
-		E->GetCapsuleComponent()->InitCapsuleSize(Radius, HalfHeight);
-		E->GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -HalfHeight));
-		E->GetMesh()->SetRelativeScale3D(FVector(1.0f));
+		E->GetCapsuleComponent()->InitCapsuleSize(Radius * Scale, HalfHeight * Scale);
+		E->GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -HalfHeight * Scale));
+		E->GetMesh()->SetRelativeScale3D(FVector(Scale));
 		E->BloodColor = FLinearColor(0.32f, 0.1f, 0.55f);
 	}
 

@@ -49,10 +49,14 @@ run "$OUT/NexusCity/src/nexus_city_tiles.glb" "$OUT/NexusCity/Tiles"
 run "$M/city_trees.glb" "$OUT/NexusCity/Trees"
 # Enemy: the VANTHOS stalker (fleshkit, 5 clips)
 run "$M/alien_stalker.glb" "$OUT/Characters/Stalker" --single
-# The Altered, the operation's enemies (altered.py: own clips per creature)
-for k in remnant veilborn bulwark colossus bearer; do
-  K="$(echo "${k:0:1}" | tr a-z A-Z)${k:1}"
-  run "$M/altered_$k.glb" "$OUT/Characters/$K" --single
+# The Sarketh, every rank (the owner's design, tools/blender/skr/game.py: built once into SourceArt/Characters/src,
+# delete a GLB to rebuild it): the male (Levy, Veteran), the female (Runner, Speaker), the heavy (Warden, Bearer, the
+# commander). The old Altered husks (altered.py) were deleted on 2026-11-22 at the owner's word.
+for rank in "male Sarketh skr_male" "female SarkethFemale skr_female" "male SarkethHeavy skr_male_heavy --rank=heavy"; do
+  set -- $rank
+  glb="$OUT/Characters/src/$3.glb"
+  [ -f "$glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/skr/game.py" -- "$1" "$2" ${4:-} 2>&1 | grep -E "^\[skr_game\]|Error|Traceback" || true
+  run "$glb" "$OUT/Characters/$2" --single
 done
 # Weapons: every archetype's gun (data.js ARCHETYPES model) with its reload parts, and the optics for the rail
 for f in "$M"/gun_*.glb; do

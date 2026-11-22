@@ -82,6 +82,7 @@ def build(o):
     body = fk.build_mesh(S, f'SKR_{sex}_body', lo, hi, o['h'], 900000, {'skin': M['skin']}, uv_scale=.24, ao_dist=.05,
                          mottle=.25, bruise=('#8f86a8', .22, 5.0), veins=('#7a7aa8', .18, 7.0), seed=4)
     A = chitin.Armour(S, M, seed=11 if sex == 'male' else 13)
+    A.rank = o.get('rank')                          # (heavy: the heavy ranks' set, male.heavy_parts)
     layout(A, J)
     log('chitin:', A.count, 'pieces')
     parts = A.join(f'SKR_{sex}_A')
