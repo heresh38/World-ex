@@ -400,7 +400,10 @@ group, the ears from the side: `TurnTo`; a portrait's light close up, softer and
 with it they shone through the jaw's edge in the skin's scatter; the picture's sides fade, `M_UI_Stage` Edge). A NEW profile opens the builder by itself at the first start
 (`USOInventoryComponent::IsCharacterMade`, false only for a new profile; a save from before version 9 counts as
 made; `ASOHUD::DrawHUD`, never in a test, a capture series, the two-player check or an unattended run), and closing the
-armoury after it ends the first start. Pictures: set 19's `SO_u10*_creator_*`; tests `ShatteredOrbit.Creator.*`. A gun carried low (a sprint, the
+armoury after it ends the first start. The hair is laid over a face's skin (`HairAmount` 1) ONLY where the face has maps
+of its own whose mask's B is the hair (the new male's `skin_face`): the female's head wears the body's map, whose B is
+white, and with it her whole face took the brows' colour (`import_assets.player_extra`; the test holds her at 0).
+Pictures: set 19's `SO_u10*_creator_*` (her body: `u10j` / `u10k`); tests `ShatteredOrbit.Creator.*`. A gun carried low (a sprint, the
 armoury's stand-in: `USOLocomotionAnimInstance::bCarried`) keeps the third-person firing elbow by the side (the arm IK's
 swing toward the straightest wrist is held to 0.55 rad there: it stood out level with the shoulder, the owner's "arm
 seems very bend out"). Known: `vr_sniper`'s third-person support palm lands on its fore end's blade fins (the body's

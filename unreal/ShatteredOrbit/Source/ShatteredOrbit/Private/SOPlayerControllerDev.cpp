@@ -683,6 +683,14 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(1.4f, TEXT("u10h_creator_random"));
 		Act([=]() { Control(ESOArmouryControl::Tool, TEXT("resetall")); Control(ESOArmouryControl::Tool, TEXT("resetall")); });
 		Snap(1.0f, TEXT("u10i_creator_reset"));
+		// her body: its own sliders (her face was built apart: the groups and keys her morphs have), then back to his
+		Act([=]() { Creator(TEXT("body")); Control(ESOArmouryControl::Choice, TEXT("body:female")); });
+		Snap(2.0f, TEXT("u10j_creator_female"));
+		Act([=]() { Creator(TEXT("eyes")); if (USOInventoryWidget* A = Armoury()) { A->OnSlider(TEXT("eye_size"), 0.7f, true); } });
+		Snap(1.4f, TEXT("u10k_creator_female_eyes"));
+		Act([=]() { Control(ESOArmouryControl::Tool, TEXT("resetall")); Control(ESOArmouryControl::Tool, TEXT("resetall")); Creator(TEXT("body"));
+			Control(ESOArmouryControl::Choice, TEXT("body:male")); });
+		Snap(1.6f, TEXT("u10l_creator_back_male"));
 		Act([=]() { OpenSlot(TEXT("")); });
 		Snap(1.2f, TEXT("u7_back"));
 		// the player goes down with the armoury open: the stand-in is a picture and stays as it was
@@ -2262,6 +2270,80 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.5f, TEXT("f3_her_back"));
 		Act([=]() { Orbit(-50.0f, 230.0f, 30.0f); });
 		Snap(0.5f, TEXT("f4_her_quarter"));
+	}
+	if (Set == 42)
+	{
+		// The Sarketh (files k*): every rank on its species, in a line in front of the player without their brains,
+		// holding their guns (tools/blender/hero/sarketh_game.py): the line from the front and from three quarters,
+		// then each one close from three quarters. The player is hidden.
+		static const TCHAR* Ranks[] = { TEXT("stalker_feral"), TEXT("remnant"), TEXT("stalker"), TEXT("veilborn"), TEXT("bulwark"), TEXT("bearer"), TEXT("colossus") };
+		static const TCHAR* Names[] = { TEXT("runner"), TEXT("levy"), TEXT("veteran"), TEXT("speaker"), TEXT("warden"), TEXT("bearer"), TEXT("commander") };
+		const TSharedRef<TArray<TWeakObjectPtr<ASOEnemy>>> Line = MakeShared<TArray<TWeakObjectPtr<ASOEnemy>>>();
+		const TSharedRef<FVector> Middle = MakeShared<FVector>(FVector::ZeroVector);
+		const TSharedRef<FVector> Toward = MakeShared<FVector>(FVector::ForwardVector);
+		auto Frame = [this, Middle, Toward](const FVector& At, float Back, float Side, float Up)
+		{
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, *Toward);
+			const FVector Eye = At - *Toward * Back + Right * Side + FVector(0.0f, 0.0f, Up);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
+			if (UCameraComponent* Cam = CaptureCamera->FindComponentByClass<UCameraComponent>())
+			{
+				Cam->SetFieldOfView(50.0f);
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		Do(5.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			ASOCharacter* H = Hero();
+			if (!H)
+			{
+				return;
+			}
+			*Toward = FRotator(0.0f, GetControlRotation().Yaw, 0.0f).Vector();
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, *Toward);
+			const FVector Feet = H->GetActorLocation() - FVector(0.0f, 0.0f, H->GetSimpleCollisionHalfHeight());
+			*Middle = Feet + *Toward * 900.0f;
+			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Ranks)); ++i)
+			{
+				const FVector At = *Middle + Right * (static_cast<float>(i) - 3.0f) * 190.0f;
+				ASOEnemy* E = USOSpeciesLibrary::Spawn(GetWorld(), Ranks[i], At, GetControlRotation().Yaw + 180.0f);
+				if (AController* Brain = E ? E->GetController() : nullptr)
+				{
+					Brain->UnPossess();                                      // (they stand for the pictures)
+					Brain->Destroy();
+				}
+				if (E)
+				{
+					E->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+				}
+				Line->Add(E);
+				UE_LOG(LogShatteredOrbit, Display, TEXT("Sarketh lineup: %s (%s) %s, body %s, %.0f cm tall"), Names[i], Ranks[i], E ? TEXT("in place") : TEXT("NOT SPAWNED"),
+					E && E->GetMesh()->GetSkeletalMeshAsset() ? *E->GetMesh()->GetSkeletalMeshAsset()->GetName() : TEXT("NONE"),
+					E ? E->GetMesh()->Bounds.BoxExtent.Z * 2.0f : 0.0f);
+			}
+			H->SetActorHiddenInGame(true);
+		});
+		Do(2.0f, [=]() { Frame(*Middle + FVector(0.0f, 0.0f, 110.0f), 1250.0f, 0.0f, 60.0f); });
+		Snap(0.4f, TEXT("k1_line_front"));
+		Act([=]() { Frame(*Middle + FVector(0.0f, 0.0f, 110.0f), 1000.0f, -820.0f, 120.0f); });
+		Snap(0.4f, TEXT("k2_line_quarter"));
+		for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Ranks)); ++i)
+		{
+			Act([=]()
+			{
+				if (ASOEnemy* E = (*Line).IsValidIndex(i) ? (*Line)[i].Get() : nullptr)
+				{
+					const float Tall = FMath::Max(150.0f, E->GetMesh()->Bounds.BoxExtent.Z * 2.0f);
+					Frame(E->GetActorLocation() + FVector(0.0f, 0.0f, Tall * 0.08f), Tall * 1.45f, -Tall * 0.75f, Tall * 0.12f);
+				}
+			});
+			Snap(0.4f, FString::Printf(TEXT("k3_%d_%s"), i + 1, Names[i]));
+		}
 	}
 	if (Set == 23)
 	{

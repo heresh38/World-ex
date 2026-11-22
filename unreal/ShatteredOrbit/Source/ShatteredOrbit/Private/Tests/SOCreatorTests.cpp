@@ -88,6 +88,19 @@ bool FSOCreatorKeysTest::RunTest(const FString& Parameters)
 				Data.HairColours[0].Tint.Equals(FLinearColor(Tint.R, Tint.G, Tint.B, 1.0f), 0.005f));
 		}
 	}
+	// the hair is laid over a face's skin only where its map has a hair mask (the male's own face map): the female's
+	// head wears the body's map, whose mask is white, and with HairAmount 1 her whole face took the brows' colour
+	if (FemaleMesh)
+	{
+		for (const FSkeletalMaterial& Slot : FemaleMesh->GetMaterials())
+		{
+			float Hair = 0.0f;
+			if (Slot.MaterialInterface && Slot.MaterialInterface->GetScalarParameterValue(TEXT("HairAmount"), Hair))
+			{
+				TestTrue(FString::Printf(TEXT("her %s takes no hair colour over its skin"), *Slot.MaterialSlotName.ToString()), Hair < 0.01f);
+			}
+		}
+	}
 	return true;
 }
 

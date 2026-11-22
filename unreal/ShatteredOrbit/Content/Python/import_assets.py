@@ -916,8 +916,12 @@ def player_extra(key, m):
         # face's map carries the brows' hairs in its mask's B: HairAmount 1 shows them)
         # (its own maps carry the colour; under the game's sky they read pale and a little pink against the sheet's
         # warm, sunned skin: a warm tint over them, the creator's skin tone sets the same parameter)
+        # (the hair over the skin only where the face has maps of its own, whose mask's B is the brows and the scalp's
+        # hair: the new male's; the female's head wears the body's map, whose B is white, and with HairAmount 1 her
+        # whole face took the brows' colour)
+        own_face = key == "skin_face" and "_face_" in str(m.get("mrTex") or "")
         return {"tint": list(SKIN_DAYLIGHT) if m.get("baseColorTex") else list(SKIN_TONE),
-                "hair": 1.0 if key == "skin_face" else 0.0}
+                "hair": 1.0 if own_face else 0.0}
     if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
     if key == "orion_suit":
