@@ -265,6 +265,72 @@ bool FSOGoodsDropTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOGoodsSharedTest, "ShatteredOrbit.Goods.RelicsGoToEveryPlayer", SOTest::Flags)
+bool FSOGoodsSharedTest::RunTest(const FString& Parameters)
+{
+	// two players: one lands the last round on a named elite, and BOTH are paid what it carries (its relic, the
+	// elite's list), each their own; what any creature may carry stays the killer's
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-4000, -4000, -100), FVector(4000, 4000, 0));
+	auto MakeState = [&W]()
+	{
+		FActorSpawnParameters Params;
+		Params.bDeferConstruction = true;
+		ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, Params);
+		PS->GetInventory()->bPersist = false;
+		PS->FinishSpawning(FTransform::Identity);
+		return PS;
+	};
+	ASOPlayerState* KillerState = MakeState();
+	ASOPlayerState* MateState = MakeState();
+	ASOCharacter* Killer = W.SpawnCharacter(FVector(0, 0, 0));
+	Killer->SetPlayerState(KillerState);
+	ASOCharacter* Mate = W.SpawnCharacter(FVector(0, 400, 0));
+	Mate->SetPlayerState(MateState);
+	USOInventoryComponent* A = KillerState->GetInventory();
+	USOInventoryComponent* B = MateState->GetInventory();
+	W.Run(0.2f);
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	const FSOGoodsDropList* Named = Tables ? Tables->GoodsDrops.Find(TEXT("remnant_captain")) : nullptr;
+	if (!TestTrue(TEXT("the Levy Captain carries something of its own"), A && B && Named && Named->Drops.Num() > 0))
+	{
+		return false;
+	}
+	const FName Relic = Named->Drops[0].Item;
+	FSOSpeciesVariant V;
+	V.Id = TEXT("remnant_captain");
+	V.DisplayName = FText::FromString(TEXT("Levy Captain"));
+	FSOSpawnOptions Options;
+	Options.bOnNav = false;
+	Options.Variant = &V;
+	ASOEnemy* E = USOSpeciesLibrary::Spawn(W.World, TEXT("remnant"), FVector(600, 0, 0), 180.0f, Options);
+	if (!TestNotNull(TEXT("a remnant spawned (/Game/Characters/Sarketh imported)"), E))
+	{
+		return false;
+	}
+	if (AController* Brain = E->GetController())
+	{
+		Brain->UnPossess();
+		Brain->Destroy();
+	}
+	TArray<FString> MateLines;
+	B->OnFeed.AddLambda([&MateLines](const FString& Text, const FLinearColor&) { MateLines.Add(Text); });
+	const int32 RelicA = A->CountOf(Relic), RelicB = B->CountOf(Relic);
+	const int32 CrystalB = B->CountOf(TEXT("void_crystal"));
+	const int32 CreditsB = B->GetCredits();
+	W.Run(0.1f);
+	USOCombatStatics::ApplyDamage(Killer, E, 100000.0f, false);
+	W.Run(0.1f);
+	TestTrue(TEXT("the creature died"), E->IsDead());
+	TestEqual(TEXT("the killer has its relic"), A->CountOf(Relic), RelicA + 1);
+	TestEqual(TEXT("and so does the one beside it"), B->CountOf(Relic), RelicB + 1);
+	TestTrue(TEXT("the elite's list is the mate's too"), B->CountOf(TEXT("void_crystal")) > CrystalB);
+	const FSOGoodsInfo* RelicInfo = Tables->FindGoods(Relic);
+	TestTrue(TEXT("the mate's feed says so"), RelicInfo && MateLines.ContainsByPredicate([RelicInfo](const FString& L) { return L.Contains(RelicInfo->Name.ToString()); }));
+	TestEqual(TEXT("the credits are the killer's"), B->GetCredits(), CreditsB);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOGoodsUseTest, "ShatteredOrbit.Goods.ConsumablesWork", SOTest::Flags)
 bool FSOGoodsUseTest::RunTest(const FString& Parameters)
 {

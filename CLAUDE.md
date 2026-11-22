@@ -1020,7 +1020,7 @@ saved: version 8, a profile from before starts with `"starterGoods"`; `AddGoods`
 all or nothing, `UseGoods` on its body, `ServerUseGoods`, `MarkGoodsSeen`); what comes in is a line in the feed. They
 are PAID by the loop (`USOLootSubsystem::OnDied`, `USOLootLibrary::RollGoods`, data `"goodsDrops"`): every kill rolls
 "kill", an elite "elite" on top, a boss "boss", and a creature its own key's list (`ASOCombatCharacter::GetLootKey`: a
-variant's id, or its boss's: each named one of Meridian Fall carries its relic, the commander the core); a cache rolls
+variant's id, or its boss's: each named one of Meridian Fall carries its relic, the commander the core); the elite's, the boss's and the creature's own list go to EVERY player in the world, each their own roll (whoever landed the last round, the team fought it; the owner's queue, 2026-11-22; test `ShatteredOrbit.Goods.RelicsGoToEveryPlayer`), the "kill" roll, the credits and the xp to the killer; a cache rolls
 "reliquary"; dismantling a gun gives its class's material by rarity and void crystal from Legendary on
 (`"dismantleGoods"`, `USOLootLibrary::DismantleGoods`). And they are TAKEN by raising: a raise takes the piece's
 material (its gun class's, armour's) by rarity and void crystal for Legendary and Sovereign (`"progression.upgrade.goods"`

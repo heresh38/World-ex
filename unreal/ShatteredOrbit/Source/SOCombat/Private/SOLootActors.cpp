@@ -468,6 +468,32 @@ void USOLootSubsystem::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld
 			}
 		}
 	}
+	// what an elite, a boss or a named one carries (its relic, the command core) goes to EVERY player here, each
+	// their own roll: whoever landed the last round, the team fought it (the owner's queue: "relics to every player in
+	// multiplayer"); it does not wait on a killer being known (a drum's blast, a fall)
+	const int32 Tier = Victim->GetLootTier();
+	const FName OwnKey = Victim->GetLootKey();
+	if (Tier >= 1 || !OwnKey.IsNone())
+	{
+		for (TActorIterator<APlayerState> It(World); It; ++It)
+		{
+			USOInventoryComponent* Each = It->FindComponentByClass<USOInventoryComponent>();
+			if (!Each)
+			{
+				continue;
+			}
+			TArray<FSOGoodsCost> Shared;
+			if (Tier >= 1)
+			{
+				USOLootLibrary::RollGoods(Tier >= 2 ? FName(TEXT("boss")) : FName(TEXT("elite")), Rng, Shared);
+			}
+			USOLootLibrary::RollGoods(OwnKey, Rng, Shared);
+			for (const FSOGoodsCost& G : Shared)
+			{
+				Each->AddGoods(G.Item, G.Count);
+			}
+		}
+	}
 	if (!Inventory)
 	{
 		return;
@@ -475,16 +501,9 @@ void USOLootSubsystem::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld
 	const int32 Level = FMath::Max(1, Inventory->GetPower());
 	Inventory->AddCredits(FMath::RoundToInt(8.0f + Rng.FRand() * 10.0f + Level * 2.0f));
 	Inventory->AddXp(60);
-	// goods, straight into the inventory: what every creature may carry, an elite's or a boss's on top, and what only
-	// this one carries (a named creature's relic)
+	// what every creature may carry: the killer's, straight into the inventory
 	TArray<FSOGoodsCost> Goods;
 	USOLootLibrary::RollGoods(TEXT("kill"), Rng, Goods);
-	const int32 Tier = Victim->GetLootTier();
-	if (Tier >= 1)
-	{
-		USOLootLibrary::RollGoods(Tier >= 2 ? FName(TEXT("boss")) : FName(TEXT("elite")), Rng, Goods);
-	}
-	USOLootLibrary::RollGoods(Victim->GetLootKey(), Rng, Goods);
 	for (const FSOGoodsCost& G : Goods)
 	{
 		Inventory->AddGoods(G.Item, G.Count);
