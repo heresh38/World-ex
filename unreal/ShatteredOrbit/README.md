@@ -204,6 +204,13 @@ ticked by hand):
 | `Loot.TablesMatchDataJs` | every archetype's data asset matches `Data/game_data.json` (damage, rpm, magazine, slot, pellets), models and optics exist |
 | `Loot.Rolls` | rarity odds (38 / 30 / 22 / 8.5 / 1.5 %), perks by rarity without repeats, stat roll ranges, compatible sights, names, stats with rarity / power / perks, the reliquary pool |
 | `Loot.Inventory` | new profile (starters + armoury, rifle in hand), possession equips, slot switching keeps each copy's ammo, NEW tags, lock / dismantle rules, equip swaps the gun, the 200 vault cap |
+| `Goods.TheTablesAreData` | every gun in a family of its own slot and an origin; every item a drop, a dismantle, a raise or the starting stock names exists; every item named, with a line, a stack, and a consumable that does something |
+| `Goods.HeldStackedAndTaken` | a new profile's starting stock, stacks up to the item's cap, unknown items refused, all-or-nothing taking, a used-up stack gone |
+| `Goods.RaisingTakesMaterials` | a raise takes its gun class's (or armour's) material by rarity and void crystal from Legendary on; short of it nothing is paid |
+| `Goods.DismantlingGivesMaterials` | dismantling gives alloy as before and its class's material by rarity, void crystal from Legendary on |
+| `Goods.ElitesCarryTheirRelics` | a named elite's kill pays its relic and the elites' void crystal into the killer's inventory, and the feed says so |
+| `Goods.ConsumablesWork` | a stim does nothing at full health (and is not used up), gives health back when hurt; a shield cell refills the shield |
+| `Goods.AnOldSaveStartsWithTheStock` | a version 7 profile is migrated with the starting stock; a current one is left as it is |
 | `Loot.PickupsAndReliquary` | loot cores become weapons of their rarity, ammo tops up the reserve, walking over pickups, the reliquary pays out once and reseals |
 | `Weapon.EveryArchetypeFiresAndReloads` | all 22 guns: both rigs build, one trigger pull = one shot with all its pellets / a full burst, an empty reload of each choreography ends with a full magazine |
 | `Wardrobe.Dresses` | both wardrobes import (body, arms, the Orion set with icons and armour, first-person cuts only where the arms reach); the player wears one follower mesh per slot, covered skin is hidden, the coat comes off, the female body swaps meshes and clips |

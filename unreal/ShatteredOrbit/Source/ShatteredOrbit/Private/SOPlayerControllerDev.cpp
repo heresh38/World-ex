@@ -589,19 +589,37 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	}
 	if (Set == 19)
 	{
-		// The armoury alone (files u*): the loadout as it opens, a card's quick look, a gun slot's armoury (the inspect
-		// panel against the equipped gun), the heavy one's, the melee armoury (the guard raised), the armour's (the piece
-		// tried on), back to the loadout.
+		// The armoury alone (files u*): the loadout as it opens, a card's quick look, a slot's arsenal (its grid, by family
+		// and by origin, by rarity, as a list, a gun's details, the comparison held), the special, heavy and melee slots,
+		// the armour, the inventory of collected items (everything, the consumables with one chosen, the relics, the
+		// materials), back to the loadout. The profile is not saved meanwhile: one of every collected item is handed
+		// out so that every card shows.
 		auto Hud = [this]() { return Cast<ASOHUD>(GetHUD()); };
-		auto OpenSlot = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->OpenSlot(SlotKey); } };
-		auto Peek = [Hud](const TCHAR* SlotKey) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->PeekSlot(SlotKey); } };
-		auto Nav = [Hud](int32 DX, int32 DY) { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->MoveFocus(DX, DY); } };
-		Do(5.0f, [=, this]() { ConsoleCommand(TEXT("DisableAllScreenMessages")); if (ASOHUD* H = Hud()) { H->ToggleInventory(); } });
+		auto Armoury = [Hud]() -> USOInventoryWidget* { ASOHUD* H = Hud(); return H ? H->GetInventoryWidget() : nullptr; };
+		auto OpenSlot = [Armoury](const TCHAR* SlotKey) { if (USOInventoryWidget* A = Armoury()) { A->OpenSlot(SlotKey); } };
+		auto Peek = [Armoury](const TCHAR* SlotKey) { if (USOInventoryWidget* A = Armoury()) { A->PeekSlot(SlotKey); } };
+		auto Nav = [Armoury](int32 DX, int32 DY) { if (USOInventoryWidget* A = Armoury()) { A->MoveFocus(DX, DY); } };
+		Do(5.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+				if (const USOLootTables* Tables = USOLootLibrary::GetTables())
+				{
+					for (int32 i = 0; i < Tables->Goods.Num(); ++i)
+					{
+						Inv->AddGoods(Tables->Goods[i].Id, Tables->Goods[i].Stack > 1 ? 3 + i : 1, false);
+					}
+				}
+			}
+			if (ASOHUD* H = Hud()) { H->ToggleInventory(); }
+		});
 		Snap(2.0f, TEXT("u1_loadout"));
 		Snap(0.9f, TEXT("u1_loadout_2"));                                      // (the stand-in's idle: three moments)
 		Snap(0.9f, TEXT("u1_loadout_3"));
 		// a flick: the stand-in spins on its turntable, whole (no turn on the spot, the head with it)
-		Act([=]() { if (ASOHUD* H = Hud(); H && H->GetInventoryWidget()) { H->GetInventoryWidget()->SpinStandIn(260.0f); } });
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SpinStandIn(260.0f); } });
 		Snap(0.25f, TEXT("u1_spin_1"));
 		Snap(0.3f, TEXT("u1_spin_2"));
 		Snap(0.3f, TEXT("u1_spin_3"));
@@ -613,12 +631,36 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.6f, TEXT("u2b_quicklook_armour"));
 		Act([=]() { Peek(TEXT("")); OpenSlot(TEXT("0")); });
 		Snap(1.2f, TEXT("u3_primary"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("family:automatic")); } });
+		Snap(0.8f, TEXT("u3b_family"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("origin:nexus")); } });
+		Snap(0.8f, TEXT("u3c_origin"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("")); A->SetSort(1); } });
+		Snap(0.8f, TEXT("u3d_by_rarity"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetListView(true); } });
+		Snap(0.8f, TEXT("u3e_list"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetListView(false); A->SetSort(0); A->MoveFocus(1, 0); } });
+		Snap(0.8f, TEXT("u3f_next"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetDetails(true); } });
+		Snap(0.8f, TEXT("u3g_details"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetDetails(false); A->SetCompare(true); } });
+		Snap(0.8f, TEXT("u3h_compare"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetCompare(false); } OpenSlot(TEXT("1")); });
+		Snap(1.2f, TEXT("u3i_special"));
 		Act([=]() { OpenSlot(TEXT("2")); });
 		Snap(1.2f, TEXT("u4_heavy"));
 		Act([=]() { OpenSlot(TEXT("melee")); });
 		Snap(1.6f, TEXT("u5_melee"));
 		Act([=]() { OpenSlot(TEXT("head")); });
 		Snap(1.2f, TEXT("u6_head"));
+		Act([=]() { OpenSlot(TEXT("goods")); });
+		Snap(1.2f, TEXT("u9_inventory"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("kind:consumable")); A->ChooseItem(TEXT("goods:stim")); } });
+		Snap(0.8f, TEXT("u9b_consumables"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("kind:relic")); } });
+		Snap(0.8f, TEXT("u9c_relics"));
+		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("kind:material")); A->ChooseItem(TEXT("goods:void_crystal")); } });
+		Snap(0.8f, TEXT("u9d_materials"));
 		Act([=]() { OpenSlot(TEXT("")); });
 		Snap(1.2f, TEXT("u7_back"));
 		// the player goes down with the armoury open: the stand-in is a picture and stays as it was

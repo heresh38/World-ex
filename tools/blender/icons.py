@@ -7,7 +7,9 @@
           wardrobe piece C_<slot>__<item> alone, three quarters from the front through a long lens, lit like the guns
           (512 x 512; gloves: the left one)
 
-blender --background --python tools/blender/icons.py -- <out dir> [guns] [armour] [--only=a,b]
+  goods:  goods.py's collected items -> <out>/goods/icon_goods_<id>.png (512 x 512), each alone, lit like the guns
+
+blender --background --python tools/blender/icons.py -- <out dir> [guns] [armour] [goods] [--only=a,b]
 """
 import bpy, sys, os, math, json, glob
 from mathutils import Vector, Euler
@@ -196,7 +198,30 @@ def armour():
             p.hide_render = True
 
 
+def goods_icons():
+    """each collected item (goods.py: our own models, pictures only) 512 x 512, three quarters from the front through a
+    long lens, lit like the guns"""
+    import goods
+    os.makedirs(os.path.join(OUT, 'goods'), exist_ok=True)
+    for gid in goods.ITEMS:
+        if ONLY and gid not in ONLY:
+            continue
+        bl.reset()
+        goods.M.clear()                                         # (the materials go with the scene)
+        sc = bpy.context.scene
+        sc.render.resolution_x, sc.render.resolution_y = 512, 512
+        studio(sc, hero=True)
+        sc.view_settings.exposure = -0.35
+        objs = goods.build(gid)
+        bpy.context.view_layer.update()
+        cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
+        frame_persp(cam, objs, goods.VIEW.get(gid, (-.55, .8, -.35)), lens=85, margin=1.18, margin_v=1.18)
+        render(os.path.join(OUT, 'goods', f'icon_goods_{gid}.png'))
+
+
 if DO_GUNS:
     guns()
 if 'armour' in KINDS:
     armour()
+if 'goods' in KINDS:
+    goods_icons()

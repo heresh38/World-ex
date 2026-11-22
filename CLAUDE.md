@@ -876,8 +876,8 @@ is announced the first time it is in view (`DrawEliteIntro`: a plate under the c
 marks either side, the sound `elite_seen`; `Introduced` remembers which). Sounds `sfx_synth.py ... loop`, import
 `SO_IMPORT_ONLY=audio SO_AUDIO_ONLY=reward_,level_up,elite_`. Pictures `hud_20_kill_paid`, `hud_21/22_level_up`,
 `hud_23_elite_seen` in set 38; test `ShatteredOrbit.Loop.AKillPaysOnScreen`. Still to do of the owner's brief: the
-effect system (`art/reference/effects/effects_guide.webp`) and the inventory of collected items
-(`art/reference/ui/armoury_arsenal.webp`).
+rest of the effect system (`art/reference/effects/effects_guide.webp`: `docs/orion/reports/EFFECTS.md`); the armoury
+and the inventory of collected items (`art/reference/ui/armoury_arsenal.webp`) are done (below).
 **The effect system** (the owner's guide, `art/reference/effects/effects_guide.webp`: "our effects are dull and one
 dimensional"; what of it exists is `docs/orion/reports/EFFECTS.md`, keep it honest; first pass 2026-11-21). Everything
 is `USOFxSubsystem` (pooled CPU particles on instanced cards: glow, streak, star, smoke, and the hexagonal CELL
@@ -909,49 +909,74 @@ opaque and large to be seen at 2.5 m; a flame is a tongue, never a dot, and neve
 light scales with the root of its radius (squared, a rocket flooded the range); a capture that fires must EQUIP the
 gun it means (the profile's held gun was a rocket launcher, and the HUD capture's burst at a creature seven metres
 off killed the player).
-**The armoury** (the loadout screen, I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word:
-"upgrade it ready for a triple a game release on steam", their mockup and reference screens as the bar, every look
-and word ours). LOADOUT: the backdrop (`M_UI_Backdrop`: night blue lit from the stage, the broken orbit faint behind
-the character, motes), the character large on a lit platform (`M_UI_Floor`), holding the gun low across the chest
-(`ASOCharacter::SetDisplayCarry`: the sprint's carry while standing, for the stand-in only); the banner (emblem, name,
-level and its bar, the body; credits, alloy, vault, power); left the ARSENAL (three guns + melee, each card with the
-gun's own render in its rarity's light), right the ARMOUR (seven cards), the six attributes in a column beside the
-stage; a hovered card opens its quick look beside it (`PeekSlot` does the same for the capture series). The tab bar
-LOADOUT · PRIMARY · SPECIAL · HEAVY · MELEE · ARMOUR (A / D, the arrows, the triggers; a gold mark where something
-new waits). A slot's ARMOURY: left its list (W / S moves through it; the armour's slots as chips over it), right the
-INSPECT panel (rarity · class · kind, the name, its line, power, the stats against the equipped gun in segmented bars
-(damage and range on a root scale), the perks on a spine of hexagons in the set's own light with the TRAIT of its
-set or class in gold at its foot; a piece's attributes against the worn one, which the attribute column shows too;
-a melee style's blows and its guard) with only the buttons that can apply. The stand-in HOLDS the chosen gun, RAISES
-the chosen fists or blade (`ASOCharacter::SetDisplayMelee`: a style shown whoever owns it, the stand-in only), WEARS
-the chosen piece. **The stand-in is a picture, never a body in play** (`ASOCombatCharacter::SetDisplayOnly`: no side,
-hostile to nobody, the damage gate lets nothing through, `Die` does nothing, no collision; the owner: "if the player
-dies then the player model in the gun selection dies too": the creatures' nearest player was the stand-in once the
-player was down, and an operation counted it as a living player; test `ShatteredOrbit.Combat.TheArmouryModelIsOnlyAPicture`).
-Turning it: a drag anywhere the cards are not (the backdrop catches the click; a flick spins on and settles), the right
-stick. The keyboard / pad: the arrows, the d-pad and the left stick move the armoury's own highlight (cards in the
-loadout, the list in an armoury, the armour's slots left / right; `NativeOnNavigation`), W / S the list, Enter / Space /
-A opens or equips, A / D and the triggers the tabs; every button is a `USOQuietButton` (never focused: the screen keeps
-the focus). The layout follows the screen's width (`UpdateLayout`): wider than 2200 units it keeps to a 2200 frame in the
-middle, narrower than 1650 (4:3) the attribute column gives way. The stand-in TURNS WHOLE on its turntable (`USOLocomotionAnimInstance`: no turn in place for a display-only body; the
-planted feet and the stepped turn twisted it against the drag with the head holding its heading, the owner's
-"chicken", 2026-11-21), and the head carries the clip's own motion under the aim everywhere (neck and head take the
-aim pitch ON TOP of the clip, about their pivots, not reset to the rest facing); the idle looks slowly about and
-shifts its weight (`hero/male/motion.py` `idle_pose`); `SpinStandIn` and the `u1_spin_*` pictures of set 19 show it.
-Every card is `M_UI_Card`, every shape its own material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`:
-0 emblem, 1 credits, 2 alloy, 3 vault, 4 power, 5-10 the attributes, 11 fists, 12 lock, 13 blade; the panels
-`M_UI_Plate`), one Custom node each drawn from the UV derivatives (`import_assets.ui_shape`, `SO_IMPORT_ONLY=ui`).
-**A UI material's colour is LINEAR**: the screen shows it through the sRGB curve, so a "dark" 0.03 is a mid grey
-(the first pass came out washed blue): glass is 0.003-0.02, the text greys 0.2-0.6. The words are data
-(`Data/game_data.json`): every archetype's `"lore"` (its line), `"traits"` (the gold node, by set or class family),
-`"classNames"` (Light / Ballistic / Living), the melee styles' `"lore"`; `import_assets.gun_words` puts them on
-`USOWeaponData::Lore / ClassName / TraitName / TraitText` (with the guns and `SO_IMPORT_ONLY=gunnumbers`). The top
-rarity is the Sovereign. The pictures: `tools/blender/icons.py` renders each gun 1024 x 512, three quarters from the
-muzzle's side through an 80 mm lens, rim-lit, on the graphics card (`frame_persp`: the least distance that fits, the
-lens shifted to centre it), and each armour piece the same way at 512 x 512; `SO_IMPORT_ONLY=icons` brings both in.
-Pictures `SOCaptureSeries 1 19` at `-ResX=1920 -ResY=1080` (and 1440 x 1080, 2560 x 1080 for the layouts; files
-`SO_u1_loadout` .. `SO_u8_player_down`: the pad's highlight, quick looks, primary, heavy, melee, head, the player
-dying with the armoury open).
+**The armoury** (I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word: "upgrade it ready
+for a triple a game release on steam"; ORGANISED on 2026-11-21 on their reference screen
+`art/reference/ui/armoury_arsenal.webp`, "how to better organize weapons and other things we need like an inventory to
+hold items we collect": its layout and feel, every word and glyph ours). Along the top the banner (emblem, name, level
+and its bar; credits, alloy, vault, power) with the TABS between: LOADOUT · ARSENAL · ARMOUR · INVENTORY (Q / E, the
+triggers; a gold mark where something new waits; a row of their own under the banner when the screen is too narrow);
+the body (MALE / FEMALE) and the drag's hint at the foot's left, what the keys do at its right. LOADOUT: the backdrop
+(`M_UI_Backdrop`), the character large on a lit platform (`M_UI_Floor`) holding the gun low
+(`ASOCharacter::SetDisplayCarry`); left the four weapon cards (each with the gun's own render in its rarity's light, the
+words in a column of their own: nothing on the picture), right the seven armour cards, the six attributes beside the
+stage; a hovered card opens its quick look beside it (`PeekSlot`). ARSENAL (a weapon slot or MELEE), ARMOUR (a slot),
+INVENTORY (the collected items): left the view's name and line, the arsenal's four slot TILES (what is carried in
+each; A / D, the bumpers), then the CATEGORIES with their counts (every family of the slot, then every ORIGIN: The
+Institute, Nexus Prime, Sarketh, Void Requiem, Grown; the armour's seven slots; the kinds of item: materials,
+consumables, keys, relics); in the middle a GRID of cards (`ESOTileStyle::Cell`: the marks, the picture, power and its
+difference against the one carried, the name; a collected item its count) under a head with the category's name, the
+SORT (power / rarity / newest / name, Z; collected items: their own order first), the GRID / LIST views (V) and the
+count, PAGES (the wheel over the grid, [ / ], PgUp / PgDn; the choice turns them); the stand-in between the grid and
+the panel holding, raising or wearing what is chosen; right the INSPECT panel: rarity · class · kind, the name, the
+origin · family in gold, the line, the gun LARGE, power and how far a level lets it be raised, the STATS beside the
+PERKS, the TRAIT in a plate of gold; DETAILS (F) for every number against the carried gun and the perks' spine; the
+actions EQUIP (Enter) · DETAILS · LOCK (R) · DISMANTLE (X, twice: what it gives is shown) · RAISE (U) with what it
+takes (credits, alloy, the materials, each red where short). Hold C (the pad's L3): the chosen gun against the one
+carried in its slot, side by side over the grid. A collected item's panel: what it is, its line, its picture large,
+how many are held of how many, what it is for (a material: how many of the guns and pieces owned take it), where it
+comes from; a consumable is USED (Enter; only when it would do something). The pad: LT / RT the tabs, LB / RB the
+slot, A equip / use, B back, X dismantle, Y raise, R3 details, Menu lock, L3 compare. Every control is a
+`USOArmouryButton` (`ESOArmouryControl`: tab, slot tile, row, page, tool) and every button a `USOQuietButton` (never
+focused: the screen keeps the focus). The layout follows the width (`UpdateLayout`): a 2200 frame in the middle of an
+ultrawide; the grid three columns under 1500 units inside the frame, the panel 440-520 wide, the attribute column
+gone under 1650. **The stand-in is a picture, never a body in play** (`ASOCombatCharacter::SetDisplayOnly`; test
+`ShatteredOrbit.Combat.TheArmouryModelIsOnlyAPicture`); it TURNS WHOLE on its turntable (a drag, a flick, the right
+stick) and its head carries the clip's own motion under the aim. Every card is `M_UI_Card`, every shape its own
+material (`M_UI_StatBar`, `M_UI_Hex`, `M_UI_Glyph`: 0 emblem, 1 credits, 2 alloy, 3 vault, 4 power, 5-10 the
+attributes, 11 fists, 12 lock, 13 blade; the panels `M_UI_Plate`), one Custom node each drawn from the UV derivatives
+(`import_assets.ui_shape`, `SO_IMPORT_ONLY=ui`). **A UI material's colour is LINEAR** (a "dark" 0.03 is a mid grey:
+glass is 0.003-0.02, the text greys 0.2-0.6). **Words that must stay in their box are cut with an ellipsis** (`Fit`:
+the overflow policy AND clipping to its bounds: Slate draws the ellipsis only where the words are clipped; and a
+button's slot pads its content 4 px a side unless told not to). The words are data (`Data/game_data.json`): every
+archetype's `"lore"`, `"family"`, `"origin"`, `"traits"`, `"classNames"`, `"families"`, `"origins"`;
+`import_assets.gun_words` puts them on `USOWeaponData` (`Lore / ClassName / TraitName / TraitText / Family / Origin`,
+with the guns and `SO_IMPORT_ONLY=gunnumbers`). The pictures: `tools/blender/icons.py` renders each gun 1024 x 512
+(`frame_persp`), each armour piece 512 x 512, and each collected item 512 x 512 (`goods`, from `tools/blender/goods.py`:
+our own models in their maker's look, pictures only, never in the world); `SO_IMPORT_ONLY=icons` (guns, armour) and
+`SO_IMPORT_ONLY=goods` (the items and their pictures, `/Game/UI/Goods/T_Goods_<id>`). **The layout audit** (as the
+HUD's: `-SOHudAudit`, `USOInventoryWidget::SetAudit`): every word, picture, button and plate on the screen as drawn
+(render transforms, a scroll's clip) against every other: `ARMOURYOVERLAP` (words or pictures that cross, anything
+across a button's or a plate's edge; what a frame holds whole is by design), `ARMOURYCLIP` (words given less room than
+they need and not cut with an ellipsis). Pictures `SOCaptureSeries 1 19` (files `SO_u1_loadout` .. `SO_u9d_materials`:
+the loadout, the pad's highlight, quick looks, the primary slot by family, by origin, by rarity, as a list, the next
+card, the details, the comparison, special, heavy, melee, head, the inventory and its consumables, relics, materials,
+the player dying with the armoury open; the profile is not saved meanwhile and one of every item is handed out), run
+at 1920 x 1080, 2560 x 1440 and 3440 x 1440 with `-SOHudAudit` to zero crossings.
+**Collected items** (the goods: the owner's "an inventory to hold items we collect"; `Data/game_data.json` "goods" ->
+`USOLootTables::Goods`, `SO_IMPORT_ONLY=goods`): fourteen in four kinds (`ESOGoodsKind`): MATERIALS (Amber Condensate,
+Machined Parts, Brood Resin, Forged Plate, Void Crystal), CONSUMABLES (Field Stim, Shield Cell, Overcharge: a share of
+full health / shield / ultimate back at once), a KEY (the Sarketh Command Core) and RELICS (one of each named creature
+of Meridian Fall). The inventory holds them (`USOInventoryComponent::Goods`, `FSOGoodsStack`: replicated to its owner,
+saved: version 8, a profile from before starts with `"starterGoods"`; `AddGoods` up to the item's stack, `TakeGoods`
+all or nothing, `UseGoods` on its body, `ServerUseGoods`, `MarkGoodsSeen`); what comes in is a line in the feed. They
+are PAID by the loop (`USOLootSubsystem::OnDied`, `USOLootLibrary::RollGoods`, data `"goodsDrops"`): every kill rolls
+"kill", an elite "elite" on top, a boss "boss", and a creature its own key's list (`ASOCombatCharacter::GetLootKey`: a
+variant's id, or its boss's: each named one of Meridian Fall carries its relic, the commander the core); a cache rolls
+"reliquary"; dismantling a gun gives its class's material by rarity and void crystal from Legendary on
+(`"dismantleGoods"`, `USOLootLibrary::DismantleGoods`). And they are TAKEN by raising: a raise takes the piece's
+material (its gun class's, armour's) by rarity and void crystal for Legendary and Sovereign (`"progression.upgrade.goods"`
+-> `USOProgressionTable::UpgradeGoods`, `USOInventoryComponent::GetUpgradeGoods`; short of any of it, nothing is paid).
+Tests `ShatteredOrbit.Goods.*`.
 The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
 `art/reference/operation/first_operation_map.png` made linear, our own names, and (owner, 2026-11-10: "at least 4x
 longer ... spawn at the very edge of the city and fight through ruined buildings / maybe a mall ... like a strike")

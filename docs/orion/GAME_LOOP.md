@@ -88,3 +88,9 @@ move then the effect stays in the air where you initated the reload and not on t
   (rarity, class, kind, name, its line, a big render, power raised up to a cap, stats as bars, perks, the intrinsic
   trait, equip / details / lock / dismantle); a quick compare. And an INVENTORY for the items collected (not guns:
   materials, consumables, keys, whatever the loop drops).
+  DONE 2026-11-21 (`USOInventoryWidget`, CLAUDE.md "The armoury" and "Collected items"): the tabs and currencies, the
+  slot tiles, families and origins with counts, the grid with its sort, views and pages, the character between, the
+  inspect panel with the gun large, stats beside perks, the trait, the actions and what a raise takes, details, the
+  comparison held on C; the INVENTORY of fourteen items (materials that raise gear, consumables, a key, relics), paid
+  by kills, elites, bosses, caches and dismantling. Not yet: the CHARACTER and JOURNAL tabs of the picture (the
+  character creator and a journal of what was learned are their own work).
