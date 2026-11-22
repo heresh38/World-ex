@@ -1,5 +1,7 @@
 #include "SOCharacter.h"
 
+#include "Materials/MaterialInstanceDynamic.h"
+
 #include "SOAreaSubsystem.h"
 #include "SOCombatStatics.h"
 #include "SOCue.h"
@@ -274,6 +276,17 @@ void ASOCharacter::SetOutfit(const FSOOutfit& NewOutfit)
 	{
 		return;
 	}
+	// only the face or the tones changed (the character builder's sliders): nothing is dressed again
+	FSOOutfit Same = NewOutfit;
+	Same.FaceKeys = Outfit.FaceKeys;
+	Same.FaceValues = Outfit.FaceValues;
+	Same.SkinTone = Outfit.SkinTone;
+	Same.HairTone = Outfit.HairTone;
+	if (Same == Outfit && AppliedBody == NewOutfit.Body && WornThirdPerson.Num() > 0)
+	{
+		SetLook(NewOutfit);
+		return;
+	}
 	Outfit = NewOutfit;
 	ApplyOutfit();
 }
@@ -319,11 +332,13 @@ void ASOCharacter::ApplyOutfit()
 		USkeletalMesh* Arms = ArmsMesh.LoadSynchronous();
 		if (Body && GetMesh()->GetSkeletalMeshAsset() != Body)
 		{
+			GetMesh()->EmptyOverrideMaterials();               // (the tones' instances were the other body's slots)
 			GetMesh()->SetSkeletalMesh(Body);
 			LoadBody(GetMesh());
 		}
 		if (Arms && FirstPersonArms->GetSkeletalMeshAsset() != Arms)
 		{
+			FirstPersonArms->EmptyOverrideMaterials();
 			FirstPersonArms->SetSkeletalMesh(Arms);
 			LoadBody(FirstPersonArms);
 		}
@@ -407,6 +422,7 @@ void ASOCharacter::ApplyOutfit()
 			}
 			if (Piece->GetSkeletalMeshAsset() != Mesh)
 			{
+				Piece->EmptyOverrideMaterials();
 				Piece->SetSkeletalMesh(Mesh);
 			}
 			Piece->SetLeaderPoseComponent(Leader);
@@ -432,6 +448,15 @@ void ASOCharacter::ApplyOutfit()
 	ApplyViewMode();
 }
 
+void ASOCharacter::SetLook(const FSOOutfit& From)
+{
+	Outfit.FaceKeys = From.FaceKeys;
+	Outfit.FaceValues = From.FaceValues;
+	Outfit.SkinTone = From.SkinTone;
+	Outfit.HairTone = From.HairTone;
+	ApplyFace();
+}
+
 void ASOCharacter::ApplyFace()
 {
 	// the face's sliders: each a morph target face_<key> of the body (tools/blender/hero/orion: headcage.FACE_SLIDERS)
@@ -444,6 +469,79 @@ void ASOCharacter::ApplyFace()
 	for (int32 i = 0; i < FMath::Min(Outfit.FaceKeys.Num(), Outfit.FaceValues.Num()); ++i)
 	{
 		Body->SetMorphTarget(FName(*(TEXT("face_") + Outfit.FaceKeys[i].ToString())), Outfit.FaceValues[i]);
+	}
+	// the skin's and the hair's tones (the character builder's) over every skin and hair material of the body and of
+	// the first-person arms: the skin's tint over its own maps, the hair's tint (the strands' atlas is neutral), the
+	// brows drawn on the face's skin following the hair; a tone unset puts the material back as it was imported
+	auto Tint = [this](USkeletalMeshComponent* Part)
+	{
+		if (!Part)
+		{
+			return;
+		}
+		for (int32 i = 0; i < Part->GetNumMaterials(); ++i)
+		{
+			UMaterialInterface* M = Part->GetMaterial(i);
+			UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(M);
+			const UMaterialInterface* Source = MID && MID->Parent ? MID->Parent.Get() : M;
+			const FString Name = Source ? Source->GetName() : FString();
+			const bool bSkin = Name.StartsWith(TEXT("MI_skin"));
+			const bool bHair = Name.StartsWith(TEXT("MI_hair")) && !Name.Contains(TEXT("lash"));
+			if (!bSkin && !bHair)
+			{
+				continue;
+			}
+			const bool bTone = bSkin ? Outfit.SkinTone.A > 0.0f || (Name == TEXT("MI_skin_face") && Outfit.HairTone.A > 0.0f) : Outfit.HairTone.A > 0.0f;
+			if (!bTone)
+			{
+				if (MID)
+				{
+					MID->ClearParameterValues();                 // (back to the imported tone)
+				}
+				continue;
+			}
+			if (!MID)
+			{
+				MID = Part->CreateDynamicMaterialInstance(i, M);
+			}
+			if (!MID)
+			{
+				continue;
+			}
+			MID->ClearParameterValues();
+			if (bSkin && Outfit.SkinTone.A > 0.0f)
+			{
+				MID->SetVectorParameterValue(TEXT("BaseColorTint"), FLinearColor(Outfit.SkinTone.R, Outfit.SkinTone.G, Outfit.SkinTone.B, 1.0f));
+				// the light scattered under the skin as deep as its tone (a deeper skin's melanin takes more of it: with
+				// the pale skin's warm scatter a deep tone glowed orange), against the body's own tone (the import's)
+				float Scatter = 0.0f;
+				if (MID->GetScalarParameterValue(TEXT("Scatter"), Scatter))
+				{
+					const float Own = 0.2126f * 0.94f + 0.7152f * 0.83f + 0.0722f * 0.74f;
+					const float Lum = 0.2126f * Outfit.SkinTone.R + 0.7152f * Outfit.SkinTone.G + 0.0722f * Outfit.SkinTone.B;
+					MID->SetScalarParameterValue(TEXT("Scatter"), Scatter * FMath::Lerp(0.25f, 1.0f, FMath::Clamp(Lum / Own, 0.0f, 1.0f)));
+				}
+			}
+			if (bSkin && Outfit.HairTone.A > 0.0f)
+			{
+				// the brows a shade lighter than the hair over them (game.py brow_mask: the brows' tone over the hair's)
+				MID->SetVectorParameterValue(TEXT("HairColor"), FLinearColor(Outfit.HairTone.R * 1.6f, Outfit.HairTone.G * 1.6f, Outfit.HairTone.B * 1.6f, 1.0f));
+			}
+			if (bHair)
+			{
+				MID->SetVectorParameterValue(TEXT("BaseColorTint"), FLinearColor(Outfit.HairTone.R, Outfit.HairTone.G, Outfit.HairTone.B, 1.0f));
+			}
+		}
+	};
+	Tint(Body);
+	Tint(FirstPersonArms);
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornThirdPerson)
+	{
+		Tint(P.Value.Get());                                    // (a body whose hair is a piece of its own)
+	}
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornFirstPerson)
+	{
+		Tint(P.Value.Get());
 	}
 }
 

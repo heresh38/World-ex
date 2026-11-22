@@ -1112,6 +1112,42 @@ def rigid_skull(o, z_head, y_head=-.024):
     log(f"rig: the skull rigid on the head from {100 * (z_head - .02):.0f} cm up ({n} vertices)")
 
 
+def chest_over_clavicle(o):
+    """the front of the chest on the chest bone, each clavicle only toward its shoulder and the shoulder's top. The heat
+    weights gave the clavicles the whole upper chest (85-91 % beside the sternum, the bone's head lies in front by
+    the jugular notch), and with the arms down in the idle the clavicles' turn folded that band against the neck's: a
+    straight ledge across the chest from shoulder to shoulder under the suit, a dip on top of each shoulder (the
+    owner's sheet: the suit's chest rises smoothly to the neck). What a clavicle gives up goes to the chest."""
+    chest = o.vertex_groups.get("chest")
+    clav = [o.vertex_groups.get("clavicle." + s) for s in "LR"]
+    if chest is None or None in clav:
+        return
+
+    def smooth(e0, e1, x):
+        t = min(max((x - e0) / (e1 - e0), 0.0), 1.0)
+        return t * t * (3 - 2 * t)
+    n = 0
+    for v in o.data.vertices:
+        x, y, z = v.co
+        if y > -0.01 or z < 1.30 or z > 1.62:
+            continue
+        # the clavicle keeps its hold out toward the shoulder, on the shoulder's top, and round the chest's side
+        keep = max(smooth(.075, .175, abs(x)), smooth(1.545, 1.595, z), 1 - smooth(.02, .045, -y))
+        if keep >= .999:
+            continue
+        w = {g.group: g.weight for g in v.groups}
+        moved = 0.0
+        for c in clav:
+            wc = w.get(c.index, 0.0)
+            if wc > 0.0:
+                c.add([v.index], wc * keep, 'REPLACE')
+                moved += wc * (1 - keep)
+        if moved > 1e-4:
+            chest.add([v.index], w.get(chest.index, 0.0) + moved, 'REPLACE')
+            n += 1
+    log(f"rig: the chest's front on the chest bone, the clavicles toward the shoulders ({n} vertices)")
+
+
 def make_rig(o, log_=None):
     """the armature on THIS body's joints, the body skinned to it (automatic heat weights), the IK helpers the shared
     layout carries kept out of the deform set"""
@@ -1191,6 +1227,7 @@ def make_rig(o, log_=None):
     copy_weights(proxy, o)
     bpy.data.objects.remove(proxy, do_unlink=True)
     rigid_skull(o, float(J["neck"][1][2]), float(J["neck"][1][1]))
+    chest_over_clavicle(o)
     o.parent = arm
     mod = o.modifiers.new("Armature", 'ARMATURE')
     mod.object = arm

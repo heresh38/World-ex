@@ -37,7 +37,10 @@ mel = unreal.MaterialEditingLibrary
 FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac",
          # the Altered (altered.py)
          "alt_skin": "hx_skin", "alt_flesh": "hx_flesh", "alt_plate": "hx_chitin", "alt_bone": "hx_bone", "alt_rag": "hx_rag"}
-ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer")
+ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer", "Veteran")
+# (the Sarketh's bodies, tools/blender/hero/sarketh_game.py, go into the same folders: Remnant a Levy, Stalker a Runner,
+# Veteran (the armed stalker's own), Veilborn a Speaker, Bulwark a Warden, Bearer, Colossus the commander's suit; a body
+# with none of the flesh materials takes none of the flesh sets)
 
 SKIN_TONE = (0.55, 0.32, 0.22)
 
@@ -885,6 +888,13 @@ def player_arms(master):
     return mesh
 
 
+def fleshy(src):
+    """a creature folder whose materials are flesh (the hx_* sets): the stalker and the Altered; the Sarketh's armour
+    brings its own maps"""
+    materials = load_json(os.path.join(src, "materials.json")) if os.path.isfile(os.path.join(src, "materials.json")) else {}
+    return not materials or any(base_slot(k) in FLESH for k in materials)
+
+
 def stalker_extra(key, m):
     if key in FLESH:
         s = FLESH[key]
@@ -897,11 +907,16 @@ HAIR_TONE = (0.020, 0.014, 0.010)     # dark brown, near black (the concept pair
 BROW_TONE = (0.032, 0.022, 0.016)     # the brows drawn on the face's skin: a dark brown (M_SOSkin HairColor)
 
 
+SKIN_DAYLIGHT = (0.94, 0.83, 0.74)     # (linear: warmer and a shade deeper over the skin maps)
+
+
 def player_extra(key, m):
     if key in ("skin", "skin_face"):
         # (the body's own skin maps carry the colour; the flat tone only for a body exported without them; the
         # face's map carries the brows' hairs in its mask's B: HairAmount 1 shows them)
-        return {"tint": [1.0, 1.0, 1.0] if m.get("baseColorTex") else list(SKIN_TONE),
+        # (its own maps carry the colour; under the game's sky they read pale and a little pink against the sheet's
+        # warm, sunned skin: a warm tint over them, the creator's skin tone sets the same parameter)
+        return {"tint": list(SKIN_DAYLIGHT) if m.get("baseColorTex") else list(SKIN_TONE),
                 "hair": 1.0 if key == "skin_face" else 0.0}
     if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
@@ -3057,8 +3072,32 @@ def ui_materials():
     tex.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
     inv = mel.create_material_expression(mat, unreal.MaterialExpressionOneMinus, -200, 150)
     mel.connect_material_expressions(tex, "A", inv, "")
+    # the picture's own soft edge (Edge: the share of its width the sides and the foot fade over; 0 none): close on
+    # the face (the character builder) the shoulders reach the picture's sides and were cut off with a hard line
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -700, 300)
+    edge = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -700, 420)
+    edge.set_editor_property("parameter_name", "Edge")
+    edge.set_editor_property("default_value", 0.0)
+    fade = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -450, 320)
+    fade.set_editor_property("code", "float e = max(Edge, 1e-4);\n"
+                                     "float fx = saturate(min(UV.x, 1.0 - UV.x) / e);\n"
+                                     "float fy = saturate((1.0 - UV.y) / (e * 0.75));\n"
+                                     "float f = fx * fx * (3.0 - 2.0 * fx) * fy * fy * (3.0 - 2.0 * fy);\n"
+                                     "return Edge > 0.0 ? f : 1.0;")
+    fade.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    ins = []
+    for n in ("UV", "Edge"):
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        ins.append(ci)
+    fade.set_editor_property("inputs", ins)
+    mel.connect_material_expressions(uv, "", fade, "UV")
+    mel.connect_material_expressions(edge, "", fade, "Edge")
+    opacity = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -150, 220)
+    mel.connect_material_expressions(inv, "", opacity, "A")
+    mel.connect_material_expressions(fade, "", opacity, "B")
     mel.connect_material_property(tex, "RGB", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    mel.connect_material_property(inv, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     ui_shape("M_UI_Plate", UI_PLATE_HLSL, dict(Fill=(.035, .045, .07, .92), FillLow=(.02, .026, .045, .94), Edge=(1, 1, 1, .14),
@@ -3786,7 +3825,8 @@ def main():
         skin = skin_material(defaults)
         PARENT_FOR.update({k: skin for k in ("skin", "skin_face")})                       # the players' skin
     if want("player"):
-        for sex in ("male", "female"):
+        sexes = [x for x in os.environ.get("SO_PLAYER_SEX", "male,female").split(",") if x in ("male", "female")]
+        for sex in sexes:                                     # (SO_PLAYER_SEX=male: one body again, the other left)
             player_wardrobe(sex, master)
     if "player_clips" in only:
         for sex in ("male", "female"):
@@ -3795,12 +3835,13 @@ def main():
         player_pieces(os.environ.get("SO_PLAYER_PIECES", ""))
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
-                  master, stalker_extra, flesh=True)
+                  master, stalker_extra, flesh=fleshy(os.path.join(SOURCE, "Characters", "Stalker")))
     if want("altered"):
         one = os.environ.get("SO_ALTERED_ONLY", "")   # (e.g. Bearer: just that one, the others are left as they are)
         for k in ALTERED:
             if os.path.isdir(os.path.join(SOURCE, "Characters", k)) and (not one or k in one.split(",")):
-                character(os.path.join(SOURCE, "Characters", k), f"/Game/Characters/{k}", f"SK_{k}", f"A_{k}_", master, stalker_extra, flesh=True)
+                src = os.path.join(SOURCE, "Characters", k)
+                character(src, f"/Game/Characters/{k}", f"SK_{k}", f"A_{k}_", master, stalker_extra, flesh=fleshy(src))
     if want("weapons") or want("rifle"):
         weapons(master, defaults)
     if "gunnumbers" in only:

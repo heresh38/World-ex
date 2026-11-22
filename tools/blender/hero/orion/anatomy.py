@@ -261,9 +261,12 @@ def muscles():
     # (a man's pectoral is a PLATE: flat across, square at its outer lower corner where the fold before the armpit
     # is thickest; peaking at .40 of the way from the sternum with a round profile it was a mound inside and below,
     # a breast under the sheet's light: the owner, 2026-11-20)
+    # (its edges soft: laid with the sternal head's hard edge (edge 1.0, for the plate's square lower border) its TOP
+    # edge ran along the clavicle as a step 5-6 mm high, nothing raising the skin above it and the bone a centimetre
+    # under: a straight ledge across the chest from shoulder to shoulder, a dip on top of each shoulder in the idle)
     add("pec_clav", ((0.022, -0.080, 1.508), (0.095, -0.087, 1.518)),
         (arm_pt(S, .06, .004, .026), arm_pt(S, .095, 0, .024)), .022, .50, mid=(0.125, -0.093, 1.498), inside=TRUNK,
-        edge=1.0)
+        edge=1.6)
     add("pec_sternal", ((0.012, -0.093, 1.482), (0.016, -0.113, 1.318)),
         (arm_pt(S, .065, -.012, .022), arm_pt(S, .105, -.020, .018)), .032, .60, mid=(0.120, -0.112, 1.408),
         inside=TRUNK, edge=1.0)

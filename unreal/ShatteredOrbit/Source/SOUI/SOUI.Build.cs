@@ -6,6 +6,6 @@ public class SOUI : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "CommonUI", "GameplayAbilities", "SOCore", "SOCombat", "SOCharacter", "SOWorld", "SOAI", "SOOperation" });
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "InputCore", "RenderCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "InputCore", "RenderCore", "Json" });
 	}
 }

@@ -214,16 +214,19 @@ def hair(V, N, H, n=120000, rng=None):
     flow[by_ear] = np.c_[np.sign(x[by_ear]) * .1, np.ones(by_ear.sum()), -.2 * np.ones(by_ear.sum())]
     flow /= np.linalg.norm(flow, axis=1)[:, None]
     # the roots' rise follows the blend (switched at a line it stood the top's hair up as a wall over the fade)
-    lift0 = (.25 + (.40 + .10 * np.clip((-y - 4.0) / 2.0, 0, 1)) * topw)[:, None]
+    # (higher at the front and swept back: the sheet's top has body and lift; at .40-.50 the top lay flat on the head)
+    lift0 = (.25 + (.55 + .22 * np.clip((-y - 4.0) / 2.0, 0, 1)) * topw)[:, None]
     # the volume: the fade close to the head (as far off it as it is long), the top full and even, a little more
     # at its front (a soft lift, not a pile)
     lift = np.clip((-y + 1.0) / 8.0, 0, 1)
-    reach = np.maximum(.05, .55 * L_side) * (1 - topw) + (1.05 + .7 * lift) * topw    # a soft quiff at the front
+    # a soft quiff at the front: the top stands 1.5 cm off the crown and up to 3 at the front (at 1.05-1.75 it read
+    # flat against the sheet's swept, full top)
+    reach = np.maximum(.05, .55 * L_side) * (1 - topw) + (1.5 + 1.5 * lift) * topw
     reach *= np.clip(1 + .08 * soft_noise(R, 5.0, 3), .9, 1.1) * rng.uniform(.93, 1.06, len(top))
     stray = (topw > .5) & (rng.random(len(top)) < .01)  # a few strays (a head of hair is never combed perfectly)
     reach = np.where(stray, reach * 1.2, reach)
     P = strands_from(R, Nn, flow, L, 14, H, lift0=lift0, lift1=np.where(stray, .2, .06)[:, None],
-                     gravity=.25 * topw, noise=.28, rng=rng, hug=.03 + .3 * topw, reach=reach)
+                     gravity=.18 * topw, noise=.28, rng=rng, hug=.03 + .3 * topw, reach=reach)
     # locks: clumps of neighbours round seeds
     seeds = rng.choice(len(R), 900, replace=False)
     from_seed = np.argmin(((R[:, None, :] - R[seeds][None, :, :]) ** 2).sum(2), axis=1)

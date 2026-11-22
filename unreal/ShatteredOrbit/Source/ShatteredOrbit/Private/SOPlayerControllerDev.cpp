@@ -661,6 +661,28 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.8f, TEXT("u9c_relics"));
 		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("kind:material")); A->ChooseItem(TEXT("goods:void_crystal")); } });
 		Snap(0.8f, TEXT("u9d_materials"));
+		// the character builder: the body and its skin (head and shoulders), the hair, the eyes (a slider moved from the
+		// keyboard), the jaw dragged far out, the ears from the side, a deep skin tone, everything back to the body's own
+		auto Creator = [Armoury](const TCHAR* Group) { if (USOInventoryWidget* A = Armoury()) { A->SetCreatorGroup(Group); } };
+		auto Control = [Armoury](ESOArmouryControl Kind, const TCHAR* Key) { if (USOInventoryWidget* A = Armoury()) { A->OnControl(Kind, Key); } };
+		Act([=]() { OpenSlot(TEXT("character")); Creator(TEXT("body")); });
+		Snap(1.6f, TEXT("u10a_creator_body"));
+		Act([=]() { Creator(TEXT("hair")); });
+		Snap(1.2f, TEXT("u10b_creator_hair"));
+		Act([=]() { Creator(TEXT("eyes")); });
+		Snap(1.4f, TEXT("u10c_creator_eyes"));
+		Act([=]() { Nav(0, 1); for (int32 i = 0; i < 12; ++i) { Nav(1, 0); } });
+		Snap(0.8f, TEXT("u10d_creator_eyes_moved"));
+		Act([=]() { Creator(TEXT("jaw")); if (USOInventoryWidget* A = Armoury()) { A->OnSlider(TEXT("jaw"), 0.9f, true); A->OnSlider(TEXT("chin"), -0.6f, true); } });
+		Snap(1.4f, TEXT("u10e_creator_jaw"));
+		Act([=]() { Creator(TEXT("ears")); });
+		Snap(1.6f, TEXT("u10f_creator_ears"));
+		Act([=]() { Creator(TEXT("body")); Control(ESOArmouryControl::Swatch, TEXT("skin:6")); Control(ESOArmouryControl::Swatch, TEXT("hair:5")); });
+		Snap(1.6f, TEXT("u10g_creator_tones"));
+		Act([=]() { Control(ESOArmouryControl::Tool, TEXT("random")); Control(ESOArmouryControl::Tool, TEXT("random")); Creator(TEXT("nose")); });
+		Snap(1.4f, TEXT("u10h_creator_random"));
+		Act([=]() { Control(ESOArmouryControl::Tool, TEXT("resetall")); Control(ESOArmouryControl::Tool, TEXT("resetall")); });
+		Snap(1.0f, TEXT("u10i_creator_reset"));
 		Act([=]() { OpenSlot(TEXT("")); });
 		Snap(1.2f, TEXT("u7_back"));
 		// the player goes down with the armoury open: the stand-in is a picture and stays as it was

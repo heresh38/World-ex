@@ -359,7 +359,12 @@ owner, 2026-11-21, "the players eyes seem to be popping out of his head"; check 
 `SO_hp_<pitch>_face` pictures, the face close from below looking down and from above looking up; and from UNDER
 THE CHIN forward: the chin and jaw sit below the skull's joint and left in the neck's blend they lagged the head and
 the face stretched looking up or down, the owner's "the face distorts", 2026-11-21: `rigid_skull(o, z, y)` drops its
-line 11 cm toward the front); the undersuit
+line 11 cm toward the front; then the chest's FRONT onto the chest bone, `game.chest_over_clavicle`: the heat weights
+gave each clavicle 85-91 % of the upper chest beside the sternum, and with the arms down in the idle the clavicles' turn
+folded that band against the neck's, a ledge across the chest from shoulder to shoulder under the suit and a dip on
+top of each shoulder; the clavicle keeps the shoulder's top and the chest's side; with it the pectoral's clavicular
+head has soft edges, `anatomy.py` `pec_clav` edge 1.6: laid with the sternal head's hard edge its TOP edge was a 5-6 mm
+step along the clavicle; measure with the scratch `chest_profile.py` and look at the idle with `suit_look.py`); the undersuit
 (`C_suit__orion`, slot `suit`, ALWAYS worn and never armour: the owner, 2026-11-17, "the undersuit is on at all times
 and armor goes on top of that"; the body's own mesh offset and cut a hair past the wrists' and ankles' rings, its maps
 baked from the lab's detailed suit and collar, `orion_male_suit_*`, its weights copied in the REST pose); the clips
@@ -373,7 +378,29 @@ checks of the knee plane and the stance, idle knees 22 cm apart, ankles 26); the
 `SourceArt/Characters/src/orion_male.glb` (delete it to rebuild). In the game every armour slot may be empty
 (`USOWardrobeData::IsOptionalSlot`); the skin is `M_SOSkin` (subsurface profile `SP_SOSkin`, `import_assets.skin_material`);
 the face rides the outfit (`FSOOutfit::FaceKeys / FaceValues`, kept by the inventory, saves version 7) onto the body's
-morph targets (`ASOCharacter::ApplyFace`); console `SOFace <key> <value>` (dev). A gun carried low (a sprint, the
+morph targets (`ASOCharacter::ApplyFace`); console `SOFace <key> <value>` (dev). **The character builder** (the
+armoury's CHARACTER tab, 2026-11-21; the owner, 2026-11-16: "the face will be heavily customizable in game when the
+player first starts"): `Data/creator.json` (read at runtime, `FSOCreatorData`; `tools/package.sh` stages it) names the
+groups (body and skin, hair, brow, eyes, nose, cheeks, mouth, jaw, ears), every slider (a key of the body's
+`face_<key>` morph targets, -1..1; a slider shows only on a body that has its morph: the two bodies' faces were built
+apart) and the tones offered (linear tints over the body's own maps; the FIRST of each list is the body's own, the
+import's `SKIN_DAYLIGHT` / `HAIR_TONE`, which alpha 0 on the outfit means: `ShatteredOrbit.Creator.EveryKeyIsOnABody`
+holds them equal). The outfit carries `SkinTone` / `HairTone` (kept by the inventory, saves version 9;
+`USOInventoryComponent::SetLook` sets the whole look in one change); `ASOCharacter::ApplyFace` lays them as dynamic
+instances on every `MI_skin*` (BaseColorTint, and the Scatter down to a quarter with the tone's depth: the pale skin's
+warm scatter made a deep tone glow orange; the brows on `MI_skin_face`'s HairColor at 1.6x the hair) and `MI_hair*`
+but the lashes, of the body, the first-person arms and every worn piece (a body or piece that changes mesh drops its
+overrides first); a change of the look alone never dresses the body again (`SetOutfit` -> `SetLook`). The tab: the
+groups down the left with how many of their sliders are moved, a RANDOM FACE and a RESET ALL (each asked twice), the
+group's sliders (`USOCreatorSlider`: dragged, the stand-in follows as it moves and the value is kept when it is let go;
+the wheel nudges, a double click puts it back; W / S choose, left / right move by 5, R resets the group) or its tones
+(`ESOArmouryControl::Swatch`, the body as `Choice`), and the stand-in close on the face (`USOCharacterPreview::
+SetFraming`: 0 the whole body, .5 head and shoulders, 1 the face; the body alone drawn, no gun; turned to show the
+group, the ears from the side: `TurnTo`; a portrait's light close up, softer and gentler, its rims ABOVE the head: level
+with it they shone through the jaw's edge in the skin's scatter; the picture's sides fade, `M_UI_Stage` Edge). A NEW profile opens the builder by itself at the first start
+(`USOInventoryComponent::IsCharacterMade`, false only for a new profile; a save from before version 9 counts as
+made; `ASOHUD::DrawHUD`, never in a test, a capture series, the two-player check or an unattended run), and closing the
+armoury after it ends the first start. Pictures: set 19's `SO_u10*_creator_*`; tests `ShatteredOrbit.Creator.*`. A gun carried low (a sprint, the
 armoury's stand-in: `USOLocomotionAnimInstance::bCarried`) keeps the third-person firing elbow by the side (the arm IK's
 swing toward the straightest wrist is held to 0.55 rad there: it stood out level with the shoulder, the owner's "arm
 seems very bend out"). Known: `vr_sniper`'s third-person support palm lands on its fore end's blade fins (the body's
@@ -410,7 +437,14 @@ a card's width is in HEAD CM (`build_cards(width=1.0)`; written in metres they w
 `Specular` parameter now (0.5, the engine's default; the undersuit's instance .3: woven fabric, not satin) and the
 suit's baked roughness is .86 on the base; `M_SOSkin`'s Scatter is .65 and `SP_SOSkin` has a 0.75 cm radius with warm
 scattering colours (the engine's defaults made the face wax in daylight), the caruncle's flush is .5, the skin's base
-tone a shade deeper than the lab's first (it read pale under the game's sky).
+tone a shade deeper than the lab's first (it read pale under the game's sky), and the import lays a warm tint over the
+skin's own maps in daylight (`import_assets.SKIN_DAYLIGHT`, the character builder's first skin tone). The hair's top
+stands higher and fuller (`groom.py`: `lift0` .55-.77 at the front, `reach` 1.5-3 cm off the crown: at 1-1.75 it lay
+flat against the sheet's swept top) and the fade is drawn SMOOTH and READS (`hair_cards.scalp_mask`: the floor under
+the top's cards laid over the head's own triangles, `raster_max`: discs at its vertices showed as a grid of dots
+however they were blurred; every short hair a stroke anti-aliased with its nearest texel at full tone: shared out
+evenly they drew at half and the sides read as bare skin; and under them a shade of how densely they grow, taken
+from the strokes themselves, up to a third: a floor laid by position took the ears too).
 
 The old player bodies, heads, clothing, hair, first-person arms and the scripts that built them (players.py, anatomy.py,
 face.py, wardrobe.py, hair.py, skin.py, the old civilians / NPC kits) were deleted on 2026-11-07: the players are

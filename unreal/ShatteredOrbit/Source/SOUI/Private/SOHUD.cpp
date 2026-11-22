@@ -36,6 +36,8 @@
 #include "SOWeapon.h"
 #include "SOWeaponData.h"
 #include "Misc/CommandLine.h"
+#include "Misc/App.h"
+#include "SOAreaSubsystem.h"
 
 using namespace SOHudPaint;
 
@@ -3051,6 +3053,27 @@ void ASOHUD::DrawHUD()
 	GlassUsed = 0;
 	ReservedLast = MoveTemp(Reserved);
 	Reserved.Reset();
+	// a new player's first start (the owner, 2026-11-16: "the face will be heavily customizable in game when the player
+	// first starts"): the character builder opens by itself once the area has arrived and the body stands in it; never
+	// in a test, a capture series, the two-player check or an unattended run
+	if (!bCreatorOffered && !InventoryWidget && GetOwningPawn() && !USOAreaSubsystem::IsArriving(this))
+	{
+		const USOInventoryComponent* Own = SOFindInventory(GetOwningPlayerController());
+		if (Own && !Own->IsCharacterMade())
+		{
+			bCreatorOffered = true;
+			const TCHAR* Cmd = FCommandLine::Get();
+			if (!GIsAutomationTesting && !FApp::IsUnattended() && !FCString::Strifind(Cmd, TEXT("SOCaptureSeries")) && !FCString::Strifind(Cmd, TEXT("SONetCheck"))
+				&& !FCString::Strifind(Cmd, TEXT("SOBenchmark")))
+			{
+				ToggleInventory();
+				if (InventoryWidget)
+				{
+					InventoryWidget->OpenSlot(TEXT("character"));
+				}
+			}
+		}
+	}
 	if (!bGlassLooked)
 	{
 		bGlassLooked = true;

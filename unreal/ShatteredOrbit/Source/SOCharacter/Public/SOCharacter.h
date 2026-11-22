@@ -654,6 +654,9 @@ public:
 	USkeletalMeshComponent* GetWornPiece(FName Slot, bool bFirstPerson) const;
 	/** Body regions the worn pieces cover (their skin sections are hidden). */
 	const TSet<FName>& GetHiddenRegions() const { return HiddenRegions; }
+	/** Only the face's sliders and the skin's and the hair's tones from an outfit, on this body as it is dressed (the
+	 *  armoury's stand-in while a slider is dragged: nothing dressed again). */
+	void SetLook(const FSOOutfit& From);
 
 protected:
 	/** Every piece is a skeletal mesh following the body's pose (leader pose), in both views. */

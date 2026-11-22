@@ -36,8 +36,10 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/SkeletalMesh.h"
 #include "SOAttributes.h"
 #include "SOCharacter.h"
+#include "SOCreator.h"
 #include "SOInventoryComponent.h"
 #include "SOLootLibrary.h"
 #include "SOMelee.h"
@@ -512,6 +514,50 @@ namespace
 	{
 		return Id.ToString().Replace(TEXT("_"), TEXT(" ")).ToUpper();
 	}
+
+	/** A skin tone's swatch: the tint over a light skin's own colour (linear, as the maps carry it). */
+	FLinearColor SkinSwatch(const FLinearColor& Tint)
+	{
+		return FLinearColor(0.74f * Tint.R, 0.46f * Tint.G, 0.34f * Tint.B, 1.0f);
+	}
+
+	/** A hair colour's swatch: the tint lifted a little (the strands' sheen: the darkest would read as one black). */
+	FLinearColor HairSwatch(const FLinearColor& Tint)
+	{
+		return FLinearColor(FMath::Min(1.0f, 1.7f * Tint.R + 0.004f), FMath::Min(1.0f, 1.7f * Tint.G + 0.004f), FMath::Min(1.0f, 1.7f * Tint.B + 0.004f), 1.0f);
+	}
+
+	/** The builder's group as the stand-in shows it: how close (0 the whole body, 1 the face), and turned how far
+	 *  (the ears from the side, the nose and the jaw in three quarters, the eyes and the mouth nearly from the front). */
+	float GroupClose(FName Group)
+	{
+		return Group == TEXT("body") ? 0.5f : Group == TEXT("hair") ? 0.62f : 1.0f;
+	}
+
+	float GroupYaw(FName Group)
+	{
+		static const TMap<FName, float> Yaws = { { TEXT("body"), 24.0f }, { TEXT("hair"), 38.0f }, { TEXT("brow"), 30.0f }, { TEXT("eyes"), 12.0f },
+			{ TEXT("nose"), 40.0f }, { TEXT("cheeks"), 26.0f }, { TEXT("mouth"), 14.0f }, { TEXT("jaw"), 34.0f }, { TEXT("ears"), 74.0f } };
+		const float* Yaw = Yaws.Find(Group);
+		return Yaw ? *Yaw : 20.0f;
+	}
+
+	/** Which of a list of tones the look has (alpha 0: the body's own = the first; -1: none of them). */
+	int32 ToneIndex(const TArray<FSOCreatorTone>& Tones, const FLinearColor& Tone)
+	{
+		if (Tone.A <= 0.0f)
+		{
+			return 0;
+		}
+		for (int32 i = 0; i < Tones.Num(); ++i)
+		{
+			if (Tones[i].Tint.Equals(FLinearColor(Tone.R, Tone.G, Tone.B, 1.0f), 2e-3f))
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
 }
 
 // --- Character preview -----------------------------------------------------------------------------
@@ -571,6 +617,7 @@ void USOCharacterPreview::Start(APlayerController* Player)
 	C->bConsiderUnrenderedOpaquePixelAsFullyTranslucent = true;
 	C->bCaptureOnMovement = false;
 	C->FOVAngle = 24.0f;
+	C->bAlwaysPersistRenderingState = true;                   // (its own history: the hair's dither resolves, close up)
 	C->ShowFlags.SetAtmosphere(false);
 	C->ShowFlags.SetFog(false);
 	C->ShowFlags.SetVolumetricFog(false);
@@ -618,13 +665,46 @@ void USOCharacterPreview::UpdateShowList()
 	}
 	USceneCaptureComponent2D* C = Cam->GetCaptureComponent2D();
 	C->ShowOnlyActors.Reset();
+	C->ShowOnlyComponents.Reset();
+	if (bBodyOnly)
+	{
+		// the character builder: the body and what it wears, nothing in the hands or on the back
+		TArray<USkeletalMeshComponent*> Meshes;
+		Pawn->GetComponents(Meshes);
+		for (USkeletalMeshComponent* Mesh : Meshes)
+		{
+			if (Mesh && !Mesh->bOnlyOwnerSee && !Mesh->IsFirstPersonRelevant())
+			{
+				C->ShowOnlyComponent(Mesh);
+			}
+		}
+		return;
+	}
 	C->ShowOnlyActors.Add(Pawn);
 	TArray<AActor*> Attached;
 	Pawn->GetAttachedActors(Attached, true, true);
 	C->ShowOnlyActors.Append(Attached);
 }
 
-void USOCharacterPreview::Sync(USOInventoryComponent* Inventory, const FString& ShowWeapon, const FString& ShowArmor)
+void USOCharacterPreview::ShowLook(const FSOOutfit& Look)
+{
+	if (ASOCharacter* Pawn = Cast<ASOCharacter>(Subject.Get()))
+	{
+		Pawn->SetLook(Look);
+	}
+}
+
+void USOCharacterPreview::SetFraming(float InClose, bool bInBodyOnly)
+{
+	CloseTarget = FMath::Clamp(InClose, 0.0f, 1.0f);
+	if (bBodyOnly != bInBodyOnly)
+	{
+		bBodyOnly = bInBodyOnly;
+		UpdateShowList();
+	}
+}
+
+void USOCharacterPreview::Sync(USOInventoryComponent* Inventory, const FString& ShowWeapon, const FString& ShowArmor, const FSOOutfit* Look)
 {
 	ASOCharacter* Pawn = Cast<ASOCharacter>(Subject.Get());
 	if (!Pawn || !Inventory)
@@ -668,6 +748,8 @@ void USOCharacterPreview::Sync(USOInventoryComponent* Inventory, const FString& 
 			Pawn->EquipInstance(*Held);
 		}
 	}
+	// the face and the tones (a slider being moved, a tone chosen: nothing is dressed again for them)
+	Pawn->SetLook(Look ? *Look : Outfit);
 	UpdateShowList();
 }
 
@@ -705,13 +787,43 @@ void USOCharacterPreview::Tick(float DeltaTime)
 	{
 		return;
 	}
+	// how close (eased), and a turn asked for (eased the shorter way round; a drag stops it)
+	const float Dt = FMath::Min(DeltaTime, 0.05f);
+	Close = DeltaTime <= 0.0f ? CloseTarget : FMath::FInterpTo(Close, CloseTarget, Dt, 5.0f);
+	if (bTurning)
+	{
+		const float Goal = YawGoal + 360.0f * FMath::RoundToFloat((Yaw - YawGoal) / 360.0f);
+		Yaw = FMath::FInterpTo(Yaw, Goal, Dt, 6.0f);
+		bTurning = FMath::Abs(Goal - Yaw) > 0.3f;
+	}
 	// The framing (FeetInPicture follows from it): the capsule's middle is 90 cm over the feet; the eye 470 cm off and
 	// 20 cm over a point 8 cm above it, a 24 degree lens on a 3:4 picture (31.6 degrees tall): the feet 0.88 down it.
+	// Closer (the character builder): head and shoulders at .55 (1.4 m off, on the chin), the face at 1 (76 cm off, on
+	// the middle of the face, at the eyes' height)
 	const FVector Center = Pawn->GetActorLocation() + FVector(0.0f, 0.0f, 8.0f);
 	const FRotator Facing(0.0f, Pawn->GetActorRotation().Yaw + Yaw, 0.0f);
 	const FVector Dir = Facing.Vector();                        // from the character towards the camera
-	const FVector Eye = Center + Dir * 470.0f + FVector(0.0f, 0.0f, 20.0f);
-	Cam->SetActorLocationAndRotation(Eye, (Center + FVector(0.0f, 0.0f, 4.0f) - Eye).Rotation());
+	FVector Look = Center + FVector(0.0f, 0.0f, 4.0f);
+	FVector Eye = Center + Dir * 470.0f + FVector(0.0f, 0.0f, 20.0f);
+	if (Close > 0.001f)
+	{
+		const ACharacter* Body = Cast<ACharacter>(Pawn);
+		const USkeletalMeshComponent* Mesh = Body ? Body->GetMesh() : nullptr;
+		const int32 HeadBone = Mesh ? Mesh->GetBoneIndex(TEXT("head")) : INDEX_NONE;
+		const FVector Ahead = FRotator(0.0f, Pawn->GetActorRotation().Yaw, 0.0f).Vector();
+		const FVector Head = HeadBone != INDEX_NONE ? Mesh->GetBoneLocation(TEXT("head")) : Center + FVector(0.0f, 0.0f, 72.0f);
+		const FVector Face = Head + FVector(0.0f, 0.0f, 7.0f) + Ahead * 5.0f;
+		const FVector Chin = Head + FVector(0.0f, 0.0f, -10.0f) + Ahead * 3.0f;
+		const float A = FMath::Clamp(Close / 0.55f, 0.0f, 1.0f);
+		const float B = FMath::Clamp((Close - 0.55f) / 0.45f, 0.0f, 1.0f);
+		const float SA = A * A * (3.0f - 2.0f * A), SB = B * B * (3.0f - 2.0f * B);
+		const FVector Aim = FMath::Lerp(FMath::Lerp(Look, Chin, SA), Face, SB);
+		const float Distance = FMath::Lerp(FMath::Lerp(470.0f, 140.0f, SA), 76.0f, SB);
+		const float Rise = FMath::Lerp(FMath::Lerp(20.0f, 6.0f, SA), 1.0f, SB);
+		Look = Aim;
+		Eye = Aim + Dir * Distance + FVector(0.0f, 0.0f, Rise);
+	}
+	Cam->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
 	const FVector Right = FRotationMatrix(Facing).GetUnitAxis(EAxis::Y);
 	const FVector Places[] = {
 		Center + Dir * 230.0f + Right * 170.0f + FVector(0.0f, 0.0f, 130.0f),      // key: in front, to the right, high
@@ -719,11 +831,32 @@ void USOCharacterPreview::Tick(float DeltaTime)
 		Center - Dir * 170.0f + Right * 160.0f + FVector(0.0f, 0.0f, 70.0f),       // rim: behind, to the right
 		Center + Dir * 260.0f - Right * 200.0f + FVector(0.0f, 0.0f, 10.0f),       // fill: in front, to the left, low
 		Center + Dir * 140.0f + FVector(0.0f, 0.0f, -80.0f) };                     // the platform's light from below
+	// close on the face (the character builder) a portrait's light: the key a third up and to the side of the face and
+	// softer, the rims at the head, the fill under the jaw's line, no platform; and all of it gentler (at the whole
+	// body's strength the forehead and the nose went white)
+	const FVector Places1[] = {
+		Look + Dir * 150.0f + Right * 120.0f + FVector(0.0f, 0.0f, 105.0f),
+		Look - Dir * 160.0f - Right * 140.0f + FVector(0.0f, 0.0f, 60.0f),
+		Look - Dir * 140.0f + Right * 150.0f + FVector(0.0f, 0.0f, 50.0f),
+		Look + Dir * 170.0f - Right * 150.0f + FVector(0.0f, 0.0f, -25.0f),
+		Look + Dir * 140.0f + FVector(0.0f, 0.0f, -120.0f) };
+	static const float Strength[] = { 175.0f, 300.0f, 210.0f, 45.0f, 40.0f };
+	// (the rims a little above the head and low: level with it they shone through the jaw's thin edge in the skin's
+	// scatter and drew a red line along it; high and strong they lit the hair's top white)
+	static const float Strength1[] = { 58.0f, 40.0f, 28.0f, 24.0f, 0.0f };
+	static const float Source[] = { 55.0f, 30.0f, 30.0f, 90.0f, 60.0f };
+	static const float Source1[] = { 95.0f, 30.0f, 30.0f, 110.0f, 60.0f };
+	const float C = FMath::Clamp(Close, 0.0f, 1.0f);
 	for (int32 i = 0; i < Lights.Num() && i < static_cast<int32>(UE_ARRAY_COUNT(Places)); ++i)
 	{
 		if (APointLight* L = Lights[i].Get())
 		{
-			L->SetActorLocation(Places[i]);
+			L->SetActorLocation(FMath::Lerp(Places[i], Places1[i], C));
+			if (UPointLightComponent* P = Cast<UPointLightComponent>(L->GetLightComponent()))
+			{
+				P->SetIntensity(FMath::Lerp(Strength[i], Strength1[i], C));
+				P->SetSourceRadius(FMath::Lerp(Source[i], Source1[i], C));
+			}
 		}
 	}
 }
@@ -1222,6 +1355,42 @@ TSharedRef<SWidget> USOArmouryButton::RebuildWidget()
 			Content = Sized(T, Line, Width, 32.0f);
 			break;
 		}
+		case ESOArmouryControl::Swatch:
+		case ESOArmouryControl::Choice:
+		{
+			// a tone (its colour, its name under it) or one of a few choices (a word on a wide plate): lit when chosen
+			FPlate Normal;
+			Normal.Cut = 7.0f;
+			Normal.Fill = bActive ? FLinearColor(0.010f, 0.034f, 0.056f, 0.95f) : FLinearColor(0.006f, 0.009f, 0.018f, 0.9f);
+			Normal.FillLow = bActive ? FLinearColor(0.006f, 0.020f, 0.034f, 0.95f) : FLinearColor(0.004f, 0.006f, 0.012f, 0.9f);
+			Normal.Edge = bActive ? Alpha(Cyan, 0.95f) : FLinearColor(1.0f, 1.0f, 1.0f, 0.12f);
+			if (bActive)
+			{
+				Normal.Accent = Cyan;
+				Normal.AccentBottom = 2.0f;
+				Normal.Wash = 0.35f;
+			}
+			FPlate Over = Normal;
+			Over.Edge = Alpha(Cyan, 1.0f);
+			Over.TopLight = 1.0f;
+			StyleButton(Button, PlateBrush(this, Normal), PlateBrush(this, Over), PlateBrush(this, Over));
+			UVerticalBox* Column = Make<UVerticalBox>(T);
+			if (Kind == ESOArmouryControl::Swatch)
+			{
+				UBorder* Chip = Box(T, FSlateRoundedBoxBrush(Alpha(SwatchColor, 1.0f), 4.0f, bActive ? Alpha(Ink, 0.85f) : FLinearColor(1.0f, 1.0f, 1.0f, 0.16f), bActive ? 2.0f : 1.0f), FMargin(0));
+				Column->AddChildToVerticalBox(Sized(T, Chip, 0.0f, 32.0f));
+			}
+			UTextBlock* Caption = Fit(Text(T, Label, Kind == ESOArmouryControl::Choice ? 11 : 8, bActive ? Ink : Soft, FaceBold, Kind == ESOArmouryControl::Choice ? 300 : 150));
+			Caption->SetJustification(ETextJustify::Center);
+			UVerticalBoxSlot* N = Column->AddChildToVerticalBox(Caption);
+			N->SetHorizontalAlignment(HAlign_Fill);
+			N->SetPadding(FMargin(0, Kind == ESOArmouryControl::Swatch ? 7.0f : 0.0f, 0, 0));
+			UBorder* Pad = Box(T, Clear, Kind == ESOArmouryControl::Swatch ? FMargin(9, 9, 9, 8) : FMargin(10, 0, 10, 0));
+			Pad->SetVerticalAlignment(VAlign_Center);
+			Pad->SetContent(Column);
+			Content = Sized(T, Pad, Width, Kind == ESOArmouryControl::Swatch ? 76.0f : 44.0f);
+			break;
+		}
 		case ESOArmouryControl::Page:
 		case ESOArmouryControl::Tool:
 		{
@@ -1325,6 +1494,7 @@ void USOInventoryWidget::NativeConstruct()
 			{
 				MID->SetTextureParameterValue(TEXT("Stage"), Preview->GetTarget());
 				PreviewImage->SetBrushFromMaterial(MID);
+				StageMaterial = MID;
 			}
 			else
 			{
@@ -1337,6 +1507,10 @@ void USOInventoryWidget::NativeConstruct()
 
 void USOInventoryWidget::NativeDestruct()
 {
+	if (Inventory && (bShowedCreator || GetView() == EView::Character) && !Inventory->IsCharacterMade())
+	{
+		Inventory->ServerSetCharacterMade();                   // (a new player's first start is over)
+	}
 	if (Preview)
 	{
 		Preview->Stop();
@@ -1895,6 +2069,7 @@ void USOInventoryWidget::Refresh()
 	}
 	FillBanner();
 	const bool bLoadout = GetView() == EView::Loadout;
+	const bool bCreator = GetView() == EView::Character;
 	for (UWidget* W : { static_cast<UWidget*>(LeftPanel.Get()), static_cast<UWidget*>(RightPanel.Get()) })
 	{
 		W->SetVisibility(bLoadout ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
@@ -1903,9 +2078,19 @@ void USOInventoryWidget::Refresh()
 	{
 		W->SetVisibility(bLoadout ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	}
+	// the character builder: the stage takes the inspect panel's room, close on the face (no platform under it)
+	InspectPanel->SetVisibility(bLoadout || bCreator ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	if (FloorImage && FloorImage->GetBrush().GetResourceObject())
+	{
+		FloorImage->SetVisibility(bCreator ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (bLoadout)
 	{
 		FillLoadout();
+	}
+	else if (bCreator)
+	{
+		FillCharacter();
 	}
 	else
 	{
@@ -2408,6 +2593,7 @@ void USOInventoryWidget::FillTabs()
 	Tab(TEXT("arsenal"), TEXT("ARSENAL"), View == EView::Arsenal, bNewGun);
 	Tab(TEXT("armour"), TEXT("ARMOUR"), View == EView::Armour, bNewArmour);
 	Tab(TEXT("goods"), TEXT("INVENTORY"), View == EView::Goods, bNewGoods);
+	Tab(TEXT("character"), TEXT("CHARACTER"), View == EView::Character, !Inventory->IsCharacterMade());
 	TabRow->AddChildToHorizontalBox(KeyCap(T, TEXT("E")))->SetVerticalAlignment(VAlign_Center);
 }
 
@@ -2444,6 +2630,13 @@ void USOInventoryWidget::FillHints()
 		Add(TEXT("A D"), TEXT("KIND"));
 		Add(TEXT("ENTER"), TEXT("USE"));
 		break;
+	case EView::Character:
+		Add(TEXT("A D"), TEXT("GROUP"));
+		Add(TEXT("W S"), TEXT("CHOOSE"));
+		Add(TEXT("\u2039 \u203A"), TEXT("ADJUST"));
+		Add(TEXT("R"), TEXT("RESET"));
+		Add(TEXT("ESC"), TEXT("DONE"));
+		return;
 	}
 	Add(TEXT("Z"), TEXT("SORT"));
 	Add(TEXT("ESC"), TEXT("BACK"));
@@ -3517,6 +3710,10 @@ USOInventoryWidget::EView USOInventoryWidget::GetView() const
 	{
 		return EView::Goods;
 	}
+	if (OpenSlotId == TEXT("character"))
+	{
+		return EView::Character;
+	}
 	return IsArmourSlot(OpenSlotId) ? EView::Armour : EView::Arsenal;
 }
 
@@ -3689,6 +3886,10 @@ void USOInventoryWidget::OnControl(ESOArmouryControl Kind, const FString& Key)
 		{
 			OpenSlot(TEXT("goods"));
 		}
+		else if (Key == TEXT("character") && GetView() != EView::Character)
+		{
+			OpenSlot(TEXT("character"));
+		}
 		break;
 	case ESOArmouryControl::SlotTile:
 		if (Key != OpenSlotId)
@@ -3697,7 +3898,11 @@ void USOInventoryWidget::OnControl(ESOArmouryControl Kind, const FString& Key)
 		}
 		break;
 	case ESOArmouryControl::Row:
-		if (Key.StartsWith(TEXT("slot:")))
+		if (Key.StartsWith(TEXT("group:")))
+		{
+			SetCreatorGroup(FName(*Key.RightChop(6)));
+		}
+		else if (Key.StartsWith(TEXT("slot:")))
 		{
 			if (Key.RightChop(5) != OpenSlotId)
 			{
@@ -3728,9 +3933,46 @@ void USOInventoryWidget::OnControl(ESOArmouryControl Kind, const FString& Key)
 		{
 			SetSort(SortMode + 1);
 		}
+		else if (Key == TEXT("reset"))
+		{
+			ResetLook(false);
+		}
+		else if (Key == TEXT("resetall") || Key == TEXT("random"))
+		{
+			// the whole look at once: asked twice (the first press arms it for three seconds)
+			if (CreatorArmed == Key && FPlatformTime::Seconds() - CreatorArmedAt < 3.0)
+			{
+				CreatorArmed.Reset();
+				if (Key == TEXT("random"))
+				{
+					RandomFace();
+				}
+				else
+				{
+					ResetLook(true);
+				}
+			}
+			else
+			{
+				CreatorArmed = Key;
+				CreatorArmedAt = FPlatformTime::Seconds();
+				USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.5f, 0.0f);
+				Refresh();
+			}
+		}
 		else
 		{
 			SetListView(Key == TEXT("list"));
+		}
+		break;
+	case ESOArmouryControl::Swatch:
+		ChooseTone(Key.StartsWith(TEXT("hair:")), FCString::Atoi(*Key.RightChop(5)));
+		break;
+	case ESOArmouryControl::Choice:
+		if (Inventory && Key.StartsWith(TEXT("body:")) && Inventory->GetBody() != FName(*Key.RightChop(5)))
+		{
+			Inventory->ServerSetBody(FName(*Key.RightChop(5)));
+			USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.6f, 0.0f);
 		}
 		break;
 	}
@@ -3820,6 +4062,26 @@ void USOInventoryWidget::OpenSlot(const FString& SlotId)
 	const EView Before = GetView();
 	OpenSlotId = Want;
 	const bool bSameView = Before == GetView() && Before != EView::Loadout;
+	if (GetView() == EView::Character)
+	{
+		bShowedCreator = true;
+		CreatorBuilt.Reset();
+		if (Before != EView::Character && Preview)
+		{
+			Preview->TurnTo(GroupYaw(CreatorGroup));
+		}
+	}
+	else if (Before == EView::Character)
+	{
+		if (Inventory && !Inventory->IsCharacterMade())
+		{
+			Inventory->ServerSetCharacterMade();               // (a new player's first start is over)
+		}
+		if (Preview)
+		{
+			Preview->TurnTo(24.0f);
+		}
+	}
 	SelectedKey.Reset();
 	HoverKey.Reset();
 	QuickKey.Reset();
@@ -3858,9 +4120,9 @@ void USOInventoryWidget::OpenSlot(const FString& SlotId)
 
 void USOInventoryWidget::StepTab(int32 Step)
 {
-	static const TCHAR* Tabs[] = { TEXT(""), TEXT("arsenal"), TEXT("armour"), TEXT("goods") };
+	static const TCHAR* Tabs[] = { TEXT(""), TEXT("arsenal"), TEXT("armour"), TEXT("goods"), TEXT("character") };
 	const int32 Now = static_cast<int32>(GetView());
-	OnControl(ESOArmouryControl::Tab, Tabs[(Now + Step % 4 + 4) % 4]);
+	OnControl(ESOArmouryControl::Tab, Tabs[(Now + Step % 5 + 5) % 5]);
 }
 
 void USOInventoryWidget::StepSlot(int32 Step)
@@ -3896,6 +4158,16 @@ void USOInventoryWidget::StepSlot(int32 Step)
 		SetFilter(Kinds[(Now + Step % 5 + 5) % 5]);
 		break;
 	}
+	case EView::Character:
+	{
+		const TArray<FName> Groups = CreatorGroups();
+		if (Groups.Num() > 0)
+		{
+			const int32 Now = FMath::Max(0, Groups.IndexOfByKey(CreatorGroup));
+			SetCreatorGroup(Groups[(Now + Step % Groups.Num() + Groups.Num()) % Groups.Num()]);
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -3903,7 +4175,7 @@ void USOInventoryWidget::StepSlot(int32 Step)
 
 void USOInventoryWidget::StepList(int32 Step)
 {
-	if (GetView() == EView::Loadout)
+	if (GetView() == EView::Loadout || GetView() == EView::Character)
 	{
 		return;
 	}
@@ -3931,7 +4203,7 @@ void USOInventoryWidget::StepList(int32 Step)
 
 void USOInventoryWidget::StepPage(int32 Step)
 {
-	if (GetView() == EView::Loadout || Step == 0)
+	if (GetView() == EView::Loadout || GetView() == EView::Character || Step == 0)
 	{
 		return;
 	}
@@ -3970,6 +4242,11 @@ TArray<USOInventoryTile*> USOInventoryWidget::ColumnTiles(int32 Column) const
 
 void USOInventoryWidget::MoveFocus(int32 DX, int32 DY)
 {
+	if (GetView() == EView::Character)
+	{
+		CreatorStep(DX, DY);
+		return;
+	}
 	if (!OpenSlotId.IsEmpty())
 	{
 		// an armoury: through the grid (a row is a column's width); in the list up and down, left and right the pages
@@ -4044,6 +4321,10 @@ void USOInventoryWidget::ApplyFocus()
 
 void USOInventoryWidget::Accept()
 {
+	if (GetView() == EView::Character)
+	{
+		return;                                                  // (left / right choose there)
+	}
 	if (!OpenSlotId.IsEmpty())
 	{
 		OnEquip();
@@ -4105,7 +4386,7 @@ void USOInventoryWidget::UpdateLayout(float Width)
 	const float GridLeft = Side + CatWidth + ColumnGap;
 	const float PanelLeft = Width - Side - InspectWidth;
 	const bool bLoadout = GetView() == EView::Loadout;
-	StageX = bLoadout ? Width * 0.5f : (GridLeft + GridWidth + PanelLeft) * 0.5f;
+	StageX = bLoadout ? Width * 0.5f : GetView() == EView::Character ? (GridLeft + GridWidth + Width - Side) * 0.5f : (GridLeft + GridWidth + PanelLeft) * 0.5f;
 	// the tabs between the banner's two ends, or on a row of their own under it where they would touch either
 	const float LeftW = BannerLeft ? static_cast<float>(BannerLeft->GetDesiredSize().X) : 0.0f;
 	const float RightW = BannerRight ? static_cast<float>(BannerRight->GetDesiredSize().X) : 0.0f;
@@ -4157,6 +4438,23 @@ void USOInventoryWidget::SyncPreview()
 	if (!Preview || !Inventory)
 	{
 		return;
+	}
+	if (GetView() == EView::Character)
+	{
+		// the builder: close on the face or on head and shoulders, the body alone, the look as it is being moved
+		const FSOOutfit Look = CurrentLook();
+		Preview->SetFraming(GroupClose(CreatorGroup), true);
+		Preview->Sync(Inventory, FString(), FString(), &Look);
+		if (StageMaterial)
+		{
+			StageMaterial->SetScalarParameterValue(TEXT("Edge"), 0.16f);   // (the shoulders fade out at the picture's sides)
+		}
+		return;
+	}
+	Preview->SetFraming(0.0f, false);
+	if (StageMaterial)
+	{
+		StageMaterial->SetScalarParameterValue(TEXT("Edge"), 0.0f);
 	}
 	FString Weapon, Armor;
 	if (!OpenSlotId.IsEmpty())
@@ -4353,6 +4651,10 @@ FReply USOInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 	{
 		bDragging = true;
 		SpinVelocity = 0.0f;
+		if (Preview)
+		{
+			Preview->StopTurning();
+		}
 		LastDragTime = FPlatformTime::Seconds();
 		return FReply::Handled().CaptureMouse(TakeWidget()).SetUserFocus(TakeWidget());
 	}
@@ -4458,7 +4760,14 @@ FReply USOInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FK
 	}
 	else if (Is({ EKeys::R, EKeys::Gamepad_Special_Right }))
 	{
-		OnLock();
+		if (GetView() == EView::Character)
+		{
+			ResetLook(false);                                    // (the builder: the group back to the body's own)
+		}
+		else
+		{
+			OnLock();
+		}
 	}
 	else if (Is({ EKeys::X, EKeys::Gamepad_FaceButton_Left }))
 	{
@@ -4477,14 +4786,14 @@ FReply USOInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FK
 	}
 	else if (Key == EKeys::Z)
 	{
-		if (GetView() != EView::Loadout)
+		if (GetView() != EView::Loadout && GetView() != EView::Character)
 		{
 			SetSort(SortMode + 1);
 		}
 	}
 	else if (Key == EKeys::V)
 	{
-		if (GetView() != EView::Loadout)
+		if (GetView() != EView::Loadout && GetView() != EView::Character)
 		{
 			SetListView(!bListView);
 		}
@@ -4524,10 +4833,695 @@ FReply USOInventoryWidget::NativeOnKeyUp(const FGeometry& InGeometry, const FKey
 FReply USOInventoryWidget::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	// over the grid the wheel turns its pages (over the inspect panel its own scroll takes it first)
-	if (GetView() != EView::Loadout && GridPanel && GridPanel->GetCachedGeometry().IsUnderLocation(InMouseEvent.GetScreenSpacePosition()))
+	if (GetView() != EView::Loadout && GetView() != EView::Character && GridPanel && GridPanel->GetCachedGeometry().IsUnderLocation(InMouseEvent.GetScreenSpacePosition()))
 	{
 		StepPage(InMouseEvent.GetWheelDelta() < 0.0f ? 1 : -1);
 		return FReply::Handled();
 	}
 	return Super::NativeOnMouseWheel(InGeometry, InMouseEvent);
+}
+
+// --- Character builder ---------------------------------------------------------------------------------
+
+TSharedRef<SWidget> USOCreatorSlider::RebuildWidget()
+{
+	if (WidgetTree && !WidgetTree->RootWidget)
+	{
+		UWidgetTree* T = WidgetTree;
+		Frame = Box(T, FSlateNoResource(), FMargin(0));
+		Frame->SetVisibility(ESlateVisibility::Visible);
+		UCanvasPanel* Canvas = Make<UCanvasPanel>(T);
+		auto Put = [&](UWidget* W, const FVector2D& At, const FVector2D& Size, const FVector2D& Align, bool bAuto)
+		{
+			UCanvasPanelSlot* S = Canvas->AddChildToCanvas(W);
+			S->SetAutoSize(bAuto);
+			S->SetAlignment(Align);
+			S->SetPosition(At);
+			if (!bAuto)
+			{
+				S->SetSize(Size);
+			}
+			return S;
+		};
+		const float Y = 37.0f;
+		const float X0 = TrackLeft(), X1 = TrackRight(), Mid = (X0 + X1) * 0.5f;
+		AccentBar = Box(T, FSlateColorBrush(Cyan), FMargin(0));
+		Put(AccentBar, FVector2D(0.0f, 9.0f), FVector2D(3.0f, Height - 18.0f), FVector2D::ZeroVector, false);
+		LabelText = Fit(Text(T, Label.ToUpper(), 10, Soft, FaceBold, 170));
+		Put(Sized(T, LabelText, Width - 120.0f, 0.0f), FVector2D(18.0f, 8.0f), FVector2D::ZeroVector, FVector2D::ZeroVector, true);
+		ValueText = Text(T, TEXT("0"), 11, Dim, FaceBold, 40);
+		ValueText->SetJustification(ETextJustify::Right);
+		Put(Sized(T, ValueText, 64.0f, 0.0f), FVector2D(Width - 18.0f, 7.0f), FVector2D::ZeroVector, FVector2D(1.0f, 0.0f), true);
+		// the track, its quarters, the middle, the fill from the middle, the knob
+		Put(Box(T, FSlateColorBrush(FLinearColor(1.0f, 1.0f, 1.0f, 0.13f)), FMargin(0)), FVector2D(X0, Y - 1.0f), FVector2D(X1 - X0, 2.0f), FVector2D::ZeroVector, false);
+		for (const float F : { -1.0f, -0.5f, 0.5f, 1.0f })
+		{
+			Put(Box(T, FSlateColorBrush(FLinearColor(1.0f, 1.0f, 1.0f, 0.18f)), FMargin(0)), FVector2D(Mid + F * (X1 - Mid) - 0.5f, Y - 3.0f), FVector2D(1.0f, 6.0f), FVector2D::ZeroVector, false);
+		}
+		Put(Box(T, FSlateColorBrush(Alpha(Soft, 0.95f)), FMargin(0)), FVector2D(Mid - 1.0f, Y - 6.0f), FVector2D(2.0f, 12.0f), FVector2D::ZeroVector, false);
+		FillBar = Box(T, FSlateColorBrush(Cyan), FMargin(0));
+		Put(FillBar, FVector2D(Mid, Y - 1.5f), FVector2D(0.0f, 3.0f), FVector2D::ZeroVector, false);
+		Knob = Box(T, FSlateRoundedBoxBrush(Ink, 6.0f, Alpha(Cyan, 1.0f), 2.0f), FMargin(0));
+		Put(Knob, FVector2D(Mid, Y), FVector2D(12.0f, 12.0f), FVector2D(0.5f, 0.5f), false);
+		Frame->SetContent(Sized(T, Canvas, Width, Height));
+		WidgetTree->RootWidget = Frame;
+		Restyle();
+		SetValue(Value);
+	}
+	return Super::RebuildWidget();
+}
+
+void USOCreatorSlider::SetValue(float InValue)
+{
+	Value = FMath::Clamp(InValue, -1.0f, 1.0f);
+	if (!Knob || !FillBar || !ValueText)
+	{
+		return;
+	}
+	const float X0 = TrackLeft(), X1 = TrackRight(), Mid = (X0 + X1) * 0.5f;
+	const float X = Mid + Value * (X1 - Mid);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Knob->Slot))
+	{
+		S->SetPosition(FVector2D(X, 37.0f));
+	}
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(FillBar->Slot))
+	{
+		S->SetPosition(FVector2D(FMath::Min(X, Mid), 35.5f));
+		S->SetSize(FVector2D(FMath::Abs(X - Mid), 3.0f));
+	}
+	const int32 Shown = FMath::RoundToInt(Value * 100.0f);
+	ValueText->SetText(FText::FromString(Shown == 0 ? FString(TEXT("0")) : FString::Printf(TEXT("%+d"), Shown)));
+	ValueText->SetColorAndOpacity(FSlateColor(Shown == 0 ? Dim : Cyan));
+}
+
+void USOCreatorSlider::SetFocused(bool bOn)
+{
+	if (bFocused != bOn)
+	{
+		bFocused = bOn;
+		Restyle();
+	}
+}
+
+void USOCreatorSlider::Restyle()
+{
+	if (!Frame)
+	{
+		return;
+	}
+	const bool bLit = bHovered || bFocused || bDragging;
+	FPlate P;
+	P.Cut = 8.0f;
+	P.Fill = bLit ? FLinearColor(0.010f, 0.028f, 0.046f, 0.93f) : FLinearColor(0.006f, 0.009f, 0.018f, 0.86f);
+	P.FillLow = bLit ? FLinearColor(0.006f, 0.017f, 0.028f, 0.94f) : FLinearColor(0.004f, 0.006f, 0.012f, 0.88f);
+	P.Edge = bLit ? Alpha(Cyan, bFocused ? 0.8f : 0.5f) : FLinearColor(1.0f, 1.0f, 1.0f, 0.10f);
+	P.TopLight = bLit ? 1.0f : 0.0f;
+	Frame->SetBrush(PlateBrush(this, P));
+	if (LabelText)
+	{
+		LabelText->SetColorAndOpacity(FSlateColor(bLit ? Ink : Soft));
+	}
+	if (AccentBar)
+	{
+		AccentBar->SetVisibility(bFocused ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+	}
+}
+
+float USOCreatorSlider::ValueAt(const FGeometry& Geometry, const FPointerEvent& Event) const
+{
+	const float X = static_cast<float>(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()).X);
+	const float Mid = (TrackLeft() + TrackRight()) * 0.5f;
+	float V = FMath::Clamp((X - Mid) / FMath::Max(1.0f, TrackRight() - Mid), -1.0f, 1.0f);
+	if (FMath::Abs(V) < 0.035f)
+	{
+		V = 0.0f;                                                // (a catch at the middle: the body's own)
+	}
+	return FMath::RoundToFloat(V * 100.0f) / 100.0f;
+}
+
+FReply USOCreatorSlider::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		bDragging = true;
+		SetValue(ValueAt(InGeometry, InMouseEvent));
+		Restyle();
+		if (Screen)
+		{
+			Screen->OnSlider(Key, Value, false);
+		}
+		return FReply::Handled().CaptureMouse(TakeWidget());
+	}
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply USOCreatorSlider::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (bDragging)
+	{
+		const float V = ValueAt(InGeometry, InMouseEvent);
+		if (!FMath::IsNearlyEqual(V, Value))
+		{
+			SetValue(V);
+			if (Screen)
+			{
+				Screen->OnSlider(Key, Value, false);
+			}
+		}
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+FReply USOCreatorSlider::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (bDragging)
+	{
+		bDragging = false;
+		Restyle();
+		if (Screen)
+		{
+			Screen->OnSlider(Key, Value, true);
+		}
+		return FReply::Handled().ReleaseMouseCapture();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+}
+
+FReply USOCreatorSlider::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	SetValue(0.0f);
+	if (Screen)
+	{
+		Screen->OnSlider(Key, 0.0f, true);
+	}
+	return FReply::Handled();
+}
+
+FReply USOCreatorSlider::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	const float Step = InMouseEvent.GetWheelDelta() > 0.0f ? 0.05f : -0.05f;
+	SetValue(FMath::Clamp(FMath::RoundToFloat((Value + Step) * 20.0f) / 20.0f, -1.0f, 1.0f));
+	if (Screen)
+	{
+		Screen->OnSlider(Key, Value, true);
+	}
+	return FReply::Handled();
+}
+
+void USOCreatorSlider::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+	bHovered = true;
+	Restyle();
+	if (Screen)
+	{
+		Screen->OnSliderHover(Key);
+	}
+}
+
+void USOCreatorSlider::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseLeave(InMouseEvent);
+	bHovered = false;
+	Restyle();
+}
+
+bool USOInventoryWidget::HasMorph(FName Key) const
+{
+	const USOWardrobeData* Wardrobe = Inventory ? USOWardrobeData::Get(Inventory->GetBody()) : nullptr;
+	const USkeletalMesh* Mesh = Wardrobe ? Wardrobe->BodyMesh.LoadSynchronous() : nullptr;
+	return Mesh && Mesh->FindMorphTarget(FName(*(TEXT("face_") + Key.ToString()))) != nullptr;
+}
+
+TArray<FName> USOInventoryWidget::CreatorGroups() const
+{
+	TArray<FName> Out;
+	for (const FSOCreatorGroup& G : FSOCreatorData::Get().Groups)
+	{
+		bool bAny = G.Sliders.Num() == 0;
+		for (const TPair<FName, FString>& S : G.Sliders)
+		{
+			bAny |= HasMorph(S.Key);
+		}
+		if (bAny)
+		{
+			Out.Add(G.Id);
+		}
+	}
+	return Out;
+}
+
+FSOOutfit USOInventoryWidget::CurrentLook() const
+{
+	FSOOutfit Look = Inventory ? Inventory->GetOutfit() : FSOOutfit();
+	for (const TPair<FName, FPendingValue>& P : PendingFace)
+	{
+		const int32 i = Look.FaceKeys.IndexOfByKey(P.Key);
+		if (FMath::IsNearlyZero(P.Value.Value, 1e-3f))
+		{
+			if (i != INDEX_NONE)
+			{
+				Look.FaceKeys.RemoveAt(i);
+				if (Look.FaceValues.IsValidIndex(i))
+				{
+					Look.FaceValues.RemoveAt(i);
+				}
+			}
+		}
+		else if (i == INDEX_NONE || !Look.FaceValues.IsValidIndex(i))
+		{
+			Look.FaceKeys.Add(P.Key);
+			Look.FaceValues.SetNum(Look.FaceKeys.Num() - 1);
+			Look.FaceValues.Add(P.Value.Value);
+		}
+		else
+		{
+			Look.FaceValues[i] = P.Value.Value;
+		}
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (Now - PendingSkinAt < 2.5)
+	{
+		Look.SkinTone = PendingSkin;
+	}
+	if (Now - PendingHairAt < 2.5)
+	{
+		Look.HairTone = PendingHair;
+	}
+	return Look;
+}
+
+void USOInventoryWidget::FillCharacter()
+{
+	UWidgetTree* T = WidgetTree;
+	const FSOCreatorData& Data = FSOCreatorData::Get();
+	ListTiles.Reset();
+	QuickLook->SetVisibility(ESlateVisibility::Collapsed);
+	QuickKey.Reset();
+	const TArray<FName> Groups = CreatorGroups();
+	if (!Groups.Contains(CreatorGroup) && Groups.Num() > 0)
+	{
+		CreatorGroup = Groups[0];
+	}
+	// what was moved and is on the profile now (or was let go a while ago) waits no more
+	const double Now = FPlatformTime::Seconds();
+	for (auto It = PendingFace.CreateIterator(); It; ++It)
+	{
+		if (Now - It.Value().At > 2.5 || (Now >= It.Value().At && FMath::IsNearlyEqual(Inventory->GetFace(It.Key()), It.Value().Value, 2e-3f)))
+		{
+			It.RemoveCurrent();
+		}
+	}
+	if (Inventory->GetSkinTone().Equals(PendingSkin, 1e-3f))
+	{
+		PendingSkinAt = -100.0;
+	}
+	if (Inventory->GetHairTone().Equals(PendingHair, 1e-3f))
+	{
+		PendingHairAt = -100.0;
+	}
+	if (Now - CreatorArmedAt > 3.0)
+	{
+		CreatorArmed.Reset();
+	}
+	const FSOOutfit Look = CurrentLook();
+	auto FaceValue = [&Look](FName Key)
+	{
+		const int32 i = Look.FaceKeys.IndexOfByKey(Key);
+		return i != INDEX_NONE && Look.FaceValues.IsValidIndex(i) ? Look.FaceValues[i] : 0.0f;
+	};
+
+	// --- the column: the builder's name and line, its groups (a face group's figure: how many of its sliders are
+	// moved), the whole look at once at its foot
+	CategoryPanel->ClearChildren();
+	CategoryPanel->AddChildToVerticalBox(Fit(Text(T, TEXT("CHARACTER"), 26, Ink, FaceCond, 140)));
+	{
+		UHorizontalBox* Under = Make<UHorizontalBox>(T);
+		Under->AddChildToHorizontalBox(Sized(T, Box(T, FSlateColorBrush(Cyan), FMargin(0)), 3.0f, 10.0f))->SetVerticalAlignment(VAlign_Center);
+		UHorizontalBoxSlot* L = Under->AddChildToHorizontalBox(Fit(Text(T, TEXT("WHO WEARS THE ARMOUR"), 8, Soft, FaceBold, 220)));
+		L->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		L->SetPadding(FMargin(8, 0, 0, 0));
+		L->SetVerticalAlignment(VAlign_Center);
+		CategoryPanel->AddChildToVerticalBox(Under)->SetPadding(FMargin(0, 2, 0, 14));
+	}
+	for (const FName Id : Groups)
+	{
+		const FSOCreatorGroup* G = Data.Find(Id);
+		int32 Moved = 0;
+		for (const TPair<FName, FString>& S : G->Sliders)
+		{
+			Moved += HasMorph(S.Key) && !FMath::IsNearlyZero(FaceValue(S.Key), 1e-3f) ? 1 : 0;
+		}
+		USOArmouryButton* B = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+		B->Setup(this, ESOArmouryControl::Row, TEXT("group:") + Id.ToString(), G->Name.ToUpper(), Id == CreatorGroup);
+		B->Count = Moved > 0 ? FString::FromInt(Moved) : FString();
+		B->Width = CatWidth;
+		CategoryPanel->AddChildToVerticalBox(B)->SetPadding(FMargin(0, 0, 0, 2));
+	}
+	CategoryPanel->AddChildToVerticalBox(Make<USpacer>(T))->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	CategoryPanel->AddChildToVerticalBox(Header(T, TEXT("THE WHOLE LOOK")))->SetPadding(FMargin(0, 0, 0, 8));
+	{
+		UHorizontalBox* Row = Make<UHorizontalBox>(T);
+		auto Whole = [&](const FString& Key, const FString& Label, bool bFirst)
+		{
+			USOArmouryButton* B = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+			const bool bArmed = CreatorArmed == Key;
+			B->Setup(this, ESOArmouryControl::Tool, Key, bArmed ? FString(TEXT("CONFIRM")) : Label, bArmed);
+			B->Width = (CatWidth - 6.0f) * 0.5f;
+			Row->AddChildToHorizontalBox(B)->SetPadding(FMargin(bFirst ? 0.0f : 6.0f, 0, 0, 0));
+		};
+		Whole(TEXT("random"), TEXT("RANDOM FACE"), true);
+		Whole(TEXT("resetall"), TEXT("RESET ALL"), false);
+		CategoryPanel->AddChildToVerticalBox(Row);
+	}
+
+	// --- the group: its head, its line, its sliders or its tones (moving a slider only moves the sliders built)
+	const FSOCreatorGroup* Group = Data.Find(CreatorGroup);
+	const bool bTones = !Group || Group->Sliders.Num() == 0;
+	const FString Built = CreatorGroup.ToString() + TEXT("|") + Inventory->GetBody().ToString();
+	if (!bTones && Built == CreatorBuilt && CreatorSliders.Num() > 0)
+	{
+		for (USOCreatorSlider* S : CreatorSliders)
+		{
+			if (S && !S->IsDragging())
+			{
+				S->SetValue(FaceValue(S->GetKey()));
+			}
+		}
+		ApplyCreatorFocus();
+		return;
+	}
+	CreatorBuilt = Built;
+	GridPanel->ClearChildren();
+	CreatorSliders.Reset();
+	{
+		FPlate HeadPlate;
+		HeadPlate.Cut = 7.0f;
+		HeadPlate.Fill = FLinearColor(0.006f, 0.009f, 0.018f, 0.88f);
+		HeadPlate.FillLow = FLinearColor(0.004f, 0.006f, 0.012f, 0.9f);
+		HeadPlate.Edge = FLinearColor(1.0f, 1.0f, 1.0f, 0.11f);
+		UBorder* Head = Box(T, PlateBrush(this, HeadPlate), FMargin(12, 5, 8, 5));
+		UHorizontalBox* Row = Make<UHorizontalBox>(T);
+		Row->AddChildToHorizontalBox(Glyph(T, this, 0, Soft, 14.0f))->SetVerticalAlignment(VAlign_Center);
+		UHorizontalBoxSlot* Name = Row->AddChildToHorizontalBox(Fit(Text(T, Group ? Group->Name.ToUpper() : FString(), 9, Ink, FaceBold, 220)));
+		Name->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		Name->SetPadding(FMargin(10, 0, 10, 0));
+		Name->SetVerticalAlignment(VAlign_Center);
+		USOArmouryButton* Reset = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+		Reset->Setup(this, ESOArmouryControl::Tool, TEXT("reset"), TEXT("RESET"), false);
+		Row->AddChildToHorizontalBox(Reset)->SetVerticalAlignment(VAlign_Center);
+		Head->SetContent(Row);
+		GridPanel->AddChildToVerticalBox(Sized(T, Head, 0.0f, 38.0f))->SetPadding(FMargin(0, 0, 0, 8));
+		if (Group && !Group->Line.IsEmpty())
+		{
+			GridPanel->AddChildToVerticalBox(Fit(Text(T, Group->Line.ToUpper(), 8, Soft, FaceBold, 200)))->SetPadding(FMargin(2, 0, 0, 16));
+		}
+	}
+	auto ChosenOf = [&](bool bHair)
+	{
+		const TArray<FSOCreatorTone>& Tones = bHair ? Data.HairColours : Data.SkinTones;
+		const int32 i = ToneIndex(Tones, bHair ? Look.HairTone : Look.SkinTone);
+		return Tones.IsValidIndex(i) ? Tones[i].Name.ToUpper() : FString();
+	};
+	auto Swatches = [&](bool bHair)
+	{
+		const TArray<FSOCreatorTone>& Tones = bHair ? Data.HairColours : Data.SkinTones;
+		const int32 Chosen = ToneIndex(Tones, bHair ? Look.HairTone : Look.SkinTone);
+		const int32 PerRow = 4;
+		const float W = (GridWidth - (PerRow - 1) * CellGap) / PerRow;
+		for (int32 Start = 0; Start < Tones.Num(); Start += PerRow)
+		{
+			UHorizontalBox* Row = Make<UHorizontalBox>(T);
+			for (int32 i = Start; i < FMath::Min(Tones.Num(), Start + PerRow); ++i)
+			{
+				USOArmouryButton* B = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+				B->Setup(this, ESOArmouryControl::Swatch, FString::Printf(TEXT("%s:%d"), bHair ? TEXT("hair") : TEXT("skin"), i), Tones[i].Name.ToUpper(), i == Chosen);
+				B->SwatchColor = bHair ? HairSwatch(Tones[i].Tint) : SkinSwatch(Tones[i].Tint);
+				B->Width = W;
+				Row->AddChildToHorizontalBox(B)->SetPadding(FMargin(i > Start ? CellGap : 0.0f, 0, 0, 0));
+			}
+			GridPanel->AddChildToVerticalBox(Row)->SetPadding(FMargin(0, 0, 0, CellGap));
+		}
+	};
+	if (CreatorGroup == TEXT("body"))
+	{
+		// the body (the two are built apart), then the skin's tone
+		const bool bFemale = Inventory->GetBody() == TEXT("female");
+		GridPanel->AddChildToVerticalBox(Header(T, TEXT("BODY"), bFemale ? TEXT("FEMALE") : TEXT("MALE"), CreatorRow == 0 ? Cyan : Dim))->SetPadding(FMargin(0, 0, 0, 10));
+		UHorizontalBox* Pair = Make<UHorizontalBox>(T);
+		for (int32 i = 0; i < 2; ++i)
+		{
+			USOArmouryButton* B = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+			B->Setup(this, ESOArmouryControl::Choice, i == 0 ? TEXT("body:male") : TEXT("body:female"), i == 0 ? TEXT("MALE") : TEXT("FEMALE"), (i == 1) == bFemale);
+			B->Width = (GridWidth - CellGap) * 0.5f;
+			Pair->AddChildToHorizontalBox(B)->SetPadding(FMargin(i > 0 ? CellGap : 0.0f, 0, 0, 0));
+		}
+		GridPanel->AddChildToVerticalBox(Pair)->SetPadding(FMargin(0, 0, 0, 22));
+		GridPanel->AddChildToVerticalBox(Header(T, TEXT("SKIN TONE"), ChosenOf(false), CreatorRow == 1 ? Cyan : Dim))->SetPadding(FMargin(0, 0, 0, 10));
+		Swatches(false);
+	}
+	else if (CreatorGroup == TEXT("hair"))
+	{
+		GridPanel->AddChildToVerticalBox(Header(T, TEXT("HAIR COLOUR"), ChosenOf(true), Cyan))->SetPadding(FMargin(0, 0, 0, 10));
+		Swatches(true);
+		GridPanel->AddChildToVerticalBox(Fit(Text(T, TEXT("THE BROWS FOLLOW THE HAIR"), 8, Dim, FaceBold, 200)))->SetPadding(FMargin(2, 6, 0, 0));
+	}
+	else if (Group)
+	{
+		for (const TPair<FName, FString>& S : Group->Sliders)
+		{
+			if (!HasMorph(S.Key))
+			{
+				continue;
+			}
+			USOCreatorSlider* Slider = CreateWidget<USOCreatorSlider>(this, USOCreatorSlider::StaticClass());
+			Slider->Setup(this, S.Key, S.Value, FaceValue(S.Key), GridWidth);
+			CreatorSliders.Add(Slider);
+			GridPanel->AddChildToVerticalBox(Slider)->SetPadding(FMargin(0, 0, 0, 8));
+		}
+		CreatorRow = FMath::Clamp(CreatorRow, 0, FMath::Max(0, CreatorSliders.Num() - 1));
+	}
+	ApplyCreatorFocus();
+}
+
+void USOInventoryWidget::ApplyCreatorFocus()
+{
+	for (int32 i = 0; i < CreatorSliders.Num(); ++i)
+	{
+		if (CreatorSliders[i])
+		{
+			CreatorSliders[i]->SetFocused(i == CreatorRow);
+		}
+	}
+}
+
+void USOInventoryWidget::OnSliderHover(FName Key)
+{
+	const int32 i = CreatorSliders.IndexOfByPredicate([Key](const USOCreatorSlider* S) { return S && S->GetKey() == Key; });
+	if (i != INDEX_NONE && i != CreatorRow)
+	{
+		CreatorRow = i;
+		ApplyCreatorFocus();
+	}
+}
+
+void USOInventoryWidget::OnSlider(FName Key, float Value, bool bCommit)
+{
+	if (!Inventory || Key.IsNone())
+	{
+		return;
+	}
+	FPendingValue& P = PendingFace.FindOrAdd(Key);
+	P.Value = FMath::Clamp(Value, -1.0f, 1.0f);
+	P.At = bCommit ? FPlatformTime::Seconds() : FPlatformTime::Seconds() + 1.0e6;   // (being dragged: it waits)
+	if (Preview)
+	{
+		Preview->ShowLook(CurrentLook());
+	}
+	if (bCommit)
+	{
+		USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.25f, 0.0f);
+		Inventory->ServerSetFace(Key, P.Value);
+	}
+}
+
+void USOInventoryWidget::SetCreatorGroup(FName Group)
+{
+	if (GetView() == EView::Character && Group == CreatorGroup)
+	{
+		return;
+	}
+	CreatorGroup = Group;
+	CreatorRow = 0;
+	CreatorBuilt.Reset();
+	if (Preview)
+	{
+		Preview->TurnTo(GroupYaw(Group));
+	}
+	if (GetView() != EView::Character)
+	{
+		OpenSlot(TEXT("character"));
+		return;
+	}
+	USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.4f, 0.0f);
+	Refresh();
+}
+
+void USOInventoryWidget::CreatorStep(int32 DX, int32 DY)
+{
+	if (!Inventory)
+	{
+		return;
+	}
+	const FSOCreatorData& Data = FSOCreatorData::Get();
+	if (CreatorGroup == TEXT("body") || CreatorGroup == TEXT("hair"))
+	{
+		// rows: the body and the skin (the hair: its colour); left and right choose in the row
+		const int32 Rows = CreatorGroup == TEXT("body") ? 2 : 1;
+		if (DY != 0)
+		{
+			const int32 Row = FMath::Clamp(CreatorRow + DY, 0, Rows - 1);
+			if (Row != CreatorRow)
+			{
+				CreatorRow = Row;
+				CreatorBuilt.Reset();
+				USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.3f, 0.0f);
+				Refresh();
+			}
+		}
+		if (DX != 0)
+		{
+			if (CreatorGroup == TEXT("body") && CreatorRow == 0)
+			{
+				OnControl(ESOArmouryControl::Choice, Inventory->GetBody() == TEXT("female") ? TEXT("body:male") : TEXT("body:female"));
+			}
+			else
+			{
+				const bool bHair = CreatorGroup == TEXT("hair");
+				const TArray<FSOCreatorTone>& Tones = bHair ? Data.HairColours : Data.SkinTones;
+				const FSOOutfit Look = CurrentLook();
+				const int32 Now = FMath::Max(0, ToneIndex(Tones, bHair ? Look.HairTone : Look.SkinTone));
+				if (Tones.Num() > 0)
+				{
+					ChooseTone(bHair, (Now + DX % Tones.Num() + Tones.Num()) % Tones.Num());
+				}
+			}
+		}
+		return;
+	}
+	if (CreatorSliders.Num() == 0)
+	{
+		return;
+	}
+	if (DY != 0)
+	{
+		const int32 Row = FMath::Clamp(CreatorRow + DY, 0, CreatorSliders.Num() - 1);
+		if (Row != CreatorRow)
+		{
+			CreatorRow = Row;
+			ApplyCreatorFocus();
+			USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.3f, 0.0f);
+		}
+	}
+	if (DX != 0 && CreatorSliders.IsValidIndex(CreatorRow) && CreatorSliders[CreatorRow])
+	{
+		USOCreatorSlider* S = CreatorSliders[CreatorRow];
+		const float V = FMath::Clamp(FMath::RoundToFloat((S->GetValue() + DX * 0.05f) * 20.0f) / 20.0f, -1.0f, 1.0f);
+		S->SetValue(V);
+		OnSlider(S->GetKey(), V, true);
+	}
+}
+
+void USOInventoryWidget::ChooseTone(bool bHair, int32 Index)
+{
+	const TArray<FSOCreatorTone>& Tones = bHair ? FSOCreatorData::Get().HairColours : FSOCreatorData::Get().SkinTones;
+	if (!Inventory || !Tones.IsValidIndex(Index))
+	{
+		return;
+	}
+	// the first is the body's own: nothing laid over it
+	const FLinearColor Tone = Index == 0 ? FLinearColor(0.0f, 0.0f, 0.0f, 0.0f) : FLinearColor(Tones[Index].Tint.R, Tones[Index].Tint.G, Tones[Index].Tint.B, 1.0f);
+	if (bHair)
+	{
+		PendingHair = Tone;
+		PendingHairAt = FPlatformTime::Seconds();
+		Inventory->ServerSetHairTone(Tone);
+	}
+	else
+	{
+		PendingSkin = Tone;
+		PendingSkinAt = FPlatformTime::Seconds();
+		Inventory->ServerSetSkinTone(Tone);
+	}
+	USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.45f, 0.0f);
+	CreatorBuilt.Reset();
+	Refresh();
+}
+
+void USOInventoryWidget::ResetLook(bool bAll)
+{
+	if (!Inventory)
+	{
+		return;
+	}
+	if (bAll)
+	{
+		PendingFace.Reset();
+		PendingSkinAt = PendingHairAt = -100.0;
+		Inventory->ServerSetLook(TArray<FName>(), TArray<float>(), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+	}
+	else if (CreatorGroup == TEXT("body") || CreatorGroup == TEXT("hair"))
+	{
+		ChooseTone(CreatorGroup == TEXT("hair"), 0);
+		return;
+	}
+	else if (const FSOCreatorGroup* Group = FSOCreatorData::Get().Find(CreatorGroup))
+	{
+		// the group's sliders back to the middle, the rest as they are
+		const FSOOutfit Look = CurrentLook();
+		TArray<FName> Keys;
+		TArray<float> Values;
+		for (int32 i = 0; i < FMath::Min(Look.FaceKeys.Num(), Look.FaceValues.Num()); ++i)
+		{
+			if (!Group->Sliders.ContainsByPredicate([&](const TPair<FName, FString>& S) { return S.Key == Look.FaceKeys[i]; }))
+			{
+				Keys.Add(Look.FaceKeys[i]);
+				Values.Add(Look.FaceValues[i]);
+			}
+		}
+		for (const TPair<FName, FString>& S : Group->Sliders)
+		{
+			PendingFace.Remove(S.Key);
+		}
+		Inventory->ServerSetLook(Keys, Values, Inventory->GetSkinTone(), Inventory->GetHairTone());
+	}
+	USOSoundLibrary::Play2D(this, TEXT("ui_close"), 0.4f, 0.0f);
+	CreatorBuilt.Reset();
+	Refresh();
+}
+
+void USOInventoryWidget::RandomFace()
+{
+	if (!Inventory)
+	{
+		return;
+	}
+	// every slider this body has, mostly near the middle and now and then far out (the difference of two even draws)
+	TArray<FName> Keys;
+	TArray<float> Values;
+	for (const FName Key : FSOCreatorData::Get().AllKeys())
+	{
+		const float V = FMath::RoundToFloat((FMath::FRand() - FMath::FRand()) * 0.85f * 100.0f) / 100.0f;
+		if (HasMorph(Key) && FMath::Abs(V) > 0.03f)
+		{
+			Keys.Add(Key);
+			Values.Add(V);
+		}
+	}
+	PendingFace.Reset();
+	Inventory->ServerSetLook(Keys, Values, Inventory->GetSkinTone(), Inventory->GetHairTone());
+	USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.5f, 0.0f);
+	CreatorBuilt.Reset();
+	Refresh();
 }

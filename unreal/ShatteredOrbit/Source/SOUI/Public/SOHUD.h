@@ -249,6 +249,8 @@ private:
 	TArray<TObjectPtr<class UMaterialInstanceDynamic>> GlassPool;
 	int32 GlassUsed = 0;
 	bool bGlassLooked = false;
+	/** A new player's first start: the character builder was opened by itself (once). */
+	bool bCreatorOffered = false;
 
 	/** The guns' pictures (the armoury's icons), by archetype, held while the HUD lives. */
 	UPROPERTY(Transient)

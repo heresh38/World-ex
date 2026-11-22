@@ -1,0 +1,296 @@
+{
+  "_doc": "The character builder (the armoury's CHARACTER tab; the owner, 2026-11-16: \"the face will be heavily customizable in game when the player first starts\"). groups: the tab's list, in order; a face group's sliders are the body's morph targets face_<key> (tools/blender/hero/orion/headcage.FACE_SLIDERS), each -1..1. skinTones and hairColours: linear tints over the body's own maps (the first of each is the default). Read at runtime (SOData; tools/package.sh stages it). A slider shows only on a body that has its morph target (the two bodies' faces were built apart: eye_tilt, lips_full and jaw_width are the female body's).",
+  "groups": [
+    {
+      "id": "body",
+      "name": "Body and skin",
+      "line": "Who you are under the suit"
+    },
+    {
+      "id": "hair",
+      "name": "Hair",
+      "line": "The colour of your hair and brows"
+    },
+    {
+      "id": "brow",
+      "name": "Brow and forehead",
+      "line": "The upper face",
+      "sliders": [
+        [
+          "brow",
+          "Brow ridge"
+        ],
+        [
+          "forehead",
+          "Forehead"
+        ],
+        [
+          "temples",
+          "Temples"
+        ]
+      ]
+    },
+    {
+      "id": "eyes",
+      "name": "Eyes",
+      "line": "Their size, their lids, what lies under them",
+      "sliders": [
+        [
+          "eye_size",
+          "Size"
+        ],
+        [
+          "eye_open",
+          "Opening"
+        ],
+        [
+          "crease",
+          "Lid crease"
+        ],
+        [
+          "hood",
+          "Hooded lids"
+        ],
+        [
+          "eye_bags",
+          "Bags"
+        ],
+        [
+          "tear_trough",
+          "Tear trough"
+        ],
+        [
+          "eye_tilt",
+          "Tilt"
+        ]
+      ]
+    },
+    {
+      "id": "nose",
+      "name": "Nose",
+      "line": "Its width, its length, its tip",
+      "sliders": [
+        [
+          "nose_width",
+          "Width"
+        ],
+        [
+          "nose_length",
+          "Length"
+        ],
+        [
+          "nose_tip",
+          "Tip"
+        ]
+      ]
+    },
+    {
+      "id": "cheeks",
+      "name": "Cheeks",
+      "line": "The middle of the face",
+      "sliders": [
+        [
+          "cheekbones",
+          "Cheekbones"
+        ],
+        [
+          "cheeks",
+          "Fullness"
+        ],
+        [
+          "cheek_hollow",
+          "Hollows"
+        ],
+        [
+          "nasolabial",
+          "Smile lines"
+        ]
+      ]
+    },
+    {
+      "id": "mouth",
+      "name": "Mouth",
+      "line": "Its width and its lips",
+      "sliders": [
+        [
+          "mouth_width",
+          "Width"
+        ],
+        [
+          "lips",
+          "Lips"
+        ],
+        [
+          "lips_full",
+          "Lips"
+        ]
+      ]
+    },
+    {
+      "id": "jaw",
+      "name": "Jaw and chin",
+      "line": "The lower face",
+      "sliders": [
+        [
+          "jaw",
+          "Jaw"
+        ],
+        [
+          "chin",
+          "Chin"
+        ],
+        [
+          "jaw_width",
+          "Jaw"
+        ]
+      ]
+    },
+    {
+      "id": "ears",
+      "name": "Ears",
+      "line": "Their size and how far they stand out",
+      "sliders": [
+        [
+          "ear_size",
+          "Size"
+        ],
+        [
+          "ear_out",
+          "Stand out"
+        ]
+      ]
+    }
+  ],
+  "skinTones": [
+    {
+      "name": "Warm",
+      "tint": [
+        0.94,
+        0.83,
+        0.74
+      ]
+    },
+    {
+      "name": "Fair",
+      "tint": [
+        1.0,
+        0.93,
+        0.87
+      ]
+    },
+    {
+      "name": "Light",
+      "tint": [
+        0.98,
+        0.88,
+        0.8
+      ]
+    },
+    {
+      "name": "Olive",
+      "tint": [
+        0.8,
+        0.72,
+        0.58
+      ]
+    },
+    {
+      "name": "Tan",
+      "tint": [
+        0.66,
+        0.56,
+        0.46
+      ]
+    },
+    {
+      "name": "Bronze",
+      "tint": [
+        0.5,
+        0.41,
+        0.34
+      ]
+    },
+    {
+      "name": "Brown",
+      "tint": [
+        0.36,
+        0.29,
+        0.25
+      ]
+    },
+    {
+      "name": "Deep",
+      "tint": [
+        0.22,
+        0.18,
+        0.155
+      ]
+    }
+  ],
+  "hairColours": [
+    {
+      "name": "Dark brown",
+      "tint": [
+        0.02,
+        0.014,
+        0.01
+      ]
+    },
+    {
+      "name": "Black",
+      "tint": [
+        0.01,
+        0.009,
+        0.009
+      ]
+    },
+    {
+      "name": "Brown",
+      "tint": [
+        0.04,
+        0.024,
+        0.014
+      ]
+    },
+    {
+      "name": "Chestnut",
+      "tint": [
+        0.065,
+        0.03,
+        0.014
+      ]
+    },
+    {
+      "name": "Auburn",
+      "tint": [
+        0.1,
+        0.032,
+        0.012
+      ]
+    },
+    {
+      "name": "Dark blond",
+      "tint": [
+        0.11,
+        0.07,
+        0.035
+      ]
+    },
+    {
+      "name": "Ash blond",
+      "tint": [
+        0.2,
+        0.165,
+        0.12
+      ]
+    },
+    {
+      "name": "Grey",
+      "tint": [
+        0.16,
+        0.16,
+        0.155
+      ]
+    }
+  ]
+}

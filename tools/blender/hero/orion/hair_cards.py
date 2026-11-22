@@ -186,6 +186,44 @@ def make_hair(body, out, hd=None, P=None, log=_log):
     return o, P
 
 
+def raster_max(mask, tri_px, tri_val):
+    """every triangle (T, 3, 2 texel coordinates: x, row) filled from its corners' values (T, 3), kept where it is
+    more than what is there"""
+    size = mask.shape[0]
+    for P_, V in zip(tri_px, tri_val):
+        if V.max() < .01:
+            continue
+        x0, y0 = max(0, int(np.floor(P_[:, 0].min()))), max(0, int(np.floor(P_[:, 1].min())))
+        x1, y1 = min(size - 1, int(np.ceil(P_[:, 0].max()))), min(size - 1, int(np.ceil(P_[:, 1].max())))
+        if x1 < x0 or y1 < y0:
+            continue
+        (ax, ay), (bx, by), (cx, cy) = P_
+        d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+        if abs(d) < 1e-9:
+            continue
+        ys, xs = np.mgrid[y0:y1 + 1, x0:x1 + 1]
+        px, py = xs + .5, ys + .5
+        l0 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d
+        l1 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d
+        l2 = 1 - l0 - l1
+        inside = (l0 >= -.02) & (l1 >= -.02) & (l2 >= -.02)            # (a hair over each edge: no seam between them)
+        val = np.where(inside, l0 * V[0] + l1 * V[1] + l2 * V[2], 0).astype(F32)
+        sub = mask[y0:y1 + 1, x0:x1 + 1]
+        np.maximum(sub, val, out=sub)
+
+
+def box_blur(a, radius, passes=3):
+    """a box blur by running sums, three passes close to a Gaussian (no scipy in Blender's Python)"""
+    out = a.astype(np.float32)
+    k = 2 * radius + 1
+    for _ in range(passes):
+        c = np.cumsum(np.pad(out, ((radius + 1, radius), (0, 0)), mode='edge'), axis=0, dtype=np.float64)
+        out = ((c[k:] - c[:-k]) / k).astype(np.float32)
+        c = np.cumsum(np.pad(out, ((0, 0), (radius + 1, radius)), mode='edge'), axis=1, dtype=np.float64)
+        out = ((c[:, k:] - c[:, :-k]) / k).astype(np.float32)
+    return out
+
+
 def scalp_mask(body, face_set, size, hd=None, P=None, log=_log):
     """the scalp's hair in the face map's hair mask (size x size, rows as Blender's pixels): every strand's root drawn
     as a short hair (the fade: short dark hair on skin), and under the top's long hair a soft floor so no bare scalp
@@ -214,20 +252,28 @@ def scalp_mask(body, face_set, size, hd=None, P=None, log=_log):
     topw = np.clip((z - 4.0) / 3.0, 0, 1) * np.clip((5.8 - x) / 2.8, 0, 1) * np.clip((7.0 - y) / 4.0, 0, 1)
     topw = topw * topw * (3 - 2 * topw)
     mask = np.zeros((size, size), F32)
-    # the floor under the cards: each vertex a soft disc of its density (the vertices lie 2-3 mm apart)
-    floor = dens * topw * .80
-    on = np.flatnonzero((floor > .02) & (vuv[head_v, 0] >= 0))
-    r = max(2, int(size * .0035))
-    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
-    disc = np.clip(1 - np.hypot(xx, yy) / r, 0, 1).astype(F32)
-    for i in on:
-        vi = head_v[i]
-        cx, cy = int(vuv[vi, 0] * size), int(vuv[vi, 1] * size)
-        x0, y0 = cx - r, cy - r
-        if x0 < 0 or y0 < 0 or x0 + 2 * r + 1 > size or y0 + 2 * r + 1 > size:
-            continue
-        sub = mask[y0:y0 + 2 * r + 1, x0:x0 + 2 * r + 1]
-        np.maximum(sub, disc * floor[i], out=sub)
+    # the floor under the top's long hair (no bare scalp between the cards): laid over the head's own triangles,
+    # each filled from its corners (discs at the vertices, 4-5 mm apart on the crown,
+    # showed as a grid of dots however they were blurred), grown a few texels past each island's rim (the small mips
+    # would draw a seam of bare scalp)
+    floor = (dens * topw * .80).astype(F32)
+    fv = np.zeros(n, F32)
+    fv[head_v] = floor
+    on = np.flatnonzero(floor > .02)
+    tri = []
+    for f in np.flatnonzero(face_set):
+        s_, t_ = ls[f], lt[f]
+        for j in range(1, t_ - 1):
+            tri.append((s_, s_ + j, s_ + j + 1))
+    tri = np.array(tri, np.int64)
+    raster_max(mask, uv[tri] * size, fv[lv[tri]])
+    for _ in range(4):
+        grown = mask.copy()
+        np.maximum(grown[1:], mask[:-1], out=grown[1:])
+        np.maximum(grown[:-1], mask[1:], out=grown[:-1])
+        np.maximum(grown[:, 1:], mask[:, :-1], out=grown[:, 1:])
+        np.maximum(grown[:, :-1], mask[:, 1:], out=grown[:, :-1])
+        mask = np.where(mask > 0, mask, grown)
     # every strand's root as a short hair: its first three segments, each point carried onto the map through the
     # triangle it lies over (the nearest head vertex's place alone put a whole hair on one vertex: a dot)
     if P is None:
@@ -262,16 +308,34 @@ def scalp_mask(body, face_set, size, hd=None, P=None, log=_log):
     ok = (seg_uv[..., 0] >= 0).all(1)
     seg_uv = seg_uv[ok]
     m_ = len(seg_uv)
-    samples = np.linspace(0, 1, 8)
+    samples = np.linspace(0, 1, 10)
+    rng = np.random.default_rng(5)
+    tone = rng.uniform(.80, 1.0, m_).astype(F32)                               # every hair a little its own
+    strokes = np.zeros((size, size), F32)
     for j in range(3):
         a, b = seg_uv[:, j], seg_uv[:, j + 1]
         d = np.linalg.norm(b - a, axis=1)
         keep = d < 10 * px_mm                                                 # (a jump across an island: no stroke)
-        a, b = a[keep], b[keep]
+        a, b, tj = a[keep], b[keep], tone[keep]
         pts = (a[:, None, :] + (b - a)[:, None, :] * samples[None, :, None]).reshape(-1, 2)
-        for dx, dy, wgt in ((0, 0, 1.0), (1, 0, .6), (-1, 0, .6), (0, 1, .6), (0, -1, .6)):
-            cx = np.clip((pts[:, 0] + dx).astype(np.int64), 0, size - 1)
-            cy = np.clip((pts[:, 1] + dy).astype(np.int64), 0, size - 1)
-            np.maximum.at(mask, (cy, cx), np.full(len(cx), .92 * wgt * (1 - .18 * j), F32))
+        val = np.repeat(tj * .92 * (1 - .18 * j), len(samples))
+        # drawn smooth: each point shared between the four texels round it by how near it lies (snapped to whole
+        # texels, every hair was a stair of pixels and the fade read as a grid), a texel's width either side
+        x0, y0 = np.floor(pts[:, 0]).astype(np.int64), np.floor(pts[:, 1]).astype(np.int64)
+        fx, fy = (pts[:, 0] - x0).astype(F32), (pts[:, 1] - y0).astype(F32)
+        corners = ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy))
+        # (the nearest texel keeps the hair's whole tone, the others by how near they lie: shared out evenly the hairs
+        # drew at half their tone and the fade read as bare skin)
+        wmax = np.maximum(np.maximum(corners[0][2], corners[1][2]), np.maximum(corners[2][2], corners[3][2]))
+        for ox, oy, wgt in corners:
+            for dx, dy, side in ((0, 0, 1.0), (1, 0, .45), (-1, 0, .45), (0, 1, .45), (0, -1, .45)):
+                cx = np.clip(x0 + ox + dx, 0, size - 1)
+                cy = np.clip(y0 + oy + dy, 0, size - 1)
+                np.maximum.at(strokes, (cy, cx), (val * (wgt / np.maximum(wmax, 1e-6)) * side).astype(F32))
+    # the fade's own shadow under its hairs: how densely they grow round each texel (from the strokes themselves: they
+    # grow only where the scalp does, never on an ear), up to a third of a texel's colour
+    shade = np.clip(box_blur(strokes, max(2, int(px_mm * .8)), passes=2) * 1.8, 0, .36)
+    np.maximum(mask, shade, out=mask)
+    np.maximum(mask, strokes, out=mask)
     log(f"scalp: {len(on)} vertices under the top's hair, {m_} strands' roots drawn as hairs")
     return mask, P

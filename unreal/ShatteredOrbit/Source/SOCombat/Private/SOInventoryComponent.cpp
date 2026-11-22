@@ -30,6 +30,9 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(USOInventoryComponent, FaceKeys);
 	DOREPLIFETIME(USOInventoryComponent, FaceValues);
 	DOREPLIFETIME_CONDITION(USOInventoryComponent, Goods, COND_OwnerOnly);
+	DOREPLIFETIME(USOInventoryComponent, SkinTone);
+	DOREPLIFETIME(USOInventoryComponent, HairTone);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, bCharacterMade, COND_OwnerOnly);
 	DOREPLIFETIME(USOInventoryComponent, Equipped);
 	DOREPLIFETIME(USOInventoryComponent, ActiveSlot);
 	// what a player has in the bank is theirs to see (the copies themselves go to everyone: the guns on a player's
@@ -131,7 +134,76 @@ FSOOutfit USOInventoryComponent::GetOutfit() const
 	}
 	Outfit.FaceKeys = FaceKeys;
 	Outfit.FaceValues = FaceValues;
+	Outfit.SkinTone = SkinTone;
+	Outfit.HairTone = HairTone;
 	return Outfit;
+}
+
+void USOInventoryComponent::SetSkinTone(const FLinearColor& Tone)
+{
+	const FLinearColor Clamped(FMath::Clamp(Tone.R, 0.0f, 1.2f), FMath::Clamp(Tone.G, 0.0f, 1.2f), FMath::Clamp(Tone.B, 0.0f, 1.2f), Tone.A > 0.0f ? 1.0f : 0.0f);
+	if (!Clamped.Equals(SkinTone, 1e-4f))
+	{
+		SkinTone = Clamped;
+		Changed(false, true);
+	}
+}
+
+void USOInventoryComponent::SetHairTone(const FLinearColor& Tone)
+{
+	const FLinearColor Clamped(FMath::Clamp(Tone.R, 0.0f, 1.0f), FMath::Clamp(Tone.G, 0.0f, 1.0f), FMath::Clamp(Tone.B, 0.0f, 1.0f), Tone.A > 0.0f ? 1.0f : 0.0f);
+	if (!Clamped.Equals(HairTone, 1e-4f))
+	{
+		HairTone = Clamped;
+		Changed(false, true);
+	}
+}
+
+void USOInventoryComponent::ServerSetSkinTone_Implementation(FLinearColor Tone)
+{
+	SetSkinTone(Tone);
+}
+
+void USOInventoryComponent::ServerSetHairTone_Implementation(FLinearColor Tone)
+{
+	SetHairTone(Tone);
+}
+
+void USOInventoryComponent::SetLook(const TArray<FName>& Keys, const TArray<float>& Values, const FLinearColor& Skin, const FLinearColor& Hair)
+{
+	FaceKeys.Reset();
+	FaceValues.Reset();
+	for (int32 i = 0; i < FMath::Min(Keys.Num(), Values.Num()); ++i)
+	{
+		const float V = FMath::Clamp(Values[i], -1.0f, 1.0f);
+		if (!Keys[i].IsNone() && !FMath::IsNearlyZero(V, 1e-3f) && !FaceKeys.Contains(Keys[i]))
+		{
+			FaceKeys.Add(Keys[i]);
+			FaceValues.Add(V);
+		}
+	}
+	SkinTone = FLinearColor(FMath::Clamp(Skin.R, 0.0f, 1.2f), FMath::Clamp(Skin.G, 0.0f, 1.2f), FMath::Clamp(Skin.B, 0.0f, 1.2f), Skin.A > 0.0f ? 1.0f : 0.0f);
+	HairTone = FLinearColor(FMath::Clamp(Hair.R, 0.0f, 1.0f), FMath::Clamp(Hair.G, 0.0f, 1.0f), FMath::Clamp(Hair.B, 0.0f, 1.0f), Hair.A > 0.0f ? 1.0f : 0.0f);
+	Changed(false, true);
+}
+
+void USOInventoryComponent::ServerSetLook_Implementation(const TArray<FName>& Keys, const TArray<float>& Values, FLinearColor Skin, FLinearColor Hair)
+{
+	SetLook(Keys, Values, Skin, Hair);
+}
+
+void USOInventoryComponent::SetCharacterMade()
+{
+	if (!bCharacterMade)
+	{
+		bCharacterMade = true;
+		Changed(false, false);
+	}
+}
+
+void USOInventoryComponent::ServerSetCharacterMade_Implementation()
+{
+	SetCharacterMade();
 }
 
 void USOInventoryComponent::SetFace(FName Key, float Value)
@@ -702,6 +774,10 @@ void USOInventoryComponent::NewProfile()
 	Level = 1;
 	Armor.Reset();
 	Body = TEXT("male");
+	FaceKeys.Reset();
+	FaceValues.Reset();
+	SkinTone = HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	bCharacterMade = false;                                     // (a new player: the builder opens at the first start)
 	StarterGoods(Goods);
 	GrantWardrobe(true);
 	Dress();
@@ -783,6 +859,9 @@ bool USOInventoryComponent::LoadProfile()
 			Kept.Count = Info ? FMath::Min(Stack.Count, FMath::Max(1, Info->Stack)) : Stack.Count;
 		}
 	}
+	SkinTone = Save->SkinTone;
+	HairTone = Save->HairTone;
+	bCharacterMade = Save->bCharacterMade;
 	FaceKeys.Reset();
 	FaceValues.Reset();
 	for (int32 i = 0; i < FMath::Min(Save->FaceKeys.Num(), Save->FaceValues.Num()); ++i)
@@ -862,6 +941,9 @@ void USOInventoryComponent::SaveProfile() const
 	Save->FaceKeys = FaceKeys;
 	Save->FaceValues = FaceValues;
 	Save->Goods = Goods;
+	Save->SkinTone = SkinTone;
+	Save->HairTone = HairTone;
+	Save->bCharacterMade = bCharacterMade;
 	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	if (USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr)
 	{

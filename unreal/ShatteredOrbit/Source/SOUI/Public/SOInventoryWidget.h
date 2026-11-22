@@ -9,6 +9,7 @@ class ASceneCapture2D;
 class APointLight;
 class UBorder;
 class UButton;
+class UMaterialInstanceDynamic;
 class UCanvasPanel;
 class UCanvasPanelSlot;
 class UHorizontalBox;
@@ -23,6 +24,7 @@ class UWidget;
 class USOInventoryComponent;
 class USOInventoryWidget;
 struct FSOArmorInstance;
+struct FSOOutfit;
 struct FSOGoodsInfo;
 struct FSOWeaponInstance;
 struct FSOMeleeStyle;
@@ -53,9 +55,17 @@ public:
 	void Start(APlayerController* Player);
 	/** Dresses and arms the stand-in like the inventory says (cheap when nothing changed). ShowWeapon: a gun's uid or
 	 *  "melee:<style>" to hold that instead of the gun in hand; ShowArmor: a piece's uid to wear over its slot. */
-	void Sync(USOInventoryComponent* Inventory, const FString& ShowWeapon = FString(), const FString& ShowArmor = FString());
+	void Sync(USOInventoryComponent* Inventory, const FString& ShowWeapon = FString(), const FString& ShowArmor = FString(), const FSOOutfit* Look = nullptr);
 	void Stop();
 	void Tick(float DeltaTime);
+	/** The face's sliders and the tones of a look on the stand-in at once (a slider being dragged). */
+	void ShowLook(const FSOOutfit& Look);
+	/** How close the picture is (0 the whole body, about .55 head and shoulders, 1 the face: eased), and only the
+	 *  body and what it wears drawn (the character builder: no gun in the hands or on the back). */
+	void SetFraming(float InClose, bool bInBodyOnly);
+	/** Turns the stand-in to so many degrees (eased; a drag takes over). */
+	void TurnTo(float Degrees) { YawGoal = Degrees; bTurning = true; }
+	void StopTurning() { bTurning = false; }
 	APawn* GetMannequin() const { return Subject.Get(); }
 	UTextureRenderTarget2D* GetTarget() const { return Target; }
 
@@ -75,6 +85,11 @@ private:
 	TWeakObjectPtr<APawn> Subject;
 	FString ShownWeapon;
 	FString ShownOutfit;
+	float Close = 0.0f;
+	float CloseTarget = 0.0f;
+	bool bBodyOnly = false;
+	float YawGoal = 0.0f;
+	bool bTurning = false;
 	void UpdateShowList();
 	/** r.PostProcessing.PropagateAlpha before the preview turned it on (the picture's background is transparent). */
 	int32 PreviousAlpha = -1;
@@ -196,6 +211,10 @@ enum class ESOArmouryControl : uint8
 	Row,
 	Page,
 	Tool,
+	/** the character builder: a tone (its colour, its name) */
+	Swatch,
+	/** the character builder: one of a few choices as a wide plate (the body) */
+	Choice,
 };
 
 /** One of the armoury's small controls: clicked, it tells the screen what it is and its key. */
@@ -227,6 +246,8 @@ public:
 	float Width = 0.0f;
 	/** A tool's own drawing: 1 the grid view's squares, 2 the list view's bars. */
 	int32 Drawing = 0;
+	/** A swatch's colour (linear, as drawn). */
+	FLinearColor SwatchColor = FLinearColor::White;
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -241,6 +262,78 @@ protected:
 	FString Key;
 	FString Label;
 	bool bActive = false;
+};
+
+/** One of the character builder's sliders: a face key (-1..1) with its name and figure, a track with the middle
+ *  marked, the fill from the middle to the value, a knob; dragged (the stand-in follows as it moves, the value is kept
+ *  when it is let go), the wheel nudges it, a double click puts it back to the middle. */
+UCLASS()
+class SOUI_API USOCreatorSlider : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Setup(USOInventoryWidget* InScreen, FName InKey, const FString& InLabel, float InValue, float InWidth)
+	{
+		Screen = InScreen;
+		Key = InKey;
+		Label = InLabel;
+		Value = InValue;
+		Width = InWidth;
+	}
+	FName GetKey() const { return Key; }
+	float GetValue() const { return Value; }
+	bool IsDragging() const { return bDragging; }
+	/** Moves the knob, the fill and the figure (nothing is built again). */
+	void SetValue(float InValue);
+	/** The keyboard's or pad's highlight is on it. */
+	void SetFocused(bool bOn);
+
+	static constexpr float Height = 54.0f;
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
+
+	float ValueAt(const FGeometry& Geometry, const FPointerEvent& Event) const;
+	void Restyle();
+	float TrackLeft() const { return 18.0f; }
+	float TrackRight() const { return Width - 18.0f; }
+
+	UPROPERTY(Transient)
+	TObjectPtr<USOInventoryWidget> Screen;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> Frame;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> LabelText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ValueText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> Knob;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> FillBar;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> AccentBar;
+
+	FName Key;
+	FString Label;
+	float Value = 0.0f;
+	float Width = 400.0f;
+	bool bHovered = false;
+	bool bFocused = false;
+	bool bDragging = false;
 };
 
 /**
@@ -276,8 +369,9 @@ class SOUI_API USOInventoryWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** What the screen shows: the loadout, a weapon slot's arsenal (or the melee styles), an armour slot, the inventory. */
-	enum class EView : uint8 { Loadout, Arsenal, Armour, Goods };
+	/** What the screen shows: the loadout, a weapon slot's arsenal (or the melee styles), an armour slot, the inventory,
+	 *  the character builder. */
+	enum class EView : uint8 { Loadout, Arsenal, Armour, Goods, Character };
 
 	void Bind(USOInventoryComponent* InInventory);
 	void Refresh();
@@ -315,6 +409,14 @@ public:
 	void ChooseItem(const FString& Key) { Choose(Key); }
 	/** The layout audit (also -SOHudAudit on the command line). */
 	void SetAudit(bool bOn) { bAuditing = bOn; AuditLast.Reset(); }
+
+	/** The character builder (the CHARACTER tab): its group ("body", "hair", "eyes" ...: Data/creator.json); a slider
+	 *  moved (bCommit: let go, kept on the profile; otherwise the stand-in alone follows it). */
+	void SetCreatorGroup(FName Group);
+	FName GetCreatorGroup() const { return CreatorGroup; }
+	void OnSlider(FName Key, float Value, bool bCommit);
+	/** The mouse is over a slider (the keyboard's highlight follows it). */
+	void OnSliderHover(FName Key);
 
 	/** Called when the screen wants to close (the HUD restores game input). */
 	TFunction<void()> OnClose;
@@ -401,6 +503,19 @@ protected:
 	void UpdateLayout(float Width);
 	/** The layout audit: every word, picture and glyph on the screen against the others. */
 	void Audit();
+	/** The character builder: its column (the groups), its sliders or its tones; the look as the player has it with
+	 *  what is being moved on top; the keyboard's row and what left / right does there; a tone chosen; the resets. */
+	void FillCharacter();
+	FSOOutfit CurrentLook() const;
+	void CreatorStep(int32 DX, int32 DY);
+	void ApplyCreatorFocus();
+	void ChooseTone(bool bHair, int32 Index);
+	void ResetLook(bool bAll);
+	void RandomFace();
+	/** The body has this face key's morph target (the two bodies' faces were built apart). */
+	bool HasMorph(FName Key) const;
+	/** The groups the body can use (a face group with none of its keys on this body is left out). */
+	TArray<FName> CreatorGroups() const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USOInventoryComponent> Inventory;
@@ -413,6 +528,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> PreviewImage;
+
+	/** The picture's material (its soft edge is the character builder's). */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> StageMaterial;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> FloorImage;
@@ -590,6 +709,28 @@ protected:
 	/** The panels' slide in (0 just changed .. 1 settled). */
 	float Arrive = 1.0f;
 	FDelegateHandle ChangedHandle;
+	/** The character builder: the group open, the row the keyboard is on, what was built (the group and the body:
+	 *  the same again only moves the sliders), the sliders, what is being moved and not yet on the profile (a value
+	 *  and when it was let go: a joined player's comes back a moment later), the reset or random asked once. */
+	FName CreatorGroup = TEXT("body");
+	int32 CreatorRow = 0;
+	FString CreatorBuilt;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USOCreatorSlider>> CreatorSliders;
+	struct FPendingValue
+	{
+		float Value = 0.0f;
+		double At = 0.0;
+	};
+	TMap<FName, FPendingValue> PendingFace;
+	FLinearColor PendingSkin = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	FLinearColor PendingHair = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	double PendingSkinAt = -100.0;
+	double PendingHairAt = -100.0;
+	FString CreatorArmed;
+	double CreatorArmedAt = -100.0;
+	/** The builder was open (a new profile's first start is over when the armoury closes after it). */
+	bool bShowedCreator = false;
 	bool bAuditing = false;
 	double AuditAt = 0.0;
 	FString AuditLast;

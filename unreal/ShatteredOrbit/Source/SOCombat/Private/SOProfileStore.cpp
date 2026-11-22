@@ -90,6 +90,12 @@ bool USOProfileStore::Migrate(USOSaveGame* Save)
 		// version 7 -> 8: collected items; a profile from before them starts with what a new one does
 		USOInventoryComponent::StarterGoods(Save->Goods);
 	}
+	if (Save->Version < 9)
+	{
+		// version 8 -> 9: the skin's and the hair's tones (none before: the body's own); a player from before the
+		// character builder has played already: it does not open by itself
+		Save->bCharacterMade = true;
+	}
 	Save->Version = USOSaveGame::CurrentVersion;
 	return true;
 }

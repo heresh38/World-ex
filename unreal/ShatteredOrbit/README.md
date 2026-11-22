@@ -211,6 +211,9 @@ ticked by hand):
 | `Goods.ElitesCarryTheirRelics` | a named elite's kill pays its relic and the elites' void crystal into the killer's inventory, and the feed says so |
 | `Goods.ConsumablesWork` | a stim does nothing at full health (and is not used up), gives health back when hurt; a shield cell refills the shield |
 | `Goods.AnOldSaveStartsWithTheStock` | a version 7 profile is migrated with the starting stock; a current one is left as it is |
+| `Creator.EveryKeyIsOnABody` | every slider the character builder offers (Data/creator.json) moves a morph target of one of the bodies; the male body has all 22 of its own; the first skin tone and hair colour are what the bodies wear with nothing chosen |
+| `Creator.TheLookIsKept` | the face's sliders and both tones are the inventory's and ride the outfit; the whole look at once replaces them; a new player has not met the builder, a version 8 profile has |
+| `Creator.TheBodyWearsTheLook` | a look lands on the body's morph targets and its skin, brow and hair materials; a look alone dresses nothing again; a tone taken off puts the material back |
 | `Loot.PickupsAndReliquary` | loot cores become weapons of their rarity, ammo tops up the reserve, walking over pickups, the reliquary pays out once and reseals |
 | `Weapon.EveryArchetypeFiresAndReloads` | all 22 guns: both rigs build, one trigger pull = one shot with all its pellets / a full burst, an empty reload of each choreography ends with a full magazine |
 | `Wardrobe.Dresses` | both wardrobes import (body, arms, the Orion set with icons and armour, first-person cuts only where the arms reach); the player wears one follower mesh per slot, covered skin is hidden, the coat comes off, the female body swaps meshes and clips |

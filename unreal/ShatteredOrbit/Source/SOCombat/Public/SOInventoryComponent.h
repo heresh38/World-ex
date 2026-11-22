@@ -17,7 +17,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 8;
+	static constexpr int32 CurrentVersion = 9;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -70,6 +70,18 @@ public:
 	 *  loot tables' StarterGoods (USOProfileStore::Migrate). */
 	UPROPERTY(SaveGame)
 	TArray<FSOGoodsStack> Goods;
+
+	/** Version 9: the skin's and the hair's tones (the character builder; alpha 0 = the body's own). */
+	UPROPERTY(SaveGame)
+	FLinearColor SkinTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	UPROPERTY(SaveGame)
+	FLinearColor HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	/** Version 9: the character builder was seen once (a new profile opens it at the first start; a profile from
+	 *  before it counts as made). */
+	UPROPERTY(SaveGame)
+	bool bCharacterMade = false;
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -160,6 +172,32 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetFace(FName Key, float Value);
+
+	/** The skin's and the hair's tones (linear tints; alpha 0 = the body's own), server. */
+	void SetSkinTone(const FLinearColor& Tone);
+	void SetHairTone(const FLinearColor& Tone);
+	const FLinearColor& GetSkinTone() const { return SkinTone; }
+	const FLinearColor& GetHairTone() const { return HairTone; }
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetSkinTone(FLinearColor Tone);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetHairTone(FLinearColor Tone);
+
+	/** The whole look at once (the builder's reset, its reset of a group, its random face): the face's sliders
+	 *  replaced by these, the tones set (alpha 0 = the body's own); one change, one save. Server. */
+	void SetLook(const TArray<FName>& Keys, const TArray<float>& Values, const FLinearColor& Skin, const FLinearColor& Hair);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetLook(const TArray<FName>& Keys, const TArray<float>& Values, FLinearColor Skin, FLinearColor Hair);
+
+	/** The character builder was seen (a new profile opens it once, at the first start). */
+	bool IsCharacterMade() const { return bCharacterMade; }
+	void SetCharacterMade();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetCharacterMade();
 
 	/** Wears (or, if it is worn, takes off) an armour piece (server). */
 	bool EquipArmor(const FString& Uid);
@@ -364,6 +402,16 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	TArray<FSOGoodsStack> Goods;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	FLinearColor SkinTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	FLinearColor HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	/** (true until a new profile is made: an inventory with no profile, a test's or a bot's, never opens the builder) */
+	UPROPERTY(Replicated)
+	bool bCharacterMade = true;
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

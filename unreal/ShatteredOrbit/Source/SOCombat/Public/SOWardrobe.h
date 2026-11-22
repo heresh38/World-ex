@@ -176,6 +176,14 @@ struct SOCOMBAT_API FSOOutfit
 	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
 	TArray<float> FaceValues;
 
+	/** The skin's and the hair's tones (the character builder's: linear tints over the body's own maps, the brows
+	 *  following the hair); alpha 0 = as the body was imported. */
+	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
+	FLinearColor SkinTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
+	FLinearColor HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
 	FName Get(FName Slot) const
 	{
 		const int32 i = Slots.IndexOfByKey(Slot);
@@ -196,6 +204,7 @@ struct SOCOMBAT_API FSOOutfit
 	}
 	bool operator==(const FSOOutfit& O) const
 	{
-		return Body == O.Body && Slots == O.Slots && Items == O.Items && FaceKeys == O.FaceKeys && FaceValues == O.FaceValues;
+		return Body == O.Body && Slots == O.Slots && Items == O.Items && FaceKeys == O.FaceKeys && FaceValues == O.FaceValues
+			&& SkinTone.Equals(O.SkinTone, 1e-4f) && HairTone.Equals(O.HairTone, 1e-4f);
 	}
 };
