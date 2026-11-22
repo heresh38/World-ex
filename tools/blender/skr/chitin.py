@@ -18,7 +18,10 @@ every edge catches the light as the sheet's plates do. Each plate is a closed me
 across it (the chitin's growth lines run along every plate) and corner colours: a tone of its own, brighter at its rim
 (the sheet's pale edge). It moves rigidly with one bone.
 
-A CLAW is a curved horn, flattened to a blade, from a root to a point. A LIGHT is a thin strip of glow on the surface.
+A SHARD is a blade standing free of the body along a curve (a crest's blade, a spike, a pauldron's point): a lens in
+section with crisp rims, its broad face toward a given direction, one edge swept and the other straighter (a horn), a
+notch for a second point. A CLAW is a curved horn, flattened to a blade, from a root to a point. A LIGHT is a thin strip
+of glow on the surface, a STUD a small light set in it (or on a plate over it).
 """
 import math
 import os
@@ -64,6 +67,7 @@ class Armour:
         self.point_k = 1.0                                # how sharp every plate's point is (under 1: blunter)
         self.vary = 1.0                                   # how much a wrapped plate's size and place wander (0: a regular grid)
         self.notch = .45                                  # the share of plates with a step in one edge (a shard with two points)
+        self.angular = 0.0                                # 0: a plate's sides swell round from its base (a leaf); 1: straight (a shard)
 
     # ------------------------------------------------------------------ helpers
     def project(self, P, iters=6, fn=None):
@@ -131,10 +135,14 @@ class Armour:
 
     # ------------------------------------------------------------------ the blade
     def blade(self, name, a, b, w, bone=None, lift=.0025, tip=0.0, free=1.0, thick=.006, ridge=.0025, peak=.35, point=1.0,
-              base=.55, n=(20, 9), mat='armour', bend=(0, 0, 0), mirror=True, tone=None, lean=0.0, only=(), field=None):
+              base=.55, n=(20, 9), mat='armour', bend=(0, 0, 0), mirror=True, tone=None, lean=0.0, only=(), field=None, angular=None):
         """a, b: base and tip (left side; mirror=True makes the right one too). bend: a bow added along the length
-        (metres, at the middle, as a vector). lean: the plate turned about its own length (radians): one edge lifted."""
+        (metres, at the middle, as a vector). lean: the plate turned about its own length (radians): one edge lifted. angular:
+        this plate's own outline (0 swelling round, 1 straight), else the set's."""
         out = []
+        keep_ang = self.angular
+        if angular is not None:
+            self.angular = angular
         for side in ((1, -1) if mirror else (1,)):
             sx = np.array([side, 1, 1], float)
             A = np.asarray(a, float) * sx; Bp = np.asarray(b, float) * sx; bd = np.asarray(bend, float) * sx
@@ -142,6 +150,7 @@ class Armour:
             fn = field or (self.subfield(set(only) | {mirror_bone(o_) for o_ in only}) if only else None)
             out.append(self._blade(f'{name}{"" if side == 1 else "_R"}', A, Bp, w, bn, lift, tip, free, thick, ridge, peak,
                                    point, base, n, mat, bd, tone, lean * side, fn))
+        self.angular = keep_ang
         return out
 
     def _blade(self, name, A, Bp, w, bone, lift, tip, free, thick, ridge, peak, point, base, n, mat, bend, tone, lean, fn=None):
@@ -167,8 +176,11 @@ class Armour:
         if abs(lean) > 1e-4:
             ca, sa = math.cos(lean), math.sin(lean)
             Sd, N = Sd * ca + N * sa, N * ca - Sd * sa
+        ang = self.angular
+
         def outline(pk, pt):
-            return np.where(u < pk, base + (1 - base) * np.sin(np.pi / 2 * u / pk), ((1 - u) / (1 - pk)).clip(0) ** pt)
+            rise = np.sin(np.pi / 2 * u / pk) * (1 - ang) + (u / pk) * ang
+            return np.where(u < pk, base + (1 - base) * rise, ((1 - u) / (1 - pk)).clip(0) ** pt)
         pk2 = float(np.clip(peak + self.rng.uniform(-.14, .14), .15, .8))
         pt2 = point * self.rng.uniform(.7, 1.4)
         prof = outline(peak, point)
@@ -200,7 +212,7 @@ class Armour:
         crown = ridge * (1 - np.abs(v[None, :]) ** 1.15) * np.maximum(prof, prof2)[:, None] ** .5          # a crease, not a dome
         th = thick * (.35 + .65 * (1 - u))[:, None] * np.ones((1, nv))
         top = grid(1.0, rise[:, None] + crown + th * .5)
-        bot = grid(.86, rise[:, None] - th * .5 + .0004)
+        bot = grid(.80, rise[:, None] - th * .5 + .0004)
         V = np.concatenate([top.reshape(-1, 3), bot.reshape(-1, 3)])
         nt = nu * nv
         idx = lambda i, j, b=0: b * nt + i * nv + j
@@ -217,24 +229,113 @@ class Armour:
         uu = np.tile((u * L)[:, None], (1, nv)); vv = v[None, :] * side_scale * hw[:, None]
         UV = np.stack([vv / TILE + self.rng.uniform(0, 1), uu / TILE + self.rng.uniform(0, 1)], -1).reshape(-1, 2)
         UV = np.concatenate([UV, UV])
-        t = self.rng.uniform(.44, .50) if tone is None else tone          # armour: one finish, little variation
-        rim = np.maximum(np.abs(v)[None, :] ** 6, smooth(.82, 1.0, u)[:, None]) * np.ones((nu, nv))
-        c0 = np.array([t, t * .985, t * .965]); c1 = np.array([.98, .90, .76])          # the pale rim leans warm (bronze)
-        Ct = c0[None, None, :] * (1 - rim[..., None] * .7) + c1[None, None, :] * rim[..., None] * .7
+        t = self.rng.uniform(.33, .41) if tone is None else tone          # armour: one finish, a little variation
+        rim = np.maximum(np.abs(v)[None, :] ** 3.5, smooth(.80, 1.0, u)[:, None]) * np.ones((nu, nv))
+        c0 = np.array([t, t * .985, t * .975]); c1 = np.array([.88, .84, .78])          # the pale rim leans warm (bronze)
+        Ct = c0[None, None, :] * (1 - rim[..., None] * .65) + c1[None, None, :] * rim[..., None] * .65
         Cb = np.ones((nu, nv, 3)) * c0 * .7
         Col = np.concatenate([Ct.reshape(-1, 3), Cb.reshape(-1, 3)])
         b = bone or self.bone_at(Cp[nu // 3])
         return self._store(name, V, faces, UV, Col, mat, b)
 
+    # ------------------------------------------------------------------ a free shard (a crest's blade, a spike, a point)
+    @staticmethod
+    def path(P, nu):
+        """nu points evenly along the smooth curve through P (Catmull-Rom), and its length"""
+        P = np.asarray(P, float)
+        if len(P) == 2:
+            P = np.array([P[0], (P[0] + P[1]) * .5, P[1]])
+        ext = np.concatenate([[2 * P[0] - P[1]], P, [2 * P[-1] - P[-2]]])
+        fine = []
+        for i in range(1, len(ext) - 2):
+            p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
+            for t in np.linspace(0, 1, 24, endpoint=False):
+                t2, t3 = t * t, t * t * t
+                fine.append(.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
+        fine.append(P[-1])
+        fine = np.array(fine)
+        s = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(fine, axis=0), axis=1))])
+        uu = np.linspace(0, 1, nu) * s[-1]
+        return np.stack([np.interp(uu, s, fine[:, k]) for k in range(3)], 1), float(s[-1])
+
+    def shard(self, name, pts, w, face, bone, thick=.006, base=.45, peak=.22, point=1.0, lower=.8, notch=None, mat='armour',
+              mirror=True, n=(28, 9), tone=None, edge=.12, curl=0.0):
+        """A blade standing free along the curve through pts (its root first, buried in what it grows from): its broad
+        face looks toward `face` (made square to the curve), it is `w` wide at `peak` along it and comes to a point at
+        the end (`point` over 1: a needle, under 1: a convex point). The edge toward +side is the full outline, the
+        other `lower` of it (a horn: one edge swept, one straighter); notch=(u, depth): a step in that lower edge, a
+        second point (the sheet's crest blades have them). A lens in section: `thick` through its middle line, `edge` of
+        that at its rims (crisp, never a knife's zero), a crease down both faces. curl: twisted along its length (radians
+        at the tip)."""
+        out = []
+        for side in ((1, -1) if mirror else (1,)):
+            sx = np.array([side, 1, 1], float)
+            P = np.asarray(pts, float) * sx
+            F = np.asarray(face, float) * sx
+            bn = bone if side == 1 else mirror_bone(bone)
+            out.append(self._shard(f'{name}{"" if side == 1 else "_R"}', P, w, F, bn, thick, base, peak, point, lower, notch,
+                                   mat, n, tone, edge, curl * side, side))
+        return out
+
+    def _shard(self, name, P, w, face, bone, thick, base, peak, point, lower, notch, mat, n, tone, edge, curl, side):
+        nu, nv = n
+        u = np.linspace(0, 1, nu)
+        C, L = self.path(P, nu)
+        T = unit(np.gradient(C, axis=0))
+        Nf = unit(face[None, :] - T * (T @ face)[:, None])
+        Sd = unit(np.cross(T, Nf)) * side                       # (the same edge leads on both sides of the body)
+        if abs(curl) > 1e-4:
+            a = (curl * u)[:, None]
+            Sd, Nf = Sd * np.cos(a) + Nf * np.sin(a), Nf * np.cos(a) - Sd * np.sin(a)
+        point = point * self.point_k
+        prof = np.where(u < peak, base + (1 - base) * np.sin(np.pi / 2 * u / peak), ((1 - u) / (1 - peak)).clip(0) ** point)
+        hw_top = np.maximum(w * .5 * prof, .0005)
+        low = prof * lower
+        if notch:
+            un, dp = notch
+            low = low * (1 - dp * smooth(un, un + .05, u))
+        hw_low = np.maximum(w * .5 * low, .0005)
+        v = np.linspace(-1, 1, nv)
+        hw = np.where(v[None, :] < 0, hw_low[:, None], hw_top[:, None])
+        th = thick * (.28 + .72 * (1 - u) ** .7)
+        z = (th[:, None] * .5) * (edge + (1 - edge) * (1 - np.abs(v[None, :]) ** 1.25))
+        mid = C[:, None, :] + Sd[:, None, :] * (v[None, :] * hw)[..., None]
+        top = mid + Nf[:, None, :] * z[..., None]
+        bot = mid - Nf[:, None, :] * z[..., None]
+        V = np.concatenate([top.reshape(-1, 3), bot.reshape(-1, 3)])
+        nt = nu * nv
+        idx = lambda i, j, b=0: b * nt + i * nv + j
+        faces = []
+        for i in range(nu - 1):
+            for j in range(nv - 1):
+                faces.append((idx(i, j), idx(i + 1, j), idx(i + 1, j + 1), idx(i, j + 1)))
+                faces.append((idx(i, j, 1), idx(i, j + 1, 1), idx(i + 1, j + 1, 1), idx(i + 1, j, 1)))
+        per = [(i, 0) for i in range(nu)] + [(nu - 1, j) for j in range(1, nv)] + [(i, nv - 1) for i in range(nu - 2, -1, -1)] + \
+              [(0, j) for j in range(nv - 2, 0, -1)]
+        for k in range(len(per)):
+            (i0, j0), (i1, j1) = per[k], per[(k + 1) % len(per)]
+            faces.append((idx(i0, j0), idx(i1, j1), idx(i1, j1, 1), idx(i0, j0, 1)))
+        uu = np.tile((u * L)[:, None], (1, nv)); vv = v[None, :] * hw
+        UV = np.stack([vv / TILE + self.rng.uniform(0, 1), uu / TILE + self.rng.uniform(0, 1)], -1).reshape(-1, 2)
+        UV = np.concatenate([UV, UV])
+        t = self.rng.uniform(.33, .41) if tone is None else tone
+        rim = np.maximum(np.abs(v)[None, :] ** 3.5, smooth(.82, 1.0, u)[:, None]) * np.ones((nu, nv))
+        c0 = np.array([t, t * .985, t * .975]); c1 = np.array([.88, .84, .78])
+        Ct = c0[None, None, :] * (1 - rim[..., None] * .65) + c1[None, None, :] * rim[..., None] * .65
+        Col = np.concatenate([Ct.reshape(-1, 3), Ct.reshape(-1, 3) * .85])
+        return self._store(name, V, faces, UV, Col, mat, bone)
+
     # ------------------------------------------------------------------ a limb or a trunk covered in rows of plates
     def wrap(self, name, a, b, bone, around=4, rows=2, span=(-150, 150), face=(0, -1, 0), cover=.92, overlap=.32, lift=.003,
-             tip=.006, ridge=.003, thick=.006, dark=(), point=1.0, peak=.35, mirror=True, reach=.30, stagger=.5, flip=False, n=(14, 7),
-             skip=(), also=(), accents=.5):
+             tip=.006, ridge=.009, thick=.007, dark=(), point=1.0, peak=.35, mirror=True, reach=.30, stagger=.5, flip=False, n=(14, 7),
+             skip=(), also=(), accents=.5, dark_arc=(), pale=(), dark_share=0.0, base=.6):
         """Rows of plates round the axis a -> b, `around` plates in each row over the arc `span` (degrees about the
         axis, 0 = the direction `face`, positive turning toward +X on the left side), each row from a little before
         its start to past its end (`overlap`), roots toward a and tips toward b (flip: the other way). Each plate is
         as wide as `cover` of its share of the arc as it lies on the surface. dark: (row, k) pairs (or 'all') that are
-        dark chitin. A gap between plates shows the body under them, as the sheet's do."""
+        dark chitin; dark_arc: arcs ((from, to) degrees, as span) whose plates are dark (the sheet: pale on the front and
+        outside of a limb, dark behind and inside it); pale: (row, k) pairs kept pale inside a dark arc. A gap between
+        plates shows the body under them, as the sheet's do."""
         a = np.asarray(a, float); b = np.asarray(b, float)
         D = unit(b - a)
         F0 = np.asarray(face, float); F0 = unit(F0 - D * np.dot(F0, D))
@@ -257,7 +358,9 @@ class Armour:
                     f = (k + .5 + off + self.rng.uniform(-.16, .16) * V_) / around if around > 1 else .5
                     tj0 = t0 + self.rng.uniform(-.07, .03) * V_ / rows
                     tj1 = t1 + self.rng.uniform(-.03, .09) * V_ / rows
-                    isdark = dark == 'all' or (r, k) in dark
+                    ang0 = span[0] + (span[1] - span[0]) * f
+                    isdark = dark == 'all' or (r, k) in dark or (any(min(a0, a1) <= ang0 <= max(a0, a1) for a0, a1 in dark_arc)
+                                                                and (r, k) not in pale) or self.rng.uniform() < dark_share
                     bn = bone if side == 1 else mirror_bone(bone)
                     pieces = [(f, tj0, tj1, cover * self.rng.uniform(1 - .14 * V_, 1 + .12 * V_), lift + .0055 * r, isdark)]
                     if accents and self.rng.uniform() < accents:
@@ -278,7 +381,7 @@ class Armour:
                         rad = max(np.linalg.norm((sm - mid) - D * np.dot(sm - mid, D)), .01)
                         w = cv * rad * math.radians(abs(span[1] - span[0])) / around
                         out.append(self._blade(f'{name}{r}{k}{"abcd"[pi]}{"" if side == 1 else "_R"}', s0 * sx, s1 * sx, w, bn, lf, tip, 1.0,
-                                               thick * (1 if pi == 0 else .8), ridge, peak, point, .6, n, 'dark' if dk else 'armour', np.zeros(3),
+                                               thick * (1 if pi == 0 else .8), ridge, peak, point, base, n, 'dark' if dk else 'armour', np.zeros(3),
                                                None, 0.0, fn))
         return out
 
@@ -297,8 +400,15 @@ class Armour:
             for p0, nrm, wd in grooves:
                 nn = unit(np.asarray(nrm, float)).astype(F32)
                 d = np.maximum(d, -(np.abs((P - np.asarray(p0, F32)) @ nn) - wd * .5))
-            for a, b, r in slits:
-                d = np.maximum(d, -sdf.capsule(P, a, b, r))
+            for sl in slits:
+                if len(sl) == 4:                                  # (a, b, r at its middle, r at its ends): an almond
+                    a, b, rm, re = sl
+                    m_ = (np.asarray(a, F32) + np.asarray(b, F32)) * .5
+                    cut = np.minimum(sdf.round_cone(P, a, m_, re, rm), sdf.round_cone(P, m_, b, rm, re))
+                else:
+                    a, b, r = sl
+                    cut = sdf.capsule(P, a, b, r)
+                d = np.maximum(d, -cut)
             return d
         V, Q = sdf.mesh(f, lo, hi, h)
         me = bpy.data.meshes.new(name)
@@ -376,11 +486,13 @@ class Armour:
             out.append(self._store(f'{name}{"" if side == 1 else "_R"}', V, faces, UV, Col, mat, bn))
         return out
 
-    def stud(self, name, p, r, bone=None, mirror=True, mat='glow'):
+    def stud(self, name, p, r, bone=None, mirror=True, mat='glow', lift=0.0):
+        """a small light set in the surface (lift: that far out along the surface's normal, onto a plate over it)"""
         out = []
         for side in ((1, -1) if mirror else (1,)):
             P = self.project([np.asarray(p, float) * np.array([side, 1, 1])])[0]
             Nn = self.normal([P])[0]
+            P = P + Nn * lift
             bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=10, v_segments=6, radius=r)
             me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
             V = np.array([v.co[:] for v in me.vertices]) * np.array([1, 1, .45])

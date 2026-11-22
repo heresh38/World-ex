@@ -1,183 +1,246 @@
-"""The male Sarketh's armour (metal plates he wears, by slot) and his claws, after the owner's sheet (art/reference/sarketh/sarketh_design_sheet.png): most of the body
-under overlapping plates with the dark scaled body showing in the gaps between them. A crest of blades lying back over
-the skull and sweeping off behind it, a pale plate down the snout over a dark mask, a slit of light either side; heavy
-layered pauldrons with spikes rising over the shoulders; a chest of broad plates meeting in a V; every limb ringed in
-rows of plates pointing down it, lying close; plates across the knuckles, long curved claws;
-the spine a row of plates with lights between them. Points are for the LEFT side (+X) and mirrored.
-
-Angles in wrap(): 0 = the `face` direction; for a limb running DOWN with face (0, -1, 0) (forward), +90 is the inside
-(-X) and -90 the outside (+X)."""
+"""The male Sarketh's armour (metal plates he wears, by slot) and his claws, after the owner's sheet
+(art/reference/sarketh/sarketh_design_sheet.png; on 2026-11-21 the owner: "make it exactly like the image"): a helmet of
+dark lacquer with eyes of light and a crest of swept blades (head_parts); few, large, pointed plates that follow the
+body's forms, the dark scaled body bare between them; big layered pauldrons; long plates down the outside of every limb,
+spikes off the elbows, calves and hocks; small amber lights at the hips, the knees and the hocks.
+Points are for the LEFT side (+X) and mirrored."""
 import numpy as np
+
+import anatomy
 
 FINGERS = ('index', 'middle', 'ring', 'pinky')
 
 
 def layout(A, J):
-    A.thick_k, A.tip_k = 2.4, .7            # thick armour plates lying on the body, edges barely lifted (not spiky: the owner)
-    A.point_k = .55                         # blunt points: the plates end rounded, not in needles
+    """the whole set: the helmet and the neck (head_parts), then the body's armour slot by slot. The sheet's armour is a
+    dense mosaic of POINTED shards, pale and dark, in rows down every limb (their points down the leg, toward the elbow
+    on the forearm, lifting off at their ends), with big pieces over it: the chest's V, the layered pauldrons, the spine,
+    the knees, the hips' plates, spikes off the elbows, calves, hocks and heels; the dark body bare on the belly and
+    between the plates."""
+    A.thick_k, A.tip_k, A.point_k = 1.5, 1.0, .85      # thick plates, their ends pointed and lifting (the sheet)
+    A.angular, A.notch = .65, .15                      # straight-sided shards, a few with a second point
     j = lambda b, e=0: np.asarray(J[b][e], float)
-    hd, nk = j('head'), j('neck')
-
-    # ---- the head (the owner's sheet, "head detail"): a tall, narrow face, its dark visor down to a pointed chin with a slit
-    #      of light along each side, framed by pale guards; a brow plate over the crown; blades swept back off the crown and
-    #      the temples. All of it is his HELMET; the eyes are his own.
-    A.slot = 'body'
-    A.slot = 'helmet'
-    # the helmet (the sheet's head detail): FACETED, flat planes meeting in hard edges, not a rounded shell. A tall narrow
-    # head: the top and the back swept back, a sloping brow, the face a V of two planes down to a pointed chin under a dark
-    # visor, flat cheeks, the jaw cut back under it to the neck. Each plane sits about a centimetre outside the skull.
-    planes = [((0, .45, 1), .172), ((0, .90, .50), .172), ((0, 1, -.30), .097), ((0, -.55, .85), .162),
-              ((.62, -1, .05), .085), ((-.62, -1, .05), .085), ((.5, -.6, -.6), .080), ((-.5, -.6, -.6), .080),
-              ((1, -.05, -.30), .057), ((-1, -.05, -.30), .057), ((1, .10, .90), .122), ((-1, .10, .90), .122),
-              ((0, -.75, -1), .080), ((1, -.20, -1), .062), ((-1, -.20, -1), .062), ((0, .30, -1), .060),
-              ((.6, 0, .8), .150), ((-.6, 0, .8), .150),                     # a pitched top: a ridge, not a lid
-              ((.8, .6, 0), .095), ((-.8, .6, 0), .095),                     # the back narrowing behind
-              ((.8, -1, .05), .080), ((-.8, -1, .05), .080)]                 # a sharper V to the face
-    NP = np.array([np.asarray(n_, float) / np.linalg.norm(n_) for n_, _ in planes], np.float32)
-    DP = np.array([d_ for _, d_ in planes], np.float32)
-
-    def poly(P):
-        q = np.asarray(P, np.float32) - hd.astype(np.float32)
-        return (q @ NP.T - DP[None, :]).max(1)
-    zc, zn, yn = hd[2] - .052, hd[2] + .045, hd[1] + .035
-
-    def keep(P):
-        return np.maximum(zc - P[:, 2], np.minimum(zn - P[:, 2], P[:, 1] - yn))
-
-    def mat_of(c):
-        q = c - hd
-        return 'dark' if (q[1] < -.030 and -.040 < q[2] < .112 and abs(q[0]) < .046 and q[1] < -.035 - .4 * abs(q[0])) else 'armour'
-    grooves = [(hd + (0, -.030, .134), (0, -.6, 1), .0024), (hd + (0, .062, .060), (0, 1, .3), .0022)]
-    slits, eyes = [], []
-    for sg in (1, -1):
-        e0, e1 = hd + (.024 * sg, -.080, .052), hd + (.046 * sg, -.066, .090)
-        slits.append((e0, e1, .0042))
-        eyes.append((e0, e1, sg))
-    A.shell('helmet', 'head', poly, hd + (-.090, -.200, -.090), hd + (.090, .160, .225), -.0055, .0055, keep, mat_of, grooves, slits,
-            h=.0009, target=16000)
-    A.slot = 'body'
-    for e0, e1, sg in eyes:                                    # his eyes, burning in the slits
-        nrm = np.array([.526 * sg, -.849, .042])
-        A.claw('eye' if sg > 0 else 'eye_R', e0 - nrm * .0025, e1 - nrm * .0025, .0036, 'head', up=(0, 0, 1), hook=.0, flat=1.0, mirror=False,
-               mat='glow', segs=8, ring=6)
-    A.slot = 'helmet'
-    A.blade('guard', hd + (.040, -.060, -.022), hd + (.062, -.010, .118), .026, 'head', lift=.002, ridge=.004, peak=.5, base=.6, field=poly,
-            thick=.006)
-    A.blade('temple', hd + (.058, -.030, .108), hd + (.082, .090, .090), .050, 'head', lift=.002, tip=.000, free=.72, peak=.5, point=.7,
-            field=poly)
-    for k in range(5):
-        a_ = hd + (.010 + .012 * k, -.010 + .020 * k, .168 - .006 * k)
-        b_ = hd + (.030 + .032 * k, .190 + .010 * k, .190 - .032 * k)          # fanned out and back
-        A.blade(f'crest{k}', a_, b_, .088 - .006 * k, 'head', lift=.002 + .005 * k, tip=.000, free=.66, thick=.006, ridge=.007, peak=.40,
-                point=1.3, bend=(0, 0, .016), mat='dark' if k in (1, 3) else 'armour', field=poly)
-    A.blade('crown', hd + (.016, .000, .172), hd + (.042, .150, .246), .050, 'head', lift=.006, tip=.000, free=.55, thick=.006, ridge=.007,
-            peak=.40, point=1.3, bend=(0, 0, .02), field=poly)
-    A.blade('crestmid', hd + (0, -.010, .178), hd + (0, .170, .205), .084, 'head', lift=.004, tip=.000, free=.62, thick=.007, ridge=.008,
-            peak=.40, point=1.2, bend=(0, 0, .020), mirror=False, field=poly)
-    A.blade('occiput', hd + (.020, .092, .110), hd + (.040, .140, .010), .050, 'head', lift=.002, tip=.004, free=.6, mat='dark', field=poly)
-
-    A.slot = 'neck'
-    # ---- neck: rings of small plates, a ridge at the nape
-    A.wrap('neck', nk + (0, .006, .150), nk + (0, .010, -.010), 'neck', around=7, rows=3, span=(-180, 180), face=(0, -1, 0), cover=1.0,
-           tip=.005, thick=.005, n=(10, 6), dark=((0, 2), (1, 1), (1, 4), (2, 3), (2, 6)), mirror=False, flip=False)
-    A.blade('nape', nk + (0, .055, .000), nk + (0, .080, .160), .040, 'neck', lift=.004, tip=.012, free=.75, mirror=False)
+    head_parts(A, J)
 
     A.slot = 'chest'
-    # ---- chest and belly
-    A.blade('pec', (.030, -.132, 1.680), (.190, -.074, 1.560), .120, 'chest', lift=.004, ridge=.006, thick=.008, peak=.4)
-    A.blade('pec2', (.040, -.124, 1.585), (.150, -.092, 1.488), .086, 'chest', lift=.003, ridge=.004, peak=.4)
-    A.blade('collar', (.020, -.104, 1.724), (.180, -.044, 1.712), .060, 'chest', lift=.007, ridge=.004, peak=.4, mat='dark')
-    A.blade('sternum', (0, -.134, 1.708), (0, -.128, 1.480), .050, 'chest', lift=.005, ridge=.006, mirror=False, thick=.008)
-    A.wrap('ribs', (.150, -.020, 1.560), (.150, .010, 1.330), 'chest', around=2, rows=3, span=(-70, 30), face=(1, -.4, 0), cover=.9,
-           tip=.006, dark=((1, 0),))
-    A.blade('oblique', (.090, -.088, 1.340), (.122, -.060, 1.240), .046, 'spine', lift=.003, tip=.004)
-    for r_, z in enumerate((1.445, 1.390, 1.335, 1.280)):
-        A.blade(f'belly{r_}', (.006, -.100, z), (.068, -.084, z - .030), .052, 'spine', mat='dark', lift=.002, ridge=.004, peak=.45, base=.8, tip=.002)
-    A.wrap('flank', (.115, .000, 1.450), (.112, .010, 1.260), 'spine', around=2, rows=2, span=(-80, 30), face=(1, -.3, 0), cover=1.0, tip=.004,
-           dark=((1, 1),))
-    A.stud('heart', (0, -.146, 1.610), .0048, 'chest', mirror=False)
-    A.stud('belly', (0, -.104, 1.350), .0036, 'spine', mirror=False)
+    # the chest: a broad plate over each side from the shoulder's front down to the foot of the breastbone, the two
+    # meeting there in a V; a dark band along each collarbone; shards on the ribs' sides under the arm and at the waist
+    ch = ('chest',)
+    A.blade('pec', (.212, -.046, 1.712), (.028, -.124, 1.596), .100, 'chest', lift=.012, ridge=.009, thick=.010, peak=.38, base=.62,
+            point=.9, only=ch)
+    A.blade('pec_m', (.200, -.066, 1.652), (.036, -.126, 1.540), .088, 'chest', lift=.008, ridge=.008, thick=.009, peak=.38, base=.62,
+            point=.9, mat='dark', only=ch)
+    A.blade('pec_l', (.178, -.084, 1.592), (.050, -.120, 1.488), .074, 'chest', lift=.004, ridge=.007, thick=.009, peak=.38, base=.62,
+            point=.9, only=ch)
+    A.blade('collar', (.040, -.092, 1.740), (.205, -.028, 1.738), .040, 'chest', lift=.014, ridge=.005, thick=.007, peak=.4, mat='dark',
+            only=ch)
+    # a collar of shards rising round the back of the neck from the trapezius (the sheet: up to the jaw)
+    for name, pts, w, mat in (('collar0', [(.050, -.010, 1.722), (.056, .000, 1.800), (.060, .014, 1.880)], .056, 'dark'),
+                              ('collar1', [(.080, .018, 1.715), (.090, .030, 1.800), (.096, .046, 1.885)], .074, 'armour'),
+                              ('collar2', [(.112, .030, 1.712), (.130, .042, 1.785), (.144, .058, 1.850)], .066, 'dark'),
+                              ('collar3', [(.148, .036, 1.708), (.176, .048, 1.762), (.196, .064, 1.808)], .060, 'armour'),
+                              ('collar4', [(.060, .062, 1.722), (.068, .078, 1.800), (.074, .096, 1.870)], .064, 'armour')):
+        A.shard(name, pts, w, (1, -.35, 0), 'chest', thick=.011, base=.72, peak=.32, point=.95, lower=.6, notch=(.55, .28), mat=mat,
+                edge=.22)
+    A.blade('pec2', (.150, -.090, 1.560), (.070, -.112, 1.470), .056, 'chest', lift=.002, ridge=.006, thick=.008, peak=.38, base=.6,
+            point=.9, mat='dark', only=ch)
+    A.wrap('ribs', (.150, -.030, 1.600), (.150, .000, 1.360), 'chest', around=2, rows=3, span=(-75, 35), face=(1, -.4, 0), cover=1.05,
+           tip=.008, dark=((1, 0), (2, 1)), accents=0, base=.35, peak=.32)
+    A.wrap('flank', (.112, -.010, 1.400), (.110, .000, 1.250), 'spine', around=2, rows=2, span=(-80, 25), face=(1, -.4, 0), cover=1.05,
+           tip=.008, dark=((0, 1),), accents=0, base=.35, peak=.32)
+    A.stud('heart', (0, -.128, 1.600), .0050, 'chest', mirror=False, lift=.002)
 
     A.slot = 'shoulders'
-    # ---- shoulders: a pauldron in three layers (rounded: no spikes, the owner 2026-11-15)
-    A.blade('pauldron', (.170, .000, 1.785), (.340, .032, 1.565), .150, 'upperarm.L', lift=.008, ridge=.007, thick=.010, peak=.3, tip=.016,
-            bend=(.022, 0, 0))
-    A.blade('pauldron2', (.215, .020, 1.745), (.362, .052, 1.530), .118, 'upperarm.L', lift=.020, ridge=.006, thick=.009, peak=.3, tip=.022,
-            mat='dark')
-    A.blade('pauldron3', (.245, .030, 1.700), (.372, .060, 1.500), .086, 'upperarm.L', lift=.032, ridge=.005, thick=.008, peak=.3, tip=.026)
+    # the pauldron: big and rounded, three layers stepping out down the arm, its top edge rising to a point behind (the
+    # sheet; the owner, 2026-11-15: rounded and layered)
+    sh = j('upperarm.L')
+    A.blade('pauldron', sh + (-.085, -.010, .105), sh + (.120, .010, -.125), .235, 'upperarm.L', lift=.012, ridge=.011, thick=.013,
+            peak=.45, base=.78, point=.7, tip=.014, bend=(.034, 0, .014), angular=.15)
+    A.blade('pauldron2', sh + (-.010, .005, .060), sh + (.140, .022, -.180), .190, 'upperarm.L', lift=.028, ridge=.009, thick=.012,
+            peak=.45, base=.75, point=.7, tip=.018, mat='dark', angular=.15)
+    A.blade('pauldron3', sh + (.045, .012, .005), sh + (.155, .030, -.230), .150, 'upperarm.L', lift=.044, ridge=.008, thick=.011,
+            peak=.45, base=.75, point=.75, tip=.022, angular=.15)
+    A.shard('pauldron_rise', [sh + (-.040, .040, .070), sh + (-.020, .060, .140), sh + (-.008, .085, .200)], .080, (1, -.6, .2),
+            'upperarm.L', thick=.011, base=.75, peak=.35, point=.9, lower=.65, notch=(.5, .3), edge=.22)
+
     A.slot = 'back'
-    A.blade('scapula', (.060, .118, 1.690), (.185, .104, 1.505), .100, 'chest', lift=.004, ridge=.005, thick=.008)
-    A.blade('scapula2', (.040, .120, 1.600), (.150, .110, 1.440), .070, 'chest', lift=.003, mat='dark')
-    A.blade('lat', (.130, .086, 1.520), (.160, .060, 1.380), .052, 'chest', lift=.003)
-    A.wrap('back', (.090, .040, 1.700), (.095, .045, 1.420), 'chest', around=3, rows=3, span=(-75, 75), face=(0, 1, 0), cover=1.04, tip=.006,
-           dark=((0, 1), (2, 0)), lift=.0045)
-    A.wrap('glute', (.070, .040, 1.200), (.085, .040, 1.040), 'hips', around=3, rows=2, span=(-80, 80), face=(0, 1, 0), cover=1.04, tip=.006,
-           dark=((1, 1),))
+    # the back (the sheet's back view): a long plate down the spine from the nape with lights along it, a plate over each
+    # shoulder blade, the lats bare; from the top of the back either side of the neck a tall spike rising
+    A.blade('spine', (0, .104, 1.740), (0, .150, 1.430), .118, 'chest', lift=.006, ridge=.012, thick=.011, peak=.12, base=.85, point=1.2,
+            mirror=False)
+    A.blade('spine2', (0, .148, 1.460), (0, .118, 1.230), .056, 'spine', lift=.006, ridge=.008, thick=.009, peak=.25, base=.8, point=1.1,
+            mirror=False, mat='dark')
+    for k, z in enumerate((1.690, 1.630, 1.570, 1.510)):
+        A.stud(f'spinelight{k}', (0, .140, z), .0042, 'chest', mirror=False, lift=.024)
+    A.blade('scapula', (.070, .118, 1.690), (.170, .105, 1.520), .090, 'chest', lift=.004, ridge=.007, thick=.009, peak=.35, tip=.010,
+            free=.85, mat='dark')
+    A.blade('trap', (.050, .060, 1.740), (.150, .040, 1.700), .060, 'chest', lift=.006, tip=.020, free=.70, ridge=.007, thick=.010,
+            peak=.35, base=.6)
+    A.blade('trap2', (.080, .085, 1.715), (.180, .070, 1.660), .056, 'chest', lift=.010, tip=.022, free=.70, ridge=.006, thick=.009,
+            peak=.35, base=.6, mat='dark')
+    A.wrap('back', (.100, .040, 1.660), (.100, .045, 1.400), 'chest', around=2, rows=3, span=(-10, 85), face=(0, 1, 0), cover=1.0,
+           tip=.010, dark=((0, 1), (2, 0)), lift=.0045)
+    A.wrap('lowback', (.060, .060, 1.400), (.065, .060, 1.250), 'spine', around=2, rows=2, span=(5, 75), face=(0, 1, 0), cover=.95, tip=.008,
+           dark=((0, 1),))
+    A.shard('wing', [(.070, .070, 1.680), (.092, .088, 1.790), (.108, .104, 1.900), (.114, .112, 1.950)], .140, (1, .45, .1), 'chest',
+            thick=.013, base=.75, peak=.38, point=.9, lower=.55, notch=(.45, .35), edge=.22)
+    A.shard('wing2', [(.110, .060, 1.700), (.140, .078, 1.780), (.165, .095, 1.850)], .090, (1, .3, .2), 'chest', thick=.011, base=.7,
+            peak=.32, point=.95, lower=.6, notch=(.55, .3), edge=.22, mat='dark')
 
     A.slot = 'arms'
-    # ---- arms: the upper arm and the forearm ringed in plates pointing down
-    sh, el, wr = j('upperarm.L'), j('forearm.L'), j('hand.L')
-    A.wrap('uarm', sh + (el - sh) * .22, el + (el - sh) * .05, 'upperarm.L', around=5, rows=3, span=(-220, 45), face=(0, -1, 0), cover=1.06,
-           tip=.008, dark=((0, 1), (0, 3), (1, 0), (1, 3), (2, 0), (2, 2)))
-    A.wrap('farm', el + (wr - el) * .06, wr + (wr - el) * .02, 'forearm.L', around=5, rows=3, span=(-230, 55), face=(0, -1, 0), cover=1.06,
-           tip=.008, dark=((0, 2), (1, 1), (1, 4), (2, 0), (2, 3)))
-    A.blade('forearm', el + (.034, .006, -.030), wr + (.040, .030, .010), .060, 'forearm.L', lift=.010, ridge=.005, peak=.3, tip=.010)
-    hn = j('hand.L', 1)
+    # the arms: plates down the outside of the upper arm under the pauldron, a spike off the elbow; the forearm's long
+    # plates on its outside and back, overlapping, their points toward the elbow and lifting off it (the sheet)
+    el, wr = j('forearm.L'), j('hand.L')
+    ua, fa = ('upperarm.L',), ('forearm.L',)
+    A.wrap('uarm', sh + (el - sh) * .26, el + (el - sh) * .05, 'upperarm.L', around=4, rows=2, span=(-190, 15), face=(0, -1, 0), cover=1.25,
+           overlap=.45, tip=.006, dark_share=.3, accents=.6, base=.32, peak=.30)
+    A.shard('elbow', [el + (.016, .040, .010), el + (.030, .070, .060), el + (.042, .095, .125)], .048, (1, -.2, 0), 'forearm.L',
+            thick=.010, base=.7, peak=.3, point=.95, lower=.6, edge=.22)
+    A.wrap('farm', el + (wr - el) * .06, wr + (wr - el) * .02, 'forearm.L', around=4, rows=2, span=(-210, 10), face=(0, -1, 0), cover=1.25,
+           overlap=.45, tip=.007, dark_share=.3, accents=.6, base=.32, peak=.30, flip=True)
+
     A.slot = 'hands'
-    A.blade('handback', wr + (.012, .000, -.006), hn + (.018, -.004, -.014), .056, 'hand.L', lift=.003, ridge=.004, peak=.45, thick=.006)
+    # the hands: a plate over the back of the hand, plates over the first two joints of every finger, the last dark; long
+    # curved claws (the creature's own)
+    hn = j('hand.L', 1)
+    A.blade('handback', wr + (.014, .002, -.010), hn + (.016, -.004, -.010), .058, 'hand.L', lift=.003, ridge=.006, peak=.4, thick=.007,
+            base=.7, point=1.1)
     for f in FINGERS:
         for k in (1, 2, 3):
             a, b = j(f'{f}{k}.L'), j(f'{f}{k}.L', 1)
-            A.slot = 'hands'
-        A.blade(f'{f}{k}', a + (.008, 0, .003), b + (.008, 0, .000), (.020, .017, .014)[k - 1], f'{f}{k}.L', lift=.0018, ridge=.002,
+            A.blade(f'{f}{k}', a + (.008, 0, .003), b + (.008, 0, .000), (.019, .016, .013)[k - 1], f'{f}{k}.L', lift=.0018, ridge=.002,
                     thick=.004, peak=.5, base=.8, n=(8, 5), mat='dark' if k == 3 else 'armour')
         a, b = j(f'{f}3.L'), j(f'{f}3.L', 1)
         d = (b - a) / np.linalg.norm(b - a)
         A.slot = 'body'
-        A.claw(f'{f}claw', b - d * .014, b + d * .046 + np.array([-.012, 0, -.004]), .0072, f'{f}3.L', up=(-1, 0, 0), hook=.5)
+        A.claw(f'{f}claw', b - d * .014, b + d * .050 + np.array([-.013, 0, -.004]), .0075, f'{f}3.L', up=(-1, 0, 0), hook=.5)
+        A.slot = 'hands'
     a, b = j('thumb3.L'), j('thumb3.L', 1)
     d = (b - a) / np.linalg.norm(b - a)
     A.slot = 'body'
-    A.claw('thumbclaw', b - d * .012, b + d * .038 + np.array([-.006, 0, 0]), .0072, 'thumb3.L', up=(-1, 0, 0), hook=.45)
+    A.claw('thumbclaw', b - d * .012, b + d * .040 + np.array([-.006, 0, 0]), .0075, 'thumb3.L', up=(-1, 0, 0), hook=.45)
 
     A.slot = 'belt'
-    # ---- hips: a girdle of plates, the loin's V
-    A.wrap('girdle', (0, .010, 1.270), (0, .010, 1.080), 'hips', around=7, rows=1, span=(-35, 200), face=(0, -1, 0), cover=.86, overlap=.2,
+    # the hips: a long plate hanging over each hip's side, its foot pointed and lifting, a dark one behind it; a dark V
+    # over the groin; a light at each hip
+    A.wrap('girdle', (0, .010, 1.270), (0, .010, 1.090), 'hips', around=7, rows=1, span=(-35, 200), face=(0, -1, 0), cover=.86, overlap=.2,
            tip=.010, dark=((0, 1), (0, 4)), reach=.40, mirror=False)
-    A.wrap('girdle_r', (0, .010, 1.270), (0, .010, 1.080), 'hips', around=3, rows=1, span=(-200, -45), face=(0, -1, 0), cover=.86, overlap=.2,
-           tip=.010, reach=.40, mirror=False)
-    A.blade('loin', (0, -.110, 1.210), (0, -.094, 1.020), .066, 'hips', lift=.006, ridge=.006, mirror=False, thick=.008)
-    A.blade('hipflare', (.130, -.040, 1.260), (.190, -.012, 1.080), .080, 'hips', lift=.012, ridge=.005, tip=.012)
+    A.wrap('girdle_r', (0, .010, 1.270), (0, .010, 1.090), 'hips', around=3, rows=1, span=(-200, -45), face=(0, -1, 0), cover=.86,
+           overlap=.2, tip=.010, reach=.40, mirror=False)
+    A.blade('tasset', (.128, -.040, 1.275), (.168, -.030, 1.070), .100, 'hips', lift=.016, tip=.018, free=.75, ridge=.008, thick=.010,
+            peak=.35, base=.65)
+    A.blade('tasset_b', (.130, .030, 1.265), (.160, .045, 1.080), .080, 'hips', lift=.012, tip=.014, free=.75, ridge=.006, peak=.35,
+            mat='dark')
+    A.blade('hipcrest', (.085, -.085, 1.265), (.125, -.065, 1.185), .050, 'hips', lift=.006, ridge=.005, peak=.4)
+    A.blade('groin', (0, -.098, 1.190), (0, -.072, 1.035), .074, 'hips', lift=.005, ridge=.007, peak=.25, base=.8, point=1.1,
+            mirror=False, mat='dark')
+    A.stud('hiplight', (.150, -.060, 1.230), .0042, 'hips', mat='amber', lift=.034)
 
     A.slot = 'legs'
-    # ---- legs
+    # the legs: a long plate down the front of the thigh, a dark one outside it, a narrow one inside; a cupped plate on
+    # the knee with a light; plates down the front of the shin; a spike off the calf and one off the hock (the sheet)
     hj, kn, hk, ba = j('thigh.L'), j('shin.L'), j('foot.L'), j('toes.L')
-    A.wrap('thigh', hj + (kn - hj) * .10, kn + (kn - hj) * .02, 'thigh.L', around=6, rows=4, span=(-225, 85), face=(0, -1, 0), cover=1.06,
-           tip=.008, ridge=.004, thick=.007, dark=((0, 2), (0, 4), (1, 0), (1, 3), (2, 1), (2, 3), (3, 0), (3, 5)))
-    A.blade('thighout', hj + (.070, -.010, -.050), kn + (.050, -.010, .080), .080, 'thigh.L', lift=.014, ridge=.006, thick=.009, peak=.35, tip=.012)
-    A.blade('knee', kn + (0, -.050, .070), kn + (0, -.056, -.092), .074, 'shin.L', lift=.006, ridge=.007, thick=.009)
-    A.stud('kneelight', kn + (0, -.070, -.004), .0042, 'shin.L')
-    A.wrap('shin', kn + (hk - kn) * .14, hk + (hk - kn) * .02, 'shin.L', around=5, rows=4, span=(-215, 85), face=(0, -1, -.4), cover=1.06,
-           tip=.008, thick=.006, dark=((0, 1), (1, 2), (1, 4), (2, 0), (3, 2), (3, 4)))
+    th_, sn = ('thigh.L',), ('shin.L',)
+    A.wrap('thigh', hj + (kn - hj) * .12, kn + (kn - hj) * .02, 'thigh.L', around=5, rows=3, span=(-170, 35), face=(0, -1, 0), cover=1.25,
+           overlap=.45, tip=.006, ridge=.006, thick=.008, dark_share=.3, accents=.6, base=.32, peak=.30)
+    A.blade('knee', kn + (.004, -.052, .100), kn + (.004, -.064, -.075), .094, 'shin.L', lift=.012, ridge=.010, thick=.012, peak=.40,
+            base=.70, point=.8)
+    A.stud('kneelight', kn + (.044, -.058, .010), .0045, 'shin.L', mat='amber', lift=.026)
+    A.wrap('shin', kn + (hk - kn) * .16, hk + (hk - kn) * .02, 'shin.L', around=4, rows=3, span=(-160, 35), face=(0, -1, -.4), cover=1.25,
+           overlap=.45, tip=.006, thick=.007, dark_share=.3, accents=.6, base=.32, peak=.30)
+    A.shard('calf', [kn + (.010, .050, -.140), kn + (.016, .100, -.100), kn + (.020, .160, -.040)], .050, (1, 0, 0), 'shin.L',
+            thick=.010, base=.7, peak=.3, point=.95, lower=.6, edge=.22)
+    A.shard('hockspike', [hk + (.008, .020, .030), hk + (.012, .075, .060), hk + (.016, .125, .110)], .044, (1, 0, 0), 'foot.L',
+            thick=.009, base=.7, peak=.3, point=.95, lower=.6, edge=.22)
+    A.stud('hocklight', hk + (.034, -.004, .000), .0042, 'foot.L', mat='amber', lift=.004)
+
     A.slot = 'feet'
-    A.wrap('foot', hk + (ba - hk) * .08, ba + (ba - hk) * .10, 'foot.L', around=4, rows=2, span=(-170, 130), face=(0, -1, .3), cover=1.05,
-           tip=.006, thick=.006, dark=((1, 1),))
+    # the long foot: plates down its front, a spike off its back; a plate over each toe, big claws
+    ft = ('foot.L',)
+    A.wrap('foot', hk + (ba - hk) * .10, ba + (ba - hk) * .10, 'foot.L', around=3, rows=2, span=(-140, 60), face=(0, -1, .3), cover=1.25,
+           overlap=.45, tip=.006, thick=.007, dark_share=.25, accents=.5, base=.32, peak=.30)
+    A.shard('heel', [ba + (.000, .045, .110), ba + (.004, .085, .150), ba + (.006, .120, .205)], .040, (1, 0, 0), 'foot.L', thick=.008,
+            base=.7, peak=.3, point=.95, lower=.6, edge=.22)
     for dx, ln in ((-.026, .088), (0.0, .102), (.026, .086)):
         tip_ = ba + (dx * 1.6, -.030 - ln, -.034)
         root = ba + (dx, -.030, -.010)
         A.slot = 'feet'
-        A.blade(f'toe{dx:+.3f}', root + (0, -.010, .018), tip_ + (0, .022, .018), .026, 'toes.L', lift=.002, ridge=.003, thick=.005, n=(10, 5))
+        A.blade(f'toe{dx:+.3f}', root + (0, -.010, .018), tip_ + (0, .022, .018), .028, 'toes.L', lift=.002, ridge=.004, thick=.006, n=(10, 5))
         A.slot = 'body'
-        A.claw(f'toeclaw{dx:+.3f}', tip_ + (0, .016, .006), tip_ + (dx * .4, -.058, -.030), .0125, 'toes.L', up=(0, 0, 1), hook=.55)
+        A.claw(f'toeclaw{dx:+.3f}', tip_ + (0, .018, .006), tip_ + (dx * .4, -.068, -.032), .0150, 'toes.L', up=(0, 0, 1), hook=.55)
     A.slot = 'body'
-    A.claw('dewclaw', ba + (-.040, .040, -.030), ba + (-.052, .080, -.050), .009, 'toes.L', up=(0, 0, 1), hook=.4)
+    A.claw('dewclaw', ba + (-.040, .040, -.030), ba + (-.054, .086, -.050), .010, 'toes.L', up=(0, 0, 1), hook=.4)
 
-    A.slot = 'back'
-    # ---- the back: the spine's plates with lights between them, plates on the low back
-    for k, z in enumerate((1.745, 1.672, 1.600, 1.528, 1.456, 1.384, 1.312, 1.240)):
-        bone = 'chest' if z > 1.46 else 'spine'
-        A.blade(f'spine{k}', (0, .150, z + .040), (0, .175, z - .050), .046 - .003 * k, bone, lift=.004, ridge=.006, tip=.003, free=1.0,
-                mirror=False, thick=.008)
-        A.stud(f'spinelight{k}', (0, .162, z - .052), .0036, bone, mirror=False)
-    A.wrap('lowback', (.050, .060, 1.420), (.060, .060, 1.270), 'spine', around=2, rows=2, span=(-20, 60), face=(0, 1, 0), cover=.9, tip=.005,
-           dark=((0, 1),))
+
+def head_parts(A, J):
+    """The helmet (the sheet's "head detail"): a dark lacquered mask over the whole head, an eye of light either side,
+    framed by pale plates (the face's front edge down to the chin, over each eye, along each cheek, under the jaw) with
+    dark plates layered round the eyes, and a crest of free blades swept BACK off the brow and the crown, stacked and
+    nearly parallel, pale and dark by turns, two dark horns rising at the top; plates down the back of the neck."""
+    j = lambda b, e=0: np.asarray(J[b][e], float)
+    hd, nk = j('head'), j('neck')
+    S = anatomy.HEAD
+    HF, lo, hi = anatomy.head_field(hd, S)
+    off, th = .0035 * S, .0045 * S
+    outer = lambda P: HF(P) - (off + th)                       # the mask's outer face: what the plates lie on
+
+    def p(x, y, z):
+        return hd + np.array([x, y, z], float) * S
+
+    A.slot = 'helmet'
+    # the eyes: almonds of light rising from behind the face's front edge back toward the temple (from the front they
+    # slant up outward), inlaid in the mask (a slit through the shell closes when the helmet is reduced for the game)
+    eyes = []
+    for sg in (1, -1):
+        e0, e1 = A.project([p(.034 * sg, -.092, .052), p(.047 * sg, -.050, .084)], fn=outer)
+        eyes.append((e0, e1, sg))
+    th0, nrm = p(0, -.040, -.022).astype(np.float32), np.array([0, .514, -.857], np.float32)
+    keep = lambda P: (np.asarray(P, np.float32) - th0) @ nrm   # open under the jaw and at the nape
+    A.shell('helmet', 'head', HF, lo - .01, hi + .01, off, th, keep, lambda c: 'dark', (), (), h=.0009, target=16000)
+    A.slot = 'body'
+    for e0, e1, sg in eyes:
+        m_ = A.project([(e0 + e1) * .5 + np.array([0, 0, .002 * S])], fn=outer)[0]
+        nn = A.normal([m_], fn=outer)[0]
+        A.shard('eye' if sg > 0 else 'eye_R', [e0 + nn * .0003, m_ + nn * .0003, e1 + nn * .0003], .0105 * S, nn, 'head', thick=.0012,
+                base=.10, peak=.42, point=1.0, lower=1.0, mat='glow', mirror=False, n=(14, 5), edge=.3)
+    A.slot = 'helmet'
+    # the frame: pale at the face's front edge, over the eye and along the cheek; the face's middle and the band round the
+    # eye dark lacquer in layers (a pale stripe down the middle of the face read as a beak)
+    A.blade('face', p(0, -.058, .140), p(0, -.126, -.043), .040 * S, 'head', lift=.0012, ridge=.006, thick=.007, peak=.20, base=.80,
+            point=.85, mirror=False, mat='dark', field=outer)
+    A.blade('faceedge', p(.026, -.050, .128), p(.014, -.118, -.032), .024 * S, 'head', lift=.0024, ridge=.004, thick=.007, peak=.30,
+            base=.7, point=.9, field=outer)
+    A.blade('brow', p(.018, -.050, .144), p(.062, .020, .116), .038 * S, 'head', lift=.0016, tip=.008, free=.82, ridge=.006, thick=.007,
+            peak=.32, base=.75, field=outer)
+    A.blade('temple', p(.050, -.040, .070), p(.064, .040, .090), .030 * S, 'head', lift=.0014, tip=.006, free=.85, ridge=.005, thick=.006,
+            peak=.35, base=.7, mat='dark', field=outer)
+    A.blade('cheek', p(.022, -.114, .002), p(.058, -.018, .040), .036 * S, 'head', lift=.0014, ridge=.006, thick=.007, peak=.45, base=.6,
+            field=outer)
+    A.blade('jaw', p(.010, -.106, -.040), p(.030, -.022, -.010), .024 * S, 'head', lift=.0014, ridge=.004, thick=.006, peak=.5, base=.6,
+            field=outer)
+    # the crest: blades swept back off the brow and the crown, stacked down the side of the head and nearly parallel (the
+    # sheet: from the front they lie back behind the head; seen from the side a layered fin), pale and dark by turns
+    crest = [  # name, points (root first, inside the mask), width, the way its face looks, material, notch: swept back and
+        # flaring out as they go (the sheet: from the front the head is a V, wide at the crest, the face narrowing to the chin;
+        # swept straight back they hid behind a narrow face)
+        ('crest_a', [p(.016, -.050, .140), p(.030, .040, .168), p(.046, .150, .196), p(.056, .225, .215)], .050, (1, 0, .55), 'armour', (.62, .30)),
+        ('crest_b', [p(.030, -.040, .128), p(.050, .050, .146), p(.072, .160, .168), p(.084, .215, .180)], .048, (1, 0, .45), 'dark', None),
+        ('crest_c', [p(.042, -.030, .112), p(.062, .060, .122), p(.084, .170, .138), p(.094, .228, .145)], .052, (1, 0, .35), 'armour', (.58, .32)),
+        ('crest_d', [p(.048, -.010, .094), p(.066, .070, .098), p(.082, .170, .104), p(.090, .210, .108)], .044, (1, 0, .30), 'dark', None),
+        ('crest_e', [p(.050, .030, .074), p(.064, .110, .070), p(.078, .190, .066)], .040, (1, 0, .25), 'armour', (.55, .3)),
+    ]
+    for name, pts, w, face, mat, notch in crest:
+        A.shard(name, pts, w * S * 1.1, face, 'head', thick=.011 * S, base=.70, peak=.40, point=.8, lower=.70, notch=notch, mat=mat,
+                edge=.22)
+    for name, pts, w in (('horn', [p(.014, -.030, .148), p(.020, -.010, .205), p(.026, .045, .262)], .034),
+                         ('horn2', [p(.022, .010, .150), p(.028, .045, .195), p(.032, .100, .232)], .030)):
+        A.shard(name, pts, w * S * 1.1, (1, 0, 0), 'head', thick=.011 * S, base=.70, peak=.35, point=.85, lower=.60, mat='dark', edge=.22)
+
+    A.slot = 'neck'
+    A.wrap('neckring', nk + (0, .004, .030), nk + (hd - nk) * .80 + (0, .012, 0), 'neck', around=5, rows=2, span=(-150, 150), face=(0, 1, 0),
+           cover=1.0, tip=.016, thick=.006, dark_arc=((-40, 40),), accents=.3)
+    # down the back of the neck plates lying on it, their ends lifting toward the crest
+    for k, (t0, t1, w) in enumerate(((.08, .48, .060), (.38, .78, .052), (.66, 1.02, .044))):
+        a_, b_ = nk + (hd - nk) * t0, nk + (hd - nk) * t1
+        A.blade(f'nape{k}', a_ + (0, .075, -.010), b_ + (0, .060, .010), w, 'neck', lift=.003, tip=.016, free=.70, ridge=.006,
+                thick=.007, peak=.35, base=.6, mirror=False, mat='armour' if k != 1 else 'dark')

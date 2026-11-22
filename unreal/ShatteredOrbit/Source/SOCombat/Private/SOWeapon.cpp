@@ -1259,6 +1259,10 @@ void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)
 				Body->SetCollisionProfileName(TEXT("PhysicsActor"));
 				Body->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 				Body->SetCollisionResponseToChannel(SO_TRACE_BULLET, ECR_Ignore);
+				// (nor does it hide anything: falling out of the hands in front of the chest it stood between a dead
+				// creature and the mate watching it go down, who then never saw it fall)
+				Body->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+				Body->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 				Drop->SetRootComponent(Body);
 				Body->RegisterComponent();
 				Body->SetWorldTransform(At);

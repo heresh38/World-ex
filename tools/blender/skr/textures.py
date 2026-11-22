@@ -20,20 +20,23 @@ from pbr import Tile, hexc, mix, smooth  # noqa: E402
 
 
 def skin():
+    """the dark hide (the sheet: a near-black violet, glossy where the muscle's form turns to the light): scutes of about
+    two and a half centimetres, each domed and parted from the next by a thin dark crease, fine scales inside them; satin
+    (at a roughness of .6 a black hide under bright light read as grey felt: its highlights are a lacquer's, small)"""
     T = Tile('skr_skin', .24)
-    d1, d2, rid = T.cells(.013, warp=.003, warp_feature=.04)
-    crease = 1 - smooth(0.0, .16, d2 - d1)
+    d1, d2, rid = T.cells(.030, warp=.007, warp_feature=.06)
+    crease = 1 - smooth(0.0, .11, d2 - d1)
     dome = np.clip(1 - d1 * .95, 0, 1) ** .6
-    s1, s2, sid = T.cells(.0042, warp=.0009)
-    crease_s = 1 - smooth(0.0, .22, s2 - s1)
-    tone = .88 + .20 * rid[..., None] + .08 * sid[..., None]
-    base = hexc('#121019')
+    s1, s2, sid = T.cells(.0055, warp=.0012)
+    crease_s = 1 - smooth(0.0, .20, s2 - s1)
+    tone = .90 + .16 * rid[..., None] + .06 * sid[..., None]
+    base = hexc('#141221')
     alb = base * tone
-    alb = mix(alb, hexc('#221f36'), (dome * .40 * (.5 + .5 * T.noise(.05))).clip(0, 1))      # the crowns' sheen
-    alb = mix(alb, hexc('#0a0910'), (crease * .85))
-    alb = mix(alb, hexc('#0e0c15'), (crease_s * .35))
-    rough = .62 - .08 * dome + .10 * crease + .04 * T.noise(.01)
-    T.write(alb, [(dome, .0011), (-crease, .0009), (-crease_s, .00028), (T.noise(.004, 3), .00012), (T.grain(1), .00002)],
+    alb = mix(alb, hexc('#2a2642'), (dome * .34 * (.5 + .5 * T.noise(.05))).clip(0, 1))      # the crowns' violet depth
+    alb = mix(alb, hexc('#09080f'), (crease * .70))
+    alb = mix(alb, hexc('#0f0d17'), (crease_s * .22))
+    rough = .40 - .06 * dome + .12 * crease + .05 * crease_s + .04 * T.noise(.01)
+    T.write(alb, [(dome, .0008), (-crease, .0005), (-crease_s, .00012), (T.noise(.004, 3), .00008), (T.grain(1), .00002)],
             rough, 0.0, relief=1.4, cavity=.35, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 
@@ -55,13 +58,13 @@ def armour():
     ground = smooth(.30, .65, -patch)                                             # ground back bright
     # (a pale warm grey, the sheet's plates: at #59564f, a tenth of the light reflected, the plates read black in the
     # game's daylight; a steel's own reflectance is far higher)
-    base = hexc('#a39e94')
+    base = hexc('#a19fa3')
     alb = base * (.90 + .12 * var[..., None]) * (.97 + .03 * flow[..., None]) * (1 - .05 * hammer[..., None])
-    alb = mix(alb, hexc('#8a8072'), heat * .45)
-    alb = mix(alb, hexc('#bab8b2'), ground * .35)
-    alb = mix(alb, hexc('#d8d4cc'), scr * .40)
-    alb = mix(alb, hexc('#5c564c'), pits * .55)
-    rough = .30 + .06 * var + .10 * heat - .06 * ground + .16 * pits - .08 * scr + .03 * fine
+    alb = mix(alb, hexc('#8c8580'), heat * .40)
+    alb = mix(alb, hexc('#bcbbc0'), ground * .35)
+    alb = mix(alb, hexc('#d8d6d8'), scr * .40)
+    alb = mix(alb, hexc('#5a5658'), pits * .55)
+    rough = .44 + .06 * var + .08 * heat - .06 * ground + .14 * pits - .08 * scr + .03 * fine
     metal = .66 + .14 * scr + .08 * ground - .10 * heat
     T.write(alb, [(-hammer, .00022), (flow, .00003), (fine, .000008), (-pits, .00020), (-scr, .00006), (var, .00030),
                   (T.grain(1), .000012)], rough, metal, relief=1.3, cavity=.35, legacy_normal_jpg=True, legacy_mask_jpg=True)
@@ -81,13 +84,17 @@ def dark():
     scr_zone = smooth(.05, .40, T.noise(.08, 2))
     scr = T.lines(150, (.004, .030), (.0002, .0005), bend=.4) * scr_zone
     pits = T.dents(140, (.0004, .0010)) * smooth(.1, .5, T.noise(.04, 3))
-    alb = hexc('#181624') * (.86 + .14 * var[..., None]) * (.97 + .05 * cid[..., None])
-    alb = mix(alb, hexc('#2a2540'), dome * .18)
-    alb = mix(alb, hexc('#0b0a12'), rim * .22)
-    alb = mix(alb, hexc('#3a3734'), rim * smooth(.3, .7, T.noise(.02, 2)) * .20)  # dust in the seams
-    alb = mix(alb, hexc('#3e3b4e'), scr * .35)
-    rough = .16 + .05 * var + .18 * satin + .14 * scr + .12 * pits + .10 * rim + .02 * fine
-    T.write(alb, [(dome, .00020), (-rim, .00012), (var, .0002), (fine, .000015), (-scr, .0001), (-pits, .0003),
+    # (the sheet's mask and dark plates are a smooth lacquer that flows with the form: the layers' rims only a whisper, or
+    # the whole face read as a crackled tortoise shell)
+    alb = hexc('#181624') * (.88 + .12 * var[..., None]) * (.985 + .025 * cid[..., None])
+    alb = mix(alb, hexc('#2a2540'), dome * .10)
+    alb = mix(alb, hexc('#0b0a12'), rim * .07)
+    alb = mix(alb, hexc('#3a3734'), rim * smooth(.3, .7, T.noise(.02, 2)) * .06)  # dust in the seams
+    alb = mix(alb, hexc('#3e3b4e'), scr * .30)
+    # (a lacquer: small sharp highlights on near black, as the sheet's; at .3 and over a broad grey sheen covered every
+    # thin blade seen edge on, and the dark crest read pale)
+    rough = .20 + .05 * var + .12 * satin + .12 * scr + .10 * pits + .03 * rim + .02 * fine
+    T.write(alb, [(dome, .00005), (-rim, .000025), (var, .00025), (fine, .000012), (-scr, .0001), (-pits, .0003),
                   (T.grain(1), .00001)], rough, .15, relief=1.2, cavity=.30, legacy_normal_jpg=True, legacy_mask_jpg=True)
 
 

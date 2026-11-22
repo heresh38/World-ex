@@ -12,8 +12,13 @@ import numpy as np
 import anatomy
 import male as male_layout
 
-SKIP = {'pec', 'pec2', 'ribfront', 'hipflare', 'pauldron', 'pauldron2', 'pauldron3', 'belly0', 'belly1', 'belly2', 'belly3', 'scapula2', 'lowback', 'glute'}
+# what of his set she does not wear: his rows of plates down every limb and round the trunk, his chest, his pauldron and
+# his collar of shards, the neck's ring (the sheet's female: a few long flowing plates, the rest bare dark hide)
+SKIP = {'pec', 'pec_m', 'pec_l', 'pec2', 'collar', 'collar0', 'collar1', 'collar2', 'collar3', 'collar4', 'ribs', 'flank', 'oblique',
+        'pauldron', 'pauldron2', 'pauldron3', 'pauldron_rise', 'back', 'lowback', 'uarm', 'farm', 'thigh', 'shin', 'girdle', 'girdle_r',
+        'tasset', 'tasset_b', 'hipcrest', 'trap2', 'wing2', 'neckring', 'scapula', 'foot', 'glute'}
 TORSO = {'hips', 'spine', 'chest', 'neck'}
+DARK = {'crest_a', 'crest_c'}          # her crest dark but for its lowest blade (the sheet's female)
 
 
 class Fit:
@@ -84,6 +89,19 @@ class Fit:
             a2, b2 = self.P(a), self.P(b)
         return self.A.blade(name, a2, b2, w * s, *args, field=field, bend=tuple(np.asarray(bend, float) * s), **kw)
 
+    def shard(self, name, pts, w, face, bone, *args, thick=.006, **kw):
+        if name in SKIP:
+            return []
+        if name in DARK:
+            kw['mat'] = 'dark'
+        if bone == 'head':                                   # the helmet's: moved and scaled with her head
+            s = self.head[2]
+            P = [self.head_out(q) for q in pts]
+        else:
+            s = self.scale_of(self.where(pts[0])[0])
+            P = [self.P(q) for q in pts]
+        return self.A.shard(name, P, w * s, face, bone, *args, thick=thick * s, **kw)
+
     def wrap(self, name, a, b, bone, *args, **kw):
         if name in SKIP:
             return []
@@ -113,23 +131,57 @@ class Fit:
 def layout(A, J):
     JM = anatomy.joints('male')
     F = Fit(A, JM, J)
-    F.own.update(thick_k=2.1, tip_k=.6, point_k=.55)       # her plates a little thinner
+    F.own.update(thick_k=1.3, tip_k=1.0, point_k=.85)      # her plates a little thinner than his
     male_layout.layout(F, JM)
     j = lambda b, e=0: np.asarray(J[b][e], float)
     ch, hp = j('chest'), j('hips')
-    # her own: plates over the chest, each curved round its side of it, a V between them
+    sh, el, wr = j('upperarm.L'), j('forearm.L'), j('hand.L')
+    hj, kn, hk, ba = j('thigh.L'), j('shin.L'), j('foot.L'), j('toes.L')
+    # her own (the sheet's female): a rounded plate over each breast, a pale band over each collarbone, one rounded
+    # pauldron with a point, a long flowing plate from the hip down the outside of each thigh with a dark one behind it, a
+    # few plates down the outside of the arm and the front of the shin; the trunk and the inside of every limb bare
     A.slot = 'chest'
-    A.blade('bust', ch + (.024, -.124, .172), ch + (.120, -.090, .066), .096, 'chest', lift=.004, ridge=.005, thick=.006, peak=.45, base=.7)
-    A.blade('bustlow', ch + (.040, -.128, .080), ch + (.110, -.098, .030), .060, 'chest', mat='dark', lift=.006, ridge=.004, peak=.45)
-    A.blade('ribs_f', ch + (.130, -.040, .110), ch + (.135, .000, .000), .040, 'chest', lift=.003)
-    # her own pauldron: one lighter layer
+    A.blade('bust', ch + (.030, -.122, .178), ch + (.118, -.086, .066), .100, 'chest', lift=.004, ridge=.006, thick=.007, peak=.45, base=.72,
+            point=.7, angular=.1)
+    A.blade('bustlow', ch + (.046, -.124, .084), ch + (.112, -.094, .034), .056, 'chest', mat='dark', lift=.008, ridge=.004, peak=.45)
+    A.blade('clav', ch + (.040, -.080, .238), sh + (.010, -.020, .040), .040, 'chest', lift=.006, ridge=.005, thick=.007, peak=.4, base=.6)
+    A.blade('oblique_f', ch + (.100, -.040, -.060), hp + (.108, -.030, .110), .036, 'spine', lift=.003, tip=.008, free=.85, ridge=.005,
+            peak=.35)
     A.slot = 'shoulders'
-    sh = j('upperarm.L')
-    A.blade('pauldron_f', sh + (-.034, -.016, .074), sh + (.092, .010, -.110), .098, 'upperarm.L', lift=.006, ridge=.006, thick=.007, peak=.32,
-            tip=.006, bend=(.014, 0, 0))
-    A.blade('pauldron_f2', sh + (.004, .004, .046), sh + (.104, .024, -.130), .070, 'upperarm.L', mat='dark', lift=.016, ridge=.005, peak=.32,
-            tip=.008)
-    # wide plates over the hips
+    A.blade('pauldron_f', sh + (-.040, -.012, .080), sh + (.096, .010, -.118), .120, 'upperarm.L', lift=.008, ridge=.008, thick=.010, peak=.42,
+            tip=.010, bend=(.018, 0, 0), base=.75, point=.75, angular=.15)
+    A.blade('pauldron_f2', sh + (.010, .004, .040), sh + (.110, .024, -.150), .084, 'upperarm.L', mat='dark', lift=.020, ridge=.006, peak=.42,
+            tip=.012, base=.7, point=.8, angular=.15)
+    A.shard('pauldron_fpt', [sh + (-.030, .030, .060), sh + (-.016, .046, .118), sh + (-.006, .066, .165)], .060, (1, -.6, .2),
+            'upperarm.L', thick=.009, base=.75, peak=.35, point=.9, lower=.65, edge=.22)
+    A.slot = 'arms'
+    fa = ('forearm.L',)
+    A.blade('uarm_f', sh + (.046, -.006, -.130), el + (.030, .006, .070), .056, 'upperarm.L', lift=.004, ridge=.006, peak=.35, tip=.008,
+            free=.9, only=('upperarm.L',))
+    A.blade('farm_f1', wr + (.026, .004, .030), el + (.032, .028, -.030), .062, 'forearm.L', lift=.005, tip=.014, free=.80, ridge=.007,
+            peak=.40, base=.5, only=fa)
+    A.blade('farm_f2', wr + (.014, .030, .060), el + (.016, .052, -.060), .048, 'forearm.L', lift=.009, tip=.012, free=.80, ridge=.006,
+            peak=.40, base=.5, mat='dark', only=fa)
+    A.blade('farm_f3', wr + (.020, -.004, -.004), wr + (.030, .014, .100), .050, 'forearm.L', lift=.012, tip=.010, free=.80, ridge=.006,
+            peak=.40, base=.55, only=fa)
     A.slot = 'belt'
-    A.blade('hipwide', hp + (.120, -.050, .100), hp + (.182, -.010, -.080), .092, 'hips', lift=.010, ridge=.005, tip=.006, peak=.4)
-    A.blade('hipback', hp + (.110, .060, .080), hp + (.150, .070, -.070), .070, 'hips', mat='dark', lift=.008, ridge=.004, peak=.4)
+    A.blade('hipwide', hp + (.112, -.052, .110), hj + (.070, -.040, -.200), .096, 'hips', lift=.010, ridge=.008, thick=.009, tip=.010,
+            free=.9, peak=.35, base=.6)
+    A.blade('hipback', hp + (.112, .050, .090), hj + (.080, .030, -.170), .072, 'hips', mat='dark', lift=.006, ridge=.005, peak=.4, base=.6)
+    A.slot = 'legs'
+    th_ = ('thigh.L',)
+    A.blade('thigh_f', hj + (.076, -.030, -.170), kn + (.040, -.030, .070), .080, 'thigh.L', lift=.012, ridge=.008, thick=.009, peak=.35,
+            base=.5, tip=.010, free=.9, only=th_)
+    A.blade('thigh_f2', hj + (.020, -.070, -.120), kn + (.008, -.046, .110), .060, 'thigh.L', lift=.006, ridge=.006, peak=.38, base=.5,
+            mat='dark', only=th_)
+    A.blade('thigh_f3', hj + (.084, .020, -.250), kn + (.052, .010, .120), .056, 'thigh.L', lift=.008, ridge=.006, peak=.38, base=.5,
+            only=th_)
+    sn = ('shin.L',)
+    A.blade('shin_f', kn + (.008, -.040, -.090), hk + (.008, -.028, .140), .058, 'shin.L', lift=.006, ridge=.007, thick=.008, peak=.38,
+            base=.5, only=sn)
+    A.blade('shin_f2', kn + (.040, -.004, -.110), hk + (.030, .004, .150), .046, 'shin.L', lift=.006, ridge=.006, peak=.38, base=.5,
+            mat='dark', only=sn)
+    A.slot = 'feet'
+    ft = ('foot.L',)
+    A.blade('meta_f', hk + (.004, -.026, -.040), ba + (.004, -.028, .070), .046, 'foot.L', lift=.005, ridge=.006, thick=.008, peak=.4,
+            base=.55, only=ft)

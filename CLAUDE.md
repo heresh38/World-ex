@@ -1087,6 +1087,36 @@ then each close). Still to do: the Warden, the Bearer and the commander (powered
 design: the sheet asks for "a bigger boss version"; the Altered stand in), the motion's other clips (Slam, Sweep,
 Barrage, Shield, Brace), levels of detail, baked own maps (the gate's own-maps check), voices of their own, the
 female's and the male's sets told apart by rank (the armour is modular by slot: a rank is a set).
+**Made to the sheet** (the owner, 2026-11-21: "work more on the sarketh model to make it exactly like the image I send";
+`skr/lab.py -- male|female --part=head|full [--bare] [--pose=Idle:1] --views=sheet,head,headside,back,torso,legs,...`
+builds a part in a minute; the view `sheet` is the sheet's OWN view of that body, orthographic at its scale (the floor
+at y 968, the male's 2.03 m at y 80, the body at x 330 / 640 of the 1536), over nothing, to lay over the sheet or set
+beside it): the head is ONE shape, `anatomy.head_field` (a cranium and a long face keeled down its front to a pointed
+chin, the jaw back to the throat; `anatomy.HEAD` 1.12: the sheet's helmet is big beside the shoulders), the sculpt's
+head and the helmet's base alike. The helmet (`male.head_parts`): a dark lacquer shell over it; the eyes almonds of
+light INLAID on it (a slit cut through the shell closed when the helmet was reduced for the game); pale plates only at
+the face's edges, over the eyes and along the cheeks (a pale stripe down the middle of the face read as a beak); a
+crest of free blades (`chitin.shard`: a lens-section blade along a curve, its broad face toward a hint, `lower` for a
+horn's straighter edge, `notch` for a second point) swept BACK, stacked down the side of the head and nearly
+parallel, pale and dark by turns, two dark horns over them. The body's armour is the sheet's dense mosaic of
+ARROWHEAD shards (a narrow root under the plate before, `wrap(..., base=.32, peak=.30)`) in rows on the front and
+outside of every limb, the inside bare (`span` round the front and outside, `dark_share` / `dark_arc` for the dark
+ones; tiled all round, a limb read as plated trousers; square plates read as a checkerboard), lying close (tips that
+flare read as a skirt); over them a chevron of plates down each side of the chest to the breastbone, the pauldron in
+three ROUNDED layers with a point rising behind (`blade(..., angular=)`: a plate's own outline), a collar of shards
+round the back of the neck, the spine's wide V with lights along it (`stud(..., lift=)` onto the plate), spikes off
+the elbows, calves, hocks and heels, small amber lights at the hips, knees and hocks (`skr_glow_amber`), the claws the
+plates' pale metal (`skr_claw` on the armour set). A plate reads carved, not cut paper: a ridge down it, walls
+bevelled in (`_blade`'s underside at 80 % of its width), a darker body (corner tone .33-.41) and a bright worn rim.
+The female is NOT his set made smaller (`female.SKIP`: his rows, his chest, his pauldron and collar): her own sparse
+set of long flowing plates (`female.layout`: a rounded plate on each breast, a band over each collarbone, one rounded
+pauldron with a point, a long plate from the hip down the outside of each thigh, a few down the arm and the shin) on
+her own slender body (`lim` .86, slight lats, a pinched waist, the hip's curve into the thigh); her crest darker
+(`female.DARK`). The neck is carried forward (about a third off upright), the trunk a V (a high ribcage, the lats
+tapering to the waist), his limbs heavy (`lim` 1.30). The hide's scutes are three centimetres and satin, the dark
+lacquer glossy (at a satin roughness a thin blade seen edge on read pale), the plate a neutral grey at a satin
+roughness. The idle stands as the sheet does: the feet apart (each leg out six degrees, the foot turned back level),
+the arms held off the body.
 **The old Sarketh armour on the human body** (`tools/blender/hero/sarketh.py`, first look 2026-11-14; the owner's ruling
 of 2026-11-15: a HUMAN player armour set now, NOT the Sarketh, never their bodies in the game): built with the player armour's plate tools (`void_sentinel.py`: `shell` / `suit` / `Base.plate`
 / `Base.light`, imported as a library with its material names pointed at this set's by `use_tools()`) on the saved

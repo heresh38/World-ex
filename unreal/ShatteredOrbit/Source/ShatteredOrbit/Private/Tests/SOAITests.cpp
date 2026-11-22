@@ -89,6 +89,12 @@ bool FSOSquadAlertTest::RunTest(const FString& Parameters)
 		}
 		W.Run(1.0f);
 		TestFalse(TEXT("nobody has noticed a player 120 m away"), SOTest::Brain(Hit)->IsInCombat() || SOTest::Brain(Watching)->IsInCombat() || SOTest::Brain(Beside)->IsInCombat());
+		// (a sentry with nowhere to walk looks round, a random way at a time: the one watching is turned back onto its
+		// mate as the shot lands, or it was sometimes looking elsewhere and the test said nothing about warning)
+		const FRotator Facing(0.0f, 180.0f, 0.0f);
+		SOTest::Brain(Watching)->ClearFocus(EAIFocusPriority::Gameplay);
+		SOTest::Brain(Watching)->SetControlRotation(Facing);
+		Watching->SetActorRotation(Facing);
 		USOCombatStatics::ApplyDamage(Player, Hit, bKill ? 100000.0f : 5.0f, false);
 		W.Run(2.0f);
 		const FString Name = bKill ? TEXT("killed outright") : TEXT("hit");

@@ -37,6 +37,16 @@ namespace
 		{
 			Params.AddIgnoredActor(IgnoreB);
 		}
+		// what either one carries (its gun, a blade) hides neither the eye behind it nor the body holding it
+		TArray<AActor*> Carried;
+		for (const AActor* Who : { IgnoreA, IgnoreB })
+		{
+			if (Who)
+			{
+				Who->GetAttachedActors(Carried, false, true);
+			}
+		}
+		Params.AddIgnoredActors(Carried);
 		return !World->LineTraceTestByChannel(A, B, ECC_Visibility, Params);
 	}
 }

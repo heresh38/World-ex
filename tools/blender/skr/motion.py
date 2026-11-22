@@ -82,15 +82,17 @@ def idle(p):
         'chest': [(X, 6 + 1.6 * b), (Z, -2 * w)],
         'neck': [(X, -6 - .8 * b)],
         'head': [(X, -5), (Z, scan)],
-        'upperarm.L': [(X, -8 + 2 * b), (Y, -3)], 'forearm.L': [(X, -26)], 'hand.L': [(X, -10), (Z, 6)],
-        'upperarm.R': [(X, -6 + 2 * b), (Y, 3)], 'forearm.R': [(X, -30)], 'hand.R': [(X, -8), (Z, -8)],
+        # (the sheet: the arms held off the body, the claws clear of the thighs)
+        'upperarm.L': [(X, -8 + 2 * b), (Y, -9)], 'forearm.L': [(X, -26)], 'hand.L': [(X, -10), (Z, 6)],
+        'upperarm.R': [(X, -6 + 2 * b), (Y, 9)], 'forearm.R': [(X, -30)], 'hand.R': [(X, -8), (Z, -8)],
     }
     for s, side in (('L', 1), ('R', -1)):
         lean = 2 * w * side                                  # the leg that takes the weight bends a little more
         thigh, knee, hock = -5 - lean, 11 + 2 * lean, -6
-        d[f'thigh.{s}'] = [(X, thigh), (Y, -3 * side)]
+        # (the sheet's stance: the feet well apart, each leg out about six degrees, the foot turned back level)
+        d[f'thigh.{s}'] = [(X, thigh), (Y, -6 * side)]
         d[f'shin.{s}'] = [(X, knee)]
-        d[f'foot.{s}'] = [(X, hock)]
+        d[f'foot.{s}'] = [(X, hock), (Y, 6 * side)]
         d[f'toes.{s}'] = [(X, flat_toes(thigh, knee, hock))]
     return d, 'both'
 

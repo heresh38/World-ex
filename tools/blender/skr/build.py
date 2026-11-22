@@ -6,7 +6,8 @@ blender -b -P tools/blender/skr/build.py -- male|female [--h=.003] [--save=x.ble
 Parts: SKR_<sex>_body (the creature: skin, claws, eyes) and one armour part per slot, SKR_<sex>_A_<slot> (helmet, neck,
 chest, back, shoulders, arms, hands, belt, legs, feet), all on one skeleton: a set is swapped, added to or made heavier
 slot by slot, never by touching the body. Materials (names are an API): skr_skin (the dark scaled body), skr_claw,
-skr_armour (the pale metal armour), skr_armour_dark (its dark plates and the visor), skr_glow (eyes, lights): a set's
+skr_armour (the pale metal armour), skr_armour_dark (its dark plates and the mask), skr_glow (the eyes),
+skr_glow_amber (the small lights on the body), skr_claw (the claws, on the armour's set): a set's
 colour is a tint on the armour materials. Bones: anatomy.ORDER.
 """
 import math
@@ -46,13 +47,28 @@ def opts():
     return o
 
 
+def half_metal(m, k=.5):
+    """the material's metal (the mask's blue) scaled by k, as the game's instance does (import_assets.skr_extra)"""
+    nt = m.node_tree
+    b = nt.nodes.get('Principled BSDF')
+    for ln in list(nt.links):
+        if ln.to_node == b and ln.to_socket.name == 'Metallic':
+            mul = nt.nodes.new('ShaderNodeMath'); mul.operation = 'MULTIPLY'; mul.inputs[1].default_value = k
+            src = ln.from_socket
+            nt.links.remove(ln)
+            nt.links.new(src, mul.inputs[0]); nt.links.new(mul.outputs[0], b.inputs['Metallic'])
+            break
+    return m
+
+
 def materials():
     return {
         'skin': fk.tmat('skr_skin', 'skr_skin', rough=.45, nstr=1.0),
-        'armour': fk.tmat('skr_armour', 'skr_armour', rough=.32, metal=.62, nstr=1.0),
+        'armour': half_metal(fk.tmat('skr_armour', 'skr_armour', rough=.32, metal=.5, nstr=1.0)),   # (half metal, as in the game)
         'dark': fk.tmat('skr_armour_dark', 'skr_dark', rough=.24, metal=.6, nstr=.8),
-        'claw': fk.tmat('skr_claw', 'skr_dark', rough=.30, nstr=.6),
+        'claw': half_metal(fk.tmat('skr_claw', 'skr_armour', rough=.30, metal=.5, nstr=.6)),   # (the sheet's claws: pale metal)
         'glow': bl.mat('skr_glow', '#cfe2ff', 0, .3, emit='#d8e8ff', strength=14.0),
+        'amber': bl.mat('skr_glow_amber', '#ffc070', 0, .3, emit='#ffa844', strength=10.0),   # the small lights on the body
     }
 
 

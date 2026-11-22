@@ -64,13 +64,13 @@ def joints(sex):
     m = sex == 'male'
     J = {}
     if m:
-        hip, sp, ch, nk, hd, top = (0, .010, 1.160), (0, .015, 1.290), (0, .020, 1.460), (0, .028, 1.735), (0, -.045, 1.905), (0, -.120, 2.020)
+        hip, sp, ch, nk, hd, top = (0, .010, 1.160), (0, .015, 1.290), (0, .020, 1.460), (0, .030, 1.722), (0, -.075, 1.890), (0, -.150, 2.005)
         J['hips'] = (hip, sp); J['spine'] = (sp, ch); J['chest'] = (ch, (0, .025, 1.720)); J['neck'] = (nk, hd); J['head'] = (hd, top)
         side = dict(sh=(.225, .028, 1.690), el=(.312, .048, 1.385), wr=(.382, .004, 1.085), hand=(.400, -.010, .995),
                     hipj=(.105, .010, 1.140), kn=(.120, -.078, .712), hock=(.115, .086, .272), ball=(.115, -.028, .046),
                     toe=(.115, -.165, .012))
     else:
-        hip, sp, ch, nk, hd, top = (0, .012, 1.090), (0, .016, 1.210), (0, .020, 1.370), (0, .026, 1.625), (0, -.040, 1.785), (0, -.108, 1.895)
+        hip, sp, ch, nk, hd, top = (0, .012, 1.090), (0, .016, 1.210), (0, .020, 1.370), (0, .028, 1.615), (0, -.068, 1.774), (0, -.136, 1.880)
         J['hips'] = (hip, sp); J['spine'] = (sp, ch); J['chest'] = (ch, (0, .024, 1.612)); J['neck'] = (nk, hd); J['head'] = (hd, top)
         side = dict(sh=(.192, .026, 1.585), el=(.270, .046, 1.300), wr=(.336, .006, 1.020), hand=(.352, -.006, .938),
                     hipj=(.112, .012, 1.068), kn=(.118, -.072, .665), hock=(.110, .080, .252), ball=(.110, -.026, .043),
@@ -136,6 +136,39 @@ class Body:
         return self.S.ell(c, r, bone, mat, col, k, R=R, **kw)
 
 
+HEAD = 1.12            # the male's head (helmet and all) to the build he had (the sheet's helmet is big beside the shoulders)
+
+
+def head_field(hd, s=1.0):
+    """The head (the owner's sheet, "head detail"): a cranium behind and above, and a long face running forward and down
+    from the brow to a pointed chin, keeled down its front, the jaw under it running back to the throat. ONE shape, used
+    by the sculpt (the head under the helmet) and by the helmet (a shell laid over it). s: the head's scale.
+    Returns (field, lo, hi)."""
+    hd = np.asarray(hd, float)
+
+    def p(x, y, z):
+        return hd + np.array([x, y, z], float) * s
+    face = sdf.Loft(p(0, -.034, .142), p(0, -.120, -.046), {
+        't': [0, .16, .36, .56, .76, .90, 1.0],
+        'rv_pos': list(np.array([.044, .049, .047, .040, .029, .017, .005]) * s),      # half its width
+        'rw_pos': list(np.array([.015, .019, .021, .020, .016, .010, .004]) * s),      # in front of its line: the keel
+        'rw_neg': list(np.array([.058, .064, .061, .052, .037, .021, .006]) * s),      # behind it
+        'n': [1.75, 1.55, 1.45, 1.45, 1.5, 1.7, 2.0],
+        'nb': [2.2, 2.2, 2.2, 2.1, 2.0, 2.0, 2.0]}, v_axis=(1, 0, 0), cap=.6)
+    a = math.radians(16)                                     # the cranium tilted, its back end up
+    Rc = np.array([[1, 0, 0], [0, math.cos(a), math.sin(a)], [0, -math.sin(a), math.cos(a)]])
+    cc, cr = p(0, .022, .090), np.array([.054, .066, .060]) * s
+    ja, jb = p(0, -.104, -.040), p(0, -.004, .004)
+
+    def f(P):
+        P = np.asarray(P, np.float32)
+        d = face(P)
+        d = sdf.smin(d, sdf.ellipsoid(P, cc, cr, Rc), .028 * s)
+        d = sdf.smin(d, sdf.round_cone(P, ja, jb, .010 * s, .028 * s), .022 * s)
+        return d
+    return f, hd + np.array([-.075, -.150, -.070]) * s, hd + np.array([.075, .115, .175]) * s
+
+
 def _R(yaw=0.0, pitch=0.0, roll=0.0):
     """rows = local axes; rotations in degrees about Z, X, Y"""
     R = sdf.rot((0, 0, 1), math.radians(yaw)) @ sdf.rot((1, 0, 0), math.radians(pitch)) @ sdf.rot((0, 1, 0), math.radians(roll))
@@ -147,11 +180,11 @@ def sculpt(sex):
     B = Body(sex, J)
     m = sex == 'male'
     w = 1.10 if m else .90         # breadth of the frame (his: the sheet's broad, muscled chest)
-    lim = 1.17 if m else .92       # limb thickness (lean, but the thighs and calves are heavy)
+    lim = 1.30 if m else .86       # limb thickness (the sheet: his heavy, muscled arms and thighs; hers slender)
 
     # ---- trunk
     ch = B.j('chest')
-    B.ell(ch + (0, .005, .095), (.150 * w, .112, .175), 'chest', k=.05)                               # ribcage
+    B.ell(ch + (0, .005, .118), (.150 * w, .112, .150), 'chest', k=.05)                               # ribcage (high: the trunk a V)
     if m:
         for s, sg in (('L', 1), ('R', -1)):
             B.ell(ch + (.072 * sg, -.068, .150), (.082, .046, .066), 'chest', k=.035, R=_R(yaw=-12 * sg))  # pectorals
@@ -160,45 +193,52 @@ def sculpt(sex):
             B.ell(ch + (.070 * sg, -.070, .110), (.060, .058, .062), 'chest', k=.03)                      # breasts
             B.ell(ch + (.060 * sg, -.050, .150), (.066, .036, .050), 'chest', k=.035)
     for s, sg in (('L', 1), ('R', -1)):
-        B.ell(ch + (.102 * sg * w, .068, .050), (.066 * w, .058, .150), 'chest', k=.045)                 # lats, the back
+        if m:
+            B.cone(ch + (.112 * sg * w, .056, .190), B.j('spine') + (.062 * sg, .046, .050), .062 * w, .026, 'chest', k=.045)   # lats: broad under the arm, to the waist
+        else:
+            B.cone(ch + (.088 * sg, .048, .170), B.j('spine') + (.046 * sg, .040, .070), .040, .018, 'chest', k=.04)         # hers: slight (the sheet's narrow waist)
         B.ell(ch + (.060 * sg, .088, .190), (.070 * w, .040, .060), 'chest', k=.04)                      # shoulder blades
-        B.cone(ch + (.030 * sg, .040, .280), B.pt('upperarm', 0, (-.03, .01, .020), s), .050 * lim, .036 * lim, 'chest', k=.04)   # trapezius
+        tr = 1.0 if m else .78
+        B.cone(ch + (.024 * sg, .046, .310 * tr + .02 * (1 - tr)), B.pt('upperarm', 0, (-.03, .01, .024), s), .056 * lim * tr, .040 * lim * tr, 'chest',
+               k=.045)                                                                                    # trapezius, up the neck (hers low and slight)
         B.cone(ch + (.020 * sg, -.050, .262), B.pt('upperarm', 0, (-.025, -.04, .005), s), .020, .024, 'chest', k=.02)           # collarbone
     sp = B.j('spine')
-    waist = .090 * w if m else .066
+    waist = .080 * w if m else .064
     B.S.chain([ch + (0, -.005, .02), sp + (0, -.004, .06), sp + (0, .000, -.04)], [.110 * w, waist, .098 * (1.0 if m else 1.12)], 'spine', 'skin', SKIN, k=.04)
     for row in range(3):                                                                                      # the segmented belly
         for sg in (1, -1):
             B.ell(sp + (.032 * sg, -.072 + row * .003, .085 - row * .058), (.034, .020, .026), 'spine', col=SINEW, k=.018)
     for sg in (1, -1):
-        B.ell(sp + (.080 * sg * w, -.012, .000), (.040, .056, .085), 'spine', k=.035)                   # obliques
+        if m:
+            B.ell(sp + (.060 * sg * w, -.010, .010), (.032, .052, .085), 'spine', k=.035)               # obliques
+        else:
+            B.ell(sp + (.040 * sg, -.008, .014), (.024, .044, .075), 'spine', k=.03)                     # hers: the waist pinched
         B.ell(sp + (.032 * sg, .080, .060), (.030, .024, .120), 'spine', col=SINEW, k=.03)              # the spine's ropes
     hp = B.j('hips')
-    pel = (.108, .080, .078) if m else (.140, .094, .088)
+    pel = (.108, .080, .078) if m else (.150, .096, .090)
     B.ell(hp + (0, .012, -.008), pel, 'hips', k=.05)
     for sg in (1, -1):
-        B.ell(hp + (.070 * sg * (1 if m else 1.08), .080, -.040), (.042, .040, .054) if m else (.050, .046, .060), 'hips', k=.04)  # glutes
+        B.ell(hp + (.064 * sg * (1 if m else 1.08), .068, -.040), (.040, .032, .050) if m else (.050, .042, .060), 'hips', k=.04)  # glutes
     B.ell(hp + (0, -.058, -.080), (.042, .030, .055), 'hips', col=DEEP, k=.03)
 
     # ---- neck and head
     hd = B.j('head')
-    B.S.chain([B.j('neck') + (0, .010, -.010), B.j('neck') + (0, -.012, .090), hd + (0, .030, .030)], [.060 * lim, .048 * lim, .042 * lim], 'neck', 'skin', SKIN, k=.03)
+    nk = B.j('neck')
+    hs = HEAD * (1.0 if m else .92)
+    # the neck: long and slim, carried forward, into the back of the head from below
+    B.S.chain([nk + (0, .012, -.012), lerp(nk, hd, .45) + (0, .010, 0), hd + (0, .032 * hs, .026 * hs)],
+              [.064 * w, .044 * hs, .038 * hs] if m else [.060 * w, .034 * hs, .030 * hs], 'neck', 'skin', SKIN, k=.03)
     for sg in (1, -1):
-        B.cone(hd + (.034 * sg, -.010, .020), B.j('neck') + (.052 * sg, -.040, .000), .014, .020, 'neck', col=SINEW, k=.018)   # the neck's cords
-        B.cone(hd + (.026 * sg, .040, .040), B.j('neck') + (.060 * sg, .050, -.010), .014, .022, 'neck', col=SINEW, k=.02)
-    hs = 1.0 if m else .92
-    B.ell(hd + (0, .022 * hs, .092 * hs), (.052 * hs, .074 * hs, .072 * hs), 'head', k=.03, R=_R(pitch=-10))   # the skull
-    B.ell(hd + (0, .070 * hs, .112 * hs), (.042 * hs, .050 * hs, .046 * hs), 'head', k=.03)                     # back of the skull
-    B.cone(hd + (0, -.040 * hs, .102 * hs), hd + (0, -.070 * hs, -.030 * hs), .040 * hs, .009 * hs, 'head', k=.03)   # the face: tall, to a pointed chin
-    B.ell(hd + (0, -.026 * hs, .044 * hs), (.040 * hs, .044 * hs, .068 * hs), 'head', k=.03)
-    B.cone(hd + (0, .004 * hs, .010 * hs), hd + (0, -.054 * hs, -.022 * hs), .026 * hs, .008 * hs, 'head', col=DEEP, k=.025)   # under the jaw
-    for sg in (1, -1):
-        B.ell(hd + (.034 * sg * hs, -.038 * hs, .042 * hs), (.016, .030, .046), 'head', col=DEEP, k=.02, R=_R(yaw=10 * sg))   # cheekbones
+        B.cone(hd + (.030 * sg * hs, -.020 * hs, .002), nk + (.050 * sg, -.046, .000), .012, .018, 'neck', col=SINEW, k=.018)   # the neck's cords
+        B.cone(hd + (.024 * sg * hs, .040 * hs, .036 * hs), nk + (.060 * sg, .050, -.010), .013, .022, 'neck', col=SINEW, k=.02)
+    hf, hlo, hhi = head_field(hd, hs)
+    B.S.add(hf, hlo, hhi, 'head', 'skin', SKIN, k=.03)                                      # the head (head_field)
 
     # ---- arms
     def arm(s, sg):
         sh, el, wr = B.j(f'upperarm.{s}'), B.j(f'forearm.{s}'), B.j(f'hand.{s}')
-        B.ell(sh + (.012 * sg, -.004, -.018), (.064 * lim, .068 * lim, .080 * lim), f'upperarm.{s}', k=.04)   # deltoid
+        dl = 1.0 if m else .86
+        B.ell(sh + (.012 * sg, -.004, -.018), (.064 * lim * dl, .068 * lim * dl, .080 * lim * dl), f'upperarm.{s}', k=.04)   # deltoid
         B.cone(sh, el, .052 * lim, .038 * lim, f'upperarm.{s}', k=.03)
         B.ell(lerp(sh, el, .48) + (-.004 * sg, -.030, 0), (.036 * lim, .036 * lim, .090), f'upperarm.{s}', k=.03)    # biceps
         B.ell(lerp(sh, el, .42) + (.006 * sg, .036, 0), (.040 * lim, .040 * lim, .100), f'upperarm.{s}', col=SINEW, k=.03)   # triceps
@@ -224,6 +264,8 @@ def sculpt(sex):
     def leg(s, sg):
         hj, kn, hk, bl_, toe = B.j(f'thigh.{s}'), B.j(f'shin.{s}'), B.j(f'foot.{s}'), B.j(f'toes.{s}'), B.j(f'toes.{s}', 1)
         B.cone(hj + (0, .004, .02), kn, .076 * lim, .050 * lim, f'thigh.{s}', k=.04)
+        if not m:
+            B.ell(lerp(hj, kn, .22) + (.026 * sg, .004, 0), (.056, .060, .120), f'thigh.{s}', k=.05)   # her hip's curve into the thigh
         B.ell(lerp(hj, kn, .42) + (.006 * sg, -.032, 0), (.058 * lim, .052 * lim, .150), f'thigh.{s}', k=.04, R=_R(pitch=-8))   # quadriceps
         B.ell(lerp(hj, kn, .40) + (.004 * sg, .040, 0), (.050 * lim, .048 * lim, .140), f'thigh.{s}', col=SINEW, k=.04)       # hamstrings
         B.ell(lerp(hj, kn, .30) + (-.040 * sg, -.004, 0), (.038 * lim, .048 * lim, .120), f'thigh.{s}', k=.04)               # adductors

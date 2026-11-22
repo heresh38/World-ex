@@ -42,7 +42,7 @@ ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer")
 # material on its own set from the texture engine (assets/textures/<set>_c.jpg, _m.png = occlusion / roughness /
 # metal, _n.png OpenGL normal)
 SARKETH = ("Sarketh", "SarkethFemale")
-SKR_SETS = {"skr_skin": "skr_skin", "skr_armour": "skr_armour", "skr_armour_dark": "skr_dark", "skr_claw": "skr_dark"}
+SKR_SETS = {"skr_skin": "skr_skin", "skr_armour": "skr_armour", "skr_armour_dark": "skr_dark", "skr_claw": "skr_armour"}
 
 SKIN_TONE = (0.55, 0.32, 0.22)
 
@@ -791,7 +791,7 @@ def skr_extra(key, m):
         s_ = SKR_SETS[key]
         # (the pale plates at half their set's metal: fully metal they mirrored the ground and the sky and read dark
         # bronze in daylight, where the sheet's plates are a pale, satin grey)
-        metal = .5 if key == "skr_armour" else 1.0
+        metal = .5 if key in ("skr_armour", "skr_claw") else 1.0      # (the claws are the plates' pale metal: the sheet)
         return {"tint": [1.0, 1.0, 1.0], "baseColorTex": s_ + "_c", "mrTex": s_ + "_m", "normalTex": s_ + "_n",
                 "metallic": metal, "roughness": 1.0, "scalars": {"AOAmount": 1.0}}
     return None
