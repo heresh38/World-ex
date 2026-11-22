@@ -355,7 +355,7 @@ void USOMapWidget::Close()
 FReply USOMapWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
 	const FKey Key = InKeyEvent.GetKey();
-	if (Key == EKeys::Escape || Key == EKeys::M || Key == EKeys::Gamepad_FaceButton_Right || Key == EKeys::Gamepad_DPad_Down)
+	if (Key == EKeys::Escape || Key == EKeys::M || Key == EKeys::Gamepad_FaceButton_Right || Key == EKeys::Gamepad_Special_Right)
 	{
 		Close();
 		return FReply::Handled();

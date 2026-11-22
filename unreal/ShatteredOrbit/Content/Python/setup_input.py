@@ -48,6 +48,8 @@ ACTIONS = {
     # (ASOCharacter::HandlePadShoulder waits a moment for the second one)
     "IA_PadShoulderRight": unreal.InputActionValueType.BOOLEAN,
     "IA_PadShoulderLeft": unreal.InputActionValueType.BOOLEAN,
+    # the quick-use key: a consumable (tapped: used; held: the next one chosen) (the owner's HUD ideas)
+    "IA_QuickUse": unreal.InputActionValueType.BOOLEAN,
 }
 
 # (action, key, modifiers) - modifiers: "neg" negate, "swz" swizzle YXZ (so a 1D key drives Y), "dz" radial dead zone
@@ -89,7 +91,9 @@ MAPPINGS = [
     ("IA_Inventory", "Tab", []),
     ("IA_Inventory", "Gamepad_Special_Left", []),
     ("IA_Map", "M", []),
-    ("IA_Map", "Gamepad_DPad_Down", []),
+    ("IA_Map", "Gamepad_Special_Right", []),          # (the d-pad's down went to the quick-use key)
+    ("IA_QuickUse", "H", []),
+    ("IA_QuickUse", "Gamepad_DPad_Down", []),
     ("IA_Flashlight", "F", []),
     ("IA_Flashlight", "Gamepad_RightThumbstick", []),
     ("IA_Grenade", "G", []),

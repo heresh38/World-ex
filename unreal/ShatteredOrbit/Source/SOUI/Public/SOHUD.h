@@ -112,6 +112,15 @@ public:
 	/** Shows a hit as if a round of the player's had landed there (the capture series). */
 	void ShowHit(const FSOHitReport& Report);
 
+	/** This player was hurt from somewhere (ASOCombatCharacter::OnDamagedFrom, on this machine; the capture series
+	 *  calls it too): a mark on the ring round the crosshair, pointing the way it came from. */
+	void OnDamagedFrom(const FVector& From, bool bShield, float Amount);
+	/** Every element comes in from its own edge, a moment apart (back from the armoury or the map, a new body). */
+	void ArriveAll(float Now);
+	/** Where on the ring round the crosshair a blow from From is marked, seen from Eye looking along LookYaw: radians on
+	 *  the screen (x right, y down), so straight ahead is up (-pi/2) and behind is down. */
+	static float HitRingAngle(const FVector& Eye, float LookYaw, const FVector& From);
+
 	/** The glass painter for one draw function: shapes on M_HUDGlass over what the painter P has drawn so far. */
 	SOHudPaint::FGlass MakeGlass(SOHudPaint::FPainter& P, float S);
 
@@ -156,6 +165,13 @@ private:
 	/** A round of this player's went in (ASOCombatCharacter::OnHitConfirmed: on this machine, host or joined). */
 	void OnHitConfirmed(bool bCrit, bool bKilled);
 	void OnHitReported(const FSOHitReport& Report);
+	/** The ring round the crosshair: an arc toward each place this player was hurt from, fading. */
+	void DrawHitRing(const FLayout& L);
+	/** RELOAD under the crosshair when the gun is empty (not part of the weapon panel: it stays at the crosshair
+	 *  however the panel is moved or comes in). */
+	void DrawEmptyWord(const FLayout& L);
+	/** An element comes in again (a short way, from its own edge) when what it shows changes (Key). */
+	void Arrive(const TCHAR* Name, const FString& Key);
 	void BindInventory();
 	void OnFeed(const FString& Text, const FLinearColor& Color);
 	void OnFeedItem(const FSOFeedItem& Item);
@@ -296,6 +312,24 @@ private:
 	bool bLastHitKill = false;
 	FDelegateHandle HitHandle;
 	FDelegateHandle HitReportHandle;
+	FDelegateHandle DamagedHandle;
+	struct FDamageMark
+	{
+		FVector From = FVector::ZeroVector;
+		float At = 0.0f;
+		bool bShield = false;
+		float Amount = 0.0f;
+	};
+	TArray<FDamageMark> DamageMarks;
+	/** Each element's arrival (when it began, how far it comes from, px at 1080 lines) and what it showed. */
+	struct FArrival
+	{
+		float At = 0.0f;
+		float Dist = 56.0f;
+	};
+	TMap<FName, FArrival> Arrivals;
+	TMap<FName, FString> ArriveKeys;
+	bool bWasScreens = true;
 	TWeakObjectPtr<const ASOCombatCharacter> HitPawn;
 
 	/** The abilities: which were ready last frame (a slot coming ready pulses), and when each last came ready. */

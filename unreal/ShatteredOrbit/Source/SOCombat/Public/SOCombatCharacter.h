@@ -49,6 +49,8 @@ struct SOCOMBAT_API FSOHitReport
 	float Precision = 0.0f;
 };
 DECLARE_MULTICAST_DELEGATE_OneParam(FSOOnHitReported, const FSOHitReport& /*Report*/);
+/** A player was hurt from somewhere (on that player's own machine): where it came from, whether the shield took it. */
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FSOOnDamagedFrom, const FVector& /*From*/, bool /*bShield*/, float /*Amount*/);
 
 /** Trace channel for rounds (DefaultEngine.ini: GameTraceChannel1 "SOBullet", blocks by default). */
 #define SO_TRACE_BULLET ECC_GameTraceChannel1
@@ -176,7 +178,7 @@ public:
 
 	/** Server: damage from someone else just went in on this character (from the damage gate; where it landed:
 	 *  USOCombatStatics::LastHit). What the body does about it. */
-	virtual void OnTookDamage(AActor* Source, float Amount, bool bCrit) {}
+	virtual void OnTookDamage(AActor* Source, float Amount, bool bCrit);
 
 	/** Server: this character's damage went in (from the damage gate): the kit's ultimate charges from it, and its
 	 *  passive rule looks at what was hit. */
@@ -203,6 +205,8 @@ public:
 
 	/** The same hit with its numbers (FSOHitReport): the HUD's damage numbers listen here. */
 	mutable FSOOnHitReported OnHitReported;
+	/** This player was hurt, and from where (its HUD's ring round the crosshair: the owner's HUD ideas). */
+	mutable FSOOnDamagedFrom OnDamagedFrom;
 
 	/** Server: a round or a blow of this character's did damage (Report: how much and where, for the shooter's HUD). */
 	void ConfirmHit(bool bCrit, bool bKilled, const FSOHitReport& Report = FSOHitReport());
@@ -327,6 +331,9 @@ protected:
 
 	UFUNCTION(Client, Unreliable)
 	void ClientHitConfirmed(bool bCrit, bool bKilled, const FSOHitReport& Report);
+
+	UFUNCTION(Client, Unreliable)
+	void ClientDamagedFrom(FVector_NetQuantize From, bool bShield, float Amount);
 
 	/** The kit this character's abilities came from (their numbers, for the abilities and the HUD). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SO|Combat")

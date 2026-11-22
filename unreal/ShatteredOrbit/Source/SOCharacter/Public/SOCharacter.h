@@ -270,6 +270,10 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> FlashlightAction;
+	/** The quick-use key (H, the pad's d-pad down): tapped, the chosen consumable is used; held, the next one held is
+	 *  chosen (the owner's HUD ideas: "a quick-use key for consumables"). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> QuickUseAction;
 
 	// the kit's abilities, one action per slot (ASOCombatCharacter::ActivateSlot)
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
@@ -351,6 +355,25 @@ public:
 	void HandleInventory();
 	void HandleMap();
 	void HandleFlashlight();
+	void HandleQuickUsePressed();
+	void HandleQuickUseReleased();
+
+	/** The consumable the quick-use key uses: the one chosen while it is held, else the first held (none: none held). */
+	FName GetQuickUse() const;
+	/** Uses it (true: it did something; false: none held, or it would do nothing now). */
+	bool QuickUse();
+	/** Chooses the next consumable held. */
+	void NextQuickUse();
+	/** When it was last used or refused (the HUD's flash on the slot), and whether it was refused. */
+	double GetQuickUseAt() const { return QuickUseAt; }
+	bool WasQuickUseRefused() const { return bQuickUseRefused; }
+
+	// (the quick-use key's state: the choice, when it was pressed, whether a hold changed the choice, the last use)
+	FName QuickUseChoice;
+	double QuickUsePressedAt = -1.0;
+	bool bQuickUseCycled = false;
+	double QuickUseAt = -100.0;
+	bool bQuickUseRefused = false;
 
 	/** Quick travel to a map point (an actor tagged SOFastTravel; the server moves the pawn beside it). */
 	void FastTravel(AActor* Point);

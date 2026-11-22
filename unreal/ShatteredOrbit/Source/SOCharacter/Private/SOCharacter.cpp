@@ -60,6 +60,7 @@ namespace SOInputPaths
 	static const TCHAR* Sprint = TEXT("/Game/Input/IA_Sprint.IA_Sprint");
 	static const TCHAR* Crouch = TEXT("/Game/Input/IA_Crouch.IA_Crouch");
 	static const TCHAR* Dodge = TEXT("/Game/Input/IA_Dodge.IA_Dodge");
+	static const TCHAR* QuickUse = TEXT("/Game/Input/IA_QuickUse.IA_QuickUse");
 	static const TCHAR* PadCrouchDodge = TEXT("/Game/Input/IA_PadCrouchDodge.IA_PadCrouchDodge");
 	static const TCHAR* ToggleView = TEXT("/Game/Input/IA_ToggleView.IA_ToggleView");
 	static const TCHAR* Interact = TEXT("/Game/Input/IA_Interact.IA_Interact");
@@ -183,6 +184,7 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	InventoryAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Inventory));
 	MapAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Map));
 	FlashlightAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Flashlight));
+	QuickUseAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::QuickUse));
 	GrenadeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Grenade));
 	MeleeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Melee));
 	ClassAbilityAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::ClassAbility));
@@ -1084,6 +1086,13 @@ void ASOCharacter::RefreshHolsters()
 void ASOCharacter::Tick(float DeltaSeconds)
 {
 	TickFootstepNoise(DeltaSeconds);
+	// the quick-use key held: the next consumable is chosen (again every half second while it is held)
+	if (QuickUsePressedAt >= 0.0 && GetWorld() && GetWorld()->GetTimeSeconds() - QuickUsePressedAt > 0.35)
+	{
+		NextQuickUse();
+		bQuickUseCycled = true;
+		QuickUsePressedAt = GetWorld()->GetTimeSeconds() - 0.35 + 0.5;
+	}
 	if (const USOCharacterMovementComponent* SOMove = GetSOMovement())
 	{
 		// a joined player's aim reaches the server with their moves; from here it goes on to everyone else
@@ -1302,6 +1311,11 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandlePadCrouchDodgeReleased);
 	}
 	if (UInputAction* A = Load(DodgeAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleDodgePressed); }
+	if (UInputAction* A = Load(QuickUseAction))
+	{
+		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleQuickUsePressed);
+		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleQuickUseReleased);
+	}
 	if (UInputAction* A = Load(ToggleViewAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleToggleView); }
 	if (UInputAction* A = Load(InteractAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInteract); }
 	if (UInputAction* A = Load(FireAction))
@@ -1487,6 +1501,86 @@ void ASOCharacter::HandlePadCrouchDodgeReleased()
 		return;
 	}
 	HandleCrouchReleased();
+}
+
+FName ASOCharacter::GetQuickUse() const
+{
+	const USOInventoryComponent* Inv = GetInventory();
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!Inv || !Tables)
+	{
+		return NAME_None;
+	}
+	if (!QuickUseChoice.IsNone() && Inv->CountOf(QuickUseChoice) > 0)
+	{
+		return QuickUseChoice;
+	}
+	// the first consumable held, in the goods' own order
+	for (const FSOGoodsInfo& Info : Tables->Goods)
+	{
+		if (Info.Kind == ESOGoodsKind::Consumable && Inv->CountOf(Info.Id) > 0)
+		{
+			return Info.Id;
+		}
+	}
+	return NAME_None;
+}
+
+void ASOCharacter::NextQuickUse()
+{
+	const USOInventoryComponent* Inv = GetInventory();
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	if (!Inv || !Tables)
+	{
+		return;
+	}
+	TArray<FName> Held;
+	for (const FSOGoodsInfo& Info : Tables->Goods)
+	{
+		if (Info.Kind == ESOGoodsKind::Consumable && Inv->CountOf(Info.Id) > 0)
+		{
+			Held.Add(Info.Id);
+		}
+	}
+	if (Held.Num() == 0)
+	{
+		return;
+	}
+	const int32 Now = Held.IndexOfByKey(GetQuickUse());
+	QuickUseChoice = Held[(Now + 1) % Held.Num()];
+	USOSoundLibrary::Play2D(this, TEXT("ui_move"), 0.5f, 0.0f);
+}
+
+bool ASOCharacter::QuickUse()
+{
+	USOInventoryComponent* Inv = GetInventory();
+	const FName Id = GetQuickUse();
+	QuickUseAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	// (the body's state is known here: only what would do something is asked for; the server checks again)
+	bQuickUseRefused = !Inv || Id.IsNone() || !Inv->CanUseGoods(Id);
+	if (bQuickUseRefused)
+	{
+		USOSoundLibrary::Play2D(this, TEXT("ui_deny"), 0.6f, 0.0f);
+		return false;
+	}
+	Inv->ServerUseGoods(Id);
+	USOSoundLibrary::Play2D(this, TEXT("ability_brace"), 0.45f, 0.05f);
+	return true;
+}
+
+void ASOCharacter::HandleQuickUsePressed()
+{
+	QuickUsePressedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	bQuickUseCycled = false;
+}
+
+void ASOCharacter::HandleQuickUseReleased()
+{
+	if (QuickUsePressedAt >= 0.0 && !bQuickUseCycled && !bDead)
+	{
+		QuickUse();                                                  // (a tap: use it)
+	}
+	QuickUsePressedAt = -1.0;
 }
 
 void ASOCharacter::HandleDodgePressed()

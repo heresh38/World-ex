@@ -485,6 +485,33 @@ void ASOCombatCharacter::ConfirmHit(bool bCrit, bool bKilled, const FSOHitReport
 	}
 }
 
+void ASOCombatCharacter::OnTookDamage(AActor* Source, float Amount, bool bCrit)
+{
+	// a player is told where it came from: back along the round's (or the blow's) own path where that is known,
+	// else where the one behind it stands (a blast: its thrower); its own blast tells it nothing
+	if (Amount <= 0.0f || !Source || Source == this || !IsPlayerControlled())
+	{
+		return;
+	}
+	const FSOHitInfo& Hit = USOCombatStatics::LastHit();
+	const FVector From = Hit.bKnown && !Hit.Direction.IsNearlyZero() ? FVector(Hit.Point - Hit.Direction.GetSafeNormal() * 800.0f) : Source->GetActorLocation();
+	// the shield took it if some is left after the blow, or the body is still whole (it broke on this one)
+	const bool bShield = GetShield() > 0.5f || GetHealth() >= GetMaxHealth() - 0.01f;
+	if (IsLocallyControlled())
+	{
+		OnDamagedFrom.Broadcast(From, bShield, Amount);
+	}
+	else
+	{
+		ClientDamagedFrom(From, bShield, Amount);
+	}
+}
+
+void ASOCombatCharacter::ClientDamagedFrom_Implementation(FVector_NetQuantize From, bool bShield, float Amount)
+{
+	OnDamagedFrom.Broadcast(From, bShield, Amount);
+}
+
 void ASOCombatCharacter::ClientHitConfirmed_Implementation(bool bCrit, bool bKilled, const FSOHitReport& Report)
 {
 	OnHitConfirmed.Broadcast(bCrit, bKilled);

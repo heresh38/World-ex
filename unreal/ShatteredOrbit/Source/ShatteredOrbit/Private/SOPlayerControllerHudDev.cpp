@@ -307,6 +307,59 @@ void ASOPlayerController::CaptureHud()
 	Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(2); } });
 	Snap(0.7f, TEXT("hud_28_slot_3"));
 	Act([=, this]() { if (USOInventoryComponent* Inv = SOFindInventory(this)) { Inv->SelectSlot(0); } });
+	// the ring round the crosshair: hurt from the left (on the shield), from behind on the right (the body), from ahead
+	Do(0.8f, [=, this]()
+	{
+		ASOHUD* H = Hud();
+		ASOCharacter* Me = Hero();
+		if (!H || !Me)
+		{
+			return;
+		}
+		const FVector At = Me->GetActorLocation();
+		H->OnDamagedFrom(At - Right() * 900.0f, true, 30.0f);
+		H->OnDamagedFrom(At - Ahead() * 700.0f + Right() * 500.0f, false, 45.0f);
+		H->OnDamagedFrom(At + Ahead() * 1200.0f + Right() * 150.0f, true, 12.0f);
+	});
+	Snap(0.25f, TEXT("hud_29_hit_ring"));
+	// the quick-use key: a stim used while hurt (the slot lit), then refused at full health (red)
+	Do(1.8f, [=, this]()
+	{
+		ASOCharacter* Me = Hero();
+		if (USOInventoryComponent* Inv = SOFindInventory(this))
+		{
+			Inv->AddGoods(TEXT("stim"), 3, false);
+		}
+		if (Me)
+		{
+			USOCombatStatics::ApplyDamage(nullptr, Me, Me->GetShield() + Me->GetMaxHealth() * 0.3f, false);
+		}
+	});
+	Do(0.3f, [=]() { if (ASOCharacter* Me = Hero()) { Me->QuickUse(); } });
+	Snap(0.1f, TEXT("hud_30_quick_use"));
+	Act([=, this]() { if (ASOCharacter* Me = Hero()) { Me->Heal(1000.0f); Me->AddShield(1000.0f); } });
+	Do(0.9f, [=]() { if (ASOCharacter* Me = Hero()) { Me->QuickUse(); } });
+	Snap(0.1f, TEXT("hud_31_quick_use_refused"));
+	// the HUD coming in (as after the armoury or a new body): a moment into its arrival
+	Do(1.0f, [=, this]() { if (ASOHUD* H = Hud()) { H->ArriveAll(GetWorld()->GetTimeSeconds()); } });
+	Snap(0.2f, TEXT("hud_32_arriving"));
+	// every kind of gun its own reticle (at the hip, first person): one of each family of the human and the light guns
+	for (const TCHAR* Kind : { TEXT("rifle"), TEXT("pulse"), TEXT("dmr"), TEXT("bolt"), TEXT("energy"), TEXT("smg"), TEXT("pistol"),
+		TEXT("revolver"), TEXT("pump"), TEXT("hmg"), TEXT("rocket") })
+	{
+		const FName Id(Kind);
+		Do(0.5f, [=]()
+		{
+			if (ASOCharacter* Me = Hero())
+			{
+				FRandomStream Rng(1);
+				FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(Id, 2, 20, Rng);
+				Copy.Sight = TEXT("default");
+				Me->EquipInstance(Copy);
+			}
+		});
+		Snap(1.0f, FString::Printf(TEXT("hud_33_reticle_%s"), Kind));
+	}
 	Do(0.5f, []() {});
 	GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 }

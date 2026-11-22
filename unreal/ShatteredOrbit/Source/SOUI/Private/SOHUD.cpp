@@ -336,6 +336,27 @@ FHudAudit* ASOHUD::AuditPtr() const
 	return bAuditing ? Audit.Get() : nullptr;
 }
 
+namespace
+{
+	/** The edge an element comes in from: the corners' from their side, the top's from above, the foot's from below. */
+	FVector2D ArriveFrom(FName Name)
+	{
+		if (Name == TEXT("minimap") || Name == TEXT("vitals"))
+		{
+			return FVector2D(-1.0f, 0.0f);
+		}
+		if (Name == TEXT("compass") || Name == TEXT("objective"))
+		{
+			return FVector2D(0.0f, -1.0f);
+		}
+		if (Name == TEXT("conditions") || Name == TEXT("tracked") || Name == TEXT("items") || Name == TEXT("weapon"))
+		{
+			return FVector2D(1.0f, 0.0f);
+		}
+		return FVector2D(0.0f, 1.0f);
+	}
+}
+
 void ASOHUD::DrawElement(const FLayout& L, const FSOHudElementLayout& E, const TCHAR* Name, TFunctionRef<void(const FLayout&)> Draw)
 {
 	if (!E.bVisible || !Canvas || !Canvas->Canvas)
@@ -344,7 +365,24 @@ void ASOHUD::DrawElement(const FLayout& L, const FSOHudElementLayout& E, const T
 	}
 	FLayout LE = L;
 	LE.S = L.S * FMath::Max(E.Scale, 0.1f);
-	const FVector2D Off = E.Offset * L.S;
+	FVector2D Off = E.Offset * L.S;
+	// arriving: in from its own edge, a little past its place and back (an ease out with a small overshoot)
+	bool bArriving = false;
+	if (const FArrival* Arr = Arrivals.Find(FName(Name)))
+	{
+		const float T = (L.Now - Arr->At) / 0.45f;
+		if (T < 0.0f)
+		{
+			return;                                                  // (its turn has not come yet)
+		}
+		if (T < 1.0f)
+		{
+			bArriving = true;
+			const float U = T - 1.0f;
+			const float Ease = 1.0f + 2.6f * U * U * U + 1.6f * U * U;
+			Off += ArriveFrom(FName(Name)) * (1.0f - Ease) * Arr->Dist * L.S;
+		}
+	}
 	const bool bMoved = !Off.IsNearlyZero();
 	if (bMoved)
 	{
@@ -354,12 +392,14 @@ void ASOHUD::DrawElement(const FLayout& L, const FSOHudElementLayout& E, const T
 	if (FHudAudit* Au = AuditPtr())
 	{
 		Au->Element = Name;
+		Au->bSuppress = bArriving;                                   // (an element on its way is judged where it lands)
 	}
 	Draw(LE);
 	ElementOffset = FVector2D::ZeroVector;
 	if (FHudAudit* Au = AuditPtr())
 	{
 		Au->Element.Reset();
+		Au->bSuppress = false;
 	}
 	if (bMoved)
 	{
@@ -1775,6 +1815,46 @@ void ASOHUD::DrawWeapon(const FLayout& L)
 			RX += 28.0f * S;
 		}
 		Type.Number(TEXT("4"), RX, RY + 2.0f * S, Type.Medium, 1.2f * S, Player->IsFists() ? Ink : Dim);
+		RX += 30.0f * S;
+		// the quick-use slot: the consumable the H key uses (its picture, how many), lit as it is used, red refused
+		if (const USOLootTables* Tables = USOLootLibrary::GetTables())
+		{
+			const FName QuickId = Player->GetQuickUse();
+			const FSOGoodsInfo* Quick = QuickId.IsNone() ? nullptr : Tables->FindGoods(QuickId);
+			const float Since = L.Now - static_cast<float>(Player->GetQuickUseAt());
+			const float Flash = Since >= 0.0f && Since < 0.6f ? 1.0f - Since / 0.6f : 0.0f;
+			const bool bRefused = Player->WasQuickUseRefused();
+			const FLinearColor Base = Quick ? Ink : Dim;
+			const FLinearColor QC = Flash > 0.0f ? Mix(Base, bRefused ? Hurt : Cyan, Flash) : Base;
+			FGlassStyle K;
+			K.FillA = Flash > 0.0f ? A(bRefused ? Hurt : Cyan, 0.3f * Flash + 0.05f) : A(Glass, 0.9f);
+			K.FillB = A(GlassDeep, 0.9f);
+			K.Edge = Flash > 0.0f ? A(QC, 0.9f) : A(Line, 0.6f);
+			K.Glow = bRefused ? Hurt : Cyan;
+			K.GlowA = 0.45f * Flash;
+			K.GlowW = 6.0f * S;
+			K.ShadowA = 0.2f;
+			K.ShadowOff = 2.0f * S;
+			K.ShadowBlur = 3.0f * S;
+			Pane.Plate4(RX, RY - 2.0f * S, 24.0f * S, 24.0f * S, 3.0f * S, K);
+			if (UTexture2D* QIcon = Quick && !Quick->Icon.IsNull() ? Quick->Icon.LoadSynchronous() : nullptr)
+			{
+				Picture(QIcon, RX + 1.0f * S, RY - 1.0f * S, 22.0f * S, 22.0f * S, Quick ? 0.95f : 0.4f, TEXT("quick use"));
+			}
+			Type.Number(Quick && Inventory ? FString::FromInt(Inventory->CountOf(QuickId)) : FString(TEXT("0")), RX + 30.0f * S, RY + 2.0f * S, Type.Medium, 1.2f * S, QC);
+			{
+				FGlassStyle Key;
+				Key.FillA = A(Glass, 0.9f);
+				Key.FillB = A(GlassDeep, 0.9f);
+				Key.Edge = A(Line, 0.6f);
+				Key.GlowA = 0.0f;
+				Key.ShadowA = 0.2f;
+				Key.ShadowOff = 2.0f * S;
+				Key.ShadowBlur = 3.0f * S;
+				Pane.Plate4(RX + 52.0f * S, RY, 20.0f * S, 20.0f * S, 3.0f * S, Key);
+			}
+			Type.Label(TEXT("H"), RX + 62.0f * S, RY + 3.0f * S, Type.Small, 1.0f * S, Dim, 0.0f, 0.5f);
+		}
 		// the flashlight's key, lit when it is on
 		const float FX = X + W - 24.0f * S;
 		const bool bOn = Player->IsFlashlightOn();
@@ -1794,13 +1874,21 @@ void ASOHUD::DrawWeapon(const FLayout& L)
 		Type.Label(TEXT("F"), FX + 11.0f * S, RY + 3.0f * S, Type.Small, 1.05f * S, bOn ? Gold : Dim, 0.0f, 0.5f);
 	}
 
-	// the word at the crosshair when the gun is empty
-	if (!Weapon->IsReloading() && Weapon->GetMag() == 0 && Weapon->GetReserve() > 0 && !Weapon->IsCondensing() && !Weapon->IsVenting())
+}
+
+void ASOHUD::DrawEmptyWord(const FLayout& L)
+{
+	const ASOCharacter* Player = Cast<ASOCharacter>(GetOwningPawn());
+	const ASOWeapon* Weapon = Player && !Player->IsFists() ? Player->GetWeapon() : nullptr;
+	if (!Weapon || Weapon->IsReloading() || Weapon->GetMag() > 0 || Weapon->GetReserve() <= 0 || Weapon->IsCondensing() || Weapon->IsVenting())
 	{
-		const float RW = Type.CapsWidth(TEXT("Reload"), Type.Medium, 1.0f * S, 2.0f * S);
-		Reserve(L.CX - RW * 0.5f - 6.0f * S, L.H * 0.5f + 30.0f * S, RW + 12.0f * S, 24.0f * S);
-		Type.Caps(TEXT("Reload"), L.CX, L.H * 0.5f + 34.0f * S, Type.Medium, 1.0f * S, Hurt, 2.0f * S, 0.5f);
+		return;
 	}
+	const float S = L.S;
+	FType Type(Canvas, AuditPtr());
+	const float RW = Type.CapsWidth(TEXT("Reload"), Type.Medium, 1.0f * S, 2.0f * S);
+	Reserve(L.CX - RW * 0.5f - 6.0f * S, L.H * 0.5f + 30.0f * S, RW + 12.0f * S, 24.0f * S);
+	Type.Caps(TEXT("Reload"), L.CX, L.H * 0.5f + 34.0f * S, Type.Medium, 1.0f * S, Hurt, 2.0f * S, 0.5f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1888,15 +1976,91 @@ void ASOHUD::DrawCrosshair(const FLayout& L)
 		P.Fill(Rectangle(CX - 1.5f * S, CY - 1.5f * S, 3.0f * S, 3.0f * S), C);
 		break;
 	default:
-		for (const float Deg : { 0.0f, 90.0f, 180.0f, 270.0f })
+	{
+		// each kind of gun its own reticle (the owner's HUD ideas: "a reticle per gun class"): a rifle's four ticks; a
+		// marksman's three and a point; a sniper's or a charge gun's point in a fine ring; an SMG's four short ticks
+		// crossed; a handgun's chevron under a point; a shotgun's ring the width of its pattern; a machine gun's two
+		// brackets; a launcher's ring with its drop marked under it
+		const FName Family = CrossData ? CrossData->Family : NAME_None;
+		const FVector2D Mid(CX, CY);
+		auto Dot = [&](float Size) { P.Fill(Rectangle(CX - Size * S, CY - Size * S, 2.0f * Size * S, 2.0f * Size * S), C); };
+		if (Family == TEXT("marksman"))
 		{
-			Tick(Deg, Open, Open + Len);
+			for (const float Deg : { 0.0f, 90.0f, 180.0f })
+			{
+				Tick(Deg, Open, Open + Len);
+			}
+			Dot(1.2f);
 		}
-		if (Theme == ETheme::Light || (bShoulder && Aim > 0.3f))
+		else if (Family == TEXT("sniper") || Family == TEXT("charge"))
 		{
-			P.Fill(Rectangle(CX - 1.0f * S, CY - 1.0f * S, 2.0f * S, 2.0f * S), C);
+			const float Rr = Open + Len * 0.6f;
+			P.Ring(Mid, Rr, Rr + 1.2f * S, A(C, 0.6f), A(C, 0.6f), 0.0f, UE_TWO_PI, 48);
+			for (const float Deg : { 0.0f, 90.0f, 180.0f, 270.0f })
+			{
+				Tick(Deg, Rr + 3.0f * S, Rr + Len * 0.6f);
+			}
+			Dot(1.4f);
+		}
+		else if (Family == TEXT("smg"))
+		{
+			for (const float Deg : { 45.0f, 135.0f, 225.0f, 315.0f })
+			{
+				Tick(Deg, Open * 0.85f, Open * 0.85f + Len * 0.7f);
+			}
+			Dot(1.0f);
+		}
+		else if (Family == TEXT("pistol") || Family == TEXT("handcannon"))
+		{
+			const float Wd = Len * 1.15f, Y0 = CY + Open * 0.85f + 2.0f * S;
+			P.Stroke({ FVector2D(CX - Wd, Y0 + Wd * 0.7f), FVector2D(CX, Y0), FVector2D(CX + Wd, Y0 + Wd * 0.7f) }, C, T, false);
+			Tick(270.0f, Open, Open + Len * 0.8f);
+			Dot(1.2f);
+		}
+		else if (Family == TEXT("shotgun"))
+		{
+			const float Rr = FMath::Min(Open + Len * 0.25f, 44.0f * S);
+			P.Ring(Mid, Rr, Rr + FMath::Max(1.2f * S, 1.2f), A(C, 0.85f), A(C, 0.85f), 0.0f, UE_TWO_PI, 64);
+			for (const float Deg : { 0.0f, 90.0f, 180.0f, 270.0f })
+			{
+				Tick(Deg, Rr - Len * 0.45f, Rr);
+			}
+			Dot(1.2f);
+		}
+		else if (Family == TEXT("machinegun"))
+		{
+			for (const float SX : { -1.0f, 1.0f })
+			{
+				const float X0 = CX + SX * (Open + Len * 0.5f), H2 = Len * 0.9f;
+				P.Stroke({ FVector2D(X0 - SX * Len * 0.45f, CY - H2), FVector2D(X0, CY - H2), FVector2D(X0, CY + H2), FVector2D(X0 - SX * Len * 0.45f, CY + H2) }, C, T, false);
+			}
+			Dot(1.2f);
+		}
+		else if (Family == TEXT("launcher"))
+		{
+			const float Rr = Open + Len * 0.8f;
+			P.Ring(Mid, Rr, Rr + T * 0.7f, C, C, 0.0f, UE_TWO_PI, 64);
+			for (int32 k = 1; k <= 3; ++k)
+			{
+				const float Y = CY + Rr + k * 6.0f * S;
+				const float Wd = (4.0f - k) * 3.0f * S;
+				P.Segment(FVector2D(CX - Wd, Y), FVector2D(CX + Wd, Y), C, T * 0.8f);
+			}
+			Dot(1.0f);
+		}
+		else
+		{
+			for (const float Deg : { 0.0f, 90.0f, 180.0f, 270.0f })
+			{
+				Tick(Deg, Open, Open + Len);
+			}
+			if (Theme == ETheme::Light || (bShoulder && Aim > 0.3f))
+			{
+				P.Fill(Rectangle(CX - 1.0f * S, CY - 1.0f * S, 2.0f * S, 2.0f * S), C);
+			}
 		}
 		break;
+	}
 	}
 	// over the shoulder, aimed: a fine ring closes on the point
 	if (bShoulder && Aim > 0.05f)
@@ -1986,6 +2150,103 @@ void ASOHUD::DrawMelee(const FLayout& L)
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Hit feedback: the numbers, the loot beams, the screen's edge
+
+float ASOHUD::HitRingAngle(const FVector& Eye, float LookYaw, const FVector& From)
+{
+	const FVector To = (From - Eye).GetSafeNormal2D();
+	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(To.Y, To.X)) - LookYaw;   // + : to the right of the view
+	return FMath::DegreesToRadians(FRotator::NormalizeAxis(Yaw) - 90.0f);
+}
+
+void ASOHUD::OnDamagedFrom(const FVector& From, bool bShield, float Amount)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	// one mark a way: a second blow from (nearly) the same place renews it
+	for (FDamageMark& M : DamageMarks)
+	{
+		if (FVector::DistSquared2D(M.From, From) < FMath::Square(250.0f))
+		{
+			M.At = Now;
+			M.bShield = bShield;
+			M.Amount = FMath::Max(M.Amount, Amount);
+			return;
+		}
+	}
+	if (DamageMarks.Num() >= 6)
+	{
+		DamageMarks.RemoveAt(0);
+	}
+	DamageMarks.Add({ From, Now, bShield, Amount });
+}
+
+void ASOHUD::DrawHitRing(const FLayout& L)
+{
+	const APlayerController* PC = GetOwningPlayerController();
+	if (!PC || DamageMarks.Num() == 0)
+	{
+		return;
+	}
+	FVector Eye;
+	FRotator Look;
+	PC->GetPlayerViewPoint(Eye, Look);
+	const float S = L.S;
+	FPainter P(Canvas);
+	const FVector2D C(L.W * 0.5f, L.H * 0.5f);
+	const float R = 96.0f * S;
+	for (int32 i = DamageMarks.Num() - 1; i >= 0; --i)
+	{
+		const FDamageMark& M = DamageMarks[i];
+		const float Age = L.Now - M.At;
+		if (Age > 1.6f || Age < 0.0f)
+		{
+			DamageMarks.RemoveAt(i);
+			continue;
+		}
+		// the way it came from (turned with the view as the player turns), an arc the wider the harder the blow,
+		// swelling as it lands, then fading; the shield's blue, the body's red
+		const float Ang = HitRingAngle(Eye, Look.Yaw, M.From);
+		const float Fade = Age < 0.06f ? Age / 0.06f : FMath::Clamp(1.0f - (Age - 0.6f), 0.0f, 1.0f);
+		const float Half = FMath::DegreesToRadians(FMath::Lerp(13.0f, 24.0f, FMath::Clamp(M.Amount / 40.0f, 0.0f, 1.0f)));
+		const FLinearColor Col = M.bShield ? ShieldBlue : HealthRed;
+		const float Rr = R * (1.0f + 0.1f * FMath::Max(0.0f, 1.0f - Age / 0.2f));
+		const FVector2D Dir(FMath::Cos(Ang), FMath::Sin(Ang)), Side(-Dir.Y, Dir.X);
+		// a soft glow under it, the arc itself bright at its outer edge, and a point at its middle
+		P.Ring(C, Rr - 6.0f * S, Rr + 10.0f * S, A(Col, 0.0f), A(Col, 0.22f * Fade), Ang - Half * 1.15f, Ang + Half * 1.15f, 28);
+		P.Ring(C, Rr, Rr + 4.0f * S, A(Col, 0.45f * Fade), A(Col, 0.95f * Fade), Ang - Half, Ang + Half, 28);
+		const FVector2D Base = C + Dir * (Rr + 5.0f * S);
+		P.Fill({ C + Dir * (Rr + 15.0f * S), Base + Side * 6.0f * S, Base - Side * 6.0f * S }, A(Col, 0.95f * Fade));
+	}
+	P.Flush();
+}
+
+void ASOHUD::Arrive(const TCHAR* Name, const FString& Key)
+{
+	const FName N(Name);
+	FString& Was = ArriveKeys.FindOrAdd(N);
+	if (Was == Key)
+	{
+		return;
+	}
+	const bool bFirst = Was.IsEmpty();
+	Was = Key;
+	if (!bFirst && GetWorld())
+	{
+		Arrivals.Add(N, { static_cast<float>(GetWorld()->GetTimeSeconds()), 56.0f });
+	}
+}
+
+void ASOHUD::ArriveAll(float Now)
+{
+	// in from beyond their edges a moment apart: the corners first, the middle last
+	static const TCHAR* Order[] = { TEXT("minimap"), TEXT("vitals"), TEXT("weapon"), TEXT("compass"), TEXT("conditions"), TEXT("abilities"),
+		TEXT("objective"), TEXT("tracked"), TEXT("items"), TEXT("interact") };
+	for (int32 i = 0; i < UE_ARRAY_COUNT(Order); ++i)
+	{
+		const FName N(Order[i]);
+		const float Far = ArriveFrom(N).X != 0.0f ? 460.0f : 240.0f;
+		Arrivals.Add(N, { Now + 0.05f + i * 0.045f, Far });
+	}
+}
 
 void ASOHUD::OnHitConfirmed(bool bCrit, bool bKilled)
 {
@@ -3113,13 +3374,31 @@ void ASOHUD::DrawHUD()
 		{
 			HitPawn->OnHitConfirmed.Remove(HitHandle);
 			HitPawn->OnHitReported.Remove(HitReportHandle);
+			HitPawn->OnDamagedFrom.Remove(DamagedHandle);
 		}
 		HitPawn = Player;
 		HitHandle = Player->OnHitConfirmed.AddUObject(this, &ASOHUD::OnHitConfirmed);
 		HitReportHandle = Player->OnHitReported.AddUObject(this, &ASOHUD::OnHitReported);
+		DamagedHandle = Player->OnDamagedFrom.AddUObject(this, &ASOHUD::OnDamagedFrom);
+		DamageMarks.Reset();
+		ArriveAll(L.Now);                                            // (a new body: the HUD comes in)
 	}
 	const bool bScreens = InventoryWidget || MapWidget;
 	const bool bScope = Player->IsScopeView();
+	if (bWasScreens && !bScreens)
+	{
+		ArriveAll(L.Now);                                            // (back from the armoury or the map)
+	}
+	bWasScreens = bScreens;
+	// what an element shows changed: it comes in again, a short way
+	if (const ASOWeapon* HeldGun = Player->GetWeapon())
+	{
+		Arrive(TEXT("weapon"), HeldGun->GetInstance().Uid);
+	}
+	if (const ASOOperation* Op = ASOOperation::Get(this))
+	{
+		Arrive(TEXT("objective"), FString::Printf(TEXT("%d.%d"), Op->GetStageIndex(), static_cast<int32>(Op->GetState())));
+	}
 
 	// a hit on the player: when, and whether the body took it or only the shield
 	if (LastHealth >= 0.0f && (Player->GetHealth() < LastHealth - 0.5f || Player->GetShield() < LastShield - 0.5f))
@@ -3202,6 +3481,10 @@ void ASOHUD::DrawHUD()
 	DrawLevelUp(L);
 	Tag(TEXT("crosshair"));
 	DrawCrosshair(L);
+	Tag(TEXT("hitring"));
+	DrawHitRing(L);
+	Tag(TEXT("empty"));
+	DrawEmptyWord(L);
 	Tag(TEXT("melee"));
 	DrawMelee(L);
 	DrawElement(L, InteractLayout, TEXT("interact"), [this](const FLayout& LE) { DrawInteract(LE); });
