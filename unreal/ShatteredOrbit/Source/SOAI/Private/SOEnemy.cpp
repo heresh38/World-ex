@@ -71,7 +71,13 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	AIControllerClass = ASOEnemyAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
-	BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/Stalker/SK_Stalker.SK_Stalker")));
+	// the Runner: a Sarketh scout (the owner's design, tools/blender/skr: the female's lighter frame), as tall as it
+	// stands; a species with a body of its own says so (SOAltered::Configure)
+	BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/SarkethFemale/SK_SarkethFemale.SK_SarkethFemale")));
+	ClipPathPrefix = TEXT("/Game/Characters/SarkethFemale/Anims/A_SarkethFemale_");
+	GetCapsuleComponent()->InitCapsuleSize(34.0f, 98.0f);
+	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -98.0f));
+	Body->SetRelativeScale3D(FVector(1.0f));
 }
 
 void ASOEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

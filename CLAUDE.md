@@ -1057,12 +1057,38 @@ ranked by what they are issued (every one has a gun; higher command has more arm
 officers: `veilborn`), Wardens and Bearers (officers and heavy weapons in powered armour: `bulwark`, `bearer`), the
 commander in a walking war suit (the Colossus: `colossus`). The big ones are SUITS with a soldier inside, never
 bigger creatures. Ids, classes and asset folders keep the first names (an API); what the player reads is each one's
-`DisplayName` and the plan's variant names, which follow the story. The first bodies (`altered.py`: husks grown
-through with crystal) are being replaced by `tools/blender/hero/sarketh.py`: ONE body with armour and weapons in tiers,
-one soldier (a Veteran) shown to the owner before any other rank is built. Other species are designed only when
-the owner asks for the place they hold (some humanoid, some nothing like us), each with names of our own.
-**The Sarketh's bodies** (`tools/blender/hero/sarketh.py`, first look 2026-11-14, NOT in the game and NOT yet
-approved by the owner): built with the player armour's plate tools (`void_sentinel.py`: `shell` / `suit` / `Base.plate`
+`DisplayName` and the plan's variant names, which follow the story. **The Sarketh are the owner's OWN design**
+(`art/reference/sarketh/sarketh_design_sheet.png`, 2026-11-15: "it's my art"): a tall, dark, digitigrade species
+(2.0-2.3 m, a crested head with eye slits, claws) in MODULAR pale metal armour by slot, built by `tools/blender/skr`
+(below: "The Sarketh in the game"). The old `tools/blender/hero/sarketh.py` set is built on the HUMAN male and is NOT
+the Sarketh: the owner made it a human player armour set (2026-11-15); never bring it into the game as them (on
+2026-11-21 it was taken for them and the owner corrected it: "that one is the human model"). The first bodies
+(`altered.py`: husks grown through with crystal) still stand in for the ranks not yet made of the owner's design.
+Other species are designed only when the owner asks for the place they hold (some humanoid, some nothing like us),
+each with names of our own.
+**The Sarketh in the game** (the owner's design; 2026-11-21, the owner: "work on getting the new sarketh models we
+made"): `tools/blender/skr/game.py -- male|female <Folder>` builds the body, its armour by slot and the rig
+(`build.py`, at 4.5 mm), joins them into one skinned creature within the enemy class's 40k triangles (the dark body
+collapsed to 14k: the armour carries the silhouette; the armour's flat faces dissolved first, then collapsed evenly to
+26k: held at their turning edges the collapse stalled at four times the budget, 500 shards are nearly all rim), its
+hard edges split, bakes the Sarketh's own motion (`skr/motion.py`: Idle, Walk, Run, Attack, Death, Cast, Blink on the
+digitigrade skeleton: the knee forward, the hock back, the weight on the toes; the trunk carried forward and the head
+level and still; the hips found at every frame so the weight-bearing toes stand on the ground) and writes
+`SourceArt/Characters/src/skr_<sex>.glb`; `export_fbx.py --single` into `SourceArt/Characters/Sarketh` (the male) and
+`SarkethFemale`; `SO_IMPORT_ONLY=sarketh` imports them (`import_assets.SARKETH`, `skr_extra`: each material on its own
+texture engine set from `assets/textures`, `SKR_SETS`: skin, armour, dark; the occlusion read; the pale plates at HALF
+their set's metal: fully metal they mirrored the ground and read dark bronze in daylight, where the sheet's are a pale
+satin grey; the armour set itself drawn pale, `skr/textures.py` armour `#a39e94`: at `#59564f` a steel plate read
+black). Who wears which: the male the Levy (`ASORemnant`) and the Veteran (`ASOArmedStalker`), the female the Speaker
+(`ASOVeilborn`) and the Runner (the feral stalker, `ASOEnemy`'s own body); their capsules as tall as they stand (the
+male 36 x 104, the female 34 x 98). They hold the light guns, which are the Sarketh's own technology (the story).
+Pictures `SOCaptureSeries 1 42` (files `SO_k*`: the seven ranks in a line on open floor the capture finds for itself,
+then each close). Still to do: the Warden, the Bearer and the commander (powered armour and a war suit on the owner's
+design: the sheet asks for "a bigger boss version"; the Altered stand in), the motion's other clips (Slam, Sweep,
+Barrage, Shield, Brace), levels of detail, baked own maps (the gate's own-maps check), voices of their own, the
+female's and the male's sets told apart by rank (the armour is modular by slot: a rank is a set).
+**The old Sarketh armour on the human body** (`tools/blender/hero/sarketh.py`, first look 2026-11-14; the owner's ruling
+of 2026-11-15: a HUMAN player armour set now, NOT the Sarketh, never their bodies in the game): built with the player armour's plate tools (`void_sentinel.py`: `shell` / `suit` / `Base.plate`
 / `Base.light`, imported as a library with its material names pointed at this set's by `use_tools()`) on the saved
 rigged male build, so a Sarketh has the player's skeleton and takes the body's clips: `blender -b <saved rigged male
 build> -P tools/blender/hero/sarketh.py -- male --save=x.blend --frames=<dir> --clips=Idle,Run,Crouch --n=1` (45 s;

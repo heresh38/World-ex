@@ -26,7 +26,7 @@ ASOVeilborn::ASOVeilborn(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	SpeciesId = TEXT("veilborn");
-	SOAltered::Configure(this, TEXT("Veilborn"), 34.0f, 90.0f);
+	SOAltered::Configure(this, TEXT("SarkethFemale"), 34.0f, 98.0f);   // (a Sarketh, a Speaker: the owner's design)
 	VoicePrefix = TEXT("veilborn");
 	WeaponArchetype = TEXT("scout");
 	WeaponDamageScale = 0.4f;

@@ -37,10 +37,12 @@ mel = unreal.MaterialEditingLibrary
 FLESH = {"alien_skin": "hx_flesh", "alien_hide": "hx_skin", "alien_plate": "hx_chitin", "alien_bone": "hx_bone", "alien_sac": "hx_sac",
          # the Altered (altered.py)
          "alt_skin": "hx_skin", "alt_flesh": "hx_flesh", "alt_plate": "hx_chitin", "alt_bone": "hx_bone", "alt_rag": "hx_rag"}
-ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer", "Veteran")
-# (the Sarketh's bodies, tools/blender/hero/sarketh_game.py, go into the same folders: Remnant a Levy, Stalker a Runner,
-# Veteran (the armed stalker's own), Veilborn a Speaker, Bulwark a Warden, Bearer, Colossus the commander's suit; a body
-# with none of the flesh materials takes none of the flesh sets)
+ALTERED = ("Remnant", "Veilborn", "Bulwark", "Colossus", "Bearer")
+# The Sarketh (the owner's own design, tools/blender/skr: game.py writes these folders): the male and the female, each
+# material on its own set from the texture engine (assets/textures/<set>_c.jpg, _m.png = occlusion / roughness /
+# metal, _n.png OpenGL normal)
+SARKETH = ("Sarketh", "SarkethFemale")
+SKR_SETS = {"skr_skin": "skr_skin", "skr_armour": "skr_armour", "skr_armour_dark": "skr_dark", "skr_claw": "skr_dark"}
 
 SKIN_TONE = (0.55, 0.32, 0.22)
 
@@ -596,6 +598,8 @@ def make_instance(master, dest, name, m, tex, extra=None):
         mel.set_material_instance_scalar_parameter_value(mi, "HairAmount", float(extra["hair"]))
     if "specular" in extra:
         mel.set_material_instance_scalar_parameter_value(mi, "Specular", float(extra["specular"]))
+    for name_, value in (extra.get("scalars") or {}).items():
+        mel.set_material_instance_scalar_parameter_value(mi, name_, float(value))
     em = m.get("emissive", [0, 0, 0])
     mel.set_material_instance_vector_parameter_value(mi, "EmissiveColor", unreal.LinearColor(em[0], em[1], em[2], 1.0))
     mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", float(m.get("emissiveStrength", 1.0)) * (4.0 if any(em) else 1.0))
@@ -688,7 +692,7 @@ def fit_bodies(mesh):
 
 def bodies():
     """Refits the bodies of every creature and both players that are already imported (SO_IMPORT_ONLY=bodies)."""
-    names = ["Stalker"] + list(ALTERED) + ["PlayerMale", "PlayerFemale"]
+    names = ["Stalker"] + list(ALTERED) + list(SARKETH) + ["PlayerMale", "PlayerFemale"]
     for name in names:
         path = f"/Game/Characters/{name}/SK_{name}"
         if eal.does_asset_exist(path):
@@ -781,10 +785,26 @@ def load_json(path):
         return json.load(f)
 
 
-def character(src, dest, mesh_name, clip_prefix, master, extra_for=None, flesh=False):
+def skr_extra(key, m):
+    """a Sarketh material: its own set's maps at full strength, the occlusion in the mask's red read"""
+    if key in SKR_SETS:
+        s_ = SKR_SETS[key]
+        # (the pale plates at half their set's metal: fully metal they mirrored the ground and the sky and read dark
+        # bronze in daylight, where the sheet's plates are a pale, satin grey)
+        metal = .5 if key == "skr_armour" else 1.0
+        return {"tint": [1.0, 1.0, 1.0], "baseColorTex": s_ + "_c", "mrTex": s_ + "_m", "normalTex": s_ + "_n",
+                "metallic": metal, "roughness": 1.0, "scalars": {"AOAmount": 1.0}}
+    return None
+
+
+def character(src, dest, mesh_name, clip_prefix, master, extra_for=None, flesh=False, sets=None):
     manifest = load_json(os.path.join(src, "export_fbx.json"))
     materials = load_json(os.path.join(src, "materials.json"))
     asset = manifest["assets"][0]
+    if not flesh and eal.does_directory_exist(dest):
+        # a body of another make (no flesh over a fleshy one's folder): start clean, or the mesh keeps its first
+        # import's material slots and skeleton (the plates wore the old flesh's slots, the clips bent the old bones)
+        eal.delete_directory(dest)
     ensure_dir(dest)
     used = {base_slot(n) for n in asset["materials"]}
     tex = import_textures_for(src, materials, dest + "/Textures", used) if any(
@@ -794,6 +814,11 @@ def character(src, dest, mesh_name, clip_prefix, master, extra_for=None, flesh=F
             for suffix, kind in (("_c", "color"), ("_m", "mask"), ("_n", "normal")):
                 f = os.path.join(REPO_TEXTURES, set_name + suffix + ".jpg")
                 tex[set_name + suffix] = import_texture(f, dest + "/Textures", "T_" + set_name + suffix, kind)
+    for set_name in sorted(set((sets or {}).values())):
+        # the texture engine's sets: the colour a jpg, the mask and the normal png
+        for suffix, ext, kind in (("_c", ".jpg", "color"), ("_m", ".png", "mask"), ("_n", ".png", "normal")):
+            f = os.path.join(REPO_TEXTURES, set_name + suffix + ext)
+            tex[set_name + suffix] = import_texture(f, dest + "/Textures", "T_" + set_name + suffix, kind)
     instances = {}
     for name in asset["materials"]:
         key = base_slot(name)
@@ -889,7 +914,7 @@ def player_arms(master):
 
 
 def fleshy(src):
-    """a creature folder whose materials are flesh (the hx_* sets): the stalker and the Altered; the Sarketh's armour
+    """a creature folder whose materials are flesh (the hx_* sets): the stalker and the Altered; a body of another make
     brings its own maps"""
     materials = load_json(os.path.join(src, "materials.json")) if os.path.isfile(os.path.join(src, "materials.json")) else {}
     return not materials or any(base_slot(k) in FLESH for k in materials)
@@ -3846,6 +3871,12 @@ def main():
             if os.path.isdir(os.path.join(SOURCE, "Characters", k)) and (not one or k in one.split(",")):
                 src = os.path.join(SOURCE, "Characters", k)
                 character(src, f"/Game/Characters/{k}", f"SK_{k}", f"A_{k}_", master, stalker_extra, flesh=fleshy(src))
+    if want("sarketh") or (want("altered") and not only):
+        one = os.environ.get("SO_SARKETH_ONLY", "")
+        for k in SARKETH:
+            src = os.path.join(SOURCE, "Characters", k)
+            if os.path.isdir(src) and (not one or k in one.split(",")):
+                character(src, f"/Game/Characters/{k}", f"SK_{k}", f"A_{k}_", master, skr_extra, flesh=False, sets=SKR_SETS)
     if want("weapons") or want("rifle"):
         weapons(master, defaults)
     if "gunnumbers" in only:

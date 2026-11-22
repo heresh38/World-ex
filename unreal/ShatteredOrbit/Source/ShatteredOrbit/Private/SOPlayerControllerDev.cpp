@@ -2281,7 +2281,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		const TSharedRef<TArray<TWeakObjectPtr<ASOEnemy>>> Line = MakeShared<TArray<TWeakObjectPtr<ASOEnemy>>>();
 		const TSharedRef<FVector> Middle = MakeShared<FVector>(FVector::ZeroVector);
 		const TSharedRef<FVector> Toward = MakeShared<FVector>(FVector::ForwardVector);
-		auto Frame = [this, Middle, Toward](const FVector& At, float Back, float Side, float Up)
+		auto Frame = [this, Middle, Toward](const FVector& At, float Back, float Side, float Up, float Fov = 50.0f)
 		{
 			if (!CaptureCamera)
 			{
@@ -2292,7 +2292,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			CaptureCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
 			if (UCameraComponent* Cam = CaptureCamera->FindComponentByClass<UCameraComponent>())
 			{
-				Cam->SetFieldOfView(50.0f);
+				Cam->SetFieldOfView(Fov);
 			}
 			SetViewTarget(CaptureCamera);
 		};
@@ -2304,14 +2304,56 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{
 				return;
 			}
-			*Toward = FRotator(0.0f, GetControlRotation().Yaw, 0.0f).Vector();
-			const FVector Right = FVector::CrossProduct(FVector::UpVector, *Toward);
+			// open floor for the line: rings round the player, each spot a box clear of anything (the line, 11 m by 3 m
+			// and 2.6 m tall) with floor under it, and the camera's place 7 m off on the player's side clear and in sight
 			const FVector Feet = H->GetActorLocation() - FVector(0.0f, 0.0f, H->GetSimpleCollisionHalfHeight());
-			*Middle = Feet + *Toward * 900.0f;
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(SarkethLine), false, H);
+			TArray<AActor*> Carried;
+			H->GetAttachedActors(Carried, true, true);
+			Q.AddIgnoredActors(Carried);
+			bool bFound = false;
+			for (float Ring = 900.0f; Ring <= 3300.0f && !bFound; Ring += 600.0f)
+			{
+				for (int32 k = 0; k < 16 && !bFound; ++k)
+				{
+					const FVector Out = FRotator(0.0f, GetControlRotation().Yaw + k * 22.5f, 0.0f).Vector();
+					const FVector At = Feet + Out * Ring;
+					FHitResult Floor;
+					if (!GetWorld()->LineTraceSingleByChannel(Floor, At + FVector(0, 0, 300), At - FVector(0, 0, 400), ECC_Visibility, Q))
+					{
+						continue;
+					}
+					const FVector Toward_ = -Out;                                       // (the line faces the player)
+					const FVector Side_ = FVector::CrossProduct(FVector::UpVector, Toward_);
+					const FVector Mid = Floor.ImpactPoint;
+					const FQuat Facing = Toward_.ToOrientationQuat();
+					const bool bLineClear = !GetWorld()->OverlapAnyTestByChannel(Mid + FVector(0, 0, 145), Facing, ECC_Visibility,
+						FCollisionShape::MakeBox(FVector(170.0f, 560.0f, 125.0f)), Q);
+					const FVector Cam = Mid - Toward_ * 700.0f + FVector(0, 0, 170);
+					FHitResult Block;
+					const bool bCamClear = !GetWorld()->OverlapAnyTestByChannel(Cam, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(60.0f), Q)
+						&& !GetWorld()->LineTraceSingleByChannel(Block, Cam, Mid + FVector(0, 0, 120), ECC_Visibility, Q)
+						&& !GetWorld()->LineTraceSingleByChannel(Block, Cam, Mid + Side_ * 500.0f + FVector(0, 0, 120), ECC_Visibility, Q)
+						&& !GetWorld()->LineTraceSingleByChannel(Block, Cam, Mid - Side_ * 500.0f + FVector(0, 0, 120), ECC_Visibility, Q);
+					if (bLineClear && bCamClear)
+					{
+						*Middle = Mid;
+						*Toward = Toward_;
+						bFound = true;
+					}
+				}
+			}
+			if (!bFound)
+			{
+				*Toward = FRotator(0.0f, GetControlRotation().Yaw, 0.0f).Vector();
+				*Middle = Feet + *Toward * 620.0f;
+			}
+			UE_LOG(LogShatteredOrbit, Display, TEXT("Sarketh lineup: %s"), bFound ? TEXT("open floor found") : TEXT("no open floor: in front of the player"));
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, *Toward);
 			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Ranks)); ++i)
 			{
-				const FVector At = *Middle + Right * (static_cast<float>(i) - 3.0f) * 190.0f;
-				ASOEnemy* E = USOSpeciesLibrary::Spawn(GetWorld(), Ranks[i], At, GetControlRotation().Yaw + 180.0f);
+				const FVector At = *Middle + Right * (static_cast<float>(i) - 3.0f) * 160.0f;
+				ASOEnemy* E = USOSpeciesLibrary::Spawn(GetWorld(), Ranks[i], At, (-*Toward).Rotation().Yaw);
 				if (AController* Brain = E ? E->GetController() : nullptr)
 				{
 					Brain->UnPossess();                                      // (they stand for the pictures)
@@ -2327,10 +2369,14 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 					E ? E->GetMesh()->Bounds.BoxExtent.Z * 2.0f : 0.0f);
 			}
 			H->SetActorHiddenInGame(true);
+			for (AActor* A : Carried)
+			{
+				A->SetActorHiddenInGame(true);                              // (its guns too)
+			}
 		});
-		Do(2.0f, [=]() { Frame(*Middle + FVector(0.0f, 0.0f, 110.0f), 1250.0f, 0.0f, 60.0f); });
+		Do(2.0f, [=]() { Frame(*Middle + FVector(0.0f, 0.0f, 110.0f), 700.0f, 0.0f, 60.0f, 74.0f); });
 		Snap(0.4f, TEXT("k1_line_front"));
-		Act([=]() { Frame(*Middle + FVector(0.0f, 0.0f, 110.0f), 1000.0f, -820.0f, 120.0f); });
+		Act([=]() { Frame(*Middle + FVector(0.0f, 0.0f, 110.0f), 620.0f, -330.0f, 90.0f, 70.0f); });
 		Snap(0.4f, TEXT("k2_line_quarter"));
 		for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Ranks)); ++i)
 		{
@@ -2339,7 +2385,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				if (ASOEnemy* E = (*Line).IsValidIndex(i) ? (*Line)[i].Get() : nullptr)
 				{
 					const float Tall = FMath::Max(150.0f, E->GetMesh()->Bounds.BoxExtent.Z * 2.0f);
-					Frame(E->GetActorLocation() + FVector(0.0f, 0.0f, Tall * 0.08f), Tall * 1.45f, -Tall * 0.75f, Tall * 0.12f);
+					Frame(E->GetActorLocation() + FVector(0.0f, 0.0f, Tall * 0.08f), Tall * 1.5f, -Tall * 0.35f, Tall * 0.10f);
 				}
 			});
 			Snap(0.4f, FString::Printf(TEXT("k3_%d_%s"), i + 1, Names[i]));

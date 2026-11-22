@@ -53,12 +53,14 @@ def armour():
     scr = T.lines(180, (.004, .035), (.0002, .0005), bend=.35, along=.6) * scr_zone
     heat = smooth(.25, .6, patch)                                                 # oxidised
     ground = smooth(.30, .65, -patch)                                             # ground back bright
-    base = hexc('#59564f')
+    # (a pale warm grey, the sheet's plates: at #59564f, a tenth of the light reflected, the plates read black in the
+    # game's daylight; a steel's own reflectance is far higher)
+    base = hexc('#a39e94')
     alb = base * (.90 + .12 * var[..., None]) * (.97 + .03 * flow[..., None]) * (1 - .05 * hammer[..., None])
-    alb = mix(alb, hexc('#4c463d'), heat * .45)
-    alb = mix(alb, hexc('#6c6b68'), ground * .35)
-    alb = mix(alb, hexc('#b2aea6'), scr * .40)
-    alb = mix(alb, hexc('#38332c'), pits * .55)
+    alb = mix(alb, hexc('#8a8072'), heat * .45)
+    alb = mix(alb, hexc('#bab8b2'), ground * .35)
+    alb = mix(alb, hexc('#d8d4cc'), scr * .40)
+    alb = mix(alb, hexc('#5c564c'), pits * .55)
     rough = .30 + .06 * var + .10 * heat - .06 * ground + .16 * pits - .08 * scr + .03 * fine
     metal = .66 + .14 * scr + .08 * ground - .10 * heat
     T.write(alb, [(-hammer, .00022), (flow, .00003), (fine, .000008), (-pits, .00020), (-scr, .00006), (var, .00030),

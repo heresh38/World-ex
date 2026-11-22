@@ -25,7 +25,7 @@ ASORemnant::ASORemnant(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	SpeciesId = TEXT("remnant");
-	SOAltered::Configure(this, TEXT("Remnant"), 34.0f, 90.0f);
+	SOAltered::Configure(this, TEXT("Sarketh"), 36.0f, 104.0f);   // (a Sarketh: the owner's design, tools/blender/skr)
 	DisplayName = NSLOCTEXT("SO", "Remnant", "Levy");
 	VoicePrefix = TEXT("remnant");
 	WeaponArchetype = TEXT("smg");

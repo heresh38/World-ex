@@ -26,6 +26,7 @@ ASOArmedStalker::ASOArmedStalker(const FObjectInitializer& ObjectInitializer)
 {
 	SpeciesId = TEXT("stalker");
 	DisplayName = NSLOCTEXT("SO", "StalkerArmed", "Veteran");
+	SOAltered::Configure(this, TEXT("Sarketh"), 36.0f, 104.0f);   // (a Sarketh: the owner's design, tools/blender/skr)
 	VoicePrefix = TEXT("stalker");
 	WeaponArchetype = TEXT("auto");
 	WeaponDamageScale = 0.3f;
