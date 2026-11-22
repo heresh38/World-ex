@@ -418,6 +418,9 @@ bool USOWeatherSubsystem::EnsureHost()
 	RainStreaks = MakeISM(TEXT("/Game/FX/SM_FX_Streak.SM_FX_Streak"), TEXT("/Game/FX/MI_FxStreak.MI_FxStreak"), true, 4);
 	Steam = MakeISM(TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke"), true, 4);
 	Smoke = MakeISM(TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke"), true, 4);
+	SplashRings = MakeISM(TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/MI_FxGlow.MI_FxGlow"), true, 4);
+	SplashDrops = MakeISM(TEXT("/Game/FX/SM_FX_Streak.SM_FX_Streak"), TEXT("/Game/FX/MI_FxStreak.MI_FxStreak"), true, 4);
+	Curtains = MakeISM(TEXT("/Game/FX/SM_FX_Quad.SM_FX_Quad"), TEXT("/Game/FX/MI_FxSmoke.MI_FxSmoke"), true, 4);
 	// the city's airborne debris: only where the city is the area being played (other areas load none of it)
 	const USOAreaSubsystem* Areas = USOAreaSubsystem::Get(World);
 	const FSOArea* Area = Areas ? Areas->GetCurrent() : nullptr;
@@ -528,6 +531,169 @@ void USOWeatherSubsystem::TickAir(float DeltaTime)
 			C.Append({ 0.75f, 0.8f, 0.88f, float(FMath::Clamp((D.P - Eye).Size() / 600.0, 0.15, 0.6)) });
 		}
 		Sync(ISM, X, &C, 1700);
+	}
+
+	// ---- where the rain lands (the owner's effects guide: "weather: rain, wind, atmospheric"): a ring opening on the
+	// ground and two drops thrown up, many a second round the eye; none where it does not fall (under a roof)
+	const float RainHere = Look.Rain * (1.0f - Shelter);
+	if (UInstancedStaticMeshComponent* Rings = SplashRings.Get())
+	{
+		// the top surface round the eye, a metre a cell, found a few cells a frame (it moves with the eye)
+		constexpr int32 G = 40;
+		const FIntPoint Cell(FMath::FloorToInt(Eye.X / 100.0f), FMath::FloorToInt(Eye.Y / 100.0f));
+		if (bJumped || RainGround.Num() != G * G || FMath::Abs(Cell.X - RainGroundOrigin.X) > 8 || FMath::Abs(Cell.Y - RainGroundOrigin.Y) > 8)
+		{
+			RainGroundOrigin = Cell;
+			RainGround.Init(-1.0e9f, G * G);
+			RainGroundFill = 0;
+		}
+		if (RainHere > 0.01f)
+		{
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(SORainGround), false);
+			if (APawn* Viewer = Camera->GetViewTargetPawn())
+			{
+				Q.AddIgnoredActor(Viewer);
+			}
+			for (int32 Traced = 0, Tries = 0; Traced < 28 && Tries < G * G; ++Tries)
+			{
+				const int32 i = RainGroundFill;
+				RainGroundFill = (RainGroundFill + 1) % (G * G);
+				if (RainGround[i] > -0.9e9f)
+				{
+					continue;
+				}
+				const FVector At((RainGroundOrigin.X - G / 2 + i % G + 0.5f) * 100.0f, (RainGroundOrigin.Y - G / 2 + i / G + 0.5f) * 100.0f, Eye.Z);
+				FHitResult Hit;
+				RainGround[i] = World->LineTraceSingleByChannel(Hit, At + FVector(0, 0, 1500.0f), At - FVector(0, 0, 1500.0f), ECC_Visibility, Q)
+					&& Hit.ImpactNormal.Z > 0.5f ? static_cast<float>(Hit.ImpactPoint.Z) : -2.0e9f;
+				++Traced;
+			}
+		}
+		SplashDue += DeltaTime * 340.0f * RainHere;
+		for (; SplashDue >= 1.0f; SplashDue -= 1.0f)
+		{
+			// nearer the eye more of them (most of what is seen of the ground is near it)
+			const float R = 1400.0f * FMath::Square(Random.FRand()) + 80.0f;
+			const float A = Random.FRandRange(0.0f, UE_TWO_PI);
+			const FVector P(Eye.X + FMath::Cos(A) * R, Eye.Y + FMath::Sin(A) * R, 0.0f);
+			const int32 cx = FMath::FloorToInt(P.X / 100.0f) - RainGroundOrigin.X + G / 2;
+			const int32 cy = FMath::FloorToInt(P.Y / 100.0f) - RainGroundOrigin.Y + G / 2;
+			if (cx < 0 || cy < 0 || cx >= G || cy >= G || RainGround[cy * G + cx] < -0.9e8f)
+			{
+				continue;
+			}
+			const FVector On(P.X, P.Y, RainGround[cy * G + cx] + 0.6f);
+			Splashes.Add({ On, 0.0f, static_cast<float>(Random.FRandRange(0.22f, 0.34f)), static_cast<float>(Random.FRandRange(12.0f, 24.0f)) });
+			for (int32 k = 0; k < 2; ++k)
+			{
+				const float B = Random.FRandRange(0.0f, UE_TWO_PI);
+				Droplets.Add({ On, FVector(FMath::Cos(B), FMath::Sin(B), 0.0f) * Random.FRandRange(35.0f, 85.0f) + FVector(0, 0, Random.FRandRange(110.0f, 190.0f)),
+					0.0f, static_cast<float>(Random.FRandRange(0.18f, 0.28f)) });
+			}
+		}
+		for (int32 i = Splashes.Num() - 1; i >= 0; --i)
+		{
+			Splashes[i].Age += DeltaTime;
+			if (Splashes[i].Age >= Splashes[i].Life)
+			{
+				Splashes.RemoveAtSwap(i, 1, EAllowShrinking::No);
+			}
+		}
+		for (int32 i = Droplets.Num() - 1; i >= 0; --i)
+		{
+			FDroplet& D = Droplets[i];
+			D.Age += DeltaTime;
+			D.V.Z -= 980.0f * DeltaTime;
+			D.P += D.V * DeltaTime;
+			if (D.Age >= D.Life)
+			{
+				Droplets.RemoveAtSwap(i, 1, EAllowShrinking::No);
+			}
+		}
+		if (Splashes.Num() > 700)
+		{
+			Splashes.RemoveAt(0, Splashes.Num() - 700, EAllowShrinking::No);
+		}
+		if (Droplets.Num() > 1400)
+		{
+			Droplets.RemoveAt(0, Droplets.Num() - 1400, EAllowShrinking::No);
+		}
+		TArray<FTransform> X;
+		TArray<float> C;
+		const FQuat Flat = FRotationMatrix::MakeFromYZ(FVector::UpVector, FVector::ForwardVector).ToQuat();
+		for (const FSplash& S : Splashes)
+		{
+			// a crown: six beads on a ring opening out from where the drop landed, fading as it opens (one soft dot read
+			// as a white spot on the street)
+			const float T = S.Age / S.Life;
+			const float R = S.Size * 0.5f * (0.2f + 0.8f * FMath::Sqrt(T));
+			const float Turn = (S.P.X * 0.37f + S.P.Y * 0.11f);
+			for (int32 k = 0; k < 6; ++k)
+			{
+				const float A = Turn + UE_TWO_PI * k / 6.0f;
+				X.Add(FTransform(Flat, S.P + FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, 0.0f), FVector(1.3f / 100.0f)));
+				C.Append({ 0.80f, 0.86f, 0.94f, 0.9f * (1.0f - T) * (1.0f - T) });
+			}
+		}
+		Sync(Rings, X, &C, 4200);
+		if (UInstancedStaticMeshComponent* Drops = SplashDrops.Get())
+		{
+			X.Reset();
+			C.Reset();
+			for (const FDroplet& D : Droplets)
+			{
+				const FVector Dir = D.V.GetSafeNormal();
+				const float Len = FMath::Clamp(D.V.Size() * 0.02f, 1.0f, 4.0f);
+				const FVector ToEye = (Eye - D.P).GetSafeNormal();
+				X.Add(FTransform(FRotationMatrix::MakeFromYX(Dir, ToEye).ToQuat(), D.P - Dir * Len, FVector(1.0f, Len / 100.0f, 0.006f)));
+				C.Append({ 0.8f, 0.86f, 0.94f, 1.1f * (1.0f - D.Age / D.Life) });
+			}
+			Sync(Drops, X, &C, 1500);
+		}
+	}
+
+	// ---- a storm's sheets of rain: tall, faint veils drifting across the distance on the wind
+	if (UInstancedStaticMeshComponent* Veils = Curtains.Get())
+	{
+		const int32 Want = Look.Rain > 0.55f ? FMath::RoundToInt(12.0f * FMath::Clamp((Look.Rain - 0.55f) / 0.45f, 0.0f, 1.0f) * (1.0f - Shelter)) : 0;
+		auto Place = [this, &Eye, &Wind](FCurtain& V, bool bUpwind)
+		{
+			const float A = Random.FRandRange(0.0f, UE_TWO_PI);
+			const float R = Random.FRandRange(1800.0f, 4500.0f);
+			V.P = Eye + FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, 0.0f) - (bUpwind ? Wind.GetSafeNormal() * 1500.0f : FVector::ZeroVector);
+			V.Width = Random.FRandRange(600.0f, 1100.0f);
+			V.Height = Random.FRandRange(1400.0f, 2400.0f);
+			V.Alpha = Random.FRandRange(0.14f, 0.24f);
+			V.Phase = Random.FRandRange(0.0f, 10.0f);
+		};
+		while (CurtainState.Num() < Want)
+		{
+			FCurtain V;
+			Place(V, false);
+			CurtainState.Add(V);
+		}
+		CurtainState.SetNum(Want);
+		TArray<FTransform> X;
+		TArray<float> C;
+		for (FCurtain& V : CurtainState)
+		{
+			V.Phase += DeltaTime;
+			V.P += Wind * 1.1f * DeltaTime;
+			const float D = FVector::Dist2D(V.P, Eye);
+			if (bJumped || D > 5200.0f || D < 1200.0f)
+			{
+				Place(V, true);
+			}
+			// facing the eye about the vertical (a sheet, not a ball): the quad's Y toward the eye, Z up
+			FVector ToEye = Eye - V.P;
+			ToEye.Z = 0.0f;
+			ToEye = ToEye.GetSafeNormal(1e-4f, FVector::ForwardVector);
+			const FVector Mid = V.P + FVector(0, 0, V.Height * 0.35f);
+			X.Add(FTransform(FRotationMatrix::MakeFromYZ(ToEye, FVector::UpVector).ToQuat(), Mid, FVector(V.Width / 100.0f, 1.0f, V.Height / 100.0f)));
+			const float Breath = 0.75f + 0.25f * FMath::Sin(V.Phase * 0.7f);
+			C.Append({ 0.56f, 0.61f, 0.70f, V.Alpha * Breath * Look.Rain });
+		}
+		Sync(Veils, X, &C, 16);
 	}
 
 	// ---- leaves, paper and wrappers: skitter along the ground on the wind, lift and tumble on gusts

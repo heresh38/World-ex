@@ -1497,6 +1497,45 @@ def goods_only():
         f"{len(values['families'])} families, {len(values['origins'])} origins")
 
 
+EXPLOSIVES = ("EX_drum", "EX_cylinder", "EX_cell", "EX_car")
+
+
+def explosives(master):
+    """The things in the world that explode (ASOExplosive; SO_IMPORT_ONLY=explosives): tools/blender/explosives.py ->
+    export_fbx.py -> SourceArt/Props/Explosives -> /Game/Props/Explosives/SM_EX_<kind>, each with its collision hull
+    (UCX), each material on its texture set (ex_paint / ex_rust from explosive_maps.py, imported here; the guns'
+    wpn_* sets already in /Game/Weapons/Textures are used where they are, never copied) in its own colour (the
+    material's tint, materials.json), the mask's red read as occlusion."""
+    src = os.path.join(SOURCE, "Props", "Explosives")
+    dest = "/Game/Props/Explosives"
+    if not os.path.isdir(src):
+        log("explosives: SourceArt/Props/Explosives is missing (tools/blender/explosives.py, then export_fbx.py)")
+        return
+    ensure_dir(dest)
+    materials = load_json(os.path.join(src, "materials.json"))
+    tex = {}
+    for m in materials.values():
+        for key, kind in (("baseColorTex", "color"), ("emissiveTex", "color"), ("mrTex", "mask"), ("normalTex", "normal")):
+            f = m.get(key)
+            if not f or f in tex:
+                continue
+            stem = os.path.splitext(os.path.basename(f))[0]
+            shared = f"/Game/Weapons/Textures/T_{stem}"
+            if stem.startswith("wpn_") and eal.does_asset_exist(shared):
+                tex[f] = eal.load_asset(shared)
+            else:
+                tex[f] = import_texture(os.path.join(src, f), dest + "/Textures", "T_" + stem, kind)
+    instances = {}
+    for k, m in materials.items():
+        key = base_slot(k)
+        textured = bool(m.get("mrTex"))
+        instances[key] = make_instance(master, dest, key, m, tex, {"scalars": {"AOAmount": 1.0 if textured else 0.0}})
+    for f in EXPLOSIVES:
+        import_static(src, f + ".fbx", dest, "SM_" + f, instances)
+    eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
+    log(f"explosives: {len(EXPLOSIVES)} meshes, {len(instances)} materials, {len(tex)} textures")
+
+
 def journal_only():
     """The journal's pictures (SO_IMPORT_ONLY=journal): every SourceArt/Icons/journal/journal_<id>[_bust].png
     (tools/blender/skr/lab.py --portraits: a Sarketh rank in its colours, the whole body 512 x 768 and the head and
@@ -3935,6 +3974,8 @@ def main():
         goods_only()
     if "journal" in only:
         journal_only()
+    if "explosives" in only:
+        explosives(master)
     if "bodies" in only:
         bodies()
     if want("nexus"):

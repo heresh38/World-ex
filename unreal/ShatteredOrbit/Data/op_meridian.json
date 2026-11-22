@@ -2702,6 +2702,155 @@
    "rocket"
   ]
  },
+ "explosives": [
+  {
+   "near": "verge_road",
+   "kinds": [
+    "car",
+    "drum",
+    "drum"
+   ]
+  },
+  {
+   "near": "verge_toll",
+   "kinds": [
+    "drum",
+    "drum",
+    "cylinder"
+   ]
+  },
+  {
+   "near": "yard_north",
+   "kinds": [
+    "drum",
+    "drum",
+    "drum"
+   ]
+  },
+  {
+   "near": "yard_west",
+   "kinds": [
+    "cylinder",
+    "cylinder"
+   ]
+  },
+  {
+   "near": "yard_east",
+   "kinds": [
+    "drum",
+    "cylinder"
+   ]
+  },
+  {
+   "near": "mall_court",
+   "kinds": [
+    "cell",
+    "cell"
+   ]
+  },
+  {
+   "near": "mall_gallery_e",
+   "kinds": [
+    "cylinder",
+    "drum"
+   ]
+  },
+  {
+   "near": "mall_gate",
+   "kinds": [
+    "cell"
+   ]
+  },
+  {
+   "near": "deep_platform",
+   "kinds": [
+    "cell",
+    "cell",
+    "drum"
+   ]
+  },
+  {
+   "near": "deep_hearts",
+   "kinds": [
+    "cell"
+   ]
+  },
+  {
+   "near": "sluice_pump",
+   "kinds": [
+    "drum",
+    "drum",
+    "cylinder",
+    "cylinder"
+   ]
+  },
+  {
+   "near": "causeway_mid",
+   "kinds": [
+    "car",
+    "car",
+    "drum"
+   ]
+  },
+  {
+   "near": "court_north",
+   "kinds": [
+    "cell",
+    "cell",
+    "drum"
+   ]
+  },
+  {
+   "near": "court_flanks",
+   "kinds": [
+    "drum",
+    "drum"
+   ]
+  },
+  {
+   "near": "boulevard_mid",
+   "kinds": [
+    "car",
+    "car",
+    "cylinder"
+   ]
+  },
+  {
+   "near": "plaza_east",
+   "kinds": [
+    "cell",
+    "drum"
+   ]
+  },
+  {
+   "near": "plaza_west",
+   "kinds": [
+    "cell",
+    "cylinder"
+   ]
+  },
+  {
+   "near": "plaza_north",
+   "kinds": [
+    "cell",
+    "cell"
+   ]
+  },
+  {
+   "near": "terrace_north",
+   "kinds": [
+    "cell",
+    "cell"
+   ]
+  },
+  {
+   "near": "terrace_east",
+   "kinds": [
+    "cell",
+    "drum"
+   ]
+  }
+ ],
  "variants": {
   "warden": {
    "species": "bulwark",

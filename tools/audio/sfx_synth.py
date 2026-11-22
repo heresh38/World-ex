@@ -2611,6 +2611,107 @@ SOUNDS.update({"impact_metal": impact_metal, "impact_dirt": impact_dirt, "impact
 IMPACTS = ["impact_metal", "impact_dirt", "impact_wood", "impact_water", "shield_hit"]
 
 
+# --- Things in the world that explode (ASOExplosive; the owner's effects guide: "environmental explosion: reactive
+# environment; vehicle explosion: massive and dramatic") -------------------------------------------------------------
+
+def _big_space(x, seed, wet=0.42, decay=1.0):
+    """an explosion's own street: early slaps off the walls, a long dark tail"""
+    ir = impulse_response(3.2, seed, early=((0.05, 0.32), (0.12, 0.26), (0.26, 0.2), (0.48, 0.14), (0.8, 0.09)),
+                          decay=decay, damping=1700, density=0.6)
+    return reverb(x, lean(ir, 110), wet)
+
+
+def drum_explode(seed=1301):
+    """A fuel drum going up: the drum's skin tearing with a ring, a slow deep WHOOMP as the fuel takes, the fireball's
+    roar rolling up and dying, bits of it coming down."""
+    out = silence(3.2)
+    out = place(out, modal(0.5, [(210, 0.12, 1.0), (342, 0.09, 0.7), (517, 0.06, 0.5), (860, 0.04, 0.35)], seed), 0.0, 0.5)   # the skin
+    out = place(out, filt(np.concatenate([np.linspace(1, -1, secs(0.002)), [0.0]]), "high", 250), 0.015, 0.9)                 # the shock
+    whoomp = svf_sweep(noise(1.5, seed + 1, "pink") * env_ad(1.5, 0.035, 0.32), "low", 2600, 70, 0.7)                     # the fuel taking
+    out = place(out, whoomp, 0.02, 1.8)
+    out = place(out, thump(48, 20, 1.3, 0.26, 1.6, 0.02), 0.02, 1.3)
+    roar = filt(noise(2.4, seed + 2, "brown"), "band", (90, 900)) * env_ad(2.4, 0.2, 0.7)                                 # the fireball's roar
+    out = place(out, roar * (1.0 + 0.35 * np.sin(np.linspace(0, 2.4 * 9.0 * math.tau, secs(2.4)))), 0.08, 0.55)
+    out = place(out, crackle(2.2, seed + 3, 70, 1800, 9000, 1.1), 0.1, 0.35)                                             # it burning
+    r = rng(seed + 4)
+    for k in range(7):                                                                                                    # pieces landing
+        f = r.uniform(380, 1400)
+        out = place(out, modal(0.12, [(f, 0.03, 0.6), (f * 1.62, 0.02, 0.4)], seed + 10 + k), r.uniform(0.5, 1.8), r.uniform(0.05, 0.14))
+    out = saturate(out * 0.9, 1.5)
+    return finish(_big_space(out, seed + 30))
+
+
+def gas_burst(seed=1351):
+    """A gas bottle going: a hard crack, the gas tearing out with a scream, the bottle thrown ringing off something."""
+    out = silence(2.4)
+    out = place(out, filt(np.concatenate([np.linspace(1, -1, secs(0.0012)), [0.0]]), "high", 400), 0.0, 1.3)
+    out = place(out, svf_sweep(noise(0.9, seed, "white") * env_ad(0.9, 0.0008, 0.12), "low", 9000, 140, 0.6), 0.0, 1.4)
+    out = place(out, thump(70, 28, 0.8, 0.12, 1.6, 0.002), 0.0, 1.0)
+    out = place(out, svf_sweep(noise(0.7, seed + 1) * env_ad(0.7, 0.01, 0.22), "band", 5200, 1800, 2.2), 0.03, 0.45)   # the gas screaming out
+    out = place(out, modal(0.9, [(1180, 0.25, 1.0), (1930, 0.18, 0.7), (3110, 0.1, 0.45)], seed + 2), 0.45, 0.32)     # the bottle landing
+    out = place(out, modal(0.6, [(1220, 0.16, 0.8), (2010, 0.1, 0.5)], seed + 3), 0.78, 0.18)
+    out = place(out, rustle(1.4, seed + 4, 2000, 10000, 70, 0.25) * np.exp(-np.linspace(0, 3, secs(1.4))), 0.1)
+    out = saturate(out * 0.9, 1.6)
+    return finish(_big_space(out, seed + 30, 0.38, 0.8))
+
+
+def cell_burst(seed=1401):
+    """A Sarketh crystal cell bursting: the crystal shattering in a glassy sheet, the charge in it going off in a deep
+    hum-whoomp, amber sparks fizzing out."""
+    out = silence(2.6)
+    r = rng(seed)
+    for k in range(14):                                                                                                   # the crystal in shards
+        f = r.uniform(2400, 7600)
+        out = place(out, bell(f, 0.5, r.uniform(0.04, 0.14), partials=((1.0, 1.0, 1.0), (2.76, 0.3, 0.5), (5.4, 0.1, 0.3))), r.uniform(0.0, 0.08), r.uniform(0.08, 0.2))
+    out = place(out, fm_zap(0.9, 220, 46, 1.5, 6.0, 0.18, 0.3, seed + 1, 0.002), 0.01, 1.0)                              # the charge
+    out = place(out, thump(52, 24, 1.1, 0.22, 1.4, 0.004), 0.01, 1.2)
+    out = place(out, svf_sweep(noise(1.0, seed + 2, "pink") * env_ad(1.0, 0.002, 0.2), "low", 4200, 90, 0.7), 0.0, 1.1)
+    out = place(out, crackle(1.6, seed + 3, 420, 2600, 12000, 0.5), 0.02, 0.45)                                         # amber fizzing
+    out = saturate(out * 0.9, 1.4)
+    return finish(_big_space(out, seed + 30, 0.4, 0.85))
+
+
+def vehicle_explode(seed=1451):
+    """A wreck's tank: a first crack as the tank splits, a moment, then the whole car going up: a huge low boom, the
+    glass going, the body crumpling and coming down hard on its wheels, the fire taking hold, debris for seconds."""
+    out = silence(4.6)
+    out = place(out, filt(np.concatenate([np.linspace(1, -1, secs(0.0015)), [0.0]]), "high", 300), 0.0, 0.8)           # the tank splitting
+    out = place(out, svf_sweep(noise(0.3, seed) * env_ad(0.3, 0.001, 0.06), "low", 5000, 300, 0.6), 0.0, 0.7)
+    t0 = 0.16                                                                                                             # then the car
+    out = place(out, filt(np.concatenate([np.linspace(1, -1, secs(0.0025)), [0.0]]), "high", 180), t0, 1.4)
+    out = place(out, svf_sweep(noise(2.2, seed + 1, "pink") * env_ad(2.2, 0.01, 0.42), "low", 5200, 45, 0.7), t0, 2.0)
+    out = place(out, thump(40, 16, 1.8, 0.4, 1.8, 0.01), t0, 1.6)
+    out = place(out, rustle(0.8, seed + 2, 3500, 12000, 260, 0.6) * np.exp(-np.linspace(0, 4, secs(0.8))), t0 + 0.02, 0.8)   # the glass
+    out = place(out, filt(noise(0.5, seed + 3), "band", (180, 1400)) * env_ad(0.5, 0.002, 0.1), t0 + 0.03, 1.0)         # the body crumpling
+    out = place(out, modal(0.8, [(96, 0.2, 1.0), (151, 0.15, 0.8), (233, 0.1, 0.6), (390, 0.06, 0.4)], seed + 4), t0 + 0.95, 0.9)  # coming down
+    out = place(out, thump(70, 30, 0.4, 0.08, 1.4, 0.002), t0 + 0.95, 0.9)
+    roar = filt(noise(3.8, seed + 5, "brown"), "band", (70, 800)) * env_ad(3.8, 0.4, 1.1)
+    out = place(out, roar, t0 + 0.2, 0.6)
+    out = place(out, crackle(3.6, seed + 6, 90, 1500, 9000, 1.8), t0 + 0.3, 0.4)
+    r = rng(seed + 7)
+    for k in range(12):
+        f = r.uniform(300, 1600)
+        out = place(out, modal(0.14, [(f, 0.035, 0.6), (f * 1.55, 0.022, 0.4)], seed + 20 + k), t0 + r.uniform(0.6, 2.8), r.uniform(0.05, 0.16))
+    out = saturate(out * 0.85, 1.7)
+    return finish(_big_space(out, seed + 40, 0.45, 1.2))
+
+
+def leak_hiss(seed=1501):
+    """What a drum or a bottle hurt past half does until it goes: gas or fuel jetting out of the hole and burning, a
+    fluttering hiss (played over and over while it burns)."""
+    t = 1.2
+    hiss = filt(noise(t, seed), "band", (2200, 9000)) * (0.75 + 0.25 * np.sin(np.linspace(0, t * 17 * math.tau, secs(t))))
+    flame = filt(noise(t, seed + 1, "brown"), "band", (120, 700)) * (0.7 + 0.3 * np.sin(np.linspace(0, t * 6 * math.tau, secs(t)) + 1.0))
+    out = hiss * 0.5 + flame * 0.9
+    out = out * np.minimum(1.0, np.minimum(np.linspace(0, 12, secs(t)), np.linspace(12, 0, secs(t))))
+    return finish(out, -7, 0.02)
+
+
+SOUNDS.update({"drum_explode": drum_explode, "gas_burst": gas_burst, "cell_burst": cell_burst, "vehicle_explode": vehicle_explode,
+               "leak_hiss": leak_hiss})
+EXPLOSIVES = ["drum_explode", "gas_burst", "cell_burst", "vehicle_explode", "leak_hiss"]
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "unreal", "ShatteredOrbit", "SourceArt", "Audio")
     only = set(sys.argv[2:])  # optional: build just these names
@@ -2628,6 +2729,8 @@ def main():
         only = set(LOOP)
     if only == {"impacts"}:
         only = set(IMPACTS)
+    if only == {"explosives"}:
+        only = set(EXPLOSIVES)
     os.makedirs(out_dir, exist_ok=True)
     for name, fn in SOUNDS.items():
         if only and name not in only:

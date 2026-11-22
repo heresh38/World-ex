@@ -40,6 +40,11 @@ public:
 	UFUNCTION(Exec)
 	void SOFace(const FString& Key, float Value = 1.0f);
 
+	/** Dev: what the effects cost now (particles alive, the most at once, the last and the worst frame's work on the
+	 *  game thread, how many gave way for the cap) and the rain round the eye. SOFxStats 1 starts the peaks over. */
+	UFUNCTION(Exec)
+	void SOFxStats(int32 bReset = 0);
+
 	virtual void PlayerTick(float DeltaTime) override;
 
 protected:

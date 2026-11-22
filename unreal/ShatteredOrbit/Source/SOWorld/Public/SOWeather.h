@@ -84,6 +84,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SO|Weather")
 	FSOWeatherLook GetLook() const { return Look; }
 
+	/** What the rain is doing round the eye now (tests, pictures): rings where drops land, the drops they throw up,
+	 *  the storm's sheets of rain drifting across the distance. */
+	int32 GetNumSplashes() const { return Splashes.Num(); }
+	int32 GetNumCurtains() const { return CurtainState.Num(); }
+
 	/** Pick the next weather by itself every few minutes. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Weather")
 	bool bAutomatic = true;
@@ -131,6 +136,20 @@ private:
 
 	TWeakObjectPtr<AActor> Host;
 	TWeakObjectPtr<UInstancedStaticMeshComponent> Motes, RainStreaks, Steam, Smoke;
+	/** Where the rain lands (a ring on the ground, drops thrown up) and the storm's sheets of rain. */
+	TWeakObjectPtr<UInstancedStaticMeshComponent> SplashRings, SplashDrops, Curtains;
+	struct FSplash { FVector P; float Age; float Life; float Size; };
+	struct FDroplet { FVector P; FVector V; float Age; float Life; };
+	struct FCurtain { FVector P; float Width; float Height; float Alpha; float Phase; };
+	TArray<FSplash> Splashes;
+	TArray<FDroplet> Droplets;
+	TArray<FCurtain> CurtainState;
+	float SplashDue = 0.0f;
+	/** The top surface the rain meets round the eye (a roof, the street), a metre a cell over 40 x 40 m, filled in
+	 *  a few traces a frame (unknown / nothing there: below -1e8). */
+	TArray<float> RainGround;
+	FIntPoint RainGroundOrigin = FIntPoint(TNumericLimits<int32>::Max(), 0);
+	int32 RainGroundFill = 0;
 	TArray<TWeakObjectPtr<UInstancedStaticMeshComponent>> Litter;
 	UPROPERTY(Transient) TObjectPtr<UMaterialParameterCollection> Params;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> CloudMID;

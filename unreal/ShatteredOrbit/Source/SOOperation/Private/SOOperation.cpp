@@ -20,6 +20,7 @@
 #include "SOEnemy.h"
 #include "SOSpecies.h"
 #include "SOEnemyAIController.h"
+#include "SOExplosive.h"
 #include "SOInventoryComponent.h"
 #include "SOJournal.h"
 #include "SOLog.h"
@@ -143,6 +144,45 @@ bool ASOOperation::LoadPlan(const FString& JsonText)
 			{
 				UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: variant '%s' is of no known species ('%s')"), *Pair.Key, *Variant.Species.ToString());
 			}
+		}
+	}
+
+	// things that explode: clusters near spawn groups (or at a point)
+	ExplosivePlan.Reset();
+	if (const TArray<TSharedPtr<FJsonValue>>* Ex = nullptr; Root->TryGetArrayField(TEXT("explosives"), Ex))
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Ex)
+		{
+			const TSharedPtr<FJsonObject> O = V.IsValid() ? V->AsObject() : nullptr;
+			if (!O.IsValid())
+			{
+				continue;
+			}
+			FExplosiveCluster C;
+			FString Near;
+			if (O->TryGetStringField(TEXT("near"), Near))
+			{
+				C.Near = FName(*Near);
+			}
+			const TArray<TSharedPtr<FJsonValue>>* At = nullptr;
+			if (O->TryGetArrayField(TEXT("at"), At) && At->Num() >= 3)
+			{
+				C.At = Vec(*At);
+				C.bAt = true;
+			}
+			O->TryGetNumberField(TEXT("yaw"), C.Yaw);
+			const TArray<TSharedPtr<FJsonValue>>* Kinds = nullptr;
+			if (O->TryGetArrayField(TEXT("kinds"), Kinds))
+			{
+				for (const TSharedPtr<FJsonValue>& K : *Kinds)
+				{
+					const FString S = K->AsString();
+					const ESOExplosiveKind Kind = S == TEXT("car") ? ESOExplosiveKind::Vehicle : S == TEXT("cylinder") ? ESOExplosiveKind::Cylinder
+						: S == TEXT("cell") ? ESOExplosiveKind::Cell : ESOExplosiveKind::Drum;
+					C.Kinds.Add(static_cast<uint8>(Kind));
+				}
+			}
+			ExplosivePlan.Add(MoveTemp(C));
 		}
 	}
 
@@ -281,6 +321,7 @@ void ASOOperation::BeginPlay()
 	}
 	if (HasAuthority())
 	{
+		SpawnExplosives();
 		DiedHandle = USOCombatStatics::OnCharacterDied().AddUObject(this, &ASOOperation::OnCharacterDied);
 		if (StartDelay >= 0.0f && Stages.Num() > 0)
 		{
@@ -720,6 +761,117 @@ int32 ASOOperation::AuditSpawns(TArray<FString>& OutProblems)
 	}
 	UE_LOG(LogShatteredOrbit, Log, TEXT("Operation audit: %d of %d spawns found their floor"), Tried - Missing, Tried);
 	return Missing;
+}
+
+int32 ASOOperation::SpawnExplosives()
+{
+	UWorld* World = GetWorld();
+	if (!World || !HasAuthority())
+	{
+		return 0;
+	}
+	auto HalfOf = [](ESOExplosiveKind Kind)
+	{
+		switch (Kind)
+		{
+		case ESOExplosiveKind::Cylinder: return FVector(13.0f, 13.0f, 75.0f);
+		case ESOExplosiveKind::Cell: return FVector(22.0f, 22.0f, 37.0f);
+		case ESOExplosiveKind::Vehicle: return FVector(228.0f, 102.0f, 74.0f);
+		default: return FVector(31.0f, 31.0f, 45.0f);
+		}
+	};
+	int32 Placed = 0, Wanted = 0;
+	for (int32 c = 0; c < ExplosivePlan.Num(); ++c)
+	{
+		const FExplosiveCluster& C = ExplosivePlan[c];
+		FVector Centre = C.At;
+		if (!C.bAt)
+		{
+			const FSOSpawnGroup* G = Groups.Find(C.Near);
+			if (!G || G->Points.Num() == 0)
+			{
+				UE_LOG(LogShatteredOrbit, Warning, TEXT("Operation: explosives near '%s': no such spawn group"), *C.Near.ToString());
+				continue;
+			}
+			Centre = FVector::ZeroVector;
+			for (const FVector& P : G->Points)
+			{
+				Centre += P;
+			}
+			Centre /= G->Points.Num();
+		}
+		// (the same places every time: the plan's, not the dice's)
+		FRandomStream R(static_cast<int32>(FCrc::StrCrc32(*C.Near.ToString())) ^ (c * 7919 + 17));   // (a name's text: its index changes run to run)
+		FVector Last = FVector::ZeroVector;
+		bool bHaveLast = false;
+		for (const uint8 K : C.Kinds)
+		{
+			++Wanted;
+			const ESOExplosiveKind Kind = static_cast<ESOExplosiveKind>(K);
+			const bool bCar = Kind == ESOExplosiveKind::Vehicle;
+			const FVector Half = HalfOf(Kind);
+			for (int32 Try = 0; Try < 60; ++Try)
+			{
+				// a drum or a bottle beside the last one of its cluster (so one sets the next off), a wreck on its own
+				const bool bBeside = bHaveLast && !bCar;
+				const float Dist = C.bAt && Try == 0 ? 0.0f : bBeside ? R.FRandRange(85.0f, 170.0f) : bCar ? R.FRandRange(450.0f, 1300.0f) : R.FRandRange(250.0f, 900.0f);
+				const float Ang = R.FRandRange(0.0f, UE_TWO_PI);
+				const float Yaw = C.bAt && Try == 0 ? C.Yaw : R.FRandRange(0.0f, 360.0f);
+				const FVector P = (bBeside ? Last : Centre) + FVector(FMath::Cos(Ang), FMath::Sin(Ang), 0.0f) * Dist;
+				FHitResult Floor;
+				const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+				if (!World->LineTraceSingleByObjectType(Floor, P + FVector(0.0f, 0.0f, 300.0f), P - FVector(0.0f, 0.0f, 700.0f), Static) || Floor.ImpactNormal.Z < 0.88f)
+				{
+					continue;                                        // (no floor, or not level enough to stand on)
+				}
+				const FVector Spot = Floor.ImpactPoint;
+				if (FMath::Abs(Spot.Z - Centre.Z) > 80.0f)
+				{
+					continue;                                        // (on the ground its group stands on: not on a wreck's roof)
+				}
+				const FQuat Turn(FRotator(0.0f, Yaw, 0.0f));
+				FCollisionObjectQueryParams Any;
+				for (const ECollisionChannel Ch : { ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, ECC_PhysicsBody })
+				{
+					Any.AddObjectTypesToQuery(Ch);
+				}
+				if (World->OverlapAnyTestByObjectType(Spot + FVector(0.0f, 0.0f, Half.Z + 8.0f), Turn, Any, FCollisionShape::MakeBox(Half)))
+				{
+					continue;                                        // (something stands there)
+				}
+				bool bOnSpawn = false;
+				for (const TPair<FName, FSOSpawnGroup>& G : Groups)
+				{
+					for (const FVector& S : G.Value.Points)
+					{
+						bOnSpawn |= FVector::DistSquared2D(S, Spot) < FMath::Square(Half.Size2D() + 130.0f) && FMath::Abs(S.Z - Spot.Z) < 400.0f;
+					}
+				}
+				if (bOnSpawn)
+				{
+					continue;                                        // (a creature is put down there)
+				}
+				FActorSpawnParameters Params;
+				Params.bDeferConstruction = true;
+				Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				if (ASOExplosive* E = World->SpawnActor<ASOExplosive>(ASOExplosive::StaticClass(), FTransform(Turn, Spot), Params))
+				{
+					E->SetKind(Kind);
+					E->FinishSpawning(FTransform(Turn, Spot));
+					++Placed;
+					Last = Spot;
+					bHaveLast = true;
+				}
+				break;
+			}
+		}
+	}
+	NumExplosives = Placed;
+	if (Wanted > 0)
+	{
+		UE_LOG(LogShatteredOrbit, Log, TEXT("Operation: %d of %d things that explode put down"), Placed, Wanted);
+	}
+	return Placed;
 }
 
 void ASOOperation::OnCharacterDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)

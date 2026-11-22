@@ -104,6 +104,13 @@ bool FSOOperationPlanTest::RunTest(const FString& Parameters)
 					TestTrue(*FString::Printf(TEXT("%s belongs to no set"), *R.Archetype.ToString()), Gun->SetId.IsNone());
 				}
 			}
+			// things that explode, by the fights: every cluster near a spawn group the plan has
+			TestTrue(TEXT("the operation has things that explode"), Real->ExplosivePlan.Num() >= 15);
+			for (const ASOOperation::FExplosiveCluster& C : Real->ExplosivePlan)
+			{
+				TestTrue(*FString::Printf(TEXT("explosives near %s: a spawn group"), *C.Near.ToString()), C.bAt || Real->Groups.Contains(C.Near));
+				TestTrue(*FString::Printf(TEXT("explosives near %s: of some kind"), *C.Near.ToString()), C.Kinds.Num() > 0);
+			}
 		}
 	}
 	else

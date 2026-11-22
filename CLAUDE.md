@@ -946,6 +946,18 @@ opaque and large to be seen at 2.5 m; a flame is a tongue, never a dot, and neve
 light scales with the root of its radius (squared, a rocket flooded the range); a capture that fires must EQUIP the
 gun it means (the profile's held gun was a rocket launcher, and the HUD capture's burst at a creature seven metres
 off killed the player).
+**Pass 3** (2026-11-22, the rest of the guide; `docs/orion/reports/EFFECTS.md`): things in the world that explode
+(`ASOExplosive`: fuel drum, gas bottle, Sarketh crystal cell, wrecked car; our models `tools/blender/explosives.py` +
+`explosive_maps.py`, `SO_IMPORT_ONLY=explosives`, sounds `sfx_synth.py ... explosives`): hurt like a body through
+`ApplyDamage` / `ApplySplash`, lit past half (a burning leak) and gone a moment later, a blast sets the next off, the
+splash is the shooter's, a wreck is thrown up and burns; an operation's plan puts them down by its fights
+(`"explosives"`, `ASOOperation::SpawnExplosives`: a level place on its group's ground clear of every spawn point,
+seeded by the group's name), the range has its own (`make_test_map.py`). The top rarity, Sovereign, signs its shots
+in gold (`ASOWeapon::IsSovereign`, `USOFxSubsystem::SovereignFlash / SovereignTrail / SovereignMark`). Rain lands
+(`USOWeatherSubsystem`: crowns of beads and drops round the eye, none under a roof; a storm's sheets of rain). The
+cost is measured (`SOFxStats`; a full pool gives way in O(1)). Tests `ShatteredOrbit.Fx.ExplosivesGoOff`,
+`ExplosivesChain`, `SovereignSignature`; pictures `SOCaptureSeries 1 43` (range, files `SO_fx3_*`) and `44` (on
+`/Game/Maps/L_Meridian`: its props and its storm).
 **The armoury** (I / Tab: `USOInventoryWidget`, C++ only; rebuilt 2026-11-16 on the owner's word: "upgrade it ready
 for a triple a game release on steam"; ORGANISED on 2026-11-21 on their reference screen
 `art/reference/ui/armoury_arsenal.webp`, "how to better organize weapons and other things we need like an inventory to

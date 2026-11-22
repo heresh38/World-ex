@@ -210,6 +210,19 @@ def main():
         spawner = spawn(unreal.SOEnemySpawner, (x, y, 0), (0, 180, 0), f"StalkerSpawner_{i}")
         spawner.set_folder_path("Gameplay")
 
+    # Things that explode, to try on the range (ASOExplosive; the owner's effects guide): fuel drums by the first
+    # spawner (one sets the next off), gas bottles by the second, Sarketh crystal cells by the third, a wreck to the
+    # side; they come back when the range is loaded again.
+    kinds = {"drum": unreal.SOExplosiveKind.DRUM, "cylinder": unreal.SOExplosiveKind.CYLINDER,
+             "cell": unreal.SOExplosiveKind.CELL, "car": unreal.SOExplosiveKind.VEHICLE}
+    for i, (kind, x, y, yaw) in enumerate((("drum", 2300, -1150, 10), ("drum", 2390, -1090, 70), ("drum", 2310, -1015, 140),
+                                           ("cylinder", 2350, 350, 0), ("cylinder", 2405, 420, 50),
+                                           ("cell", 3000, -320, 0), ("cell", 3085, -250, 30),
+                                           ("car", 2000, 1850, 25), ("drum", 1240, 1900, 0), ("drum", 1330, 1950, 45))):
+        e = spawn(unreal.SOExplosive, (x, y, 0), (0, yaw, 0), f"Explosive_{kind}_{i}")
+        e.set_editor_property("kind", kinds[kind])
+        e.set_folder_path("Gameplay")
+
     # Stage 5: the VANTHOS reward pool to try on the range (it reseals after 30 s here).
     reliquary = spawn(unreal.SOReliquary, (950, -800, 0), (0, 140, 0), "Reliquary")
     reliquary.set_folder_path("Gameplay")

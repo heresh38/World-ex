@@ -1,4 +1,5 @@
 #include "SOCombatStatics.h"
+#include "SOExplosive.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
@@ -28,6 +29,11 @@ float USOCombatStatics::ApplyDamage(AActor* Source, AActor* Target, float Amount
 	if (!Target || Amount <= 0.0f || !Target->HasAuthority())
 	{
 		return 0.0f;
+	}
+	// a thing in the world that explodes is hurt like a body, by its own health (it has no attributes)
+	if (ASOExplosive* Explosive = Cast<ASOExplosive>(Target))
+	{
+		return Explosive->TakeHit(Source, Amount);
 	}
 	UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
 	if (!TargetASC)

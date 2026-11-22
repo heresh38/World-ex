@@ -34,6 +34,8 @@ public:
 	 *  finish, saved ammo). */
 	void SetInstance(const FSOWeaponInstance& InInstance);
 	const FSOWeaponInstance& GetInstance() const { return Instance; }
+	/** A copy of the top rarity (Sovereign): its shots carry the gold signature (USOFxSubsystem::Sovereign*). */
+	bool IsSovereign() const;
 
 	/** What this copy fires with (state.js weaponStats + the sight's zoom). */
 	const FSOWeaponStats& GetStats() const { return Stats; }

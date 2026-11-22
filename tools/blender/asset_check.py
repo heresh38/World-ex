@@ -93,7 +93,8 @@ class Report:
 def load(path):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=os.path.abspath(path))
-    return [o for o in bpy.context.scene.objects if o.type == 'MESH' and len(o.data.polygons)]
+    # (a collision hull, UCX_*, is never drawn: it is not the asset's surface)
+    return [o for o in bpy.context.scene.objects if o.type == 'MESH' and len(o.data.polygons) and not o.name.startswith('UCX_')]
 
 
 def triangles(objs):

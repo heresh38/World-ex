@@ -387,6 +387,36 @@ VARIANTS = dict(
 MAP = dict(c=(20.0, -1035.0), half=1420.0)
 
 
+# Things that explode (ASOExplosive; the owner's effects guide: "environmental explosion: reactive environment; vehicle
+# explosion: massive and dramatic"), put down where the fights are: each cluster near a spawn group's middle, the game
+# finding each one a free, level place on the floor clear of every spawn point (ASOOperation::SpawnExplosives). What is
+# left where: fuel at the toll and on the dead highway, the army's bottles and drums in the yard and at the pump house,
+# the Sarketh's crystal cells where they hold (the Galleria's gate, the platform, the court, the Ring, the terraces),
+# wrecks on the open streets.
+EXPLOSIVES = [
+    dict(near="verge_road", kinds=["car", "drum", "drum"]),
+    dict(near="verge_toll", kinds=["drum", "drum", "cylinder"]),
+    dict(near="yard_north", kinds=["drum", "drum", "drum"]),
+    dict(near="yard_west", kinds=["cylinder", "cylinder"]),
+    dict(near="yard_east", kinds=["drum", "cylinder"]),
+    dict(near="mall_court", kinds=["cell", "cell"]),
+    dict(near="mall_gallery_e", kinds=["cylinder", "drum"]),
+    dict(near="mall_gate", kinds=["cell"]),
+    dict(near="deep_platform", kinds=["cell", "cell", "drum"]),
+    dict(near="deep_hearts", kinds=["cell"]),
+    dict(near="sluice_pump", kinds=["drum", "drum", "cylinder", "cylinder"]),
+    dict(near="causeway_mid", kinds=["car", "car", "drum"]),
+    dict(near="court_north", kinds=["cell", "cell", "drum"]),
+    dict(near="court_flanks", kinds=["drum", "drum"]),
+    dict(near="boulevard_mid", kinds=["car", "car", "cylinder"]),
+    dict(near="plaza_east", kinds=["cell", "drum"]),
+    dict(near="plaza_west", kinds=["cell", "cylinder"]),
+    dict(near="plaza_north", kinds=["cell", "cell"]),
+    dict(near="terrace_north", kinds=["cell", "cell"]),
+    dict(near="terrace_east", kinds=["cell", "drum"]),
+]
+
+
 def to_json():
     groups = {}
     for gid, g in GROUPS.items():
@@ -409,6 +439,7 @@ def to_json():
         mapInfo=dict(c=[MAP["c"][1] * 100.0, MAP["c"][0] * 100.0], half=MAP["half"] * 100.0),
         nav=[list(b) for b in NAV],
         rewards=REWARDS,
+        explosives=EXPLOSIVES,
         **(dict(enemies=ENEMIES) if ENEMIES else {}),
         **(dict(variants=VARIANTS) if VARIANTS else {}),
     )

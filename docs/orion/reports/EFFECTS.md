@@ -15,7 +15,9 @@ Status per bullet of the guide: DONE / PART / TO DO.
   `hmg` / `lmg`, `rocket` / `launcher`): the blades' length and width, the core, the smoke, the light, burning
   powder thrown out, and a ring of pressure across the bore for the long guns, the shotguns and the launchers.
 - Energy bright and otherworldly: DONE before (`PlasmaFlash`); the Sarketh's rail flash (`SlugFlash`).
-- Exotic unique: TO DO (no exotic class yet).
+- Exotic unique: DONE (pass 3, 2026-11-22). Our top rarity is Sovereign (its id is still `exotic`): a Sovereign copy
+  signs every shot in gold on top of its gun's own effects (`ASOWeapon::IsSovereign`, `USOFxSubsystem::SovereignFlash`:
+  a crown of gold motes opening round the bore, a halo, two blades of light).
 - Shell ejection (ballistic): DONE. `Casing`: a brass bar and its glint out of the ejection port found on each gun's
   own bounds (ahead of the grip, right flank, high), carried with the shooter, landing on the floor under it and
   skittering to rest (`FSOFxParticle::FloorZ` / `Bounce`).
@@ -43,7 +45,17 @@ Status per bullet of the guide: DONE / PART / TO DO.
   the round lands. A blast that lands knocks the local player's view and pulses fire at the screen's edge
   (`OnBlast` -> `ASOCharacter::OnBlastNearby`).
 - Energy explosion (sci-fi): DONE. `Blast(Zap)`: arcs of light stepping out in jagged chains, a ring on the surface.
-- Environmental explosion (reactive environment), vehicle explosion: TO DO (nothing in the world explodes yet).
+- Environmental explosion (reactive environment), vehicle explosion: DONE (pass 3). `ASOExplosive` (SOCombat): a fuel
+  drum, a gas bottle, a Sarketh crystal cell (their power: an amber burst) and a wrecked car, our own models
+  (`tools/blender/explosives.py`, paint `explosive_maps.py`, through the gate; `SO_IMPORT_ONLY=explosives`,
+  `/Game/Props/Explosives`) with sounds of their own (`sfx_synth.py ... explosives`). Rounds, blows and blasts hurt one
+  as they hurt a body (`USOCombatStatics::ApplyDamage`, `USOProjectileSubsystem::ApplySplash`); holed past half it is
+  lit (a jet of flame out of the hole, its light, smoke, a hiss) and goes by itself a moment later; at nothing it goes
+  at once; a blast sets the next one off a beat later (a row ripples); its splash is the shooter's (what it kills is
+  theirs). A wreck takes the most, is thrown up by its own blast, comes down askew with a shock of dust and burns
+  black for twenty seconds. Meridian Fall puts 47 down by its fights from its plan (`"explosives"`: clusters near spawn
+  groups, `ASOOperation::SpawnExplosives` finds each a level place on the ground clear of every spawn point); the
+  range has ten (`make_test_map.py`).
 
 ## Ability effects
 - Ours are the strike's sweep, the slam's and the charge's shockwave, the brace's ward, the warnings on the ground
@@ -52,7 +64,9 @@ Status per bullet of the guide: DONE / PART / TO DO.
 
 ## Projectiles and tracers
 - Ballistic tracer, energy bolt, plasma, rocket trail: DONE before (`Tracer`, `PlasmaBolt`, `SlugRound`, `Trail`).
-- Exotic projectile: TO DO (with the exotic class).
+- Exotic projectile: DONE (pass 3). A Sovereign round's way is marked as it passes: a helix of gold motes wound round
+  the line (a turn every 36 cm) and an orb riding its head (`SovereignTrail`); where it lands a sigil of six gold cells
+  opens on the surface with motes rising (`SovereignMark`).
 
 ## Environmental
 - Dust and debris (reactive to explosions): DONE (debris, dust, the column).
@@ -62,7 +76,10 @@ Status per bullet of the guide: DONE / PART / TO DO.
   time (a grenade 2.2 s, a rocket 4.5 s), thicker toward the middle, dying down in its last third; lit only when
   the blast lands.
 - Sparks (metal and electrical): DONE (metal impacts, the zap's arcs).
-- Weather: TO DO (a level's own: the Meridian storm exists as a sky, not as particles).
+- Weather: DONE (pass 3). Beside the rain streaks round the eye (`USOWeatherSubsystem`): where the rain lands, a crown
+  of beads opening on the ground and two drops thrown up, ~340 a second near the eye at full rain (the top surface
+  found a metre a cell over 40 x 40 m, a few traces a frame), none under a roof; a storm's sheets of rain, tall faint
+  veils drifting across the distance on the wind. Meridian's storm shows all of it.
 
 ## Loot and pickup
 - Beams per rarity, glow and pulse, visible from a distance: DONE before (the HUD's beams and the world's streaks).
@@ -78,6 +95,15 @@ Tests `ShatteredOrbit.Fx.SurfaceOfAHit`, `ImpactsPerSurfaceAndHitKinds`, `Casing
 Budget: the pool holds 1500 particles, oldest dropped first; a rocket's blast spends about 60, a burn about 20 a
 second, a metal impact 30.
 
+## The cost (pass 3)
+Measured with `SOFxStats` (dev console: particles alive, the most at once, the last and the worst frame's work on the
+game thread, how many gave way for the cap) in `SOCaptureSeries 1 43` at 1920 x 1080 on this machine: a row of drums,
+a wreck and a cell going off, then the busiest moment (a shotgun pumped into ten creatures' shields with a bottle and
+a drum going off among them). The pool peaked at 1,492 of its 1,500; the effects' game-thread work was 0.38 ms at its
+worst and 0.21 ms in the busiest moment; frames held 8.3-9.7 ms. A full pool used to drop its oldest particle by
+taking the first of the array out (every other one moved, 1,500 at a time, for each new one): now one of the furthest
+through its life, of eight slots from a walking cursor, gives way (O(1)). Not measured: the GPU's share on a mid-range
+card.
+
 ## Still to do (the owner's guide)
-Exotic weapons and projectiles (with the class), environmental and vehicle explosions (with things that explode),
-weather as particles, the particles' cost profiled at the busiest moment (a shotgun into a shield in a crowd).
+Ability effects (void, arc, solar, stasis, healing) take their own look as each ability is designed.

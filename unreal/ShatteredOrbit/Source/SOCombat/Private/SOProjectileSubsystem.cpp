@@ -1,4 +1,5 @@
 #include "SOProjectileSubsystem.h"
+#include "SOExplosive.h"
 
 #include "CollisionQueryParams.h"
 #include "Engine/World.h"
@@ -301,6 +302,7 @@ float USOProjectileSubsystem::ApplySplash(AActor* Instigator, const FVector& Cen
 		}
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOSplash), false, Victim);
 		Params.AddIgnoredActor(Instigator);
+		Params.AddIgnoredActor(Ignore);                              // (what went off is no wall: a drum's blast starts inside it)
 		if (World->LineTraceTestByChannel(Center, Victim->GetActorLocation(), ECC_Visibility, Params))
 		{
 			continue; // behind a wall
@@ -312,6 +314,29 @@ float USOProjectileSubsystem::ApplySplash(AActor* Instigator, const FVector& Cen
 		{
 			OutVictims->Add(Victim);
 		}
+	}
+	// things that explode in its reach and in its sight are set off by it (a beat later each: a chain)
+	for (TActorIterator<ASOExplosive> It(World); It; ++It)
+	{
+		ASOExplosive* Other = *It;
+		if (Other == Ignore || Other->IsSpent())
+		{
+			continue;
+		}
+		const FVector Mid = Other->GetComponentsBoundingBox().GetCenter();
+		const float Distance = FVector::Dist(Center, Mid);
+		if (Distance > Radius)
+		{
+			continue;
+		}
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SOSplashProp), false, Other);
+		Params.AddIgnoredActor(Instigator);
+		Params.AddIgnoredActor(Ignore);
+		if (World->LineTraceTestByChannel(Center, Mid, ECC_Visibility, Params))
+		{
+			continue;
+		}
+		Other->TakeHit(Instigator, Damage * FMath::Lerp(1.0f, 0.25f, Distance / Radius), true);
 	}
 	return Total;
 }

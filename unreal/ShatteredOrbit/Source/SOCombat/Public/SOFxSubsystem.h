@@ -198,6 +198,17 @@ public:
 	 *  point bursts in its own colour with a ring. */
 	void HitKind(const FVector& Point, const FVector& Normal, bool bShield, bool bShieldBroken, bool bCrit, bool bWeak, const FLinearColor& Color);
 
+	// --- Sovereign: the top rarity's own signature (the owner's guide: "exotic weapon: unique and memorable; exotic
+	// projectile: unique and distinctive"; our top rarity is Sovereign). Gold, on top of the gun's own effects. ------
+	/** A crown of gold opening round the bore as it fires, a halo, two blades of light forward. */
+	void SovereignFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, bool bThroughScope);
+	/** Its round's way marked as it passes: a helix of gold motes wound round the line, appearing as the round goes
+	 *  by, and an orb of gold riding the round's head. Carry: the shooter's velocity (the line is drawn in its frame). */
+	void SovereignTrail(const FVector& From, const FVector& To, float Speed, const FVector& Carry = FVector::ZeroVector);
+	/** Where it lands: a ring of six gold cells opening on the surface (a sigil), motes rising off it, a flash. */
+	void SovereignMark(const FVector& Point, const FVector& Normal, float Delay = 0.0f);
+	static const FLinearColor SovereignGold;
+
 	/** Fire that stays (the guide: "fire: spreads and persists"): flames and embers over a patch of Radius round
 	 *  Point on the surface facing Normal for Duration seconds, smoke rising off it. */
 	void Burn(const FVector& Point, const FVector& Normal, float Radius, float Duration);
@@ -223,7 +234,16 @@ public:
 	int32 GetNumDecals() const;
 	int32 GetNumImpactsPlayed() const { return ImpactsPlayed; }
 
-	/** Hard caps (oldest dropped first). */
+	/** What the system costs (the owner's guide: "the particles' cost at the busiest moment"): the last frame's work
+	 *  on the game thread (ms: moving them and laying out their cards), the most alive at once, how many were dropped
+	 *  for the cap since the world began. SOFxStats prints them. */
+	float GetLastTickMs() const { return LastTickMs; }
+	float GetPeakTickMs() const { return PeakTickMs; }
+	int32 GetPeakParticles() const { return PeakParticles; }
+	int32 GetDropped() const { return Dropped; }
+	void ResetStats() { PeakTickMs = 0.0f; PeakParticles = 0; Dropped = 0; }
+
+	/** Hard caps (past the particles' cap one of the furthest through its life gives way). */
 	static constexpr int32 MaxParticles = 1500;
 	static constexpr int32 MaxDecals = 64;
 
@@ -312,6 +332,11 @@ private:
 	void PlaceWarning(FWarning& W) const;
 
 	TArray<FSOFxParticle> Particles;
+	int32 DropCursor = 0;
+	int32 Dropped = 0;
+	int32 PeakParticles = 0;
+	float LastTickMs = 0.0f;
+	float PeakTickMs = 0.0f;
 	TArray<FPendingImpact> Pending;
 	TArray<FPendingLight> PendingLights;
 	TArray<FLightFlash> Lights;

@@ -545,6 +545,13 @@ void ASOWeapon::MulticastShotFired_Implementation(FVector_NetQuantize Origin, FV
 	OnWeaponEvent.Broadcast(TEXT("fired"));
 }
 
+bool ASOWeapon::IsSovereign() const
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	const int32 Top = Tables ? Tables->Rarities.Num() - 1 : 4;
+	return Top > 0 && Instance.Rarity >= Top;
+}
+
 void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32 Seed, float HalfAngle)
 {
 	UWorld* World = GetWorld();
@@ -570,6 +577,11 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		const bool bLight = Data->WeaponClass == ESOWeaponClass::Energy || Data->WeaponClass == ESOWeaponClass::Horror;
 		const FLinearColor FlashColor = bLight ? FMath::Lerp(Data->TracerColor, FLinearColor::White, 0.25f) : FLinearColor(1.0f, 0.74f, 0.4f);
 		const bool bThroughScope = bFirstPerson && IsScoped() && Holder->IsAimingDownSights();
+		if (IsSovereign())
+		{
+			// the top rarity's own signature, on top of the gun's own flash (the guide's "exotic: unique and memorable")
+			Fx->SovereignFlash(Muzzle, Aim, bFirstPerson ? 0.6f : 1.0f, bFirstPerson, bThroughScope);
+		}
 		if (Data->Projectile == ESOProjectileKind::Slug)
 		{
 			// (the rails throw it: a hard white-gold flash, the amber field tearing off, nothing burning)
@@ -655,6 +667,15 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		if (!Fx)
 		{
 			continue;
+		}
+		if (IsSovereign() && (Pellet == 0 || Pellet % 3 == 0) && Kind != ESOProjectileKind::Spit && Kind != ESOProjectileKind::Bile && Kind != ESOProjectileKind::Brood)
+		{
+			// (its way marked in gold, and where it lands; a pattern of pellets: every third)
+			Fx->SovereignTrail(Muzzle, End, Speed, Holder->GetVelocity());
+			if (bHit)
+			{
+				Fx->SovereignMark(Hit.ImpactPoint, Hit.ImpactNormal, Flight);
+			}
 		}
 		const ASOCombatCharacter* Victim = bHit ? Cast<ASOCombatCharacter>(Hit.GetActor()) : nullptr;
 		const UPrimitiveComponent* Comp = bHit ? Hit.GetComponent() : nullptr;

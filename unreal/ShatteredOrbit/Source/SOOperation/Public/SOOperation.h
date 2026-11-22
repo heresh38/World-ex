@@ -272,6 +272,23 @@ public:
 
 	TMap<FName, FSOSpawnGroup> Groups;
 
+	/** Things that explode, put down by the plan ("explosives", the owner's effects guide: "environmental explosion:
+	 *  reactive environment"): a cluster near a spawn group's middle (or at a point), of these kinds
+	 *  (ESOExplosiveKind); the server finds each a free, level place on the floor clear of every spawn point. */
+	struct FExplosiveCluster
+	{
+		FName Near;
+		FVector At = FVector::ZeroVector;
+		bool bAt = false;
+		float Yaw = 0.0f;
+		TArray<uint8> Kinds;
+	};
+	TArray<FExplosiveCluster> ExplosivePlan;
+
+	/** Server: puts the plan's things that explode down (returns how many found a place). */
+	int32 SpawnExplosives();
+	int32 GetNumExplosives() const { return NumExplosives; }
+
 	/** The level's operation (null if it has none). */
 	static ASOOperation* Get(const UObject* WorldContext);
 
@@ -374,6 +391,8 @@ protected:
 	/** What its species need to appear, held while the operation's level runs. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UObject>> HeldContent;
+
+	int32 NumExplosives = 0;
 
 	/** Server: the stage's enemies still standing, its next wave, when the last wave came, the hold's loop. */
 	TArray<TWeakObjectPtr<ASOEnemy>> Alive;

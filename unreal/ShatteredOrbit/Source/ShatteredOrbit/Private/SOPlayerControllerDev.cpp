@@ -37,6 +37,8 @@
 #include "SOJournal.h"
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
+#include "SOExplosive.h"
+#include "Misc/App.h"
 #include "SOFxSubsystem.h"
 #include "SOWeaponData.h"
 #include "SOProjectileSubsystem.h"
@@ -65,6 +67,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set) {}
 void ASOPlayerController::CaptureStep() {}
 void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone) {}
 void ASOPlayerController::SOFace(const FString& Key, float Value) {}
+void ASOPlayerController::SOFxStats(int32 bReset) {}
 void ASOPlayerController::FinishBenchmark() {}
 void ASOPlayerController::DevTick(float DeltaTime) {}
 void ASOPlayerController::DevBegin() {}
@@ -188,6 +191,237 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	auto View = [Hero](ESOViewMode Mode) { if (ASOCharacter* H = Hero()) { H->SetViewMode(Mode); } };
 
 	CaptureCues.Reset();
+	if (Set == 43)
+	{
+		// The effects' third pass (files fx3_*): the range's things that explode (a row of drums one setting off the
+		// next, a wreck thrown up and left burning, a Sarketh cell's amber burst), a Sovereign rifle's gold (flash,
+		// its rounds' way, where they land), a storm's rain (splashes, sheets), and the busiest moment measured: a
+		// shotgun into a crowd's shields with blasts going off (FXCOST lines every half second).
+		auto Explosive = [this](ESOExplosiveKind Kind, const FVector& Near) -> ASOExplosive*
+		{
+			ASOExplosive* Best = nullptr;
+			for (TActorIterator<ASOExplosive> It(GetWorld()); It; ++It)
+			{
+				if (It->GetKind() == Kind && !It->IsSpent() && (!Best || FVector::DistSquared(It->GetActorLocation(), Near) < FVector::DistSquared(Best->GetActorLocation(), Near)))
+				{
+					Best = *It;
+				}
+			}
+			return Best;
+		};
+		auto Stand = [this, Hero](const FVector& At, const FVector& Toward)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				H->SetActorLocation(At + FVector(0, 0, 100.0f));
+				const FRotator Look = (Toward - (At + FVector(0, 0, 160.0f))).Rotation();
+				SetControlRotation(FRotator(Look.Pitch, Look.Yaw, 0.0f));
+			}
+		};
+		auto Watch = [this](const FVector& Eye, const FVector& At)
+		{
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		auto Blow = [this](ASOExplosive* E) { if (E) { USOCombatStatics::ApplyDamage(GetPawn(), E, 5000.0f, false); } };
+		auto Speed = [this](float Dilation) { UGameplayStatics::SetGlobalTimeDilation(this, Dilation); };
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			View(ESOViewMode::FirstPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				H->SetCanBeDamaged(false);                       // (it stands among the blasts)
+			}
+			if (USOWeatherSubsystem* W = GetWorld()->GetSubsystem<USOWeatherSubsystem>())
+			{
+				W->bAutomatic = false;
+				W->SetWeather(ESOWeather::Cloudy, 0.0f);
+			}
+		});
+		// 1. the drums by the first spawner, from 9 m: as they stand, then one shot through and the row going up
+		Act([=]() { Watch(FVector(1450, -700, 230), FVector(2330, -1085, 60)); });
+		Snap(1.5f, TEXT("fx3_01_drums"));
+		Act([=]() { Speed(0.35f); Blow(Explosive(ESOExplosiveKind::Drum, FVector(2300, -1150, 0))); });
+		Snap(0.04f, TEXT("fx3_02_drum_blast"));
+		Snap(0.12f, TEXT("fx3_03_drum_chain"));
+		Snap(0.3f, TEXT("fx3_04_drum_chain_later"));
+		Act([=]() { Speed(1.0f); });
+		Snap(1.6f, TEXT("fx3_05_drums_after"));
+		// 2. the wreck: as it stands, thrown up by its blast, down and burning
+		Act([=]() { Watch(FVector(1150, 1150, 260), FVector(2000, 1850, 80)); });
+		Snap(1.2f, TEXT("fx3_06_wreck"));
+		Act([=]() { Speed(0.4f); Blow(Explosive(ESOExplosiveKind::Vehicle, FVector(2000, 1850, 0))); });
+		Snap(0.05f, TEXT("fx3_07_wreck_blast"));
+		Snap(0.2f, TEXT("fx3_08_wreck_thrown"));
+		Act([=]() { Speed(1.0f); });
+		Snap(2.5f, TEXT("fx3_09_wreck_burning"));
+		// 3. a Sarketh cell's burst
+		Act([=]() { Watch(FVector(2350, -250, 200), FVector(3040, -285, 60)); });
+		Snap(1.0f, TEXT("fx3_10_cells"));
+		Act([=]() { Speed(0.35f); Blow(Explosive(ESOExplosiveKind::Cell, FVector(3000, -320, 0))); });
+		Snap(0.06f, TEXT("fx3_11_cell_burst"));
+		Act([=]() { Speed(1.0f); });
+		// 4. a Sovereign rifle firing at the far wall: first person, then from beside the line
+		Do(1.0f, [=, this]()
+		{
+			SetViewTarget(GetPawn());
+			Stand(FVector(-600, 3000, 0), FVector(4000, 3000, 260));      // (a clear line down the range to the far wall)
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(9);
+				const USOLootTables* Tables = USOLootLibrary::GetTables();
+				FSOWeaponInstance Copy = USOLootLibrary::MakeWeapon(TEXT("rifle"), Tables ? Tables->Rarities.Num() - 1 : 4, 30, Rng);
+				Copy.Sight = TEXT("default");
+				H->EquipInstance(Copy);
+			}
+		});
+		Do(1.0f, [=, this]() { if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { H->GetWeapon()->SetAmmo(30, 120); H->HandleFirePressed(); } });
+		Do(0.18f, [=]() { Speed(0.04f); });
+		Snap(0.0f, TEXT("fx3_12_sovereign_fire"));
+		Act([=, this]() { Speed(1.0f); if (ASOCharacter* H = Hero()) { H->HandleFireReleased(); } });
+		Act([=, this]() { Watch(FVector(1300, 2350, 190), FVector(2300, 3000, 170)); if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { H->GetWeapon()->SetAmmo(30, 120); H->HandleFirePressed(); } });
+		Do(0.22f, [=]() { Speed(0.04f); });
+		Snap(0.0f, TEXT("fx3_13_sovereign_side"));
+		Act([=, this]() { Speed(1.0f); if (ASOCharacter* H = Hero()) { H->HandleFireReleased(); } });
+		// 5. a storm: the rain landing round the feet, the sheets across the range
+		Do(0.5f, [=, this]()
+		{
+			if (USOWeatherSubsystem* W = GetWorld()->GetSubsystem<USOWeatherSubsystem>())
+			{
+				W->SetWeather(ESOWeather::Storm, 0.0f);
+				W->SetWetness(0.9f);
+			}
+			SetViewTarget(GetPawn());
+			Stand(FVector(-200, -2000, 0), FVector(600, -1700, 0));
+		});
+		Snap(6.0f, TEXT("fx3_14_rain_ground"));                        // (the eye's exposure settles into the storm)
+		Act([=]() { Stand(FVector(-3200, -3200, 0), FVector(3000, 3000, 900)); });
+		Snap(2.0f, TEXT("fx3_15_rain_sheets"));
+		Act([=, this]() { SOFxStats(1); });
+		// 6. the busiest moment: ten creatures with their shields up, a shotgun pumped into them, the drums and the
+		// bottles going off among them; what it costs every half second
+		Do(0.5f, [=, this]()
+		{
+			if (USOWeatherSubsystem* W = GetWorld()->GetSubsystem<USOWeatherSubsystem>())
+			{
+				W->SetWeather(ESOWeather::Cloudy, 0.0f);
+			}
+			Stand(FVector(1500, 0, 0), FVector(2600, 0, 100));
+			FSOSpawnOptions Options;
+			Options.bOnNav = false;
+			for (int32 i = 0; i < 10; ++i)
+			{
+				if (ASOEnemy* E = USOSpeciesLibrary::Spawn(GetWorld(), TEXT("remnant"), FVector(2350 + (i % 5) * 90.0f, -260 + (i / 5) * 260.0f + (i % 2) * 40.0f, 0), 180.0f, Options))
+				{
+					if (AController* Brain = E->GetController())
+					{
+						Brain->UnPossess();
+						Brain->Destroy();
+					}
+				}
+			}
+			if (ASOCharacter* H = Hero())
+			{
+				FRandomStream Rng(5);
+				H->EquipInstance(USOLootLibrary::MakeWeapon(TEXT("shotgun"), 2, 30, Rng));
+			}
+		});
+		for (int32 i = 0; i < 8; ++i)
+		{
+			Do(0.25f, [=, this]() { if (ASOCharacter* H = Hero(); H && H->GetWeapon()) { H->GetWeapon()->SetAmmo(8, 80); H->HandleFirePressed(); } });
+			Do(0.25f, [=, this]()
+			{
+				if (ASOCharacter* H = Hero()) { H->HandleFireReleased(); }
+				if (i == 2) { Blow(Explosive(ESOExplosiveKind::Cylinder, FVector(2350, 350, 0))); }
+				if (i == 4) { Blow(Explosive(ESOExplosiveKind::Drum, FVector(1240, 1900, 0))); }
+				SOFxStats(0);
+			});
+			if (i == 3)
+			{
+				Snap(0.0f, TEXT("fx3_16_busiest"));
+			}
+		}
+		Do(0.5f, [=, this]() { SOFxStats(0); });
+		Do(0.5f, [=, this]() { SOFxStats(0); });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 44)
+	{
+		// Meridian Fall's things that explode where the plan put them and its storm's rain on the street (run on
+		// /Game/Maps/L_Meridian; files fx3_2*): the cluster by the dead highway's road, the rain landing round the
+		// feet, the street in the storm; how many the operation put down
+		auto Stand = [this, Hero](const FVector& At, const FVector& Toward)
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				H->SetActorLocation(At + FVector(0, 0, 100.0f));
+				const FRotator Look = (Toward - (At + FVector(0, 0, 160.0f))).Rotation();
+				SetControlRotation(FRotator(Look.Pitch, Look.Yaw, 0.0f));
+			}
+		};
+		auto Floor = [this](const FVector& Over) -> FVector
+		{
+			FHitResult Hit;
+			return GetWorld()->LineTraceSingleByChannel(Hit, Over + FVector(0, 0, 400.0f), Over - FVector(0, 0, 2000.0f), ECC_Visibility) ? FVector(Hit.ImpactPoint) : Over;
+		};
+		Do(16.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			View(ESOViewMode::FirstPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				H->SetCanBeDamaged(false);
+			}
+			const ASOOperation* Op = ASOOperation::Get(this);
+			UE_LOG(LogShatteredOrbit, Display, TEXT("MERIDIAN explosives put down: %d"), Op ? Op->GetNumExplosives() : -1);
+			// the nearest cluster to the dead highway's road
+			ASOExplosive* Best = nullptr;
+			const FVector Road(-205000, -200, 0);
+			for (TActorIterator<ASOExplosive> It(GetWorld()); It; ++It)
+			{
+				if (!Best || FVector::DistSquared2D(It->GetActorLocation(), Road) < FVector::DistSquared2D(Best->GetActorLocation(), Road))
+				{
+					Best = *It;
+				}
+			}
+			if (Best)
+			{
+				const FVector At = Best->GetActorLocation();
+				Stand(Floor(At + FVector(-850, -350, 0)), At + FVector(0, 0, 60));
+				UE_LOG(LogShatteredOrbit, Display, TEXT("MERIDIAN nearest explosive at %s"), *At.ToCompactString());
+			}
+		});
+		Snap(3.0f, TEXT("fx3_20_meridian_props"));
+		Act([=, this]()
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				const FVector P = H->GetActorLocation();
+				SetControlRotation(FRotator(-38.0f, GetControlRotation().Yaw + 70.0f, 0.0f));
+			}
+		});
+		Snap(2.5f, TEXT("fx3_21_meridian_rain"));
+		Act([=, this]() { SetControlRotation(FRotator(2.0f, GetControlRotation().Yaw - 40.0f, 0.0f)); SOFxStats(0); });
+		Snap(2.0f, TEXT("fx3_22_meridian_storm"));
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 41)
 	{
 		// The effect system on the owner's guide (files fx_*): a round's impact on each surface, the flash of each
@@ -3905,6 +4139,25 @@ void ASOPlayerController::CaptureStep()
 	CaptureWait = 0.0f;
 	++CaptureIndex;
 	Cue.Action();
+}
+
+void ASOPlayerController::SOFxStats(int32 bReset)
+{
+	USOFxSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<USOFxSubsystem>() : nullptr;
+	const USOWeatherSubsystem* Weather = GetWorld() ? GetWorld()->GetSubsystem<USOWeatherSubsystem>() : nullptr;
+	if (!Fx)
+	{
+		return;
+	}
+	const FString Line = FString::Printf(TEXT("FXCOST particles %d (peak %d of %d), tick %.2f ms (peak %.2f), gave way %d, frame %.1f ms | rain splashes %d, sheets %d"),
+		Fx->GetNumParticles(), Fx->GetPeakParticles(), USOFxSubsystem::MaxParticles, Fx->GetLastTickMs(), Fx->GetPeakTickMs(), Fx->GetDropped(),
+		FApp::GetDeltaTime() * 1000.0, Weather ? Weather->GetNumSplashes() : 0, Weather ? Weather->GetNumCurtains() : 0);
+	UE_LOG(LogShatteredOrbit, Display, TEXT("%s"), *Line);
+	ClientMessage(Line);
+	if (bReset)
+	{
+		Fx->ResetStats();
+	}
 }
 
 void ASOPlayerController::SOFace(const FString& Key, float Value)

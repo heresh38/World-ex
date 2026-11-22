@@ -156,9 +156,183 @@ void USOFxSubsystem::Spawn(const FSOFxParticle& Particle)
 {
 	if (Particles.Num() >= MaxParticles)
 	{
-		Particles.RemoveAt(0, 1, EAllowShrinking::No);
+		// full: one of the furthest through its life gives way (of eight slots from a cursor that walks the pool: the
+		// oldest was the first in the array and taking it out moved every other one, 1500 at a time)
+		++Dropped;
+		const int32 N = Particles.Num();
+		int32 Best = DropCursor % N;
+		float BestShare = -2.0f;
+		for (int32 k = 0; k < 8; ++k)
+		{
+			const int32 i = (DropCursor + k * 187) % N;
+			const FSOFxParticle& P = Particles[i];
+			const float Share = P.Delay > 0.0f ? -1.0f : P.Age / FMath::Max(P.Life, 1e-4f);
+			if (Share > BestShare)
+			{
+				BestShare = Share;
+				Best = i;
+			}
+		}
+		DropCursor = (DropCursor + 1) % N;
+		Particles[Best] = Particle;
+		return;
 	}
 	Particles.Add(Particle);
+}
+
+const FLinearColor USOFxSubsystem::SovereignGold(1.0f, 0.74f, 0.22f);
+
+void USOFxSubsystem::SovereignFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, bool bThroughScope)
+{
+	const FVector D = Dir.GetSafeNormal(1e-4f, FVector::ForwardVector);
+	const FVector Side = FVector::CrossProduct(D, FMath::Abs(D.Z) < 0.9f ? FVector::UpVector : FVector::RightVector).GetSafeNormal();
+	const FVector Up2 = FVector::CrossProduct(D, Side);
+	const float S = Scale * (bViewmodel ? 0.7f : 1.0f);
+	if (bThroughScope)
+	{
+		return;                                                      // (the glass shows nothing of a flash at arm's length)
+	}
+	// the crown: a ring of gold motes opening round the bore
+	const float Turn = Random.FRandRange(0.0f, UE_TWO_PI);
+	for (int32 i = 0; i < 12; ++i)
+	{
+		const float A = Turn + UE_TWO_PI * i / 12.0f;
+		const FVector Out = Side * FMath::Cos(A) + Up2 * FMath::Sin(A);
+		FSOFxParticle M;
+		M.Kind = ESOFxKind::Glow;
+		M.Position = Muzzle + Out * 2.5f * S + D * 2.0f * S;
+		M.Velocity = Out * 150.0f * S + D * 70.0f * S;
+		M.Drag = 7.0f;
+		M.Life = 0.17f;
+		M.Size0 = 2.4f * S;
+		M.Size1 = 0.8f * S;
+		M.Intensity0 = 4.5f;
+		M.Color = SovereignGold;
+		Spawn(M);
+	}
+	FSOFxParticle Halo;
+	Halo.Kind = ESOFxKind::Glow;
+	Halo.Position = Muzzle + D * 3.0f * S;
+	Halo.Life = 0.08f;
+	Halo.Size0 = 9.0f * S;
+	Halo.Size1 = 20.0f * S;
+	Halo.Intensity0 = 3.0f;
+	Halo.Color = FMath::Lerp(SovereignGold, FLinearColor::White, 0.25f);
+	Spawn(Halo);
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FSOFxParticle Blade;
+		Blade.Kind = ESOFxKind::Star;
+		Blade.Position = Muzzle + D * 4.0f * S;
+		Blade.Axis = D;
+		Blade.Spin = 90.0f * i + Random.FRandRange(-10.0f, 10.0f);
+		Blade.Length = 16.0f * S;
+		Blade.Life = 0.05f;
+		Blade.Size0 = Blade.Size1 = 3.0f * S;
+		Blade.Intensity0 = 5.0f;
+		Blade.Color = SovereignGold;
+		Spawn(Blade);
+	}
+}
+
+void USOFxSubsystem::SovereignTrail(const FVector& From, const FVector& To, float Speed, const FVector& Carry)
+{
+	const FVector Line = To - From;
+	const float L = Line.Size();
+	if (L < 10.0f || Speed <= 1.0f)
+	{
+		return;
+	}
+	const FVector D = Line / L;
+	const FVector Side = FVector::CrossProduct(D, FMath::Abs(D.Z) < 0.9f ? FVector::UpVector : FVector::RightVector).GetSafeNormal();
+	const FVector Up2 = FVector::CrossProduct(D, Side);
+	// a helix of motes, a turn every 36 cm, appearing as the round passes (no more than 90 along the way)
+	const int32 N = FMath::Clamp(FMath::RoundToInt(L / 30.0f), 6, 90);
+	const float Phase0 = Random.FRandRange(0.0f, UE_TWO_PI);
+	for (int32 i = 1; i <= N; ++i)
+	{
+		const float T = static_cast<float>(i) / N;
+		const float Along = L * T;
+		const float A = Phase0 + Along / 36.0f * UE_TWO_PI;
+		FSOFxParticle M;
+		M.Kind = ESOFxKind::Glow;
+		M.Position = From + D * Along + (Side * FMath::Cos(A) + Up2 * FMath::Sin(A)) * 4.5f;
+		M.Velocity = (Side * FMath::Cos(A) + Up2 * FMath::Sin(A)) * 14.0f;
+		M.Delay = Along / Speed;
+		M.Life = 0.36f;
+		M.Size0 = 2.6f;
+		M.Size1 = 0.6f;
+		M.Intensity0 = 4.5f;
+		M.Color = SovereignGold;
+		Spawn(M);
+	}
+	// the orb on the round's head
+	FSOFxParticle Orb;
+	Orb.Kind = ESOFxKind::Glow;
+	Orb.Position = From;
+	Orb.Velocity = D * Speed;
+	Orb.Life = L / Speed;
+	Orb.Size0 = Orb.Size1 = 2.6f;
+	Orb.Intensity0 = Orb.Intensity1 = 3.0f;
+	Orb.Color = SovereignGold;
+	Spawn(Orb);
+}
+
+void USOFxSubsystem::SovereignMark(const FVector& Point, const FVector& Normal, float Delay)
+{
+	const FVector N = Normal.GetSafeNormal(1e-4f, FVector::UpVector);
+	const FVector Side = FVector::CrossProduct(N, FMath::Abs(N.Z) < 0.9f ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	const FVector Up2 = FVector::CrossProduct(Side, N);
+	// the sigil: six cells round the point, opening outward
+	for (int32 i = 0; i < 6; ++i)
+	{
+		const float A = UE_TWO_PI * i / 6.0f;
+		const FVector Out = Side * FMath::Cos(A) + Up2 * FMath::Sin(A);
+		FSOFxParticle C;
+		C.Kind = ESOFxKind::Cell;
+		C.Position = Point + N * 1.2f + Out * 7.0f;
+		C.Velocity = Out * 22.0f;
+		C.Drag = 3.0f;
+		C.Axis = N;
+		C.bFlat = true;
+		C.Spin = 60.0f * i;
+		C.Delay = Delay;
+		C.Life = 0.55f;
+		C.Size0 = 4.5f;
+		C.Size1 = 6.0f;
+		C.Intensity0 = 5.0f;
+		C.Intensity1 = 0.0f;
+		C.Color = SovereignGold;
+		Spawn(C);
+	}
+	for (int32 i = 0; i < 8; ++i)
+	{
+		FSOFxParticle M;
+		M.Kind = ESOFxKind::Glow;
+		M.Position = Point + N * 2.0f;
+		M.Velocity = N * Random.FRandRange(40.0f, 110.0f) + Random.VRand() * 35.0f;
+		M.Gravity = -60.0f;
+		M.Drag = 1.6f;
+		M.Delay = Delay;
+		M.Life = Random.FRandRange(0.5f, 0.8f);
+		M.Size0 = 1.6f;
+		M.Size1 = 0.3f;
+		M.Intensity0 = 3.0f;
+		M.Color = SovereignGold;
+		Spawn(M);
+	}
+	FSOFxParticle Flash;
+	Flash.Kind = ESOFxKind::Star;
+	Flash.Position = Point + N * 2.0f;
+	Flash.Axis = N;
+	Flash.Spin = Random.FRandRange(0.0f, 180.0f);
+	Flash.Length = 12.0f;
+	Flash.Delay = Delay;
+	Flash.Life = 0.06f;
+	Flash.Size0 = Flash.Size1 = 3.0f;
+	Flash.Intensity0 = 5.0f;
+	Flash.Color = SovereignGold;
+	Spawn(Flash);
 }
 
 int32 USOFxSubsystem::GetNumDecals() const
@@ -2066,6 +2240,18 @@ void USOFxSubsystem::FlashLight(const FVector& Point, float Intensity, const FLi
 
 void USOFxSubsystem::Tick(float DeltaTime)
 {
+	// (what this frame's work costs: kept as the frame's work ends, whichever way it ends)
+	struct FCost
+	{
+		USOFxSubsystem* Self;
+		double Start = FPlatformTime::Seconds();
+		~FCost()
+		{
+			Self->LastTickMs = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+			Self->PeakTickMs = FMath::Max(Self->PeakTickMs, Self->LastTickMs);
+			Self->PeakParticles = FMath::Max(Self->PeakParticles, Self->Particles.Num());
+		}
+	} Cost{ this };
 	for (int32 i = Pending.Num() - 1; i >= 0; --i)
 	{
 		Pending[i].Delay -= DeltaTime;
