@@ -15,6 +15,7 @@
 #include "SOCombatStatics.h"
 #include "SOEnemyAIController.h"
 #include "SOLootActors.h"
+#include "SOProjectileSubsystem.h"
 #include "SOWeapon.h"
 
 namespace SOTest
@@ -208,6 +209,108 @@ bool FSOLootGroundTest::RunTest(const FString& Parameters)
 	ASOLootPickup* Ammo = Loot->SpawnPickup(FVector(200, 0, 90.0f), ESOPickupKind::Ammo, 0, 10);
 	TestTrue(TEXT("a core lands on the floor"), Core && FMath::Abs(Core->GetActorLocation().Z) < 5.0f);
 	TestTrue(TEXT("ammo lands on the floor"), Ammo && FMath::Abs(Ammo->GetActorLocation().Z) < 5.0f);
+	return true;
+}
+
+// The owner, 2026-11-22: "if i shoot beside them they do nothing, they need to listen to sound, see bullets and react".
+// One far beyond the sound of the gun (70 m) and out of sight: a round cracks past it three metres off. It is in the
+// fight at once, against the one who fired, and knows only roughly where they are (the way the round came).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOShotsNearbyTest, "ShatteredOrbit.AI.ShotsNearbyAreNoticed", SOTest::Flags)
+bool FSOShotsNearbyTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-16000, -16000, -100), FVector(16000, 16000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(-7000, 0, 0));
+	ASORemnant* E = SOTest::SpawnCreature<ASORemnant>(W, FVector(0, 0, 0), 90.0f);     // looking away, across the line
+	ASOEnemyAIController* AI = SOTest::Brain(E);
+	USOProjectileSubsystem* Rounds = W.World->GetSubsystem<USOProjectileSubsystem>();
+	if (!TestNotNull(TEXT("a remnant with a brain"), AI) || !TestNotNull(TEXT("rounds"), Rounds))
+	{
+		return false;
+	}
+	W.Run(1.0f);
+	TestFalse(TEXT("nothing yet: the player is 70 m off, out of sight and silent"), AI->IsInCombat());
+	FSOProjectile Round;
+	Round.Origin = Round.Position = Player->GetActorLocation() + FVector(0, 0, 60.0f);
+	const FVector Beside = E->GetActorLocation() + FVector(0, 300.0f, 0);
+	Round.Velocity = (Beside - Round.Origin).GetSafeNormal() * 80000.0f;
+	Round.Gravity = 0.0f;
+	Round.Damage = 10.0f;
+	Round.Life = 1.5f;
+	Round.Instigator = Player;
+	Rounds->Fire(Round);
+	W.Run(1.2f);
+	TestTrue(TEXT("a round cracking past three metres off puts it in the fight"), AI->IsInCombat());
+	TestTrue(TEXT("against the one who fired"), AI->GetTarget() == Player);
+	const float Off = static_cast<float>(FVector::Dist2D(AI->GetLastKnownLocation(), Player->GetActorLocation()));
+	TestTrue(FString::Printf(TEXT("it knows roughly where from (%.0f cm off the shooter)"), Off), Off < 1000.0f);
+	TestTrue(TEXT("it knows it is being shot at"), AI->SinceShotAt() < 2.0f);
+	return true;
+}
+
+// Shot from fifty metres by someone it cannot see, one that holds ground does not run at the shooter (the owner: "they
+// get shot by the player then just ran straight to the player no matter how far the player is like they are mindless
+// zombies"): it knows the way the round came and roughly how far, and keeps to its ground.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOHoldsGroundTest, "ShatteredOrbit.AI.HoldsGroundWhenShotFromAfar", SOTest::Flags)
+bool FSOHoldsGroundTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-16000, -16000, -100), FVector(16000, 16000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(-5000, 0, 0));
+	ASORemnant* E = SOTest::SpawnCreature<ASORemnant>(W, FVector(0, 0, 0), 0.0f);      // its back to the player
+	ASOEnemyAIController* AI = SOTest::Brain(E);
+	if (!TestNotNull(TEXT("a remnant with a brain"), AI))
+	{
+		return false;
+	}
+	AI->SetFlanker(false);
+	W.Run(0.5f);
+	const FVector Start = E->GetActorLocation();
+	USOCombatStatics::ApplyDamage(Player, E, 5.0f, false);
+	W.Run(0.5f);
+	TestTrue(TEXT("hit: it is in the fight"), AI->IsInCombat());
+	const float Off = static_cast<float>(FVector::Dist2D(AI->GetLastKnownLocation(), Player->GetActorLocation()));
+	TestTrue(FString::Printf(TEXT("it knows roughly where the shot came from, not the place (%.0f cm off)"), Off), Off > 50.0f && Off < 1000.0f);
+	W.Run(10.0f);
+	const float Closed = static_cast<float>(FVector::Dist2D(Start, Player->GetActorLocation()) - FVector::Dist2D(E->GetActorLocation(), Player->GetActorLocation()));
+	TestTrue(FString::Printf(TEXT("it keeps to its ground (closed %.0f cm of 50 m in ten seconds)"), Closed), Closed < AI->HoldRadius + 150.0f);
+	TestTrue(FString::Printf(TEXT("it is within its ground (%.0f cm from its post)"), FVector::Dist2D(E->GetActorLocation(), AI->GetHome())),
+		FVector::Dist2D(E->GetActorLocation(), AI->GetHome()) < AI->HoldRadius + 150.0f);
+	return true;
+}
+
+// The owner: zoomed in on one "they just move out of the way fast ... shooting needs to be a bit more easier and more
+// fun". A gun levelled at a creature in the open no longer makes it jump aside: in view of the player, aimed at for six
+// seconds, it fights from where it stands.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSONoDodgeTest, "ShatteredOrbit.AI.AimingDoesNotMakeThemDodge", SOTest::Flags)
+bool FSONoDodgeTest::RunTest(const FString& Parameters)
+{
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-8000, -8000, -100), FVector(8000, 8000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	ASOArmedStalker* E = SOTest::SpawnCreature<ASOArmedStalker>(W, FVector(1800, 0, 0), 180.0f);
+	ASOEnemyAIController* AI = SOTest::Brain(E);
+	if (!TestNotNull(TEXT("an armed stalker with a brain"), AI))
+	{
+		return false;
+	}
+	if (AController* C = Player->GetController())
+	{
+		C->SetControlRotation((E->GetActorLocation() - Player->GetActorLocation()).Rotation());
+	}
+	W.Run(1.5f);
+	TestTrue(TEXT("it has seen the player"), AI->IsInCombat());
+	const FVector Start = E->GetActorLocation();
+	W.Run(6.0f, [&] {
+		if (AController* C = Player->GetController())
+		{
+			C->SetControlRotation((E->GetActorLocation() - Player->GetActorLocation()).Rotation());
+		}
+	});
+	TestEqual(TEXT("aimed at, it never jumped aside"), AI->GetDodges(), 0);
+	TestTrue(FString::Printf(TEXT("it fought from about where it stood (moved %.0f cm)"), FVector::Dist2D(Start, E->GetActorLocation())),
+		FVector::Dist2D(Start, E->GetActorLocation()) < 400.0f);
+	TestTrue(FString::Printf(TEXT("and it shot back (%d rounds)"), E->GetShotsFired()), E->GetShotsFired() > 0);
 	return true;
 }
 

@@ -113,12 +113,15 @@ void ASOEnemyAIController::OnNoise(UWorld* World, const FVector& Location, AActo
 	LastStimulusTime = World->GetTimeSeconds();
 	if (bShot)
 	{
+		const bool bSawIt = World->GetTimeSeconds() - LastSeenTime < 1.0f;
 		Awareness = 1.0f;
 		if (!bInCombat)
 		{
 			EnterCombat(Source, true);
 		}
-		LastKnownLocation = Location;
+		// heard, not seen: the way it came and roughly how far, never the place (it takes cover from that way and
+		// looks; it does not run to where the shot was)
+		LastKnownLocation = bSawIt ? Source->GetActorLocation() : Guess(Location);
 		LastSeenTime = FMath::Max(LastSeenTime, World->GetTimeSeconds() - LoseTargetTime * 0.5f);
 	}
 	else
@@ -160,11 +163,19 @@ void ASOEnemyAIController::OnHit(ASOCombatCharacter* Victim, AActor* Source, flo
 		// It is the one hit: it knows it is in a fight and roughly where the shot came from, from any distance.
 		// (what its body does about the hit is the body's own: ASOEnemy::OnTookDamage)
 		LastHurtTime = World->GetTimeSeconds();
+		LastShotAtTime = LastHurtTime;
 		LastAttacker = Shooter;
+		const bool bSawIt = World->GetTimeSeconds() - LastSeenTime < 1.0f;
 		if (!bInCombat)
 		{
 			EnterCombat(Shooter, true);
 			LastSeenTime = FMath::Max(LastSeenTime, World->GetTimeSeconds() - LoseTargetTime * 0.5f);
+		}
+		// hit by someone it did not see: it knows the way the round came and roughly how far, never the place (the owner:
+		// shot from afar they "just ran straight to the player no matter how far ... like they are mindless zombies")
+		if (!bSawIt)
+		{
+			LastKnownLocation = Guess(Shooter->GetActorLocation()); // (if it can see them from here, it soon does)
 		}
 		return;
 	}
@@ -175,6 +186,66 @@ void ASOEnemyAIController::OnHit(ASOCombatCharacter* Victim, AActor* Source, flo
 	{
 		Alert(Shooter, Shooter->GetActorLocation());
 	}
+}
+
+void ASOEnemyAIController::OnShotNear(ASOCombatCharacter* Shooter, const FVector& Origin)
+{
+	ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
+	UWorld* World = GetWorld();
+	if (!World || !Me || Me->IsDead() || !Shooter || Shooter->IsDead() || !USOCombatStatics::AreHostile(Me, Shooter))
+	{
+		return;
+	}
+	const float T = World->GetTimeSeconds();
+	if (T - LastShotAtTime < 0.3f)
+	{
+		return;                                                   // (a burst is one event, not twenty)
+	}
+	LastShotAtTime = T;
+	Stimulus = Origin;
+	LastStimulusTime = T;
+	const bool bSawIt = T - LastSeenTime < 1.0f;
+	if (!bInCombat)
+	{
+		// rounds cracking past or striking beside it: it is in a fight, it knows from which way, and it cries out
+		EnterCombat(Shooter, true);
+		LastSeenTime = FMath::Max(LastSeenTime, T - LoseTargetTime * 0.5f);
+	}
+	if (!bSawIt)
+	{
+		LastKnownLocation = Guess(Origin);
+	}
+	// caught in the open it makes for cover now (running: ThinkCombat); looking out from cover, it ducks back
+	if (Me->IsArmed() && Me->bUsesCover && !bRetreating)
+	{
+		if (!bHasCover)
+		{
+			NextCoverSearch = 0.0f;
+		}
+		else if (bPeeking)
+		{
+			PhaseUntil = T;
+		}
+	}
+}
+
+float ASOEnemyAIController::SinceShotAt() const
+{
+	return Now(this) - LastShotAtTime;
+}
+
+FVector ASOEnemyAIController::Guess(const FVector& At) const
+{
+	const APawn* Me = GetPawn();
+	const float Dist = Me ? static_cast<float>(FVector::Dist2D(Me->GetActorLocation(), At)) : 0.0f;
+	const float Err = FMath::Clamp(Dist * 0.12f, 100.0f, 900.0f);
+	const FVector2D Way = FVector2D(FMath::FRandRange(-1.0f, 1.0f), FMath::FRandRange(-1.0f, 1.0f)).GetSafeNormal();
+	return At + FVector(Way.X, Way.Y, 0.0f) * Err * FMath::FRandRange(0.35f, 1.0f);
+}
+
+bool ASOEnemyAIController::OnItsGround(const FVector& P) const
+{
+	return !HoldsGround() || FVector::Dist2D(P, Home) <= HoldRadius;
 }
 
 bool ASOEnemyAIController::IsScattering() const
@@ -644,6 +715,9 @@ void ASOEnemyAIController::Think()
 			if (ASOCombatCharacter* Who = NearestPlayer())
 			{
 				EnterCombat(Who, true);
+				// (hurt by it knows not what: the nearest of them, roughly where they are)
+				LastKnownLocation = Guess(Who->GetActorLocation());
+				LastSeenTime = FMath::Max(LastSeenTime, T - LoseTargetTime * 0.5f);
 			}
 		}
 	}
@@ -744,7 +818,15 @@ void ASOEnemyAIController::ThinkCombat()
 			SearchUntil = T + SearchTime;
 			Me->SetAimTarget(nullptr);
 			Me->SetWantsFire(false);
-			MoveToLocation(LastKnownLocation, 150.0f);
+			Me->SetPace(ESOPace::Walk);
+			// one that holds ground searches what it holds: where the target was if that is on its ground, else the
+			// edge of its ground toward it (it does not go hunting across the map)
+			SearchCentre = LastKnownLocation;
+			if (!OnItsGround(SearchCentre))
+			{
+				SearchCentre = Home + (SearchCentre - Home).GetSafeNormal2D() * HoldRadius;
+			}
+			MoveToLocation(SearchCentre, 150.0f);
 			SetFocalPoint(LastKnownLocation, EAIFocusPriority::Gameplay);
 		}
 		else if (T >= SearchUntil)
@@ -756,15 +838,18 @@ void ASOEnemyAIController::ThinkCombat()
 			// look round the last place
 			NextWander = T + FMath::FRandRange(1.5f, 3.0f);
 			FNavLocation P;
-			if (UNavigationSystemV1* Nav = NavOf(GetWorld()); Nav && Nav->GetRandomReachablePointInRadius(LastKnownLocation, 600.0f, P))
+			if (UNavigationSystemV1* Nav = NavOf(GetWorld()); Nav && Nav->GetRandomReachablePointInRadius(SearchCentre, 600.0f, P))
 			{
 				MoveToLocation(P.Location, 50.0f);
-				SetFocalPoint(P.Location + (P.Location - LastKnownLocation), EAIFocusPriority::Gameplay);
+				SetFocalPoint(P.Location + (P.Location - SearchCentre), EAIFocusPriority::Gameplay);
 			}
 		}
 		return;
 	}
-	Me->SetRunning(true);
+	// how it moves: claws run; a gunman jogs from place to place and runs only for cover with rounds landing round it,
+	// or falling back (at a dead run all the time it was a blur to shoot at)
+	const bool bUnderFire = T - LastShotAtTime < 2.5f;
+	Me->SetPace(!Me->IsArmed() || bRetreating || (bUnderFire && (!bHasCover || State == ESOEnemyState::Cover)) ? ESOPace::Run : ESOPace::Jog);
 	Me->SetAimTarget(bVisible || T - LastSeenTime < 1.5f || Me->IsSuppressing() ? Foe : nullptr);
 	if (bVisible)
 	{
@@ -781,24 +866,31 @@ void ASOEnemyAIController::ThinkCombat()
 		bDirectChase = false;
 		return;
 	}
-	const float Dist = Me->DistanceTo(Foe);
+	// what it knows of how far the target is: the truth while it sees it (or a hunter), else where it thinks it is
+	const float Dist = bVisible || bHunter ? Me->DistanceTo(Foe) : static_cast<float>(FVector::Dist(Me->GetActorLocation(), LastKnownLocation));
 	const bool bArmed = Me->IsArmed();
-	// It does not stand there: hit out in the open, or with a gun levelled at it, it steps aside (a cover-user then
-	// looks for new cover). A step it has started is finished before the next plan.
+	// Hit out in the open it does not stand there: one that fights from cover makes for cover (running), another
+	// steps aside once in a while. Never for a gun that is only levelled at it (the owner, 2026-11-22: zoomed in on one
+	// "they just move out of the way fast ... shooting needs to be a bit more easier and more fun").
 	const bool bExposed = !bHasCover || bPeeking || State == ESOEnemyState::Cover;
-	if (bVisible && bExposed && T >= NextDodge && Dist > Me->MeleeRange * 1.6f && !Me->IsAttacking()
-		&& (T - LastHurtTime < 0.35f || (Dist < 3200.0f && AimedAt(Foe))))
+	if (bVisible && bExposed && T >= NextDodge && Dist > Me->MeleeRange * 1.6f && !Me->IsAttacking() && T - LastHurtTime < 0.35f)
 	{
-		NextDodge = T + FMath::FRandRange(bArmed ? 2.2f : 1.4f, bArmed ? 4.0f : 2.6f);
-		if (Sidestep(Foe))
+		NextDodge = T + FMath::FRandRange(bArmed ? 4.0f : 2.4f, bArmed ? 7.0f : 4.0f);
+		if (bArmed && Me->bUsesCover)
+		{
+			if (!bHasCover)
+			{
+				NextCoverSearch = 0.0f;                           // (to the cover search below, at a run)
+			}
+			else if (bPeeking)
+			{
+				PhaseUntil = T;                                   // (back behind it)
+			}
+		}
+		else if (Sidestep(Foe))
 		{
 			++Dodges;
 			MoveCommitUntil = T + (bArmed ? 0.7f : 0.45f);
-			if (Me->bUsesCover)
-			{
-				bHasCover = false;
-				NextCoverSearch = MoveCommitUntil;
-			}
 		}
 	}
 	// badly hurt: fall back (cover further off, longer behind it), and say so
@@ -823,9 +915,9 @@ void ASOEnemyAIController::ThinkCombat()
 		// (how readily is the level's: a harder one reacts more often) ...
 		const FSODifficulty& Level = USODifficultySubsystem::Get(this);
 		if (bVisible && Dist > Me->MeleeRange * 1.5f && Dist < 2600.0f && T >= NextJuke && T >= ScatterUntil && !Me->IsAttacking()
-			&& (T - LastHurtTime < 0.3f || AimedAt(Foe)))
+			&& T - LastHurtTime < 0.3f)
 		{
-			NextJuke = T + FMath::FRandRange(1.1f, 2.2f) * Level.Reaction;
+			NextJuke = T + FMath::FRandRange(1.8f, 3.2f) * Level.Reaction;
 			if (FMath::FRand() < FMath::Clamp(0.6f / FMath::Max(Level.Reaction, 0.4f), 0.3f, 0.95f))
 			{
 				const FVector Line = (Foe->GetActorLocation() - Me->GetActorLocation()).GetSafeNormal2D();
@@ -932,8 +1024,10 @@ void ASOEnemyAIController::ThinkCombat()
 		State = ESOEnemyState::Fight;
 		return;
 	}
-	const float Patience = (bRetreating ? 9.0f : ((Me->GetUniqueID() % 2) == 0 || bFlanker ? 2.4f : 5.2f)) * USODifficultySubsystem::Get(this).Patience
-		* (SquadSuppressing() ? 0.4f : 1.0f); // (covered by a suppressor's fire, they move up sooner)
+	// One that holds ground keeps it: it watches where the target went for a good while before it moves (and then no
+	// further than the edge of its ground); flankers and hunters move up sooner, a bound at a time.
+	const float Patience = (bRetreating ? 9.0f : (HoldsGround() ? 12.0f : 4.0f)) * USODifficultySubsystem::Get(this).Patience
+		* (SquadSuppressing() ? 0.5f : 1.0f); // (covered by a suppressor's fire, they move up sooner)
 	bPushing = Blind > Patience && FVector::Dist2D(Me->GetActorLocation(), LastKnownLocation) > 350.0f;
 	if (bPushing)
 	{
@@ -997,27 +1091,75 @@ void ASOEnemyAIController::Push()
 	const float T = Now(this);
 	State = ESOEnemyState::Chase;
 	bHasCover = false;
-	Me->SetWantsFire(Me->HasLineOfFire(Foe));
-	if (T < NextRepath)
+	Me->SetWantsFire(T - LastSeenTime < 1.0f && Me->HasLineOfFire(Foe));
+	UNavigationSystemV1* Nav = NavOf(GetWorld());
+	const FVector From = Me->GetActorLocation();
+	// a bound ends where it was going (or where it got to): it stops there and looks before the next
+	if (bBounding && (Nav ? GetMoveStatus() == EPathFollowingStatus::Idle : FVector::Dist2D(From, HoldSpot) < 120.0f))
+	{
+		bBounding = false;
+		bDirectHold = false;
+		BoundPauseUntil = T + FMath::FRandRange(1.0f, 2.2f) * USODifficultySubsystem::Get(this).Patience;
+		StopMovement();
+	}
+	if (bBounding || T < BoundPauseUntil || T < NextRepath)
 	{
 		return;
 	}
 	NextRepath = T + 0.6f;
 	FVector Goal = LastKnownLocation;
-	UNavigationSystemV1* Nav = NavOf(GetWorld());
 	if (bFlanker && Nav)
 	{
 		// round its side: a point across the line it was last seen on
-		const FVector To = (LastKnownLocation - Me->GetActorLocation()).GetSafeNormal2D();
+		const FVector To = (LastKnownLocation - From).GetSafeNormal2D();
 		FNavLocation P;
 		if (Nav->ProjectPointToNavigation(LastKnownLocation + FVector::CrossProduct(FVector::UpVector, To) * SideBias * 700.0f, P, FVector(250.0f, 250.0f, 400.0f)))
 		{
 			Goal = P.Location;
 		}
 	}
-	const EPathFollowingRequestResult::Type Result = MoveToLocation(Goal, FMath::Max(Me->PreferredRange * 0.3f, 250.0f), true, true, true, true);
-	bUsedNav |= Result != EPathFollowingRequestResult::Failed;
+	// the next stretch of the way, no further than the edge of its ground if it holds one
+	FVector Step = FVector::Dist2D(From, Goal) > BoundLength ? From + (Goal - From).GetSafeNormal2D() * BoundLength : Goal;
+	if (!OnItsGround(Step))
+	{
+		Step = Home + (Step - Home).GetSafeNormal2D() * HoldRadius;
+		if (FVector::Dist2D(From, Step) < 150.0f)
+		{
+			// at the edge of its ground already: it holds here, facing the way the target went
+			SetFocalPoint(LastKnownLocation, EAIFocusPriority::Gameplay);
+			bDirectHold = false;
+			StopMovement();
+			BoundPauseUntil = T + 1.5f;
+			return;
+		}
+	}
+	if (FVector::Dist2D(From, Step) < Me->PreferredRange * 0.25f && FVector::Dist2D(Step, LastKnownLocation) < Me->PreferredRange * 0.6f)
+	{
+		return;                                                   // (close enough: it waits for the target to show)
+	}
+	FNavLocation OnNav;
+	if (Nav && Nav->ProjectPointToNavigation(Step, OnNav, FVector(300.0f, 300.0f, 400.0f)))
+	{
+		Step = OnNav.Location;
+	}
 	bDirectChase = false;
+	if (Nav)
+	{
+		const EPathFollowingRequestResult::Type Result = MoveToLocation(Step, 100.0f, true, true, true, true);
+		bUsedNav |= Result != EPathFollowingRequestResult::Failed;
+		bBounding = Result != EPathFollowingRequestResult::Failed;
+		bDirectHold = false;
+	}
+	else
+	{
+		HoldSpot = Step;                                          // (no nav mesh: steered at the spot in Tick)
+		bDirectHold = true;
+		bBounding = true;
+	}
+	if (bBounding)
+	{
+		++Bounds;
+	}
 }
 
 bool ASOEnemyAIController::SquadSuppressing() const
@@ -1045,7 +1187,8 @@ void ASOEnemyAIController::ThinkCoverFight(float Dist)
 	ASOEnemy* Me = Cast<ASOEnemy>(GetPawn());
 	ASOCombatCharacter* Foe = Target.Get();
 	const float T = Now(this);
-	const FVector ThreatEye = Foe->GetActorLocation() + FVector(0, 0, 60.0f);
+	// (the threat where it is known to be: the truth while it is seen, else where it was heard or last seen)
+	const FVector ThreatEye = (T - LastSeenTime < 0.6f || bHunter ? Foe->GetActorLocation() : LastKnownLocation) + FVector(0, 0, 60.0f);
 	const float Half = Me->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 	// is the cover still cover? (flanked: the target sees the hiding spot)
 	if (bHasCover && Clear(GetWorld(), CoverPoint + FVector(0, 0, 30.0f), ThreatEye, Me, Foe))
@@ -1065,6 +1208,11 @@ void ASOEnemyAIController::ThinkCoverFight(float Dist)
 			bPeeking = false;
 			MoveToLocation(P, 30.0f);
 			State = ESOEnemyState::Cover;
+			// how long it means to hold it: one that holds ground stays, the others move on sooner (and sooner still
+			// while far from the range they like)
+			const bool bFarNow = !bRetreating && Dist > Me->PreferredRange * RangeBias * 1.2f;
+			CoverHoldFor = (HoldsGround() ? FMath::FRandRange(14.0f, 24.0f) : (bFarNow ? FMath::FRandRange(3.0f, 5.5f) : FMath::FRandRange(9.0f, 15.0f)))
+				* USODifficultySubsystem::Get(this).CoverHold;
 		}
 	}
 	if (!bHasCover)
@@ -1081,10 +1229,8 @@ void ASOEnemyAIController::ThinkCoverFight(float Dist)
 		return;
 	}
 	State = ESOEnemyState::Fight;
-	// held long enough: move on to another spot (keeps the fight moving, and the flankers swing wider). Still far
-	// from the range it likes, it holds only a few bursts before the next bound.
-	const bool bFar = !bRetreating && Dist > Me->PreferredRange * RangeBias * 1.2f;
-	if (T - CoverTaken > (bFar ? FMath::FRandRange(3.0f, 5.5f) : FMath::FRandRange(9.0f, 15.0f)) * USODifficultySubsystem::Get(this).CoverHold)
+	// held as long as it meant to: move on to another spot (keeps the fight moving, and the flankers swing wider)
+	if (T - CoverTaken > CoverHoldFor)
 	{
 		bHasCover = false;
 		NextCoverSearch = T;
@@ -1112,7 +1258,8 @@ void ASOEnemyAIController::ThinkCoverFight(float Dist)
 	if (T >= PhaseUntil)
 	{
 		bPeeking = !bPeeking;
-		PhaseUntil = T + (bPeeking ? FMath::FRandRange(1.4f, 3.0f) : FMath::FRandRange(0.8f, 2.2f) * (bRetreating ? 2.2f : 1.0f));
+		// (out long enough to be answered: a peek of a second was a target nobody could hit)
+		PhaseUntil = T + (bPeeking ? FMath::FRandRange(2.0f, 3.6f) : FMath::FRandRange(1.0f, 2.2f) * (bRetreating ? 2.2f : 1.0f));
 		MoveToLocation(bPeeking ? PeekPoint - FVector(0, 0, Half) : CoverPoint - FVector(0, 0, Half), 20.0f, false, true, false, true);
 	}
 	Me->SetWantsFire(bPeeking && Me->HasLineOfFire(Foe));
@@ -1124,9 +1271,38 @@ void ASOEnemyAIController::ThinkAssault(float Dist)
 	ASOCombatCharacter* Foe = Target.Get();
 	const float T = Now(this);
 	const bool bLine = Me->HasLineOfFire(Foe);
+	const bool bSeen = T - LastSeenTime < 0.6f;
+	const float Range = Me->PreferredRange * RangeBias;
+	if (Me->bUsesCover)
+	{
+		// One that fights from cover and finds none here (open ground, or no nav mesh to find it on) does not run at the
+		// target: it stands its ground and fights from where it is, moving only to get a line, a bound at a time.
+		Me->SetWantsFire(bLine && bSeen);
+		bDirectChase = false;
+		if (bLine && bSeen)
+		{
+			State = ESOEnemyState::Fight;
+			bDirectHold = false;
+			// now and then a short step, so it is not a statue (never a dance: it is there to be shot at)
+			if (T >= NextStrafe)
+			{
+				NextStrafe = T + FMath::FRandRange(4.0f, 7.0f);
+				const FVector To = (Foe->GetActorLocation() - Me->GetActorLocation()).GetSafeNormal2D();
+				FNavLocation P;
+				UNavigationSystemV1* Nav = NavOf(GetWorld());
+				const FVector Want = Me->GetActorLocation() + FVector::CrossProduct(FVector::UpVector, To) * (FMath::RandBool() ? 1.0f : -1.0f) * FMath::FRandRange(150.0f, 260.0f);
+				if (Nav && Nav->ProjectPointToNavigation(Want, P, FVector(120.0f, 120.0f, 300.0f)) && OnItsGround(P.Location))
+				{
+					MoveToLocation(P.Location, 30.0f, false, true, false, true);
+				}
+			}
+			return;
+		}
+		Push();
+		return;
+	}
 	Me->SetWantsFire(bLine);
 	State = ESOEnemyState::Chase;
-	const float Range = Me->PreferredRange * RangeBias;
 	if (Dist > Range || !bLine)
 	{
 		// Close in (to a line of fire, then the range it likes: each its own, so a squad is not a clump), but not
@@ -1158,15 +1334,15 @@ void ASOEnemyAIController::ThinkAssault(float Dist)
 		return;
 	}
 	bDirectChase = false;
-	// at range: side-step now and then so it is not a still target
+	// at range: a step aside now and then so it is not a still target (rarely: shooting it must be fun)
 	if (T >= NextStrafe)
 	{
-		NextStrafe = T + FMath::FRandRange(1.2f, 2.6f);
+		NextStrafe = T + FMath::FRandRange(3.5f, 6.5f);
 		const FVector To = (Foe->GetActorLocation() - Me->GetActorLocation()).GetSafeNormal2D();
 		const FVector SideV = FVector::CrossProduct(FVector::UpVector, To) * (FMath::RandBool() ? 1.0f : -1.0f);
 		FNavLocation P;
 		UNavigationSystemV1* Nav = NavOf(GetWorld());
-		const FVector Want = Me->GetActorLocation() + SideV * FMath::FRandRange(250.0f, 450.0f) - (Dist < Me->PreferredRange * 0.5f ? To * 300.0f : FVector::ZeroVector);
+		const FVector Want = Me->GetActorLocation() + SideV * FMath::FRandRange(150.0f, 300.0f) - (Dist < Me->PreferredRange * 0.5f ? To * 300.0f : FVector::ZeroVector);
 		if (Nav && Nav->ProjectPointToNavigation(Want, P, FVector(150.0f, 150.0f, 300.0f)))
 		{
 			MoveToLocation(P.Location, 30.0f, false, true, false, true);
@@ -1207,9 +1383,12 @@ bool ASOEnemyAIController::FindCover(const FVector& ThreatEye, FVector& OutPoint
 			// (far from the range it likes it works its way in: any spot nearer the target than it stands now will do,
 			// so a fight that starts at eighty metres is closed bound by bound, not in one run down the street)
 			const float Here = static_cast<float>(FVector::Dist2D(From, ThreatEye));
-			const bool bAdvance = !bRetreating && Here > Liked * 1.2f;
-			if (ToThreat < (bRetreating ? 900.0f : 450.0f)
-				|| ToThreat > FMath::Max(Me->PreferredRange * (bRetreating ? 3.0f : 2.0f), bAdvance ? Here - 150.0f : 0.0f))
+			const bool bHold = HoldsGround() && !bRetreating;
+			const bool bAdvance = !bRetreating && !bHold && Here > Liked * 1.2f;
+			// (one that holds ground takes cover about where it stands, never nearer the target than it likes)
+			const float FarthestOk = bRetreating ? Me->PreferredRange * 3.0f
+				: (bAdvance ? FMath::Max(Me->PreferredRange * 2.0f, Here - 150.0f) : FMath::Max(Me->PreferredRange * 2.0f, Here + 250.0f));
+			if (ToThreat < (bRetreating ? 900.0f : 450.0f) || ToThreat > FarthestOk || (bHold && ToThreat < FMath::Min(Liked * 0.6f, Here - 200.0f)))
 			{
 				continue;
 			}
@@ -1243,6 +1422,10 @@ bool ASOEnemyAIController::FindCover(const FVector& ThreatEye, FVector& OutPoint
 			if (bAdvance)
 			{
 				Score += FMath::Clamp((Here - ToThreat) / 500.0f, -2.0f, 3.0f);     // ground made toward it
+			}
+			if (bHold)
+			{
+				Score -= FMath::Max(0.0f, static_cast<float>(FVector::Dist2D(Floor, Home)) - HoldRadius) / 300.0f;   // off its ground
 			}
 			if (Me->bLikesHigh)
 			{
@@ -1308,7 +1491,8 @@ void ASOEnemyAIController::ChaseTarget()
 			return;
 		}
 	}
-	bDirectChase = true; // no nav mesh or no path: straight at it
+	// no nav mesh or no path: claws go straight at it; a gunman holds where it is (it fights from there)
+	bDirectChase = !Me->IsArmed();
 }
 
 void ASOEnemyAIController::Wander()

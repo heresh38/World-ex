@@ -122,6 +122,8 @@ public:
 	/** A round within this of a hostile character's middle (cm), without hitting it, is a near miss
 	 *  (ASOCombatCharacter::NoteNearMiss): being shot at counts, not only being hit. */
 	static constexpr float NearMissRadius = 130.0f;
+	/** A round passing (or striking) this close to a body is seen and heard by it (ASOCombatCharacter::NoteRoundNear). */
+	static constexpr float ShotNoticeRadius = 600.0f;
 	int32 GetNumPools() const { return Pools.Num(); }
 
 	/** Seconds poison stays on the ground. */

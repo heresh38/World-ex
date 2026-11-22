@@ -96,6 +96,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|AI")
 	bool bHunter = false;
 
+	/** How far from its post (where it was put into the world) one that holds ground fights and looks for cover (cm).
+	 *  Flankers and hunters are not held by it: they move up, a bound at a time. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|AI")
+	float HoldRadius = 1800.0f;
+
+	/** How far one bound goes before it stops, looks and goes again (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|AI")
+	float BoundLength = 900.0f;
+
+	/** A round went past or struck near it (ASOEnemy::NoteRoundNear): it knows it is under fire and roughly from where
+	 *  (never the place), and one caught in the open makes for cover. */
+	void OnShotNear(ASOCombatCharacter* Shooter, const FVector& Origin);
+
+	/** It holds ground: not a flanker, not a hunter (most of a squad). */
+	bool HoldsGround() const { return !bFlanker && !bHunter; }
+	/** A level or a test may say who goes round the side (otherwise a share of the squad by the difficulty). */
+	void SetFlanker(bool bFlank) { bFlanker = bFlank; }
+	/** Where it was put into the world. */
+	FVector GetHome() const { return Home; }
+	/** Seconds since a round last went past it, struck near it or hit it. */
+	float SinceShotAt() const;
+	/** How many bounds it has made toward a target it lost (for tests). */
+	int32 GetBounds() const { return Bounds; }
+
 	UFUNCTION(BlueprintPure, Category = "SO|AI")
 	ESOEnemyState GetState() const { return State; }
 
@@ -218,12 +242,29 @@ protected:
 	/** Does this one notice what just happened to Mate (near enough to feel it, or in view)? */
 	bool Notices(const AActor* Mate) const;
 	ASOCombatCharacter* NearestPlayer() const;
-	/** Foe has its sights on this creature (a player's aim within a few degrees). */
+	/** Foe has its sights on this creature (a player's aim within a few degrees). Nothing dodges for it any more (the
+	 *  owner: aimed down the sights they "just move out of the way fast ... shooting needs to be a bit more easier"). */
 	bool AimedAt(const ASOCombatCharacter* Foe) const;
+	/** Where it believes someone is that it heard or saw the rounds of but has not seen: At, off by an error that grows
+	 *  with the distance (a tenth or so of it). */
+	FVector Guess(const FVector& At) const;
+	/** P is on the ground it holds (always true for one that does not hold ground). */
+	bool OnItsGround(const FVector& P) const;
 	/** Steps to the side of the line to Foe (a nav point; a little back if Foe is close). */
 	bool Sidestep(const ASOCombatCharacter* Foe);
-	/** The target is out of sight: go and find it (flankers round its side). */
+	/** The target is out of sight (or it holds no line on it): move up toward where it was, a bound at a time (the next
+	 *  stretch of the way, then a moment there looking), flankers round its side; one that holds ground goes no
+	 *  further than the edge of its ground. Never one run down the street. */
 	void Push();
+	float BoundPauseUntil = 0.0f;
+	bool bBounding = false;
+	int32 Bounds = 0;
+	/** When rounds last went past it or struck near it (or hit it). */
+	float LastShotAtTime = -100.0f;
+	/** How long it means to keep the cover it took. */
+	float CoverHoldFor = 10.0f;
+	/** Where its search goes (the target's last place, or the edge of its ground toward it). */
+	FVector SearchCentre = FVector::ZeroVector;
 	/** One of its own side near it is keeping the target's last place under fire (so it can move up). */
 	bool SquadSuppressing() const;
 	/** Out of the world's geometry, onto free nav ground near here. */

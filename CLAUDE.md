@@ -1335,10 +1335,32 @@ unaware / suspicious / combat / search; squad alerts; armed cover-users score na
 target but have a peek or a line over the top (flankers swing wide, claims kept apart), peek-shoot-duck, move on
 when flanked; stuck detection steps them back onto free nav, and one found standing in the world's geometry is put
 back on free ground (`Rescue`; a blink or a rescue asks `ASOEnemy::FitsAt` first). It does not stand there (the
-owner: "the ai is stupid"): hit in the open or with a gun levelled at it, it steps aside (`Sidestep`, then new cover);
+owner: "the ai is stupid"): hit in the open, one that fights from cover makes for cover at a run, another steps aside
+now and then (`Sidestep`); NEVER for a gun merely levelled at it (the owner, 2026-11-22: zoomed in, "they just move out
+of the way fast ... shooting needs to be a bit more easier and more fun, fun the the most important thing here");
 badly hurt it falls back to cover further off and stays down longer (`bRetreating`); when the target goes out of
-sight half the squad pushes to where it was, the flankers round its side (`Push`), the rest hold and follow; claws
-come in round the sides (`SideBias`), everyone keeps its own distance (`RangeBias`). A hunter knows where the players
+sight the flankers and hunters move up in BOUNDS (`Push`: a stretch of the way, `BoundLength` 9 m, then a moment there
+looking, never one run down the street), while the rest HOLD THEIR GROUND (`HoldsGround`, `HoldRadius` 18 m round
+where it was put into the world, `Home`): they take cover there, wait (`Patience` 12 s), search no further than its
+edge; claws come in round the sides (`SideBias`), everyone keeps its own distance (`RangeBias`). **The AI pass of
+2026-11-22** (the owner: "if i shoot beside them they do nothing, they need to listen to sound, see bullets and react
+... they get shot by the player then just ran straight to the player no matter how far ... like they are mindless
+zombies ... going behind cover and holding an area ... must be modular ... their behavior should be the same"): a
+round that passes or strikes within `USOProjectileSubsystem::ShotNoticeRadius` (6 m) of a body is SEEN AND HEARD
+(`ASOCombatCharacter::NoteRoundNear` -> `ASOEnemy` -> `ASOEnemyAIController::OnShotNear`): it is in the fight, knows
+from which way, and one caught in the open makes for cover (looking out from cover, it ducks); hit, heard or shot at
+by someone it has not seen, it knows the way and roughly how far, NEVER the place (`Guess`: off by about a tenth of
+the distance; it took the shooter's true place and ran there); a gunman JOGS from place to place (`ESOPace`,
+`ASOEnemy::SetPace`, `JogShare`) and runs only for cover under fire or falling back (at a dead run all the time it
+was a blur to shoot at), shoots wider on the move (it stops to shoot), looks out of cover two to three and a half
+seconds at a time, and with no cover (or no nav mesh) it holds where it stands and fights from there: no gunman ever
+steers straight at the target (`ChaseTarget`: claws only). The same brain in every level: the range's spawners and
+an operation's garrisons hold ground, its hunting waves come on in bounds. A creature's line of fire is what its
+round would meet, traced as the round is (complex, from its eye, AND eye to muzzle and muzzle to target: a barrel in
+a wall's corner fired "through the wall"); an ability's start point (`GetCastOrigin`) stops short of anything between
+the eye and the hands; a blow lands only with nothing of the world between and no floor between (`CanReach`). A
+dropped gun blocks no one's sight. Tests `AI.ShotsNearbyAreNoticed`, `AI.HoldsGroundWhenShotFromAfar`,
+`AI.AimingDoesNotMakeThemDodge`; the report is `docs/orion/reports/AI.md`. A hunter knows where the players
 are but aims and fires only at what it sees; `HasLineOfFire` is the bullet's own trace, fat, and stops behind a mate.
 A hit is news (`USOCombatStatics::OnCharacterHit`, `OnCharacterDied` -> `ASOEnemyAIController::OnHit`): the one hit
 knows from any distance; a mate that is looking at it (`Notices`: in view, nothing between) or stands within
@@ -1431,7 +1453,7 @@ and anything that resists stagger is not checked or stumbled. **The head's kick 
 (`FSOLocomotionProxy::ApplyHit`): the gun-hold pass sets neck and head afresh, and anything put on them earlier is
 lost. **Test the body, not the number**: a reaction can be in the anim instance's values and not on the bones (it
 was); `ShatteredOrbit.AI.AHitShowsWhereItLands` measures the bones, and `SOCaptureSeries 1 26` (files `SO_h*`) shows
-them from beside the creature. The brain: a clawed creature hit or aimed at on its way in leaps out of the line
+them from beside the creature. The brain: a clawed creature hit on its way in (not merely aimed at) leaps out of the line
 (`ASOEnemy::Juke`, how often is the level's `Reaction`) and comes in from the other side; badly hurt before it
 arrives it breaks off once (`bBrokeOff`); after a stumble an armed one looks for cover. **The Bulwark's plate**
 (`PlateFaces`): what it turns sparks and rings instead of bleeding (`ASOCombatCharacter::TurnsBlow`, read where the

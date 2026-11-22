@@ -56,9 +56,16 @@ void USOProjectileSubsystem::NoteNearMisses(const FSOProjectile& Round, const FV
 		{
 			continue;
 		}
-		if (FMath::PointDistToSegmentSquared(Near->GetActorLocation(), From, To) <= FMath::Square(NearMissRadius))
+		const float Off2 = FMath::PointDistToSegmentSquared(Near->GetActorLocation(), From, To);
+		if (Off2 <= FMath::Square(NearMissRadius))
 		{
 			Near->NoteNearMiss(Shooter);
+		}
+		// (the crack of a round going past, or the spray where it strikes the ground or a wall beside it: seen and
+		// heard, the body knows it is shot at; To is where it struck when it did)
+		if (Off2 <= FMath::Square(ShotNoticeRadius))
+		{
+			Near->NoteRoundNear(Shooter, Round.Origin);
 		}
 	}
 }

@@ -148,6 +148,45 @@ Missing: tests for ten creatures against a squad, mixed groups on a real nav mes
 - **Still a sponge by design**: the Bulwark from the front takes a quarter of each blow until it reels (about two
   seconds of rifle fire on the plate, then about a second open); bosses do not react to single hits at all.
 
+## The owner's AI pass (2026-11-22)
+
+The owner: "the ai is still dumb, if i shoot beside them they do nothing, they need to listen to sound, see bullets and
+react. they get shot by the player then just ran straight to the player no matter how far the player is like they are
+mindless zombies when they should be going behind cover and holding an area and doing more tactical things ... the ai is
+still able to shoot through some walls on meridian ... the shooting/aiming is still very diffuclt ... fun the the most
+important thing here", and the AI must be modular: the same behaviour in Meridian, any operation or the range.
+
+What was wrong, found in the code:
+- **Shots beside them**: a gunshot was heard out to 45 m and nothing else: a round that passed more than 1.3 m away, or
+  struck the ground beside one, told it nothing (1.3 m only pinned one already fighting).
+- **The zombie run**: hit (or alerted) by someone it had not seen, a creature was handed the shooter's TRUE place; it
+  waited 2.4-5.2 s and then ran there (`Push`). With no cover found (no nav mesh, open ground) it came straight at the
+  target (`ThinkAssault` -> `MoveToActor`, or straight at it in `Tick`). In a fight it always ran (6.5 m/s for a Levy).
+- **The dodging**: any creature within 32 m that a player's aim was on (4.5 degrees) stepped 2-4 m aside every 2-4 s,
+  and at range it strafed every 1-3 s.
+- **"Through walls"**: the rounds already fly as the player's do (one projectile subsystem, the same complex trace on
+  the bullet channel). What leaked: the line of fire was checked from the eye only (a simple trace), while the shot is
+  drawn from the muzzle, held 60-100 cm ahead: at a corner the barrel stood in the wall and the bolts came out of it;
+  an ability's start point was 70 cm ahead of the body (beyond a thin wall or rail); a melee blow measured the distance
+  across the ground and nothing else (through walls and floors); a dropped gun blocked sight. Meridian's own collision
+  leaves out what nobody can reach (the towers behind the sealed street rows, faces above `col_top`): not a leak in play.
+
+What it does now (`ASOEnemyAIController`, `ASOEnemy`, `USOProjectileSubsystem`):
+
+| What | Where | Test |
+| --- | --- | --- |
+| A round passing or striking within 6 m is seen and heard: in the fight, from which way; caught in the open it makes for cover, looking out from cover it ducks | `ShotNoticeRadius`, `NoteRoundNear`, `OnShotNear` | `AI.ShotsNearbyAreNoticed` (70 m off, out of sight, a round 3 m past it) |
+| Hit, heard or shot at by someone unseen: the way and roughly how far, never the place (about a tenth of the distance off) | `Guess` in `OnHit`, `OnNoise`, `OnShotNear` | `AI.HoldsGroundWhenShotFromAfar` |
+| Most of a squad holds its ground (18 m round where it was put): cover there, a long wait before it moves, a search no further than its edge; flankers and hunters move up in 9 m bounds with a pause between | `HoldsGround`, `HoldRadius`, `Push`, `BoundLength` | same (shot from 50 m: still on its ground after ten seconds) |
+| A gunman jogs, runs only for cover under fire or falling back; shoots wider on the move; looks out of cover 2-3.6 s at a time | `ESOPace`, `SetPace`, `GetAimDirection`, `ThinkCoverFight` | none of its own |
+| No dodge for a levelled gun (a hit in the open: cover, or a step aside at most every 4-7 s); at range a short step every 4-7 s; claws leap aside only when hit | `ThinkCombat`, `ThinkAssault` | `AI.AimingDoesNotMakeThemDodge` |
+| No cover, no nav mesh: a gunman holds and fights from where it stands; only claws steer straight at a target | `ThinkAssault`, `ChaseTarget` | the older tests in worlds without a nav mesh |
+| The line of fire is the round's: complex, eye to target, eye to muzzle, muzzle to target; an ability starts short of what is between eye and hands; a blow needs nothing between and no floor between | `HasLineOfFire`, `GetCastOrigin`, `CanReach` | `AI.NoShotsThroughWalls` (still) |
+
+Not checked: any of it by playing (the tests run one world with no picture and no nav mesh: cover, bounds and the hold
+were not seen on a real nav mesh); Meridian's walls in play; how the new pace feels; the marksman's shot and the void
+bolt's homing round corners (the bolt still turns toward its target after it leaves).
+
 ## What I would do next, in order
 
 1. Blender: bodies, clips and voices for the roles (the gunner needs a two-handed hold or a body built for the

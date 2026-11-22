@@ -17,6 +17,16 @@ struct FSOSpeciesVariant;
  * defaults here are the feral stalker (hp 140, 5.4 m/s, melee 18 damage at 2.2 m every 0.9 s). Melee strikes land
  * after a wind-up if the target is still in reach.
  */
+/** How a creature moves: a walk, the jog a gunman moves from place to place at, a run (claws; a gunman only for cover
+ *  with rounds landing round it, or falling back). */
+UENUM(BlueprintType)
+enum class ESOPace : uint8
+{
+	Walk,
+	Jog,
+	Run
+};
+
 UCLASS()
 class SOAI_API ASOEnemy : public ASOCombatCharacter
 {
@@ -182,6 +192,18 @@ public:
 	float DistanceTo(const AActor* Other) const;
 
 	void SetRunning(bool bRun);
+	/** Walk, jog (JogShare of the way from WalkSpeed to RunSpeed) or run. */
+	void SetPace(ESOPace NewPace);
+	/** Nothing of the world between the two bodies, and not a floor above or below: a blow can land. */
+	bool CanReach(const AActor* Target) const;
+	ESOPace GetPace() const { return Pace; }
+
+	/** Where its jog sits between its walk and its run. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Enemy")
+	float JogShare = 0.35f;
+
+	//~ ASOCombatCharacter: a round seen or heard near it goes to its brain
+	virtual void NoteRoundNear(AActor* From, const FVector& Origin) override;
 
 	//~ ASOCombatCharacter
 	virtual void OnMoveScaleChanged() override;
@@ -423,6 +445,7 @@ protected:
 	float Raise = 0.0f;
 	bool bWantsFire = false;
 	bool bRunning = false;
+	ESOPace Pace = ESOPace::Walk;
 	bool bFiring = false;
 	float TriggerUntil = 0.0f;
 	float NextBurst = 0.0f;

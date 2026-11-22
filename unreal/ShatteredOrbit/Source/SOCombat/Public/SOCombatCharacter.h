@@ -228,6 +228,11 @@ public:
 	 *  and one in the open shoots wider. At most once in a while per character, however many rounds pass. */
 	void NoteNearMiss(AActor* From);
 
+	/** Server: a hostile round passed within a few metres of it, or struck within a few metres
+	 *  (USOProjectileSubsystem::ShotNoticeRadius): seen and heard. Origin: where it was fired from. A creature's brain
+	 *  knows it is being shot at and roughly from where (the owner: "if i shoot beside them they do nothing"). */
+	virtual void NoteRoundNear(AActor* From, const FVector& Origin) {}
+
 	// --- Attributes (SOAttributes.h) ---
 
 	/** Server: the points this character's gear gives, in place of whatever it gave before. */

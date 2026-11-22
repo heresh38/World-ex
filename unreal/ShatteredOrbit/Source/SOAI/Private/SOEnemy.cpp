@@ -406,10 +406,25 @@ int32 ASOEnemy::DamageAround(const FVector& Center, float Radius, float Damage, 
 
 void ASOEnemy::SetRunning(bool bRun)
 {
-	bRunning = bRun;
+	SetPace(bRun ? ESOPace::Run : ESOPace::Walk);
+}
+
+void ASOEnemy::SetPace(ESOPace NewPace)
+{
+	Pace = NewPace;
+	bRunning = NewPace != ESOPace::Walk;
 	// (checked by a hit for a moment; slower for good once it is badly hurt)
 	const float Hurt = (IsChecked() ? HitSlow : 1.0f) * (GetHealth() < GetMaxHealth() * WoundedAt ? WoundedSpeed : 1.0f);
-	GetCharacterMovement()->MaxWalkSpeed = (bRun ? RunSpeed : WalkSpeed) * GetMoveScale() * (Boss ? Boss->GetSpeedScale() : 1.0f) * Hurt;
+	const float Speed = NewPace == ESOPace::Run ? RunSpeed : (NewPace == ESOPace::Jog ? FMath::Lerp(WalkSpeed, RunSpeed, JogShare) : WalkSpeed);
+	GetCharacterMovement()->MaxWalkSpeed = Speed * GetMoveScale() * (Boss ? Boss->GetSpeedScale() : 1.0f) * Hurt;
+}
+
+void ASOEnemy::NoteRoundNear(AActor* From, const FVector& Origin)
+{
+	if (ASOEnemyAIController* Brain = Cast<ASOEnemyAIController>(GetController()))
+	{
+		Brain->OnShotNear(Cast<ASOCombatCharacter>(From), Origin);
+	}
 }
 
 bool ASOEnemy::IsUsingAbility() const
@@ -429,7 +444,25 @@ bool ASOEnemy::IsUsingAbility() const
 
 FVector ASOEnemy::GetCastOrigin() const
 {
-	return GetActorLocation() + GetActorForwardVector() * 70.0f + FVector(0.0f, 0.0f, 55.0f); // the hands
+	// the hands, 70 cm ahead of the body: never on the far side of a wall, a rail or a frame within that reach (swept
+	// from the eye as a round is traced, it stops short of whatever is in the way: a bolt began beyond a thin wall)
+	const FVector Hands = GetActorLocation() + GetActorForwardVector() * 70.0f + FVector(0.0f, 0.0f, 55.0f);
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return Hands;
+	}
+	const FVector Eye = GetPawnViewLocation();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOCastOrigin), true, this);
+	TArray<AActor*> Carried;
+	GetAttachedActors(Carried);
+	Params.AddIgnoredActors(Carried);
+	FHitResult Hit;
+	if (World->SweepSingleByChannel(Hit, Eye, Hands, FQuat::Identity, SO_TRACE_BULLET, FCollisionShape::MakeSphere(8.0f), Params))
+	{
+		return Hit.Location - (Hands - Eye).GetSafeNormal() * 4.0f;
+	}
+	return Hands;
 }
 
 float ASOEnemy::PrecisionAt(const FHitResult& Hit) const
@@ -562,7 +595,7 @@ float ASOEnemy::GetAbilityCooldownScale(ESOAbilitySlot Slot) const
 
 void ASOEnemy::OnMoveScaleChanged()
 {
-	SetRunning(bRunning); // a slow came or went
+	SetPace(Pace); // a slow came or went
 }
 
 float ASOEnemy::DistanceTo(const AActor* Other) const
@@ -588,7 +621,7 @@ bool ASOEnemy::TryAttack(AActor* Target)
 		return false;
 	}
 	const float Now = World->GetTimeSeconds();
-	if (Now - LastAttackTime < MeleeCooldown || DistanceTo(Target) > MeleeRange)
+	if (Now - LastAttackTime < MeleeCooldown || DistanceTo(Target) > MeleeRange || !CanReach(Target))
 	{
 		return false;
 	}
@@ -647,7 +680,7 @@ void ASOEnemy::Tick(float DeltaSeconds)
 			if (bHitSlowed && !IsChecked())
 			{
 				bHitSlowed = false;
-				SetRunning(bRunning);
+				SetPace(Pace);
 			}
 			if (bStaggered)
 			{
@@ -669,7 +702,7 @@ void ASOEnemy::Tick(float DeltaSeconds)
 	// The strike lands if the target is still within reach (a little extra for the lunge) and in front.
 	const FVector To = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 	const bool bInFront = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), To) > 0.3f;
-	if (bInFront && DistanceTo(Target) <= MeleeRange + 40.0f)
+	if (bInFront && DistanceTo(Target) <= MeleeRange + 40.0f && CanReach(Target))
 	{
 		if (USOCombatStatics::ApplyDamage(this, Target, MeleeDamage, false) > 0.0f)
 		{
@@ -830,7 +863,7 @@ void ASOEnemy::HitReact(AActor* Source, float Amount, bool bPrecision)
 		{
 			HitSlowUntil = FMath::Max(HitSlowUntil, T + HitSlowTime * (bLeg ? 1.6f : 1.0f));
 			bHitSlowed = true;
-			SetRunning(bRunning);
+			SetPace(Pace);
 		}
 		// unsteadied; and past what it can take, it stumbles
 		const float Turned = AbsorbedByArmour * ArmourPoise / FMath::Max(GetMaxHealth(), 1.0f); // (what a plate took still shakes it)
@@ -918,6 +951,7 @@ FVector ASOEnemy::GetAimDirection() const
 		Chest += T->GetVelocity() * (Dist / ShotSpeed) * ShotLead * Tracked;
 	}
 	const float Err = AimError * Level.AimError * (Dist / 1000.0f) * (1.0f + T->GetVelocity().Size2D() / 450.0f) * FMath::Lerp(1.7f, 0.65f, Tracked)
+		* (1.0f + GetVelocity().Size2D() / 520.0f) // (on the move itself it shoots wider: it stops to shoot)
 		* (HasStatus(SOTags::Status_Suppressed) ? 1.6f : 1.0f); // (under fire itself, it shoots wider)
 	const FVector Off = FMath::VRand() * Err * FMath::Sqrt(FMath::FRand());
 	return (Chest + Off - Origin).GetSafeNormal();
@@ -929,15 +963,56 @@ bool ASOEnemy::HasLineOfFire(const AActor* Other) const
 	{
 		return false;
 	}
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOLineOfFire), false, this);
+	// What a round of its own would meet, traced as the round is (complex collision, its holder and whatever it carries
+	// ignored): from its eye to the target's chest, AND from its eye to its gun's muzzle and from the muzzle to the
+	// chest. A gun held round a corner or over a wall with its barrel in the wall does not fire: the shot was drawn
+	// coming out of the wall (the owner: "the ai is still able to shoot through some walls on meridian").
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOLineOfFire), true, this);
 	Params.AddIgnoredActor(Other);
+	TArray<AActor*> Carried;
+	GetAttachedActors(Carried);
+	Params.AddIgnoredActors(Carried);
 	if (const AActor* W = GetWeapon())
 	{
 		Params.AddIgnoredActor(W);
 	}
+	UWorld* World = GetWorld();
+	auto Open = [World, &Params](const FVector& A, const FVector& B)
+	{
+		return !World->SweepTestByChannel(A, B, FQuat::Identity, SO_TRACE_BULLET, FCollisionShape::MakeSphere(6.0f), Params)
+			&& !World->LineTraceTestByChannel(A, B, ECC_Visibility, Params);
+	};
 	const FVector From = GetAimOrigin(), To = Other->GetActorLocation() + FVector(0, 0, 25.0f);
-	return !GetWorld()->SweepTestByChannel(From, To, FQuat::Identity, SO_TRACE_BULLET, FCollisionShape::MakeSphere(6.0f), Params)
-		&& !GetWorld()->LineTraceTestByChannel(From, To, ECC_Visibility, Params);
+	if (!World || !Open(From, To))
+	{
+		return false;
+	}
+	const ASOWeapon* Gun = GetWeapon();
+	const USOGunRigComponent* Rig = Gun ? Gun->GetThirdPersonRig() : nullptr;
+	if (Rig && Rig->IsBuilt())
+	{
+		const FVector Muzzle = Rig->GetMuzzleLocation();
+		return Open(From, Muzzle) && Open(Muzzle, To);
+	}
+	return true;
+}
+
+bool ASOEnemy::CanReach(const AActor* Target) const
+{
+	// A blow lands only on what it can get at: not a floor above or below, nothing of the world between the two bodies
+	// (a strike went through walls and floors: it measured the distance across the ground and nothing else).
+	UWorld* World = GetWorld();
+	if (!World || !Target || FMath::Abs(Target->GetActorLocation().Z - GetActorLocation().Z) > 130.0f)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOReach), true, this);
+	Params.AddIgnoredActor(Target);
+	TArray<AActor*> Carried;
+	GetAttachedActors(Carried);
+	Params.AddIgnoredActors(Carried);
+	return !World->LineTraceTestByObjectType(GetActorLocation() + FVector(0, 0, 30.0f), Target->GetActorLocation() + FVector(0, 0, 30.0f),
+		FCollisionObjectQueryParams(FCollisionObjectQueryParams::AllStaticObjects), Params);
 }
 
 bool ASOEnemy::FitsAt(const FVector& Location) const
