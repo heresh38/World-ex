@@ -2337,7 +2337,7 @@ def attachments():
         P.append(plate('pr_adjust_slot', [(y + .0036, h + .0002), (y + .0036, h + .001), (y - .0036, h + .001), (y - .0036, h + .0002)], RB, .0231, .0236, .0001,
                        sym=False, side=-1))
     done('ATT_prism', P, (0, .0975, h), True)
-    bl.export('gun_attach.glb', export_attributes=True)
+    bl.unembed_images(bl.export('gun_attach.glb', export_attributes=True))
 
 
 GUNS = dict(auto=auto_rifle, pulse=pulse_rifle, scout=scout_rifle, handcannon=hand_cannon, shotgun=shotgun, sniper=sniper,

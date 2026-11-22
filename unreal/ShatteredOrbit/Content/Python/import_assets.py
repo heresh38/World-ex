@@ -79,7 +79,9 @@ def write_png(path, rgba, size=4):
 
 
 def import_texture(file_path, dest, name, kind):
-    """kind: color | mask | normal."""
+    """kind: color | mask | normal. (A materials.json may name a texture engine's file where it lies, relative to the
+    exported folder: ../../assets/textures/..., export_fbx.py for an image the GLB carries by reference.)"""
+    file_path = os.path.normpath(file_path)
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", file_path)
     task.set_editor_property("destination_path", dest)
@@ -2696,7 +2698,10 @@ def vehicles_trees_street(master, dest):
             if eal.does_asset_exist(f"{folder}/SM_{name}"):
                 eal.delete_asset(f"{folder}/SM_{name}")
             mesh = import_static(src, a["file"], folder, f"SM_{name}", inst)
-            _nanite(mesh, sub != "Trees")
+            if sub == "Trees":
+                _nanite(mesh, False)
+            else:
+                _nanite_solid(mesh, src, a["file"], folder, name, inst)
             count += 1
     return count
 
@@ -2717,13 +2722,47 @@ def _city_instance(parent, dest, name, params, textures):
 
 
 def _nanite(mesh, collide):
+    """A Nanite mesh that is only drawn (collide False). One that is collided with goes through _nanite_solid."""
+    if collide:
+        raise RuntimeError(f"{mesh.get_name()}: a Nanite mesh that collides takes an exact twin (_nanite_solid)")
     ns = mesh.get_editor_property("nanite_settings")
     ns.set_editor_property("enabled", True)
     mesh.set_editor_property("nanite_settings", ns)
-    if collide:
-        body = mesh.get_editor_property("body_setup")
-        if body:
-            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+
+
+# where the exact twins of Nanite meshes live: never cooked (Config/DefaultGame.ini DirectoriesToNeverCook), never
+# held by an area's arrival (USOAreaSubsystem::AssetsFor skips it)
+EXACT = "/Game/EditorOnly/Collision"
+
+
+def _nanite_solid(mesh, src, fbx, folder, name, instances):
+    """A Nanite mesh that is collided with (walked on, shot at, the nav mesh's ground) never collides with its own
+    simplified fallback (the Crown kept 3 % of its triangles, and shots, creatures and the nav mesh went through what
+    was drawn): an exact twin of it, not Nanite, with the same slots in the same order (a hit's ElementIndex names the
+    same material, so impacts and footsteps read the same surface), is its ComplexCollisionMesh. That is editor-only
+    data: the cook bakes the twin's triangles into the mesh's own collision, and the twin (EXACT/<its folder>) is never
+    loaded by the game."""
+    dest = EXACT + "/" + folder.replace("/Game/", "", 1)
+    ensure_dir(dest)
+    if eal.does_asset_exist(f"{dest}/SM_{name}"):
+        eal.delete_asset(f"{dest}/SM_{name}")
+    twin = import_static(src, fbx, dest, f"SM_{name}", instances)
+    ns = twin.get_editor_property("nanite_settings")
+    ns.set_editor_property("enabled", False)
+    twin.set_editor_property("nanite_settings", ns)
+    tb = twin.get_editor_property("body_setup")
+    if tb:
+        # (its own body cooks no triangles: it is only ever read through the mesh it stands for)
+        tb.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX)
+    eal.save_loaded_asset(twin, only_if_is_dirty=False)
+    ns = mesh.get_editor_property("nanite_settings")
+    ns.set_editor_property("enabled", True)
+    mesh.set_editor_property("nanite_settings", ns)
+    body = mesh.get_editor_property("body_setup")
+    if body:
+        body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    mesh.set_editor_property("complex_collision_mesh", twin)
     eal.save_loaded_asset(mesh, only_if_is_dirty=False)
 
 
@@ -2779,7 +2818,7 @@ def nexus_city(master, defaults):
             if eal.does_asset_exist(f"{folder}/SM_{name}"):
                 eal.delete_asset(f"{folder}/SM_{name}")
             mesh = import_static(src, a["file"], folder, f"SM_{name}", inst)
-            _nanite(mesh, True)
+            _nanite_solid(mesh, src, a["file"], folder, name, inst)
             count += 1
     eal.save_directory(dest, only_if_is_dirty=False, recursive=True)
     log(f"NexusCity: {count} meshes")
@@ -2953,14 +2992,14 @@ def meridian(master):
     some = {z.strip() for z in os.environ.get("SO_MERIDIAN_ONLY", "").split(",") if z.strip()}
     for a in manifest["assets"]:
         name = os.path.splitext(a["file"])[0]
-        if some and not any(name in (f"MR_{z}", f"MR_{z}_solid", f"MR_{z}_detail") for z in some):
+        if some and not (("kit" in some and a in kit) or any(name in (f"MR_{z}", f"MR_{z}_solid", f"MR_{z}_detail") for z in some)):
             continue
         if eal.does_asset_exist(f"{dest}/SM_{name}"):           # a fresh import: the zones change content
             eal.delete_asset(f"{dest}/SM_{name}")
         if a in kit:
             if eal.does_asset_exist(f"{shared}/SM_{name}"):
                 eal.delete_asset(f"{shared}/SM_{name}")
-            _nanite(import_static(src, a["file"], shared, f"SM_{name}", kit_instances), True)
+            _nanite_solid(import_static(src, a["file"], shared, f"SM_{name}", kit_instances), src, a["file"], shared, name, kit_instances)
             continue
         mesh = import_static(src, a["file"], dest, f"SM_{name}", instances)
         if name.endswith("_solid") or name == "MR_blockers":

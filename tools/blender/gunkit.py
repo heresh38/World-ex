@@ -509,4 +509,5 @@ def assemble(name, parts, organic=(), S=.22, cyl_axis=None):
 
 
 def export(fname, **kw):
-    return bl.export(fname, export_attributes=True, **kw)
+    # (the tiling sets a gun wears are the texture engine's own files: referenced, not carried: bl.unembed_images)
+    return bl.unembed_images(bl.export(fname, export_attributes=True, **kw))

@@ -525,11 +525,11 @@ def main():
     if look_dir:
         os.makedirs(look_dir, exist_ok=True)
         look(os.path.abspath(look_dir))
-    bl.export('explosives.glb')
+    bl.unembed_images(bl.export('explosives.glb'))
     # each alone too, for the gate (asset_check.py --class=prop)
     for o in built:
         hulls = [h for h in bpy.context.scene.objects if h.name.startswith('UCX_' + o.name)]
-        bl.export(o.name.lower().replace('ex_', 'explosive_') + '.glb', selected=[o] + hulls)
+        bl.unembed_images(bl.export(o.name.lower().replace('ex_', 'explosive_') + '.glb', selected=[o] + hulls))
 
 
 if __name__ == '__main__':

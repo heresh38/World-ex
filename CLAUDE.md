@@ -201,8 +201,12 @@ existing classes, never second systems.
   frame on UV 1 is needed); `gun_instances` imports `T_<gun>_u_*` and sets them on every material of that gun;
   static meshes are imported WITHOUT generated lightmap UVs (they would overwrite UV 1). One gun again:
   `weapons.py -- rifle`, `export_fbx.py -- assets/models/gun_rifle.glb SourceArt/Weapons/Rifle --split-parts`,
-  `SO_IMPORT_ONLY=weapons,guntextures SO_WEAPONS_ONLY=rifle`. Known cost: a gun's GLB now carries the 4096 px
-  tiling maps (the rifle's is 130 MB): the exporter should stop embedding them. Look at ONE gun in the game:
+  `SO_IMPORT_ONLY=weapons,guntextures SO_WEAPONS_ONLY=rifle`. A gun's GLB carries no tiling set (2026-11-22: the
+  rifle's was 141 MB, 139 of them the 4096 px sets every gun shares, and export_fbx.py wrote them out again per gun:
+  2.9 GB of copies): `bl.unembed_images` (`gunkit.export`, the sights, the explosives) names every image that is one
+  of the engine's own files in `assets/textures` by a relative uri, byte for byte the same (the rifle's GLB is 2 MB);
+  Blender's glTF importer reads the uri back, and `export_fbx.py` writes the file where it lies into materials.json
+  (`../../../../../assets/textures/wpn_steel_c.jpg`; nothing copied; `import_texture` normalises the path). Look at ONE gun in the game:
   `SOCaptureSeries 1 29 -SOGuns=<archetype>` (the gun alone from each flank, three quarters, close on the receiver,
   the markings, the muzzle (aimed at the gun's own muzzle, `USOGunRigComponent::GetMuzzleLocation`): files `SO_r_<gun>_*`). **The high-poly** (`bakekit.bake_highpoly_normals`, every gun with own maps: the rifle and all
   eleven light guns; `SO_GUN_HIGHPOLY=none` skips it, a list bakes only those): the game model with its hard edges rounded (0.7 mm bevel, three steps, weighted normals), its normals baked
@@ -1236,8 +1240,12 @@ the invisible walls lost half), so shots, creatures and the nav mesh went throug
 exports `MR_<zone>_solid` beside itself (`ruinkit.collision_of`: the faces flagged to collide, exact; towers only up
 to `COL_TOP` / `col_top` above their foot, nothing for ruins behind the invisible walls, rubble heaps through a
 coarser stand-in `HEAP_COL_RES`), imported NOT Nanite, complex-as-simple, double-sided (`_collision_mesh`), placed
-hidden; the drawn zone has no collision. Never give a Nanite mesh its own complex collision (Nexus Prime's kit still
-does: to do). Do not name an object `*_col` (the FBX exporter takes that for UCX collision). The invisible walls
+hidden; the drawn zone has no collision. Never give a Nanite mesh its own complex collision: a Nanite mesh that is
+collided with (Nexus Prime's kit, tiles and vehicles, the operations' barrier and conduit) takes it from an EXACT twin
+(`import_assets._nanite_solid`: the same FBX, not Nanite, the same slots in the same order, so a hit's ElementIndex
+names the same material) set as its `ComplexCollisionMesh`, editor-only data: the cook bakes the twin's triangles into
+the mesh's own collision; the twins live in `/Game/EditorOnly/Collision` (never cooked: `DirectoriesToNeverCook`;
+never held by an area's arrival); `_nanite(mesh, True)` refuses. Test `ShatteredOrbit.World.NaniteCollidesExactly`. Do not name an object `*_col` (the FBX exporter takes that for UCX collision). The invisible walls
 stand 9 m over what is walked on (an air jump + a clamber reach nearly 6), with lids over the estate and the mall.
 Modular by rule (owner, 2026-11-10). **Species**: every creature is written ONCE: one class with everything it is
 (body, clips, voice, gun, numbers, its own moves; the brain is the shared `ASOEnemyAIController`), one file per species

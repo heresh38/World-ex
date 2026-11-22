@@ -206,7 +206,8 @@ TArray<FSoftObjectPath> USOAreaSubsystem::AssetsFor(const FSOArea* Area) const
 	{
 		Registry.ScanPathsSynchronous({ TEXT("/Game") });           // (an uncooked game still reading its content folder)
 	}
-	TArray<FString> Skip = { TEXT("/Game/Maps/"), TEXT("/Game/Developers/"), TEXT("/Game/Collections/"), TEXT("/Game/Python/") };
+	// (and the editor's own: the exact twins Nanite meshes collide with are baked into their collision, never loaded)
+	TArray<FString> Skip = { TEXT("/Game/Maps/"), TEXT("/Game/Developers/"), TEXT("/Game/Collections/"), TEXT("/Game/Python/"), TEXT("/Game/EditorOnly/") };
 	for (const FSOArea& Other : Areas)
 	{
 		if (&Other != Area)

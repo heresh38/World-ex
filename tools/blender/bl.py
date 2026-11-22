@@ -310,6 +310,76 @@ def rng(seed):
     return random.Random(seed)
 
 
+def unembed_images(path, root=None, same_only=True):
+    """Rewrite an exported GLB so every image that is one of the texture engine's own files (root/<name>.jpg|.png,
+    byte for byte the same) is referenced by a relative uri instead of carried inside it. A gun's GLB carried every
+    4096 px tiling set it wears (the rifle's was 141 MB, 139 of them sets every gun shares, and export_fbx.py wrote
+    them out again per gun). Blender's glTF importer reads the uri back (relative to the file); export_fbx.py names
+    the file itself in materials.json, so the Unreal import reads it where it lies."""
+    import json, struct
+    root = root or TEXTURES
+    raw = open(path, 'rb').read()
+    jl = struct.unpack('<I', raw[12:16])[0]
+    J = json.loads(raw[20:20 + jl])
+    bo = 20 + jl
+    BIN = b''
+    if bo + 8 <= len(raw):
+        bl_ = struct.unpack('<I', raw[bo:bo + 4])[0]
+        BIN = raw[bo + 8:bo + 8 + bl_]
+    bvs = J.get('bufferViews', [])
+    rel = os.path.relpath(root, os.path.dirname(os.path.abspath(path))).replace(os.sep, '/')
+    drop = set()
+    for im in J.get('images', []):
+        if 'bufferView' not in im or not im.get('name'):
+            continue
+        ext = '.jpg' if im.get('mimeType') == 'image/jpeg' else '.png'
+        f = os.path.join(root, im['name'] + ext)
+        v = bvs[im['bufferView']]
+        o = v.get('byteOffset', 0)
+        if not os.path.isfile(f):
+            continue
+        if same_only and (os.path.getsize(f) != v['byteLength'] or open(f, 'rb').read() != BIN[o:o + v['byteLength']]):
+            continue                                             # (an older drawing of the set: same_only=False takes the file as it is now)
+        drop.add(im.pop('bufferView'))
+        im['uri'] = rel + '/' + im['name'] + ext
+    if not drop:
+        return path
+    # the views left, packed again; every index into the list moved down past the ones dropped
+    keep = [i for i in range(len(bvs)) if i not in drop]
+    remap = {old: new for new, old in enumerate(keep)}
+    out = bytearray()
+    views = []
+    for i in keep:
+        v = bvs[i]
+        o = v.get('byteOffset', 0)
+        data = BIN[o:o + v['byteLength']]
+        while len(out) % 4:
+            out += bytes(1)
+        v['byteOffset'] = len(out)
+        out += data
+        views.append(v)
+    while len(out) % 4:
+        out += bytes(1)
+    J['bufferViews'] = views
+    for a in J.get('accessors', []):
+        if 'bufferView' in a:
+            a['bufferView'] = remap[a['bufferView']]
+        for k in ('indices', 'values'):
+            if 'sparse' in a:
+                a['sparse'][k]['bufferView'] = remap[a['sparse'][k]['bufferView']]
+    for im in J.get('images', []):
+        if 'bufferView' in im:
+            im['bufferView'] = remap[im['bufferView']]
+    J['buffers'][0]['byteLength'] = len(out)
+    js = json.dumps(J, separators=(',', ':')).encode()
+    js += b' ' * ((4 - len(js) % 4) % 4)
+    glb = struct.pack('<III', 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(out))
+    glb += struct.pack('<II', len(js), 0x4E4F534A) + js + struct.pack('<II', len(out), 0x004E4942) + bytes(out)
+    open(path, 'wb').write(glb)
+    print('[unembed] %s  %d image(s) by reference  %.1f MB -> %.1f MB' % (os.path.basename(path), len(drop), len(raw) / 1e6, len(glb) / 1e6))
+    return path
+
+
 def quantize_glb(path):
     """Shrink an exported GLB in place: NORMAL -> int8 (KHR_mesh_quantization), WEIGHTS_0 -> uint8 and COLOR_0 -> uint8
     normalized, TEXCOORD_0 in [0,1] -> uint16 normalized. Positions, indices, morph targets and images stay as they are.

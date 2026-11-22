@@ -113,8 +113,20 @@ def export_materials(src, out_dir):
     images = doc.get("images", [])
     files = {}
     tex_dir = os.path.join(out_dir, "Textures")
+    glb_dir = os.path.dirname(os.path.abspath(src))
     for i, img in enumerate(images):
         if "bufferView" not in img:
+            # an image the GLB names by uri (bl.unembed_images: one of the texture engine's own files): materials.json
+            # names that file where it lies, relative to out_dir (the Unreal import joins it to the folder), and
+            # nothing is copied
+            uri = img.get("uri", "")
+            if uri and not uri.startswith("data:"):
+                from urllib.parse import unquote
+                real = os.path.normpath(os.path.join(glb_dir, unquote(uri)))
+                if os.path.isfile(real):
+                    files[i] = os.path.relpath(real, out_dir).replace(os.sep, "/")
+                else:
+                    print(f"[export_fbx] {os.path.basename(src)}: the image {uri} is not there")
             continue
         bv = doc["bufferViews"][img["bufferView"]]
         raw = binary[bv.get("byteOffset", 0): bv.get("byteOffset", 0) + bv["byteLength"]]
