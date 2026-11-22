@@ -13,6 +13,10 @@ ASOBearer::ASOBearer(const FObjectInitializer& ObjectInitializer)
 	SpeciesId = TEXT("bearer");
 	SOAltered::Configure(this, TEXT("SarkethHeavy"), 40.0f, 104.0f, 1.06f);   // (a Bearer: the heavy Sarketh)
 	VoicePrefix = TEXT("bearer");
+	// the Bearer's colours: bronze plates, a brown-black lacquer, orange lights (heavy weapons)
+	PlateTint = FLinearColor(1.16f, 0.82f, 0.52f);
+	LacquerTint = FLinearColor(1.24f, 0.98f, 0.74f);
+	LightTint = FLinearColor(1.00f, 0.50f, 0.15f);
 	DisplayName = NSLOCTEXT("SO", "Bearer", "Bearer");
 	WeaponArchetype = TEXT("hmg");
 	WeaponDamageScale = 0.2f;

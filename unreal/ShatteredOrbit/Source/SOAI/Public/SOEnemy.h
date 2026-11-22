@@ -110,6 +110,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	TArray<FName> ActionClips;
 
+	/** Its rank's colours (the owner, 2026-11-22: "give the different types different colour set, not too wild but
+	 *  enough to distinguish them"): tints laid on the Sarketh's own materials as the body is set (ApplyRankColours):
+	 *  the pale plates and the claws (MI_skr_armour, MI_skr_claw), the dark lacquer (MI_skr_armour_dark), and the small
+	 *  lights on the body (MI_skr_glow_amber, its glow's colour). The eyes stay the species' own. White plates and
+	 *  lacquer and a black light = as imported. Never violet (another species' colour). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FLinearColor PlateTint = FLinearColor::White;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FLinearColor LacquerTint = FLinearColor::White;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
+	FLinearColor LightTint = FLinearColor::Black;
+
 	/** Its sounds: <SoundPrefix>_attack / _hurt / _death. */
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	FString SoundPrefix = TEXT("stalker");
@@ -385,6 +399,8 @@ protected:
 	TMap<FName, TObjectPtr<UAnimSequenceBase>> Actions;
 
 	void LoadContent();
+	/** lays the rank's colours (PlateTint, LacquerTint, LightTint) on the body's Sarketh materials */
+	void ApplyRankColours();
 	UAnimSequenceBase* LoadClip(const TCHAR* Name) const;
 
 	FName VariantId;

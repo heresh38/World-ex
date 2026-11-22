@@ -27,6 +27,10 @@ ASORemnant::ASORemnant(const FObjectInitializer& ObjectInitializer)
 	SpeciesId = TEXT("remnant");
 	SOAltered::Configure(this, TEXT("Sarketh"), 36.0f, 104.0f);   // (a Sarketh: the owner's design, tools/blender/skr)
 	DisplayName = NSLOCTEXT("SO", "Remnant", "Levy");
+	// the Levy's colours: the plates and lacquer as made (the rank and file), amber lights (the sheet's)
+	PlateTint = FLinearColor::White;
+	LacquerTint = FLinearColor::White;
+	LightTint = FLinearColor::Black;
 	VoicePrefix = TEXT("remnant");
 	WeaponArchetype = TEXT("smg");
 	WeaponDamageScale = 0.3f;

@@ -26,6 +26,10 @@ ASOArmedStalker::ASOArmedStalker(const FObjectInitializer& ObjectInitializer)
 {
 	SpeciesId = TEXT("stalker");
 	DisplayName = NSLOCTEXT("SO", "StalkerArmed", "Veteran");
+	// the Veteran's colours: gunmetal plates with a blue cast, a blue-black lacquer, ice-blue lights
+	PlateTint = FLinearColor(0.68f, 0.84f, 1.18f);
+	LacquerTint = FLinearColor(0.80f, 0.96f, 1.40f);
+	LightTint = FLinearColor(0.40f, 0.85f, 1.00f);
 	SOAltered::Configure(this, TEXT("Sarketh"), 36.0f, 104.0f);   // (a Sarketh: the owner's design, tools/blender/skr)
 	VoicePrefix = TEXT("stalker");
 	WeaponArchetype = TEXT("auto");

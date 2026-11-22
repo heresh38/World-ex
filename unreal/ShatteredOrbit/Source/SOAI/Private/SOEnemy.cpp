@@ -1,4 +1,5 @@
 #include "SOEnemy.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "SOBoss.h"
 #include "SODifficulty.h"
 #include "SOLog.h"
@@ -78,6 +79,10 @@ ASOEnemy::ASOEnemy(const FObjectInitializer& ObjectInitializer)
 	GetCapsuleComponent()->InitCapsuleSize(34.0f, 98.0f);
 	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -98.0f));
 	Body->SetRelativeScale3D(FVector(1.0f));
+	// the Runner's colours: sand plates, a warm lacquer, gold lights (a scout's, light and dry)
+	PlateTint = FLinearColor(1.26f, 1.06f, 0.70f);
+	LacquerTint = FLinearColor(1.22f, 1.04f, 0.80f);
+	LightTint = FLinearColor(1.00f, 0.72f, 0.26f);
 }
 
 void ASOEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -278,6 +283,7 @@ void ASOEnemy::LoadContent()
 	{
 		return;
 	}
+	ApplyRankColours();
 	if (!Body->GetAnimInstance())
 	{
 		Body->SetAnimInstanceClass(USOLocomotionAnimInstance::StaticClass());
@@ -298,6 +304,51 @@ void ASOEnemy::LoadContent()
 			{
 				Actions.Add(Name, A);
 			}
+		}
+	}
+}
+
+void ASOEnemy::ApplyRankColours()
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	const bool bPlates = !PlateTint.Equals(FLinearColor::White), bLacquer = !LacquerTint.Equals(FLinearColor::White);
+	const bool bLights = !LightTint.Equals(FLinearColor::Black);
+	if (!Body || !Body->GetSkeletalMeshAsset() || !(bPlates || bLacquer || bLights))
+	{
+		return;
+	}
+	for (int32 i = 0; i < Body->GetNumMaterials(); ++i)
+	{
+		UMaterialInterface* M = Body->GetMaterial(i);
+		UMaterialInstanceDynamic* Already = Cast<UMaterialInstanceDynamic>(M);
+		const UMaterialInterface* Source = Already ? Already->Parent.Get() : M;
+		if (!M || !Source)
+		{
+			continue;
+		}
+		const FString Name = Source->GetName();
+		const bool bPlate = Name == TEXT("MI_skr_armour") || Name == TEXT("MI_skr_claw");
+		const bool bDark = Name == TEXT("MI_skr_armour_dark");
+		const bool bLight = Name == TEXT("MI_skr_glow_amber");
+		if (!((bPlate && bPlates) || (bDark && bLacquer) || (bLight && bLights)))
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* D = Already ? Already : Body->CreateDynamicMaterialInstance(i, M);
+		if (!D)
+		{
+			continue;
+		}
+		if (bPlate || bDark)
+		{
+			// (on the tint the import gave the material, never on top of one laid before: from the source's)
+			FLinearColor Base = FLinearColor::White;
+			Source->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("BaseColorTint")), Base);
+			D->SetVectorParameterValue(TEXT("BaseColorTint"), Base * (bPlate ? PlateTint : LacquerTint));
+		}
+		else
+		{
+			D->SetVectorParameterValue(TEXT("EmissiveColor"), LightTint);
 		}
 	}
 }

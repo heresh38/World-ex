@@ -28,6 +28,10 @@ ASOVeilborn::ASOVeilborn(const FObjectInitializer& ObjectInitializer)
 	SpeciesId = TEXT("veilborn");
 	SOAltered::Configure(this, TEXT("SarkethFemale"), 34.0f, 98.0f);   // (a Sarketh, a Speaker: the owner's design)
 	VoicePrefix = TEXT("veilborn");
+	// the Speaker's colours: verdigris plates, a green-black lacquer, teal lights (the signals officer)
+	PlateTint = FLinearColor(0.70f, 1.10f, 0.96f);
+	LacquerTint = FLinearColor(0.80f, 1.32f, 1.14f);
+	LightTint = FLinearColor(0.30f, 1.00f, 0.75f);
 	WeaponArchetype = TEXT("scout");
 	WeaponDamageScale = 0.4f;
 	AimError = 40.0f;

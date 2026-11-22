@@ -117,6 +117,10 @@ ASOColossus::ASOColossus(const FObjectInitializer& ObjectInitializer)
 	// (the commander: the heavy Sarketh made big, the sheet's "bigger boss version", until its walking war suit is designed)
 	SOAltered::Configure(this, TEXT("SarkethHeavy"), 40.0f, 104.0f, 1.32f);
 	DisplayName = NSLOCTEXT("SO", "Colossus", "The Colossus");
+	// the commander's colours: a red-bronze steel, a blood-black lacquer, red lights (the one in command)
+	PlateTint = FLinearColor(1.22f, 0.64f, 0.58f);
+	LacquerTint = FLinearColor(1.50f, 0.80f, 0.80f);
+	LightTint = FLinearColor(1.00f, 0.22f, 0.15f);
 	VoicePrefix = TEXT("colossus");
 	WeaponArchetype = TEXT("hmg");
 	WeaponDamageScale = 0.22f;

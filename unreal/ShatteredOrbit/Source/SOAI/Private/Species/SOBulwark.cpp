@@ -29,6 +29,10 @@ ASOBulwark::ASOBulwark(const FObjectInitializer& ObjectInitializer)
 	// (a Warden: the heavy Sarketh, a shield on its forearm, a little bigger in its powered armour; the old husk is gone)
 	SOAltered::Configure(this, TEXT("SarkethHeavy"), 40.0f, 104.0f, 1.08f);
 	VoicePrefix = TEXT("bulwark");
+	// the Warden's colours: ivory plates with gold in them, a warm lacquer, gold lights (an officer)
+	PlateTint = FLinearColor(1.32f, 1.14f, 0.76f);
+	LacquerTint = FLinearColor(1.20f, 1.08f, 0.84f);
+	LightTint = FLinearColor(1.00f, 0.85f, 0.40f);
 	WeaponArchetype = TEXT("shotgun");
 	WeaponDamageScale = 0.2f;
 	AimError = 70.0f;

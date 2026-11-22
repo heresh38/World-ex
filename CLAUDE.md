@@ -1088,7 +1088,14 @@ male 36 x 104, the female 34 x 98). The heavy ranks wear the HEAVY Sarketh (`skr
 fins, a fourth pauldron layer, a plate down the breastbone), a little bigger in powered armour
 (`SOAltered::Configure(..., Scale)`): the Warden (`ASOBulwark`) 1.08, the Bearer 1.06, the commander (`ASOColossus`)
 1.32 (the sheet's "bigger boss version" until its war suit is designed). The heavy ranks' moves play the Sarketh's own
-clips (`skr/motion.py`: Slam, Sweep, Barrage, Shield, Brace, timed to the kits' `clipLead`). They hold the light guns, which are the Sarketh's own technology (the story).
+clips (`skr/motion.py`: Slam, Sweep, Barrage, Shield, Brace, timed to the kits' `clipLead`). **Every rank its own
+colours** (the owner, 2026-11-22: "give the different types different colour set, not too wild but enough to
+distinguish them"): tints a species' constructor sets (`ASOEnemy::PlateTint`, `LacquerTint`, `LightTint`), laid as
+dynamic instances on the body's own Sarketh materials as it is set (`ASOEnemy::ApplyRankColours`: the plates and the
+claws, the dark lacquer, the small lights' glow; the eyes stay the species' white): the Runner sand, the Levy as made
+(grey), the Veteran steel-blue, the Speaker teal, the Warden ivory-gold, the Bearer bronze, the commander crimson; never
+violet (another species'). The half-metal plates mirror the sky, so a tint of a tenth or two did not show: the hue
+moves about a third (the lacquer more: it is most of the female). They hold the light guns, which are the Sarketh's own technology (the story).
 Pictures `SOCaptureSeries 1 42` (files `SO_k*`: the seven ranks in a line on open floor the capture finds for itself,
 then each close). Still to do: the Warden's, the Bearer's and the commander's own powered armour and war suit on
 the owner's design (the heavy Sarketh stands in), levels of detail, baked own maps (the gate's own-maps check), voices of their own, the
