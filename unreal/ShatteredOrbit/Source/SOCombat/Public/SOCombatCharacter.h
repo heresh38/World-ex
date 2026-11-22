@@ -165,6 +165,11 @@ public:
 	virtual FName GetLootKey() const { return NAME_None; }
 	virtual int32 GetLootTier() const { return 0; }
 
+	/** What the journal learns when it dies (SOJournal): its kind (a creature's species) and, for a named one, its
+	 *  name's key (an operation's variant). None: nothing. */
+	virtual FName GetJournalKind() const { return NAME_None; }
+	virtual FName GetJournalName() const { return NAME_None; }
+
 	/** A hand to hand blow of this character's landed on Victim at Point (server; USOMeleeLibrary::Land): how it is
 	 *  shown everywhere (the freeze, the sparks, the count). */
 	virtual void OnMeleeHit(ASOCombatCharacter* Victim, const FVector& Point, float Weight, float HitStop) {}

@@ -15,6 +15,7 @@
 #include "SOCombatStatics.h"
 #include "SOFxSubsystem.h"
 #include "SOInventoryComponent.h"
+#include "SOJournal.h"
 #include "SOLootLibrary.h"
 #include "SOSound.h"
 #include "SOWeapon.h"
@@ -423,11 +424,50 @@ ASOLootPickup* USOLootSubsystem::SpawnPickup(const FVector& Location, ESOPickupK
 
 void USOLootSubsystem::OnDied(ASOCombatCharacter* Victim, AActor* Killer, UWorld* World)
 {
-	if (World != GetWorld() || !Victim || Victim->Faction == ESOFaction::Player || !Victim->bDropsLoot || World->GetNetMode() == NM_Client)
+	if (World != GetWorld() || !Victim || World->GetNetMode() == NM_Client)
 	{
 		return;
 	}
 	USOInventoryComponent* Inventory = SOFindInventory(Killer);
+	if (Victim->Faction == ESOFaction::Player)
+	{
+		// the journal's record: a player down, whoever did it
+		if (USOInventoryComponent* Own = SOFindInventory(Victim))
+		{
+			Own->Tally(SOJournal::DeathsTally());
+		}
+		return;
+	}
+	if (!Victim->bDropsLoot)
+	{
+		return;                                                  // (a conduit: no creature)
+	}
+	// the journal: every player here learns what died (its kind, a named one's name); the killer counts it
+	const FName Kind = Victim->GetJournalKind();
+	const FName Named = Victim->GetJournalName();
+	if (!Kind.IsNone())
+	{
+		for (TActorIterator<APlayerState> It(World); It; ++It)
+		{
+			if (USOInventoryComponent* Each = It->FindComponentByClass<USOInventoryComponent>())
+			{
+				Each->Learn(SOJournal::MetKey(Kind));
+				if (!Named.IsNone())
+				{
+					Each->Learn(SOJournal::NamedKey(Named));
+				}
+			}
+		}
+		if (Inventory)
+		{
+			Inventory->Tally(SOJournal::KillTally(Kind));
+			Inventory->Tally(SOJournal::KillsTally());
+			if (!Named.IsNone())
+			{
+				Inventory->Tally(SOJournal::NamedTally());
+			}
+		}
+	}
 	if (!Inventory)
 	{
 		return;

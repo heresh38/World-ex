@@ -10,6 +10,7 @@
 #include "SOCombatTypes.h"
 #include "SOLootLibrary.h"
 #include "SOCombatCharacter.h"
+#include "SOJournal.h"
 #include "SOProfileStore.h"
 #include "SOWeaponData.h"
 
@@ -33,6 +34,9 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME(USOInventoryComponent, SkinTone);
 	DOREPLIFETIME(USOInventoryComponent, HairTone);
 	DOREPLIFETIME_CONDITION(USOInventoryComponent, bCharacterMade, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, Learned, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, JournalRead, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USOInventoryComponent, Tallies, COND_OwnerOnly);
 	DOREPLIFETIME(USOInventoryComponent, Equipped);
 	DOREPLIFETIME(USOInventoryComponent, ActiveSlot);
 	// what a player has in the bank is theirs to see (the copies themselves go to everyone: the guns on a player's
@@ -509,6 +513,11 @@ FSOWeaponInstance USOInventoryComponent::AddWeapon(FSOWeaponInstance Weapon, boo
 		Equipped[Slot] = Weapon.Uid;
 		bLoadout = Slot == ActiveSlot;
 	}
+	// the journal: what is known of its maker
+	if (const USOWeaponData* Data = Tables ? Tables->LoadArchetype(Weapon.Archetype) : nullptr; Data && !Data->Origin.IsNone())
+	{
+		Learn(SOJournal::OriginKey(Data->Origin));
+	}
 	Changed(bLoadout);
 	return Weapon;
 }
@@ -778,6 +787,9 @@ void USOInventoryComponent::NewProfile()
 	FaceValues.Reset();
 	SkinTone = HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	bCharacterMade = false;                                     // (a new player: the builder opens at the first start)
+	Learned.Reset();
+	JournalRead.Reset();
+	Tallies.Reset();
 	StarterGoods(Goods);
 	GrantWardrobe(true);
 	Dress();
@@ -813,6 +825,7 @@ void USOInventoryComponent::NewProfile()
 			}
 		}
 	}
+	LearnOwnedOrigins();
 	Changed(true, true);
 }
 
@@ -862,6 +875,10 @@ bool USOInventoryComponent::LoadProfile()
 	SkinTone = Save->SkinTone;
 	HairTone = Save->HairTone;
 	bCharacterMade = Save->bCharacterMade;
+	Learned = Save->Learned;
+	JournalRead = Save->JournalRead;
+	Tallies = Save->Tallies;
+	LearnOwnedOrigins();
 	FaceKeys.Reset();
 	FaceValues.Reset();
 	for (int32 i = 0; i < FMath::Min(Save->FaceKeys.Num(), Save->FaceValues.Num()); ++i)
@@ -944,6 +961,9 @@ void USOInventoryComponent::SaveProfile() const
 	Save->SkinTone = SkinTone;
 	Save->HairTone = HairTone;
 	Save->bCharacterMade = bCharacterMade;
+	Save->Learned = Learned;
+	Save->JournalRead = JournalRead;
+	Save->Tallies = Tallies;
 	const UGameInstance* Game = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	if (USOProfileStore* Store = Game ? Game->GetSubsystem<USOProfileStore>() : nullptr)
 	{
@@ -1125,6 +1145,97 @@ void USOInventoryComponent::StarterGoods(TArray<FSOGoodsStack>& Out)
 	}
 }
 
+// --- The journal -----------------------------------------------------------------------------------------
+
+void USOInventoryComponent::Learn(FName Key)
+{
+	if (Key.IsNone() || Key == SOJournal::StartKey() || Learned.Contains(Key))
+	{
+		return;
+	}
+	Learned.Add(Key);
+	// a line in the feed for each entry it shows (an operation's own come with its banner and its radio)
+	for (const FSOJournalEntry* E : FSOJournalData::Get().UnlockedBy(Key))
+	{
+		if (E->Section != TEXT("operations"))
+		{
+			Feed(FString::Printf(TEXT("JOURNAL  ·  %s"), *E->Title), FLinearColor(0.55f, 0.85f, 1.0f));
+		}
+	}
+	Changed(false);
+}
+
+bool USOInventoryComponent::HasLearned(FName Key) const
+{
+	return Key == SOJournal::StartKey() || Learned.Contains(Key);
+}
+
+bool USOInventoryComponent::IsJournalOpen(FName EntryId) const
+{
+	const FSOJournalEntry* E = FSOJournalData::Get().Find(EntryId);
+	return E && HasLearned(E->Unlock);
+}
+
+bool USOInventoryComponent::IsJournalNew(FName EntryId) const
+{
+	return IsJournalOpen(EntryId) && !JournalRead.Contains(EntryId);
+}
+
+bool USOInventoryComponent::HasJournalNew() const
+{
+	for (const FSOJournalEntry& E : FSOJournalData::Get().Entries)
+	{
+		if (HasLearned(E.Unlock) && !JournalRead.Contains(E.Id))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void USOInventoryComponent::MarkJournalRead(FName EntryId)
+{
+	if (IsJournalNew(EntryId))
+	{
+		JournalRead.Add(EntryId);
+		Changed(false);
+	}
+}
+
+void USOInventoryComponent::Tally(FName Key, int32 Add)
+{
+	if (Key.IsNone() || Add == 0)
+	{
+		return;
+	}
+	FSOTally* T = Tallies.FindByPredicate([Key](const FSOTally& Each) { return Each.Key == Key; });
+	if (!T)
+	{
+		T = &Tallies.AddDefaulted_GetRef();
+		T->Key = Key;
+	}
+	T->Count = FMath::Max(0, T->Count + Add);
+	Changed(false);
+}
+
+int32 USOInventoryComponent::GetTally(FName Key) const
+{
+	const FSOTally* T = Tallies.FindByPredicate([Key](const FSOTally& Each) { return Each.Key == Key; });
+	return T ? T->Count : 0;
+}
+
+void USOInventoryComponent::LearnOwnedOrigins()
+{
+	const USOLootTables* Tables = USOLootLibrary::GetTables();
+	for (const FSOWeaponInstance& W : Items)
+	{
+		if (const USOWeaponData* Data = Tables ? Tables->LoadArchetype(W.Archetype) : nullptr; Data && !Data->Origin.IsNone())
+		{
+			Learned.AddUnique(SOJournal::OriginKey(Data->Origin));
+		}
+	}
+}
+
 void USOInventoryComponent::Feed(const FString& Text, const FLinearColor& Color)
 {
 	OnFeed.Broadcast(Text, Color);
@@ -1199,6 +1310,7 @@ void USOInventoryComponent::ServerEquip_Implementation(const FString& Uid) { if 
 void USOInventoryComponent::ServerSelectSlot_Implementation(int32 Slot) { SelectSlot(Slot); }
 void USOInventoryComponent::ServerUseGoods_Implementation(FName Id) { UseGoods(Id); }
 void USOInventoryComponent::ServerMarkGoodsSeen_Implementation(FName Id) { MarkGoodsSeen(Id); }
+void USOInventoryComponent::ServerMarkJournalRead_Implementation(FName EntryId) { MarkJournalRead(EntryId); }
 void USOInventoryComponent::ServerSetKeep_Implementation(const FString& Uid, bool bKeep) { if (PlausibleUid(Uid)) { SetKeep(Uid, bKeep); } }
 void USOInventoryComponent::ServerDismantle_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { Dismantle(Uid); } }
 void USOInventoryComponent::ServerMarkSeen_Implementation(const FString& Uid) { if (PlausibleUid(Uid)) { MarkSeen(Uid); } }

@@ -96,6 +96,8 @@ bool USOProfileStore::Migrate(USOSaveGame* Save)
 		// character builder has played already: it does not open by itself
 		Save->bCharacterMade = true;
 	}
+	// version 9 -> 10: the journal; nothing learned before it (the makers of the guns owned are learned as it loads,
+	// what the field teaches from the next kill on), nothing to do
 	Save->Version = USOSaveGame::CurrentVersion;
 	return true;
 }

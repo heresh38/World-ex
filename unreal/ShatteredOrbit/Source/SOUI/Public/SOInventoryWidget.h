@@ -370,8 +370,8 @@ class SOUI_API USOInventoryWidget : public UUserWidget
 
 public:
 	/** What the screen shows: the loadout, a weapon slot's arsenal (or the melee styles), an armour slot, the inventory,
-	 *  the character builder. */
-	enum class EView : uint8 { Loadout, Arsenal, Armour, Goods, Character };
+	 *  the character builder, the journal (in the order of the tabs). */
+	enum class EView : uint8 { Loadout, Arsenal, Armour, Goods, Character, Journal };
 
 	void Bind(USOInventoryComponent* InInventory);
 	void Refresh();
@@ -384,7 +384,7 @@ public:
 	void OnControl(ESOArmouryControl Kind, const FString& Key);
 
 	/** Opens a view: "0".."2" a weapon slot's arsenal, "melee", head .. feet an armour slot ("armour": the one open
-	 *  last), "goods" the inventory; empty = the loadout. */
+	 *  last), "goods" the inventory, "character" the builder, "journal" the journal; empty = the loadout. */
 	void OpenSlot(const FString& SlotId);
 	const FString& GetOpenSlot() const { return OpenSlotId; }
 	EView GetView() const;
@@ -466,6 +466,14 @@ protected:
 	void FillArmorInspect(const FSOArmorInstance& A);
 	void FillMeleeInspect(const FSOMeleeStyle& Style, FName Id);
 	void FillGoodsInspect(const FSOGoodsInfo& Info);
+	/** The journal (the JOURNAL tab: SOJournal.h): an entry to read (its section and what it is, its title, its
+	 *  portrait beside its words, what it notes, its tally), one not yet learned, or the service record. */
+	void FillJournalInspect(FName EntryId);
+	void FillRecord();
+	/** The journal's open section (its filter "section:<id>"; none: the first). */
+	FName JournalSection() const;
+	/** Cards a page holds: a list's rows (the journal is always a list) or the grid's cells. */
+	int32 CardsPerPage() const;
 	/** The six attributes; with a piece, what wearing it would change. */
 	void FillAttributes(const FSOArmorInstance* TryOn);
 	void FillQuickLook(USOInventoryTile* Tile);

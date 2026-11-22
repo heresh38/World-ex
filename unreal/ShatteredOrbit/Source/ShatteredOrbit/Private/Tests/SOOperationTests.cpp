@@ -13,6 +13,7 @@
 #include "SOSpecies.h"
 #include "SOEnemyAIController.h"
 #include "SOInventoryComponent.h"
+#include "SOJournal.h"
 #include "SOLootLibrary.h"
 #include "SOLootTypes.h"
 #include "SOWeaponData.h"
@@ -129,6 +130,7 @@ bool FSOOperationFlowTest::RunTest(const FString& Parameters)
 	Op->StartDelay = -1.0f;
 	Op->StageGap = 0.2f;
 	Op->LoadPlan(SOTest::OperationPlan);
+	Op->PlanFile = TEXT("Data/op_flowtest.json");                  // (its name to the journal; the plan is inline)
 	FTransform Checkpoint;
 	TestFalse(TEXT("no checkpoint before it starts"), Op->GetCheckpoint(Checkpoint));
 	Op->Begin();
@@ -198,6 +200,15 @@ bool FSOOperationFlowTest::RunTest(const FString& Parameters)
 
 	// the reward: one piece (none of the test's options exist, so a gun of the reward rarity)
 	USOInventoryComponent* Inv = PS->GetInventory();
+	// the journal heard every stage begin and the end, learned what was killed and counted it
+	for (const TCHAR* Stage : { TEXT("go"), TEXT("clear"), TEXT("hold"), TEXT("boss") })
+	{
+		TestTrue(FString::Printf(TEXT("the journal heard stage %s"), Stage), Inv->HasLearned(SOJournal::StageKey(TEXT("flowtest"), Stage)));
+	}
+	TestTrue(TEXT("the journal knows it was finished"), Inv->HasLearned(SOJournal::DoneKey(TEXT("flowtest"))));
+	TestEqual(TEXT("and counts it"), Inv->GetTally(SOJournal::DoneTally(TEXT("flowtest"))), 1);
+	TestTrue(TEXT("the journal learned the Veteran from its dead"), Inv->HasLearned(SOJournal::MetKey(TEXT("stalker"))));
+	TestTrue(TEXT("and counted them"), Inv->GetTally(SOJournal::KillTally(TEXT("stalker"))) >= 3);
 	const int32 Guns = Inv->GetItems().Num();
 	FRandomStream Rng(7);
 	const FString Label = Op->GrantReward(PS, Inv, Rng);

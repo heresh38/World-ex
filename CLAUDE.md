@@ -1014,6 +1014,22 @@ variant's id, or its boss's: each named one of Meridian Fall carries its relic, 
 material (its gun class's, armour's) by rarity and void crystal for Legendary and Sovereign (`"progression.upgrade.goods"`
 -> `USOProgressionTable::UpgradeGoods`, `USOInventoryComponent::GetUpgradeGoods`; short of any of it, nothing is paid).
 Tests `ShatteredOrbit.Goods.*`.
+**The journal** (the armoury's JOURNAL tab, 2026-11-22; the owner's armoury reference: "a journal of what was learned"):
+`Data/journal.json` (read at runtime, `FSOJournalData` in `SOJournal.h`; `tools/package.sh` stages it) has the sections
+(the Sarketh, operations, the war, makers, the record) and the pages, each shown once its key is learned (`SOJournal`:
+`met:<species>` = one was killed where the player was, EVERY player of the world learns it; `named:<variant>`;
+`stage:<operation>:<stage>` = a stage began; `done:<operation>`; `origin:<origin>` = a gun of that maker came in; none =
+from the start). An operation's pages are NOT written there: they are its plan's own words (the briefing with its first
+stage, the radio's line as each stage begins with what the stage asked, the outcome), read from `Data/areas.json`'s
+operations, so nothing is written twice. The inventory keeps what was learned, what was read and the tallies (kills by
+species and in all, named ones, operations finished, deaths: `USOInventoryComponent::Learn / MarkJournalRead / Tally`;
+replicated to the owner, saved: version 10); a page first learned is a line in the feed (an operation's own come with
+its banner and radio, quietly), unread pages mark the tab gold. The view (`EView::Journal`, the armoury's list
+machinery: sections as categories with learned / all, pages as rows, a page not learned a locked row with what would
+teach it) has no stand-in: the reading pane takes its room, the rank's portrait beside the words (`T_Journal_<rank>`:
+`skr/lab.py -- <sex> --part=full --pose=Idle:1 --portraits=<species,...>` renders each rank in its colours, the whole
+body and the head and shoulders, `SO_IMPORT_ONLY=journal`); the record is drawn from the tallies. Pictures set 19's
+`SO_u11*_journal_*`; tests `ShatteredOrbit.Journal.*`.
 The first operation, Meridian Fall (`/Game/Maps/L_Meridian`; travel from Nexus Prime): the owner's layout sheet
 `art/reference/operation/first_operation_map.png` made linear, our own names, and (owner, 2026-11-10: "at least 4x
 longer ... spawn at the very edge of the city and fight through ruined buildings / maybe a mall ... like a strike")

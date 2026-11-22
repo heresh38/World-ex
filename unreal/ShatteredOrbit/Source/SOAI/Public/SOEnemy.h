@@ -59,6 +59,9 @@ public:
 	//~ ASOCombatCharacter: a variant's own drops (its relic), a boss's, the elites' and the bosses' lists
 	virtual FName GetLootKey() const override { return !VariantId.IsNone() ? VariantId : BossId; }
 	virtual int32 GetLootTier() const override { return !BossId.IsNone() ? 2 : (bElite ? 1 : 0); }
+	//~ ASOCombatCharacter: what the journal learns of it (its species; a variant: its own name)
+	virtual FName GetJournalKind() const override { return SpeciesId; }
+	virtual FName GetJournalName() const override { return VariantId; }
 
 	/** What its special moves multiply their damage by (a variant's). */
 	float GetDamageScale() const { return DamageScale; }

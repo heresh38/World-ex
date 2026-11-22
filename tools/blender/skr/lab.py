@@ -11,6 +11,11 @@ The view `sheet` is the owner's sheet's own view of this body: orthographic at t
 1024, the male's 2.03 m at y 80, the body at x 330 (male) or 640 (female) of the 1536), turned `yaw` degrees, over
 nothing, so it can be laid over the sheet or set beside the same crop of it.
 Renders under the sheet's light (SKR_LAB_LIGHT scales it): a warm key front left, cold rims behind, a near-black ground.
+
+--portraits=<species>[,<species>] (with --part=full): the journal's pictures of those ranks (the armoury's JOURNAL tab):
+each in its rank's colours (RANK_TINTS: the game's ASOEnemy::PlateTint / LacquerTint / LightTint), the whole body three
+quarters from the front 512 x 768 and the head and shoulders 256 x 256, over nothing, into <out>/journal_<species>.png
+and journal_<species>_bust.png (SO_IMPORT_ONLY=journal reads them from SourceArt/Icons/journal).
 """
 import math
 import os
@@ -73,6 +78,91 @@ def studio(sc):
     area('top', (0, .4, 4.2), 220 * k, 2.0, (1, 1, 1), (0, 0, 1.0))
 
 
+# a rank's colours, as the game lays them (ASOEnemy::ApplyRankColours: the plates and claws times PlateTint, the dark
+# lacquer times LacquerTint, the small lights' glow LightTint; white / black: as made)
+RANK_TINTS = {
+    'stalker_feral': ((1.26, 1.06, .70), (1.22, 1.04, .80), (1.0, .72, .26)),
+    'remnant': ((1, 1, 1), (1, 1, 1), None),
+    'stalker': ((.68, .84, 1.18), (.80, .96, 1.40), (.40, .85, 1.0)),
+    'veilborn': ((.70, 1.10, .96), (.80, 1.32, 1.14), (.30, 1.0, .75)),
+    'bulwark': ((1.32, 1.14, .76), (1.20, 1.08, .84), (1.0, .85, .40)),
+    'bearer': ((1.16, .82, .52), (1.24, .98, .74), (1.0, .50, .15)),
+    'colossus': ((1.22, .64, .58), (1.50, .80, .80), (1.0, .22, .15)),
+}
+
+
+def tint_nodes():
+    """a multiply in front of the base colour of the plates, the claws and the lacquer, and the amber lights' glow:
+    {'plate': [mix nodes], 'dark': [...], 'light': [(principled, its colour as made)]}"""
+    out = {'plate': [], 'dark': [], 'light': []}
+    for m in bpy.data.materials:
+        n = m.name.split('.')[0]
+        kind = 'plate' if n in ('skr_armour', 'skr_claw') else 'dark' if n == 'skr_armour_dark' else 'light' if n == 'skr_glow_amber' else None
+        if not kind or not m.node_tree:
+            continue
+        nt = m.node_tree
+        b = next((x for x in nt.nodes if x.type == 'BSDF_PRINCIPLED'), None)
+        if not b:
+            continue
+        if kind == 'light':
+            out['light'].append((b, tuple(b.inputs['Emission Color'].default_value)))
+            continue
+        mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'
+        mix.inputs['Factor'].default_value = 1.0
+        src = b.inputs['Base Color'].links[0].from_socket if b.inputs['Base Color'].links else None
+        if src is not None:
+            nt.links.new(src, mix.inputs[6])
+        else:
+            mix.inputs[6].default_value = b.inputs['Base Color'].default_value
+        mix.inputs[7].default_value = (1, 1, 1, 1)
+        nt.links.new(mix.outputs[2], b.inputs['Base Color'])
+        out[kind].append(mix)
+    return out
+
+
+def set_rank(nodes, species):
+    plate, dark, light = RANK_TINTS[species]
+    for mix in nodes['plate']:
+        mix.inputs[7].default_value = (*plate, 1)
+    for mix in nodes['dark']:
+        mix.inputs[7].default_value = (*dark, 1)
+    for b, made in nodes['light']:
+        b.inputs['Emission Color'].default_value = (*light, 1) if light else made
+
+
+def portraits(o, sc, cam, cam_d, sex, out, hd):
+    """the journal's pictures: each rank asked for in its colours, the whole body and the head and shoulders"""
+    nodes = tint_nodes()
+    sc.render.film_transparent = True
+    # (on the armoury's dark glass: the lights a little up from the sheet's, the rims up more, so the dark lacquer
+    # keeps its outline)
+    for ob in sc.objects:
+        if ob.type == 'LIGHT':
+            ob.data.energy *= 1.9 if ob.name.startswith('rim') else 1.45
+    yaw = math.radians(float(o.get('yaw') or 24))
+    d = Vector((-math.sin(yaw), -math.cos(yaw), .06)).normalized()
+    Hh = Vector(hd)
+    tall = Hh.z + .32                                 # (the crest over the head)
+    shots = (
+        # name, size, what it looks at, how far (half the height it frames over the lens's half angle), lens
+        ('', (512, 768), Vector((0, 0, tall * .49)), tall * .5 / math.tan(math.atan(18 / 85)) * 1.16, 85),
+        ('_bust', (256, 256), Hh + Vector((0, .01, .06)), .47 / math.tan(math.atan(18 / 85)), 85),
+    )
+    for species in o['portraits'].split(','):
+        set_rank(nodes, species)
+        for suffix, res, tgt, dist, lens in shots:
+            cam_d.type = 'PERSP'
+            cam_d.lens = lens
+            cam_d.sensor_fit = 'AUTO'
+            sc.render.resolution_x, sc.render.resolution_y = res
+            cam.location = tgt + d * dist
+            cam.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()
+            sc.render.filepath = os.path.join(out, f'journal_{species}{suffix}.png')
+            bpy.ops.render.render(write_still=True)
+            log('rendered', os.path.basename(sc.render.filepath))
+    sc.render.film_transparent = False
+
+
 def main():
     o = opts()
     bl.reset()
@@ -112,9 +202,12 @@ def main():
         bpy.context.scene.frame_set(int(fr))
     sc = bpy.context.scene
     studio(sc)
-    out = o['out'] or os.path.join(os.environ.get('TEMP', '.'), 'skr_lab')
+    out = os.path.abspath(o['out'] or os.path.join(os.environ.get('TEMP', '.'), 'skr_lab'))   # (Blender reads a relative render path from the .blend's own place)
     os.makedirs(out, exist_ok=True)
     cam_d = bpy.data.cameras.new('cam'); cam = bpy.data.objects.new('cam', cam_d); sc.collection.objects.link(cam); sc.camera = cam
+    if o.get('portraits'):
+        portraits(o, sc, cam, cam_d, sex, out, hd)
+        return
     Hh = Vector(hd)
     Hm = 2.2 if sex == 'male' else 2.05
     views = {

@@ -41,6 +41,7 @@
 #include "SOCharacter.h"
 #include "SOCreator.h"
 #include "SOInventoryComponent.h"
+#include "SOJournal.h"
 #include "SOLootLibrary.h"
 #include "SOMelee.h"
 #include "SOProgression.h"
@@ -445,6 +446,30 @@ namespace
 		case ESOGoodsKind::Relic: return 0;
 		default: return 2;
 		}
+	}
+
+	/** A journal page's picture (/Game/UI/Journal/T_Journal_<id>: a Sarketh's portrait in its rank's colours, the whole
+	 *  body two by three; bBust: head and shoulders, square, for a row). */
+	UTexture2D* JournalPicture(FName Id, bool bBust = false)
+	{
+		if (Id.IsNone())
+		{
+			return nullptr;
+		}
+		const FString Name = FString::Printf(TEXT("T_Journal_%s%s"), *Id.ToString(), bBust ? TEXT("_bust") : TEXT(""));
+		return Cast<UTexture2D>(FSoftObjectPath(FString::Printf(TEXT("/Game/UI/Journal/%s.%s"), *Name, *Name)).TryLoad());
+	}
+
+	/** What would teach a page not yet learned (by its key's kind: SOJournal). */
+	FString JournalHint(const FSOJournalEntry& E)
+	{
+		const FString Key = E.Unlock.ToString();
+		if (Key.StartsWith(TEXT("met:"))) return TEXT("KILL ONE TO LEARN MORE");
+		if (Key.StartsWith(TEXT("named:"))) return TEXT("ONE OF THEIR NAMED, NOT YET FOUGHT");
+		if (Key.StartsWith(TEXT("stage:"))) return TEXT("NOT YET REACHED");
+		if (Key.StartsWith(TEXT("done:"))) return TEXT("FINISH THE OPERATION");
+		if (Key.StartsWith(TEXT("origin:"))) return TEXT("CARRY ONE OF THEIR GUNS");
+		return TEXT("NOT YET KNOWN");
 	}
 
 	/** An arsenal slot's line under its name (ours). */
@@ -1791,7 +1816,7 @@ void USOInventoryWidget::BuildTree()
 	UHorizontalBox* Left = Make<UHorizontalBox>(T);
 	Left->AddChildToHorizontalBox(Glyph(T, this, 0, Cyan, 46.0f))->SetVerticalAlignment(VAlign_Center);
 	UVerticalBox* Who = Make<UVerticalBox>(T);
-	NameText = Text(T, TEXT("WAYFARER"), 24, Ink, FaceCond, 260);
+	NameText = Text(T, TEXT("ORION OPERATIVE"), 24, Ink, FaceCond, 260);    // (ours: the reference picture's brand is never used)
 	Who->AddChildToVerticalBox(NameText);
 	UHorizontalBox* LevelRow = Make<UHorizontalBox>(T);
 	LevelText = Text(T, TEXT("LEVEL 1"), 10, Cyan, FaceBold, 220);
@@ -2070,6 +2095,7 @@ void USOInventoryWidget::Refresh()
 	FillBanner();
 	const bool bLoadout = GetView() == EView::Loadout;
 	const bool bCreator = GetView() == EView::Character;
+	const bool bJournal = GetView() == EView::Journal;
 	for (UWidget* W : { static_cast<UWidget*>(LeftPanel.Get()), static_cast<UWidget*>(RightPanel.Get()) })
 	{
 		W->SetVisibility(bLoadout ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
@@ -2082,7 +2108,20 @@ void USOInventoryWidget::Refresh()
 	InspectPanel->SetVisibility(bLoadout || bCreator ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	if (FloorImage && FloorImage->GetBrush().GetResourceObject())
 	{
-		FloorImage->SetVisibility(bCreator ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		FloorImage->SetVisibility(bCreator || bJournal ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	// the journal is read: its reading pane takes the stand-in's room (and what turns or changes the stand-in goes)
+	if (PreviewImage)
+	{
+		PreviewImage->SetVisibility(bJournal ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	if (DragHint)
+	{
+		DragHint->SetVisibility(bJournal ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (BodyToggle)
+	{
+		BodyToggle->SetVisibility(bJournal ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);   // (a button: it is clicked)
 	}
 	if (bLoadout)
 	{
@@ -2240,12 +2279,24 @@ void USOInventoryWidget::FillArmoury()
 	{
 		SelectedKey.Reset();                                      // (not in this category: the first one that is)
 	}
-	const int32 PerPage = bListView ? ListRows : Columns * GridRows;
+	const int32 PerPage = CardsPerPage();
+	const bool bRows = bListView || View == EView::Journal;
 	const int32 Pages = FMath::Max(1, (All.Num() + PerPage - 1) / PerPage);
 	Page = FMath::Clamp(Page, 0, Pages - 1);
 	if (SelectedKey.IsEmpty() && All.Num() > 0)
 	{
 		SelectedKey = All[FMath::Min(Page * PerPage, All.Num() - 1)].Key;
+		if (View == EView::Journal)
+		{
+			// the journal opens on the first page not yet read, else the first learned
+			const FSOTileInfo* First = All.FindByPredicate([](const FSOTileInfo& I) { return I.bNew; });
+			First = First ? First : All.FindByPredicate([](const FSOTileInfo& I) { return !I.bEmpty; });
+			if (First)
+			{
+				SelectedKey = First->Key;
+				Page = All.IndexOfByPredicate([&](const FSOTileInfo& I) { return I.Key == First->Key; }) / FMath::Max(PerPage, 1);
+			}
+		}
 	}
 
 	// --- the column: the view's name and its line, the arsenal's slots, the categories with their counts ---------------
@@ -2260,6 +2311,11 @@ void USOInventoryWidget::FillArmoury()
 	{
 		Title = TEXT("ARMOUR");
 		Line = TEXT("WORN OVER THE UNDERSUIT");
+	}
+	else if (View == EView::Journal)
+	{
+		Title = TEXT("JOURNAL");
+		Line = TEXT("WHAT WE HAVE LEARNED");
 	}
 	else
 	{
@@ -2371,6 +2427,43 @@ void USOInventoryWidget::FillArmoury()
 			AddRow(FString(), TEXT("ALL"), All.Num(), true, false);
 		}
 	}
+	else if (View == EView::Journal)
+	{
+		// every section, with how much of it is learned (of all there is to learn) and a mark where a page waits unread
+		const FSOJournalData& Journal = FSOJournalData::Get();
+		const FName Open = JournalSection();
+		for (const FSOJournalSection& Section : Journal.Sections)
+		{
+			int32 Learned = 0, Total = 0;
+			bool bNew = false;
+			for (const FSOJournalEntry& E : Journal.Entries)
+			{
+				if (E.Section == Section.Id)
+				{
+					++Total;
+					Learned += Inventory->IsJournalOpen(E.Id) ? 1 : 0;
+					bNew |= Inventory->IsJournalNew(E.Id);
+				}
+			}
+			USOArmouryButton* B = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+			B->Setup(this, ESOArmouryControl::Row, TEXT("section:") + Section.Id.ToString(), Section.Name.ToUpper(), Section.Id == Open);
+			B->Count = Section.Id == TEXT("record") ? FString() : FString::Printf(TEXT("%d/%d"), Learned, Total);
+			B->bDim = Learned == 0;
+			B->bNew = bNew;
+			B->Width = CatWidth;
+			CategoryPanel->AddChildToVerticalBox(B)->SetPadding(FMargin(0, 0, 0, 2));
+		}
+		// how much of all of it is known, at the column's foot
+		int32 Known = 0;
+		for (const FSOJournalEntry& E : Journal.Entries)
+		{
+			Known += Inventory->IsJournalOpen(E.Id) ? 1 : 0;
+		}
+		CategoryPanel->AddChildToVerticalBox(Make<USpacer>(T))->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		CategoryPanel->AddChildToVerticalBox(Header(T, TEXT("LEARNED"), FString::Printf(TEXT("%d / %d"), Known, Journal.Entries.Num())))->SetPadding(FMargin(0, 0, 0, 8));
+		UImage* Bar = StatBar(T, this, Journal.Entries.Num() > 0 ? static_cast<float>(Known) / Journal.Entries.Num() : 0.0f, 0.0f, 20, Cyan);
+		CategoryPanel->AddChildToVerticalBox(Sized(T, Bar, CatWidth, 8.0f));
+	}
 	else if (View == EView::Armour)
 	{
 		// the seven slots, each with how many pieces are owned for it
@@ -2471,6 +2564,11 @@ void USOInventoryWidget::FillArmoury()
 		{
 			Shown = FString::Printf(TEXT("%s  ·  ARMOUR"), *USOWardrobeData::SlotLabel(FName(*OpenSlotId)).ToString().ToUpper());
 		}
+		else if (View == EView::Journal)
+		{
+			const FSOJournalSection* Section = FSOJournalData::Get().FindSection(JournalSection());
+			Shown = Section ? FString::Printf(TEXT("%s  ·  %s"), *Section->Name.ToUpper(), *Section->Line.ToUpper()) : FString(TEXT("JOURNAL"));
+		}
 		else
 		{
 			Shown = Filter.IsEmpty() ? FString(TEXT("EVERYTHING GATHERED")) : Rest == TEXT("consumable") ? GoodsKindName(ESOGoodsKind::Consumable, true)
@@ -2483,7 +2581,8 @@ void USOInventoryWidget::FillArmoury()
 		HeadPlate.Edge = FLinearColor(1.0f, 1.0f, 1.0f, 0.11f);
 		UBorder* Head = Box(T, PlateBrush(this, HeadPlate), FMargin(12, 5, 8, 5));
 		UHorizontalBox* Row = Make<UHorizontalBox>(T);
-		Row->AddChildToHorizontalBox(Glyph(T, this, View == EView::Goods ? 2 : 3, Soft, 14.0f))->SetVerticalAlignment(VAlign_Center);
+		const FSOJournalSection* HeadSection = View == EView::Journal ? FSOJournalData::Get().FindSection(JournalSection()) : nullptr;
+		Row->AddChildToHorizontalBox(Glyph(T, this, HeadSection ? HeadSection->Glyph : View == EView::Goods ? 2 : 3, HeadSection ? HeadSection->Color : Soft, 14.0f))->SetVerticalAlignment(VAlign_Center);
 		UHorizontalBoxSlot* Name = Row->AddChildToHorizontalBox(Fit(Text(T, Shown, 9, Ink, FaceBold, 220)));
 		Name->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		Name->SetPadding(FMargin(10, 0, 10, 0));
@@ -2497,11 +2596,15 @@ void USOInventoryWidget::FillArmoury()
 			S->SetPadding(FMargin(Gap, 0, 0, 0));
 			S->SetVerticalAlignment(VAlign_Center);
 		};
-		Tool(TEXT("sort"), FString::Printf(TEXT("SORT  ·  %s"), SortName(SortMode, View == EView::Goods)), false, 0, 0.0f);
-		Tool(TEXT("grid"), FString(), !bListView, 1, 8.0f);
-		Tool(TEXT("list"), FString(), bListView, 2, 4.0f);
+		if (View != EView::Journal)
+		{
+			Tool(TEXT("sort"), FString::Printf(TEXT("SORT  ·  %s"), SortName(SortMode, View == EView::Goods)), false, 0, 0.0f);
+			Tool(TEXT("grid"), FString(), !bListView, 1, 8.0f);
+			Tool(TEXT("list"), FString(), bListView, 2, 4.0f);
+		}
+		const int32 Open = All.FilterByPredicate([](const FSOTileInfo& I) { return !I.bEmpty; }).Num();
 		const FString Count = View == EView::Arsenal && IsWeaponSlot(OpenSlotId) ? FString::Printf(TEXT("%d / %d"), Inventory->GetItems().Num(), USOLootLibrary::VaultCap)
-			: FString::Printf(TEXT("%d"), All.Num());
+			: View == EView::Journal ? FString::Printf(TEXT("%d / %d"), Open, All.Num()) : FString::Printf(TEXT("%d"), All.Num());
 		UHorizontalBoxSlot* CountSlot = Row->AddChildToHorizontalBox(Text(T, Count, 9, Dim, FaceBold, 120));
 		CountSlot->SetPadding(FMargin(12, 0, 4, 0));
 		CountSlot->SetVerticalAlignment(VAlign_Center);
@@ -2519,7 +2622,7 @@ void USOInventoryWidget::FillArmoury()
 		ListTiles.Add(Tile);
 		return Tile;
 	};
-	if (bListView)
+	if (bRows)
 	{
 		for (int32 i = From; i < To; ++i)
 		{
@@ -2541,6 +2644,7 @@ void USOInventoryWidget::FillArmoury()
 	if (All.Num() == 0)
 	{
 		UTextBlock* None = Text(T, View == EView::Goods ? TEXT("Nothing of this kind gathered yet. Kills, elites, bosses and caches pay into here.")
+			: View == EView::Journal ? TEXT("Nothing in this section yet.")
 			: TEXT("Nothing of this kind owned yet. What the operations and the caches give you comes here."), 12, Dim, FaceItalic);
 		None->SetAutoWrapText(true);
 		GridPanel->AddChildToVerticalBox(None)->SetPadding(FMargin(4, 8, 4, 0));
@@ -2594,6 +2698,7 @@ void USOInventoryWidget::FillTabs()
 	Tab(TEXT("armour"), TEXT("ARMOUR"), View == EView::Armour, bNewArmour);
 	Tab(TEXT("goods"), TEXT("INVENTORY"), View == EView::Goods, bNewGoods);
 	Tab(TEXT("character"), TEXT("CHARACTER"), View == EView::Character, !Inventory->IsCharacterMade());
+	Tab(TEXT("journal"), TEXT("JOURNAL"), View == EView::Journal, Inventory->HasJournalNew());
 	TabRow->AddChildToHorizontalBox(KeyCap(T, TEXT("E")))->SetVerticalAlignment(VAlign_Center);
 }
 
@@ -2636,6 +2741,11 @@ void USOInventoryWidget::FillHints()
 		Add(TEXT("\u2039 \u203A"), TEXT("ADJUST"));
 		Add(TEXT("R"), TEXT("RESET"));
 		Add(TEXT("ESC"), TEXT("DONE"));
+		return;
+	case EView::Journal:
+		Add(TEXT("A D"), TEXT("SECTION"));
+		Add(TEXT("W S"), TEXT("CHOOSE"));
+		Add(TEXT("ESC"), TEXT("BACK"));
 		return;
 	}
 	Add(TEXT("Z"), TEXT("SORT"));
@@ -2737,6 +2847,10 @@ void USOInventoryWidget::FillInspect()
 	else if (const FSOGoodsInfo* Goods = Tables && Key.StartsWith(TEXT("goods:")) ? Tables->FindGoods(FName(*Key.RightChop(6))) : nullptr)
 	{
 		FillGoodsInspect(*Goods);
+	}
+	else if (Key.StartsWith(TEXT("journal:")))
+	{
+		FillJournalInspect(FName(*Key.RightChop(8)));
 	}
 	else
 	{
@@ -3107,6 +3221,179 @@ void USOInventoryWidget::FillGoodsInspect(const FSOGoodsInfo& Info)
 		EquipLabel->SetText(FText::FromString(bCan ? TEXT("USE") : (Held > 0 ? TEXT("NOT NEEDED NOW") : TEXT("NONE HELD"))));
 		EquipLabel->SetColorAndOpacity(FSlateColor(bCan ? Ink : Dim));
 	}
+}
+
+void USOInventoryWidget::FillJournalInspect(FName EntryId)
+{
+	UWidgetTree* T = WidgetTree;
+	const FSOJournalData& Journal = FSOJournalData::Get();
+	const FSOJournalEntry* E = Journal.Find(EntryId);
+	SetActions(false);
+	if (!E)
+	{
+		return;
+	}
+	const FSOJournalSection* Section = Journal.FindSection(E->Section);
+	const FLinearColor Light = Section ? Section->Color : Cyan;
+	const bool bOpen = Inventory->IsJournalOpen(EntryId);
+	// its section and what it is, its title
+	const FString Kind = Section ? Section->Name.ToUpper() : FString();
+	Inspect->AddChildToVerticalBox(Fit(Text(T, bOpen && !E->Sub.IsEmpty() ? FString::Printf(TEXT("%s  ·  %s"), *Kind, *E->Sub) : Kind, 9, Light, FaceBold, 240)));
+	UTextBlock* Title = Text(T, bOpen ? E->Title.ToUpper() : FString(TEXT("NOT YET LEARNED")), 32, bOpen ? Ink : Dim, FaceCond, 40);
+	Title->SetAutoWrapText(true);
+	Inspect->AddChildToVerticalBox(Title)->SetPadding(FMargin(0, 2, 0, 0));
+	Inspect->AddChildToVerticalBox(Rule(T, Light))->SetPadding(FMargin(0, 8, 0, 14));
+	if (!bOpen)
+	{
+		UTextBlock* Hint = Text(T, JournalHint(*E), 11, Soft, FaceBold, 200);
+		Hint->SetAutoWrapText(true);
+		Inspect->AddChildToVerticalBox(Hint);
+		return;
+	}
+	if (E->Section == TEXT("record"))
+	{
+		FillRecord();
+		return;
+	}
+	// its words a paragraph at a time; what it notes under its own head; its tally
+	UVerticalBox* Words = Make<UVerticalBox>(T);
+	TArray<FString> Paragraphs;
+	E->Text.ParseIntoArray(Paragraphs, TEXT("\n\n"));
+	for (const FString& P : Paragraphs)
+	{
+		UTextBlock* Para = Text(T, P.TrimStartAndEnd(), 12, Ink);
+		Para->SetAutoWrapText(true);
+		Words->AddChildToVerticalBox(Para)->SetPadding(FMargin(0, 0, 0, 12));
+	}
+	if (!E->Note.IsEmpty())
+	{
+		const TCHAR* NoteHead = E->Section == TEXT("sarketh") ? TEXT("ISSUED") : E->Section == TEXT("operations") ? TEXT("THE STAGE ASKED") : TEXT("NOTE");
+		Words->AddChildToVerticalBox(Header(T, NoteHead, FString(), Light))->SetPadding(FMargin(0, 6, 0, 8));
+		UTextBlock* Note = Text(T, E->Note, 11, Soft, FaceBold, 60);
+		Note->SetAutoWrapText(true);
+		Words->AddChildToVerticalBox(Note)->SetPadding(FMargin(0, 0, 0, 12));
+	}
+	if (!E->Tally.IsNone())
+	{
+		UHorizontalBox* Row = Make<UHorizontalBox>(T);
+		Row->AddChildToHorizontalBox(Glyph(T, this, Section ? Section->Glyph : 4, Light, 20.0f))->SetVerticalAlignment(VAlign_Center);
+		UHorizontalBoxSlot* N = Row->AddChildToHorizontalBox(Text(T, Number(Inventory->GetTally(E->Tally)), 34, Ink, FaceCond));
+		N->SetPadding(FMargin(10, 0, 0, 0));
+		N->SetVerticalAlignment(VAlign_Center);
+		UHorizontalBoxSlot* L = Row->AddChildToHorizontalBox(Text(T, E->TallyLabel.IsEmpty() ? FString(TEXT("COUNTED")) : E->TallyLabel.ToUpper(), 8, Soft, FaceBold, 300));
+		L->SetPadding(FMargin(10, 0, 0, 0));
+		L->SetVerticalAlignment(VAlign_Center);
+		Words->AddChildToVerticalBox(Row)->SetPadding(FMargin(0, 4, 0, 0));
+	}
+	// the portrait beside the words where the pane is wide, over them where it is not
+	UTexture2D* Picture = JournalPicture(E->Picture);
+	const float Wide = FMath::Max(200.0f, InspectWidth - 66.0f);  // (the frame's padding and the scroll bar)
+	auto Portrait = [&](float W)
+	{
+		UImage* Pic = Make<UImage>(T);
+		Pic->SetBrushFromTexture(Picture, false);
+		Pic->SetVisibility(ESlateVisibility::HitTestInvisible);
+		return Sized(T, Pic, W, W * 1.5f);
+	};
+	if (Picture && Wide >= 640.0f)
+	{
+		UHorizontalBox* Pair = Make<UHorizontalBox>(T);
+		Pair->AddChildToHorizontalBox(Portrait(FMath::Clamp(Wide * 0.36f, 220.0f, 300.0f)))->SetVerticalAlignment(VAlign_Top);
+		UHorizontalBoxSlot* W = Pair->AddChildToHorizontalBox(Words);
+		W->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		W->SetPadding(FMargin(24, 0, 0, 0));
+		Inspect->AddChildToVerticalBox(Pair);
+	}
+	else
+	{
+		if (Picture)
+		{
+			UVerticalBoxSlot* PicSlot = Inspect->AddChildToVerticalBox(Portrait(200.0f));
+			PicSlot->SetHorizontalAlignment(HAlign_Center);
+			PicSlot->SetPadding(FMargin(0, 0, 0, 14));
+		}
+		// (a line no longer than reads comfortably: across a wide pane a line ran to 150 letters)
+		USizeBox* Measure = Make<USizeBox>(T);
+		Measure->SetMaxDesiredWidth(FMath::Min(Wide, 720.0f));
+		Measure->SetContent(Words);
+		Inspect->AddChildToVerticalBox(Measure)->SetHorizontalAlignment(HAlign_Left);
+	}
+}
+
+void USOInventoryWidget::FillRecord()
+{
+	UWidgetTree* T = WidgetTree;
+	const FSOJournalData& Journal = FSOJournalData::Get();
+	// the record in two columns (a figure for every line): the field, the Sarketh rank by rank, the operations, the
+	// journal itself
+	UHorizontalBox* Columns2 = Make<UHorizontalBox>(T);
+	UVerticalBox* Left = Make<UVerticalBox>(T);
+	UVerticalBox* Right = Make<UVerticalBox>(T);
+	const bool bTwo = InspectWidth - 66.0f >= 640.0f;
+	auto Line = [&](UVerticalBox* To, const FString& Label, const FString& Value, const FLinearColor& Color)
+	{
+		UHorizontalBox* Row = Make<UHorizontalBox>(T);
+		UHorizontalBoxSlot* L = Row->AddChildToHorizontalBox(Fit(Text(T, Label, 10, Soft, FaceBold, 200)));
+		L->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		L->SetVerticalAlignment(VAlign_Center);
+		UHorizontalBoxSlot* V = Row->AddChildToHorizontalBox(Text(T, Value, 18, Color, FaceCond));
+		V->SetPadding(FMargin(12, 0, 0, 0));
+		V->SetVerticalAlignment(VAlign_Center);
+		To->AddChildToVerticalBox(Row)->SetPadding(FMargin(0, 0, 0, 4));
+		To->AddChildToVerticalBox(Sized(T, Box(T, FSlateColorBrush(Faint), FMargin(0)), 0.0f, 1.0f))->SetPadding(FMargin(0, 0, 0, 7));
+	};
+	auto Head = [&](UVerticalBox* To, const TCHAR* Label, const FLinearColor& Accent, bool bFirst)
+	{
+		To->AddChildToVerticalBox(Header(T, Label, FString(), Accent))->SetPadding(FMargin(0, bFirst ? 0.0f : 14.0f, 0, 10));
+	};
+	if (const FSOJournalEntry* E = Journal.Find(TEXT("record_service")); E && !E->Text.IsEmpty())
+	{
+		UTextBlock* Intro = Text(T, E->Text, 11, Soft, FaceItalic);
+		Intro->SetAutoWrapText(true);
+		Inspect->AddChildToVerticalBox(Intro)->SetPadding(FMargin(0, 0, 0, 16));
+	}
+	Head(Left, TEXT("IN THE FIELD"), Cyan, true);
+	Line(Left, TEXT("LEVEL"), FString::FromInt(Inventory->GetLevel()), Ink);
+	Line(Left, TEXT("POWER"), FString::FromInt(Inventory->GetPower()), Gold);
+	Line(Left, TEXT("KILLS"), Number(Inventory->GetTally(SOJournal::KillsTally())), Ink);
+	Line(Left, TEXT("NAMED ONES KILLED"), Number(Inventory->GetTally(SOJournal::NamedTally())), Gold);
+	Line(Left, TEXT("TIMES DOWN"), Number(Inventory->GetTally(SOJournal::DeathsTally())), Bad);
+	UVerticalBox* Second = bTwo ? Right : Left;
+	const FSOJournalSection* Sarketh = Journal.FindSection(TEXT("sarketh"));
+	Head(Second, TEXT("THE SARKETH"), Sarketh ? Sarketh->Color : Gold, bTwo);
+	for (const FSOJournalEntry& Each : Journal.Entries)
+	{
+		if (Each.Section == TEXT("sarketh") && !Each.Tally.IsNone())
+		{
+			const bool bKnown = Inventory->IsJournalOpen(Each.Id);
+			Line(Second, bKnown ? Each.Title.ToUpper() : FString(TEXT("NOT YET MET")), Number(Inventory->GetTally(Each.Tally)), bKnown ? Ink : Dim);
+		}
+	}
+	Head(Left, TEXT("OPERATIONS FINISHED"), Gold, false);
+	for (const FSOJournalEntry& Each : Journal.Entries)
+	{
+		if (Each.Section == TEXT("operations") && Each.Id.ToString().EndsWith(TEXT("_briefing")))
+		{
+			Line(Left, Each.Title.ToUpper(), Number(Inventory->GetTally(Each.Tally)), Ink);
+		}
+	}
+	int32 Known = 0;
+	for (const FSOJournalEntry& Each : Journal.Entries)
+	{
+		Known += Inventory->IsJournalOpen(Each.Id) ? 1 : 0;
+	}
+	Head(Left, TEXT("THE JOURNAL"), Cyan, false);
+	Line(Left, TEXT("PAGES LEARNED"), FString::Printf(TEXT("%d / %d"), Known, Journal.Entries.Num()), Cyan);
+	Line(Left, TEXT("GUNS IN THE VAULT"), FString::Printf(TEXT("%d / %d"), Inventory->GetItems().Num(), USOLootLibrary::VaultCap), Ink);
+	UHorizontalBoxSlot* LS = Columns2->AddChildToHorizontalBox(Left);
+	LS->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	if (bTwo)
+	{
+		UHorizontalBoxSlot* RS = Columns2->AddChildToHorizontalBox(Right);
+		RS->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		RS->SetPadding(FMargin(28, 0, 0, 0));
+	}
+	Inspect->AddChildToVerticalBox(Columns2);
 }
 
 void USOInventoryWidget::FillCompare()
@@ -3578,8 +3865,8 @@ void USOInventoryWidget::OnTile(const FSOTileInfo& Tile)
 		OpenSlot(Tile.Key);
 		return;
 	}
-	// an item in the list: choose it (a second click on the one chosen equips / wears it)
-	if (SelectedKey == Tile.Key)
+	// an item in the list: choose it (a second click on the one chosen equips / wears it; a page of the journal is only read)
+	if (SelectedKey == Tile.Key && Tile.Kind != TEXT("journal"))
 	{
 		OnEquip();
 		return;
@@ -3617,6 +3904,14 @@ void USOInventoryWidget::Choose(const FString& Key)
 		if (Inventory->GetGoods().ContainsByPredicate([Id](const FSOGoodsStack& G) { return G.Id == Id && G.bNew; }))
 		{
 			Inventory->ServerMarkGoodsSeen(Id);
+		}
+	}
+	else if (Key.StartsWith(TEXT("journal:")))
+	{
+		const FName Id(*Key.RightChop(8));
+		if (Inventory->IsJournalNew(Id))
+		{
+			Inventory->ServerMarkJournalRead(Id);                  // (read: the inventory changes, the screen refreshes)
 		}
 	}
 }
@@ -3714,7 +4009,23 @@ USOInventoryWidget::EView USOInventoryWidget::GetView() const
 	{
 		return EView::Character;
 	}
+	if (OpenSlotId == TEXT("journal"))
+	{
+		return EView::Journal;
+	}
 	return IsArmourSlot(OpenSlotId) ? EView::Armour : EView::Arsenal;
+}
+
+FName USOInventoryWidget::JournalSection() const
+{
+	const FSOJournalData& Journal = FSOJournalData::Get();
+	const FName Want = Filter.StartsWith(TEXT("section:")) ? FName(*Filter.RightChop(8)) : NAME_None;
+	return Journal.FindSection(Want) ? Want : (Journal.Sections.Num() > 0 ? Journal.Sections[0].Id : NAME_None);
+}
+
+int32 USOInventoryWidget::CardsPerPage() const
+{
+	return bListView || GetView() == EView::Journal ? ListRows : Columns * GridRows;
 }
 
 TArray<FSOTileInfo> USOInventoryWidget::ListItems() const
@@ -3728,6 +4039,47 @@ TArray<FSOTileInfo> USOInventoryWidget::ListItems() const
 	const USOLootTables* Tables = USOLootLibrary::GetTables();
 	const ESOTileStyle Style = bListView ? ESOTileStyle::Row : ESOTileStyle::Cell;
 	const FString Rest = Filter.Contains(TEXT(":")) ? Filter.RightChop(Filter.Find(TEXT(":")) + 1) : FString();
+	if (View == EView::Journal)
+	{
+		// the section's pages in the journal's own order: one learned with its title and what it is (its portrait, how
+		// many of them this player has killed), one not yet learned as a locked row with what would teach it
+		const FSOJournalData& Journal = FSOJournalData::Get();
+		const FName SectionId = JournalSection();
+		const FSOJournalSection* Section = Journal.FindSection(SectionId);
+		for (const FSOJournalEntry& E : Journal.Entries)
+		{
+			if (E.Section != SectionId)
+			{
+				continue;
+			}
+			FSOTileInfo Tile;
+			Tile.Kind = TEXT("journal");
+			Tile.Key = TEXT("journal:") + E.Id.ToString();
+			Tile.Style = ESOTileStyle::Row;
+			Tile.Rarity = Section ? Section->Color : Cyan;
+			Tile.bSquare = true;
+			Tile.Order = Out.Num();
+			if (Inventory->IsJournalOpen(E.Id))
+			{
+				Tile.Title = E.Title;
+				Tile.Tag = E.Sub;
+				Tile.Icon = JournalPicture(E.Picture, true);
+				Tile.Glyph = Section ? Section->Glyph : 0;
+				Tile.bNew = Inventory->IsJournalNew(E.Id);
+				Tile.Count = E.Tally.IsNone() || E.Section != TEXT("sarketh") ? -1 : Inventory->GetTally(E.Tally);   // (how many of them killed)
+			}
+			else
+			{
+				Tile.Title = TEXT("NOT YET LEARNED");
+				Tile.Tag = JournalHint(E);
+				Tile.Glyph = 12;
+				Tile.bEmpty = true;
+				Tile.Rarity = Dim;
+			}
+			Out.Add(Tile);
+		}
+		return Out;
+	}
 	if (View == EView::Arsenal && OpenSlotId == TEXT("melee"))
 	{
 		// the fists, and every blade owned
@@ -3861,7 +4213,7 @@ int32 USOInventoryWidget::PageOf(const FString& Key) const
 {
 	const TArray<FSOTileInfo> All = ListItems();
 	const int32 At = All.IndexOfByPredicate([&Key](const FSOTileInfo& I) { return I.Key == Key; });
-	const int32 PerPage = bListView ? ListRows : Columns * GridRows;
+	const int32 PerPage = CardsPerPage();
 	return At == INDEX_NONE ? 0 : At / FMath::Max(PerPage, 1);
 }
 
@@ -3889,6 +4241,10 @@ void USOInventoryWidget::OnControl(ESOArmouryControl Kind, const FString& Key)
 		else if (Key == TEXT("character") && GetView() != EView::Character)
 		{
 			OpenSlot(TEXT("character"));
+		}
+		else if (Key == TEXT("journal") && GetView() != EView::Journal)
+		{
+			OpenSlot(TEXT("journal"));
 		}
 		break;
 	case ESOArmouryControl::SlotTile:
@@ -4120,9 +4476,10 @@ void USOInventoryWidget::OpenSlot(const FString& SlotId)
 
 void USOInventoryWidget::StepTab(int32 Step)
 {
-	static const TCHAR* Tabs[] = { TEXT(""), TEXT("arsenal"), TEXT("armour"), TEXT("goods"), TEXT("character") };
+	static const TCHAR* Tabs[] = { TEXT(""), TEXT("arsenal"), TEXT("armour"), TEXT("goods"), TEXT("character"), TEXT("journal") };
+	constexpr int32 Count = UE_ARRAY_COUNT(Tabs);
 	const int32 Now = static_cast<int32>(GetView());
-	OnControl(ESOArmouryControl::Tab, Tabs[(Now + Step % 5 + 5) % 5]);
+	OnControl(ESOArmouryControl::Tab, Tabs[(Now + Step % Count + Count) % Count]);
 }
 
 void USOInventoryWidget::StepSlot(int32 Step)
@@ -4168,6 +4525,16 @@ void USOInventoryWidget::StepSlot(int32 Step)
 		}
 		break;
 	}
+	case EView::Journal:
+	{
+		const TArray<FSOJournalSection>& Sections = FSOJournalData::Get().Sections;
+		if (Sections.Num() > 0)
+		{
+			const int32 Now = FMath::Max(0, Sections.IndexOfByPredicate([this](const FSOJournalSection& S) { return S.Id == JournalSection(); }));
+			SetFilter(TEXT("section:") + Sections[(Now + Step % Sections.Num() + Sections.Num()) % Sections.Num()].Id.ToString());
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -4190,7 +4557,7 @@ void USOInventoryWidget::StepList(int32 Step)
 	{
 		return;
 	}
-	const int32 PerPage = bListView ? ListRows : Columns * GridRows;
+	const int32 PerPage = CardsPerPage();
 	if (Next / PerPage != Page)
 	{
 		// the choice went over the page's edge: the page turns with it
@@ -4208,7 +4575,7 @@ void USOInventoryWidget::StepPage(int32 Step)
 		return;
 	}
 	const TArray<FSOTileInfo> All = ListItems();
-	const int32 PerPage = bListView ? ListRows : Columns * GridRows;
+	const int32 PerPage = CardsPerPage();
 	const int32 Pages = FMath::Max(1, (All.Num() + PerPage - 1) / PerPage);
 	const int32 Want = FMath::Clamp(Page + Step, 0, Pages - 1);
 	if (Want == Page)
@@ -4249,8 +4616,9 @@ void USOInventoryWidget::MoveFocus(int32 DX, int32 DY)
 	}
 	if (!OpenSlotId.IsEmpty())
 	{
-		// an armoury: through the grid (a row is a column's width); in the list up and down, left and right the pages
-		if (bListView)
+		// an armoury: through the grid (a row is a column's width); in the list (the journal's too) up and down, left
+		// and right the pages
+		if (bListView || GetView() == EView::Journal)
 		{
 			if (DY != 0)
 			{
@@ -4321,9 +4689,9 @@ void USOInventoryWidget::ApplyFocus()
 
 void USOInventoryWidget::Accept()
 {
-	if (GetView() == EView::Character)
+	if (GetView() == EView::Character || GetView() == EView::Journal)
 	{
-		return;                                                  // (left / right choose there)
+		return;                                                  // (left / right choose there; a page is only read)
 	}
 	if (!OpenSlotId.IsEmpty())
 	{
@@ -4384,6 +4752,11 @@ void USOInventoryWidget::UpdateLayout(float Width)
 	GridWidth = Columns * CellWidth + (Columns - 1) * CellGap;
 	InspectWidth = FMath::Clamp(Inner * 0.28f, 440.0f, 520.0f);
 	const float GridLeft = Side + CatWidth + ColumnGap;
+	if (GetView() == EView::Journal)
+	{
+		// (no stand-in: the reading pane from beyond the list to the frame's edge, at most a comfortable line)
+		InspectWidth = FMath::Clamp(Width - Side - (GridLeft + GridWidth + 2.0f * ColumnGap), 440.0f, 980.0f);
+	}
 	const float PanelLeft = Width - Side - InspectWidth;
 	const bool bLoadout = GetView() == EView::Loadout;
 	StageX = bLoadout ? Width * 0.5f : GetView() == EView::Character ? (GridLeft + GridWidth + Width - Side) * 0.5f : (GridLeft + GridWidth + PanelLeft) * 0.5f;
@@ -4786,14 +5159,14 @@ FReply USOInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FK
 	}
 	else if (Key == EKeys::Z)
 	{
-		if (GetView() != EView::Loadout && GetView() != EView::Character)
+		if (GetView() != EView::Loadout && GetView() != EView::Character && GetView() != EView::Journal)
 		{
 			SetSort(SortMode + 1);
 		}
 	}
 	else if (Key == EKeys::V)
 	{
-		if (GetView() != EView::Loadout && GetView() != EView::Character)
+		if (GetView() != EView::Loadout && GetView() != EView::Character && GetView() != EView::Journal)
 		{
 			SetListView(!bListView);
 		}

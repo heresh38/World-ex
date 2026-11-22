@@ -8,6 +8,19 @@
 #include "SOWardrobe.h"
 #include "SOInventoryComponent.generated.h"
 
+/** A count the journal keeps (SOJournal: kills of a species, operations finished, deaths). */
+USTRUCT()
+struct SOCOMBAT_API FSOTally
+{
+	GENERATED_BODY()
+
+	UPROPERTY(SaveGame)
+	FName Key;
+
+	UPROPERTY(SaveGame)
+	int32 Count = 0;
+};
+
 /** What a player owns, on disk (state.js save: inventory, equipped, credits, alloy, xp, level). */
 UCLASS()
 class SOCOMBAT_API USOSaveGame : public USaveGame
@@ -17,7 +30,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 9;
+	static constexpr int32 CurrentVersion = 10;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -82,6 +95,16 @@ public:
 	 *  before it counts as made). */
 	UPROPERTY(SaveGame)
 	bool bCharacterMade = false;
+
+	/** Version 10: the journal: the keys learned (SOJournal), the entries read, the tallies. */
+	UPROPERTY(SaveGame)
+	TArray<FName> Learned;
+
+	UPROPERTY(SaveGame)
+	TArray<FName> JournalRead;
+
+	UPROPERTY(SaveGame)
+	TArray<FSOTally> Tallies;
 };
 
 DECLARE_MULTICAST_DELEGATE(FSOOnInventoryChanged);
@@ -268,6 +291,26 @@ public:
 	/** What a new profile starts with (the loot tables' StarterGoods), into Out. */
 	static void StarterGoods(TArray<FSOGoodsStack>& Out);
 
+	// --- The journal (SOJournal.h; the armoury's JOURNAL tab) ---
+	/** Server: a key learned (SOJournal::MetKey ...). The first time, every entry it shows is new, and a line in the
+	 *  feed names each one that is not an operation's own (those come with the operation's banner and radio). */
+	void Learn(FName Key);
+	bool HasLearned(FName Key) const;
+	/** Shown in the journal: learned (or shown from the start). */
+	bool IsJournalOpen(FName EntryId) const;
+	/** Shown and not yet read. */
+	bool IsJournalNew(FName EntryId) const;
+	/** Any entry shown and not yet read (the armoury's gold mark on the tab). */
+	bool HasJournalNew() const;
+	void MarkJournalRead(FName EntryId);
+	/** Server: one more of something counted (SOJournal::KillTally ...). */
+	void Tally(FName Key, int32 Add = 1);
+	int32 GetTally(FName Key) const;
+	const TArray<FSOTally>& GetTallies() const { return Tallies; }
+
+	UFUNCTION(Server, Reliable)
+	void ServerMarkJournalRead(FName EntryId);
+
 	// --- Spending and upgrades (USOProgressionTable) ---
 	/** Pays both or neither: false (and nothing taken) if either is short. The one way anything is paid for. */
 	bool Spend(int32 InCredits, int32 InAlloy);
@@ -412,6 +455,19 @@ protected:
 	/** (true until a new profile is made: an inventory with no profile, a test's or a bot's, never opens the builder) */
 	UPROPERTY(Replicated)
 	bool bCharacterMade = true;
+
+	/** The journal: the keys learned, the entries read, the tallies (to the owner only). */
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FName> Learned;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FName> JournalRead;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	TArray<FSOTally> Tallies;
+
+	/** Learns the makers of every gun owned without a word (a profile from before the journal, a new one). */
+	void LearnOwnedOrigins();
 
 	TMap<FString, double> StowedAt;
 	FRandomStream Rng;

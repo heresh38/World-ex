@@ -34,6 +34,7 @@
 #include "SOLog.h"
 #include "SOWeapon.h"
 #include "SOInventoryComponent.h"
+#include "SOJournal.h"
 #include "SOLootActors.h"
 #include "SOLootLibrary.h"
 #include "SOFxSubsystem.h"
@@ -612,6 +613,29 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 						Inv->AddGoods(Tables->Goods[i].Id, Tables->Goods[i].Stack > 1 ? 3 + i : 1, false);
 					}
 				}
+				// the journal of a player half way through Meridian Fall: five ranks met, two named ones, the stages to
+				// the hearts, a record to show
+				for (const TCHAR* Key : { TEXT("met:remnant"), TEXT("met:stalker"), TEXT("met:veilborn"), TEXT("met:stalker_feral"), TEXT("met:bulwark"),
+					TEXT("named:warden"), TEXT("named:remnant_captain") })
+				{
+					Inv->Learn(Key);
+				}
+				for (const TCHAR* Stage : { TEXT("verge"), TEXT("gatehouse"), TEXT("yard"), TEXT("alley"), TEXT("galleria"), TEXT("rotunda"), TEXT("warden"), TEXT("descent"), TEXT("hearts") })
+				{
+					Inv->Learn(SOJournal::StageKey(TEXT("meridian"), Stage));
+				}
+				const TPair<const TCHAR*, int32> Kills[] = { { TEXT("remnant"), 87 }, { TEXT("stalker"), 31 }, { TEXT("veilborn"), 12 }, { TEXT("stalker_feral"), 24 }, { TEXT("bulwark"), 3 } };
+				int32 All = 0;
+				for (const TPair<const TCHAR*, int32>& K : Kills)
+				{
+					Inv->Tally(SOJournal::KillTally(K.Key), K.Value);
+					All += K.Value;
+				}
+				Inv->Tally(SOJournal::KillsTally(), All);
+				Inv->Tally(SOJournal::NamedTally(), 2);
+				Inv->Tally(SOJournal::DeathsTally(), 4);
+				Inv->MarkJournalRead(TEXT("sarketh_levy"));
+				Inv->MarkJournalRead(TEXT("sarketh_veteran"));
 			}
 			if (ASOHUD* H = Hud()) { H->ToggleInventory(); }
 		});
@@ -661,6 +685,31 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		Snap(0.8f, TEXT("u9c_relics"));
 		Act([=]() { if (USOInventoryWidget* A = Armoury()) { A->SetFilter(TEXT("kind:material")); A->ChooseItem(TEXT("goods:void_crystal")); } });
 		Snap(0.8f, TEXT("u9d_materials"));
+		// the journal: the Sarketh (opens on the first page not read), a rank's page with its portrait, an operation's
+		// page, the war, the service record
+		auto Journal = [Armoury](const TCHAR* Section, const TCHAR* Page)
+		{
+			if (USOInventoryWidget* A = Armoury())
+			{
+				A->SetFilter(Section);
+				if (*Page)
+				{
+					A->ChooseItem(Page);
+				}
+			}
+		};
+		Act([=]() { OpenSlot(TEXT("journal")); });
+		Snap(1.4f, TEXT("u11a_journal"));
+		Act([=]() { Journal(TEXT("section:sarketh"), TEXT("journal:sarketh_warden")); });
+		Snap(0.8f, TEXT("u11b_journal_warden"));
+		Act([=]() { Journal(TEXT("section:operations"), TEXT("journal:meridian_yard")); });
+		Snap(0.8f, TEXT("u11c_journal_operation"));
+		Act([=]() { Journal(TEXT("section:war"), TEXT("journal:war_turn")); });
+		Snap(0.8f, TEXT("u11d_journal_war"));
+		Act([=]() { Journal(TEXT("section:arsenal"), TEXT("journal:maker_institute")); });
+		Snap(0.8f, TEXT("u11e_journal_makers"));
+		Act([=]() { Journal(TEXT("section:record"), TEXT("journal:record_service")); });
+		Snap(0.8f, TEXT("u11f_journal_record"));
 		// the character builder: the body and its skin (head and shoulders), the hair, the eyes (a slider moved from the
 		// keyboard), the jaw dragged far out, the ears from the side, a deep skin tone, everything back to the body's own
 		auto Creator = [Armoury](const TCHAR* Group) { if (USOInventoryWidget* A = Armoury()) { A->SetCreatorGroup(Group); } };

@@ -1,0 +1,154 @@
+{
+ "_doc": "The journal: the armoury's JOURNAL tab (the owner's armoury reference: 'a journal of what was learned'). Sections, then entries; an entry is shown once its 'unlock' key is learned (none or 'start': from the first moment). Keys (SOJournal.h): met:<species> (one was killed where the player was), named:<variant> (a named one), stage:<operation>:<stage> (a stage of an operation began), done:<operation> (finished), origin:<origin> (a gun of that maker came in). An operation's own pages (its briefing, the radio as each stage begins, its outcome) are not written here: they are read from its plan (Data/areas.json). 'picture': /Game/UI/Journal/T_Journal_<picture> (tools/blender/skr/lab.py --portraits, SO_IMPORT_ONLY=journal). 'tally': a count shown with it (kill:<species> = how many this player has killed). Our own words; nothing of the war has a date or a length of time.",
+ "sections": [
+  { "id": "sarketh", "name": "The Sarketh", "line": "What their dead have taught us", "glyph": 13, "color": [1.0, 0.6, 0.22] },
+  { "id": "operations", "name": "Operations", "line": "Briefings and what the radio said", "glyph": 4, "color": [0.95, 0.58, 0.14] },
+  { "id": "war", "name": "The War", "line": "How it came to this", "glyph": 0, "color": [0.25, 0.85, 1.0] },
+  { "id": "arsenal", "name": "Makers", "line": "Who made what you carry", "glyph": 3, "color": [0.58, 0.72, 1.0] },
+  { "id": "record", "name": "Record", "line": "Your war in numbers", "glyph": 5, "color": [0.82, 0.86, 0.94] }
+ ],
+ "entries": [
+  {
+   "id": "sarketh_people", "section": "sarketh", "title": "The Sarketh", "sub": "A PEOPLE UNDER ARMS", "unlock": "stage:meridian:verge",
+   "text": "One people, built much as we are and of a size with us. What makes one of them small and quick and another a wall of metal is what he was issued.\n\nThe force on Meridian came down after the station and has been cut off since the fleet left. What it has is what it landed with, and that goes by rank: a foot soldier gets a light gun and little else; the higher the command, the more armour and the bigger the gun, up to powered armour and, for the one who commands the garrison, a walking war suit.\n\nEvery one of them carries a gun. Their light guns are the pattern ours were copied from.\n\nThey want Sol, for the Sarketh. So does every other people the empire left here, which is why they fight each other before they fight us."
+  },
+  {
+   "id": "sarketh_levy", "section": "sarketh", "title": "Levy", "sub": "FOOT SOLDIER", "unlock": "met:remnant", "picture": "remnant", "tally": "kill:remnant", "tallyLabel": "KILLED",
+   "text": "The many. A Levy is issued light armour, a light automatic gun and very little else, and there are always more of them.\n\nLevies come on in numbers and keep coming, from cover to cover. They are how the Sarketh find out where you are.\n\nTheir plates are left as they came from the forge: grey, unmarked.",
+   "note": "Light armour, a light automatic gun. Numbers."
+  },
+  {
+   "id": "sarketh_veteran", "section": "sarketh", "title": "Veteran", "sub": "SEASONED SOLDIER", "unlock": "met:stalker", "picture": "stalker", "tally": "kill:stalker", "tallyLabel": "KILLED",
+   "text": "Full armour and a rifle, and the sense to use both. Veterans take cover, work round a flank and fall back when a fight turns against them.\n\nThey are the backbone of the garrison. Where a Levy pushes, a Veteran waits for you to show yourself.\n\nTheir plates are finished in a cold steel blue.",
+   "note": "Full armour, a rifle. Cover, flanks, a fighting withdrawal."
+  },
+  {
+   "id": "sarketh_speaker", "section": "sarketh", "title": "Speaker", "sub": "SIGNALS OFFICER", "unlock": "met:veilborn", "picture": "veilborn", "tally": "kill:veilborn", "tallyLabel": "KILLED",
+   "text": "The Speakers carry the crystal sets that talk to the command net, a marksman's rifle, and a cloak that hides them for a step.\n\nWhat a Speaker sees, the rest know. They fire from far back and do not stay where they were seen.\n\nTheir lacquer is a deep teal, the colour of the net.",
+   "note": "A marksman's rifle, the net's crystal set, a cloak for a step."
+  },
+  {
+   "id": "sarketh_runner", "section": "sarketh", "title": "Runner", "sub": "SCOUT", "unlock": "met:stalker_feral", "picture": "stalker_feral", "tally": "kill:stalker_feral", "tallyLabel": "KILLED",
+   "text": "Runners are issued almost nothing: a blade and the speed to use it. They move in groups and close the distance before you have counted them.\n\nA pack holds off until enough of it is in place, then goes in together. Cut two of them down quickly and the rest break off.\n\nTheir plates are sand-coloured, the colour of the ground they cross.",
+   "note": "Almost nothing issued. Speed, and the pack."
+  },
+  {
+   "id": "sarketh_warden", "section": "sarketh", "title": "Warden", "sub": "OFFICER IN POWERED ARMOUR", "unlock": "met:bulwark", "picture": "bulwark", "tally": "kill:bulwark", "tallyLabel": "KILLED",
+   "text": "An officer's suit: powered armour a head taller than a soldier, a shield along one arm and a gun for close work.\n\nThe shield turns what hits it, but what it turns still shakes the one inside. Hammer the plate and it comes down while he reels.\n\nWardens hold the gates. Their plates are finished in ivory and gold.",
+   "note": "Powered armour, a shield, a gun for close work."
+  },
+  {
+   "id": "sarketh_bearer", "section": "sarketh", "title": "Bearer", "sub": "HEAVY WEAPONS IN POWERED ARMOUR", "unlock": "met:bearer", "picture": "bearer", "tally": "kill:bearer", "tallyLabel": "KILLED",
+   "text": "The same suit as a Warden's, built round a gun too heavy to carry without it, and the drum that feeds it.\n\nA Bearer does not take cover. It sets itself and keeps a place under fire until whatever was there stops moving. Its plates turn half of what comes from the front.\n\nIts plates are bronze.",
+   "note": "Powered armour round a heavy gun and its feed."
+  },
+  {
+   "id": "sarketh_commander", "section": "sarketh", "title": "The Commander", "sub": "THE GARRISON'S COMMAND", "unlock": "met:colossus", "picture": "colossus", "tally": "kill:colossus", "tallyLabel": "KILLED",
+   "text": "The one who commands Meridian does not fight on foot. He walks in a war suit with the garrison's heaviest weapons, and he had not left the Crown since the day they landed.\n\nThe suit is shielded for as long as what feeds it lives. Stop the feed and it staggers.\n\nIts plates are lacquered crimson. Nothing else on Meridian wears that colour.",
+   "note": "A walking war suit, the garrison's heaviest weapons."
+  },
+  {
+   "id": "named_gatekeeper", "section": "sarketh", "title": "The Gatekeeper", "sub": "A WARDEN  ·  THE GALLERIA", "unlock": "named:warden", "picture": "bulwark",
+   "text": "One Warden kept the Galleria's service gate shut through everything that came against it. His suit is older than the others', and has been mended more often.\n\nHe is not holding the gate any more."
+  },
+  {
+   "id": "named_captain", "section": "sarketh", "title": "Levy Captain", "sub": "A LEVY WHO COMMANDS", "unlock": "named:remnant_captain", "picture": "remnant",
+   "text": "Levies under a captain fight harder and move faster: he calls them on, and they hear it.\n\nWhen a captain falls, those round him falter. The ones who learned that early learned to look for the captain first."
+  },
+  {
+   "id": "named_seer", "section": "sarketh", "title": "Senior Speaker", "sub": "A SPEAKER OF RANK", "unlock": "named:veilborn_seer", "picture": "veilborn",
+   "text": "The senior Speakers carry a heavier set. Its pulse goes through what we carry: for a while after it, nothing you have but your gun will answer.\n\nThe pulse takes a moment to build. You can see it coming."
+  },
+  {
+   "id": "named_alpha", "section": "sarketh", "title": "Lead Runner", "sub": "THE ONE THE PACK FOLLOWS", "unlock": "named:stalker_alpha", "picture": "stalker_feral",
+   "text": "A pack has one it follows. It calls, and the pack comes in round it.\n\nIt is faster than the rest, and it knows where you are going to be."
+  },
+  {
+   "id": "named_hunter", "section": "sarketh", "title": "Veteran Hunter", "sub": "SENT AFTER ONE TARGET", "unlock": "named:stalker_hunter", "picture": "stalker",
+   "text": "Some Veterans are sent after one target and nothing else. They close with a lunge, and they throw charges into the cover you are using.\n\nThe one in the Concord Ring was waiting for us."
+  },
+  {
+   "id": "named_marksman", "section": "sarketh", "title": "Speaker Marksman", "sub": "A SPEAKER WITH A LONG GUN", "unlock": "named:veilborn_marksman", "picture": "veilborn",
+   "text": "A line of light on you is a Marksman taking aim. When the line holds still, the shot comes a breath later.\n\nThey watch the Sluice from the footbridges, and they move after every few shots."
+  },
+  {
+   "id": "named_gunner", "section": "sarketh", "title": "Warden Gunner", "sub": "A WARDEN WITH A HEAVIER GUN", "unlock": "named:bulwark_gunner", "picture": "bulwark",
+   "text": "A Warden issued a gun meant for a Bearer, and the suit to carry it. It keeps the shield."
+  },
+
+  {
+   "id": "war_spread", "section": "war", "title": "The Spread", "sub": "BEFORE",
+   "text": "Humanity had spread through its own system: stations round Earth, cities on the Moon and on Mars, outposts as far as the outer moons.\n\nIt was the furthest we had ever gone, and we thought it was ours."
+  },
+  {
+   "id": "war_empire", "section": "war", "title": "The Vanthos Empire", "sub": "WHAT CAME IN",
+   "text": "Many peoples under one throne, each with its own worlds, its own fleets and its own lords. They did not like each other. The throne was the one thing they all obeyed.\n\nIt came in from the edge of the system with all of them."
+  },
+  {
+   "id": "war_retreat", "section": "war", "title": "The Long Retreat", "sub": "WORLD BY WORLD",
+   "text": "We met the empire at the edge of the system and lost. It came inward a world at a time: the outer moons, the belt, Mars, the Moon.\n\nWe lost each one more slowly than the last, until the fight was in the sky over Earth and the ring of stations round the planet was breaking."
+  },
+  {
+   "id": "war_turn", "section": "war", "title": "The Turn", "sub": "OVER EARTH",
+   "text": "Then the empire's ships began firing on each other. Destroyers rammed freighters. Landing columns turned their guns on the column beside them. Nobody on Earth understood what they were seeing.\n\nMost of the fleet pulled out of the system, still fighting itself as it went. We hit what we could reach as it left. Some of it never got away."
+  },
+  {
+   "id": "war_stayed", "section": "war", "title": "Those Who Stayed", "sub": "WHO HOLDS WHAT",
+   "text": "What stayed behind is still here: on Earth, in the wreck of the orbit and on every world they took from us. They are not one army any more. Each people holds the ground it was standing on and means to have the whole system for its own.\n\nA place held by one of them has only that people in it. They fight their neighbours for Sol, and that is the only reason we are still alive."
+  },
+  {
+   "id": "war_orbit", "section": "war", "title": "Shattered Orbit", "sub": "OVERHEAD",
+   "text": "The broken ring of stations and the hulks of the fleet that died there are still overhead. On a clear night you can watch them turn.\n\nSome of them came down. Meridian was under one."
+  },
+  {
+   "id": "war_nexus", "section": "war", "title": "Nexus Prime", "sub": "THE FIRST CITY",
+   "text": "The first city rebuilt, raised round a grounded carrier of theirs whose heart still runs. It powers the city.\n\nShields, light guns and the first new ships of our own come out of it."
+  },
+  {
+   "id": "war_orion", "section": "war", "title": "Orion", "sub": "THE PROGRAMME",
+   "text": "Small teams carrying the best of the stolen technology, sent into the places still held to kill what holds them and bring back what works.\n\nYou are one of them."
+  },
+  {
+   "id": "war_rampart", "section": "war", "title": "The Rampart Directorate", "sub": "CALL SIGN RAMPART", "unlock": "stage:meridian:verge",
+   "text": "The command that holds what has been retaken. Rampart sends the teams in, and Rampart's is the voice you hear on the way.\n\nIt does not tell you how to fight. It tells you what the place was."
+  },
+  {
+   "id": "war_institute", "section": "war", "title": "The Institute", "sub": "THE PEOPLE WHO TAKE THEM APART", "unlock": "stage:meridian:descent",
+   "text": "The Institute takes the empire's machines apart. Everything the city has came out of its workshops.\n\nSo did the mistakes that cost it districts. The annex on the Sluice was one of theirs."
+  },
+  {
+   "id": "war_crystal", "section": "war", "title": "Void Crystal", "sub": "WHAT THEIR MACHINES ARE GROWN FROM", "unlock": "stage:meridian:hearts",
+   "text": "Power, memory and armour in one material. Every people of the empire used it; none of them made it. Their machines are grown from it, not built.\n\nEverything we have learned, we learned by cutting it open."
+  },
+  {
+   "id": "war_fear", "section": "war", "title": "What Earth Fears", "sub": "AFTER MERIDIAN", "unlock": "done:meridian",
+   "text": "That when one of them has won whatever they are fighting for out there, it will come back.\n\nThe Sarketh on Meridian were calling for theirs. Nothing answered. Nobody here knows why."
+  },
+
+  {
+   "id": "maker_nexus", "section": "arsenal", "title": "Nexus Prime Steel", "sub": "BALLISTIC", "unlock": "origin:nexus",
+   "text": "Ballistic guns from the city's own workshops: steel, brass and powder, made the way guns were made before the empire came.\n\nThey are heavy, loud and honest. A round leaves the barrel faster than any bolt of light and drops on its way to the target."
+  },
+  {
+   "id": "maker_institute", "section": "arsenal", "title": "Institute Light Guns", "sub": "LIGHT", "unlock": "origin:institute",
+   "text": "Built on Sarketh patterns taken off the dead. They fire plasma: a bolt you can watch fly, so lead what moves.\n\nThey reload their own way. Some take a fresh cell, some throw their heat out through a vent, and some open and draw energy in from the air."
+  },
+  {
+   "id": "maker_sarketh", "section": "arsenal", "title": "Sarketh Make", "sub": "THEIR OWN GUNS", "unlock": "origin:sarketh",
+   "text": "Their own guns. They fire crystalline slugs that go on through what they hit, and they are never reloaded: rest the trigger and the crystal condenses new rounds out of the reserve.\n\nFire too long and the crystal heats, then faster, then it vents whether you want it to or not."
+  },
+  {
+   "id": "maker_grown", "section": "arsenal", "title": "Grown", "sub": "LIVING", "unlock": "origin:grown",
+   "text": "Living weapons: grown, not made. They feed, and they spit what they make of it.\n\nNobody is sure they are only weapons."
+  },
+  {
+   "id": "maker_void", "section": "arsenal", "title": "Void Requiem", "sub": "ANOTHER PEOPLE'S", "unlock": "origin:void_requiem",
+   "text": "Made by a people no human has met. They are not Sarketh work.\n\nWhere they came from is a question the Institute would like answered."
+  },
+
+  {
+   "id": "record_service", "section": "record", "title": "Service Record", "sub": "YOUR WAR IN NUMBERS",
+   "text": "What you have done since you joined Orion, as the Directorate keeps it."
+  }
+ ]
+}

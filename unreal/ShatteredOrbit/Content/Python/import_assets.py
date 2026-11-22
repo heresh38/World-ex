@@ -976,6 +976,7 @@ def import_ui_texture(file_path, dest, name):
     tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
     tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
     tex.set_editor_property("never_stream", True)
+    eal.save_loaded_asset(tex, only_if_is_dirty=False)          # (import_texture saved it before these were set)
     return tex
 
 
@@ -1494,6 +1495,18 @@ def goods_only():
     pictures = len(glob.glob(os.path.join(ICONS, "goods", "icon_goods_*.png")))
     log(f"DA_LootTables: {len(values['goods'])} goods ({pictures} with pictures), {len(values['goods_drops'])} drop lists, "
         f"{len(values['families'])} families, {len(values['origins'])} origins")
+
+
+def journal_only():
+    """The journal's pictures (SO_IMPORT_ONLY=journal): every SourceArt/Icons/journal/journal_<id>[_bust].png
+    (tools/blender/skr/lab.py --portraits: a Sarketh rank in its colours, the whole body 512 x 768 and the head and
+    shoulders 256 x 256) as /Game/UI/Journal/T_Journal_<id>[_bust], a UI texture (Data/journal.json names them)."""
+    ensure_dir("/Game/UI/Journal")
+    files = sorted(glob.glob(os.path.join(ICONS, "journal", "journal_*.png")))
+    for f in files:
+        stem = os.path.splitext(os.path.basename(f))[0][len("journal_"):]
+        import_ui_texture(f, "/Game/UI/Journal", f"T_Journal_{stem}")
+    log(f"Journal: {len(files)} pictures")
 
 
 def weapon(master, arch, a, clear):
@@ -3920,6 +3933,8 @@ def main():
         perks_only()
     if "goods" in only:
         goods_only()
+    if "journal" in only:
+        journal_only()
     if "bodies" in only:
         bodies()
     if want("nexus"):

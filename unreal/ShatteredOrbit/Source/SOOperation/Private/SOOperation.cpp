@@ -21,6 +21,7 @@
 #include "SOSpecies.h"
 #include "SOEnemyAIController.h"
 #include "SOInventoryComponent.h"
+#include "SOJournal.h"
 #include "SOLog.h"
 #include "SOLootLibrary.h"
 #include "SOLootTypes.h"
@@ -438,6 +439,16 @@ void ASOOperation::StartStage(int32 Index)
 		GoalCount = 1;
 	}
 	UE_LOG(LogShatteredOrbit, Log, TEXT("Operation stage %d: %s (%s)"), Index, *S.Title.ToString(), *S.Objective.ToString());
+	// the journal: every player here has heard this stage's words (the briefing with the first); an operation is known
+	// to it by its plan's file (an inline plan has none)
+	const FName Op = PlanFile.IsEmpty() ? NAME_None : SOJournal::OperationOf(PlanFile);
+	for (TActorIterator<APlayerState> It(GetWorld()); It && !Op.IsNone(); ++It)
+	{
+		if (USOInventoryComponent* Inventory = It->FindComponentByClass<USOInventoryComponent>())
+		{
+			Inventory->Learn(SOJournal::StageKey(Op, S.Id));
+		}
+	}
 	OnRep_Stage();
 }
 
@@ -822,6 +833,19 @@ void ASOOperation::Complete()
 		Inventory->AddAlloy(20 + Rng.RandRange(0, 10));
 		Inventory->AddXp(4000);
 		UE_LOG(LogShatteredOrbit, Log, TEXT("Operation complete: %s earned %s"), *PS->GetPlayerName(), *Label);
+	}
+	// the journal: every player here saw it finished (its outcome, what it teaches) and counts it
+	if (!PlanFile.IsEmpty())
+	{
+		const FName Op = SOJournal::OperationOf(PlanFile);
+		for (TActorIterator<APlayerState> It(GetWorld()); It; ++It)
+		{
+			if (USOInventoryComponent* Inventory = It->FindComponentByClass<USOInventoryComponent>())
+			{
+				Inventory->Learn(SOJournal::DoneKey(Op));
+				Inventory->Tally(SOJournal::DoneTally(Op));
+			}
+		}
 	}
 	OnRep_Stage();
 }
