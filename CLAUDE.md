@@ -468,8 +468,9 @@ then the colour. Pictures `SOCaptureSeries 1 46` (files `SO_hb_<style>_<beard>_<
 `ShatteredOrbit.Creator.HairAndBeard`. A gun carried low (a sprint, the
 armoury's stand-in: `USOLocomotionAnimInstance::bCarried`) keeps the third-person firing elbow by the side (the arm IK's
 swing toward the straightest wrist is held to 0.55 rad there: it stood out level with the shoulder, the owner's "arm
-seems very bend out"). Known: `vr_sniper`'s third-person support palm lands on its fore end's blade fins (the body's
-reach clamp slides it back from where the first-person arms hold it), `ShatteredOrbit.Hold.TheGunIsSolid` fails on it.
+seems very bend out"). `vr_sniper`'s third-person support hand lands 5 cm behind where the first-person arms hold it (the body's
+reach clamp), and there it met the fang's blade and the keel's fins: its hand rest now runs back under the receiver's
+front and the fang and the keel start ahead of it (requiem_guns.py, 2026-11-22; `TheGunIsSolid` passes on every gun).
 The old male builder (`hero/build.py -- male`) is no longer exported: it stays only as the Sarketh's and the Void
 Sentinel's base until they move to this body.
 **The passes of 2026-11-20** (the owner: "do 10 more passes ... ensure it is not just as good but better ... the body

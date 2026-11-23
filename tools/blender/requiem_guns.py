@@ -283,7 +283,10 @@ def vr_sniper():
     P.append(ext('receiver', [(.15, .02), (.15, .084), (.12, .096), (-.3, .096), (-.34, .084), (-.34, .03), (-.135, .03), (-.135, .0), (-.055, .0), (-.055, .012),
                               (.06, .012), (.1, .02)], W, M['body'], .004, 1, cuts=[cbox((.014, .078, .018), (RIGHT * h, .04, .074))]))
     shroud(M, P, -.33, -.53, zb, .0095, .038, top=.094, low=.03, ribs=5)
-    P.append(prism('handrest', [(-.36, .026), (-.36, .032), (-.5, .032), (-.5, .026), (-.49, .0225), (-.37, .0225)], .036, M['grip'], .002))
+    # the hand rest runs back under the receiver's front: in third person the body's shorter reach slides the support
+    # hand 5 cm back from where the first-person arms hold it, and there it met the fang's blade and the keel's fins
+    # (two of its finger roots in the gun, the palm 3.6 cm off)
+    P.append(prism('handrest', [(-.265, .026), (-.265, .032), (-.5, .032), (-.5, .026), (-.49, .0225), (-.275, .0225)], .036, M['grip'], .002))
     # the long lit barrel and its trident
     barrel('barrel', M, -.53, -.93, zb, .0105, P, rings=[(-.6, .0128, .014), (-.7, .0128, .014), (-.8, .0128, .014)])
     for y in (-.575, -.675, -.775, -.875):
@@ -295,9 +298,9 @@ def vr_sniper():
     P += talon('trident', [(-.865, zb), (-.94, zb + .003), (-1.0, zb)], [.014, .013, 0], M['silver'], x=.0125, t=.004, n=10, trim=M['trim'])
     # silver
     feathers('crown', M, P, -.2, -.67, .091, 3, .04, .0245, .007, up=1, rise=.008)
-    feathers('keel', M, P, -.25, -.61, .038, 3, .032, .0225, .0055, up=-1, rise=.008)
-    P += talon('fang', [(-.15, .03), (-.24, .0), (-.345, -.03)], [.04, .026, 0], M['silver'], x=.0235, t=.007, bias=.3, trim=M['trim'])
-    P += talon('fang_strut', [(-.19, .0), (-.27, -.03), (-.33, -.032)], [.006, .007, 0], M['trim'], x=.0215, t=.003, n=10)
+    feathers('keel', M, P, -.40, -.62, .038, 2, .032, .0225, .0055, up=-1, rise=.008)        # (ahead of the hands)
+    P += talon('fang', [(-.15, .03), (-.205, .006), (-.258, -.022)], [.04, .024, 0], M['silver'], x=.0235, t=.007, bias=.3, trim=M['trim'])
+    P += talon('fang_strut', [(-.175, .0), (-.22, -.016), (-.252, -.02)], [.006, .007, 0], M['trim'], x=.0215, t=.003, n=10)
     P += talon('wing', [(-.3, .084), (-.1, .091), (.05, .091), (.15, .108)], [.014, .026, .02, 0], M['silver'], x=h + .002, t=.006, lean=-.3, bias=-.4,
                trim=M['trim'], glow=M['glow'])
     P += talon('dorsal', [(-.31, .094), (-.26, .104), (-.2, .117)], [.022, .014, 0], M['silver'], x=.021, t=.004, bias=-.2)
