@@ -1201,8 +1201,10 @@ head and the helmet's base alike. The helmet (`male.head_parts`): a dark lacquer
 light INLAID on it (a slit cut through the shell closed when the helmet was reduced for the game); pale plates only at
 the face's edges, over the eyes and along the cheeks (a pale stripe down the middle of the face read as a beak); a
 crest of free blades (`chitin.shard`: a lens-section blade along a curve, its broad face toward a hint, `lower` for a
-horn's straighter edge, `notch` for a second point) swept BACK, stacked down the side of the head and nearly
-parallel, pale and dark by turns, two dark horns over them. The body's armour is the sheet's dense mosaic of
+horn's straighter edge, `notch` for a second point), eight a side in three layers (the owner, 2026-11-22: "crest
+more layered"), thick and RISING up and back off the brow and the crown (laid back level they read as a fan of knives),
+the longest on top, the lowest down the back of the skull, pale and dark by turns, two taller dark horns over them;
+over each eye a heavy dark brow plate, a second cheek plate and one at the temple. The body's armour is the sheet's dense mosaic of
 ARROWHEAD shards (a narrow root under the plate before, `wrap(..., base=.32, peak=.30)`) in rows on the front and
 outside of every limb, the inside bare (`span` round the front and outside, `dark_share` / `dark_arc` for the dark
 ones; tiled all round, a limb read as plated trousers; square plates read as a checkerboard), lying close (tips that

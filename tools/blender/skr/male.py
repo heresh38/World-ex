@@ -252,21 +252,33 @@ def head_parts(A, J):
             field=outer)
     # the crest: blades swept back off the brow and the crown, stacked down the side of the head and nearly parallel (the
     # sheet: from the front they lie back behind the head; seen from the side a layered fin), pale and dark by turns
-    crest = [  # name, points (root first, inside the mask), width, the way its face looks, material, notch: swept back and
-        # flaring out as they go (the sheet: from the front the head is a V, wide at the crest, the face narrowing to the chin;
-        # swept straight back they hid behind a narrow face)
-        ('crest_a', [p(.016, -.050, .140), p(.030, .040, .168), p(.046, .150, .196), p(.056, .225, .215)], .050, (1, 0, .55), 'armour', (.62, .30)),
-        ('crest_b', [p(.030, -.040, .128), p(.050, .050, .146), p(.072, .160, .168), p(.084, .215, .180)], .048, (1, 0, .45), 'dark', None),
-        ('crest_c', [p(.042, -.030, .112), p(.062, .060, .122), p(.084, .170, .138), p(.094, .228, .145)], .052, (1, 0, .35), 'armour', (.58, .32)),
-        ('crest_d', [p(.048, -.010, .094), p(.066, .070, .098), p(.082, .170, .104), p(.090, .210, .108)], .044, (1, 0, .30), 'dark', None),
-        ('crest_e', [p(.050, .030, .074), p(.064, .110, .070), p(.078, .190, .066)], .040, (1, 0, .25), 'armour', (.55, .3)),
+    # the crest (the owner, 2026-11-22: "crest more layered"): eight blades a side in three layers, thick and curved,
+    # RISING up and back off the brow and the crown (the sheet: a crown of curved horns; laid back level they read as a
+    # fan of knives), pale and dark by turns, the longest on top, the lowest down the back of the skull
+    crest = [  # name, points (root first, inside the mask), width, the way its face looks, material, notch
+        ('crest_a', [p(.014, -.050, .142), p(.030, .028, .192), p(.048, .108, .246), p(.058, .168, .292)], .056, (1, 0, .55), 'armour', (.62, .30)),
+        ('crest_b', [p(.026, -.040, .130), p(.048, .048, .170), p(.070, .132, .214), p(.082, .188, .246)], .052, (1, 0, .48), 'dark', None),
+        ('crest_c', [p(.038, -.030, .116), p(.062, .058, .146), p(.086, .148, .180), p(.098, .206, .200)], .054, (1, 0, .40), 'armour', (.58, .32)),
+        ('crest_d', [p(.046, -.018, .100), p(.070, .062, .120), p(.092, .142, .138), p(.102, .192, .146)], .046, (1, 0, .34), 'dark', None),
+        ('crest_e', [p(.050, .002, .086), p(.072, .080, .094), p(.090, .150, .100)], .042, (1, 0, .30), 'armour', (.55, .30)),
+        ('crest_f', [p(.050, .030, .070), p(.066, .108, .064), p(.080, .170, .054)], .040, (1, 0, .25), 'dark', None),
+        ('crest_g', [p(.044, .058, .052), p(.058, .128, .040), p(.066, .182, .026)], .036, (1, 0, .20), 'armour', None),
+        ('crest_h', [p(.034, .084, .034), p(.044, .146, .016), p(.048, .190, .000)], .032, (1, 0, .15), 'dark', None),
     ]
     for name, pts, w, face, mat, notch in crest:
-        A.shard(name, pts, w * S * 1.1, face, 'head', thick=.011 * S, base=.70, peak=.40, point=.8, lower=.70, notch=notch, mat=mat,
+        A.shard(name, pts, w * S * 1.1, face, 'head', thick=.016 * S, base=.70, peak=.42, point=.8, lower=.70, notch=notch, mat=mat,
                 edge=.22)
-    for name, pts, w in (('horn', [p(.014, -.030, .148), p(.020, -.010, .205), p(.026, .045, .262)], .034),
-                         ('horn2', [p(.022, .010, .150), p(.028, .045, .195), p(.032, .100, .232)], .030)):
-        A.shard(name, pts, w * S * 1.1, (1, 0, 0), 'head', thick=.011 * S, base=.70, peak=.35, point=.85, lower=.60, mat='dark', edge=.22)
+    for name, pts, w in (('horn', [p(.014, -.030, .148), p(.020, -.006, .214), p(.028, .048, .284)], .036),
+                         ('horn2', [p(.022, .010, .150), p(.030, .048, .208), p(.036, .108, .256)], .032)):
+        A.shard(name, pts, w * S * 1.1, (1, 0, 0), 'head', thick=.014 * S, base=.70, peak=.35, point=.85, lower=.60, mat='dark', edge=.22)
+    # the face's second layer: a heavy brow plate over each eye, a second cheek plate under the first, a plate at the
+    # temple behind the eye (the sheet's face is plates over plates, not one shell with stripes)
+    A.blade('browplate', p(.022, -.074, .100), p(.060, -.018, .114), .030 * S, 'head', lift=.0030, tip=.006, free=.80, ridge=.006,
+            thick=.009, peak=.35, base=.7, mat='dark', field=outer)
+    A.blade('cheek2', p(.028, -.102, -.014), p(.060, -.032, .018), .030 * S, 'head', lift=.0026, ridge=.005, thick=.007, peak=.45,
+            base=.6, field=outer)
+    A.blade('temple2', p(.054, -.024, .052), p(.070, .046, .066), .028 * S, 'head', lift=.0024, tip=.006, free=.85, ridge=.005,
+            thick=.006, peak=.35, base=.7, field=outer)
 
     A.slot = 'neck'
     A.wrap('neckring', nk + (0, .004, .030), nk + (hd - nk) * .80 + (0, .012, 0), 'neck', around=5, rows=2, span=(-150, 150), face=(0, 1, 0),
