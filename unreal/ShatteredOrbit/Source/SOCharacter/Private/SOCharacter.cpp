@@ -1,4 +1,5 @@
 #include "SOCharacter.h"
+#include "SOStance.h"
 
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -1131,9 +1132,40 @@ void ASOCharacter::RefreshHolsters()
 	}
 }
 
+void ASOCharacter::OnTookDamage(AActor* Source, float Amount, bool bCrit)
+{
+	Super::OnTookDamage(Source, Amount, bCrit);
+	MarkCombat();                                               // (hit: the gun comes up)
+}
+
+void ASOCharacter::MarkCombat()
+{
+	if (const UWorld* World = GetWorld())
+	{
+		CombatUntil = World->GetTimeSeconds() + FSOStanceData::Get().CombatSeconds;
+	}
+}
+
 void ASOCharacter::Tick(float DeltaSeconds)
 {
 	TickFootstepNoise(DeltaSeconds);
+	// The gun's state (FSOStance): up at the ready on a shot, an aim, a reload or a hit, back down to the relaxed carry a
+	// while after the last of them. The owner and the server know it from what happens here; the others from the server.
+	{
+		const bool bLocalOrServer = IsLocallyControlled() || HasAuthority();
+		if (bLocalOrServer && (bAiming || (Weapon && (Weapon->IsTriggerHeld() || Weapon->IsReloading()))))
+		{
+			MarkCombat();
+		}
+		const bool bReady = bAiming || (bLocalOrServer ? GetWorld()->GetTimeSeconds() < CombatUntil : bCombatReady);
+		if (HasAuthority())
+		{
+			bCombatReady = bReady;
+		}
+		const FSOStanceData& Stances = FSOStanceData::Get();
+		CombatReady = FMath::FInterpConstantTo(CombatReady, bReady ? 1.0f : 0.0f, DeltaSeconds,
+			1.0f / FMath::Max(0.05f, bReady ? Stances.RaiseTime : Stances.LowerTime));
+	}
 	// the quick-use key held: the next consumable is chosen (again every half second while it is held)
 	if (QuickUsePressedAt >= 0.0 && GetWorld() && GetWorld()->GetTimeSeconds() - QuickUsePressedAt > 0.35)
 	{
@@ -2526,6 +2558,7 @@ void ASOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ASOCharacter, MeleeStyle);
 	DOREPLIFETIME(ASOCharacter, bBlocking);
 	DOREPLIFETIME_CONDITION(ASOCharacter, bAiming, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(ASOCharacter, bCombatReady, COND_SkipOwner);
 }
 
 void ASOCharacter::ToggleViewMode()

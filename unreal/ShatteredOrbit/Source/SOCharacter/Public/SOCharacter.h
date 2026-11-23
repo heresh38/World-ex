@@ -418,6 +418,16 @@ public:
 	/** The loadout's stand-in: the gun carried low across the chest (the sprint's carry), a hero's stance for the picture. */
 	void SetDisplayCarry(bool bOn) { bDisplayCarry = bOn; }
 	bool IsDisplayCarry() const { return bDisplayCarry; }
+	/** The gun's state in third person (FSOStance): 0 RELAXED (carried low out of a fight), 1 at the READY (up and
+	 *  forward, the body in its combat stance). It comes up on a shot, an aim, a reload or a hit, and goes back down
+	 *  FSOStanceData::CombatSeconds after the last of them; eased (raise / lower time). Every machine: the owner from its
+	 *  own input, the others from the server's word (bCombatReady). */
+	float GetCombatReady() const { return CombatReady; }
+	/** Bring the gun up and keep it up for a while (a shot, an aim, a reload, a hit, a capture's picture). */
+	void MarkCombat();
+	/** Back to relaxed at once (a capture's next gun; nothing else). */
+	void CancelCombat() { CombatUntil = -1000.0; CombatReady = 0.0f; }
+	virtual void OnTookDamage(AActor* Source, float Amount, bool bCrit) override;
 	/** Nothing carried: no gun in the hands or on the body, the body in its own idle (an outfit's pictures). */
 	void SetEmptyHanded(bool bOn) { bEmptyHanded = bOn; }
 	void SetFists(bool bOn);
@@ -715,6 +725,11 @@ protected:
 	 *  pose the others see are the aimed ones. */
 	UPROPERTY(Transient, Replicated, BlueprintReadOnly, Category = "SO|Combat")
 	bool bAiming = false;
+	/** At the ready (the server's word, for the other machines: GetCombatReady). */
+	UPROPERTY(Replicated)
+	bool bCombatReady = false;
+	double CombatUntil = -1000.0;
+	float CombatReady = 0.0f;
 
 private:
 	void ApplyViewMode();

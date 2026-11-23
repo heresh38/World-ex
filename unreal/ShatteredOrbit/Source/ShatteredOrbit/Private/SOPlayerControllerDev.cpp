@@ -843,24 +843,34 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				FaceSun();
 			});
 			Do(1.2f, []() {});
-			for (int32 State = 0; State < 2; ++State)
+			// relaxed (as equipped: nothing has happened), at the ready (a fight going on), on the sights
+			for (int32 State = 0; State < 3; ++State)
 			{
 				if (State == 1)
+				{
+					Act([=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } FaceSun(); });
+					Do(0.8f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
+				}
+				if (State == 2)
 				{
 					Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimPressed(); } FaceSun(); });
 					Do(0.8f, []() {});
 				}
+				static const TCHAR* StanceStates[] = { TEXT("relaxed"), TEXT("ready"), TEXT("aim") };
 				for (const FString& V : ViewStr)
 				{
 					const float Yaw = FCString::Atof(*V);
-					Act([=, this]() { FaceSun(); Body(Yaw); });
-					Snap(0.6f, FString::Printf(TEXT("st_%s_%s_%d"), *Gun, State ? TEXT("aim") : TEXT("ready"), int32(Yaw)));
+					Act([=, this]() { FaceSun(); Body(Yaw); if (State == 1) { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } } });
+					Snap(0.6f, FString::Printf(TEXT("st_%s_%s_%d"), *Gun, StanceStates[State], int32(Yaw)));
 				}
-				if (State == 1)
+				if (State == 2)
 				{
 					Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimReleased(); } });
 				}
 			}
+			// (the next gun starts relaxed again: nothing has happened with it)
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } });
+			Do(1.0f, []() {});
 		}
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);

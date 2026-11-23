@@ -6,5 +6,6 @@ public class SOCharacter : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayAbilities", "GameplayTags", "SOCore", "SOCombat" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Json" });     // (Data/stances.json)
 	}
 }

@@ -1309,6 +1309,30 @@ then the world drawn BEHIND the screen until shaders and textures are in; nothin
 its assets are in, players cannot move or fire, an operation's clock and captures wait (`IsArriving`). Never keep
 a bare pointer to a loaded asset across a timer or a level change (nothing holds it: it is collected). Test
 `ShatteredOrbit.Area.OneAtATime`.
+**The third-person combat stance** (the owner, 2026-11-23, with a reference sheet: "a professional AAA third-person
+shooter character with a confident, aggressive, disciplined military combat stance"; their picture of the wrong pose was
+the outfit capture taken with the gun hidden, the hands still on its grips). What made the pose weak, found before
+anything was changed: the gun's butt sat 4 cm under the shoulder joint in one state only (no relaxed, no ready); each
+elbow was aimed nearly straight down (pole .45 out) and the support elbow capped low, so both tucked against the ribs;
+the collarbones pulled forward up to 24 degrees on any forward reach and the trunk was bladed 12-24 degrees to the gun:
+rounded shoulders; and the legs were the plain idle's: upright, the feet together. Now a profile per CLASS of gun
+(`FSOStance`, `SOCharacter/Public/SOStance.h`; `Data/stances.json`, read at runtime and staged by `tools/package.sh`:
+smg, rifle, lmg, sniper, shotgun, pistol, heavy, chosen by the gun's family): where the gun rides at the ready and on
+the sights (the shoulder pocket's shift, a handgun's grip), the relaxed carry, each elbow's lean out and how far it may
+swing, how much of the collarbones' pull is taken out (square shoulders), the trunk's turn and forward lean, the chin
+down, the knees (the hips lower), the support foot forward and the feet wider standing. THREE STATES: relaxed (out of a
+fight: the gun carried low across the body, the arms easy), ready (up and forward, the body in its stance) and on the
+sights (the cheek on the stock); `ASOCharacter::GetCombatReady` (0 relaxed .. 1 ready) comes up on a shot, an aim, a
+reload or a hit (`MarkCombat`) and goes back down `combatSeconds` after the last, eased (`raiseTime`, `lowerTime`;
+replicated as `bCombatReady` for the other machines). Applied where it already lived: the gun's place in
+`USOViewmodelComponent::ThirdPersonHoldTransform` (the relaxed blend beside the sprint carry and the reload), the body
+in `USOLocomotionAnimInstance` (`FSOStanceInputs`: the stance's feet through the legs' two-bone IK in `ApplyBody`, the
+hips' drop with it; the elbows, the collarbones and the chin in `ApplyHold`); players only (a creature keeps its own way
+of holding), never the first-person arms. Lessons: holding the FIRING elbow out bends the wrist on a raked grip past a
+hand's limit, so on the sights the firing elbow goes where its wrist runs straightest and the shoulders roll into the
+gun (60-75 degrees from the forearm is a hand round a pistol grip: `Hold.TheGunIsSolid` allows 75 on every gun now); a
+muzzle dipped at the ready costs the wrist as much. Pictures `SOCaptureSeries 1 47` (files `SO_st_<gun>_<relaxed|ready|
+aim>_<view>`; `-SOGuns=`, `-SOStanceViews=20,90,180,270`, one exposure, no HUD); tests `ShatteredOrbit.Stance.*`.
 The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own
 (`ASOCharacter::RefreshHolsters`: long guns stand side by side on the back, one behind each shoulder, placed by their
 BORE LINE inside the shoulders' width, never by their outline (a gun with fins was pushed out beside the body);

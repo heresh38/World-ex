@@ -5,6 +5,7 @@
 #include "Animation/AnimInstanceProxy.h"
 #include "SOCombatTypes.h"
 #include "SOGunRigComponent.h"
+#include "SOStance.h"
 #include "SOLocomotionAnimInstance.generated.h"
 
 class UAnimSequenceBase;
@@ -135,6 +136,10 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	float Blade = 0.0f;
 	float Lean = 0.0f;
 	float HeadCant = 0.0f;   // degrees: aiming a long gun in third person, the head leans onto the stock
+	/** The combat stance (FSOStance: the gun's class, the state); the body's share of it, and how still it stands. */
+	FSOStanceInputs Stance;
+	float StanceBody = 0.0f;
+	float StanceStill = 0.0f;
 	FTransform RightTarget;
 	FTransform LeftTarget;
 	bool bSupportOnPost = false;   // (the support hand is round a vertical fore grip: it may reach nearly straight)
@@ -360,6 +365,10 @@ public:
 	float Blade = 0.0f;
 	float Lean = 0.0f;
 	float HeadCant = 0.0f;   // degrees: aiming a long gun in third person, the head leans onto the stock
+	/** The combat stance (FSOStance: the gun's class, the state); the body's share of it, and how still it stands. */
+	FSOStanceInputs Stance;
+	float StanceBody = 0.0f;
+	float StanceStill = 0.0f;
 	FTransform RightTarget;
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;

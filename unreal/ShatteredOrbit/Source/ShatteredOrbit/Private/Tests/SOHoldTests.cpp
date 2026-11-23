@@ -778,8 +778,10 @@ bool FSOSolidHoldTest::RunTest(const FString& Parameters)
 				UE_LOG(LogTemp, Display, TEXT("Hold rifle %s, %s: %s"), When, View, *R.ToString());
 				TestTrue(FString::Printf(TEXT("rifle %s, %s: nothing of either hand is in the gun (%d + %d bones: %s%s)"), When, View, R.Inside[0], R.Inside[1], *R.Which[0], *R.Which[1]),
 					R.Inside[0] + R.Inside[1] == 0);
-				TestTrue(FString::Printf(TEXT("rifle %s, %s: the wrists bend %.0f and %.0f degrees (at most 70)"), When, View, R.WristBend[0], R.WristBend[1]),
-					R.WristBend[0] <= 70.0f && R.WristBend[1] <= 70.0f);
+				// (a hand round a raked pistol grip is 60-75 degrees from its forearm, the handguns' limit; the combat stance holds the
+				// firing elbow a little out at the ready, FSOStance, and the wrist sits at the top of that range: 70 before it)
+				TestTrue(FString::Printf(TEXT("rifle %s, %s: the wrists bend %.0f and %.0f degrees (at most 75)"), When, View, R.WristBend[0], R.WristBend[1]),
+					R.WristBend[0] <= 75.0f && R.WristBend[1] <= 75.0f);
 			}
 		};
 		Player->HandleAimPressed();

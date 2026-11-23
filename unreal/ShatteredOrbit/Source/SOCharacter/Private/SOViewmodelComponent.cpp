@@ -1,4 +1,6 @@
 #include "SOViewmodelComponent.h"
+#include "SOStance.h"
+#include "SOWeaponData.h"
 
 #include "AnimationRuntime.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -210,6 +212,20 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		const FTransform Ride(FRotator(FMath::RadiansToDegrees(PX), FMath::RadiansToDegrees(-PY), FMath::RadiansToDegrees(-PZ)),
 			FVector(-TZ * 100.0f, TX * 100.0f, TY * 100.0f));
 		FTransform Hold = ThirdPersonHoldTransform(Character, bHandgun, Dt);
+		// Relaxed (out of a fight, FSOStance): the gun carried low across the body, the arms easy; it comes up to the ready
+		// on a shot, an aim, a reload or a hit (ASOCharacter::GetCombatReady), never a body walking about on the sights
+		if (const float Relax = (1.0f - Character->GetCombatReady()) * (1.0f - Ads); Relax > 1e-3f)
+		{
+			const FSOStance& St = FSOStanceData::Get().For(Data ? Data->Family : NAME_None);
+			FVector Pocket, Chest;
+			GetShoulderPoints(Character, Pocket, Chest);
+			const FTransform Actor = Character->GetActorTransform();
+			const FQuat Facing = FRotator(0.0f, Character->GetAimRotation().Yaw, 0.0f).Quaternion();
+			const FTransform Low(Facing * St.RelaxRot.Quaternion(), Actor.TransformPosition(Chest + St.RelaxOffset));
+			FTransform Eased;
+			Eased.Blend(Hold, Low, Relax * Relax * (3.0f - 2.0f * Relax));
+			Hold = Eased;
+		}
 		// Off the shoulder: a sprint carries the gun low across the chest (muzzle down and to the left); a reload
 		// brings it down in front of the chest, canted so the support hand works the mag well in front of the body.
 		const float TPReload = ReloadK * ReloadK * (3.0f - 2.0f * ReloadK) * (1.0f - Ads);
@@ -267,6 +283,9 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	GetShoulderPoints(Character, Pocket, Chest);
 	const ASOWeapon* Weapon = Character->GetWeapon();
 	const USOGunRigComponent* Rig = Weapon ? Weapon->GetThirdPersonRig() : nullptr;
+	// the gun's class: where it rides at the ready and on the sights (FSOStance, Data/stances.json)
+	const USOWeaponData* StanceData = Weapon ? Weapon->GetData() : nullptr;
+	const FSOStance& St = FSOStanceData::Get().For(StanceData ? StanceData->Family : NAME_None);
 
 	// Where the gun points: the crosshair's point, never nearer than a few metres (a wall at arm's length would
 	// swing the muzzle sideways), eased so a trace flicking between near and far things never snaps the gun.
@@ -294,7 +313,9 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	{
 		const FVector Low = Chest + ThirdPersonLowHold;                     // low and ahead of the chest, a little right
 		// (at 10 cm ahead the gun hung against the belly and thighs with the hands stacked on it)
-		Start = Actor.TransformPosition(FMath::Lerp(Pocket + FMath::Lerp(FVector::ZeroVector, PocketAimShift, Ads), Low, Down));
+		// (the butt in the shoulder pocket, raised by the class at the ready so the gun is up and forward, the sights just
+		// under the eye; on the sights higher and in to the cheek. Low in the pocket, the gun read as held at the chest)
+		Start = Actor.TransformPosition(FMath::Lerp(Pocket + FMath::Lerp(St.ReadyShift, St.AimShift, Ads), Low, Down));
 		Butt.X = FMath::Lerp(Butt.X, Butt.X + 16.0f, Down);               // (the butt no longer in a pocket: the gun's middle hangs from the point)
 	}
 	FVector WantDir = (Target - Start).GetSafeNormal(1e-4f, Character->GetEyeTransform(true).GetRotation().GetForwardVector());
@@ -306,6 +327,7 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	{
 		FRotator R = WantDir.Rotation();
 		R.Pitch = FMath::Clamp(static_cast<float>(R.Pitch), -ThirdPersonMaxDownPitch, ThirdPersonMaxUpPitch);
+		R.Pitch -= St.ReadyDip * (1.0f - Ads);                      // (at the ready the muzzle a touch under the line)
 		WantDir = R.Vector();
 	}
 	if (!bHoldDirValid || Dt > 0.2f)
@@ -328,7 +350,7 @@ FTransform USOViewmodelComponent::ThirdPersonHoldTransform(const ASOCharacter* C
 	if (bHandgun)
 	{
 		// both arms out, the gun a little right of the middle, rising toward the eye line when aiming
-		const FVector Out = FMath::Lerp(HandgunHold, HandgunAimHold, Ads);
+		const FVector Out = FMath::Lerp(St.HandHold, St.HandAimHold, Ads);
 		return FTransform(Aim, Start + Aim.RotateVector(Out));
 	}
 	FTransform Hold(Aim, Start - Aim.RotateVector(Butt));
