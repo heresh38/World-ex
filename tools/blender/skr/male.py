@@ -12,6 +12,8 @@ FINGERS = ('index', 'middle', 'ring', 'pinky')
 
 
 def layout(A, J):
+    # (the plates as numerous as the sheet's mosaic, the owner, 2026-11-22: "plates more numerous": a plate more round each
+    # limb and a row more along it)
     """the whole set: the helmet and the neck (head_parts), then the body's armour slot by slot. The sheet's armour is a
     dense mosaic of POINTED shards, pale and dark, in rows down every limb (their points down the leg, toward the elbow
     on the forearm, lifting off at their ends), with big pieces over it: the chest's V, the layered pauldrons, the spine,
@@ -44,7 +46,7 @@ def layout(A, J):
                 edge=.22)
     A.blade('pec2', (.150, -.090, 1.560), (.070, -.112, 1.470), .056, 'chest', lift=.002, ridge=.006, thick=.008, peak=.38, base=.6,
             point=.9, mat='dark', only=ch)
-    A.wrap('ribs', (.150, -.030, 1.600), (.150, .000, 1.360), 'chest', around=2, rows=3, span=(-75, 35), face=(1, -.4, 0), cover=1.05,
+    A.wrap('ribs', (.150, -.030, 1.600), (.150, .000, 1.360), 'chest', around=3, rows=3, span=(-75, 35), face=(1, -.4, 0), cover=1.05,
            tip=.008, dark=((1, 0), (2, 1)), accents=0, base=.35, peak=.32)
     A.wrap('flank', (.112, -.010, 1.400), (.110, .000, 1.250), 'spine', around=2, rows=2, span=(-80, 25), face=(1, -.4, 0), cover=1.05,
            tip=.008, dark=((0, 1),), accents=0, base=.35, peak=.32)
@@ -78,7 +80,7 @@ def layout(A, J):
             peak=.35, base=.6)
     A.blade('trap2', (.080, .085, 1.715), (.180, .070, 1.660), .056, 'chest', lift=.010, tip=.022, free=.70, ridge=.006, thick=.009,
             peak=.35, base=.6, mat='dark')
-    A.wrap('back', (.100, .040, 1.660), (.100, .045, 1.400), 'chest', around=2, rows=3, span=(-10, 85), face=(0, 1, 0), cover=1.0,
+    A.wrap('back', (.100, .040, 1.660), (.100, .045, 1.400), 'chest', around=3, rows=3, span=(-10, 85), face=(0, 1, 0), cover=1.0,
            tip=.010, dark=((0, 1), (2, 0)), lift=.0045)
     A.wrap('lowback', (.060, .060, 1.400), (.065, .060, 1.250), 'spine', around=2, rows=2, span=(5, 75), face=(0, 1, 0), cover=.95, tip=.008,
            dark=((0, 1),))
@@ -92,11 +94,11 @@ def layout(A, J):
     # plates on its outside and back, overlapping, their points toward the elbow and lifting off it (the sheet)
     el, wr = j('forearm.L'), j('hand.L')
     ua, fa = ('upperarm.L',), ('forearm.L',)
-    A.wrap('uarm', sh + (el - sh) * .26, el + (el - sh) * .05, 'upperarm.L', around=4, rows=2, span=(-190, 15), face=(0, -1, 0), cover=1.25,
+    A.wrap('uarm', sh + (el - sh) * .26, el + (el - sh) * .05, 'upperarm.L', around=5, rows=3, span=(-190, 15), face=(0, -1, 0), cover=1.25,
            overlap=.45, tip=.006, dark_share=.3, accents=.6, base=.32, peak=.30)
     A.shard('elbow', [el + (.016, .040, .010), el + (.030, .070, .060), el + (.042, .095, .125)], .048, (1, -.2, 0), 'forearm.L',
             thick=.010, base=.7, peak=.3, point=.95, lower=.6, edge=.22)
-    A.wrap('farm', el + (wr - el) * .06, wr + (wr - el) * .02, 'forearm.L', around=4, rows=2, span=(-210, 10), face=(0, -1, 0), cover=1.25,
+    A.wrap('farm', el + (wr - el) * .06, wr + (wr - el) * .02, 'forearm.L', around=5, rows=3, span=(-210, 10), face=(0, -1, 0), cover=1.25,
            overlap=.45, tip=.007, dark_share=.3, accents=.6, base=.32, peak=.30, flip=True)
 
     A.slot = 'hands'
@@ -141,12 +143,12 @@ def layout(A, J):
     # the knee with a light; plates down the front of the shin; a spike off the calf and one off the hock (the sheet)
     hj, kn, hk, ba = j('thigh.L'), j('shin.L'), j('foot.L'), j('toes.L')
     th_, sn = ('thigh.L',), ('shin.L',)
-    A.wrap('thigh', hj + (kn - hj) * .12, kn + (kn - hj) * .02, 'thigh.L', around=5, rows=3, span=(-170, 35), face=(0, -1, 0), cover=1.25,
+    A.wrap('thigh', hj + (kn - hj) * .12, kn + (kn - hj) * .02, 'thigh.L', around=6, rows=4, span=(-170, 35), face=(0, -1, 0), cover=1.25,
            overlap=.45, tip=.006, ridge=.006, thick=.008, dark_share=.3, accents=.6, base=.32, peak=.30)
     A.blade('knee', kn + (.004, -.052, .100), kn + (.004, -.064, -.075), .094, 'shin.L', lift=.012, ridge=.010, thick=.012, peak=.40,
             base=.70, point=.8)
     A.stud('kneelight', kn + (.044, -.058, .010), .0045, 'shin.L', mat='amber', lift=.026)
-    A.wrap('shin', kn + (hk - kn) * .16, hk + (hk - kn) * .02, 'shin.L', around=4, rows=3, span=(-160, 35), face=(0, -1, -.4), cover=1.25,
+    A.wrap('shin', kn + (hk - kn) * .16, hk + (hk - kn) * .02, 'shin.L', around=5, rows=4, span=(-160, 35), face=(0, -1, -.4), cover=1.25,
            overlap=.45, tip=.006, thick=.007, dark_share=.3, accents=.6, base=.32, peak=.30)
     A.shard('calf', [kn + (.010, .050, -.140), kn + (.016, .100, -.100), kn + (.020, .160, -.040)], .050, (1, 0, 0), 'shin.L',
             thick=.010, base=.7, peak=.3, point=.95, lower=.6, edge=.22)
@@ -157,7 +159,7 @@ def layout(A, J):
     A.slot = 'feet'
     # the long foot: plates down its front, a spike off its back; a plate over each toe, big claws
     ft = ('foot.L',)
-    A.wrap('foot', hk + (ba - hk) * .10, ba + (ba - hk) * .10, 'foot.L', around=3, rows=2, span=(-140, 60), face=(0, -1, .3), cover=1.25,
+    A.wrap('foot', hk + (ba - hk) * .10, ba + (ba - hk) * .10, 'foot.L', around=4, rows=2, span=(-140, 60), face=(0, -1, .3), cover=1.25,
            overlap=.45, tip=.006, thick=.007, dark_share=.25, accents=.5, base=.32, peak=.30)
     A.shard('heel', [ba + (.000, .045, .110), ba + (.004, .085, .150), ba + (.006, .120, .205)], .040, (1, 0, 0), 'foot.L', thick=.008,
             base=.7, peak=.3, point=.95, lower=.6, edge=.22)
