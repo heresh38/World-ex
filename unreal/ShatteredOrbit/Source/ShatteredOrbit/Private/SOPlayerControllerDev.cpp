@@ -870,13 +870,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			}
 			UE_LOG(LogShatteredOrbit, Display, TEXT("Outfit capture: %s"), bFound ? TEXT("open floor found") : TEXT("no open floor: where the player stands"));
 		});
-		struct FShot { float Yaw, Distance, Up, Fov; const TCHAR* Bone; FVector Offset; const TCHAR* Name; };
+		struct FShot { float Yaw, Distance, Up, Fov; const TCHAR* Bone; FVector Offset; const TCHAR* Name; bool bBackToSun = false; };
 		static const FShot Shots[] = {
 			{ 0.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("1_front") },
 			{ 40.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("2_quarter") },
 			{ 90.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("3_side") },
-			{ 145.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("4_back_quarter") },
-			{ 180.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("5_back") },
+			{ 145.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("4_back_quarter"), true },
+			{ 180.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("5_back"), true },
 			{ 25.0f, 110.0f, 5.0f, 30.0f, TEXT("neck"), FVector(0, 0, -8), TEXT("6_collar") },
 			{ 15.0f, 150.0f, 0.0f, 30.0f, TEXT("chest"), FVector(0, 0, -5), TEXT("7_chest") },
 			{ 30.0f, 140.0f, -5.0f, 30.0f, TEXT("hips"), FVector(0, 0, 8), TEXT("8_belt") },
@@ -886,7 +886,25 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		for (const FShot& S : Shots)
 		{
 			const FShot Shot1 = S;
-			Act([=]() { Frame(Shot1.Yaw, Shot1.Distance, Shot1.Up, Shot1.Fov, Shot1.Bone, Shot1.Offset); });
+			Act([=, this]()
+			{
+				// the body turned to the sun, or its back turned to it for the views from behind (lit as the sheet's
+				// back view is: with the body facing the sun they were all shadow)
+				ASOCharacter* H = Hero();
+				for (TActorIterator<ADirectionalLight> It(GetWorld()); H && It; ++It)
+				{
+					FVector ToSun = -It->GetActorForwardVector();
+					ToSun.Z = 0.0f;
+					if (ToSun.Normalize())
+					{
+						const FRotator Face(0.0f, ToSun.Rotation().Yaw - 30.0f + (Shot1.bBackToSun ? 180.0f : 0.0f), 0.0f);
+						SetControlRotation(Face);
+						H->SetActorRotation(Face);
+					}
+					break;
+				}
+				Frame(Shot1.Yaw, Shot1.Distance, Shot1.Up, Shot1.Fov, Shot1.Bone, Shot1.Offset);
+			});
 			Snap(2.5f, FString::Printf(TEXT("of_%s"), Shot1.Name));
 		}
 		Do(0.5f, []() {});

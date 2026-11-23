@@ -495,7 +495,7 @@ def skin(o, body, arm, rigid_faces):
 # in, VertexColorAmount) darkens it to the black everywhere but the worn patches (the sheet: on the sleeves, the
 # shoulders, the upper back, the thighs and the shins) and the skirt's lighter centre panel behind
 PAINT_BASE = {"orion_coat": ((.200, .198, .210), (.050, .050, .058)), "orion_cloth": ((.120, .120, .130), (.025, .025, .029))}
-BACK_PANEL = (.095, .074, .085)                           # (the sheet's warm mid grey down the skirt's back)
+BACK_PANEL = (.150, .134, .142)                           # (the sheet's warm mid grey down the skirt's back)
 
 
 def camo(p, scale, prob, seed):
@@ -544,9 +544,18 @@ def paint_coat(o, T):
     col = me.color_attributes.get("Col") or me.color_attributes.new("Col", 'BYTE_COLOR', 'CORNER')
     base, dark = PAINT_BASE["orion_coat"]
     own = {i for i, m in enumerate(me.materials) if m and m.name.split(".")[0] == "orion_coat"}
+    light = {i for i, m in enumerate(me.materials) if m and m.name.split(".")[0] == "orion_coat_light"}
+    neck = T.get("neck_base_z", 1.52)
+    sash_a, sash_b = Vector((-.150, 0, 1.50)), Vector((.030, 0, 1.18))   # (the body's right shoulder to the middle)
     S = Vector(T["shoulder_joint"])
     zw = T["coat_waist"]
     for poly in me.polygons:
+        if poly.material_index in light:
+            for li in poly.loop_indices:
+                p = me.vertices[me.loops[li].vertex_index].co
+                k = .20 if (p.y > .015 and p.z > neck - .05) else 1.0        # the hood's black behind the neck
+                col.data[li].color = (k, k, k, 1.0)
+            continue
         if poly.material_index not in own:
             for li in poly.loop_indices:
                 col.data[li].color = (1.0, 1.0, 1.0, 1.0)
@@ -555,8 +564,13 @@ def paint_coat(o, T):
             p = me.vertices[me.loops[li].vertex_index].co
             arm = abs(p.x) > S.x + .02 and p.z > S.z - .20
             back = p.y > .02
+            q = Vector((p.x, 0, p.z))
+            t = max(0.0, min(1.0, (q - sash_a).dot(sash_b - sash_a) / (sash_b - sash_a).length_squared))
             if p.z < zw - .02 and back and abs(p.x) < .12 + .05 * (zw - p.z):
                 c = BACK_PANEL                             # the skirt's centre panel behind
+                k = 1.0
+            elif back and p.y > .05 and (q - sash_a.lerp(sash_b, t)).length < .042 + .012 * t:
+                c = PAINT_BASE["orion_coat"][0]            # the light grey panel over the right shoulder blade
                 k = 1.0
             else:
                 prob = .30 if arm else (.30 if p.z > S.z - .05 else (.22 if back and p.z > zw else .08))

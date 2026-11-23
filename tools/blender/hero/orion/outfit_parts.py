@@ -260,28 +260,63 @@ def harness(vest, T, log=print):
 
 
 def back_module(coat, T, log=print):
-    """on the coat's upper back: the spine plate between the shoulder blades, its round light at the top and a bar of
-    light across its middle, two straps from its top corners to the shoulders"""
+    """the armour on the coat's back as the sheet draws it: a column of five overlapping segments down the spine from
+    the hood to the middle of the back (the top one with a round light in a dark bezel, the third with a bar of light),
+    a plate over each shoulder blade angled out from it with two dashes of light, and the X of straps from each
+    shoulder to the other side's hip, under the plates"""
     plates, straps, lights = bmesh.new(), bmesh.new(), bmesh.new()
-    h = coat.hit(Vector((0.0, .40, 1.320)), Vector((0, -1, 0)))
-    if h is None:
-        return plates, straps, lights
-    p, n = h
-    fr = frame(p + n * .010, n)
-    plate(plates, [(-.034, -.120), (.034, -.120), (.048, -.040), (.044, .090), (.026, .120), (-.026, .120), (-.044, .090), (-.048, -.040)],
-          fr, thick=.008, ridge=.008, rings=3, wrap=.20, bevel=.002)
-    c, r_, u_, o_ = fr
-    top = c + u_ * .095 + o_ * .016
-    disc = [(math.cos(2 * math.pi * k / 16) * .014, math.sin(2 * math.pi * k / 16) * .014) for k in range(16)]
-    plate(lights, disc, (top, r_, u_, o_), thick=.004, ridge=.002, rings=2, wrap=0.0, bevel=.001)
-    bar = c + u_ * .010 + o_ * .016
-    plate(lights, [(-.030, -.004), (.030, -.004), (.030, .004), (-.030, .004)], (bar, r_, u_, o_), thick=.003, ridge=.001, rings=1, wrap=0.0, bevel=.0008)
+
+    def on(x, z, lift):
+        h = coat.hit(Vector((x, .40, z)), Vector((0, -1, 0)))
+        if h is None:
+            return None
+        p, n = h
+        n = Vector((n.x, n.y, n.z * .5)).normalized()
+        return frame(p + n * lift, n)
+
+    # the straps first (they run under the plates): each shoulder's top to the other side's hip, crossing on the spine
     for sx in (1, -1):
-        a = c + u_ * .110 + r_ * (sx * .030)
-        s = coat.hit(Vector((sx * .175, .40, 1.50)), Vector((0, -1, 0)))
-        if s:
-            band(straps, coat, [a, s[0]], .036, thick=.004, lift=.006)
-    log("back: the spine plate, its lights, two straps")
+        a = coat.hit(Vector((sx * .150, .40, 1.505)), Vector((0, -1, 0)))
+        m = coat.hit(Vector((0.0, .40, 1.300)), Vector((0, -1, 0)))
+        b = coat.hit(Vector((-sx * .135, .40, 1.120)), Vector((0, -1, 0)))
+        if a and m and b:
+            band(straps, coat, [a[0], m[0], b[0]], .036, thick=.004, lift=.006)
+    # the spine's column: five segments, each a little narrower than the one above, overlapping it
+    seg_z = (1.455, 1.395, 1.335, 1.275, 1.215)
+    for k, z in enumerate(seg_z):
+        fr = on(0.0, z, .016 + .002 * (4 - k))
+        if fr is None:
+            continue
+        w = .084 - .007 * k
+        h = .066
+        outline = [(-w * .38, -h / 2), (w * .38, -h / 2), (w / 2, -h * .16), (w / 2, h * .30), (w * .30, h / 2),
+                   (-w * .30, h / 2), (-w / 2, h * .30), (-w / 2, -h * .16)]
+        plate(plates, outline, fr, thick=.008, ridge=.009, rings=3, wrap=.16, bevel=.0018)
+        c, r_, u_, o_ = fr
+        if k == 0:                                         # the round light, in its dark bezel
+            disc = [(math.cos(2 * math.pi * j / 20) * .019, math.sin(2 * math.pi * j / 20) * .019) for j in range(20)]
+            plate(plates, disc, (c + o_ * .012, r_, u_, o_), thick=.004, ridge=.003, rings=2, wrap=0.0, bevel=.001)
+            disc = [(math.cos(2 * math.pi * j / 20) * .012, math.sin(2 * math.pi * j / 20) * .012) for j in range(20)]
+            plate(lights, disc, (c + o_ * .0165, r_, u_, o_), thick=.003, ridge=.002, rings=2, wrap=0.0, bevel=.0008)
+        if k == 2:                                         # the bar of light across the third
+            plate(lights, [(-.026, -.0042), (.026, -.0042), (.026, .0042), (-.026, .0042)], (c + o_ * .0115, r_, u_, o_),
+                  thick=.003, ridge=.001, rings=1, wrap=0.0, bevel=.0008)
+    # a plate over each shoulder blade, angled out from the column, two dashes of light on it
+    for sx in (1, -1):
+        fr = on(sx * .098, 1.400, .014)
+        if fr is None:
+            continue
+        c, r_, u_, o_ = fr
+        out = [(-.050, -.058), (.044, -.064), (.056, .020), (.036, .062), (-.040, .058), (-.056, .010)]
+        out = [(u * sx, v) for u, v in out]
+        if sx < 0:
+            out = out[::-1]                                  # (counter-clockwise on both sides)
+        plate(plates, out, fr, thick=.008, ridge=.010, rings=3, wrap=.18, bevel=.0018)
+        for dv in (.018, -.006):
+            plate(lights, [(-.010, -.0028), (.010, -.0028), (.010, .0028), (-.010, .0028)],
+                  (c + u_ * dv + r_ * (sx * .018) + o_ * .0105, r_, u_, o_), thick=.002, ridge=.001, rings=1, wrap=0.0,
+                  bevel=.0006)
+    log("back: the spine's five segments, the shoulder blades' plates, their lights, the X of straps")
     return plates, straps, lights
 
 
