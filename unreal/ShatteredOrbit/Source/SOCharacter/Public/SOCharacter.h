@@ -27,11 +27,12 @@ enum class ESOViewMode : uint8
 };
 
 /**
- * The player character. First person by default: the eye at ~165 cm, and an arms-only copy of the player's own body
- * rendered with the camera's first-person FOV (the full body is hidden from the owner but still casts the shadow), so
- * the hands you see are the same hands everyone else sees. T toggles a third-person spring-arm camera with collision.
- * The gun is held by USOViewmodelComponent (a first-person and a third-person hold) and both bodies reach for its grips
- * with arm IK; aims down sights (zoom from the weapon); plays the Blender body's clips through USOLocomotionAnimInstance.
+ * The player character. The game is FIRST PERSON, always (the owner, 2026-11-23): ONE body holding ONE gun, seen from
+ * its own eyes by ONE camera (its head hidden from that camera alone, on its own player's machine: everyone else sees
+ * the whole body). T moves the same camera out behind the right shoulder: the third-person test view of how others see
+ * the player. The gun is held by USOViewmodelComponent (where the body holds it; on the sights, its sight on the eyes'
+ * line) and the body's arms reach for its grips with IK; aims down sights (zoom from the weapon); plays the Blender
+ * body's clips through USOLocomotionAnimInstance.
  */
 enum class ESOMovementEvent : uint8;
 
@@ -66,11 +67,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	TSoftObjectPtr<USkeletalMesh> BodyMesh;
 
-	/** First-person arms: the body's own sleeves and gloves on the body's skeleton (export_fbx.py --arms-only). Without
-	 *  it the first-person copy uses the whole body with everything but the arms collapsed. */
-	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
-	TSoftObjectPtr<USkeletalMesh> ArmsMesh;
-
 	/** Folder + prefix of the body clips: <prefix>Idle, <prefix>Walk, ... */
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Content")
 	FString ClipPathPrefix = TEXT("/Game/Characters/PlayerMale/Anims/A_PlayerMale_");
@@ -95,10 +91,11 @@ public:
 	float GetRecoilPitch() const { return FMath::RadiansToDegrees(RecoilKick * RecoilRadians); }
 
 	USOViewmodelComponent* GetViewmodel() const { return Viewmodel; }
-	USceneComponent* GetThirdPersonHold() const { return ThirdPersonHold; }
+	/** Where the gun is held (placed every frame by the viewmodel component; the gun rides it). */
+	USceneComponent* GetGunHold() const { return GunHold; }
 
-	/** The eye: camera eye position with the aim rotation (control rotation, or the replicated view for others),
-	 *  optionally with the recoil kick the camera shows. */
+	/** The body's own eyes (where the camera sits in first person, and the shots start) with the aim rotation (control
+	 *  rotation, or the replicated view for others), optionally with the recoil kick the camera shows. */
 	FTransform GetEyeTransform(bool bWithRecoil) const;
 
 	/** Where the player looks, without recoil: the control rotation (or the replicated view for others). */
@@ -114,10 +111,8 @@ public:
 	virtual bool CanFireWeapon() const override;
 	virtual bool IsAimingDownSights() const override { return bAiming; }
 	virtual float GetSpreadScale() const override;
-	virtual USceneComponent* GetFirstPersonWeaponParent() const override;
-	virtual USceneComponent* GetThirdPersonWeaponParent() const override { return ThirdPersonHold; }
+	virtual USceneComponent* GetWeaponParent() const override { return GunHold; }
 	virtual void OnWeaponFired(float Kick) override;
-	virtual FVector ViewmodelToWorld(const FVector& ViewmodelPoint) const override;
 	virtual bool IsFirstPersonView() const override;
 
 	/** Eye height above the feet when standing / crouched (cm). */
@@ -130,11 +125,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float EyeHeightInterpSpeed = 14.0f;
 
-	// --- First-person camera feel (local player, first person only; the third-person boom has its own lag) ---
-	/** Head bob in step with the footsteps (0 = off). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Camera")
-	float HeadBobScale = 1.0f;
+	/** The eyes from the head joint at rest (cm: forward, right, up in the body's facing): the Orion male's eyeballs'
+	 *  middle is 8.6 ahead of the joint and 4.6 above it, the corneas 9.9 ahead. The camera sits here in first person. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	FVector EyeFromHead = FVector(10.0f, 0.0f, 4.6f);
 
+	/** How the camera follows the eyes (a spring, per second: the pose's jitter smoothed), and never further behind
+	 *  them than EyeMaxLag (cm): a crouch, a slide, the cheek coming down onto the stock carry the eyes all the way. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float EyeFollow = 30.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float EyeMaxLag = 2.0f;
+
+	/** How long the camera takes to move between the eyes and the test view behind the shoulder (s). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float ViewSwitchTime = 0.35f;
+
+	/** Where the camera is: 0 in the body's eyes (first person: the game), 1 behind the shoulder (the test view). */
+	float GetViewBlend() const { return ViewBlend; }
+
+	/** On the sights of a long gun the gun stays shouldered and the CAMERA alone goes to its sight's line (the owner,
+	 *  2026-11-23: "Don't move the eyes since other players will be looking at us ... just move the camera"): the body's
+	 *  head and eyes keep their own pose for everyone watching. USOViewmodelComponent sets where (the capsule's frame,
+	 *  cm) and how far on the sights (0..1) each frame; the camera and the shots go there. */
+	void SetSightEye(const FVector& InCapsuleFrame, float Alpha) { SightEyeCS = InCapsuleFrame; SightEyeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f); }
+	float GetSightEye(FVector& OutCapsuleFrame) const { OutCapsuleFrame = SightEyeCS; return SightEyeAlpha; }
+
+	/** Its own player's camera is in this body's head (first person): the head is hidden from it, on this machine only
+	 *  (USOLocomotionAnimInstance: the head shrinks into its joint). */
+	bool IsHeadHidden() const;
+
+	// --- The camera's feel in the eyes (local player; behind the shoulder the boom has its own lag) ---
 	/** Extra field of view while sprinting / sliding / dodging (degrees, eased in and out). The owner's movement guide
 	 *  (2026-11-20): walk 95, sprint 103-108. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
@@ -215,10 +236,6 @@ public:
 	/** Third person zooms at most this much while aiming (a magnified optic zooms at the eye, in the scope view). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float ThirdPersonMaxZoom = 1.35f;
-
-	/** Field of view of the first-person arms / gun (independent of the world FOV). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	float ViewmodelFov = 74.0f;
 
 	/** A tap shorter than this latches sprint / crouch (toggle); holding longer releases on key up. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Input")
@@ -319,10 +336,9 @@ public:
 
 	USpotLightComponent* GetFlashlight() const { return Flashlight; }
 
-	UCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
-	UCameraComponent* GetThirdPersonCamera() const { return ThirdPersonCamera; }
-	USpringArmComponent* GetThirdPersonBoom() const { return ThirdPersonBoom; }
-	USkeletalMeshComponent* GetFirstPersonArms() const { return FirstPersonArms; }
+	/** The one camera (the owner, 2026-11-23: "one model and one camera that moves from player head to behind player"). */
+	UCameraComponent* GetCamera() const { return Camera; }
+	USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	USOLookComponent* GetLook() const { return Look; }
 
 	// --- Input handlers (public so tests and the controller can drive them) ---
@@ -444,8 +460,8 @@ public:
 			OnRep_MeleeStyle();
 		}
 	}
-	/** The blade in the hand (first person / the body), null while none is out. */
-	class UStaticMeshComponent* GetHeldBlade(bool bFirstPerson) const { return bFirstPerson ? BladeFP.Get() : BladeTP.Get(); }
+	/** The blade in the body's hand, null while none is out. */
+	class UStaticMeshComponent* GetHeldBlade() const { return HeldBlade.Get(); }
 	const struct FSOMeleeStyle* GetMeleeStyle() const;
 	/** A blow from this player's own input (light, or heavy): shown at once here, landed by the server. */
 	void MeleeStrike(bool bHeavy);
@@ -553,9 +569,6 @@ protected:
 	bool bHeldStowed = false;
 	bool bEmptyHanded = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	TObjectPtr<UCameraComponent> FirstPersonCamera;
-
 	/** A lamp on the chest, pointing where the player looks (placed every frame). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Flashlight")
 	TObjectPtr<USpotLightComponent> Flashlight;
@@ -582,12 +595,9 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetMeleeStyle(FName Style);
 
-	/** The style's blade in the right fist of the body and of the first-person arms (made as it is first needed). */
+	/** The style's blade in the body's right fist (made as it is first needed). */
 	UPROPERTY(Transient)
-	TObjectPtr<class UStaticMeshComponent> BladeTP;
-
-	UPROPERTY(Transient)
-	TObjectPtr<class UStaticMeshComponent> BladeFP;
+	TObjectPtr<class UStaticMeshComponent> HeldBlade;
 
 	FName BladeStyle;
 	void UpdateBlade();
@@ -627,13 +637,6 @@ protected:
 	/** The guard on (or off) both bodies' animation. */
 	void UpdateMeleeGuard();
 
-	/** First person with the fists up: the arms this far forward and down (cm), eased in by FistsView. */
-	UPROPERTY(EditDefaultsOnly, Category = "SO|Melee")
-	float FistsForward = 14.0f;
-	UPROPERTY(EditDefaultsOnly, Category = "SO|Melee")
-	float FistsDrop = 9.0f;
-	float FistsView = 0.0f;
-	float ArmsBaseX = 0.0f;
 	bool bDisplayCarry = false;
 
 	int32 MeleeLastIndex = -1;
@@ -657,20 +660,16 @@ protected:
 	void TickFootstepNoise(float DeltaSeconds);
 	float FootstepTimer = 0.0f;
 
-	/** First person: a copy of the body seen only by its owner, posed like the body but with everything except the
-	 *  arms collapsed (first-person rendering: own FOV, never clips into walls, no shadow). */
+	/** Where the gun is held (set every frame by the viewmodel component; the gun rides it). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	TObjectPtr<USkeletalMeshComponent> FirstPersonArms;
+	TObjectPtr<USceneComponent> GunHold;
 
-	/** Third-person hold: the gun's place as seen from outside (set every frame by the viewmodel component). */
+	/** The one camera's boom: no length in the eyes (first person), out behind the shoulder for the test view. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	TObjectPtr<USceneComponent> ThirdPersonHold;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	TObjectPtr<USpringArmComponent> ThirdPersonBoom;
+	TObjectPtr<USpringArmComponent> CameraBoom;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	TObjectPtr<UCameraComponent> ThirdPersonCamera;
+	TObjectPtr<UCameraComponent> Camera;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Look")
 	TObjectPtr<USOLookComponent> Look;
@@ -686,8 +685,8 @@ public:
 	/** Dresses the character (server; replicated): the body and one wardrobe piece per slot. */
 	void SetOutfit(const FSOOutfit& NewOutfit);
 	const FSOOutfit& GetOutfit() const { return Outfit; }
-	/** The worn piece of a slot (third-person body or first-person arms), null if none shows. */
-	USkeletalMeshComponent* GetWornPiece(FName Slot, bool bFirstPerson) const;
+	/** The worn piece of a slot, null if none shows. */
+	USkeletalMeshComponent* GetWornPiece(FName Slot) const;
 	/** Body regions the worn pieces cover (their skin sections are hidden). */
 	const TSet<FName>& GetHiddenRegions() const { return HiddenRegions; }
 	/** Only the face's sliders and the skin's and the hair's tones from an outfit, on this body as it is dressed (the
@@ -712,10 +711,7 @@ protected:
 	TSet<FName> HiddenRegions;
 
 	UPROPERTY(Transient)
-	TMap<FName, TObjectPtr<USkeletalMeshComponent>> WornThirdPerson;
-
-	UPROPERTY(Transient)
-	TMap<FName, TObjectPtr<USkeletalMeshComponent>> WornFirstPerson;
+	TMap<FName, TObjectPtr<USkeletalMeshComponent>> WornPieces;
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetViewMode(ESOViewMode NewMode);
@@ -735,10 +731,25 @@ private:
 	void ApplyViewMode();
 	float GetTargetEyeOffset() const;
 
-	/** Eye position relative to the capsule centre (interpolated across crouch changes). */
+	/** The capsule's eye height over its centre (eased across crouch changes): the eyes until the body has a pose. */
 	float EyeOffset = 0.0f;
 
-	/** First-person camera feel: step smoothing, landing spring, head bob, roll, field-of-view boost. */
+	/** The body's own eyes in the capsule's frame (followed by a spring), and their place on the head joint. */
+	void UpdateEye(float DeltaSeconds);
+	FVector EyeCS = FVector::ZeroVector;
+	FVector EyeVelCS = FVector::ZeroVector;
+	bool bHaveEye = false;
+	FVector EyeInHead = FVector::ZeroVector;
+	TWeakObjectPtr<const USkeletalMesh> EyeMesh;
+	/** The camera's place on the sights (the capsule's frame) and how far on them: SetSightEye. */
+	FVector SightEyeCS = FVector::ZeroVector;
+	float SightEyeAlpha = 0.0f;
+
+	/** The one camera: in the eyes, or out behind the shoulder (ViewBlend), its field of view between the two. */
+	void UpdateCamera(float DeltaSeconds, float Ads, float EyeFov, float ShoulderFov);
+	float ViewBlend = 0.0f;
+
+	/** The camera's feel in the eyes: step smoothing, landing spring, roll, field-of-view boost. */
 	void UpdateCameraFeel(float DeltaSeconds);
 	/** Sound, camera and effects for the movement component's one-off events (jump, land, slide, vault, ...). */
 	void HandleMovementEvent(ESOMovementEvent Event, float Strength);
@@ -750,8 +761,6 @@ private:
 	float LandDip = 0.0f;         // cm, spring
 	float LandDipVel = 0.0f;
 	float LastAirVz = 0.0f;
-	float BobPhase = 0.0f;
-	float BobAmp = 0.0f;
 	float CameraRoll = 0.0f;
 	float CameraRollVel = 0.0f;   // (the roll is a spring: it leans in and settles, never a straight line)
 	float EyeVel = 0.0f;          // (so is the eye's height across crouch, slide and stand)

@@ -239,9 +239,8 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bHold = false;
 	const ASOCharacter* Player = Cast<ASOCharacter>(Character);
 	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
-	bArmsOnly = Player && Mesh && Mesh == Player->GetFirstPersonArms();
-	// The arms mesh is already only arms; the whole body standing in for it gets everything else collapsed.
-	bCollapseBody = bArmsOnly && Mesh->GetSkeletalMeshAsset() == Player->GetMesh()->GetSkeletalMeshAsset();
+	// (one body in every view: first person is this body's own eyes, its head hidden from that camera alone)
+	bHideHead = Player && Mesh && Mesh == Player->GetMesh() && Player->IsHeadHidden();
 	{
 		const USOCharacterMovementComponent* Move = Player ? Cast<USOCharacterMovementComponent>(Player->GetCharacterMovement()) : nullptr;
 		bCarried = Player && ((Move && Move->IsSprinting()) || Player->IsDisplayCarry());
@@ -251,7 +250,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	// anyone who fights holds their gun this way: the player, and the creatures that carry guns
 	const ASOCombatCharacter* Holder = Cast<ASOCombatCharacter>(Character);
 	const ASOWeapon* Held = Holder ? Holder->GetWeapon() : nullptr;
-	const USOGunRigComponent* Rig = Held ? (bArmsOnly ? Held->GetFirstPersonRig() : Held->GetThirdPersonRig()) : nullptr;
+	const USOGunRigComponent* Rig = Held ? Held->GetRig() : nullptr;
 	if (Player && Player->IsWeaponStowed())
 	{
 		Rig = nullptr;                                           // (the gun is put away: the hands are free)
@@ -305,7 +304,19 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			const FTransform& RigT = Rig->GetComponentTransform();
 			RightFingers = FitFingers[0];
 			RightTarget.AddToTranslation(ToMesh.InverseTransformVector(RigT.TransformVector(FitOffset[0])));
-			FitWeight = FMath::FInterpConstantTo(FitWeight, Held->IsReloading() ? 0.0f : 1.0f, DeltaSeconds, 7.0f);
+			// (away only while the reload's own hand works a part: as far as its choreography has the hand at the fore end,
+			// the hand is on its fitted hold there, so it comes home onto it; eased back in after the reload had ended, it
+			// lay a centimetre or three into the gun for a tenth of a second)
+			float FitTarget = 1.0f;
+			if (const FSOReloadPose& P = Held->GetPose(); Held->IsReloading() && P.bHand)
+			{
+				auto AtHold = [](FName Anchor, const float* Off)
+				{
+					return (Anchor.IsNone() || Anchor == TEXT("fore")) && FMath::Abs(Off[0]) + FMath::Abs(Off[1]) + FMath::Abs(Off[2]) < 1e-3f ? 1.0f : 0.0f;
+				};
+				FitTarget = FMath::Lerp(AtHold(P.HandAnchorA, P.HandA), AtHold(P.HandAnchorB, P.HandB), FMath::Clamp(P.HandAlpha, 0.0f, 1.0f));
+			}
+			FitWeight = FMath::FInterpConstantTo(FitWeight, FitTarget, DeltaSeconds, 14.0f);
 			if (FitWeight > 0.0f)
 			{
 				LeftFingers = FSOFingerPose::Lerp(LeftFingers, FitFingers[1], FitWeight);
@@ -319,20 +330,18 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		}
 		const float Ads = Player ? (Player->GetViewmodel() ? Player->GetViewmodel()->GetAds() : 0.0f) : (Holder->IsAimingDownSights() ? 1.0f : 0.0f);
 		AimPitch = FRotator::NormalizeAxis(Player ? Player->GetAimRotation().Pitch : Holder->GetBaseAimRotation().Pitch);
-		EyeCS = ToMesh.InverseTransformPosition(Player ? Player->GetEyeTransform(false).GetLocation() : Holder->GetPawnViewLocation());
 		bOneHand = Holder->HoldsWithOneHand();
 		bSnugHold = Rig->IsSnugGrip();
-		// First person keeps a gentler stance so the off shoulder stays out of the corner of the view.
-		const float StanceScale = bArmsOnly ? 0.5f : 1.0f;
+		bHandgunHold = Rig->IsHandgun();
 		// long guns blade the body to the gun; handguns square up (both arms out, an isosceles stance)
 		const bool bHandgun = Rig->IsHandgun();
-		Blade = (bHandgun ? FMath::Lerp(5.0f, 8.0f, Ads) : FMath::Lerp(12.0f, 24.0f, Ads)) * StanceScale;
-		Lean = FMath::Lerp(4.0f, 9.0f, Ads) * StanceScale;
-		HeadCant = bArmsOnly || bHandgun ? 0.0f : Ads * 14.0f;
+		Blade = bHandgun ? FMath::Lerp(5.0f, 8.0f, Ads) : FMath::Lerp(12.0f, 24.0f, Ads);
+		Lean = FMath::Lerp(4.0f, 9.0f, Ads);
+		HeadCant = bHandgun ? 0.0f : Ads * 14.0f;
 		// The combat stance (FSOStance, the owner, 2026-11-23): the gun's class sets how the arms hold it and how the body
 		// stands, at the ready and on the sights; relaxed (out of a fight) the body eases out of it.
 		Stance = FSOStanceInputs();
-		if (Player && !bArmsOnly)
+		if (Player)
 		{
 			const USOWeaponData* Data = Held->GetData();
 			const FSOStance& St = FSOStanceData::Get().For(Data ? Data->Family : NAME_None);
@@ -537,21 +546,9 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		}
 	}
 
-	// The first-person arms holding a gun play no walk, run or landing: the gun has its own bob and sway, and shoulders
-	// swinging with the stride under grips fixed on the gun moved the hands on it (the owner: "the player arm/hands
-	// should essentially become like static objects on the gun ... the player hands keep moving when moving the gun").
-	// Traversals and anything with the gun put away are left as they are.
-	if (bArmsOnly && bHold && !bLedge)
-	{
-		for (int32 k = 0; k < Count; ++k)
-		{
-			Target[k] = k == Idle ? 1.0f : 0.0f;
-		}
-	}
-
-	// Idle variations: standing still, not aiming, a full body (the first-person arms never fidget).
+	// Idle variations: standing still, not aiming.
 	const bool bAimingNow = Player && Player->GetViewmodel() && Player->GetViewmodel()->GetAds() > 0.01f;
-	const bool bStill = Target[Idle] > 0.99f && Speed < 10.0f && !bArmsOnly && !bAimingNow && Clips.Fidgets.Num() > 0;
+	const bool bStill = Target[Idle] > 0.99f && Speed < 10.0f && !bAimingNow && Clips.Fidgets.Num() > 0;
 	if (!bStill)
 	{
 		StillTime = 0.0f;
@@ -917,7 +914,7 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 				bool bReaches = SlideBack <= 0.0f;                 // (fitted again because the arm did not reach it: not taken)
 				if (bReaches && Lower != INDEX_NONE && Ref.GetParentIndex(Lower) != INDEX_NONE)
 				{
-					const FVector ShoulderR = bArmsOnly ? FVector(-18.0f, -30.0f, -2.4f) : FVector(-23.0f, -27.0f, 5.0f);
+					const FVector ShoulderR(-23.0f, -27.0f, 5.0f);
 					const float Arm = static_cast<float>(FVector::Dist(RefCS(Ref.GetParentIndex(Lower)).GetLocation(), RefCS(Lower).GetLocation())
 						+ FVector::Dist(RefCS(Lower).GetLocation(), RefCS(Hand).GetLocation())) * static_cast<float>(Mesh->GetComponentScale().X);
 					// (a hand round a post may reach to 98.5 % at the arm's own rule: taken up to 93 % of the estimate, which is
@@ -987,13 +984,13 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 			// fitted as it comes up into the hands: the arm is not there yet).
 			if (!Rig->IsHandgun() && !bPost && Lower != INDEX_NONE && Ref.GetParentIndex(Lower) != INDEX_NONE)
 			{
-				const FVector ShoulderR = bArmsOnly ? FVector(-18.0f, -30.0f, -2.4f) : FVector(-23.0f, -27.0f, 5.0f);
+				const FVector ShoulderR(-23.0f, -27.0f, 5.0f);
 				const float Arm = static_cast<float>(FVector::Dist(RefCS(Ref.GetParentIndex(Lower)).GetLocation(), RefCS(Lower).GetLocation())
 					+ FVector::Dist(RefCS(Lower).GetLocation(), RefCS(Hand).GetLocation())) * static_cast<float>(Mesh->GetComponentScale().X);
 				const FVector WristR = RigT.InverseTransformPosition(Wrist);
 				// (the body's shoulder is known to five centimetres, the arms' to one or two: the body keeps a wider margin, or
 				// the arm's own rule (93 %) slid the hand back off where it was fitted, palm off the gun, fingers into it)
-				const float Reach = bArmsOnly ? 0.90f : 0.87f;
+				const float Reach = 0.87f;
 				while (ShiftX > -14.0f && FVector::Dist(ShoulderR, WristR + FVector(ShiftX, 0.0f, 0.0f)) > Reach * Arm)
 				{
 					ShiftX -= 1.0f;
@@ -1787,7 +1784,7 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 {
 	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
 	const float Dt = FMath::Max(DeltaSeconds, 1e-4f);
-	bBodyMotion = Character && Mesh && !bArmsOnly && !bDead;
+	bBodyMotion = Character && Mesh && !bDead;
 	if (!bBodyMotion)
 	{
 		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = StandYaw = 0.0f;
@@ -1960,7 +1957,7 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	// only, never crouched, at a sprint or in a traversal, and eased out as the walk becomes a run (the gait's own feet
 	// take over).
 	{
-		const bool bStanceBody = Stance.bPlayer && bHold && !bArmsOnly && !bCarried && !bInAir && !bSliding && !bMantling && !bCrouched && !bDodging;
+		const bool bStanceBody = Stance.bPlayer && bHold && !bCarried && !bInAir && !bSliding && !bMantling && !bCrouched && !bDodging;
 		const float Moving = 1.0f - FMath::SmoothStep(260.0f, 520.0f, Speed);
 		const float Still = 1.0f - FMath::SmoothStep(40.0f, 160.0f, Speed);
 		StanceBody = FMath::FInterpTo(StanceBody, bStanceBody ? Moving : 0.0f, Dt, 6.0f);
@@ -2004,8 +2001,8 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	}
 	bHold = Instance->bHold;
 	bOneHand = Instance->bOneHand;
-	bArmsOnly = Instance->bArmsOnly;
-	bCollapseBody = Instance->bCollapseBody;
+	bHandgunHold = Instance->bHandgunHold;
+	bHideHead = Instance->bHideHead;
 	bCarried = Instance->bCarried;
 	bHeadFree = Instance->bHeadFree;
 	AimPitch = Instance->AimPitch;
@@ -2021,7 +2018,6 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	bSnugHold = Instance->bSnugHold;
 	RightFingers = Instance->RightFingers;
 	LeftFingers = Instance->LeftFingers;
-	EyeCS = Instance->EyeCS;
 	GunAxis = Instance->GunAxis;
 	bBodyMotion = Instance->bBodyMotion;
 	WarpYaw = Instance->WarpYaw;
@@ -2087,6 +2083,7 @@ bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
 		ApplyBody(Output);
 		ApplyHold(Output);
 		ApplyHit(Output);
+		HideHead(Output);
 		return true;
 	}
 
@@ -2113,7 +2110,29 @@ bool FSOLocomotionProxy::Evaluate(FPoseContext& Output)
 	ApplyBody(Output);
 	ApplyHold(Output);
 	ApplyHit(Output);
+	HideHead(Output);
 	return true;
+}
+
+void FSOLocomotionProxy::HideHead(FPoseContext& Output) const
+{
+	// First person is this body's own eyes (the owner, 2026-11-23: one model, one camera): the head the camera sits in
+	// shrinks into its joint, and with it what it carries (the eyes, the hair, a helmet: their pieces follow this pose).
+	// Only on its own player's machine: everyone else sees the whole body.
+	if (!bHideHead)
+	{
+		return;
+	}
+	const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
+	const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(TEXT("head"));
+	if (MeshIndex != INDEX_NONE)
+	{
+		const FCompactPoseBoneIndex Head = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex));
+		if (Head.IsValid())
+		{
+			Output.Pose[Head].SetScale3D(FVector(0.01f));
+		}
+	}
 }
 
 void FSOLocomotionProxy::ApplyMelee(FPoseContext& Output) const
@@ -2177,12 +2196,6 @@ void FSOLocomotionProxy::ApplyMelee(FPoseContext& Output) const
 		const FQuat Part = FQuat::Slerp(FQuat::Identity, Pitch, Share);
 		Pose[Bone].SetRotation((Above.Inverse() * Part * Above * Pose[Bone].GetRotation()).GetNormalized());
 	};
-	if (bArmsOnly)
-	{
-		Turn(TEXT("spine"), 0.45f);
-		Turn(TEXT("chest"), 0.55f);
-	}
-	else
 	{
 		Turn(TEXT("spine"), 0.3f);
 		Turn(TEXT("chest"), 0.35f);
@@ -2413,20 +2426,17 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 	//    leg says nothing about that side (its offset from the line is a few millimetres of noise, and it flipped the
 	//    knee backward and through the floor when the hips came down), so the leg's forward is always part of it and
 	//    whatever points behind the line is taken out.
-	if (PelvisDrop > 0.01f || FootIKAlpha > 0.01f || StanceFeet > 0.001f)
+	// (one leg onto an ankle and a foot's turn: used below for the wanted feet, and again where an ankle would bend past
+	// a human's, 5.)
+	auto SolveLeg = [&](int32 i, const FVector& AnkleAt, const FQuat& FootTurn)
 	{
-		for (int32 i = 0; i < 2; ++i)
 		{
-			if (!bLeg[i])
-			{
-				continue;
-			}
 			const int32 Upper = Leg[i][0], Lower = Leg[i][1], Foot = Leg[i][2];
 			const FVector S = CS[Upper].GetLocation();
 			const FVector Knee0 = CS[Lower].GetLocation();
 			const float L1 = FVector::Dist(S, Knee0);
 			const float L2 = FVector::Dist(Knee0, CS[Foot].GetLocation());
-			const FVector ToTarget = FootWanted[i].GetLocation() - S;
+			const FVector ToTarget = AnkleAt - S;
 			const FVector Dir = ToTarget.GetSafeNormal(1e-4f, -Up);
 			const float D = FMath::Clamp(static_cast<float>(ToTarget.Size()), FMath::Abs(L1 - L2) + 0.5f, (L1 + L2) * 0.999f);
 			const float Along = (L1 * L1 - L2 * L2 + D * D) / (2.0f * D);
@@ -2457,7 +2467,71 @@ void FSOLocomotionProxy::ApplyBody(FPoseContext& Output) const
 			Turn(Upper, FQuat::FindBetweenNormals((CS[Lower].GetLocation() - S).GetSafeNormal(), (Knee - S).GetSafeNormal()));
 			const FVector E = CS[Lower].GetLocation();
 			Turn(Lower, FQuat::FindBetweenNormals((CS[Foot].GetLocation() - E).GetSafeNormal(), (Ankle - E).GetSafeNormal()));
-			SetCS(Foot, FTransform(FootWanted[i].GetRotation(), CS[Foot].GetLocation(), CS[Foot].GetScale3D()));
+			SetCS(Foot, FTransform(FootTurn, CS[Foot].GetLocation(), CS[Foot].GetScale3D()));
+		}
+	};
+	if (PelvisDrop > 0.01f || FootIKAlpha > 0.01f || StanceFeet > 0.001f)
+	{
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (bLeg[i])
+			{
+				SolveLeg(i, FootWanted[i].GetLocation(), FootWanted[i].GetRotation());
+			}
+		}
+	}
+
+	// 5. Every joint as a human's (the owner, 2026-11-23: "the player should not be bending any part of their body in a
+	//    way a normal human cant or in a way harmful to a humans"): an ankle draws the toes up toward the shin some 35
+	//    degrees and points them some 55. What asks more (a crouch, a run's swing, the stance's deep knees: the clips
+	//    reached 74 degrees up) is met the way a body meets it: a planted foot lifts its heel, turning about the ball of
+	//    the foot, and the leg reaches the ankle raised; a foot off the ground turns about its ankle. (A player's body:
+	//    the Sarketh walk on their toes.)
+	if (bHeadFree)
+	{
+		// (degrees between the way up the shin and the way the foot points: 90 standing)
+		constexpr float MinAnkle = 55.0f, MaxAnkle = 145.0f;
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (!bLeg[i])
+			{
+				continue;
+			}
+			const int32 Lower = Leg[i][1], Foot = Leg[i][2];
+			// the foot's forward and up at rest, in its own frame; its ankle's standing height
+			FTransform RestFoot = Pose.GetRefPose(FCompactPoseBoneIndex(Foot));
+			for (int32 P = Parent[Foot]; P != INDEX_NONE; P = Parent[P])
+			{
+				RestFoot = RestFoot * Pose.GetRefPose(FCompactPoseBoneIndex(P));
+			}
+			const FVector ToesRest = RestFoot.GetRotation().UnrotateVector(Fwd), UpRest = RestFoot.GetRotation().UnrotateVector(Up);
+			const bool bPlanted = CS[Foot].GetLocation().Z < RestFoot.GetLocation().Z + 4.0f;
+			for (int32 Pass = 0; Pass < 3; ++Pass)
+			{
+				const FVector Ankle = CS[Foot].GetLocation();
+				const FVector UpShin = (CS[Lower].GetLocation() - Ankle).GetSafeNormal();
+				const FVector Toes = CS[Foot].GetRotation().RotateVector(ToesRest).GetSafeNormal();
+				const float Angle = static_cast<float>(FMath::Acos(FMath::Clamp(FVector::DotProduct(UpShin, Toes), -1.0, 1.0)));
+				const float Need = Angle < FMath::DegreesToRadians(MinAnkle) ? FMath::DegreesToRadians(MinAnkle) - Angle
+					: (Angle > FMath::DegreesToRadians(MaxAnkle) ? FMath::DegreesToRadians(MaxAnkle) - Angle : 0.0f);
+				const FVector Axis = FVector::CrossProduct(UpShin, Toes).GetSafeNormal();
+				if (FMath::Abs(Need) < FMath::DegreesToRadians(0.5f) || Axis.IsNearlyZero())
+				{
+					break;
+				}
+				const FQuat Turned(Axis, Need);          // (+: the toes away from the shin)
+				if (bPlanted && Need > 0.0f)
+				{
+					// the heel lifts: the foot turns about the ball of the foot, a hand's breadth ahead of the ankle on the floor
+					const FVector FootUp = CS[Foot].GetRotation().RotateVector(UpRest).GetSafeNormal();
+					const FVector Ball = Ankle + Toes * 13.0f - FootUp * 7.0f;
+					SolveLeg(i, Ball + Turned.RotateVector(Ankle - Ball), Turned * CS[Foot].GetRotation());
+				}
+				else
+				{
+					SetCS(Foot, FTransform(Turned * CS[Foot].GetRotation(), Ankle, CS[Foot].GetScale3D()));
+				}
+			}
 		}
 	}
 
@@ -2537,32 +2611,27 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	const float Pitch = FMath::DegreesToRadians(FMath::Clamp(AimPitch, -80.0f, 80.0f));
 	const float BladeRad = FMath::DegreesToRadians(Blade), LeanRad = FMath::DegreesToRadians(Lean);
 
-	// 1. Stance: the torso follows the aim pitch (70 %), leans into the gun and turns the off shoulder forward.
-	//    First person: the shoulders turn with the whole view about the eye instead, so looking down never shows the
-	//    shoulders from above and looking up never leaves the gun out of the arms' reach.
+	// 1. Stance: the torso follows the aim pitch (60 %), leans into the gun and turns the off shoulder forward.
 	// (the trunk's share of the pitch stops at a lean: looking straight down the body folded 56 degrees at the waist
 	// and the gun pointed down along it with the hands at the hips; a man looking at his feet bends his neck and
-	// leans a little, the gun comes down in front of him instead: USOViewmodelComponent::ThirdPersonHoldTransform)
-	const float StancePitch = bArmsOnly ? 0.0f : FMath::DegreesToRadians(FMath::Clamp(AimPitch, -40.0f, 57.0f));
+	// leans a little, the gun comes down in front of him instead: USOViewmodelComponent::HoldTransform. Every bend a
+	// normal amount, the owner, 2026-11-23: "head/arms/legs/body bends a normal amount not crazy": at 70 % of up to 57
+	// degrees the trunk leaned back 40 looking up.)
+	const float StancePitch = FMath::DegreesToRadians(FMath::Clamp(AimPitch, -40.0f, 45.0f));
 	if (Spine != INDEX_NONE)
 	{
-		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * 0.3f - LeanRad * 0.5f));
+		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * 0.25f - LeanRad * 0.5f));
 	}
 	if (Chest != INDEX_NONE)
 	{
-		Turn(Chest, FQuat(Up, BladeRad * 0.6f) * FQuat(Side, StancePitch * 0.4f - LeanRad * 0.5f));
-		if (bArmsOnly)
-		{
-			const FQuat View(Side, Pitch);
-			const FTransform C = CS[Chest];
-			SetCS(Chest, FTransform(View * C.GetRotation(), EyeCS + View.RotateVector(C.GetLocation() - EyeCS), C.GetScale3D()));
-		}
+		Turn(Chest, FQuat(Up, BladeRad * 0.6f) * FQuat(Side, StancePitch * 0.35f - LeanRad * 0.5f));
 	}
+	const float TrunkPitch = StancePitch * 0.6f - LeanRad;     // (what the trunk took of the aim's pitch, up +)
 	// 2. The head looks along the aim: neck and head share the aim pitch ON TOP of what the clip gave them (the
 	//    idle's breathing, a glance, a fidget's turn), about their own pivots. Set to the rest facing instead, the
 	//    head stood dead still over a body that breathed and shifted (the owner, 2026-11-21, on the armoury's
 	//    stand-in: "the head stays still like a chicken"). The trunk's stance (1.) carries under it unchanged.
-	if (Neck != INDEX_NONE && !bArmsOnly)
+	if (Neck != INDEX_NONE)
 	{
 		// aiming a long gun: the head cants toward the right shoulder and dips onto the stock (cheek weld)
 		const float Cant = FMath::DegreesToRadians(HeadCant);
@@ -2578,10 +2647,13 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					Turn(HeadBone, FQuat(Up, -BladeRad * 0.55f));
 				}
 			}
-			Turn(Neck, FQuat(Side, Pitch * 0.4f));
+			// (the neck and the head take what the trunk did not, within what a neck does: they took the whole aim on top
+			// of the trunk's share, and looking 60 degrees up the face pointed 100 degrees up, past the sky)
+			const float HeadPitch = FMath::Clamp(Pitch - TrunkPitch, FMath::DegreesToRadians(-55.0f), FMath::DegreesToRadians(50.0f));
+			Turn(Neck, FQuat(Side, HeadPitch * 0.4f));
 			if (HeadBone != INDEX_NONE)
 			{
-				Turn(HeadBone, Weld * FQuat(Side, Pitch * 0.6f - FMath::DegreesToRadians(Stance.HeadDown)));   // (the chin a little down: the stance)
+				Turn(HeadBone, Weld * FQuat(Side, HeadPitch * 0.6f - FMath::DegreesToRadians(Stance.HeadDown)));   // (the chin a little down: the stance)
 			}
 		}
 		else
@@ -2618,54 +2690,6 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			Turn(Clav, FQuat(Up, Sign * Protract) * FQuat(FVector(0.0f, 1.0f, 0.0f), -Sign * Elevate));
 		}
 
-		// First person: the firing shoulder is drawn back, down and out, out of the picture. The arms hang from the
-		// eye, and the grip is a hand's breadth under it: with the shoulder where a shoulder is, the arm was folded
-		// to a quarter of its length and the wrist bent 117 degrees to reach the grip. Nobody sees this shoulder.
-		if (bArmsOnly)
-		{
-			// (either shoulder, straight away from its hand, until the arm is stretched to .62 of its length: a long
-			// gun's firing arm, and both arms on a handgun held close)
-			const FTransform U = CS[Upper];
-			const float ArmLength = static_cast<float>(FVector::Dist(U.GetLocation(), CS[Lower].GetLocation()) + FVector::Dist(CS[Lower].GetLocation(), CS[Hand].GetLocation()));
-			const FVector From = U.GetLocation() - Target.GetLocation();
-			const float Now = static_cast<float>(From.Size());
-			// (a handgun is held OUT in both hands, the arms nearly straight: both hands on one grip)
-			// (and the support arm always: on the sights the gun comes back to the eye, and from a shoulder that stayed
-			// where it was the forearm came straight up under the hand, the wrist bent 85 degrees beside the sights)
-			const float Least = (bLeft || (!bOneHand && FVector::Dist(LeftTarget.GetLocation(), RightTarget.GetLocation()) < 14.0f) ? 0.8f : 0.62f) * ArmLength;
-			if (Now > 1.0f && Now < Least)
-			{
-				// (the support shoulder goes BEHIND its hand as it goes away from it, eased in over the last fifth of
-				// the arm: straight away from a hand that had come back over it, the forearm still stood up under it)
-				FVector Way = From / Now;
-				if (bLeft)
-				{
-					const FVector Behind = FQuat(Side, Pitch).RotateVector(FVector(0.45f, -0.85f, -0.2f).GetSafeNormal());
-					Way = FMath::Lerp(Way, Behind, 0.7f * FMath::Clamp((Least - Now) / (0.2f * ArmLength), 0.0f, 1.0f)).GetSafeNormal(1e-4f, Way);
-				}
-				else if (bSnugHold && !bOneHand && FVector::Dist(LeftTarget.GetLocation(), RightTarget.GetLocation()) >= 14.0f)
-				{
-					// the snug way the firing shoulder of a long gun goes BACK and out from its hand more than down: straight
-					// away from a hand on the sights it stayed under the grip, the forearm climbed to it and the wrist bent
-					// 72 degrees
-					const FVector Behind = FQuat(Side, Pitch).RotateVector(FVector(-0.5f, -0.85f, -0.15f).GetSafeNormal());
-					Way = FMath::Lerp(Way, Behind, 0.6f * FMath::Clamp((Least - Now) / (0.2f * ArmLength), 0.0f, 1.0f)).GetSafeNormal(1e-4f, Way);
-				}
-				SetCS(Upper, FTransform(U.GetRotation(), Target.GetLocation() + Way * Least, U.GetScale3D()));
-			}
-			// and never further from its hand than the arm reaches with a bend left in it: in first person a HAND stays
-			// where it was fitted on the gun, like a part of it, and the shoulder nobody sees comes to it (the support
-			// hand used to slide back along the gun with its fingers still curled for where it had been, into the gun,
-			// and the firing hand stopped short of its grip: the owner's "the arm keeps glitching when moving")
-			const FTransform U2 = CS[Upper];
-			const FVector Off = U2.GetLocation() - Target.GetLocation();
-			const float Far = (bLeft && bSupportOnPost ? 0.97f : 0.92f) * ArmLength;
-			if (Off.SizeSquared() > Far * Far)
-			{
-				SetCS(Upper, FTransform(U2.GetRotation(), Target.GetLocation() + Off.GetSafeNormal() * Far, U2.GetScale3D()));
-			}
-		}
-
 		// Hand bone vs its anatomical basis, from the rest pose (relaxed hands: thumb forward, palm to the thigh).
 		const FVector RestAlong = (RefCS[Hand].GetLocation() - RefCS[Lower].GetLocation()).GetSafeNormal();
 		const FQuat RestBasis = FSOHandGrip::MakeBasis(RestAlong, FVector(0.0f, 1.0f, 0.0f), bLeft);
@@ -2677,11 +2701,13 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		// The support hand never holds the gun further out than the arm reaches with a bend left in it: it slides BACK
 		// along the gun to where it does. (Held at a fore point a long way out, the arm was dead straight and the hand
 		// stopped short of the gun with its fingers closing in it.)
-		if (bLeft && !GunAxis.IsNearlyZero() && !bArmsOnly)
+		if (bLeft && !GunAxis.IsNearlyZero())
 		{
-			// (third person only: that body's shoulders are seen. A hand round a vertical fore grip may reach nearly straight: slid back, it left the post with its fingers
+			// (a hand round a vertical fore grip may reach nearly straight: slid back, it left the post with its fingers
 			// still curled for it, in the gun)
-			const float Most = (bSupportOnPost ? 0.985f : 0.93f) * (L1 + L2);
+			// (95 %: a long fore end, a pump's, is held with the arm nearly straight; slid back at 93 % while walking a pump
+			// gun's hand came off its pump, the palm over nothing)
+			const float Most = (bSupportOnPost ? 0.985f : 0.95f) * (L1 + L2);
 			const FVector V = Target.GetLocation() - S;
 			if (V.SizeSquared() > Most * Most)
 			{
@@ -2689,8 +2715,9 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				const float Disc = Va * Va - static_cast<float>(V.SizeSquared() - Most * Most);
 				if (Disc > 0.0f)
 				{
-					// (up to 30 cm: at 14 a gun pointed steeply down left the hand floating short of it)
-					Target.AddToTranslation(-GunAxis * FMath::Clamp(Va - FMath::Sqrt(Disc), 0.0f, 30.0f));
+					// (up to 30 cm: at 14 a gun pointed steeply down left the hand floating short of it; on a handgun 2: slid
+					// further it came off the pistol's back, round nothing: the viewmodel brings a handgun into reach)
+					Target.AddToTranslation(-GunAxis * FMath::Clamp(Va - FMath::Sqrt(Disc), 0.0f, bHandgunHold ? 2.0f : 30.0f));
 				}
 			}
 		}
@@ -2727,7 +2754,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		// (FSOStance::ElbowSwing, a share of the way toward the straight wrist): taken where the wrist ran straightest the
 		// firing elbow hung under the gun in front of the chest, the forearm standing straight up to the grip, and from
 		// behind the body hid the whole arm (the owner, 2026-11-23: "arm not showing ... the arms are gone").
-		const bool bStanceArms = Stance.bPlayer && !bArmsOnly && !bCarried && Stance.Ready > 0.0f;
+		const bool bStanceArms = Stance.bPlayer && !bCarried && Stance.Ready > 0.0f;
 		bool bSwung = false;
 		{
 			static const float ElbowToWrist = 0.6f;
@@ -2746,7 +2773,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				// (and the firing elbow of a gun carried low, at a sprint or by the armoury's stand-in, stays by the side:
 				// swung out to line the forearm up with the canted grip it stood out level with the shoulder, the owner's "arm
 				// seems very bend out", 2026-11-17)
-				const float Most = bLeft ? (bArmsOnly ? 0.6f : 0.9f) : (bCarried && !bArmsOnly ? 0.55f : 1.45f);
+				const float Most = bLeft ? 0.9f : (bCarried ? 0.55f : 1.45f);
 				if (Ask > 0.15f)
 				{
 					// (the firing arm goes further: on the sights its wrist is the tightest)
@@ -2788,7 +2815,6 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					Bend = Down * FMath::Cos(A) + Out * FMath::Sin(A);
 				}
 #if !UE_BUILD_SHIPPING
-				if (!bArmsOnly)
 				{
 					float* Sw = USOLocomotionAnimInstance::DebugSwing[SideIndex]; Sw[0] = A0; Sw[1] = A1; Sw[2] = A; Sw[3] = Ask; Sw[4] = Most;
 				}
@@ -2890,32 +2916,6 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				Local[I] = CS[I].GetRelativeTransform(ParentCS);
 				ParentCS = CS[I];
 			}
-		}
-	}
-
-	// 4. First-person copy of the whole body: only the arms remain (everything else shrinks into its bone).
-	if (bCollapseBody)
-	{
-		TArray<FTransform, TInlineAllocator<64>> Final = CS;
-		for (int32 I = 0; I < Num; ++I)
-		{
-			bool bArm = false;
-			for (const int32 (&Chain)[3] : Arm)
-			{
-				bArm |= I == Chain[0] || I == Chain[1] || I == Chain[2];
-				for (int32 P = Parent[I]; P != INDEX_NONE && !bArm; P = Parent[P])
-				{
-					bArm = P == Chain[2]; // fingers under the hand
-				}
-			}
-			if (!bArm)
-			{
-				Final[I].SetScale3D(FVector(0.001f));
-			}
-		}
-		for (int32 I = 0; I < Num; ++I)
-		{
-			Local[I] = Parent[I] == INDEX_NONE ? Final[I] : Final[I].GetRelativeTransform(Final[Parent[I]]);
 		}
 	}
 

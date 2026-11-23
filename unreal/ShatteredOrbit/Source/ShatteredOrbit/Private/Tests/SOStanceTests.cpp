@@ -135,7 +135,7 @@ bool FSOStanceBodyTest::RunTest(const FString& Parameters)
 		if (bLong)
 		{
 			const ASOWeapon* Gun = Player->GetWeapon();
-			const USOGunRigComponent* Rig = Gun ? Gun->GetThirdPersonRig() : nullptr;
+			const USOGunRigComponent* Rig = Gun ? Gun->GetRig() : nullptr;
 			if (TestTrue(FString::Printf(TEXT("%s: the gun's rig"), Name), Rig && Rig->IsBuilt()))
 			{
 				const FVector Butt = Player->GetActorTransform().InverseTransformPosition(Rig->GetComponentTransform().TransformPosition(FVector(Rig->GetRigBounds().Min.X, 0.0f, 1.5f)));

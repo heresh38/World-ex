@@ -44,7 +44,6 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 	{
 		const USkeletalMesh* BodyMesh = W->BodyMesh.LoadSynchronous();
 		TestNotNull(*FString::Printf(TEXT("%s body mesh"), *W->Body.ToString()), BodyMesh);
-		TestNotNull(*FString::Printf(TEXT("%s first-person arms"), *W->Body.ToString()), W->ArmsMesh.LoadSynchronous());
 		if (BodyMesh)
 		{
 			// one skin section per region, so worn pieces can hide what they cover
@@ -70,7 +69,6 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("the undersuit is worn by default"), Male->Defaults.FindRef(TEXT("suit")), FName(TEXT("orion")));
 	TestTrue(TEXT("the undersuit hides the chest"), Suit->Hide.Contains(TEXT("chest")));
 	TestFalse(TEXT("the undersuit leaves the face"), Suit->Hide.Contains(TEXT("head")));
-	TestTrue(TEXT("the undersuit has a first-person cut (its sleeves)"), !Suit->ArmsMesh.IsNull());
 
 	SOTest::FTestWorld World;
 	World.AddBox(FVector(-2000, -2000, -100), FVector(2000, 2000, 0));
@@ -81,14 +79,13 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 	}
 	World.Run(0.2f);
 	TestTrue(TEXT("male body"), Player->GetMesh()->GetSkeletalMeshAsset() == Male->BodyMesh.LoadSynchronous());
-	USkeletalMeshComponent* Worn = Player->GetWornPiece(TEXT("suit"), false);
+	USkeletalMeshComponent* Worn = Player->GetWornPiece(TEXT("suit"));
 	if (TestNotNull(TEXT("the undersuit is worn"), Worn))
 	{
 		TestTrue(TEXT("it follows the body's pose"), Worn->LeaderPoseComponent.Get() == Player->GetMesh());
 		TestTrue(TEXT("it shares the skeleton"), Worn->GetSkeletalMeshAsset() &&
 			Worn->GetSkeletalMeshAsset()->GetSkeleton() == Player->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton());
 	}
-	TestNotNull(TEXT("first-person sleeves"), Player->GetWornPiece(TEXT("suit"), true));
 	TestTrue(TEXT("the undersuit hides the chest skin"), Player->GetHiddenRegions().Contains(TEXT("chest")));
 	TestFalse(TEXT("the face shows"), Player->GetHiddenRegions().Contains(TEXT("head")));
 	auto SectionShown = [&](const TCHAR* SlotName) -> int32
@@ -119,8 +116,7 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 	Player->SetOutfit(Outfit);
 	World.Run(0.1f);
 	TestTrue(TEXT("female body"), Player->GetMesh()->GetSkeletalMeshAsset() == Female->BodyMesh.LoadSynchronous());
-	TestTrue(TEXT("female arms"), Player->GetFirstPersonArms()->GetSkeletalMeshAsset() == Female->ArmsMesh.LoadSynchronous());
-	TestNull(TEXT("no male undersuit on the female body"), Player->GetWornPiece(TEXT("suit"), false));
+	TestNull(TEXT("no male undersuit on the female body"), Player->GetWornPiece(TEXT("suit")));
 	TestEqual(TEXT("female head skin shows"), SectionShown(TEXT("skin__head")), 1);
 	Outfit.Body = TEXT("male");
 	for (const TPair<FName, FName>& D : Male->Defaults)
@@ -130,7 +126,7 @@ bool FSOWardrobeDressesTest::RunTest(const FString& Parameters)
 	Player->SetOutfit(Outfit);
 	World.Run(0.1f);
 	TestEqual(TEXT("male head skin shows after the female body"), SectionShown(TEXT("skin__head")), 1);
-	TestNotNull(TEXT("the undersuit is back on"), Player->GetWornPiece(TEXT("suit"), false));
+	TestNotNull(TEXT("the undersuit is back on"), Player->GetWornPiece(TEXT("suit")));
 	return true;
 }
 
@@ -282,17 +278,17 @@ bool FSOHeadGearTest::RunTest(const FString& Parameters)
 		Outfit.Set(TEXT("head"), TEXT("orion_helmet"));
 		Player->SetOutfit(Outfit);
 		World.Run(0.1f);
-		TestNotNull(FString::Printf(TEXT("%s: helmet worn"), *Body.ToString()), Player->GetWornPiece(TEXT("head"), false));
-		TestNull(FString::Printf(TEXT("%s: bald under the helmet"), *Body.ToString()), Player->GetWornPiece(TEXT("hair"), false));
+		TestNotNull(FString::Printf(TEXT("%s: helmet worn"), *Body.ToString()), Player->GetWornPiece(TEXT("head")));
+		TestNull(FString::Printf(TEXT("%s: bald under the helmet"), *Body.ToString()), Player->GetWornPiece(TEXT("hair")));
 		Outfit.Set(TEXT("head"), TEXT("orion_headset"));
 		Player->SetOutfit(Outfit);
 		World.Run(0.1f);
-		TestNotNull(FString::Printf(TEXT("%s: the hair is back with the headset"), *Body.ToString()), Player->GetWornPiece(TEXT("hair"), false));
+		TestNotNull(FString::Printf(TEXT("%s: the hair is back with the headset"), *Body.ToString()), Player->GetWornPiece(TEXT("hair")));
 		Outfit.Set(TEXT("head"), TEXT("none"));
 		Player->SetOutfit(Outfit);
 		World.Run(0.1f);
-		TestNull(TEXT("bare head"), Player->GetWornPiece(TEXT("head"), false));
-		TestNotNull(TEXT("hair without the helmet"), Player->GetWornPiece(TEXT("hair"), false));
+		TestNull(TEXT("bare head"), Player->GetWornPiece(TEXT("head")));
+		TestNotNull(TEXT("hair without the helmet"), Player->GetWornPiece(TEXT("hair")));
 	}
 	return true;
 }

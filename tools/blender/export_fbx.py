@@ -10,13 +10,11 @@ Options:
                      become their own FBX files with the origin at their pivot; <asset>.parts.json gives their rest
                      transforms and the gun's empties (muzzle, sight, rail, foregrip, ...) in Unreal mesh space
   --only=a,b,c       keep only these mesh objects (e.g. one wardrobe loadout); armatures and empties are kept
-  --arms-only        skinned meshes keep only what the arm bones (upperarm / forearm / hand) mostly carry: the
-                     first-person arms cut from the very body (and outfit) everyone else sees
   --per-item         players: the body (head, eyes, brows, lashes and every B_<region>, each region its own material slot
                      skin__<region> so the game can hide what clothing covers) as <stem>__Body.fbx with the clips, and
                      every wardrobe piece C_<slot>__<item> as its own <stem>__C_<slot>__<item>.fbx on the same skeleton
                      (no clips); wardrobe.json keeps the armature's `worldex` meta (labels, regions each piece hides,
-                     defaults). With --arms-only: the first-person cut of each of them.
+                     defaults). (There is no first-person cut: one body is seen from its own eyes, the owner's rule.)
   --finger-rig=male|female
                      players: adds finger bones under hand.L / hand.R (index, middle, ring, pinky, thumb; three each,
                      <finger>_01..03.<side>) laid along the fingers anatomy.py sculpts, and moves the finger skin (body
@@ -189,30 +187,6 @@ def drop_helpers(only):
         filtered = only is not None and ob.type == "MESH" and ob.name not in only
         if is_shape or filtered:
             bpy.data.objects.remove(ob, do_unlink=True)
-
-
-ARM_BONES = tuple(f"{b}.{s}" for b in ("upperarm", "forearm", "hand") for s in "LR")
-
-
-def keep_arms_only(threshold=0.5):
-    """Deletes every vertex whose arm-bone weight is below threshold; meshes left empty are removed."""
-    import bmesh
-    for ob in list(bpy.context.scene.objects):
-        if ob.type != "MESH" or not ob.vertex_groups:
-            continue
-        arm = {g.index for g in ob.vertex_groups if g.name in ARM_BONES or FINGER_RE.match(g.name)}
-        bm = bmesh.new()
-        bm.from_mesh(ob.data)
-        deform = bm.verts.layers.deform.active
-        drop = [v for v in bm.verts if deform is None or sum(w for i, w in v[deform].items() if i in arm) < threshold]
-        bmesh.ops.delete(bm, geom=drop, context="VERTS")
-        left = len(bm.verts)
-        bm.to_mesh(ob.data)
-        bm.free()
-        if left == 0:
-            bpy.data.objects.remove(ob, do_unlink=True)
-        else:
-            print(f"[export_fbx] arms only: {ob.name} keeps {left} vertices")
 
 
 # Finger layout of anatomy.Body.hand_sdf (left hand, hand-local frame: x wrist -> tip, y towards the thumb, z dorsal;
@@ -655,14 +629,12 @@ def main():
     drop_helpers(only)
     if isinstance(flags.get("--finger-rig"), str):
         add_finger_rig(flags["--finger-rig"] != "female")
-    if "--arms-only" in flags:
-        keep_arms_only()
     if do_split:
         wear_to_vertex_colour()
     skeletal_file = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
     if "--per-item" in flags:
         scene_to_centimetres()
-        export_per_item(src, out_dir, textures, with_clips="--arms-only" not in flags)
+        export_per_item(src, out_dir, textures, with_clips=True)
         return
     if skeletal_file:
         scene_to_centimetres()

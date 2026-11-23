@@ -105,8 +105,9 @@ class SOCOMBAT_API USOGunRigComponent : public USceneComponent
 public:
 	USOGunRigComponent();
 
-	/** Creates the mesh components. First person: owner-only, first-person rendering, no shadows. */
-	void Build(const USOWeaponData* Data, bool bInFirstPerson);
+	/** Creates the mesh components: the gun, one model, seen by everyone and casting its shadow (the owner's own eyes
+	 *  see the same gun in the same hands). */
+	void Build(const USOWeaponData* Data);
 
 	/** The copy's looks: mounts its optic on the rail (hiding the built-in sight it replaces), paints the body in its
 	 *  finish and the glow in its rarity colour (material names are an API: gun_body, gun_glow). */
@@ -217,6 +218,8 @@ private:
 	int32 LastSegment = -1;
 	FName Archetype;
 	bool bShown = true;
+	/** Hidden from its owner (the third-person copy while its owner looks through first person): a part made later is too. */
+	bool bOwnerNoSee = false;
 	bool bOpticMounted = false;
 	float BarrelSpin = 0.0f;
 	bool bHandgun = false;
@@ -225,6 +228,5 @@ private:
 	/** A part's current transform in mesh space (nested parts included). */
 	FTransform PartInMesh(const UStaticMeshComponent* Comp) const;
 	FVector Muzzle = FVector::ZeroVector;
-	bool bFirstPerson = false;
 	bool bBuilt = false;
 };

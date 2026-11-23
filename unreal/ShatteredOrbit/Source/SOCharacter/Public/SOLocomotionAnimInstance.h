@@ -119,6 +119,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	 *  hands reached for where the gun had been a frame ago: every bob, kick and turn left them off it for a frame, the
 	 *  owner's "the player hand keeps moving and feels like the player is not properly gripping the guns"). */
 	void CopyFrom(const class USOLocomotionAnimInstance* Instance);
+	/** The head shrunk into its joint for its own player's camera (first person, bHideHead). */
+	void HideHead(FPoseContext& Output) const;
 
 	/** 0 Idle, 1 Walk, 2 Run, 3 Jump, 4 Death, 5 Attack, 6 Slide, 7 Fidget, 8 Stroll, 9 Land, 10 Vault, 11 Mantle,
 	 *  12 Climb, 13 Crouch, 14 CrouchWalk, 15 Stop */
@@ -128,8 +130,10 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	bool bHold = false;
 	/** Only the right arm reaches for the gun (the left is busy: a shield). */
 	bool bOneHand = false;
-	bool bArmsOnly = false;
-	bool bCollapseBody = false;
+	/** A handgun: the support hand wraps the firing hand and never slides back along it. */
+	bool bHandgunHold = false;
+	/** Its own player's camera is in this head (first person): the head shrinks into its joint, on this machine only. */
+	bool bHideHead = false;
 	bool bCarried = false;
 	bool bHeadFree = false;     // the head carries its clip's own motion under the aim (a player's body, the stand-in); a creature's is held on its aim      // the gun carried low (a sprint, the armoury's stand-in): the firing elbow stays down
 	float AimPitch = 0.0f;
@@ -146,8 +150,6 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	bool bSnugHold = false;        // (the gun is held the snug way: the first-person firing shoulder goes back from its hand)
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
-	/** Eye position in component space (first person: the shoulders turn with the view about it). */
-	FVector EyeCS = FVector::ZeroVector;
 	FVector GunAxis = FVector::ZeroVector;
 
 	/** How much of the arm / stance solve shows (1 = all; hands coming onto and off a ledge blend through it). */
@@ -355,9 +357,11 @@ public:
 	bool bOneHand = false;
 	/** The gun in the hands is held the snug way (USOGunRigComponent::IsSnugGrip). */
 	bool bSnugHold = false;
-	/** First-person copy of the body: everything but the arms collapses. */
-	bool bArmsOnly = false;
-	bool bCollapseBody = false;
+	/** A handgun: the support hand wraps the firing hand and never slides back along it. */
+	bool bHandgunHold = false;
+	/** Its own player's camera is in this body's head (first person, ASOCharacter::IsHeadHidden): the head is hidden
+	 *  from it by shrinking into its joint, on that player's machine only (others see the whole body). */
+	bool bHideHead = false;
 	/** The gun is carried low (a sprint, the armoury's stand-in): the firing elbow stays by the side. */
 	bool bCarried = false;
 	bool bHeadFree = false;     // the head carries its clip's own motion under the aim (a player's body, the stand-in); a creature's is held on its aim
@@ -373,7 +377,6 @@ public:
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
-	FVector EyeCS = FVector::ZeroVector;
 	/** The way the held gun points, in the mesh's space (zero: no gun): the support hand slides back along it where
 	 *  the arm would not reach. */
 	FVector GunAxis = FVector::ZeroVector;

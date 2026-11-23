@@ -49,9 +49,10 @@ bool FSOMovementDefaultsTest::RunTest(const FString& Parameters)
 
 	const ASOCharacter* Character = GetDefault<ASOCharacter>();
 	TestTrue(TEXT("character uses the SO movement component"), Character->GetSOMovement() != nullptr);
-	const float EyeFromFeet = Character->GetFirstPersonCamera()->GetRelativeLocation().Z + Character->GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+	// (the capsule's eye, until the body has a pose: then the body's own eyes)
+	const float EyeFromFeet = Character->GetCameraBoom()->GetRelativeLocation().Z + Character->GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 	TestEqual(TEXT("eye height ~165 cm"), EyeFromFeet, 165.0f, 1.0f);
-	TestTrue(TEXT("third-person boom collides"), Character->GetThirdPersonBoom()->bDoCollisionTest);
+	TestTrue(TEXT("one camera, on the boom"), Character->GetCamera() && Character->GetCamera()->GetAttachParent() == Character->GetCameraBoom());
 	return true;
 }
 
@@ -270,16 +271,20 @@ bool FSOViewToggleTest::RunTest(const FString& Parameters)
 {
 	SOTest::FTestWorld W;
 	ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 0));
+	// ONE body and ONE camera (the owner, 2026-11-23): first person the camera is in the body's eyes and the body is
+	// seen from them; the third-person test view moves the same camera out behind the shoulder
 	TestTrue(TEXT("first person by default"), C->GetViewMode() == ESOViewMode::FirstPerson);
-	TestTrue(TEXT("first-person camera active"), C->GetFirstPersonCamera()->IsActive());
-	TestTrue(TEXT("body hidden from owner"), C->GetMesh()->bOwnerNoSee);
+	W.Run(0.5f);
+	TestTrue(TEXT("the camera in the body's eyes"), C->GetViewBlend() < 0.01f && C->GetCameraBoom()->TargetArmLength < 1.0f);
+	TestFalse(TEXT("the body seen from its own eyes (one model)"), C->GetMesh()->bOwnerNoSee);
 	C->ToggleViewMode();
+	W.Run(0.6f);
 	TestTrue(TEXT("third person after toggle"), C->GetViewMode() == ESOViewMode::ThirdPerson);
-	TestTrue(TEXT("third-person camera active"), C->GetThirdPersonCamera()->IsActive());
-	TestFalse(TEXT("first-person camera inactive"), C->GetFirstPersonCamera()->IsActive());
+	TestTrue(TEXT("the same camera moved out behind the shoulder"), C->GetViewBlend() > 0.99f && C->GetCameraBoom()->TargetArmLength > 100.0f);
 	TestFalse(TEXT("body visible to owner"), C->GetMesh()->bOwnerNoSee);
 	C->ToggleViewMode();
-	TestTrue(TEXT("back to first person"), C->GetFirstPersonCamera()->IsActive());
+	W.Run(0.6f);
+	TestTrue(TEXT("back in the eyes"), C->GetViewBlend() < 0.01f);
 	return true;
 }
 

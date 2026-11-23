@@ -279,29 +279,22 @@ UStaticMeshComponent* USOGunRigComponent::MakeMesh(FName Name, UStaticMesh* Mesh
 	Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Comp->SetGenerateOverlapEvents(false);
 	Comp->SetMobility(EComponentMobility::Movable);
-	if (bFirstPerson)
-	{
-		Comp->SetOnlyOwnerSee(true);
-		Comp->SetCastShadow(false);
-		Comp->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
-	}
-	else
-	{
-		Comp->SetCastShadow(true);
-		Comp->SetCastHiddenShadow(true); // the gun's shadow stays while its owner looks through first person
-	}
+	// (a part made while the rig is hidden stays hidden: the optic is made again whenever the copy is dressed)
+	Comp->SetVisibility(bShown);
+	Comp->SetOwnerNoSee(bOwnerNoSee);
+	Comp->SetCastShadow(true);
+	Comp->SetCastHiddenShadow(true); // (its shadow stays while a scope's picture hides it from its own player)
 	Comp->RegisterComponent();
 	return Comp;
 }
 
-void USOGunRigComponent::Build(const USOWeaponData* Data, bool bInFirstPerson)
+void USOGunRigComponent::Build(const USOWeaponData* Data)
 {
 	if (bBuilt || !Data || !GetOwner())
 	{
 		return;
 	}
 	bBuilt = true;
-	bFirstPerson = bInFirstPerson;
 
 	GunSpace = NewObject<USceneComponent>(GetOwner(), MakeUniqueObjectName(GetOwner(), USceneComponent::StaticClass(), TEXT("GunSpace")));
 	GunSpace->SetupAttachment(this);
@@ -624,6 +617,7 @@ FVector USOGunRigComponent::GetMuzzleLocation() const
 
 void USOGunRigComponent::SetOwnerNoSeeAll(bool bNoSee)
 {
+	bOwnerNoSee = bNoSee;
 	TArray<USceneComponent*> Children;
 	if (GunSpace)
 	{

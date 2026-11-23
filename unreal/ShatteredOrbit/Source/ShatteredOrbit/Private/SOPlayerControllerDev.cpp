@@ -130,21 +130,21 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 					static_cast<float>(H->GetMesh()->GetBoneLocation(TEXT("hips")).Z) - Floor, Anim->GetPelvisDrop(), Anim->GetCrouchAlpha(), H->bIsCrouched ? TEXT("crouched") : TEXT("standing"),
 					H->GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), Anim->GetLeanPitch(), H->GetVelocity().Size2D(), Anim->Weights[0], Anim->Weights[8], Anim->Weights[1], Anim->Weights[2], Anim->Weights[3], Anim->Weights[9]);
 			}
-			const USkeletalMeshComponent* Arms = H->GetFirstPersonArms();
-			UE_LOG(LogShatteredOrbit, Log, TEXT("  arms visible %d rendered %d hiddenInGame %d bounds %s r=%.0f view %d"), Arms->IsVisible(), Arms->WasRecentlyRendered(0.2f),
-				Arms->bHiddenInGame, *Arms->Bounds.Origin.ToCompactString(), Arms->Bounds.SphereRadius, (int32)H->GetViewMode());
+			const USkeletalMeshComponent* Seen = H->GetMesh();
+			UE_LOG(LogShatteredOrbit, Log, TEXT("  body visible %d rendered %d head hidden %d view %d (camera %.2f out)"), Seen->IsVisible(), Seen->WasRecentlyRendered(0.2f),
+				H->IsHeadHidden() ? 1 : 0, (int32)H->GetViewMode(), H->GetViewBlend());
 			if (const ASOWeapon* W = H->GetWeapon())
 			{
-				const USkeletalMeshComponent* Bodies[2] = { H->GetFirstPersonArms(), H->GetMesh() };
-				const USOGunRigComponent* Rigs[2] = { W->GetFirstPersonRig(), W->GetThirdPersonRig() };
-				for (int32 i = 0; i < 2; ++i)
+				const USkeletalMeshComponent* Bodies[1] = { H->GetMesh() };
+				const USOGunRigComponent* Rigs[1] = { W->GetRig() };
+				for (int32 i = 0; i < 1; ++i)
 				{
 					FTransform R, L;
 					if (Rigs[i] && Rigs[i]->GetHandTargets(R, L))
 					{
 						const FVector Local = H->GetActorTransform().InverseTransformPosition(Rigs[i]->GetComponentLocation());
 						UE_LOG(LogShatteredOrbit, Log, TEXT("  %s rig at %s (actor space) fwd %s | R target %s bone %s | L target %s bone %s"),
-							i == 0 ? TEXT("FP") : TEXT("TP"), *Local.ToCompactString(),
+							TEXT("gun"), *Local.ToCompactString(),
 							*H->GetActorTransform().InverseTransformVector(Rigs[i]->GetForwardVector()).ToCompactString(),
 							*H->GetActorTransform().InverseTransformPosition(R.GetLocation()).ToCompactString(),
 							*H->GetActorTransform().InverseTransformPosition(Bodies[i]->GetBoneLocation(TEXT("hand_R"))).ToCompactString(),
@@ -601,7 +601,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		{
 			ASOCharacter* H = Hero();
 			const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
-			const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr;
+			const USOGunRigComponent* Rig = W ? W->GetRig() : nullptr;
 			if (Rig && H->GetMesh())
 			{
 				const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(Rig, H->GetMesh());
@@ -715,14 +715,14 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{
 				const USOCharacterMovementComponent* M = H->GetSOMovement();
 				const ASOWeapon* W = H->GetWeapon();
-				const USOGunRigComponent* R = W ? W->GetFirstPersonRig() : nullptr;
+				const USOGunRigComponent* R = W ? W->GetRig() : nullptr;
 				const FVector Eye = H->GetEyeTransform(true).GetLocation();
 				UE_LOG(LogShatteredOrbit, Display, TEXT("MVDODGE state=%d mode=%d custom=%d vel=%s arms vis=%d at=%s rig=%s shown=%d fov=%.1f eye=%s stowed=%d fists=%d"),
 					M ? static_cast<int32>(M->GetMovementState()) : -1, M ? static_cast<int32>(M->MovementMode.GetValue()) : -1, M ? M->CustomMovementMode : -1,
-					*H->GetVelocity().ToString(), H->GetFirstPersonArms() ? H->GetFirstPersonArms()->IsVisible() : -1,
-					H->GetFirstPersonArms() ? *H->GetFirstPersonArms()->GetComponentLocation().ToString() : TEXT("-"),
+					*H->GetVelocity().ToString(), H->GetMesh() ? H->GetMesh()->IsVisible() : -1,
+					H->GetMesh() ? *H->GetMesh()->GetComponentLocation().ToString() : TEXT("-"),
 					R ? *R->GetComponentLocation().ToString() : TEXT("-"), R ? R->IsVisible() : -1,
-					H->GetFirstPersonCamera() ? H->GetFirstPersonCamera()->FieldOfView : -1.0f, *Eye.ToString(), H->IsWeaponStowed(), H->IsFists());
+					H->GetCamera() ? H->GetCamera()->FieldOfView : -1.0f, *Eye.ToString(), H->IsWeaponStowed(), H->IsFists());
 			}
 			return true;
 		});
@@ -840,7 +840,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				Out += FString::Printf(TEXT(" %s %s"), Bone, *Str(At(Bone)));
 			}
 			const ASOWeapon* W = H->GetWeapon();
-			if (const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr; Rig && Rig->IsBuilt())
+			if (const USOGunRigComponent* Rig = W ? W->GetRig() : nullptr; Rig && Rig->IsBuilt())
 			{
 				const FBox B = Rig->GetRigBounds();
 				const FTransform R = Rig->GetComponentTransform();
@@ -942,6 +942,144 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			}
 			// (the next gun starts relaxed again: nothing has happened with it)
 			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } FaceSun(); });
+			Do(1.0f, []() {});
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 48)
+	{
+		// The gun in the hands (the owner's ULTIMATE rule, 2026-11-23: "all players hands must always at all times be on
+		// this [the handle] ... to ensure we get no floating guns"; files ih_<gun>_*): from the player's own eyes (first
+		// person: the game) and beside and in front of the body (how others see it): at the ready, on the sights (the cheek
+		// on the stock), a reload from empty at seven moments; then a burst, a strafe each way and the sights in and out
+		// (the owner: "the gun or its scope will double"). Each picture logs INHAND: every hand's distance from its hold
+		// and the palm's gap. -SOGuns=<archetype>[,...].
+		FString List = TEXT("rifle,auto,smg,pistol,shotgun,sniper,hmg,rocket");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		auto Cam = [this, Hero](int32 Which)
+		{
+			ASOCharacter* H = Hero();
+			if (!H || Which < 0)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			// 0 beside the firing side, 1 in front and to the right
+			const FVector Focus = H->GetMesh()->GetBoneLocation(TEXT("spine")) + FVector(0.0f, 0.0f, 20.0f);
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + (Which == 0 ? 95.0f : 30.0f), 0.0f);
+			const FVector Eye = Focus + Around.Vector() * 260.0f + FVector(0.0f, 0.0f, 10.0f);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* C = Cast<ACameraActor>(CaptureCamera))
+			{
+				C->GetCameraComponent()->SetFieldOfView(45.0f);
+				C->GetCameraComponent()->SetConstraintAspectRatio(false);
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		auto InHand = [this, Hero](const FString& Label)
+		{
+			const ASOCharacter* H = Hero();
+			const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
+			const USOGunRigComponent* Rig = W ? W->GetRig() : nullptr;
+			if (!Rig || !H->GetMesh())
+			{
+				return true;
+			}
+			FTransform R, L;
+			Rig->GetHandTargets(R, L);
+			const USkeletalMeshComponent* M = H->GetMesh();
+			const float OffR = static_cast<float>(FVector::Dist(M->GetBoneLocation(TEXT("hand_R")), R.GetLocation()));
+			const float OffL = static_cast<float>(FVector::Dist(M->GetBoneLocation(TEXT("hand_L")), L.GetLocation()));
+			const USOLocomotionAnimInstance::FHoldReport Rep = USOLocomotionAnimInstance::MeasureHold(Rig, M);
+			const float* G = W->GetPose().Gun;
+			UE_LOG(LogShatteredOrbit, Display, TEXT("INHAND %s: reload %d firing hand %.1f cm off its hold, palm %.1f | support %.1f cm off, palm %.1f | reach %.2f/%.2f | gun moves %.2f %.2f %.2f %.2f %.2f %.2f"),
+				*Label, W->IsReloading() ? 1 : 0, OffR, Rep.PalmGap[0], OffL, Rep.PalmGap[1], Rep.Reach[0], Rep.Reach[1], G[0], G[1], G[2], G[3], G[4], G[5]);
+			return true;
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+			}
+			View(ESOViewMode::FirstPerson);
+		});
+		for (const FString& Gun : Guns)
+		{
+			Act([=, this]()
+			{
+				if (ASOCharacter* H = Hero())
+				{
+					FRandomStream Rng(FCrc::StrCrc32(*Gun));
+					FSOWeaponInstance Wi = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+					Wi.Sight = TEXT("reflex");                      // (a reflex sight where the gun takes one: the owner's doubled sight)
+					H->EquipInstance(Wi);
+					H->MarkCombat();
+				}
+				Cam(-1);
+			});
+			Do(1.2f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
+			Snap(0.1f, FString::Printf(TEXT("ih_%s_ready_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s ready"), *Gun)); });
+			Act([=, this]() { Cam(0); });
+			Snap(0.0f, FString::Printf(TEXT("ih_%s_ready_side"), *Gun));
+			// on the sights, standing: the cheek on the stock, from the eyes and from beside and in front
+			Act([=, this]() { Cam(-1); Aim(true); });
+			Snap(0.9f, FString::Printf(TEXT("ih_%s_aim_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s aimed"), *Gun)); });
+			Act([=, this]() { Cam(0); });
+			Snap(0.0f, FString::Printf(TEXT("ih_%s_aim_side"), *Gun));
+			Act([=, this]() { Cam(1); });
+			Snap(0.0f, FString::Printf(TEXT("ih_%s_aim_front"), *Gun));
+			Act([=, this]() { Cam(-1); Aim(false); });
+			Do(0.6f, []() {});
+			// looking far down and far up (the hands stay on the gun)
+			for (const float Pitch : { -60.0f, 60.0f })
+			{
+				Act([=, this]() { SetControlRotation(FRotator(Pitch, GetControlRotation().Yaw, 0.0f)); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
+				Snap(0.7f, FString::Printf(TEXT("ih_%s_look_%s_cam"), *Gun, Pitch < 0.0f ? TEXT("down") : TEXT("up")),
+					[=]() { return InHand(FString::Printf(TEXT("%s look %s"), *Gun, Pitch < 0.0f ? TEXT("down") : TEXT("up"))); });
+				Act([=, this]() { Cam(0); });
+				Snap(0.0f, FString::Printf(TEXT("ih_%s_look_%s_side"), *Gun, Pitch < 0.0f ? TEXT("down") : TEXT("up")));
+				Act([=, this]() { Cam(-1); });
+			}
+			Act([=, this]() { SetControlRotation(FRotator(0.0f, GetControlRotation().Yaw, 0.0f)); });
+			Do(0.6f, []() {});
+			// a reload from empty, seven moments, each from the player's camera, beside the body and in front
+			Act([=, this]() { EmptyReload(); });
+			float Last = 0.0f;
+			for (const float At : { 0.15f, 0.4f, 0.7f, 1.0f, 1.4f, 1.9f, 2.5f })
+			{
+				const int32 Moment = FMath::RoundToInt(At * 100.0f);
+				Do(At - Last, [=, this]() { Cam(-1); });
+				Snap(0.0f, FString::Printf(TEXT("ih_%s_reload_%03d_cam"), *Gun, Moment), [=]() { return InHand(FString::Printf(TEXT("%s reload %.2f"), *Gun, At)); });
+				Act([=, this]() { Cam(0); });
+				Snap(0.0f, FString::Printf(TEXT("ih_%s_reload_%03d_side"), *Gun, Moment));
+				Act([=, this]() { Cam(1); });
+				Snap(0.0f, FString::Printf(TEXT("ih_%s_reload_%03d_front"), *Gun, Moment));
+				Last = At + 0.2f;                                    // (the two Acts and three Snaps between moments)
+			}
+			Do(1.5f, [=, this]() { Cam(-1); });
+			// a burst, a strafe each way, the sights in and out: from the player's own camera
+			Act([=, this]() { Fire(true); });
+			Do(0.35f, [=, this]() { Fire(false); CaptureMove = FVector2D(-1.0f, 0.0f); });
+			Snap(0.4f, FString::Printf(TEXT("ih_%s_strafe_l_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s strafe left"), *Gun)); });
+			Act([=, this]() { Aim(true); });
+			Snap(0.35f, FString::Printf(TEXT("ih_%s_strafe_l_aim_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s strafe left aimed"), *Gun)); });
+			Act([=, this]() { Aim(false); CaptureMove = FVector2D(1.0f, 0.0f); });
+			Snap(0.35f, FString::Printf(TEXT("ih_%s_strafe_r_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s strafe right"), *Gun)); });
+			Act([=, this]() { Aim(true); });
+			Snap(0.25f, FString::Printf(TEXT("ih_%s_strafe_r_aim_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s strafe right aimed"), *Gun)); });
+			Act([=, this]() { Aim(false); });
+			Snap(0.2f, FString::Printf(TEXT("ih_%s_strafe_r_out_cam"), *Gun), [=]() { return InHand(FString::Printf(TEXT("%s strafe right out"), *Gun)); });
+			Act([=, this]() { CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->CancelCombat(); } });
 			Do(1.0f, []() {});
 		}
 		Do(0.5f, []() {});
@@ -1931,7 +2069,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 							return false;
 						}
 						const ASOWeapon* W = Weapon();
-						const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr;
+						const USOGunRigComponent* Rig = W ? W->GetRig() : nullptr;
 						if (Pass == 2 && Rig && CaptureCamera)
 						{
 							// from the gun's left, a little ahead, above and behind its middle
@@ -2063,7 +2201,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Act([=, this]()
 			{
 				const ASOCharacter* H = Hero();
-				const USOGunRigComponent* Rig = H && H->GetWeapon() ? H->GetWeapon()->GetFirstPersonRig() : nullptr;
+				const USOGunRigComponent* Rig = H && H->GetWeapon() ? H->GetWeapon()->GetRig() : nullptr;
 				if (Rig && Rig->IsBuilt())
 				{
 					const FBox B = Rig->GetRigBounds();
@@ -2136,7 +2274,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				PC->SetControlRotation(PC->GetControlRotation() + FRotator(0.0f, Drift->Yaw * Dt, 0.0f));
 			}
 			const bool bFirst = H->GetViewMode() == ESOViewMode::FirstPerson;
-			if (const USOGunRigComponent* Rig = bFirst ? W->GetFirstPersonRig() : W->GetThirdPersonRig())
+			if (const USOGunRigComponent* Rig = bFirst ? W->GetRig() : W->GetRig())
 			{
 				Drift->LastRig = Drift->bPending || Drift->bLastRig ? Drift->PendingRig : Rig->GetComponentTransform();
 				Drift->bLastRig = true;
@@ -2156,7 +2294,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Drift->bPending = false;
 			ASOCharacter* H = Cast<ASOCharacter>(PC->GetPawn());
 			const bool bFirst = Drift->bPendingFirst;
-			const USkeletalMeshComponent* Body = H ? (bFirst ? H->GetFirstPersonArms() : H->GetMesh()) : nullptr;
+			const USkeletalMeshComponent* Body = H ? (bFirst ? H->GetMesh() : H->GetMesh()) : nullptr;
 			if (!Body)
 			{
 				return;
@@ -2239,8 +2377,8 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				return;
 			}
 			const bool bFirst = H->GetViewMode() == ESOViewMode::FirstPerson;
-			const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(bFirst ? W->GetFirstPersonRig() : W->GetThirdPersonRig(),
-				bFirst ? H->GetFirstPersonArms() : H->GetMesh());
+			const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(bFirst ? W->GetRig() : W->GetRig(),
+				bFirst ? H->GetMesh() : H->GetMesh());
 			UE_LOG(LogShatteredOrbit, Log, TEXT("HOLDFIT %s %s: %s"), bFirst ? TEXT("FP") : TEXT("TP"), Label, *R.ToString());
 		};
 		const TSharedRef<FTransform> Start = MakeShared<FTransform>();
@@ -2257,13 +2395,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				if (ASOWeapon* Gun = H->GetWeapon())
 				{
 					UWorld* World = GetWorld();
-					for (USOGunRigComponent* Rig : { Gun->GetFirstPersonRig(), Gun->GetThirdPersonRig() })
+					if (USOGunRigComponent* Rig = Gun->GetRig())
 					{
 						Rig->TransformUpdated.AddLambda([Drift, World, Rig, Gun](USceneComponent* C, EUpdateTransformFlags Flags, ETeleportType)
 						{
 							if (Drift->Phase == TEXT("fire") && World)
 							{
-								UE_LOG(LogShatteredOrbit, Log, TEXT("RIGMOVE %s frame %llu group %d flags %d at %s"), Rig == Gun->GetFirstPersonRig() ? TEXT("FP") : TEXT("TP"),
+								UE_LOG(LogShatteredOrbit, Log, TEXT("RIGMOVE %s frame %llu group %d flags %d at %s"), TEXT("gun"),
 									GFrameCounter, static_cast<int32>(World->TickGroup), static_cast<int32>(Flags), *C->GetComponentLocation().ToCompactString());
 							}
 						});
@@ -2389,19 +2527,19 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		auto Fore = [Weapon](bool bFirst)
 		{
 			const ASOWeapon* W = Weapon();
-			const USOGunRigComponent* Rig = W ? (bFirst ? W->GetFirstPersonRig() : W->GetThirdPersonRig()) : nullptr;
+			const USOGunRigComponent* Rig = W ? (bFirst ? W->GetRig() : W->GetRig()) : nullptr;
 			return Rig ? Rig->GetLeftGrip().Wrist + FVector(0, 4.0f, 2.0f) : FVector(28.0f, 0, 2.0f);
 		};
 		// ---- third person
 		Do(3.0f, [=, this]() {});
 		for (const FView& V : GripViews)
 		{
-			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetThirdPersonRig() : nullptr, FVector(-1, 0, -5), V.Dir, V.Distance, 58.0f); });
+			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetRig() : nullptr, FVector(-1, 0, -5), V.Dir, V.Distance, 58.0f); });
 			Snap(0.7f, Tag + TEXT("third_") + V.Name);
 		}
 		for (const FView& V : ForeViews)
 		{
-			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetThirdPersonRig() : nullptr, Fore(false), V.Dir, V.Distance, 40.0f); });
+			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetRig() : nullptr, Fore(false), V.Dir, V.Distance, 40.0f); });
 			Snap(0.7f, Tag + TEXT("third_") + V.Name);
 		}
 		// ---- first person as the player sees it
@@ -2424,13 +2562,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				return;
 			}
 			TArray<USceneComponent*> Shown, Some;                  // (GetChildrenComponents empties what it is given)
-			if (USkeletalMeshComponent* Arms = H->GetFirstPersonArms())
+			if (USkeletalMeshComponent* Seen = H->GetMesh())
 			{
-				Shown.Add(Arms);
-				Arms->GetChildrenComponents(true, Some);
+				Shown.Add(Seen);
+				Seen->GetChildrenComponents(true, Some);
 				Shown.Append(Some);
 			}
-			if (USOGunRigComponent* Rig = W->GetFirstPersonRig())
+			if (USOGunRigComponent* Rig = W->GetRig())
 			{
 				Rig->GetChildrenComponents(true, Some);
 				Shown.Append(Some);
@@ -2444,19 +2582,19 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				}
 			}
 			H->GetMesh()->SetVisibility(false, true);             // (the body would stand in the picture)
-			if (USOGunRigComponent* Third = W->GetThirdPersonRig())
+			if (USOGunRigComponent* Third = W->GetRig())
 			{
 				Third->SetShown(false);
 			}
 		});
 		for (const FView& V : GripViews)
 		{
-			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetFirstPersonRig() : nullptr, FVector(-1, 0, -5), V.Dir, V.Distance, 58.0f); });
+			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetRig() : nullptr, FVector(-1, 0, -5), V.Dir, V.Distance, 58.0f); });
 			Snap(0.7f, Tag + TEXT("arms_") + V.Name);
 		}
 		for (const FView& V : ForeViews)
 		{
-			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetFirstPersonRig() : nullptr, Fore(true), V.Dir, V.Distance, 40.0f); });
+			Act([=, this]() { const ASOWeapon* W = Weapon(); RigCam(W ? W->GetRig() : nullptr, Fore(true), V.Dir, V.Distance, 40.0f); });
 			Snap(0.7f, Tag + TEXT("arms_") + V.Name);
 		}
 		Act([=, this]()
@@ -2464,21 +2602,21 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			if (ASOCharacter* H = Hero())
 			{
 				H->GetMesh()->SetVisibility(true, true);
-				if (const ASOWeapon* W = Weapon(); W && W->GetThirdPersonRig())
+				if (const ASOWeapon* W = Weapon(); W && W->GetRig())
 				{
-					W->GetThirdPersonRig()->SetShown(true);
+					W->GetRig()->SetShown(true);
 				}
 				// what was fitted and how it holds: logged for the record
 				const ASOWeapon* W = Weapon();
-				for (USkeletalMeshComponent* Body : { H->GetFirstPersonArms(), H->GetMesh() })
+				if (USkeletalMeshComponent* Body = H->GetMesh())
 				{
-					const bool bArms = Body != H->GetMesh();
+					const bool bArms = false;
 					if (const USOLocomotionAnimInstance* Anim = Body ? Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance()) : nullptr)
 					{
 						UE_LOG(LogShatteredOrbit, Display, TEXT("Hold: %s fitted %d, offsets R %s L %s"), bArms ? TEXT("arms") : TEXT("body"),
 							Anim->HasFittedGrip() ? 1 : 0, *Anim->GetFittedOffset(false).ToCompactString(), *Anim->GetFittedOffset(true).ToCompactString());
 						UE_LOG(LogShatteredOrbit, Display, TEXT("Hold: %s %s"), bArms ? TEXT("arms") : TEXT("body"),
-							*USOLocomotionAnimInstance::MeasureHold(W ? (bArms ? W->GetFirstPersonRig() : W->GetThirdPersonRig()) : nullptr, Body).ToString());
+							*USOLocomotionAnimInstance::MeasureHold(W ? (bArms ? W->GetRig() : W->GetRig()) : nullptr, Body).ToString());
 					}
 				}
 			}
@@ -2511,7 +2649,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			FVector Target = Origin + T.TransformVectorNoScale(Local);
 			// (the muzzle shot looks at the gun's OWN muzzle, a little back along the barrel: a fixed point ahead of
 			// the middle was the rifle's muzzle and empty air in front of a handgun or an SMG)
-			const USOGunRigComponent* Rig = W->GetThirdPersonRig();
+			const USOGunRigComponent* Rig = W->GetRig();
 			if (bMuzzle && Rig)
 			{
 				Target = Rig->GetMuzzleLocation() + T.TransformVectorNoScale(Local);
@@ -3651,7 +3789,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			FVector Focus = H->GetActorLocation() + FVector(0, 0, 40.0f);
 			if (const ASOWeapon* W = H->GetWeapon())
 			{
-				if (const USOGunRigComponent* Rig = W->GetThirdPersonRig())
+				if (const USOGunRigComponent* Rig = W->GetRig())
 				{
 					// 0 = the whole hold, 1 = the firing hand on the grip, 2 = the support hand
 					Focus = On == 1 ? Rig->GetComponentLocation() - Rig->GetForwardVector() * 1.0f - Rig->GetUpVector() * 5.0f

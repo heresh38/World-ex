@@ -132,9 +132,9 @@ bool FSORifleTest::RunTest(const FString& Parameters)
 	const USOWeaponData* Data = Rifle->GetData();
 	TestEqual(TEXT("magazine"), Rifle->GetMag(), 30);
 	TestEqual(TEXT("reserve"), Rifle->GetReserve(), 300);
-	TestTrue(TEXT("first-person rig built"), Rifle->GetFirstPersonRig()->IsBuilt());
-	TestNotNull(TEXT("mag part"), Rifle->GetFirstPersonRig()->GetPart(TEXT("mag")));
-	TestNotNull(TEXT("bolt part"), Rifle->GetFirstPersonRig()->GetPart(TEXT("bolt")));
+	TestTrue(TEXT("the gun built"), Rifle->GetRig()->IsBuilt());
+	TestNotNull(TEXT("mag part"), Rifle->GetRig()->GetPart(TEXT("mag")));
+	TestNotNull(TEXT("bolt part"), Rifle->GetRig()->GetPart(TEXT("bolt")));
 
 	// 600 rpm for one second: 10 rounds (+1 for the first shot at t = 0).
 	Rifle->StartFire();
@@ -149,11 +149,11 @@ bool FSORifleTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("reloading"), Rifle->IsReloading());
 	TestEqual(TEXT("tactical reload time"), Rifle->GetReloadDuration(), Data->ReloadTime, 0.01f);
 	bool bMagHidden = false, bSpareShown = false;
-	UStaticMeshComponent* Mag = Rifle->GetFirstPersonRig()->GetPart(TEXT("mag"));
+	UStaticMeshComponent* Mag = Rifle->GetRig()->GetPart(TEXT("mag"));
 	W.Run(Data->ReloadTime + 0.1f, [&]()
 	{
 		bMagHidden |= Mag && !Mag->IsVisible();
-		bSpareShown |= Rifle->GetFirstPersonRig()->GetSpare() && Rifle->GetFirstPersonRig()->GetSpare()->IsVisible();
+		bSpareShown |= Rifle->GetRig()->GetSpare() && Rifle->GetRig()->GetSpare()->IsVisible();
 	});
 	TestTrue(TEXT("old mag dropped"), bMagHidden);
 	TestTrue(TEXT("spare mag brought in"), bSpareShown);

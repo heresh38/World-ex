@@ -33,7 +33,6 @@ struct FSOFxAnchor
 	TWeakObjectPtr<const ASOWeapon> Gun;
 	FVector Local = FVector::ZeroVector;  // the point, in the gun's rig frame
 	FVector Last = FVector::ZeroVector;   // where it was last frame (world)
-	bool bViewmodel = false;              // the first-person gun (its rig is drawn in the viewmodel's space)
 	bool IsSet() const { return Gun.IsValid(); }
 };
 
@@ -87,7 +86,7 @@ public:
 	/** Muzzle flash along Dir (star + light + a wisp of smoke). */
 	/** The flash at the muzzle: tongues of flame in the gun's own colour, a hot core, a wisp of smoke. bThroughScope:
 	 * the shooter is looking down a magnified optic (a flash at arm's length fills the lens: only a flicker is drawn). */
-	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f, bool bViewmodel = false,
+	void MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale = 1.0f, bool bOwnEyes = false,
 		const FLinearColor& Color = FLinearColor(1.0f, 0.74f, 0.4f), bool bThroughScope = false, EFlash Style = EFlash::Rifle);
 
 	// --- Plasma: what a light gun fires. Not a bullet: a bolt you can see fly. -------------------------------------
@@ -99,20 +98,20 @@ public:
 		const FVector& Carry = FVector::ZeroVector);
 
 	// --- A light gun's reload (and its heat): what it looks like as the gun works. All of it carries the holder's
-	// velocity (Carry), so it stays with the gun; bViewmodel = the first-person gun, a hand's breadth from the eye. ---
+	// velocity (Carry), so it stays with the gun; bOwnEyes = seen by its own player from the body's eyes (smaller, the light kept off the hands). ---
 	/** The heat purged out of an open flap At, along Out, for Duration seconds: a jet of glowing gas that blooms and
 	 *  rises, a white-hot core at the opening, sparks thrown out, its light on the hands. Strength 1 = a reload's
 	 *  purge; a little after a long burst (the gun venting its heat by itself). */
-	void ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel,
+	void ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bOwnEyes,
 		const FSOFxAnchor& Anchor = FSOFxAnchor());
 	/** Energy drawn in from the air through an open flap At (Out = the way it faces) for Duration seconds: motes of
 	 *  light appearing all round and streaming in, a glow at the opening that grows as it fills. */
-	void ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel,
+	void ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bOwnEyes,
 		const FSOFxAnchor& Anchor = FSOFxAnchor());
 	/** A battery's lock releasing: a puff of vapour and a spit of light round its seat. */
-	void ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor = FSOFxAnchor());
+	void ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bOwnEyes, const FSOFxAnchor& Anchor = FSOFxAnchor());
 	/** The gun charging up as it closes: a ring of its light swelling round it and a flash. */
-	void ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor = FSOFxAnchor());
+	void ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bOwnEyes, const FSOFxAnchor& Anchor = FSOFxAnchor());
 
 	/** Plasma landing: it splashes: a flare, drops of it thrown out ALONG the surface, a breath of vapour, a glow on
 	 *  the place that cools over half a second, and light by its size (a pellet's is small: a shotgun's pattern must
@@ -120,7 +119,7 @@ public:
 	void PlasmaImpact(const FVector& Point, const FVector& Normal, const FLinearColor& Color, float Size = 1.0f, float Delay = 0.0f, bool bFlesh = false);
 
 	/** The muzzle of a light gun as it fires: a bloom of its light and a few motes thrown forward. No flame, no smoke. */
-	void PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope = false);
+	void PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, const FLinearColor& Color, bool bThroughScope = false);
 	int32 GetPlasmaBolts() const { return PlasmaBolts; }
 
 	// --- The Sarketh's slugs (docs/orion/SARKETH_WEAPONS.md): a crystalline slug in an amber field ----------------
@@ -133,7 +132,7 @@ public:
 	 *  (into a body: the flash and sparks only). Splash > 0 (a Breach Charge): the whole burst, that radius (cm). */
 	void SlugImpact(const FVector& Point, const FVector& Normal, float Size = 1.0f, float Delay = 0.0f, bool bFlesh = false, float Splash = 0.0f);
 	/** The muzzle: a hard white-gold flash and the amber field tearing off the slug; no flame, no smoke. */
-	void SlugFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, float Bright = 1.0f, bool bThroughScope = false);
+	void SlugFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, float Bright = 1.0f, bool bThroughScope = false);
 	int32 GetSlugs() const { return Slugs; }
 	/** (where and when plasma last lit what it struck: a pattern of pellets lights the place once) */
 	FVector LastPlasmaLightAt = FVector::ZeroVector;
@@ -201,7 +200,7 @@ public:
 	// --- Sovereign: the top rarity's own signature (the owner's guide: "exotic weapon: unique and memorable; exotic
 	// projectile: unique and distinctive"; our top rarity is Sovereign). Gold, on top of the gun's own effects. ------
 	/** A crown of gold opening round the bore as it fires, a halo, two blades of light forward. */
-	void SovereignFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, bool bThroughScope);
+	void SovereignFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, bool bThroughScope);
 	/** Its round's way marked as it passes: a helix of gold motes wound round the line, appearing as the round goes
 	 *  by, and an orb of gold riding the round's head. Carry: the shooter's velocity (the line is drawn in its frame). */
 	void SovereignTrail(const FVector& From, const FVector& To, float Speed, const FVector& Carry = FVector::ZeroVector);

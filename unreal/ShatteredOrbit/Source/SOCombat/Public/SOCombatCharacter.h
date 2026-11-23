@@ -277,17 +277,13 @@ public:
 	/** 1 at the hip, smaller while aiming / crouched, larger while moving or airborne. */
 	virtual float GetSpreadScale() const { return 1.0f; }
 
-	/** Attach points for the weapon's first-person and third-person rigs. */
-	virtual USceneComponent* GetFirstPersonWeaponParent() const { return nullptr; }
-	virtual FName GetThirdPersonWeaponSocket() const { return NAME_None; }
-	/** A component the third-person rig attaches to instead of a socket (held guns); null = use the socket. */
-	virtual USceneComponent* GetThirdPersonWeaponParent() const { return nullptr; }
+	/** Where the gun is held: a socket on the body, or a component it is placed on every frame instead (a held gun:
+	 *  the body's arms reach for its grips); null = the socket. */
+	virtual FName GetWeaponSocket() const { return NAME_None; }
+	virtual USceneComponent* GetWeaponParent() const { return nullptr; }
 
-	/** World point where a point of the first-person viewmodel appears on screen (the viewmodel renders with its own
-	 *  field of view); effects such as the muzzle flash are placed there. */
-	virtual FVector ViewmodelToWorld(const FVector& ViewmodelPoint) const { return ViewmodelPoint; }
-
-	/** True while the local player sees this character's first-person viewmodel. */
+	/** True while this machine's player looks out of this character's own eyes (first person: the body's own arms and
+	 *  gun are what it sees). */
 	virtual bool IsFirstPersonView() const { return false; }
 
 	/** A shot left the muzzle (all machines): recoil, viewmodel kick. */

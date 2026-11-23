@@ -782,7 +782,7 @@ void ASOEnemy::BeginPlay()
 	NextIdleVoice = GetWorld()->GetTimeSeconds() + FMath::FRandRange(1.0f, 8.0f);
 }
 
-USceneComponent* ASOEnemy::GetThirdPersonWeaponParent() const
+USceneComponent* ASOEnemy::GetWeaponParent() const
 {
 	return GunHold;
 }
@@ -988,7 +988,7 @@ bool ASOEnemy::HasLineOfFire(const AActor* Other) const
 		return false;
 	}
 	const ASOWeapon* Gun = GetWeapon();
-	const USOGunRigComponent* Rig = Gun ? Gun->GetThirdPersonRig() : nullptr;
+	const USOGunRigComponent* Rig = Gun ? Gun->GetRig() : nullptr;
 	if (Rig && Rig->IsBuilt())
 	{
 		const FVector Muzzle = Rig->GetMuzzleLocation();
@@ -1045,7 +1045,7 @@ void ASOEnemy::Voice(FName Kind, float Volume)
 void ASOEnemy::UpdateGunHold(float DeltaSeconds)
 {
 	const ASOWeapon* W = GetWeapon();
-	const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr;
+	const USOGunRigComponent* Rig = W ? W->GetRig() : nullptr;
 	if (!Rig)
 	{
 		return;

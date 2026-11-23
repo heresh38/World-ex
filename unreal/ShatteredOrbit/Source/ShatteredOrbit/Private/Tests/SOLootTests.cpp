@@ -300,7 +300,7 @@ bool FSOEveryArchetypeTest::RunTest(const FString& Parameters)
 		}
 		W.Run(0.3f);
 		const USOWeaponData* Data = Gun->GetData();
-		TestTrue(*FString::Printf(TEXT("%s: both rigs built"), *Name), Gun->GetFirstPersonRig()->IsBuilt() && Gun->GetThirdPersonRig()->IsBuilt());
+		TestTrue(*FString::Printf(TEXT("%s: the gun built"), *Name), Gun->GetRig()->IsBuilt());
 		// one trigger pull: pellets / burst
 		const int32 InFlight = Rounds->GetNumInFlight();
 		const int32 Shots = Gun->GetShotsFired();

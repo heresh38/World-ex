@@ -167,7 +167,7 @@ bool FSOCreatorBodyTest::RunTest(const FString& Parameters)
 	USOInventoryComponent* Inv = FreshInventory();
 	Body->SetOutfit(Inv->GetOutfit());
 	W.Run(0.1f);
-	const USkeletalMeshComponent* Suit = Body->GetWornPiece(TEXT("suit"), false);
+	const USkeletalMeshComponent* Suit = Body->GetWornPiece(TEXT("suit"));
 	TestNotNull(TEXT("the undersuit is worn"), Suit);
 	FSOOutfit Look = Inv->GetOutfit();
 	Look.FaceKeys = { TEXT("jaw"), TEXT("ear_out") };
@@ -175,7 +175,7 @@ bool FSOCreatorBodyTest::RunTest(const FString& Parameters)
 	Look.SkinTone = FLinearColor(0.44f, 0.31f, 0.23f, 1.0f);
 	Look.HairTone = FLinearColor(0.18f, 0.12f, 0.065f, 1.0f);
 	Body->SetOutfit(Look);
-	TestTrue(TEXT("a look alone dresses nothing again"), Body->GetWornPiece(TEXT("suit"), false) == Suit);
+	TestTrue(TEXT("a look alone dresses nothing again"), Body->GetWornPiece(TEXT("suit")) == Suit);
 	TestEqual(TEXT("the jaw's morph"), Body->GetMesh()->GetMorphTarget(TEXT("face_jaw")), 0.7f);
 	TestEqual(TEXT("the ears' morph"), Body->GetMesh()->GetMorphTarget(TEXT("face_ear_out")), -0.4f);
 	bool bSkin = false, bHair = false, bBrows = false;
@@ -199,7 +199,7 @@ bool FSOCreatorBodyTest::RunTest(const FString& Parameters)
 		}
 	}
 	// (the hair is a piece of the hair slot where the body has hairstyles to choose from)
-	if (const USkeletalMeshComponent* Hair = Body->GetWornPiece(TEXT("hair"), false))
+	if (const USkeletalMeshComponent* Hair = Body->GetWornPiece(TEXT("hair")))
 	{
 		for (int32 i = 0; i < Hair->GetNumMaterials(); ++i)
 		{
@@ -277,7 +277,7 @@ bool FSOCreatorHairTest::RunTest(const FString& Parameters)
 	}
 	Body->SetOutfit(Inv->GetOutfit());
 	W.Run(0.1f);
-	const USkeletalMeshComponent* Hair = Body->GetWornPiece(TEXT("hair"), false);
+	const USkeletalMeshComponent* Hair = Body->GetWornPiece(TEXT("hair"));
 	TestTrue(TEXT("the crop is worn"), Hair && Hair->GetSkeletalMeshAsset() && Hair->GetSkeletalMeshAsset()->GetName().Contains(TEXT("hair_crop")));
 	FLinearColor Mask = FLinearColor::Black;
 	bool bFace = false;
@@ -294,7 +294,7 @@ bool FSOCreatorHairTest::RunTest(const FString& Parameters)
 	Inv->SetHairStyle(TEXT("slick"));
 	Body->SetOutfit(Inv->GetOutfit());
 	W.Run(0.1f);
-	const USkeletalMeshComponent* Slick = Body->GetWornPiece(TEXT("hair"), false);
+	const USkeletalMeshComponent* Slick = Body->GetWornPiece(TEXT("hair"));
 	TestTrue(TEXT("the style changes what is worn"), Slick && Slick->GetSkeletalMeshAsset() && Slick->GetSkeletalMeshAsset()->GetName().Contains(TEXT("hair_slick")));
 	// the face's sliders reach the hair (its roots ride the forehead)
 	Inv->SetHairStyle(TEXT("swept"));
@@ -303,7 +303,7 @@ bool FSOCreatorHairTest::RunTest(const FString& Parameters)
 	Look.FaceValues = { 0.8f };
 	Body->SetOutfit(Look);
 	W.Run(0.1f);
-	if (const USkeletalMeshComponent* Swept = Body->GetWornPiece(TEXT("hair"), false))
+	if (const USkeletalMeshComponent* Swept = Body->GetWornPiece(TEXT("hair")))
 	{
 		if (Swept->GetSkeletalMeshAsset() && Swept->GetSkeletalMeshAsset()->FindMorphTarget(TEXT("face_forehead")))
 		{

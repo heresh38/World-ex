@@ -50,6 +50,32 @@ existing classes, never second systems.
   making, not a human rifle in alien colours. Budget: up to 200,000 triangles a gun (the owner raised it from 60k on
   2026-11-15: "the weapons are ... the center focus of the player so the must look amazing"); guns others hold will
   need lighter LOD copies.
+- **The game is FIRST PERSON, completely and always** (the owner, 2026-11-23, word for word: "the game will be in first
+  person remember this and save this rule, we only use third person now to test on how others will see our player and how
+  we see others but the game will be in first person completely always"). Third person is a test view only (T): how the
+  player looks to others, how others look.
+- **ONE model, ONE camera** (the owner, 2026-11-23: "i want one copy ... one model and one camera that moves from player
+  head to behind player ... i do not want these 2 models as this will cause lots of issues later on too and is just lazy
+  writing and should not be done again"). The player is one body holding one gun; first person is that body's own arms
+  and gun seen from its eyes (its head hidden from its own player's camera only); the one camera sits at the eyes in
+  first person and moves out behind the shoulder for the third-person test view. Never a second copy of arms, a gun or
+  anything else for one view.
+- **ULTIMATE RULE: the hands are always on the gun** (the owner, 2026-11-23, word for word: "this is an ultimate rule
+  remember it always for all current and future guns, every single gun must have a place where the players hand hold it
+  like the handle, all guns must have this and all players hands must always at all times be on this. this is to ensure
+  we get no floating guns"). Every gun has a handle; while a gun is in the hands the firing hand is ON it in every state
+  and both views (idle, relaxed, ready, aiming, firing, every moment of a reload, walking, sprinting, jumping, sliding,
+  crouching, turning, looking up and down): the gun is placed where the hand can be, never the hand chasing a gun out of
+  its reach. The support hand is on the gun too (its hold, or the part a reload works). Test
+  `ShatteredOrbit.Hold.AlwaysInHand`.
+- **The body moves only as a human body can** (the owner, 2026-11-23, word for word: "head/arms/legs/body bends a normal
+  amount not crazy" and "these rules should always apply, the player should not be bending any part of their body in a
+  way a normal human cant or in a way harmful to a humans"): every joint of the player's body stays inside a normal,
+  healthy human range of motion in every state and both views, whatever bends it (a clip, the stance, an IK, the aim):
+  the neck and head, the spine, the shoulders, the elbows (never past straight, never backward), the wrists, the
+  fingers, the hips, the knees (never past straight, never in or backward), the ankles. Nothing is ever solved by
+  bending a joint further: the gun, the camera or the stance gives way instead (on the sights only the camera moves to
+  the sight line, never the head or the eyes: "just move the camera"). Test `ShatteredOrbit.Body.HumanRange`.
 - **One colour palette a set** (the owner, 2026-11-15: "all guns in the set need to have the same color pallet and shoot
   the same color, this is our rule going forward"): every gun of a set (its `"set"`; a gun of no set: its class's
   family, light / kinetic / horror) fires the same colour and carries the same light. `Data/game_data.json`
@@ -117,9 +143,28 @@ existing classes, never second systems.
   carry gets the gun's own (`ASOWeapon::SetInstance`). `ShatteredOrbit.Aim.EverySightOnTheEyeLine` holds every gun
   with every allowed sight to it: the sight's point on the eye's axis as each round leaves, an optic's glass centred
   on it, windows wide enough to look through. Rounds leave along the eye's axis, so on the sights the gun turns about
-  its SIGHT (`USOViewmodelComponent`: `SightPivot`), aimed spread is x0.25, a long gun's irons sit 9 cm ahead of the eye (further back the eye is over the stock and its comb fills the
-  picture; a handgun's 24, `AdsHandgunSightDistance`)
-  (`AdsSightDistance`), an optic on a handgun 12 cm (`AdsHandgunOpticDistance`). A rotary gun's barrel cluster is the
+  its SIGHT (`USOViewmodelComponent`: `SightPivot`), aimed spread is x0.25. **One body on the sights** (the owner's rule:
+  one model, one camera): a long gun stays SHOULDERED (its butt in the pocket) and the CAMERA alone comes to its sight's
+  line where a cheek on the comb would put an eye, `CheekFromButt` 13 cm ahead of the butt and never nearer the sight
+  than `IronsEyeRelief` 6, `BuiltInOpticEyeRelief` 4 or `OpticEyeRelief` 0 (a rail optic's sight point is its eye
+  point): `ASOCharacter::SetSightEye`, set each frame by the viewmodel from the shouldered gun; the shots go along the
+  camera's line. The body's head and eyes are NOT moved for it (the owner, 2026-11-23: "Don't move the eyes since other
+  players will be looking at us so it's weird if some one sees ours eyes moving out of our head, just move the camera";
+  a head bent onto the stock to meet the camera was tried and taken out the same day): on the sights the head keeps its
+  own pose, the stance's small cant toward the stock (`HeadCant` 14 degrees). Before, the gun went to the eyes at a
+  fixed 9 cm: with one body its butt went through the shoulder and out of the back. A handgun comes up to the eyes'
+  line held out at the arms' reach (`HandgunReach` 0.88 of the firing arm, the support arm's too). A red dot's window
+  is as wide as it is from there (most long guns 7-13 degrees; the rifle's rail sits far forward on its handguard: its
+  reflex is 3.6 degrees across from 50 cm, a model change to move it back). **Every bend a normal amount** (the owner,
+  2026-11-23: "head/arms/legs/body bends a normal amount not crazy"): the trunk takes 60 % of the aim's pitch (within
+  -40..+45) and the neck and the head only what the trunk did not, within -55..+50 degrees (they took the whole aim on
+  top of the trunk's share: looking 60 degrees up the face pointed 100 degrees up); an ankle draws the toes up at most
+  35 degrees and points them 55 (`USOLocomotionAnimInstance::ApplyBody` step 5, a player's body: what asks more, a
+  crouch, a run's swing, the stance's deep knees, the clips reached 74 up, is met as a body meets it: a planted foot
+  lifts its heel about the ball of the foot and the leg reaches the raised ankle; a foot in the air turns about its
+  ankle). `ShatteredOrbit.Body.HumanRange` measures the head on the chest, the chest on the hips, the elbows, the
+  wrists, the knees (never behind their hip-to-ankle line) and the ankles in 225 states (seven guns through everything
+  a player does with them, both views, and the fists) against a healthy human's range. A rotary gun's barrel cluster is the
   part `spin` (origin on its axis): `ASOWeapon::Tick` turns it while firing. Tracers and flashes take the gun's own
   colour (`tracer` in the data: kinetic warm, light guns cyan / blue / gold, living green and violet; a bolt of light
   is longer with a head), the flash is five torn blades (`FX_Star`, shader mode 3), nothing is drawn through a scope.
@@ -287,7 +332,7 @@ existing classes, never second systems.
   `ASOWeapon::PlayReloadFx` -> `USOFxSubsystem::ReloadVent / ReloadIntake / ReloadCellPop / ReloadCharge` (in the
   view that shows the gun, HELD to the gun: every particle carries an `FSOFxAnchor` (the gun, a point in its rig
   frame, where that point was last frame) and `Tick` moves it by however far the point moved, through
-  `ASOWeapon::RigPointToWorld` (the viewmodel's space for the first-person gun); spawned with the holder's
+  `ASOWeapon::RigPointToWorld`; spawned with the holder's
   velocity of the moment, the cloud hung in the air where the reload began when the player turned, stopped or the
   gun swayed: the owner, 2026-11-20. `SOCaptureSeries 1 34 -SOReloadTurn` turns 30 degrees between the moments to
   show it). **Overheat**: a light gun that fired a long burst (half
@@ -405,7 +450,7 @@ holds them equal). The outfit carries `SkinTone` / `HairTone` (kept by the inven
 `USOInventoryComponent::SetLook` sets the whole look in one change); `ASOCharacter::ApplyFace` lays them as dynamic
 instances on every `MI_skin*` (BaseColorTint, and the Scatter down to a quarter with the tone's depth: the pale skin's
 warm scatter made a deep tone glow orange; the brows on `MI_skin_face`'s HairColor at 1.6x the hair) and `MI_hair*`
-but the lashes, of the body, the first-person arms and every worn piece (a body or piece that changes mesh drops its
+but the lashes, of the body and every worn piece (a body or piece that changes mesh drops its
 overrides first); a change of the look alone never dresses the body again (`SetOutfit` -> `SetLook`). The tab: the
 groups down the left with how many of their sliders are moved, a RANDOM FACE and a RESET ALL (each asked twice), the
 group's sliders (`USOCreatorSlider`: dragged, the stand-in follows as it moves and the value is kept when it is let go;
@@ -443,7 +488,7 @@ then the colour. Pictures `SOCaptureSeries 1 46` (files `SO_hb_<style>_<beard>_<
 `ShatteredOrbit.Creator.HairAndBeard`. A gun carried low (a sprint, the
 armoury's stand-in: `USOLocomotionAnimInstance::bCarried`) keeps the third-person firing elbow by the side (the arm IK's
 swing toward the straightest wrist is held to 0.55 rad there: it stood out level with the shoulder, the owner's "arm
-seems very bend out"). `vr_sniper`'s third-person support hand lands 5 cm behind where the first-person arms hold it (the body's
+seems very bend out"). `vr_sniper`'s support hand landed 5 cm behind where the old first-person arms held it (the body's
 reach clamp), and there it met the fang's blade and the keel's fins: its hand rest now runs back under the receiver's
 front and the fang and the keel start ahead of it (requiem_guns.py, 2026-11-22; `TheGunIsSolid` passes on every gun).
 The old male builder (`hero/build.py -- male`) is no longer exported: it stays only as the Sarketh's and the Void
@@ -590,7 +635,7 @@ at 0 (Blender 5 adds new keys at 1.0). Heat weights are solved on a cleaned copy
 The two bodies share no generated file: textures `SourceArt/Characters/src/tex/<sex>/hero_<sex>_*.png`, GLBs `SourceArt/Characters/src/hero_<sex>.glb`,
 Unreal folders `/Game/Characters/Player<Sex>` (own skeleton, clips, materials, textures, wardrobe).
 `export_unreal.sh` builds `SourceArt/Characters/src/hero_<sex>.glb` (delete it, and `SourceArt/Characters/src/tex/<sex>`, to rebuild) and
-exports `--per-item` + `--arms-only`.
+exports `--per-item` (one body: no first-person cut).
 The bodies' surface anatomy and skin (both the game's players and the naked base asset use the same body; the first,
 smoother bodies were removed on 2026-11-09 at the owner's request). `build.py` gives the game's body its UVs and skin
 maps (`basemesh_finish.game_skin`: `hero_<sex>_skin_BaseColor / _Normal / _ORM / _Subsurface`, `hero_<sex>_eye_BaseColor`
@@ -614,7 +659,8 @@ them (functions of the 3D position: nothing shows at a seam), collections `<Sex>
 `unreal/ShatteredOrbit` (UE 5.8, C++ modules ShatteredOrbit/SOCore/SOCharacter/SOCombat/SOAI/SOWorld/SOUI); plan in
 `docs/unreal/MIGRATION_PLAN.md`; build, content scripts, tests and gaps in its README.
 Blender GLB -> FBX: `tools/blender/export_fbx.py` (`--per-item` writes the player body (one `skin__<region>` section per
-region) and every wardrobe piece as its own skeletal FBX; `--arms-only` cuts the first-person arms). The player is
+region) and every wardrobe piece as its own skeletal FBX; there is no first-person cut: the owner, 2026-11-23, "one
+model and one camera ... i do not want these 2 models", the arms copies and `--arms-only` were deleted). The player is
 modular (`USOWardrobeData` per body, one follower skeletal mesh per slot, armour owned / worn through the inventory),
 both views hold the gun with arm IK onto the rig's grips and the fingers close by grip preset (`USOGunRigComponent`,
 `FSOFingerPose`, `USOLocomotionAnimInstance`). **The hands are FITTED to each gun's own shape** as it is picked up
@@ -648,8 +694,8 @@ a post up to 93 % of the arm (the shoulder is an estimate) and no further. The p
 point (up to 9 cm behind it and 12 ahead), at a lower height if not at the usual one (`PostUp`), its front and back
 probed from 9 cm off and then nearer (a probe begun inside the heavy machine gun's drum read its post 11 cm long), and
 a probe that misses is tried again a hair to either side (laid along a mesh edge it slips between two faces: the
-ksmg's post was found by one view and not the other on that alone). Elsewhere the support hand is kept within 90 % of
-the first-person arm's reach and 87 % of the body's (the body's shoulder is known to five centimetres: at 90 the arm's
+ksmg's post was found by one view and not the other on that alone). Elsewhere the support hand is kept within 87 % of
+the body's arm's reach (the body's shoulder is known to five centimetres: at 90 the arm's
 own rule slid the hand back off where it was fitted, the Requiem sniper's palm into its fins). Measuring the slide the
 arm really needs and fitting again from it was tried and dropped: it fires while the gun is still coming up into the
 hands, and moved every rifle's support hand 20 cm back. A gun's own shape can make a grip impossible: the heavy machine gun's drum
@@ -672,8 +718,8 @@ judged it: "start with just the ak rifle then after feedback from me we can do t
 together toward the middle finger's line before they close (`FSOFingerPose::Together`, 0.85, `FingersTogether`, in the
 fit and the pose alike: a resting hand fans its fingers, and they touched the handguard with their tips), the support
 thumb's place at its root's height and close to the side (it stood up beside the handguard from the eye, its tip by
-the front sight), and the first-person firing shoulder of a long gun pushed back and out from its hand rather than
-down (on the sights the wrist bent 72 degrees, now 64).
+the front sight), and the firing shoulder of a long gun pushed back and out from its hand rather than down (on the
+sights the wrist bent 72 degrees, now 64).
 **The Sarketh's guns never reload** (the owner, 2026-11-16: "remove loading and keep venting so after we stop shooting
 and the counter rests to 0 or after venting we slowly add bullets from reserve to magazine"): a gun with `"refill"`
 (seconds for a full load: `USOWeaponData::RefillTime`) condenses its rounds (`ASOWeapon::Condenses`, `IsCondensing`):
@@ -715,7 +761,7 @@ and cone from the eye, force, stagger, the step in, sounds). The server lands it
 side within reach in the cone, not through the world's geometry, through the damage gate); a joined player sees their
 own blow at once (`MeleePredicted`). The body: `USOLocomotionAnimInstance::SetMeleeGuard` / `PlayMeleeBlow`, a layer on
 the UPPER body (the spine and under it) over the legs' gait, the whole body when standing, the trunk pitched with the
-aim; the first-person arms play the same. Clips per body (`hero/<sex>/motion.py`): `FistGuard`, `Jab`, `Cross`, `Hook`,
+aim; seen from its own eyes it is the same body. Clips per body (`hero/<sex>/motion.py`): `FistGuard`, `Jab`, `Cross`, `Hook`,
 `Haymaker`, `BladeGuard`, `SlashA`, `SlashB`, `Thrust`, `Cleave` (a hook's upper arm is out at 80 and turned in -80,
 or the forearm stands up). Sounds `sfx_synth.py ... melee`. **The Veyr Edge** (`skr_blade`, the owner, 2026-11-15:
 approved): `sarketh_guns.veyr_edge` (mirror-polished stainless, a ground edge, a glass window with a filament of light,
@@ -723,8 +769,8 @@ a machined handle), exported like a gun to `SourceArt/Weapons/SkrBlade`; the sty
 pipeline's materials by `SO_IMPORT_ONLY=melee`. A blade is OWNED (`USOInventoryComponent::Blades`, saved: version 5,
 replicated); a set cache gives every style of its set (`FSOMeleeStyle::SetId`, `ASOReliquary`). Key 4 goes from the
 gun to the first blade owned (or the fists), from a blade to the fists, from the fists back to the gun
-(`ASOCharacter::HandleFists`, `SetMeleeStyle`, checked on the server). The blade lies in the right fist of the body and
-of the first-person arms from the hand's own bones (`ASOCharacter::BladeInHand`: the handle across the palm, the blade
+(`ASOCharacter::HandleFists`, `SetMeleeStyle`, checked on the server). The blade lies in the body's right fist from the
+hand's own bones (`ASOCharacter::BladeInHand`, one blade: `GetHeldBlade`; the handle across the palm, the blade
 out of the thumb's side, the edge toward the knuckles). A gun put away stays away whichever view comes up. **Melee like a fighter's** (the owner, 2026-11-16: "make mele combat on par" with
 fighting games; our own moves): the stance picks the move (`ASOCharacter::NextMeleeBlow`, `SOMeleeMove`): light, light,
 heavy = the finisher (a launcher); light at a sprint = the rush; light crouched = the sweep; heavy crouched = the riser
@@ -738,15 +784,30 @@ sweep plants the swept foot far out with the leg's IK). The loadout has a MELEE 
 MeleeSlot`, saves version 6): a blade owned or, empty, the fists; key 4 brings up what is in it and puts it away.
 Tests `ShatteredOrbit.Melee.*`; pictures
 `SOCaptureSeries 1 35` (files `SO_me_fp_*`, `SO_me_side_*`).
-**Where the gun sits in first person** (`USOViewmodelComponent`; the owner, 2026-11-15: "the guns cover too much of the
-screen ... shouldn't be at the center of the screen, better to be on the right ... on running we lower the gun for
-rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): at rest in the lower right (`HipOffset`,
-`HandgunHipOffset`); on a sprint each gun is carried as its data says (`"carry"` in `Data/game_data.json` ->
-`USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready, canted, muzzle in and down,
-still in the corner of the view; `SprintLow*`), `short` (SMGs: up part of the way, `SprintShort*`; higher, the support
-arm crossed the view), `high` (handguns: up by the face, muzzle to the sky, `SprintHigh*`). A gun's length does not
-tell (the heavy machine gun is shorter than the SMG). Pictures `SOCaptureSeries 1 32 -SOGuns=<arch>,<arch>` (files
-`SO_vm_<gun>_hip` / `_sprint`). **Third person**: the shoulder camera stays over the RIGHT shoulder (`HipSocketOffset`
+**Where the gun sits** (`USOViewmodelComponent`: one gun in the one body's hands, seen from its eyes in first person;
+the owner, 2026-11-15: "the guns cover too much of the screen ... shouldn't be at the center of the screen, better to be
+on the right ... on running we lower the gun for rifles ... smaller guns like smg/pistol/revolver/handcannon we take it
+up"): where the body holds it (`HoldTransform`: the stance's place: from the eyes a long gun at the ready is in the
+lower right; relaxed, out of a fight, it is carried low across the body, below the eyes' picture, as the owner's stance
+reference has it, and comes up on a shot, an aim, a reload or a hit; held up near the ready instead, the firing wrist
+bent past 75 degrees on several guns), and on a sprint each gun is carried as its data says (`"carry"` in
+`Data/game_data.json` -> `USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready,
+across the chest, muzzle down and to the left; `CarryOffset` / `CarryRot`), `short` (SMGs: up part of the way,
+`ShortCarry*`), `high` (handguns: up by the face in both hands, muzzle to the sky, `HandgunCarry*`). A gun's length does
+not tell (the heavy machine gun is shorter than the SMG). A reload brings the gun up into the workspace in front of the
+chest where the eyes see it (`ReloadOffset` 40 / 6 / -2: at the belly a first-person reload showed the muzzle alone).
+**The hands are where the gun is, the gun where the hands can be** (the ULTIMATE rule): `InFiringReach` (the firing
+wrist within 0.33-0.95 of its arm) and `InSupportReach` (the support hand's fitted place within `SupportReach` 0.87 of
+its arm: the gun comes in toward that shoulder, a long gun's butt no further back than `ButtAheadOfShoulder` in front
+of the firing shoulder joint, freer looking steeply up or down), both before the eye is put on the sights and again
+after the sway (on the sights the sight line wins); `ClearOfWalls` (one gun in the hands cannot pass through a wall:
+pulled back along itself, then the muzzle up). The anim's own rule slides the support hand back along a long gun past
+95 % of the arm (2 cm at most on a handgun: further it came off its back), and the fit follows a reload's choreography
+(`FitWeight`: on its hold whenever the reload's hand is at the fore end). Test `ShatteredOrbit.Hold.AlwaysInHand`:
+every gun through relaxed, ready, on the sights, firing, walking, turning, looking 60 degrees up and down, every frame
+of a reload, and (first person) sprinting, sliding, jumping and crouched, in both views: the firing palm on its handle,
+the support palm on the gun (or at the reload's work, within 50 cm of the gun); pictures `SOCaptureSeries 1 48`
+(files `SO_ih_<gun>_<ready|aim|look_down|look_up|reload_NNN|strafe_*>_<cam|side|front>`, `INHAND` lines). **Third person**: the shoulder camera stays over the RIGHT shoulder (`HipSocketOffset`
 Y +55): the owner tried it over the left one on 2026-11-15 and asked for it back. Maps: every level has an `ASOMapInfo` + `ASOMapPoint`s (mini-map, map
 screen, quick travel). Nexus Prime (the big city, `L_Nexus`): plan `tools/city/nexus_plan.py` -> `Data/nexus_plan.json`,
 kit + baked tiles `tools/blender/nexus_city.py`, built at runtime by `ASONexusCity`. Inventory icons:
@@ -1325,10 +1386,10 @@ fight: the gun carried low across the body, the arms easy), ready (up and forwar
 sights (the cheek on the stock); `ASOCharacter::GetCombatReady` (0 relaxed .. 1 ready) comes up on a shot, an aim, a
 reload or a hit (`MarkCombat`) and goes back down `combatSeconds` after the last, eased (`raiseTime`, `lowerTime`;
 replicated as `bCombatReady` for the other machines). Applied where it already lived: the gun's place in
-`USOViewmodelComponent::ThirdPersonHoldTransform` (the relaxed blend beside the sprint carry and the reload), the body
+`USOViewmodelComponent::HoldTransform` (the relaxed blend beside the sprint carry and the reload), the body
 in `USOLocomotionAnimInstance` (`FSOStanceInputs`: the stance's feet through the legs' two-bone IK in `ApplyBody`, the
 hips' drop with it; the elbows, the collarbones and the chin in `ApplyHold`); players only (a creature keeps its own way
-of holding), never the first-person arms. **The second pass** (the owner on the first, with pictures from their own
+of holding). **The second pass** (the owner on the first, with pictures from their own
 camera: "arm not showing ... the player legs are completely wrong and crossed, it should be a military stance not this,
 the arms are gone and the gun is in the players shoulder"). Causes, measured (capture set 47 logs `STANCEGEO`: every
 joint, the butt and the muzzle in the actor's frame, the wrists, the swings): (1) the stance bent the knees by the
@@ -1387,14 +1448,14 @@ it plays out: `USOLocomotionAnimInstance` layer `Dodge`, `ActiveDodge` picked by
 the trunk's share of the aim pitch stops at a lean (`USOLocomotionAnimInstance` hold pass, the stance pitch clamped
 -46..+57 degrees: at 70 % of -80 the body folded 56 degrees at the waist and the gun from the shoulder pocket
 pointed down along it, the support hand beyond the arm), and below -20 degrees the stock comes off the shoulder:
-`USOViewmodelComponent::ThirdPersonHoldTransform` blends the hold's point from the pocket to low and ahead of
+`USOViewmodelComponent::HoldTransform` blends the hold's point from the pocket to low and ahead of
 the chest (`Low`), the gun's middle hanging from it, both hands on it with the elbows bent; the support hand may
 slide 30 cm back along the gun (14 left it floating). Pictures `SOCaptureSeries 1 40` (files `SO_hp_<pitch>_*`,
 at rest and aiming, -89 to +75). **Pass 2 of the look-down** (the owner, 2026-11-21: "the third person gun placement is in the players
-face ... the wrist should not be twisting like that"): the gun's OWN pitch in third person is held within
-`ThirdPersonMaxDownPitch` 55 / `ThirdPersonMaxUpPitch` 65 degrees (pointed straight down from the chest the stock
-stood up along the face; the shot still goes along the eye's axis), it hangs from `ThirdPersonLowHold` (22 ahead, 10
-right, 27 under the chest point) canted `ThirdPersonLowCant` 20 degrees inward, and the trunk's share of the pitch
+face ... the wrist should not be twisting like that"): the gun's OWN pitch is held within `MaxDownPitch` 48 /
+`MaxUpPitch` 65 degrees (pointed straight down from the chest the stock stood up along the face; the shot still goes
+along the eye's axis), it hangs from `LowHold` (22 ahead, 10 right, 27 under the chest point) canted `LowCant` 28
+degrees inward, and the trunk's share of the pitch
 stops at -40 (the head does the looking). The firing wrist at the full look-down went from 120 degrees to about 60-80;
 a hand round a raked pistol grip is 60-75 degrees from its forearm (`ShatteredOrbit.Hold.TheGunIsSolid` allows 75).
 Where the stock, the grip, the trigger and the fore end are comes from each gun's own shape (the rig's bounds and
@@ -1435,12 +1496,19 @@ crouched: the body's own Crouch / CrouchWalk on the same phase (`CrouchDrop` onl
 clips; sinking the standing clips over runtime leg IK made the legs flip: the owner's "legs glitch everywhere and under
 the floor"). The runtime leg IK's knee can only bend ahead of the hip-ankle line in the leg's own heading
 (`KneeAhead`: an almost straight animated leg says nothing about the knee's side). Test `ShatteredOrbit.Anim.CrouchWalk`
-(feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). The first-person arms
-hang from the eye, not the capsule (`ASOCharacter::Tick`: crouched, the capsule's centre drops and the eye comes down
-to it; left on the capsule the shoulders ended up above the camera and the arms came into view from overhead; test
-`ShatteredOrbit.Anim.CrouchFirstPerson`). Braking out of a run plays the body's `Stop` clip (by how fast it was going);
+(feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). **The one camera is in the
+body's own eyes** (`ASOCharacter::UpdateEye`: the head joint in the body's last pose and the eyes on it, `EyeFromHead`
+10 / 0 / 4.6, measured on the Orion male; in the capsule's frame, a stiff spring `EyeFollow` 30 never more than
+`EyeMaxLag` 2 cm behind: a soft one left the eyes 30 cm off the head in a crouch); the camera rides the boom
+`CameraBoom`, its length 0 in the eyes and out behind the right shoulder for the test view (`ViewBlend`, eased over
+`ViewSwitchTime` 0.35 s; through a scope it is in the eyes at once). The head is hidden from its own player's camera
+alone (`IsHeadHidden`: local, alive, the camera in the eyes AND that player's view target is the body: a capture's or
+a spectator's camera sees the whole body; the anim shrinks the head bone into its joint, `HideHead`, after
+everything else). Its shadow has no head yet (open: the head as its own piece on the body's skeleton, hidden from its
+owner and casting a shadow). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
+pose they were taken from). Braking out of a run plays the body's `Stop` clip (by how fast it was going);
 a turn on the spot is stepped (`TurnLift`: the foot on the side of the turn comes off the ground first); on a vault,
-mantle or climb the gun is put away in both views and the first-person hands go onto the edge too. Test
+mantle or climb the gun is put away and the hands go onto the edge. Test
 `ShatteredOrbit.Anim.StopsAndTurns`.
 Enemies, the Altered (`SOAltered.h`; the name stays an API: their bodies are the Sarketh now), all armed with our guns (`ASOEnemy::WeaponArchetype`, held two-handed
 by the same arm IK as the player, one-handed by the Bulwark; rounds scaled by `WeaponDamageScale`, aim error shrinking as

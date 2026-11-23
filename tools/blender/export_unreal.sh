@@ -34,7 +34,6 @@ for sex in male female; do
     [ -f "$glb" ] || "$BLENDER" --background --python "$ROOT/tools/blender/hero/build.py" -- "$sex" "--glb=$glb" 2>&1 | grep -E "^\[hero\]|Error|Traceback" || true
   fi
   run "$glb" "$OUT/Characters/Player$Sex" --per-item
-  run "$glb" "$OUT/Characters/Player${Sex}Arms" --per-item --arms-only
 done
 # Inventory icons (guns and armour pieces) rendered from the same models
 "$BLENDER" --background --python "$ROOT/tools/blender/icons.py" -- "$OUT/Icons" 2>&1 | grep -E "^\[icons\]|Error|Traceback" || true

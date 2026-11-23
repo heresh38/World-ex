@@ -59,10 +59,6 @@ struct SOCOMBAT_API FSOWardrobeItem
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	TSoftObjectPtr<USkeletalMesh> Mesh;
 
-	/** First-person cut (only what the arm bones carry); unset for pieces that never reach the arms. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
-	TSoftObjectPtr<USkeletalMesh> ArmsMesh;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	TSoftObjectPtr<UTexture2D> Icon;
 };
@@ -78,11 +74,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	FName Body;
 
+	/** The one body: seen by everyone and from its own eyes (first person: its head hidden from that camera alone). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
 	TSoftObjectPtr<USkeletalMesh> BodyMesh;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")
-	TSoftObjectPtr<USkeletalMesh> ArmsMesh;
 
 	/** /Game/Characters/Player<Sex>/Anims/A_Player<Sex>_ */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Wardrobe")

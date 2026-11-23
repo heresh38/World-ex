@@ -370,7 +370,7 @@ public:
 
 	virtual FVector GetAimOrigin() const override;
 	virtual FVector GetAimDirection() const override;
-	virtual USceneComponent* GetThirdPersonWeaponParent() const override;
+	virtual USceneComponent* GetWeaponParent() const override;
 	virtual float GetOutgoingDamageScale() const override { return WeaponDamageScale; }
 	virtual float ScaleIncomingDamage(float Amount, const AActor* Source, bool bCrit) const override;
 	virtual void BeginPlay() override;

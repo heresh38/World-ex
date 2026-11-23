@@ -819,8 +819,8 @@ bool FSOCrouchWalkTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOCrouchFirstPersonTest, "ShatteredOrbit.Anim.CrouchFirstPerson", SOTest::Flags)
 bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
 {
-	// The first-person arms hang from the eye: crouched, sliding or standing, the shoulders sit as far under the camera
-	// as they do standing (they used to stay on the capsule, and crouched the arms came down into the view from above).
+	// First person is the body's own eyes (the owner, 2026-11-23: one model, one camera): crouched, sliding or standing,
+	// the eyes are on the head, where they are at rest, and come down with it.
 	if (SOTest::PlayerBodyMissing(*this))
 	{
 		return true;
@@ -829,34 +829,43 @@ bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
 	SOTest::Floor(W);
 	ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 0));
 	C->SetViewMode(ESOViewMode::FirstPerson);
-	USkeletalMeshComponent* Arms = C->GetFirstPersonArms();
-	if (!TestNotNull(TEXT("the first-person arms"), Arms))
+	USkeletalMeshComponent* Body = C->GetMesh();
+	if (!TestNotNull(TEXT("the body"), Body) || Body->GetBoneIndex(TEXT("head")) == INDEX_NONE)
 	{
 		return false;
 	}
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	W.Run(1.0f);
-	const bool bBone = Arms->GetBoneIndex(TEXT("upperarm_R")) != INDEX_NONE;
-	auto Under = [&]()
+	// the eyes from the head joint, in the head's own frame (the same on the head whatever the head does)
+	auto OnHead = [&]()
 	{
-		const float Eye = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z);
-		return FVector2f(Eye - static_cast<float>(Arms->GetComponentLocation().Z), bBone ? Eye - static_cast<float>(Arms->GetBoneLocation(TEXT("upperarm_R")).Z) : 0.0f);
+		const FTransform Head = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));
+		return Head.GetRotation().UnrotateVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation());
 	};
-	const FVector2f Standing = Under();
+	const FVector Standing = OnHead();
 	const float EyeStanding = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z) - SOTest::Feet(C);
 	C->Crouch();
 	float Worst = 0.0f;
-	W.Run(1.5f, [&] { Worst = FMath::Max(Worst, FMath::Abs(Under().X - Standing.X)); });
-	const FVector2f Crouched = Under();
+	// (the eyes are set from the pose drawn the frame before: the gun and the arms follow from them in the frame, the head
+	// itself is hidden from that camera; measured against that pose)
+	auto OnHeadOf = [&](const FTransform& Head) { return Head.GetRotation().UnrotateVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation()); };
+	FTransform Drawn = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));
+	W.Run(1.5f, [&]
+	{
+		Worst = FMath::Max(Worst, static_cast<float>(FVector::Dist(OnHeadOf(Drawn), Standing)));
+		Drawn = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));
+	});
+	const FVector Crouched = OnHead();
 	const float EyeCrouched = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z) - SOTest::Feet(C);
-	AddInfo(FString::Printf(TEXT("eye %.1f cm standing, %.1f crouched; arms' origin %.1f / %.1f cm under the eye; shoulder %.1f / %.1f cm under the eye; worst on the way down %.1f"),
-		EyeStanding, EyeCrouched, Standing.X, Crouched.X, Standing.Y, Crouched.Y, Worst));
+	AddInfo(FString::Printf(TEXT("eye %.1f cm standing, %.1f crouched; %.1f cm from the head joint; off the head %.1f cm at most on the way down"),
+		EyeStanding, EyeCrouched, Standing.Size(), Worst));
+	TestTrue(FString::Printf(TEXT("the eyes are on the head, in front of its joint (%.1f cm)"), Standing.Size()), Standing.Size() > 8.0f && Standing.Size() < 14.0f);
 	TestTrue(TEXT("the eye came down with the crouch"), EyeStanding - EyeCrouched > 30.0f);
-	TestTrue(FString::Printf(TEXT("the arms stay under the eye all the way down (%.1f cm off at most)"), Worst), Worst < 1.0f);
-	TestTrue(FString::Printf(TEXT("crouched, the shoulder is as far under the eye as standing (%.1f against %.1f cm)"), Crouched.Y, Standing.Y),
-		!bBone || FMath::Abs(Crouched.Y - Standing.Y) < 3.0f);
+	TestTrue(FString::Printf(TEXT("the eyes follow the head all the way down (%.1f cm off at most)"), Worst), Worst < 8.0f);
+	TestTrue(FString::Printf(TEXT("crouched, the eyes are where they are on the head (%.1f cm off)"), FVector::Dist(Crouched, Standing)), FVector::Dist(Crouched, Standing) < 1.5f);
 	C->UnCrouch();
 	W.Run(1.0f);
-	TestTrue(TEXT("standing again, the arms are back where they were"), FMath::Abs(Under().X - Standing.X) < 1.0f);
+	TestTrue(TEXT("standing again, the eyes on the head"), FVector::Dist(OnHead(), Standing) < 1.5f);
 	return true;
 }
 

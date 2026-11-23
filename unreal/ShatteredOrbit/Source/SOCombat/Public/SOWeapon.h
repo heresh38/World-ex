@@ -52,14 +52,14 @@ public:
 	/** Rampage stacks currently active (0..3). */
 	int32 GetRampageStacks() const;
 
-	/** Attaches the rigs to the holder (all machines). */
+	/** Attaches the gun to the holder (all machines). */
 	void AttachToHolder(ASOCombatCharacter* Holder);
 
-	/** First person: show the viewmodel rig, hide the world rig from the owner. */
-	void SetFirstPersonView(bool bFirstPerson);
+	/** Hidden from its own player's camera (looking through a scope: the scope's picture is the view). */
+	void SetHiddenFromOwner(bool bHide);
 
 	/** The holder died: the gun leaves the hands and falls (a physics copy of what the world sees; cosmetic, every
-	 *  machine), the held rigs hide. */
+	 *  machine), the held gun hides. */
 	void DropOnDeath(const FVector& HolderVelocity);
 	bool IsDropped() const { return bDropped; }
 
@@ -105,11 +105,12 @@ public:
 	int32 RefillFromReserve(float Share = 1.0f);
 
 	const FSOReloadPose& GetPose() const { return Reload.GetPose(); }
-	USOGunRigComponent* GetFirstPersonRig() const { return FirstPersonRig; }
-	USOGunRigComponent* GetThirdPersonRig() const { return ThirdPersonRig; }
-	/** A point in the gun's rig frame as the world shows it now: through the viewmodel's space for the first-person
-	 *  gun (an effect anchored to the gun asks this every frame: USOFxSubsystem's FSOFxAnchor). */
-	FVector RigPointToWorld(const FVector& RigLocal, bool bFirstPerson) const;
+	/** The gun: ONE model, held by the body in every view (the owner, 2026-11-23: one model, one camera; there is no
+	 *  first-person copy of it). */
+	USOGunRigComponent* GetRig() const { return Rig; }
+	/** A point in the gun's rig frame where the world has it now (an effect anchored to the gun asks this every frame:
+	 *  USOFxSubsystem's FSOFxAnchor). */
+	FVector RigPointToWorld(const FVector& RigLocal) const;
 
 	/** Reload and shot events (seat, drop, sfx, fired) for audio / effects. */
 	FSOOnWeaponEvent OnWeaponEvent;
@@ -156,9 +157,8 @@ protected:
 	UFUNCTION()
 	void OnRep_Instance();
 	void PlayEventSound(FName Event);
-	/** A light gun's reload and heat, seen on the gun in the view that shows it (first person: the viewmodel's place
-	 *  in the world): "vent", "intake" (at its flap), "cellpop" (at its cell), "charge" (round the gun), "overheat"
-	 *  (a small vent by itself after a long burst). Seconds = how long it runs. */
+	/** A light gun's reload and heat, on the gun: "vent", "intake" (at its flap), "cellpop" (at its cell), "charge"
+	 *  (round the gun), "overheat" (a small vent by itself after a long burst). Seconds = how long it runs. */
 	void PlayReloadFx(FName Kind, float Seconds);
 
 	UFUNCTION(NetMulticast, Reliable)
@@ -192,10 +192,7 @@ protected:
 	TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(VisibleAnywhere, Category = "SO|Weapon")
-	TObjectPtr<USOGunRigComponent> FirstPersonRig;
-
-	UPROPERTY(VisibleAnywhere, Category = "SO|Weapon")
-	TObjectPtr<USOGunRigComponent> ThirdPersonRig;
+	TObjectPtr<USOGunRigComponent> Rig;
 
 	FSOReloadPlayer Reload;
 	bool bTriggerHeld = false;

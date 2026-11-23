@@ -182,12 +182,12 @@ void USOFxSubsystem::Spawn(const FSOFxParticle& Particle)
 
 const FLinearColor USOFxSubsystem::SovereignGold(1.0f, 0.74f, 0.22f);
 
-void USOFxSubsystem::SovereignFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, bool bThroughScope)
+void USOFxSubsystem::SovereignFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, bool bThroughScope)
 {
 	const FVector D = Dir.GetSafeNormal(1e-4f, FVector::ForwardVector);
 	const FVector Side = FVector::CrossProduct(D, FMath::Abs(D.Z) < 0.9f ? FVector::UpVector : FVector::RightVector).GetSafeNormal();
 	const FVector Up2 = FVector::CrossProduct(D, Side);
-	const float S = Scale * (bViewmodel ? 0.7f : 1.0f);
+	const float S = Scale * (bOwnEyes ? 0.7f : 1.0f);
 	if (bThroughScope)
 	{
 		return;                                                      // (the glass shows nothing of a flash at arm's length)
@@ -347,7 +347,7 @@ int32 USOFxSubsystem::GetNumDecals() const
 
 // --- Effects -------------------------------------------------------------------------------------
 
-void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope, EFlash Style)
+void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, const FLinearColor& Color, bool bThroughScope, EFlash Style)
 {
 	const FVector D = Dir.GetSafeNormal();
 	if (bThroughScope)
@@ -444,7 +444,7 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 	// so the gun itself does not flare white on every shot.
 	// the light of the flash, in its own colour. In first person it stands well ahead of the muzzle and under the
 	// bore: beside the muzzle it raked along the top of the gun and every grain of its finish sparkled.
-	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 220.0f * Scale * P.Light * (bViewmodel ? 0.25f : 1.0f),
+	FlashLight(Muzzle + D * (bOwnEyes ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 22.0f : 0.0f), 220.0f * Scale * P.Light * (bOwnEyes ? 0.25f : 1.0f),
 		FMath::Lerp(Color, Fire, 0.35f), 0.05f);
 }
 
@@ -587,12 +587,12 @@ void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Sp
 	}
 }
 
-void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bViewmodel,
+void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, float Strength, const FVector& Carry, bool bOwnEyes,
 	const FSOFxAnchor& Anchor)
 {
 	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
 	const FVector N = Out.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
-	const float S = (bViewmodel ? 0.42f : 1.0f) * FMath::Clamp(Strength, 0.1f, 1.5f);
+	const float S = (bOwnEyes ? 0.42f : 1.0f) * FMath::Clamp(Strength, 0.1f, 1.5f);
 	const float T = FMath::Max(Duration, 0.1f);
 	const FLinearColor Hot = FMath::Lerp(Color, FLinearColor::White, 0.65f);
 	// the jet: gas leaving the opening fast, slowing as it blooms, rising as it cools; thickest at the start
@@ -610,7 +610,7 @@ void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLi
 		Gas.Life = Random.FRandRange(0.28f, 0.5f);
 		Gas.Size0 = Random.FRandRange(5.0f, 8.0f) * S;
 		Gas.Size1 = Random.FRandRange(18.0f, 30.0f) * S;
-		Gas.Intensity0 = Random.FRandRange(3.0f, 5.5f) * (1.0f - At01 * 0.6f) * (bViewmodel ? 0.7f : 1.0f);
+		Gas.Intensity0 = Random.FRandRange(3.0f, 5.5f) * (1.0f - At01 * 0.6f) * (bOwnEyes ? 0.7f : 1.0f);
 		Gas.Intensity1 = 0.0f;
 		Gas.Color = FMath::Lerp(Color, Hot, Random.FRand() * 0.5f);
 		Put(Gas);
@@ -661,15 +661,15 @@ void USOFxSubsystem::ReloadVent(const FVector& At, const FVector& Out, const FLi
 		Ember.Color = Hot;
 		Put(Ember);
 	}
-	PendingLights.Add({ At + N * 12.0f * S, Color, (bViewmodel ? 6.0f : 40.0f) * FMath::Min(Strength, 1.0f), T * 0.8f, 0.0f });   // (at the hands: hundreds flooded the view)
+	PendingLights.Add({ At + N * 12.0f * S, Color, (bOwnEyes ? 6.0f : 40.0f) * FMath::Min(Strength, 1.0f), T * 0.8f, 0.0f });   // (at the hands: hundreds flooded the view)
 }
 
-void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel,
+void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const FLinearColor& Color, float Duration, const FVector& Carry, bool bOwnEyes,
 	const FSOFxAnchor& Anchor)
 {
 	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
 	const FVector N = Out.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
-	const float S = bViewmodel ? 0.42f : 1.0f;
+	const float S = bOwnEyes ? 0.42f : 1.0f;
 	const float T = FMath::Max(Duration, 0.15f);
 	// motes of light out of the air round the gun, each drawn in to the opening, faster as it nears it
 	const int32 Motes = 46;
@@ -715,13 +715,13 @@ void USOFxSubsystem::ReloadIntake(const FVector& At, const FVector& Out, const F
 		Fill.Color = FMath::Lerp(Color, FLinearColor::White, 0.2f * k);
 		Put(Fill);
 	}
-	PendingLights.Add({ At + N * 10.0f * S, Color, bViewmodel ? 4.0f : 25.0f, T, 0.0f });
+	PendingLights.Add({ At + N * 10.0f * S, Color, bOwnEyes ? 4.0f : 25.0f, T, 0.0f });
 }
 
-void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor)
+void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color, const FVector& Carry, bool bOwnEyes, const FSOFxAnchor& Anchor)
 {
 	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
-	const float S = bViewmodel ? 0.42f : 1.0f;
+	const float S = bOwnEyes ? 0.42f : 1.0f;
 	for (int32 i = 0; i < 5; ++i)
 	{
 		FSOFxParticle Puff;
@@ -750,10 +750,10 @@ void USOFxSubsystem::ReloadCellPop(const FVector& At, const FLinearColor& Color,
 	Put(Spit);
 }
 
-void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bViewmodel, const FSOFxAnchor& Anchor)
+void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, float Duration, const FVector& Carry, bool bOwnEyes, const FSOFxAnchor& Anchor)
 {
 	auto Put = [&](FSOFxParticle& P) { P.Anchor = Anchor; Spawn(P); };
-	const float S = bViewmodel ? 0.42f : 1.0f;
+	const float S = bOwnEyes ? 0.42f : 1.0f;
 	const float T = FMath::Max(Duration, 0.08f);
 	FSOFxParticle Swell;
 	Swell.Kind = ESOFxKind::Glow;
@@ -773,7 +773,7 @@ void USOFxSubsystem::ReloadCharge(const FVector& At, const FLinearColor& Color, 
 	Flash.Intensity0 = 18.0f;
 	Flash.Color = FMath::Lerp(Color, FLinearColor::White, 0.7f);
 	Put(Flash);
-	PendingLights.Add({ At, Color, bViewmodel ? 5.0f : 30.0f, 0.12f, 0.0f });
+	PendingLights.Add({ At, Color, bOwnEyes ? 5.0f : 30.0f, 0.12f, 0.0f });
 }
 
 void USOFxSubsystem::PlasmaImpact(const FVector& Point, const FVector& Normal, const FLinearColor& Color, float Size, float Delay, bool bFlesh)
@@ -1062,7 +1062,7 @@ void USOFxSubsystem::SlugImpact(const FVector& Point, const FVector& Normal, flo
 	Spawn(Ember);
 }
 
-void USOFxSubsystem::SlugFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, float Bright, bool bThroughScope)
+void USOFxSubsystem::SlugFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, float Bright, bool bThroughScope)
 {
 	if (bThroughScope)
 	{
@@ -1103,11 +1103,11 @@ void USOFxSubsystem::SlugFlash(const FVector& Muzzle, const FVector& Dir, float 
 		Mote.Color = SOSlug::SparkGold;
 		Spawn(Mote);
 	}
-	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 220.0f * Scale * (bViewmodel ? 0.25f : 1.0f),
+	FlashLight(Muzzle + D * (bOwnEyes ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 22.0f : 0.0f), 220.0f * Scale * (bOwnEyes ? 0.25f : 1.0f),
 		SOSlug::Shell, 0.05f);
 }
 
-void USOFxSubsystem::PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bViewmodel, const FLinearColor& Color, bool bThroughScope)
+void USOFxSubsystem::PlasmaFlash(const FVector& Muzzle, const FVector& Dir, float Scale, bool bOwnEyes, const FLinearColor& Color, bool bThroughScope)
 {
 	if (bThroughScope)
 	{
@@ -1146,7 +1146,7 @@ void USOFxSubsystem::PlasmaFlash(const FVector& Muzzle, const FVector& Dir, floa
 		Mote.Color = Color;
 		Spawn(Mote);
 	}
-	FlashLight(Muzzle + D * (bViewmodel ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bViewmodel ? 22.0f : 0.0f), 240.0f * Scale * (bViewmodel ? 0.25f : 1.0f),
+	FlashLight(Muzzle + D * (bOwnEyes ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 22.0f : 0.0f), 240.0f * Scale * (bOwnEyes ? 0.25f : 1.0f),
 		Color, 0.06f);
 }
 
@@ -2476,7 +2476,7 @@ void USOFxSubsystem::Tick(float DeltaTime)
 			P.Delay -= DeltaTime;
 			if (P.Anchor.IsSet())
 			{
-				const FVector Now = P.Anchor.Gun->RigPointToWorld(P.Anchor.Local, P.Anchor.bViewmodel);
+				const FVector Now = P.Anchor.Gun->RigPointToWorld(P.Anchor.Local);
 				P.Position += Now - P.Anchor.Last;
 				P.Anchor.Last = Now;
 			}
@@ -2491,7 +2491,7 @@ void USOFxSubsystem::Tick(float DeltaTime)
 		if (P.Anchor.IsSet())
 		{
 			// held to its gun: moved by however far the gun's point moved since last frame (its own motion on top)
-			const FVector Now = P.Anchor.Gun->RigPointToWorld(P.Anchor.Local, P.Anchor.bViewmodel);
+			const FVector Now = P.Anchor.Gun->RigPointToWorld(P.Anchor.Local);
 			P.Position += Now - P.Anchor.Last;
 			P.Anchor.Last = Now;
 		}

@@ -1,6 +1,8 @@
 #include "SOCharacter.h"
 #include "SOStance.h"
 
+#include "AnimationRuntime.h"
+
 #include "Materials/MaterialInstanceDynamic.h"
 
 #include "SOAreaSubsystem.h"
@@ -16,6 +18,7 @@
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
@@ -107,51 +110,32 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	BaseEyeHeight = EyeOffset;
 	CrouchedEyeHeight = CrouchEyeHeight - 58.0f;
 
-	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-	FirstPersonCamera->SetupAttachment(Capsule);
-	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
-	FirstPersonCamera->bUsePawnControlRotation = true;
-	FirstPersonCamera->SetFieldOfView(90.0f);
-	FirstPersonCamera->bEnableFirstPersonFieldOfView = true;
-	FirstPersonCamera->FirstPersonFieldOfView = ViewmodelFov;
-
-	// The full body: hidden from the owner in first person but it still casts the player's shadow.
+	// ONE body (the owner, 2026-11-23: "one model and one camera that moves from player head to behind player"): seen by
+	// everyone, and from its own eyes by its own player (the head hidden from that camera alone: USOLocomotionAnimInstance
+	// bHideHead). Always animated: the eyes, the hands on the gun and the shots all come from its pose.
 	USkeletalMeshComponent* Body = GetMesh();
 	Body->SetRelativeLocation(FVector(0.0f, 0.0f, -Capsule->GetUnscaledCapsuleHalfHeight()));
 	Body->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f)); // Blender -Y forward -> UE +X
 	Body->SetCastHiddenShadow(true);
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
-	// First person: the same body again, owner-only, arms only (the anim instance collapses the rest).
-	FirstPersonArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArms"));
-	FirstPersonArms->bReceivesDecals = false;
-	FirstPersonArms->SetupAttachment(Capsule);
-	FirstPersonArms->SetRelativeLocation(Body->GetRelativeLocation());
-	ArmsBaseX = Body->GetRelativeLocation().X;                 // (the arms' own place along the body: the fists add to it)
-	FirstPersonArms->SetRelativeRotation(Body->GetRelativeRotation());
-	FirstPersonArms->SetOnlyOwnerSee(true);
-	FirstPersonArms->SetCastShadow(false);
-	FirstPersonArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	FirstPersonArms->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
-	// Animated whenever first person is on (ticking is switched off in third person): "only when rendered" would leave
-	// them stuck in the rest pose below the camera after a third-person spell, never rendered and so never animated.
-	FirstPersonArms->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	// ONE camera on one boom: first person (the game) the boom has no length and stands in the body's eyes; the
+	// third-person test view reaches it out behind the right shoulder (UpdateCamera moves it between the two).
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(Capsule);
+	CameraBoom->SetRelativeLocation(FVector(EyeFromHead.X, 0.0f, EyeOffset));
+	CameraBoom->TargetArmLength = 0.0f;
+	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bDoCollisionTest = false;
+	CameraBoom->ProbeSize = 14.0f;
+	CameraBoom->ProbeChannel = ECC_Camera;
+	CameraBoom->bEnableCameraLag = false;
+	CameraBoom->CameraLagSpeed = 18.0f;
 
-	ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
-	ThirdPersonBoom->SetupAttachment(Capsule);
-	ThirdPersonBoom->SetRelativeLocation(FVector(0.0f, 0.0f, 55.0f));
-	ThirdPersonBoom->TargetArmLength = HipArmLength;
-	ThirdPersonBoom->SocketOffset = HipSocketOffset;
-	ThirdPersonBoom->bUsePawnControlRotation = true;
-	ThirdPersonBoom->bDoCollisionTest = true;
-	ThirdPersonBoom->ProbeSize = 14.0f;
-	ThirdPersonBoom->ProbeChannel = ECC_Camera;
-	ThirdPersonBoom->bEnableCameraLag = true;
-	ThirdPersonBoom->CameraLagSpeed = 18.0f;
-
-	ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
-	ThirdPersonCamera->SetupAttachment(ThirdPersonBoom, USpringArmComponent::SocketName);
-	ThirdPersonCamera->bUsePawnControlRotation = false;
-	ThirdPersonCamera->SetAutoActivate(false);
+	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
+	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+	Camera->bUsePawnControlRotation = false;
+	Camera->SetFieldOfView(90.0f);
 
 	Look = CreateDefaultSubobject<USOLookComponent>(TEXT("Look"));
 
@@ -159,11 +143,10 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	// when the view is computed at the end of the frame).
 	Viewmodel = CreateDefaultSubobject<USOViewmodelComponent>(TEXT("Viewmodel"));
 	Viewmodel->SetupAttachment(Capsule);
-	ThirdPersonHold = CreateDefaultSubobject<USceneComponent>(TEXT("ThirdPersonHold"));
-	ThirdPersonHold->SetupAttachment(Capsule);
+	GunHold = CreateDefaultSubobject<USceneComponent>(TEXT("GunHold"));
+	GunHold->SetupAttachment(Capsule);
 
 	BodyMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/PlayerMale/SK_PlayerMale.SK_PlayerMale")));
-	ArmsMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/PlayerMale/SK_PlayerMaleArms.SK_PlayerMaleArms")));
 	DefaultWeapon = TSoftObjectPtr<USOWeaponData>(FSoftObjectPath(TEXT("/Game/Weapons/Rifle/DA_Rifle.DA_Rifle")));
 
 	MoveAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Move));
@@ -293,7 +276,7 @@ FLinearColor ASOCharacter::BeardMask(FName Beard)
 
 void ASOCharacter::SetOutfit(const FSOOutfit& NewOutfit)
 {
-	if (NewOutfit == Outfit && AppliedBody == NewOutfit.Body && WornThirdPerson.Num() > 0)
+	if (NewOutfit == Outfit && AppliedBody == NewOutfit.Body && WornPieces.Num() > 0)
 	{
 		return;
 	}
@@ -304,7 +287,7 @@ void ASOCharacter::SetOutfit(const FSOOutfit& NewOutfit)
 	Same.SkinTone = Outfit.SkinTone;
 	Same.HairTone = Outfit.HairTone;
 	Same.Beard = Outfit.Beard;
-	if (Same == Outfit && AppliedBody == NewOutfit.Body && WornThirdPerson.Num() > 0)
+	if (Same == Outfit && AppliedBody == NewOutfit.Body && WornPieces.Num() > 0)
 	{
 		SetLook(NewOutfit);
 		return;
@@ -327,9 +310,9 @@ void ASOCharacter::OutfitFromInventory()
 	}
 }
 
-USkeletalMeshComponent* ASOCharacter::GetWornPiece(FName Slot, bool bFirstPerson) const
+USkeletalMeshComponent* ASOCharacter::GetWornPiece(FName Slot) const
 {
-	const TObjectPtr<USkeletalMeshComponent>* Found = (bFirstPerson ? WornFirstPerson : WornThirdPerson).Find(Slot);
+	const TObjectPtr<USkeletalMeshComponent>* Found = WornPieces.Find(Slot);
 	return Found ? Found->Get() : nullptr;
 }
 
@@ -340,29 +323,21 @@ void ASOCharacter::ApplyOutfit()
 	{
 		return;
 	}
-	// another body: its meshes and clips (both views)
+	// another body: its mesh and clips
 	if (AppliedBody != Outfit.Body)
 	{
 		AppliedBody = Outfit.Body;
 		BodyMesh = Wardrobe->BodyMesh;
-		ArmsMesh = Wardrobe->ArmsMesh;
 		if (!Wardrobe->ClipPathPrefix.IsEmpty())
 		{
 			ClipPathPrefix = Wardrobe->ClipPathPrefix;
 		}
 		USkeletalMesh* Body = BodyMesh.LoadSynchronous();
-		USkeletalMesh* Arms = ArmsMesh.LoadSynchronous();
 		if (Body && GetMesh()->GetSkeletalMeshAsset() != Body)
 		{
 			GetMesh()->EmptyOverrideMaterials();               // (the tones' instances were the other body's slots)
 			GetMesh()->SetSkeletalMesh(Body);
 			LoadBody(GetMesh());
-		}
-		if (Arms && FirstPersonArms->GetSkeletalMeshAsset() != Arms)
-		{
-			FirstPersonArms->EmptyOverrideMaterials();
-			FirstPersonArms->SetSkeletalMesh(Arms);
-			LoadBody(FirstPersonArms);
 		}
 	}
 
@@ -421,12 +396,12 @@ void ASOCharacter::ApplyOutfit()
 		}
 	}
 
-	auto Dress = [&](TMap<FName, TObjectPtr<USkeletalMeshComponent>>& Pieces, USkeletalMeshComponent* Leader, bool bFirstPerson)
+	auto Dress = [&](TMap<FName, TObjectPtr<USkeletalMeshComponent>>& Pieces, USkeletalMeshComponent* Leader)
 	{
 		TSet<FName> Keep;
 		for (const TPair<FName, const FSOWardrobeItem*>& P : Worn)
 		{
-			USkeletalMesh* Mesh = Gone.Contains(P.Key) ? nullptr : (bFirstPerson ? P.Value->ArmsMesh : P.Value->Mesh).LoadSynchronous();
+			USkeletalMesh* Mesh = Gone.Contains(P.Key) ? nullptr : P.Value->Mesh.LoadSynchronous();
 			if (!Mesh)
 			{
 				continue;
@@ -434,24 +409,14 @@ void ASOCharacter::ApplyOutfit()
 			TObjectPtr<USkeletalMeshComponent>& Piece = Pieces.FindOrAdd(P.Key);
 			if (!Piece)
 			{
-				const FName Name = MakeUniqueObjectName(this, USkeletalMeshComponent::StaticClass(),
-					*FString::Printf(TEXT("%s_%s"), bFirstPerson ? TEXT("WornFP") : TEXT("Worn"), *P.Key.ToString()));
+				const FName Name = MakeUniqueObjectName(this, USkeletalMeshComponent::StaticClass(), *FString::Printf(TEXT("Worn_%s"), *P.Key.ToString()));
 				Piece = NewObject<USkeletalMeshComponent>(this, Name);
 				Piece->bReceivesDecals = false;
 				Piece->SetupAttachment(Leader);
 				Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Piece->SetGenerateOverlapEvents(false);
 				Piece->bUseBoundsFromLeaderPoseComponent = true;
-				if (bFirstPerson)
-				{
-					Piece->SetOnlyOwnerSee(true);
-					Piece->SetCastShadow(false);
-					Piece->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
-				}
-				else
-				{
-					Piece->SetCastHiddenShadow(true);
-				}
+				Piece->SetCastHiddenShadow(true);
 				Piece->RegisterComponent();
 			}
 			if (Piece->GetSkeletalMeshAsset() != Mesh)
@@ -474,10 +439,8 @@ void ASOCharacter::ApplyOutfit()
 			}
 		}
 	};
-	Dress(WornThirdPerson, GetMesh(), false);
-	Dress(WornFirstPerson, FirstPersonArms, true);
+	Dress(WornPieces, GetMesh());
 	ShowRegions(GetMesh(), HiddenRegions);
-	ShowRegions(FirstPersonArms, HiddenRegions);
 	ApplyFace();
 	ApplyViewMode();
 }
@@ -501,7 +464,7 @@ void ASOCharacter::ApplyFace()
 		return;
 	}
 	TArray<USkeletalMeshComponent*, TInlineAllocator<8>> Faced = { Body };
-	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornThirdPerson)
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornPieces)
 	{
 		if (P.Value)
 		{
@@ -517,7 +480,7 @@ void ASOCharacter::ApplyFace()
 		}
 	}
 	// the skin's and the hair's tones (the character builder's) over every skin and hair material of the body and of
-	// the first-person arms: the skin's tint over its own maps, the hair's tint (the strands' atlas is neutral), the
+	// its worn pieces: the skin's tint over its own maps, the hair's tint (the strands' atlas is neutral), the
 	// brows drawn on the face's skin following the hair; a tone unset puts the material back as it was imported
 	auto Tint = [this](USkeletalMeshComponent* Part)
 	{
@@ -585,21 +548,15 @@ void ASOCharacter::ApplyFace()
 		}
 	};
 	Tint(Body);
-	Tint(FirstPersonArms);
-	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornThirdPerson)
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornPieces)
 	{
 		Tint(P.Value.Get());                                    // (a body whose hair is a piece of its own)
-	}
-	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornFirstPerson)
-	{
-		Tint(P.Value.Get());
 	}
 }
 
 void ASOCharacter::LoadContent()
 {
 	LoadBody(GetMesh());
-	LoadBody(FirstPersonArms);
 }
 
 void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
@@ -608,24 +565,12 @@ void ASOCharacter::LoadBody(USkeletalMeshComponent* Body)
 	{
 		return;
 	}
-	const bool bArms = Body == FirstPersonArms;
-	if (!Body->GetSkeletalMeshAsset())
+	if (!Body->GetSkeletalMeshAsset() && !BodyMesh.IsNull())
 	{
-		USkeletalMesh* Loaded = bArms && !ArmsMesh.IsNull() ? ArmsMesh.LoadSynchronous() : nullptr;
-		if (!Loaded && !BodyMesh.IsNull())
-		{
-			Loaded = BodyMesh.LoadSynchronous();
-		}
-		if (Loaded)
+		if (USkeletalMesh* Loaded = BodyMesh.LoadSynchronous())
 		{
 			Body->SetSkeletalMesh(Loaded);
 		}
-	}
-	if (bArms && GetMesh()->GetPhysicsAsset())
-	{
-		// Bounds from the body's physics shapes, so arms reaching forward are never culled (the arms mesh has none).
-		Body->SetPhysicsAsset(GetMesh()->GetPhysicsAsset());
-		Body->bComponentUseFixedSkelBounds = false;
 	}
 	if (Body->GetSkeletalMeshAsset() && !Body->GetAnimInstance())
 	{
@@ -692,8 +637,8 @@ void ASOCharacter::BeginPlay()
 	{
 		BlastHandle = Fx->OnBlast.AddUObject(this, &ASOCharacter::OnBlastNearby);
 	}
-	// the eye's height, the arms' place under it and the camera's roll are set in this actor's tick; the gun is laid on
-	// the eye (the viewmodel) and the arms reach for it after that, in the same frame, never from the frame before
+	// the eyes and the camera are set in this actor's tick; the gun is laid in the hands after that (the viewmodel) and
+	// the arms reach for it after that, in the same frame, never from the frame before
 	if (Viewmodel)
 	{
 		Viewmodel->AddTickPrerequisiteActor(this);
@@ -712,12 +657,7 @@ void ASOCharacter::BeginPlay()
 
 FVector ASOCharacter::GetAimOrigin() const
 {
-	return FirstPersonCamera->GetComponentLocation();
-}
-
-USceneComponent* ASOCharacter::GetFirstPersonWeaponParent() const
-{
-	return Viewmodel;
+	return GetEyeTransform(false).GetLocation();
 }
 
 bool ASOCharacter::CanFireWeapon() const
@@ -756,12 +696,21 @@ FTransform ASOCharacter::GetEyeTransform(bool bWithRecoil) const
 	FRotator Aim = GetAimRotation();
 	Aim.Pitch = FRotator::NormalizeAxis(Aim.Pitch) + (bWithRecoil ? GetRecoilPitch() : 0.0f);
 	Aim.Roll = CameraRoll;   // slide / strafe tilt (the gun rolls with the view; the aim direction does not change)
-	return FTransform(Aim, FirstPersonCamera->GetComponentLocation());
+	// the body's own eyes: the camera sits in them in first person, and the shots start there
+	return FTransform(Aim, GetCapsuleComponent()->GetComponentTransform().TransformPosition(bHaveEye ? EyeCS : FVector(EyeFromHead.X, 0.0f, EyeOffset)));
 }
 
 bool ASOCharacter::UsesShoulderCrosshair() const
 {
-	return ViewMode == ESOViewMode::ThirdPerson && ThirdPersonCamera && !bDead && !bScopeView;
+	return ViewBlend > 0.5f && !bDead && !bScopeView;
+}
+
+bool ASOCharacter::IsHeadHidden() const
+{
+	// only while its own player's camera is in it: any other camera on this machine (a capture's, a spectator's) sees the
+	// whole body (hidden whenever the player was local, the pictures from beside the body showed it headless)
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	return IsLocallyControlled() && IsPlayerControlled() && !bDead && ViewBlend < 0.25f && PC && PC->GetViewTarget() == this;
 }
 
 FVector ASOCharacter::GetAimTarget() const
@@ -773,11 +722,11 @@ FVector ASOCharacter::GetAimTarget() const
 	{
 		return Origin + Forward * 30000.0f;
 	}
-	// Third person: the crosshair is the middle of the shoulder camera, which sits beside the head: what the
-	// camera's centre ray hits (starting level with the eye, so nothing behind the character counts).
+	// The third-person test view: the crosshair is the middle of the camera behind the shoulder: what its centre ray
+	// hits (starting level with the eye, so nothing behind the character counts).
 	UWorld* World = GetWorld();
-	const FVector Camera = ThirdPersonCamera->GetComponentLocation();
-	const FVector Start = Camera + Forward * FMath::Max(0.0f, FVector::DotProduct(Origin - Camera, Forward));
+	const FVector CameraAt = Camera->GetComponentLocation();
+	const FVector Start = CameraAt + Forward * FMath::Max(0.0f, FVector::DotProduct(Origin - CameraAt, Forward));
 	const FVector End = Start + Forward * 30000.0f;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SOThirdPersonAim), true, this);
 	if (Weapon)
@@ -832,26 +781,9 @@ void ASOCharacter::OnWeaponFired(float Kick)
 	RecoilKick = FMath::Min(1.5f, RecoilKick + (0.35f / Spread * 0.3f + 0.15f) * (Kick > 0.0f ? 1.0f : 0.0f));
 }
 
-FVector ASOCharacter::ViewmodelToWorld(const FVector& ViewmodelPoint) const
-{
-	// The viewmodel renders with FirstPersonFieldOfView; at the same depth a world point appears at the same screen
-	// position when its lateral offsets are scaled by tan(worldFov / 2) / tan(viewmodelFov / 2).
-	const FTransform Eye = GetEyeTransform(true); // what the camera shows (the component itself turns late)
-	FVector Local = Eye.InverseTransformPosition(ViewmodelPoint);
-	if (FirstPersonCamera->bEnableFirstPersonFieldOfView)
-	{
-		const float World = FMath::Tan(FMath::DegreesToRadians(FirstPersonCamera->FieldOfView) * 0.5f);
-		const float View = FMath::Tan(FMath::DegreesToRadians(FirstPersonCamera->FirstPersonFieldOfView) * 0.5f);
-		const float K = View > 1e-3f ? World / View : 1.0f;
-		Local.Y *= K;
-		Local.Z *= K;
-	}
-	return Eye.TransformPosition(Local);
-}
-
 bool ASOCharacter::IsFirstPersonView() const
 {
-	return ViewMode == ESOViewMode::FirstPerson && IsLocallyControlled() && IsPlayerControlled();
+	return IsLocallyControlled() && IsPlayerControlled() && ViewBlend < 0.5f;
 }
 
 void ASOCharacter::UpdateFeedbackSounds(float DeltaSeconds)
@@ -987,7 +919,7 @@ void ASOCharacter::RefreshHolsters()
 			USOGunRigComponent* Rig = NewObject<USOGunRigComponent>(this);
 			Rig->SetupAttachment(Body);
 			Rig->RegisterComponent();
-			Rig->Build(Data, false);
+			Rig->Build(Data);
 			Rig->Dress(*Copy);
 			HolsterRigs[Slot] = Rig;
 			HolsterUids[Slot] = Copy->Uid;
@@ -1032,7 +964,7 @@ void ASOCharacter::RefreshHolsters()
 	const bool bFemale = Inventory->GetBody() == TEXT("female");
 	// the clothed body's surface from its joints (cm): behind the chest, behind the belt, beside the hip joint
 	// (a coat or jacket over the back adds its cloth and folded hood)
-	const float BackDepth = ((bFemale ? HolsterBackDepth.Y : HolsterBackDepth.X) + (GetWornPiece(TEXT("outer"), false) ? HolsterCoat : 0.0f)) * K;
+	const float BackDepth = ((bFemale ? HolsterBackDepth.Y : HolsterBackDepth.X) + (GetWornPiece(TEXT("outer")) ? HolsterCoat : 0.0f)) * K;
 	const float BeltDepth = (bFemale ? 10.5f : 12.0f) * K;
 	const float HipSide = (bFemale ? HolsterHipSide.Y : HolsterHipSide.X) * K;
 	const float SpineGap = 1.6f;                                   // a back gun's top keeps this far from the midline
@@ -1196,14 +1128,9 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		if (bStow != bHeldStowed)
 		{
 			bHeldStowed = bStow;
-			if (Weapon && Weapon->GetThirdPersonRig())
+			if (Weapon && Weapon->GetRig())
 			{
-				Weapon->GetThirdPersonRig()->SetShown(!bStow);
-			}
-			// (first person: the hands go onto the edge too, so the gun is out of them and comes back up after)
-			if (Weapon && Weapon->GetFirstPersonRig())
-			{
-				Weapon->GetFirstPersonRig()->SetShown(!bStow);
+				Weapon->GetRig()->SetShown(!bStow);
 			}
 			if (!bStow && Viewmodel)
 			{
@@ -1228,8 +1155,8 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		// hands (stowed on a ledge): from just ahead of the chest.
 		const FRotator Aim = IsLocallyControlled() ? GetControlRotation() : GetBaseAimRotation();
 		const bool bFirst = IsFirstPersonView();
-		const FVector Eye = bFirst ? FirstPersonCamera->GetComponentLocation() : GetPawnViewLocation();
-		const USOGunRigComponent* Rig = Weapon && !bHeldStowed ? (bFirst ? Weapon->GetFirstPersonRig() : Weapon->GetThirdPersonRig()) : nullptr;
+		const FVector Eye = bFirst ? Camera->GetComponentLocation() : GetPawnViewLocation();
+		const USOGunRigComponent* Rig = Weapon && !bHeldStowed ? Weapon->GetRig() : nullptr;
 		const FVector From = Rig ? Rig->GetMuzzleLocation() + Aim.RotateVector(FVector(8.0f, 0.0f, -4.0f))
 			: (bFirst ? Eye + Aim.RotateVector(FVector(34.0f, 10.0f, -14.0f)) : GetActorLocation() + GetActorRotation().RotateVector(FVector(34.0f, -14.0f, 42.0f)));
 		FVector On = Eye + Aim.Vector() * 3000.0f;
@@ -1252,12 +1179,12 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	RecoilKick = FMath::Max(0.0f, RecoilKick - DeltaSeconds * RecoilRecovery);
 	AbilityKick = FMath::FInterpTo(AbilityKick, 0.0f, DeltaSeconds, 9.0f);
 	UpdateCameraFeel(DeltaSeconds);
-	for (UCameraComponent* Camera : { FirstPersonCamera.Get(), ThirdPersonCamera.Get() })
 	{
+		// (the view's own feel, a roll and a lean, belongs to the eyes: it goes as the camera goes out behind the shoulder)
+		const float AtEyes = 1.0f - ViewBlend;
 		Camera->ClearAdditiveOffset();
-		const bool bEyeCam = Camera == FirstPersonCamera.Get();
-		const float Roll = bEyeCam ? CameraRoll + ShakeRoll : 0.0f;
-		const float Pitch = GetRecoilPitch() + AbilityKick + (bEyeCam ? FeelPitch + BlastPunch : 0.0f);
+		const float Roll = (CameraRoll + ShakeRoll) * AtEyes;
+		const float Pitch = GetRecoilPitch() + AbilityKick + (FeelPitch + BlastPunch) * AtEyes;
 		if (FMath::Abs(Pitch) > 1e-3f || FMath::Abs(Roll) > 1e-3f)
 		{
 			Camera->AddAdditiveOffset(FTransform(FRotator(Pitch, 0.0f, Roll)), 0.0f);
@@ -1272,16 +1199,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		EyeVel += (Omega * Omega * (GetTargetEyeOffset() - EyeOffset) - 2.0f * Zeta * Omega * EyeVel) * Dt;
 		EyeOffset += EyeVel * Dt;
 	}
-	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset) + FeelOffset);
-	// The first-person arms hang from the eye, not from the capsule. Crouched (or sliding) the capsule's centre drops
-	// and the eye comes down to it: left on the capsule, the arms' shoulders ended up above the camera and the arms
-	// reached down into the view from overhead. Their shoulders keep their place under the eye exactly as standing.
-	// With the fists up the arms stand a little forward and lower (the guard is at the chin: from the eye the fists filled
-	// the bottom corners of the view; a hand to hand view shows them ahead, under the line of sight).
-	FistsView = FMath::FInterpTo(FistsView, bFists ? 1.0f : 0.0f, DeltaSeconds, 8.0f);
-	const FVector ArmsAt = FirstPersonArms->GetRelativeLocation();
-	const float ArmsX = ArmsBaseX;
-	FirstPersonArms->SetRelativeLocation(FVector(ArmsX + FistsForward * FistsView, ArmsAt.Y, EyeOffset - StandingEyeHeight - FistsDrop * FistsView));
+	UpdateEye(DeltaSeconds);
 
 	// Aim down sights: progress at the weapon ADS rate, zoom by the weapon magnification.
 	const USOWeaponData* WeaponData = Weapon ? Weapon->GetData() : nullptr;
@@ -1295,15 +1213,11 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	// scoped gun never zooms onto the character's back before the view cuts to the scope.
 	const float EyeFov = MoveFov / FMath::Lerp(1.0f, FMath::Max(Zoom, 1.0f), Ads);
 	const float ShoulderFov = MoveFov / FMath::Lerp(1.0f, FMath::Clamp(Zoom, 1.0f, ThirdPersonMaxZoom), Ads);
-	FirstPersonCamera->SetFieldOfView(EyeFov);
-	ThirdPersonCamera->SetFieldOfView(ShoulderFov);
 	{
 		const USOCharacterMovementComponent* SOMove = GetSOMovement();
 		const float Want = SOMove && SOMove->IsSprinting() ? FMath::Clamp((GetVelocity().Size2D() - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f;
 		SprintView = FMath::FInterpTo(SprintView, Want, DeltaSeconds, 4.0f);
 	}
-	ThirdPersonBoom->TargetArmLength = FMath::Lerp(HipArmLength, AimArmLength, Ads) + SprintArmExtra * SprintView * (1.0f - Ads);
-	ThirdPersonBoom->SocketOffset = FMath::Lerp(HipSocketOffset, AimSocketOffset, Ads);
 
 	// Magnified optics: fully aimed, the scope picture replaces the gun (viewmodel.js inScope); third person cuts to
 	// the eye for it, like the shoulder shooters do.
@@ -1314,7 +1228,8 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		bScopeView = bScope;
 		ApplyViewMode();
 	}
-	CurrentFov = UsesShoulderCrosshair() ? ShoulderFov : EyeFov;
+	UpdateCamera(DeltaSeconds, Ads, EyeFov, ShoulderFov);
+	CurrentFov = Camera->FieldOfView;
 	Look->SetAim(bAiming, MoveFov, CurrentFov);
 
 	// A latched (tapped) sprint ends once you stop pushing forward; a latched crouch follows the movement state.
@@ -2403,7 +2318,7 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	const double Z = GetActorLocation().Z;
 	if (!bFeel)
 	{
-		// the shoulder camera: the capsule pops up and down steps, the view glides over them
+		// behind the shoulder: the capsule pops up and down steps, the view glides over them
 		const bool bShoulder = Move && IsLocallyControlled() && ViewMode == ESOViewMode::ThirdPerson && !bDead;
 		if (bShoulder && bHaveFeelZ && Move->MovementMode == MOVE_Walking)
 		{
@@ -2414,14 +2329,14 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 			}
 		}
 		StepSmooth = bShoulder ? FMath::FInterpTo(StepSmooth, 0.0f, Dt, 11.0f) : 0.0f;
-		ThirdPersonBoom->TargetOffset = FVector(0.0f, 0.0f, StepSmooth);
+		CameraBoom->TargetOffset = FVector(0.0f, 0.0f, StepSmooth);
 		FeelOffset = FVector::ZeroVector;
-		LandDip = LandDipVel = CameraRoll = CameraRollVel = FovBoost = BobAmp = FeelPitch = ShakeRoll = ShakeRollVel = 0.0f;
+		LandDip = LandDipVel = CameraRoll = CameraRollVel = FovBoost = FeelPitch = ShakeRoll = ShakeRollVel = 0.0f;
 		LastFeelZ = Z;
 		bHaveFeelZ = true;
 		return;
 	}
-	ThirdPersonBoom->TargetOffset = FVector::ZeroVector;
+	CameraBoom->TargetOffset = FVector::ZeroVector;
 	const FVector Velocity = GetVelocity();
 	const float Speed = Velocity.Size2D();
 	const bool bGrounded = Move->IsMovingOnGround() && !Move->IsSliding();
@@ -2449,17 +2364,8 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	LandDipVel += (-Stiff * LandDip - Damp * LandDipVel) * Dt;
 	LandDip = FMath::Clamp(LandDip + LandDipVel * Dt, -14.0f, 6.0f);
 
-	// 3. Head bob in step with the footsteps (one dip per step, a sway per stride), never while aiming much.
-	const float Stride = Move->IsSprinting() ? 240.0f : (bIsCrouched ? 140.0f : 185.0f);
-	if (bGrounded)
-	{
-		BobPhase += Speed * Dt * PI / Stride;
-	}
+	// 3. (the step's bob and the breath are the body's own: the camera is in its eyes, and its head walks and breathes)
 	const float Ads = AimProgress * AimProgress * (3.0f - 2.0f * AimProgress);
-	const float WantAmp = bGrounded ? FMath::Min(Speed / 440.0f, 1.0f) * (Move->IsSprinting() ? 1.25f : 0.55f) * (1.0f - Ads * 0.85f) : 0.0f;
-	BobAmp = FMath::FInterpTo(BobAmp, WantAmp * HeadBobScale, Dt, 6.0f);
-	const float BobZ = -FMath::Abs(FMath::Sin(BobPhase)) * BobAmp + BobAmp * 0.5f;
-	const float BobY = FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.45f;
 
 	// 4. Roll: into a slide, into a dodge, a lean toward a strafe (the guide's 3-5 degrees), a whisper with the stride;
 	//    and a hard landing's wobble (a spring knocked by the impact, settling in a cycle or two).
@@ -2468,7 +2374,7 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	const float VaultArc = Move->IsVaulting() ? FMath::Sin(Move->GetMantleAlpha() * PI) : 0.0f;
 	const float DodgeSide = Move->IsDodging() ? static_cast<float>(FVector::DotProduct(Move->GetDodgeDir(), Right)) * FMath::Sin(Move->GetDodgeAlpha() * PI) : 0.0f;
 	const float WantRoll = (Move->IsSliding() ? -SlideCameraRoll : 0.0f) + VaultArc * VaultCameraRoll + Strafe * StrafeCameraRoll * (1.0f - Ads)
-		+ DodgeSide * DodgeCameraRoll + FMath::Sin(BobPhase * 0.5f) * BobAmp * 0.25f;
+		+ DodgeSide * DodgeCameraRoll;
 	{
 		// a spring (at a straight exponential the lean stopped dead: a machine's motion)
 		const float Omega = 9.0f, Zeta = 0.78f, SDt = FMath::Min(Dt, 0.05f);
@@ -2486,20 +2392,83 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	FovBoost = FMath::FInterpTo(FovBoost, WantFov, Dt, 5.0f);
 	FeelPitch = FMath::FInterpTo(FeelPitch, SprintCameraPitch * SprintK * (1.0f - Ads), Dt, 4.0f);
 
-	// 6. Standing still the view breathes (the guide's idle: "subtle breathing, small weight shifts"): a few millimetres
-	//    over 3.6 seconds, gone the moment the body moves.
-	const float Still = FMath::Clamp(1.0f - Speed / 30.0f, 0.0f, 1.0f) * (bGrounded ? 1.0f : 0.0f) * (1.0f - Ads * 0.7f);
-	const float BreathZ = 0.35f * Still * FMath::Sin(GetWorld()->GetTimeSeconds() * (2.0f * PI / 3.6f));
-	FeelOffset = FVector(0.0f, BobY, StepSmooth + LandDip + BobZ + BreathZ);
+	FeelOffset = FVector(0.0f, 0.0f, StepSmooth + LandDip * 0.5f);
+	(void)bGrounded;
+}
+
+void ASOCharacter::UpdateEye(float DeltaSeconds)
+{
+	// The body's own eyes (true first person: the camera sits in them): the head joint's place and turn in the body's
+	// last pose, with the eyes' place on it (EyeFromHead, measured at rest), in the capsule's frame; on the sights of a
+	// long gun the camera alone goes to the shouldered gun's sight line (SetSightEye; the head stays as it is: the
+	// owner, "just move the camera"). Followed by a stiff spring (the pose's jitter smoothed) never more than EyeMaxLag
+	// behind: a crouch carries the eyes all the way, at once (a soft spring left them 30 cm off the head in a crouch).
+	// Until the body has a head, the capsule's eye.
+	FVector Want(EyeFromHead.X, 0.0f, EyeOffset);
+	const USkeletalMeshComponent* Body = GetMesh();
+	const USkeletalMesh* BodyAsset = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+	const int32 Head = BodyAsset ? Body->GetBoneIndex(TEXT("head")) : INDEX_NONE;
+	if (Head != INDEX_NONE && Body->GetComponentSpaceTransforms().IsValidIndex(Head))
+	{
+		if (EyeMesh.Get() != BodyAsset)
+		{
+			// the eyes in the head bone's own frame, from the rest pose (the body's component space: +Y forward, +X the
+			// character's left, +Z up)
+			const FTransform RefHead = FAnimationRuntime::GetComponentSpaceTransformRefPose(BodyAsset->GetRefSkeleton(), Head);
+			EyeInHead = RefHead.GetRotation().UnrotateVector(FVector(-EyeFromHead.Y, EyeFromHead.X, EyeFromHead.Z));
+			EyeMesh = BodyAsset;
+		}
+		const FTransform HeadCS = Body->GetComponentSpaceTransforms()[Head];
+		const FVector EyeWorld = Body->GetComponentTransform().TransformPosition(HeadCS.GetLocation() + HeadCS.GetRotation().RotateVector(EyeInHead));
+		Want = GetCapsuleComponent()->GetComponentTransform().InverseTransformPosition(EyeWorld);
+	}
+	if (SightEyeAlpha > 1e-3f)
+	{
+		Want = FMath::Lerp(Want, SightEyeCS, SightEyeAlpha);
+	}
+	if (!bHaveEye || DeltaSeconds > 0.25f)
+	{
+		EyeCS = Want;
+		EyeVelCS = FVector::ZeroVector;
+		bHaveEye = true;
+		return;
+	}
+	const float Dt = FMath::Min(DeltaSeconds, 0.05f);
+	const float Omega = EyeFollow;
+	EyeVelCS += (Omega * Omega * (Want - EyeCS) - 2.0f * Omega * EyeVelCS) * Dt;   // (critically damped: no overshoot)
+	EyeCS += EyeVelCS * Dt;
+	const FVector Behind = EyeCS - Want;
+	if (Behind.SizeSquared() > FMath::Square(EyeMaxLag))
+	{
+		EyeCS = Want + Behind.GetSafeNormal() * EyeMaxLag;
+	}
+}
+
+void ASOCharacter::UpdateCamera(float DeltaSeconds, float Ads, float EyeFov, float ShoulderFov)
+{
+	// ONE camera (the owner, 2026-11-23): first person (the game) it is in the body's own eyes, the boom without length;
+	// the third-person test view carries it out behind the right shoulder; a switch moves it from one to the other over
+	// ViewSwitchTime, eased. Looking through a scope it is in the eyes at once.
+	const bool bBehind = ViewMode == ESOViewMode::ThirdPerson && !bScopeView;
+	ViewBlend = bScopeView ? 0.0f : FMath::FInterpConstantTo(ViewBlend, bBehind ? 1.0f : 0.0f, DeltaSeconds, 1.0f / FMath::Max(ViewSwitchTime, 0.01f));
+	const float V = ViewBlend * ViewBlend * (3.0f - 2.0f * ViewBlend);
+	const FVector InTheEyes = (bHaveEye ? EyeCS : FVector(EyeFromHead.X, 0.0f, EyeOffset)) + FeelOffset;
+	const FVector Shoulder(0.0f, 0.0f, 55.0f);
+	CameraBoom->SetRelativeLocation(FMath::Lerp(InTheEyes, Shoulder, V));
+	CameraBoom->TargetArmLength = (FMath::Lerp(HipArmLength, AimArmLength, Ads) + SprintArmExtra * SprintView * (1.0f - Ads)) * V;
+	CameraBoom->SocketOffset = FMath::Lerp(HipSocketOffset, AimSocketOffset, Ads) * V;
+	CameraBoom->bDoCollisionTest = V > 0.02f;
+	CameraBoom->bEnableCameraLag = V > 0.98f;
+	Camera->SetFieldOfView(FMath::Lerp(EyeFov, ShoulderFov, V));
 }
 
 void ASOCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
 	LastFeelZ -= ScaledHalfHeightAdjust;   // the capsule centre moved, not the feet: no step
-	// The capsule centre dropped; keep the eye where it was and let Tick ease it down.
+	// The capsule centre dropped; keep the eyes where they were (the body's pose and Tick bring them down).
 	EyeOffset += ScaledHalfHeightAdjust;
-	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
+	EyeCS.Z += ScaledHalfHeightAdjust;
 }
 
 void ASOCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
@@ -2507,7 +2476,7 @@ void ASOCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdj
 	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
 	LastFeelZ += ScaledHalfHeightAdjust;
 	EyeOffset -= ScaledHalfHeightAdjust;
-	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, EyeOffset));
+	EyeCS.Z -= ScaledHalfHeightAdjust;
 }
 
 bool ASOCharacter::CanJumpInternal_Implementation() const
@@ -2568,39 +2537,35 @@ void ASOCharacter::ToggleViewMode()
 
 void ASOCharacter::ApplyViewMode()
 {
-	const bool bFirst = ViewMode == ESOViewMode::FirstPerson;
-	const bool bEye = bFirst || bScopeView; // looking through a scope is always from the eye
-	FirstPersonCamera->SetActive(bEye);
-	ThirdPersonCamera->SetActive(!bEye);
-	FirstPersonArms->SetVisibility(bFirst && !bScopeView, true);
-	FirstPersonArms->SetComponentTickEnabled(bFirst);
-	GetMesh()->SetOwnerNoSee(bEye);
-	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& Piece : WornThirdPerson)
+	// One body, one gun, one camera (the owner, 2026-11-23): nothing changes model between the views; the camera moves
+	// (UpdateCamera) and the head is hidden from it while it is in the eyes (IsHeadHidden, in the body's own pose).
+	// Looking through a scope, its picture is the whole view: the body and the gun are hidden from their own player's
+	// camera (their shadows stay). The guns worn on the back stand behind the head: from its own eyes they would rise
+	// into the top of the view.
+	const bool bHideOwn = bScopeView;
+	GetMesh()->SetOwnerNoSee(bHideOwn);
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& Piece : WornPieces)
 	{
 		if (Piece.Value)
 		{
-			Piece.Value->SetOwnerNoSee(bEye);
+			Piece.Value->SetOwnerNoSee(bHideOwn);
 		}
 	}
-	if (Weapon)
+	if (Weapon && !Weapon->IsDropped())
 	{
-		Weapon->SetFirstPersonView(bEye);
-		// (a gun put away, on a vault or in hand to hand, stays away whichever view comes up: switching views with the
-		// fists up brought the gun back into the first-person view)
-		if (Weapon->GetFirstPersonRig())
+		Weapon->SetHiddenFromOwner(bHideOwn);
+		// (a gun put away, on a vault or in hand to hand, stays away whichever view comes up)
+		if (Weapon->GetRig())
 		{
-			Weapon->GetFirstPersonRig()->SetShown(bFirst && !bScopeView && !bHeldStowed);
-		}
-		if (bHeldStowed && Weapon->GetThirdPersonRig())
-		{
-			Weapon->GetThirdPersonRig()->SetShown(false);
+			Weapon->GetRig()->SetShown(!bHeldStowed);
 		}
 	}
+	const bool bEyes = ViewMode == ESOViewMode::FirstPerson || bScopeView;
 	for (USOGunRigComponent* Rig : HolsterRigs)
 	{
 		if (Rig)
 		{
-			Rig->SetOwnerNoSeeAll(bEye);
+			Rig->SetOwnerNoSeeAll(bEyes);
 		}
 	}
 }
@@ -2665,12 +2630,9 @@ void ASOCharacter::UpdateMeleeGuard()
 	const FSOMeleeStyle* Style = bFists && !bDead ? GetMeleeStyle() : nullptr;
 	const bool bBlock = Style && bBlocking && !Style->BlockClip.IsNone();
 	UAnimSequenceBase* Guard = Style ? GetAbilityClip(bBlock ? Style->BlockClip : Style->Guard) : nullptr;
-	for (USkeletalMeshComponent* Skel : { GetMesh(), FirstPersonArms.Get() })
+	if (USOLocomotionAnimInstance* Anim = GetMesh() ? Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr)
 	{
-		if (USOLocomotionAnimInstance* Anim = Skel ? Cast<USOLocomotionAnimInstance>(Skel->GetAnimInstance()) : nullptr)
-		{
-			Anim->SetMeleeGuard(Guard, bBlock ? Style->BlockHold : -1.0f);
-		}
+		Anim->SetMeleeGuard(Guard, bBlock ? Style->BlockHold : -1.0f);
 	}
 }
 
@@ -2804,12 +2766,9 @@ void ASOCharacter::ShowMeleeBlow(int32 Index)
 	}
 	if (UAnimSequenceBase* Clip = GetAbilityClip(Blow->Clip))
 	{
-		for (USkeletalMeshComponent* Skel : { GetMesh(), FirstPersonArms.Get() })
+		if (USOLocomotionAnimInstance* Anim = GetMesh() ? Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr)
 		{
-			if (USOLocomotionAnimInstance* Anim = Skel ? Cast<USOLocomotionAnimInstance>(Skel->GetAnimInstance()) : nullptr)
-			{
-				Anim->PlayMeleeBlow(Clip, 1.0f);
-			}
+			Anim->PlayMeleeBlow(Clip, 1.0f);
 		}
 	}
 	if (!Blow->SwingSound.IsNone())
@@ -3043,48 +3002,30 @@ void ASOCharacter::UpdateBlade()
 	{
 		// once per change of style, never every frame: the mesh is loaded with the area's assets already
 		UStaticMesh* BladeMesh = Style->Mesh.LoadSynchronous();
-		for (TObjectPtr<UStaticMeshComponent>* Slot : { &BladeTP, &BladeFP })
+		if (!HeldBlade)
 		{
-			if (!*Slot)
-			{
-				UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
-				C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-				C->SetCastShadow(Slot == &BladeTP);
-				C->SetupAttachment(GetCapsuleComponent());
-				C->RegisterComponent();
-				if (Slot == &BladeFP)
-				{
-					C->SetOnlyOwnerSee(true);
-					C->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
-				}
-				*Slot = C;
-			}
-			(*Slot)->SetStaticMesh(BladeMesh);
+			HeldBlade = NewObject<UStaticMeshComponent>(this);
+			HeldBlade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			HeldBlade->SetCastShadow(true);
+			HeldBlade->SetupAttachment(GetCapsuleComponent());
+			HeldBlade->RegisterComponent();
 		}
+		HeldBlade->SetStaticMesh(BladeMesh);
 		BladeStyle = MeleeStyle;
 	}
 	if (!bShow)
 	{
 		BladeStyle = NAME_None;
 	}
-	for (const bool bFirst : { false, true })
+	if (HeldBlade)
 	{
-		UStaticMeshComponent* C = bFirst ? BladeFP.Get() : BladeTP.Get();
-		const USkeletalMeshComponent* Holder = bFirst ? FirstPersonArms.Get() : GetMesh();
-		if (!C)
-		{
-			continue;
-		}
 		FTransform At;
-		const bool bOn = bShow && Holder && Holder->IsVisible() && BladeInHand(Holder, At);
-		C->SetVisibility(bOn);
+		const bool bOn = bShow && GetMesh() && BladeInHand(GetMesh(), At);
+		HeldBlade->SetVisibility(bOn);
 		if (bOn)
 		{
-			C->SetWorldTransform(At);
-			if (!bFirst)
-			{
-				C->SetOwnerNoSee(GetMesh()->bOwnerNoSee);
-			}
+			HeldBlade->SetWorldTransform(At);
+			HeldBlade->SetOwnerNoSee(GetMesh()->bOwnerNoSee);
 		}
 	}
 }

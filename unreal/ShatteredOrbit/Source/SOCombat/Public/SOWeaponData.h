@@ -246,8 +246,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats", meta = (Units = "s"))
 	float SprintToFireTime = 0.2f;
 
-	/** How the gun is carried in first person on a sprint (data "carry"): low (a long gun at the low ready), short (an
-	 *  SMG, up part of the way), high (a handgun, muzzle to the sky). None: a handgun high, anything else low. */
+	/** How the body carries the gun on a sprint (data "carry"; USOViewmodelComponent): low (a long gun at the low
+	 *  ready), short (an SMG, up part of the way), high (a handgun up by the face, muzzle to the sky). None: a handgun
+	 *  high, anything else low. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
 	FName SprintCarry;
 
@@ -288,13 +289,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
 	FName DefaultSight = TEXT("default");
-
-	/** First-person arms (viewmodel_arms.glb): the right arm sits at the gun origin, the left on the foregrip. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
-	TSoftObjectPtr<UStaticMesh> ArmLeftMesh;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
-	TSoftObjectPtr<UStaticMesh> ArmRightMesh;
 
 	const FSOWeaponPart* FindPart(FName PartName) const;
 	float GetShotInterval() const { return RoundsPerMinute > 0.0f ? 60.0f / RoundsPerMinute : 0.1f; }

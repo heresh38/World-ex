@@ -155,7 +155,7 @@ bool FSOArmedTest::RunTest(const FString& Parameters)
 	{
 		return false;
 	}
-	TestTrue(TEXT("the gun is held (attached to its hold)"), S->GetWeapon()->GetThirdPersonRig() && S->GetWeapon()->GetThirdPersonRig()->GetAttachParent() != nullptr);
+	TestTrue(TEXT("the gun is held (attached to its hold)"), S->GetWeapon()->GetRig() && S->GetWeapon()->GetRig()->GetAttachParent() != nullptr);
 	const float Before = Player->GetHealth() + Player->GetShield();
 	W.Run(6.0f);
 	TestTrue(FString::Printf(TEXT("it shoots (%d rounds)"), S->GetShotsFired()), S->GetShotsFired() > 0);

@@ -126,7 +126,7 @@
       "elbowMost": [1.45, 1.3],
       "wristMax": [76, 66],
       "shoulders": [0.6, 0.35],
-      "blade": [26, 30],
+      "blade": [30, 32],
       "lean": [10, 12],
       "hips": [4, 18],
       "headDown": 4,

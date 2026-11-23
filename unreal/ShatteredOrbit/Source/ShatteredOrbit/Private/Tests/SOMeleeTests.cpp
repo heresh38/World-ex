@@ -176,7 +176,7 @@ bool FSOMeleeBladeTest::RunTest(const FString& Parameters)
 	Player->HandleFists();
 	TestTrue(TEXT("key 4: the blade"), Player->IsFists() && Player->GetMeleeStyleId() == TEXT("skr_blade"));
 	W.Run(0.2f);
-	const UStaticMeshComponent* Held = Player->GetHeldBlade(false);
+	const UStaticMeshComponent* Held = Player->GetHeldBlade();
 	TestTrue(TEXT("the blade is in the body's hand"), Held && Held->IsVisible() && Held->GetStaticMesh());
 	if (Held && !SOTest::PlayerBodyMissing(*this))
 	{

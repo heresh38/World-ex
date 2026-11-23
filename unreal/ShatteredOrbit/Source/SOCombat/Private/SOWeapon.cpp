@@ -28,10 +28,8 @@ ASOWeapon::ASOWeapon()
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
-	FirstPersonRig = CreateDefaultSubobject<USOGunRigComponent>(TEXT("FirstPersonRig"));
-	FirstPersonRig->SetupAttachment(Root);
-	ThirdPersonRig = CreateDefaultSubobject<USOGunRigComponent>(TEXT("ThirdPersonRig"));
-	ThirdPersonRig->SetupAttachment(Root);
+	Rig = CreateDefaultSubobject<USOGunRigComponent>(TEXT("Rig"));
+	Rig->SetupAttachment(Root);
 	SpreadStream.Initialize(0x5EED);
 }
 
@@ -237,10 +235,8 @@ void ASOWeapon::BuildRigs()
 	{
 		return;
 	}
-	FirstPersonRig->Build(Data, true);
-	ThirdPersonRig->Build(Data, false);
-	FirstPersonRig->Dress(Instance);
-	ThirdPersonRig->Dress(Instance);
+	Rig->Build(Data);
+	Rig->Dress(Instance);
 }
 
 ASOCombatCharacter* ASOWeapon::GetHolder() const
@@ -255,32 +251,23 @@ void ASOWeapon::AttachToHolder(ASOCombatCharacter* Holder)
 		return;
 	}
 	AttachToActor(Holder, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-	if (USceneComponent* Viewmodel = Holder->GetFirstPersonWeaponParent())
-	{
-		FirstPersonRig->AttachToComponent(Viewmodel, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-	}
-	else
-	{
-		FirstPersonRig->SetShown(false);
-	}
-	if (USceneComponent* Hold = Holder->GetThirdPersonWeaponParent())
+	if (USceneComponent* Hold = Holder->GetWeaponParent())
 	{
 		// Held guns: the holder places the gun and its body's arm IK reaches for the rig's grips.
-		ThirdPersonRig->AttachToComponent(Hold, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		Rig->AttachToComponent(Hold, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 		return;
 	}
-	const FName Socket = Holder->GetThirdPersonWeaponSocket();
+	const FName Socket = Holder->GetWeaponSocket();
 	USkeletalMeshComponent* Body = Holder->GetMesh();
 	if (Body && Body->GetSkeletalMeshAsset() && Socket != NAME_None && Body->DoesSocketExist(Socket))
 	{
-		ThirdPersonRig->AttachToComponent(Body, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+		Rig->AttachToComponent(Body, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
 	}
 }
 
-void ASOWeapon::SetFirstPersonView(bool bFirstPerson)
+void ASOWeapon::SetHiddenFromOwner(bool bHide)
 {
-	FirstPersonRig->SetShown(bFirstPerson);
-	ThirdPersonRig->SetOwnerNoSeeAll(bFirstPerson);
+	Rig->SetOwnerNoSeeAll(bHide);
 }
 
 // --- Trigger ---------------------------------------------------------------------------------
@@ -560,15 +547,12 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 	{
 		return;
 	}
-	const bool bFirstPerson = Holder->IsFirstPersonView() && FirstPersonRig->IsBuilt();
+	// (seen from its own player's eyes: the flash a little smaller and its light thrown ahead, off the arms)
+	const bool bFirstPerson = Holder->IsFirstPersonView();
 	FVector Muzzle = Origin + Aim * 60.0f;
-	if (bFirstPerson)
+	if (Rig->IsBuilt() && Rig->GetAttachParent())
 	{
-		Muzzle = Holder->ViewmodelToWorld(FirstPersonRig->GetMuzzleLocation());
-	}
-	else if (ThirdPersonRig->IsBuilt() && ThirdPersonRig->GetAttachParent())
-	{
-		Muzzle = ThirdPersonRig->GetMuzzleLocation();
+		Muzzle = Rig->GetMuzzleLocation();
 	}
 	USOFxSubsystem* Fx = World->GetSubsystem<USOFxSubsystem>();
 	if (Fx)
@@ -609,12 +593,11 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 		{
 			// the spent casing out of the ejection port on the receiver's right (found on the gun's own bounds: ahead
 			// of the grip, on its right flank, high), landing on whatever floor is under it
-			const USOGunRigComponent* R = bFirstPerson ? FirstPersonRig : ThirdPersonRig;
-			const FBox B = R && R->IsBuilt() ? R->GetRigBounds() : FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
+			const FBox B = Rig->IsBuilt() ? Rig->GetRigBounds() : FBox(FVector(-20.0f, -3.0f, -12.0f), FVector(40.0f, 3.0f, 10.0f));
 			const FVector Local(B.Min.X + (B.Max.X - B.Min.X) * 0.42f, B.Max.Y + 0.5f, B.Min.Z + (B.Max.Z - B.Min.Z) * 0.62f);
-			const FVector Port = RigPointToWorld(Local, bFirstPerson);
-			const FVector Out = (RigPointToWorld(Local + FVector(0.0f, 1.0f, 0.0f), bFirstPerson) - Port).GetSafeNormal();
-			const FVector Up = (RigPointToWorld(Local + FVector(0.0f, 0.0f, 1.0f), bFirstPerson) - Port).GetSafeNormal();
+			const FVector Port = RigPointToWorld(Local);
+			const FVector Out = (RigPointToWorld(Local + FVector(0.0f, 1.0f, 0.0f)) - Port).GetSafeNormal();
+			const FVector Up = (RigPointToWorld(Local + FVector(0.0f, 0.0f, 1.0f)) - Port).GetSafeNormal();
 			FHitResult Floor;
 			FCollisionQueryParams FloorParams(SCENE_QUERY_STAT(SOCasingFloor), false, Holder);
 			FloorParams.AddIgnoredActor(this);
@@ -822,16 +805,9 @@ void ASOWeapon::PlayShotEffects(const FVector& Origin, const FVector& Aim, int32
 	USOSoundLibrary::PlayFor(Holder, Sound, Muzzle, bOwn ? 0.85f : 1.0f, ESOSoundRange::Far, 0.035f);
 }
 
-FVector ASOWeapon::RigPointToWorld(const FVector& RigLocal, bool bFirstPerson) const
+FVector ASOWeapon::RigPointToWorld(const FVector& RigLocal) const
 {
-	const USOGunRigComponent* Rig = bFirstPerson ? FirstPersonRig.Get() : ThirdPersonRig.Get();
-	if (!Rig)
-	{
-		return RigLocal;
-	}
-	const FVector P = Rig->GetComponentTransform().TransformPosition(RigLocal);
-	const ASOCombatCharacter* Holder = GetHolder();
-	return bFirstPerson && Holder ? Holder->ViewmodelToWorld(P) : P;
+	return Rig ? Rig->GetComponentTransform().TransformPosition(RigLocal) : RigLocal;
 }
 
 void ASOWeapon::PlayReloadFx(FName Kind, float Seconds)
@@ -843,13 +819,12 @@ void ASOWeapon::PlayReloadFx(FName Kind, float Seconds)
 	{
 		return;
 	}
-	const bool bFirstPerson = Holder->IsFirstPersonView() && FirstPersonRig->IsBuilt();
-	const USOGunRigComponent* Rig = bFirstPerson ? FirstPersonRig.Get() : ThirdPersonRig.Get();
+	const bool bFirstPerson = Holder->IsFirstPersonView();
 	if (!Rig || !Rig->IsBuilt())
 	{
 		return;
 	}
-	auto ToWorld = [&](const FVector& P) { return bFirstPerson ? Holder->ViewmodelToWorld(P) : P; };
+	auto ToWorld = [](const FVector& P) { return P; };
 	const FTransform Frame = Rig->GetComponentTransform();
 	const FVector Centre = ToWorld(Frame.TransformPosition(Rig->GetRigBounds().GetCenter()));
 	// the flap faces out of the gun's LEFT flank (rig -Y), a little up
@@ -864,7 +839,6 @@ void ASOWeapon::PlayReloadFx(FName Kind, float Seconds)
 	Anchor.Gun = this;
 	Anchor.Local = Rig->GetRigBounds().GetCenter();
 	Anchor.Last = Centre;
-	Anchor.bViewmodel = bFirstPerson;
 	const FLinearColor Color = Data->TracerColor;
 	if (Kind == TEXT("vent"))
 	{
@@ -1234,11 +1208,8 @@ void ASOWeapon::Tick(float DeltaSeconds)
 		BarrelSpin = FMath::Fmod(BarrelSpin + BarrelSpinRate * DeltaSeconds, UE_TWO_PI);
 	}
 	const FSOReloadPose& Pose = Reload.GetPose();
-	for (USOGunRigComponent* Rig : { FirstPersonRig.Get(), ThirdPersonRig.Get() })
-	{
-		Rig->SetBarrelSpin(BarrelSpin);
-		Rig->ApplyPose(Pose);
-	}
+	Rig->SetBarrelSpin(BarrelSpin);
+	Rig->ApplyPose(Pose);
 }
 
 void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)
@@ -1249,14 +1220,14 @@ void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)
 	}
 	bDropped = true;
 	UWorld* World = GetWorld();
-	USceneComponent* Space = ThirdPersonRig->IsBuilt() ? ThirdPersonRig->GetGunSpace() : nullptr;
+	USceneComponent* Space = Rig->IsBuilt() ? Rig->GetGunSpace() : nullptr;
 	if (World && Space && World->GetNetMode() != NM_DedicatedServer)
 	{
 		TArray<USceneComponent*> RigParts;
 		Space->GetChildrenComponents(true, RigParts);
 		TArray<UStaticMeshComponent*> Meshes;
 		FBox Local(ForceInit);
-		const FTransform Frame = ThirdPersonRig->GetComponentTransform();
+		const FTransform Frame = Rig->GetComponentTransform();
 		for (USceneComponent* Child : RigParts)
 		{
 			UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Child);
@@ -1310,18 +1281,17 @@ void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)
 			}
 		}
 	}
-	FirstPersonRig->SetShown(false);
-	ThirdPersonRig->SetShown(false);
+	Rig->SetShown(false);
 }
 
 void ASOWeapon::DropPart(FName Part)
 {
 	UWorld* World = GetWorld();
-	if (!World || World->GetNetMode() == NM_DedicatedServer || !ThirdPersonRig->IsBuilt())
+	if (!World || World->GetNetMode() == NM_DedicatedServer || !Rig->IsBuilt())
 	{
 		return;
 	}
-	const UStaticMeshComponent* Source = ThirdPersonRig->GetPart(Part);
+	const UStaticMeshComponent* Source = Rig->GetPart(Part);
 	UStaticMesh* Mesh = Source ? Source->GetStaticMesh() : nullptr;
 	if (!Mesh)
 	{

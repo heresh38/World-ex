@@ -876,7 +876,7 @@ bool FSOBearerTest::RunTest(const FString& Parameters)
 		return true;
 	}
 	const ASOWeapon* Gun = E->GetWeapon();
-	if (!TestNotNull(TEXT("its gun"), Gun) || !TestTrue(TEXT("the gun's rig is built"), Gun->GetThirdPersonRig() && Gun->GetThirdPersonRig()->IsBuilt()))
+	if (!TestNotNull(TEXT("its gun"), Gun) || !TestTrue(TEXT("the gun's rig is built"), Gun->GetRig() && Gun->GetRig()->IsBuilt()))
 	{
 		return false;
 	}
@@ -886,7 +886,7 @@ bool FSOBearerTest::RunTest(const FString& Parameters)
 	auto Reach = [&](const TCHAR* When)
 	{
 		FTransform Right, Left;
-		if (!TestTrue(TEXT("hand targets"), Gun->GetThirdPersonRig()->GetHandTargets(Right, Left)))
+		if (!TestTrue(TEXT("hand targets"), Gun->GetRig()->GetHandTargets(Right, Left)))
 		{
 			return;
 		}
@@ -902,7 +902,7 @@ bool FSOBearerTest::RunTest(const FString& Parameters)
 	E->SetAimTarget(Player);
 	W.Run(1.2f);
 	Reach(TEXT("on a target"));
-	const FVector Muzzle = Gun->GetThirdPersonRig()->GetMuzzleLocation();
+	const FVector Muzzle = Gun->GetRig()->GetMuzzleLocation();
 	const FVector ToPlayer = (Player->GetActorLocation() - E->GetActorLocation()).GetSafeNormal2D();
 	TestTrue(TEXT("on a target the muzzle is out in front of it"), FVector::DotProduct(Muzzle - E->GetActorLocation(), ToPlayer) > 40.0f);
 	E->SetAimTarget(nullptr);
