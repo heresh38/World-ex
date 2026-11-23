@@ -765,11 +765,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	{
 		// The third-person combat stance (files st_<gun>_<state>_<view>): each gun in the hands, the body turned to the
 		// sun, at rest then aiming, seen from in front, from the support side, from the side and from behind; one
-		// exposure, no HUD. -SOGuns=<archetype>[,...] (one of each class by default), -SOStanceViews=0,90,180,270.
+		// exposure, no HUD, the profile not saved meanwhile. -SOGuns=<archetype>[,...] (one of each class by default),
+		// -SOStanceViews=0,90,180,270.
 		FString List = TEXT("smg,rifle,hmg,sniper,shotgun,pistol,rocket");
 		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
 		FString ViewList = TEXT("20,90,180,270");
 		FParse::Value(FCommandLine::Get(), TEXT("SOStanceViews="), ViewList, false);
+		const FString Pre = TEXT("st");
 		TArray<FString> Guns, ViewStr;
 		List.ParseIntoArray(Guns, TEXT(","));
 		ViewList.ParseIntoArray(ViewStr, TEXT(","));
@@ -819,9 +821,56 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				break;
 			}
 		};
+		// (what the picture shows, measured: in the actor's frame, cm, X forward, Y right, Z up)
+		auto Geo = [this, Hero](const FString& Label)
+		{
+			const ASOCharacter* H = Hero();
+			const USkeletalMeshComponent* M = H ? H->GetMesh() : nullptr;
+			if (!M)
+			{
+				return true;
+			}
+			const FTransform A = H->GetActorTransform();
+			auto At = [&](const TCHAR* Bone) { return M->GetBoneIndex(Bone) == INDEX_NONE ? FVector::ZeroVector : A.InverseTransformPosition(M->GetBoneLocation(Bone)); };
+			auto Str = [](const FVector& V) { return FString::Printf(TEXT("(%.0f %.0f %.0f)"), V.X, V.Y, V.Z); };
+			FString Out = FString::Printf(TEXT("STANCEGEO %s ready %.2f:"), *Label, H->GetCombatReady());
+			for (const TCHAR* Bone : { TEXT("upperarm_R"), TEXT("forearm_R"), TEXT("hand_R"), TEXT("upperarm_L"), TEXT("forearm_L"), TEXT("hand_L"),
+				TEXT("hips"), TEXT("thigh_L"), TEXT("shin_L"), TEXT("foot_L"), TEXT("thigh_R"), TEXT("shin_R"), TEXT("foot_R"), TEXT("head") })
+			{
+				Out += FString::Printf(TEXT(" %s %s"), Bone, *Str(At(Bone)));
+			}
+			const ASOWeapon* W = H->GetWeapon();
+			if (const USOGunRigComponent* Rig = W ? W->GetThirdPersonRig() : nullptr; Rig && Rig->IsBuilt())
+			{
+				const FBox B = Rig->GetRigBounds();
+				const FTransform R = Rig->GetComponentTransform();
+				Out += FString::Printf(TEXT(" butt %s muzzle %s"), *Str(A.InverseTransformPosition(R.TransformPosition(FVector(B.Min.X, 0.0f, 1.5f)))),
+					*Str(A.InverseTransformPosition(R.TransformPosition(FVector(B.Max.X, 0.0f, 0.0f)))));
+				const USOLocomotionAnimInstance::FHoldReport Rep = USOLocomotionAnimInstance::MeasureHold(Rig, M);
+				Out += FString::Printf(TEXT(" wrist %.0f/%.0f inside %d/%d [%s|%s] palm %.1f/%.1f"), Rep.WristBend[0], Rep.WristBend[1], Rep.Inside[0], Rep.Inside[1], *Rep.Which[0], *Rep.Which[1],
+					Rep.PalmGap[0], Rep.PalmGap[1]);
+			}
+			const float* S0 = USOLocomotionAnimInstance::DebugSwing[0];
+			const float* S1 = USOLocomotionAnimInstance::DebugSwing[1];
+			Out += FString::Printf(TEXT(" swingR %.2f/%.2f/%.2f swingL %.2f/%.2f/%.2f"), S0[0], S0[1], S0[2], S1[0], S1[1], S1[2]);
+			UE_LOG(LogShatteredOrbit, Display, TEXT("%s"), *Out);
+			return true;
+		};
+		// the player's own third-person camera (behind, over the right shoulder: what the owner looks at)
+		auto Own = [this, Hero]()
+		{
+			if (ASOCharacter* H = Hero())
+			{
+				SetViewTarget(H);
+			}
+		};
 		Do(6.0f, [=, this]()
 		{
 			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+			}
 			View(ESOViewMode::ThirdPerson);
 			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
 			{
@@ -861,15 +910,38 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				{
 					const float Yaw = FCString::Atof(*V);
 					Act([=, this]() { FaceSun(); Body(Yaw); if (State == 1) { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } } });
-					Snap(0.6f, FString::Printf(TEXT("st_%s_%s_%d"), *Gun, StanceStates[State], int32(Yaw)));
+					const FString Name = FString::Printf(TEXT("%s_%s_%s_%d"), *Pre, *Gun, StanceStates[State], int32(Yaw));
+					Snap(0.6f, Name, [=]() { return Geo(Name); });
 				}
+				Act([=, this]() { Own(); if (State == 1) { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } } });
+				Snap(0.6f, FString::Printf(TEXT("%s_%s_%s_cam"), *Pre, *Gun, StanceStates[State]));
 				if (State == 2)
 				{
 					Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimReleased(); } });
 				}
 			}
+			// What the owner did: at the ready the view turned on the spot (the feet stay planted under it), then on the
+			// sights and off them again ("if you zoom in then zoom out the player legs are completely wrong and crossed")
+			Act([=, this]()
+			{
+				if (ASOCharacter* H = Hero())
+				{
+					H->MarkCombat();
+				}
+				SetControlRotation(GetControlRotation() + FRotator(0.0f, 30.0f, 0.0f));
+				Own();
+			});
+			Snap(0.6f, FString::Printf(TEXT("%s_%s_turned_cam"), *Pre, *Gun), [=]() { return Geo(FString::Printf(TEXT("%s_%s_turned"), *Pre, *Gun)); });
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimPressed(); } SetControlRotation(GetControlRotation() + FRotator(0.0f, -55.0f, 0.0f)); });
+			Do(1.0f, [=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimReleased(); } });
+			Snap(0.7f, FString::Printf(TEXT("%s_%s_after_cam"), *Pre, *Gun), [=]() { return Geo(FString::Printf(TEXT("%s_%s_after"), *Pre, *Gun)); });
+			for (const float Yaw : { 0.0f, 180.0f })
+			{
+				Act([=, this]() { Body(Yaw); });
+				Snap(0.3f, FString::Printf(TEXT("%s_%s_after_%d"), *Pre, *Gun, int32(Yaw)));
+			}
 			// (the next gun starts relaxed again: nothing has happened with it)
-			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } });
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } FaceSun(); });
 			Do(1.0f, []() {});
 		}
 		Do(0.5f, []() {});

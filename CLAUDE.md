@@ -1328,11 +1328,34 @@ replicated as `bCombatReady` for the other machines). Applied where it already l
 `USOViewmodelComponent::ThirdPersonHoldTransform` (the relaxed blend beside the sprint carry and the reload), the body
 in `USOLocomotionAnimInstance` (`FSOStanceInputs`: the stance's feet through the legs' two-bone IK in `ApplyBody`, the
 hips' drop with it; the elbows, the collarbones and the chin in `ApplyHold`); players only (a creature keeps its own way
-of holding), never the first-person arms. Lessons: holding the FIRING elbow out bends the wrist on a raked grip past a
-hand's limit, so on the sights the firing elbow goes where its wrist runs straightest and the shoulders roll into the
-gun (60-75 degrees from the forearm is a hand round a pistol grip: `Hold.TheGunIsSolid` allows 75 on every gun now); a
-muzzle dipped at the ready costs the wrist as much. Pictures `SOCaptureSeries 1 47` (files `SO_st_<gun>_<relaxed|ready|
-aim>_<view>`; `-SOGuns=`, `-SOStanceViews=20,90,180,270`, one exposure, no HUD); tests `ShatteredOrbit.Stance.*`.
+of holding), never the first-person arms. **The second pass** (the owner on the first, with pictures from their own
+camera: "arm not showing ... the player legs are completely wrong and crossed, it should be a military stance not this,
+the arms are gone and the gun is in the players shoulder"). Causes, measured (capture set 47 logs `STANCEGEO`: every
+joint, the butt and the muzzle in the actor's frame, the wrists, the swings): (1) the stance bent the knees by the
+clip's own knee side, and the idle's knees sit a little in (22 cm apart over ankles 26): the deeper bend carried them
+16 cm off the hip-ankle line, an X from behind, held 8 s after every aim; (2) the firing elbow was put where its wrist
+ran straightest: under the gun in front of the chest, the forearm standing up to the grip, so from behind the torso hid
+the whole arm; (3) the support hand on a long fore end was out of the left arm's reach and
+`ThirdPersonHoldTransform` pulled the WHOLE GUN 12 cm back toward the left shoulder: the butt 3 cm behind the right
+shoulder joint, in the shoulder. Now: the knee goes over the toes and never in (`ApplyBody`: the inward side taken out,
+`kneeOut` added, the leg's forward the way its toes point); a split stance with a gun in the hands, relaxed a little,
+at the ready the support foot 34 cm ahead, the firing foot's toes out (`toeOut`), the hips turned (`hips`, the spine
+turned back); the trunk BLADED to the gun (`blade` 26-30 for long guns): the left shoulder comes forward, so the fore
+end is in reach and nothing pulls the gun into the shoulder (the butt 4-10 cm in front of the joint), and the HEAD is
+turned back onto the target (turned with the chest it looked off to the side); each elbow carried at a swing round its
+shoulder-to-wrist line (`elbowSwing` / `elbowSwingAim`: the firing elbow 13-18 cm out from the shoulder, the support
+elbow under the gun) and no further out than leaves its wrist within `wristMax` (the hand's fitted place on the gun
+stays); the gun at the ready a little higher (`readyShift`); a handgun held out nearly straight in both hands
+(`handHold` 54 cm: at 38 both arms folded and the firing elbow crossed in); at the ready the feet step round under an
+aim that turned 18 degrees (`turnStep`: a split stance left planted under a 30 degree turn stood in line with the aim
+and read as crossed). Lessons: turning the hand round its grip to follow the forearm put the palm 2.3 cm into the
+grip's front (a grip is deeper than it is wide): the hand's place is the fit's, the elbow gives way; a hand round a
+raked grip at a bent arm's reach is 60-75 degrees from its forearm wherever the elbow goes, so the look decides the
+elbow and the wrist only limits it; look at the stance from the player's own camera (`_cam` shots), not only from a
+free one. Pictures `SOCaptureSeries 1 47` (files `SO_st_<gun>_<relaxed|ready|aim>_<view|cam>`, `_turned_cam`,
+`_after_cam|0|180`: on the sights and off again after a turn; `-SOGuns=`, `-SOStanceViews=20,90,180,270`, one exposure,
+no HUD, the profile not saved); tests `ShatteredOrbit.Stance.*` (the knees over the feet, the elbows, the butt in front
+of the shoulder, the stance after a turn).
 The loadout is worn: of the three equipped guns one is in the hands, the others each in a place of their own
 (`ASOCharacter::RefreshHolsters`: long guns stand side by side on the back, one behind each shoulder, placed by their
 BORE LINE inside the shoulders' width, never by their outline (a gun with fins was pushed out beside the body);

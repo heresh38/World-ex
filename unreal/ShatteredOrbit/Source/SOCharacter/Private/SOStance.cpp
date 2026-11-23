@@ -26,10 +26,15 @@ namespace
 	void Pair(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, float (&Out)[2])
 	{
 		const TArray<TSharedPtr<FJsonValue>>* A = nullptr;
+		double One = 0.0;
 		if (O->TryGetArrayField(Field, A) && A->Num() >= 2)
 		{
 			Out[0] = static_cast<float>((*A)[0]->AsNumber());
 			Out[1] = static_cast<float>((*A)[1]->AsNumber());
+		}
+		else if (O->TryGetNumberField(Field, One))
+		{
+			Out[0] = Out[1] = static_cast<float>(One);              // (one number: the same in both)
 		}
 	}
 
@@ -82,16 +87,23 @@ namespace
 				S.HandAimHold = Vec(O, TEXT("handAimHold"), S.HandAimHold);
 				S.RelaxOffset = Vec(O, TEXT("relaxOffset"), S.RelaxOffset);
 				S.RelaxRot = Rot(O, TEXT("relaxRot"), S.RelaxRot);
-				Pair(O, TEXT("elbowOut"), S.ElbowOut);
+				Pair(O, TEXT("elbowSwing"), S.ElbowSwing);
+				Pair(O, TEXT("elbowSwingAim"), S.ElbowSwingAim);
+				Pair(O, TEXT("wristShare"), S.WristShare);
 				Pair(O, TEXT("elbowLeast"), S.ElbowLeast);
 				Pair(O, TEXT("elbowMost"), S.ElbowMost);
-				Num(O, TEXT("shoulders"), S.Shoulders);
+				Pair(O, TEXT("wristMax"), S.WristMax);
+				Pair(O, TEXT("shoulders"), S.Shoulders);
 				Pair(O, TEXT("blade"), S.Blade);
 				Pair(O, TEXT("lean"), S.Lean);
+				Pair(O, TEXT("hips"), S.Hips);
 				Num(O, TEXT("headDown"), S.HeadDown);
-				Num(O, TEXT("knees"), S.Knees);
-				Num(O, TEXT("stagger"), S.Stagger);
-				Num(O, TEXT("width"), S.Width);
+				Pair(O, TEXT("knees"), S.Knees);
+				Pair(O, TEXT("stagger"), S.Stagger);
+				Pair(O, TEXT("width"), S.Width);
+				Pair(O, TEXT("toeOut"), S.ToeOut);
+				Num(O, TEXT("kneeOut"), S.KneeOut);
+				Num(O, TEXT("turnStep"), S.TurnStep);
 				Out.Classes.Add(S.Id, S);
 			}
 		}

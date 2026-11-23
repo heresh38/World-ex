@@ -1,5 +1,5 @@
 {
-  "_doc": "The third-person combat stance, one profile per class of gun (the owner, 2026-11-23: a confident, aggressive, disciplined military combat stance; never a pose per gun). Read at runtime (SOStance.h). families: a gun's family (game_data.json archetypes' family) -> its class. combatSeconds: how long the gun stays up after the last shot, aim, reload or hit; raiseTime / lowerTime: how fast it comes up from relaxed and goes back down. Per class: readyShift / aimShift (cm, actor axes forward, right, up): where a long gun's butt rides in the right shoulder pocket at the ready and on the sights; readyDip: the muzzle's dip at the ready (deg); handHold / handAimHold: a handgun's grip from the shoulders' middle (cm); relaxOffset / relaxRot: the relaxed carry from the chest point (cm) and its turn (pitch, yaw, roll); elbowOut: each elbow's lean out from straight down (firing, support); elbowLeast / elbowMost: how far it may swing (radians from straight down, + out round the arm's outside); shoulders: how much of the collarbones' forward pull is taken out (0..1: square shoulders, open chest); blade / lean: the trunk turned to the gun and leaning forward (deg, ready and aimed); headDown: the chin down (deg); knees: the hips lowered (cm); stagger: the support foot forward of the firing foot standing (cm); width: the feet wider standing (cm).",
+  "_doc": "The third-person combat stance, one profile per class of gun (the owner, 2026-11-23: a confident, aggressive, disciplined military combat stance; never a pose per gun). Read at runtime (SOStance.h). families: a gun's family (game_data.json archetypes' family) -> its class. combatSeconds: how long the gun stays up after the last shot, aim, reload or hit; raiseTime / lowerTime: how fast it comes up from relaxed and goes back down. Per class. The gun: readyShift / aimShift (cm, actor axes forward, right, up): where a long gun's butt rides in the right shoulder pocket at the ready and on the sights; readyDip: the muzzle's dip at the ready (deg); handHold / handAimHold: a handgun's grip from the shoulders' middle (cm); relaxOffset / relaxRot: the relaxed carry from the chest point (cm) and its turn (pitch, yaw, roll). The arms [firing, support]: elbowSwing / elbowSwingAim: where each elbow is carried at the ready and on the sights, a swing round the line from its shoulder to its wrist (radians from straight down, + out round the arm's outside: out at the sides, seen from behind); wristShare: how much of the way from there toward the straightest wrist it goes; elbowLeast / elbowMost: the least and the most it may swing; wristMax: each elbow comes no further out than leaves its wrist within this (deg between forearm and hand); shoulders [ready, aim]: how much of the collarbones' forward pull is taken out (0..1: square shoulders, open chest). The trunk: blade / lean [ready, aim]: turned to the gun and leaning forward (deg; the head stays on the target); hips [relaxed, ready]: the hips turned, the support hip forward (deg); headDown: the chin down (deg). The legs [relaxed, ready]: knees: the hips lowered (cm); stagger: the support foot ahead of the firing foot standing (cm); width: the feet further apart than the clip stands them (cm); toeOut [support foot, firing foot] at the ready (deg, relaxed 40 % of it); kneeOut: the knees carried out over the toes (cm), never in. turnStep: standing at the ready, the feet step round under an aim that turned this far (deg).",
   "combatSeconds": 8.0,
   "raiseTime": 0.18,
   "lowerTime": 0.7,
@@ -18,339 +18,171 @@
   },
   "classes": {
     "smg": {
-      "readyShift": [
-        0,
-        0,
-        2
-      ],
-      "aimShift": [
-        1.5,
-        -2.5,
-        7.5
-      ],
+      "readyShift": [2, 0, 5],
+      "aimShift": [1.5, -2.5, 7.5],
       "readyDip": 0,
-      "relaxOffset": [
-        24,
-        8,
-        -22
-      ],
-      "relaxRot": [
-        -30,
-        -36,
-        -14
-      ],
-      "elbowOut": [
-        0.6,
-        0.8
-      ],
-      "elbowLeast": [
-        -0.35,
-        -0.15
-      ],
-      "elbowMost": [
-        1.45,
-        1.2
-      ],
-      "shoulders": 0.5,
-      "blade": [
-        8,
-        24
-      ],
-      "lean": [
-        7,
-        9
-      ],
+      "relaxOffset": [24, 8, -22],
+      "relaxRot": [-30, -36, -14],
+      "elbowSwing": [0.7, 0.35],
+      "elbowSwingAim": [0.6, 0.3],
+      "wristShare": [0.0, 0.0],
+      "elbowLeast": [0.3, 0.0],
+      "elbowMost": [1.45, 1.2],
+      "wristMax": [76, 66],
+      "shoulders": [0.6, 0.35],
+      "blade": [26, 30],
+      "lean": [10, 12],
+      "hips": [4, 18],
       "headDown": 4,
-      "knees": 5,
-      "stagger": 16,
-      "width": 6
+      "knees": [1, 5.5],
+      "stagger": [6, 34],
+      "width": [2, 4],
+      "toeOut": [4, 38],
+      "kneeOut": 0.3,
+      "turnStep": 18
     },
     "rifle": {
-      "readyShift": [
-        0,
-        0,
-        2
-      ],
-      "aimShift": [
-        1.5,
-        -2.5,
-        7
-      ],
+      "readyShift": [2, 0, 5],
+      "aimShift": [1.5, -2.5, 7],
       "readyDip": 0,
-      "relaxOffset": [
-        24,
-        8,
-        -24
-      ],
-      "relaxRot": [
-        -32,
-        -38,
-        -16
-      ],
-      "elbowOut": [
-        0.6,
-        0.8
-      ],
-      "elbowLeast": [
-        -0.35,
-        -0.15
-      ],
-      "elbowMost": [
-        1.45,
-        1.25
-      ],
-      "shoulders": 0.5,
-      "blade": [
-        8,
-        24
-      ],
-      "lean": [
-        7,
-        9
-      ],
+      "relaxOffset": [24, 8, -24],
+      "relaxRot": [-32, -38, -16],
+      "elbowSwing": [0.7, 0.35],
+      "elbowSwingAim": [0.6, 0.3],
+      "wristShare": [0.0, 0.0],
+      "elbowLeast": [0.3, 0.0],
+      "elbowMost": [1.45, 1.2],
+      "wristMax": [76, 66],
+      "shoulders": [0.6, 0.35],
+      "blade": [26, 30],
+      "lean": [10, 12],
+      "hips": [4, 18],
       "headDown": 4,
-      "knees": 5,
-      "stagger": 18,
-      "width": 6
+      "knees": [1, 5.5],
+      "stagger": [6, 34],
+      "width": [2, 4],
+      "toeOut": [4, 38],
+      "kneeOut": 0.3,
+      "turnStep": 18
     },
     "lmg": {
-      "readyShift": [
-        0,
-        0,
-        1.5
-      ],
-      "aimShift": [
-        1,
-        -2,
-        5.5
-      ],
+      "readyShift": [2, 0, 4],
+      "aimShift": [1, -2, 5.5],
       "readyDip": 2,
-      "relaxOffset": [
-        22,
-        8,
-        -26
-      ],
-      "relaxRot": [
-        -26,
-        -34,
-        -12
-      ],
-      "elbowOut": [
-        0.6,
-        1.3
-      ],
-      "elbowLeast": [
-        -0.35,
-        0.3
-      ],
-      "elbowMost": [
-        1.45,
-        1.5
-      ],
-      "shoulders": 0.55,
-      "blade": [
-        9,
-        20
-      ],
-      "lean": [
-        8,
-        9
-      ],
+      "relaxOffset": [22, 8, -26],
+      "relaxRot": [-26, -34, -12],
+      "elbowSwing": [0.65, 0.55],
+      "elbowSwingAim": [0.55, 0.5],
+      "wristShare": [0.0, 0.0],
+      "elbowLeast": [0.3, 0.3],
+      "elbowMost": [1.45, 1.5],
+      "wristMax": [76, 66],
+      "shoulders": [0.65, 0.4],
+      "blade": [24, 28],
+      "lean": [10, 12],
+      "hips": [4, 18],
       "headDown": 3,
-      "knees": 7,
-      "stagger": 22,
-      "width": 10
+      "knees": [1.5, 6.5],
+      "stagger": [8, 38],
+      "width": [3, 8],
+      "toeOut": [4, 38],
+      "kneeOut": 0.3,
+      "turnStep": 18
     },
     "sniper": {
-      "readyShift": [
-        0,
-        0,
-        2
-      ],
-      "aimShift": [
-        1.5,
-        -3,
-        8
-      ],
+      "readyShift": [2, 0, 5],
+      "aimShift": [1.5, -3, 8],
       "readyDip": 0,
-      "relaxOffset": [
-        24,
-        8,
-        -24
-      ],
-      "relaxRot": [
-        -32,
-        -38,
-        -16
-      ],
-      "elbowOut": [
-        0.6,
-        0.8
-      ],
-      "elbowLeast": [
-        -0.35,
-        -0.15
-      ],
-      "elbowMost": [
-        1.45,
-        1.25
-      ],
-      "shoulders": 0.5,
-      "blade": [
-        8,
-        24
-      ],
-      "lean": [
-        6,
-        9
-      ],
+      "relaxOffset": [24, 8, -24],
+      "relaxRot": [-32, -38, -16],
+      "elbowSwing": [0.7, 0.35],
+      "elbowSwingAim": [0.6, 0.3],
+      "wristShare": [0.0, 0.0],
+      "elbowLeast": [0.3, 0.0],
+      "elbowMost": [1.45, 1.2],
+      "wristMax": [76, 66],
+      "shoulders": [0.6, 0.35],
+      "blade": [26, 30],
+      "lean": [10, 12],
+      "hips": [4, 18],
       "headDown": 6,
-      "knees": 5,
-      "stagger": 18,
-      "width": 6
+      "knees": [1, 5.5],
+      "stagger": [6, 34],
+      "width": [2, 4],
+      "toeOut": [4, 38],
+      "kneeOut": 0.3,
+      "turnStep": 18
     },
     "shotgun": {
-      "readyShift": [
-        0,
-        0,
-        2
-      ],
-      "aimShift": [
-        1.5,
-        -2.5,
-        7
-      ],
+      "readyShift": [2, 0, 5],
+      "aimShift": [1.5, -2.5, 7],
       "readyDip": 0,
-      "relaxOffset": [
-        24,
-        8,
-        -24
-      ],
-      "relaxRot": [
-        -32,
-        -38,
-        -16
-      ],
-      "elbowOut": [
-        0.6,
-        0.8
-      ],
-      "elbowLeast": [
-        -0.35,
-        -0.15
-      ],
-      "elbowMost": [
-        1.45,
-        1.3
-      ],
-      "shoulders": 0.5,
-      "blade": [
-        8,
-        24
-      ],
-      "lean": [
-        8,
-        9
-      ],
+      "relaxOffset": [24, 8, -24],
+      "relaxRot": [-32, -38, -16],
+      "elbowSwing": [0.7, 0.4],
+      "elbowSwingAim": [0.6, 0.35],
+      "wristShare": [0.0, 0.0],
+      "elbowLeast": [0.3, 0.0],
+      "elbowMost": [1.45, 1.3],
+      "wristMax": [76, 66],
+      "shoulders": [0.6, 0.35],
+      "blade": [26, 30],
+      "lean": [10, 12],
+      "hips": [4, 18],
       "headDown": 4,
-      "knees": 6,
-      "stagger": 18,
-      "width": 7
+      "knees": [1, 5.5],
+      "stagger": [6, 34],
+      "width": [2, 4],
+      "toeOut": [4, 38],
+      "kneeOut": 0.3,
+      "turnStep": 18
     },
     "pistol": {
-      "handHold": [
-        38,
-        7,
-        -3
-      ],
-      "handAimHold": [
-        44,
-        5,
-        3
-      ],
-      "relaxOffset": [
-        34,
-        6,
-        -12
-      ],
-      "relaxRot": [
-        -10,
-        -6,
-        0
-      ],
-      "elbowOut": [
-        0.8,
-        0.6
-      ],
-      "elbowLeast": [
-        0.05,
-        -0.3
-      ],
-      "elbowMost": [
-        1.45,
-        1.15
-      ],
-      "shoulders": 0.6,
-      "blade": [
-        4,
-        6
-      ],
-      "lean": [
-        6,
-        9
-      ],
+      "handHold": [54, 4, 3],
+      "handAimHold": [58, 3, 6],
+      "relaxOffset": [34, 6, -12],
+      "relaxRot": [-10, -6, 0],
+      "elbowSwing": [0.5, 0.45],
+      "elbowSwingAim": [0.45, 0.4],
+      "wristShare": [0.3, 0.0],
+      "elbowLeast": [0.05, -0.1],
+      "elbowMost": [1.2, 1.1],
+      "wristMax": [70, 66],
+      "shoulders": [0.6, 0.45],
+      "blade": [4, 6],
+      "lean": [6, 9],
+      "hips": [3, 8],
       "headDown": 4,
-      "knees": 5,
-      "stagger": 14,
-      "width": 6
+      "knees": [1, 5],
+      "stagger": [5, 26],
+      "width": [2, 4],
+      "toeOut": [4, 30],
+      "kneeOut": 0.3,
+      "turnStep": 18
     },
     "heavy": {
-      "readyShift": [
-        0,
-        0,
-        2
-      ],
-      "aimShift": [
-        0.5,
-        -1.5,
-        6
-      ],
+      "readyShift": [2, 0, 4],
+      "aimShift": [0.5, -1.5, 6],
       "readyDip": 2,
-      "relaxOffset": [
-        22,
-        8,
-        -24
-      ],
-      "relaxRot": [
-        -24,
-        -34,
-        -12
-      ],
-      "elbowOut": [
-        0.6,
-        1.3
-      ],
-      "elbowLeast": [
-        -0.35,
-        0.3
-      ],
-      "elbowMost": [
-        1.45,
-        1.5
-      ],
-      "shoulders": 0.55,
-      "blade": [
-        9,
-        20
-      ],
-      "lean": [
-        7,
-        9
-      ],
+      "relaxOffset": [22, 8, -24],
+      "relaxRot": [-24, -34, -12],
+      "elbowSwing": [0.65, 0.55],
+      "elbowSwingAim": [0.55, 0.5],
+      "wristShare": [0.0, 0.0],
+      "elbowLeast": [0.3, 0.3],
+      "elbowMost": [1.45, 1.5],
+      "wristMax": [76, 66],
+      "shoulders": [0.65, 0.4],
+      "blade": [24, 28],
+      "lean": [10, 12],
+      "hips": [4, 18],
       "headDown": 3,
-      "knees": 6,
-      "stagger": 20,
-      "width": 8
+      "knees": [1.5, 6.5],
+      "stagger": [8, 38],
+      "width": [3, 8],
+      "toeOut": [4, 38],
+      "kneeOut": 0.3,
+      "turnStep": 18
     }
   }
 }
