@@ -4330,6 +4330,20 @@ void USOInventoryWidget::OnControl(ESOArmouryControl Kind, const FString& Key)
 			Inventory->ServerSetBody(FName(*Key.RightChop(5)));
 			USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.6f, 0.0f);
 		}
+		else if (Inventory && Key.StartsWith(TEXT("hairstyle:")))
+		{
+			Inventory->ServerSetHairStyle(FName(*Key.RightChop(10)));
+			USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.5f, 0.0f);
+			CreatorBuilt.Reset();
+			Refresh();
+		}
+		else if (Inventory && Key.StartsWith(TEXT("beard:")))
+		{
+			Inventory->ServerSetBeard(FName(*Key.RightChop(6)));
+			USOSoundLibrary::Play2D(this, TEXT("ui_equip"), 0.5f, 0.0f);
+			CreatorBuilt.Reset();
+			Refresh();
+		}
 		break;
 	}
 }
@@ -5656,9 +5670,62 @@ void USOInventoryWidget::FillCharacter()
 	}
 	else if (CreatorGroup == TEXT("hair"))
 	{
+		// the style (the body's wardrobe's hair slot, its default first), the beard (where the body's face carries one),
+		// then the colour; each a row of choices two to a line
+		auto Choices = [&](const TCHAR* Prefix, const TArray<TPair<FName, FString>>& Options, FName Chosen)
+		{
+			const int32 PerRow = 2;
+			const float W = (GridWidth - (PerRow - 1) * CellGap) / PerRow;
+			for (int32 Start = 0; Start < Options.Num(); Start += PerRow)
+			{
+				UHorizontalBox* Row = Make<UHorizontalBox>(T);
+				for (int32 i = Start; i < FMath::Min(Options.Num(), Start + PerRow); ++i)
+				{
+					USOArmouryButton* B = CreateWidget<USOArmouryButton>(this, USOArmouryButton::StaticClass());
+					B->Setup(this, ESOArmouryControl::Choice, FString::Printf(TEXT("%s:%s"), Prefix, *Options[i].Key.ToString()), Options[i].Value.ToUpper(), Options[i].Key == Chosen);
+					B->Width = W;
+					Row->AddChildToHorizontalBox(B)->SetPadding(FMargin(i > Start ? CellGap : 0.0f, 0, 0, 0));
+				}
+				GridPanel->AddChildToVerticalBox(Row)->SetPadding(FMargin(0, 0, 0, CellGap));
+			}
+		};
+		const FName BodyId = Inventory->GetBody();
+		if (const USOWardrobeData* Wardrobe = USOWardrobeData::Get(BodyId))
+		{
+			TArray<TPair<FName, FString>> Styles;
+			const FName Default = Wardrobe->Defaults.FindRef(TEXT("hair"));
+			for (const FSOWardrobeItem& Item : Wardrobe->Items)
+			{
+				if (Item.Slot == TEXT("hair"))
+				{
+					Styles.Insert(TPair<FName, FString>(Item.Item, Item.Label.ToString()), Item.Item == Default ? 0 : Styles.Num());
+				}
+			}
+			if (Styles.Num() > 1)
+			{
+				const FName Worn = Look.Get(TEXT("hair"));
+				const TPair<FName, FString>* Shown = Styles.FindByPredicate([Worn](const TPair<FName, FString>& S) { return S.Key == Worn; });
+				GridPanel->AddChildToVerticalBox(Header(T, TEXT("STYLE"), Shown ? Shown->Value.ToUpper() : FString(), Cyan))->SetPadding(FMargin(0, 0, 0, 10));
+				Choices(TEXT("hairstyle"), Styles, Worn);
+				GridPanel->AddChildToVerticalBox(Make<USpacer>(T))->SetPadding(FMargin(0, 0, 0, 14));
+			}
+		}
+		if (Data.BeardBodies.Contains(BodyId) && Data.Beards.Num() > 0)
+		{
+			TArray<TPair<FName, FString>> Beards;
+			for (const FSOCreatorBeard& B : Data.Beards)
+			{
+				Beards.Emplace(B.Id, B.Name);
+			}
+			const FName Chosen = Look.Beard.IsNone() ? FName(TEXT("none")) : Look.Beard;
+			const FSOCreatorBeard* Shown = Data.Beards.FindByPredicate([Chosen](const FSOCreatorBeard& B) { return B.Id == Chosen; });
+			GridPanel->AddChildToVerticalBox(Header(T, TEXT("BEARD"), Shown ? Shown->Name.ToUpper() : FString(), Cyan))->SetPadding(FMargin(0, 0, 0, 10));
+			Choices(TEXT("beard"), Beards, Chosen);
+			GridPanel->AddChildToVerticalBox(Make<USpacer>(T))->SetPadding(FMargin(0, 0, 0, 14));
+		}
 		GridPanel->AddChildToVerticalBox(Header(T, TEXT("HAIR COLOUR"), ChosenOf(true), Cyan))->SetPadding(FMargin(0, 0, 0, 10));
 		Swatches(true);
-		GridPanel->AddChildToVerticalBox(Fit(Text(T, TEXT("THE BROWS FOLLOW THE HAIR"), 8, Dim, FaceBold, 200)))->SetPadding(FMargin(2, 6, 0, 0));
+		GridPanel->AddChildToVerticalBox(Fit(Text(T, TEXT("THE BROWS AND THE BEARD FOLLOW THE HAIR"), 8, Dim, FaceBold, 200)))->SetPadding(FMargin(2, 6, 0, 0));
 	}
 	else if (Group)
 	{

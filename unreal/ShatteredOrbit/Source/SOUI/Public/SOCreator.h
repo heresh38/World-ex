@@ -25,9 +25,18 @@ struct FSOCreatorTone
  * heavily customizable in game when the player first starts"), read once from Data/creator.json (SOData: in a package
  * from the staged data). The first tone of each list is the body's own (what alpha 0 on the outfit means).
  */
+/** A beard the builder offers (none = clean-shaven: the base face), and the bodies whose faces carry it. */
+struct FSOCreatorBeard
+{
+	FName Id;
+	FString Name;
+};
+
 struct SOUI_API FSOCreatorData
 {
 	TArray<FSOCreatorGroup> Groups;
+	TArray<FSOCreatorBeard> Beards;
+	TArray<FName> BeardBodies;
 	TArray<FSOCreatorTone> SkinTones;
 	TArray<FSOCreatorTone> HairColours;
 

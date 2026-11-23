@@ -109,7 +109,7 @@ def import_texture(file_path, dest, name, kind):
             # the face's maps are held at 4K (0.13 mm a texel): the brows are drawn into them hair by hair, a hair about
             # a texel wide; at 2K, packed as BC1 (4 x 4 texel blocks of two values each), every hair came out a chain of
             # millimetre blocks. Its packed map (R occlusion, G roughness, B the brows) is BC7: its channels kept apart
-            if "_orm" in name.lower():
+            if "_orm" in name.lower() or "_beard" in name.lower():   # (the beards' map: three masks, one a channel)
                 tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
         else:
             # the body's skin maps are written at 4K; the game holds them at 2K (video memory)
@@ -486,7 +486,19 @@ def skin_material(defaults):
     # the hair drawn on the skin (the Orion male's brows, hair by hair: the mask's B is how much of a texel is hair,
     # game.py brow_mask): the hair's own colour over the skin and its own roughness, by HairAmount (0 in the master:
     # the import turns it on for a face whose map carries the hairs; the creator colours them with HairColor)
-    hair = mul(mr, "B", scalar("HairAmount", 0.0, 1100), "", 1000)
+    brows = mul(mr, "B", scalar("HairAmount", 0.0, 1100), "", 1000)
+    beard_tex = tex("BeardTex", S.SAMPLERTYPE_MASKS, defaults["mask"], 1450)
+    beard_mask = E(unreal.MaterialExpressionVectorParameter, -900, 1700)
+    beard_mask.set_editor_property("parameter_name", "BeardMask")
+    beard_mask.set_editor_property("default_value", unreal.LinearColor(0, 0, 0, 0))
+    beard = E(unreal.MaterialExpressionDotProduct, -650, 1500)
+    mel.connect_material_expressions(beard_tex, "RGBA", beard, "A")          # (float4 with float4: the mask's A is 0)
+    mel.connect_material_expressions(beard_mask, "", beard, "B")
+    both = E(unreal.MaterialExpressionAdd, -500, 1150)
+    mel.connect_material_expressions(brows, "", both, "A")
+    mel.connect_material_expressions(beard, "", both, "B")
+    hair = E(unreal.MaterialExpressionSaturate, -400, 1150)
+    mel.connect_material_expressions(both, "", hair, "")
     hair_col = E(unreal.MaterialExpressionVectorParameter, -900, 1200)
     hair_col.set_editor_property("parameter_name", "HairColor")
     hair_col.set_editor_property("default_value", unreal.LinearColor(*BROW_TONE, 1.0))
@@ -506,8 +518,14 @@ def skin_material(defaults):
     mel.connect_material_expressions(scalar("AOAmount", 1.0, 700), "", ao, "Alpha")
     mel.connect_material_property(ao, "", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
     mel.connect_material_property(scalar("Specular", .35, 820), "", unreal.MaterialProperty.MP_SPECULAR)
-    mel.connect_material_property(scalar("Scatter", .65, 900), "", unreal.MaterialProperty.MP_OPACITY)   # (the profile's amount:
-    # at 1 the face was wax in daylight)
+    # (the profile's amount: at 1 the face was wax in daylight; none under the hair drawn on the skin: hair is not skin,
+    # and the light scattered under a beard washed it out to an olive cast)
+    bare = E(unreal.MaterialExpressionOneMinus, -400, 960)
+    mel.connect_material_expressions(hair, "", bare, "")
+    scatter = E(unreal.MaterialExpressionMultiply, -300, 900)
+    mel.connect_material_expressions(scalar("Scatter", .65, 900), "", scatter, "A")
+    mel.connect_material_expressions(bare, "", scatter, "B")
+    mel.connect_material_property(scatter, "", unreal.MaterialProperty.MP_OPACITY)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     return mat
@@ -609,6 +627,10 @@ def make_instance(master, dest, name, m, tex, extra=None):
         file = extra.get(key) or m.get(key)
         if file and file in tex:
             mel.set_material_instance_texture_parameter_value(mi, param, tex[file])
+    if extra.get("beardTex") and os.path.exists(extra["beardTex"]):
+        stem = os.path.splitext(os.path.basename(extra["beardTex"]))[0]
+        beard_t = import_texture(extra["beardTex"], f"{dest}/Textures", f"T_{stem}", "mask")
+        mel.set_material_instance_texture_parameter_value(mi, "BeardTex", beard_t)
 
     overrides = mi.get_editor_property("base_property_overrides")
     if m.get("alphaMode") in ("MASK", "BLEND"):
@@ -947,8 +969,12 @@ def player_extra(key, m):
         # hair: the new male's; the female's head wears the body's map, whose B is white, and with HairAmount 1 her
         # whole face took the brows' colour)
         own_face = key == "skin_face" and "_face_" in str(m.get("mrTex") or "")
-        return {"tint": list(SKIN_DAYLIGHT) if m.get("baseColorTex") else list(SKIN_TONE),
-                "hair": 1.0 if own_face else 0.0}
+        out = {"tint": list(SKIN_DAYLIGHT) if m.get("baseColorTex") else list(SKIN_TONE),
+               "hair": 1.0 if own_face else 0.0}
+        if own_face:
+            # (the beards, the character builder's, drawn hair by hair beside the face's maps: game.py beard_maps)
+            out["beardTex"] = os.path.join(SOURCE, "Characters", "src", "orion_male", "orion_male_skin_face_Beard.png")
+        return out
     if key in ("hair", "hair__cap", "hair__brow", "hair__lash", "brow"):
         return {"tint": list(HAIR_TONE)}
     if key == "orion_suit":
@@ -1222,6 +1248,11 @@ def player_wardrobe(sex, master):
         data = tools.create_asset("DA_Wardrobe", dest, unreal.SOWardrobeData, factory)
     items = []
     wardrobe = meta.get("wardrobe", {})
+    for slot, entries in wardrobe.items():
+        if slot in ARMOR_SLOT:
+            continue
+        for item in entries:
+            pieces.setdefault((slot, item), {"mesh": None})
     for (slot, item), got in sorted(pieces.items()):
         info = wardrobe.get(slot, {}).get(item, {})
         label = info.get("label", item)

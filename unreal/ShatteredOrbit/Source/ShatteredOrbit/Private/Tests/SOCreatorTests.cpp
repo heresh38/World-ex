@@ -9,6 +9,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "SOCreator.h"
+#include "SOCharacter.h"
 #include "SOInventoryComponent.h"
 #include "SOProfileStore.h"
 #include "SOWardrobe.h"
@@ -197,6 +198,19 @@ bool FSOCreatorBodyTest::RunTest(const FString& Parameters)
 			bHair |= Tint.Equals(FLinearColor(0.18f, 0.12f, 0.065f, 1.0f), 1e-3f);
 		}
 	}
+	// (the hair is a piece of the hair slot where the body has hairstyles to choose from)
+	if (const USkeletalMeshComponent* Hair = Body->GetWornPiece(TEXT("hair"), false))
+	{
+		for (int32 i = 0; i < Hair->GetNumMaterials(); ++i)
+		{
+			UMaterialInterface* M = Hair->GetMaterial(i);
+			FLinearColor Tint;
+			if (Source(M) && Source(M)->GetName() == TEXT("MI_hair") && M->GetVectorParameterValue(TEXT("BaseColorTint"), Tint))
+			{
+				bHair |= Tint.Equals(FLinearColor(0.18f, 0.12f, 0.065f, 1.0f), 1e-3f);
+			}
+		}
+	}
 	TestTrue(TEXT("the skin takes its tone"), bSkin);
 	TestTrue(TEXT("the brows follow the hair"), bBrows);
 	TestTrue(TEXT("the hair takes its colour"), bHair);
@@ -211,6 +225,89 @@ bool FSOCreatorBodyTest::RunTest(const FString& Parameters)
 		if (From && From->GetName() == TEXT("MI_skin") && M->GetVectorParameterValue(TEXT("BaseColorTint"), Now) && From->GetVectorParameterValue(TEXT("BaseColorTint"), Own))
 		{
 			TestTrue(TEXT("the skin back to its own tone"), Now.Equals(Own, 1e-3f));
+		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOCreatorHairTest, "ShatteredOrbit.Creator.HairAndBeard", SOTest::Flags)
+bool FSOCreatorHairTest::RunTest(const FString& Parameters)
+{
+	// the builder's hairstyles are the body's hair slot
+	// and its beards a channel of the face's beard map; both are kept, both reach the body, the other body keeps its
+	// own hair
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	const USOWardrobeData* Male = USOWardrobeData::Get(TEXT("male"));
+	if (!TestNotNull(TEXT("his wardrobe"), Male) || !Male->Find(TEXT("hair"), TEXT("crop")))
+	{
+		AddWarning(TEXT("the male's hairstyles are not imported yet"));
+		return true;
+	}
+	TestTrue(TEXT("a slicked back style to choose"), Male->Find(TEXT("hair"), TEXT("slick")) != nullptr);
+	TestEqual(TEXT("he starts with the swept style"), Male->Defaults.FindRef(TEXT("hair")), FName(TEXT("swept")));
+	const FSOCreatorData& Data = FSOCreatorData::Get();
+	TestTrue(TEXT("beards are data"), Data.Beards.Num() >= 4 && Data.BeardBodies.Contains(TEXT("male")));
+	TestEqual(TEXT("the first beard is none"), Data.Beards.Num() > 0 ? Data.Beards[0].Id : NAME_None, FName(TEXT("none")));
+
+	USOInventoryComponent* Inv = FreshInventory();
+	TestEqual(TEXT("a new player: the default hair"), Inv->GetOutfit().Get(TEXT("hair")), FName(TEXT("swept")));
+	TestTrue(TEXT("and clean-shaven"), Inv->GetOutfit().Beard.IsNone());
+	Inv->SetHairStyle(TEXT("crop"));
+	Inv->SetBeard(TEXT("short"));
+	FSOOutfit Outfit = Inv->GetOutfit();
+	TestEqual(TEXT("the crop on the outfit"), Outfit.Get(TEXT("hair")), FName(TEXT("crop")));
+	TestEqual(TEXT("the beard on the outfit"), Outfit.Beard, FName(TEXT("short")));
+	Inv->SetBeard(TEXT("none"));
+	TestTrue(TEXT("none is clean-shaven"), Inv->GetBeard().IsNone());
+	Inv->SetBeard(TEXT("full"));
+	USOSaveGame* Old = NewObject<USOSaveGame>();
+	Old->Version = 11;
+	TestTrue(TEXT("a profile from before migrates"), USOProfileStore::Migrate(Old));
+	TestTrue(TEXT("with the default hair and no beard"), Old->HairStyle.IsNone() && Old->Beard.IsNone());
+
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-500, -500, -20), FVector(500, 500, 0));
+	ASOCharacter* Body = W.SpawnCharacter(FVector::ZeroVector);
+	if (!TestNotNull(TEXT("a body"), Body))
+	{
+		return false;
+	}
+	Body->SetOutfit(Inv->GetOutfit());
+	W.Run(0.1f);
+	const USkeletalMeshComponent* Hair = Body->GetWornPiece(TEXT("hair"), false);
+	TestTrue(TEXT("the crop is worn"), Hair && Hair->GetSkeletalMeshAsset() && Hair->GetSkeletalMeshAsset()->GetName().Contains(TEXT("hair_crop")));
+	FLinearColor Mask = FLinearColor::Black;
+	bool bFace = false;
+	for (int32 i = 0; i < Body->GetMesh()->GetNumMaterials(); ++i)
+	{
+		UMaterialInterface* M = Body->GetMesh()->GetMaterial(i);
+		if (Source(M) && Source(M)->GetName() == TEXT("MI_skin_face") && M->GetVectorParameterValue(TEXT("BeardMask"), Mask))
+		{
+			bFace = true;
+			break;
+		}
+	}
+	TestTrue(TEXT("the face takes the full beard (its map's blue)"), bFace && Mask.Equals(ASOCharacter::BeardMask(TEXT("full")), 1e-3f) && Mask.B > 0.5f);
+	Inv->SetHairStyle(TEXT("slick"));
+	Body->SetOutfit(Inv->GetOutfit());
+	W.Run(0.1f);
+	const USkeletalMeshComponent* Slick = Body->GetWornPiece(TEXT("hair"), false);
+	TestTrue(TEXT("the style changes what is worn"), Slick && Slick->GetSkeletalMeshAsset() && Slick->GetSkeletalMeshAsset()->GetName().Contains(TEXT("hair_slick")));
+	// the face's sliders reach the hair (its roots ride the forehead)
+	Inv->SetHairStyle(TEXT("swept"));
+	FSOOutfit Look = Inv->GetOutfit();
+	Look.FaceKeys = { TEXT("forehead") };
+	Look.FaceValues = { 0.8f };
+	Body->SetOutfit(Look);
+	W.Run(0.1f);
+	if (const USkeletalMeshComponent* Swept = Body->GetWornPiece(TEXT("hair"), false))
+	{
+		if (Swept->GetSkeletalMeshAsset() && Swept->GetSkeletalMeshAsset()->FindMorphTarget(TEXT("face_forehead")))
+		{
+			TestEqual(TEXT("the hair rides the forehead's slider"), Swept->GetMorphTarget(TEXT("face_forehead")), 0.8f);
 		}
 	}
 	return true;

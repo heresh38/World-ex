@@ -173,8 +173,20 @@ def soft_noise(P, scale, seed=0, k=7):
     return (np.sin(P @ D.T * f + ph)).sum(1) / np.sqrt(k / 2)
 
 
-def hair(V, N, H, n=120000, rng=None):
-    """the scalp's hair (world points, the head's vertices and normals)"""
+# the character builder's hairstyles (the owner, 2026-11-16: "the face will be heavily customizable in game when the
+# player first starts"): one groom, its top cut and combed another way; the fade on the sides and the back is the same.
+# top: the top's length; reach: how far it stands off the head; lift: how much the roots rise; sweep: to his left;
+# gravity: how much it falls. (The buzz cut has no cards: the scalp's short hair drawn in the face's map alone.)
+STYLES = {
+    "swept": dict(top=1.0, reach=1.0, lift=1.0, sweep=.12, gravity=.18),
+    "crop": dict(top=.40, reach=.52, lift=.55, sweep=.04, gravity=.08, cards_min=.9),   # (its top too short for 3 cm cards)
+    "slick": dict(top=1.12, reach=.40, lift=.28, sweep=0.0, gravity=.04),
+}
+
+
+def hair(V, N, H, n=120000, rng=None, style="swept"):
+    """the scalp's hair (world points, the head's vertices and normals), in one of STYLES"""
+    St = STYLES[style]
     rng = rng or np.random.default_rng(7)
     Q = to_head(V, H)
     soft = scalp_density(Q)                       # a man's hairline with soft edges (lower and denser at the front)
@@ -196,7 +208,7 @@ def hair(V, N, H, n=120000, rng=None):
     zb = -2.6 - 3.0 * np.clip((y - 1.0) / 4.0, 0, 1)      # the fade's foot: round the ears, lower at the nape
     f = np.clip((z - zb) / (5.2 - zb), 0, 1)
     L_side = .12 + 1.9 * f ** 1.5                         # 1 mm at the foot, 2 cm at the top of the sides
-    L_top = 3.0 + 3.8 * np.clip((5.0 - y) / 9.0, 0, 1)     # long at the front, shorter to the crown (the owner:
+    L_top = (3.0 + 3.8 * np.clip((5.0 - y) / 9.0, 0, 1)) * St["top"]     # long at the front, shorter to the crown (the owner:
     # "the hair on the top of the head looks like a building, 3 stories": the long top ended in a ledge there)
     L = L_side * (1 - topw) + L_top * topw
     ear_r = H.ear(R)
@@ -208,25 +220,25 @@ def hair(V, N, H, n=120000, rng=None):
     wd = np.maximum(side, behind)[:, None]
     wd = wd * wd * (3 - 2 * wd)
     flow = np.c_[np.zeros(len(x)), np.ones(len(x)), np.zeros(len(x))] * (1 - wd)         + np.c_[np.sign(x) * .25, .35 * np.ones(len(x)), -np.ones(len(x))] * wd
-    flow[:, 0] += .12 * topw                                       # the top swept a little to his left
+    flow[:, 0] += St["sweep"] * topw                               # the top swept a little to his left
     flow[:, 2] += .32 * np.clip((-y - 4.0) / 4.0, 0, 1) * topw     # up off the hairline, then back
     by_ear = ear_r < 2.5                          # round the ears the hair goes back, not down over them
     flow[by_ear] = np.c_[np.sign(x[by_ear]) * .1, np.ones(by_ear.sum()), -.2 * np.ones(by_ear.sum())]
     flow /= np.linalg.norm(flow, axis=1)[:, None]
     # the roots' rise follows the blend (switched at a line it stood the top's hair up as a wall over the fade)
     # (higher at the front and swept back: the sheet's top has body and lift; at .40-.50 the top lay flat on the head)
-    lift0 = (.25 + (.55 + .22 * np.clip((-y - 4.0) / 2.0, 0, 1)) * topw)[:, None]
+    lift0 = (.25 + (.55 + .22 * np.clip((-y - 4.0) / 2.0, 0, 1)) * topw * St["lift"])[:, None]
     # the volume: the fade close to the head (as far off it as it is long), the top full and even, a little more
     # at its front (a soft lift, not a pile)
     lift = np.clip((-y + 1.0) / 8.0, 0, 1)
     # a soft quiff at the front: the top stands 1.5 cm off the crown and up to 3 at the front (at 1.05-1.75 it read
     # flat against the sheet's swept, full top)
-    reach = np.maximum(.05, .55 * L_side) * (1 - topw) + (1.5 + 1.5 * lift) * topw
+    reach = np.maximum(.05, .55 * L_side) * (1 - topw) + (1.5 + 1.5 * lift) * St["reach"] * topw
     reach *= np.clip(1 + .08 * soft_noise(R, 5.0, 3), .9, 1.1) * rng.uniform(.93, 1.06, len(top))
     stray = (topw > .5) & (rng.random(len(top)) < .01)  # a few strays (a head of hair is never combed perfectly)
     reach = np.where(stray, reach * 1.2, reach)
     P = strands_from(R, Nn, flow, L, 14, H, lift0=lift0, lift1=np.where(stray, .2, .06)[:, None],
-                     gravity=.18 * topw, noise=.28, rng=rng, hug=.03 + .3 * topw, reach=reach)
+                     gravity=St["gravity"] * topw, noise=.28, rng=rng, hug=.03 + .3 * topw, reach=reach)
     # locks: clumps of neighbours round seeds
     seeds = rng.choice(len(R), 900, replace=False)
     from_seed = np.argmin(((R[:, None, :] - R[seeds][None, :, :]) ** 2).sum(2), axis=1)
@@ -241,7 +253,9 @@ def hair(V, N, H, n=120000, rng=None):
     return P[~touch]
 
 
-def beard(V, N, H, n=75000, rng=None):
+def beard(V, N, H, n=75000, rng=None, scale=1.0, lift=.5):
+    """the beard's strands: a short boxed beard (scale 1: 2-4.5 mm, fuller on the chin and the moustache); scale makes
+    it a stubble (.2) or a full trimmed beard (2.6)"""
     rng = rng or np.random.default_rng(3)
     Q = to_head(V, H)
     m = beard_mask(Q, H)
@@ -253,13 +267,13 @@ def beard(V, N, H, n=75000, rng=None):
     chin = np.exp(-((z + 10.5) / 2.0) ** 2) * np.exp(-(x / 2.6) ** 2)
     moust = (z > H.stom_z) & (np.abs(x) < 3.0)
     L = .2 + .24 * chin + .1 * moust                         # a short boxed beard, 2-4.5 mm, fuller on the chin
-    L *= rng.uniform(.7, 1.25, len(L))
+    L *= rng.uniform(.7, 1.25, len(L)) * scale
     flow = np.zeros_like(R)
     flow[:, 2] = -1.0
     flow[:, 0] = np.where(moust, np.sign(x) * .8, 0.0)
     flow[:, 1] = np.where(z < -11.5, .9, 0.0)
     flow /= np.linalg.norm(flow, axis=1)[:, None]
-    return strands_from(R, Nn, flow, L, 5, H, lift0=.5, lift1=.32, noise=.3, rng=rng, hug=.02)
+    return strands_from(R, Nn, flow, L, 5, H, lift0=lift, lift1=.32, noise=.3, rng=rng, hug=.02)
 
 
 def brows(H, n=1350, rng=None):

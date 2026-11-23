@@ -580,7 +580,7 @@ def save_png(arr, path, srgb, depth=8):
 BROW_WIDTH = (.105, .035)        # mm: a brow hair at its root and at its tip
 
 
-def brow_mask(o, face_set, size):
+def brow_mask(o, face_set, size, S=None, width=None, label="brows"):
     """each of the groom's brow strands (groom.brows: roots along the brow, laid along its flow on the skin) carried
     onto the game mesh (nearest point, its UV from the triangle it lies in) and drawn into the face's map as a tapered
     line (0.13 mm a texel: a hair is a line of its own); returns the mask (size x size, rows as Blender's pixels)"""
@@ -589,7 +589,7 @@ def brow_mask(o, face_set, size):
     from mathutils import Vector
     from mathutils.bvhtree import BVHTree
     hd = HD.Head()
-    S = np.asarray(GR.brows(hd), np.float64)                       # (n, k, 3) head cm
+    S = np.asarray(GR.brows(hd) if S is None else S, np.float64)   # (n, k, 3) head cm
     n, k, _ = S.shape
     W = np.asarray(GR.to_world(S.reshape(-1, 3).astype(np.float32), hd), np.float64)
     me = o.data
@@ -636,7 +636,7 @@ def brow_mask(o, face_set, size):
     UV = UV.reshape(n, k, 2) * size
     px_mm = float(np.median(dens)) if dens else 7.7
     mask = np.zeros((size, size), np.float32)
-    w0, w1 = BROW_WIDTH[0] * px_mm, BROW_WIDTH[1] * px_mm
+    w0, w1 = (width or BROW_WIDTH)[0] * px_mm, (width or BROW_WIDTH)[1] * px_mm
     for s in range(n):
         P = UV[s]
         for j in range(k - 1):
@@ -657,7 +657,7 @@ def brow_mask(o, face_set, size):
             cov = np.clip(w / 2 + .5 - dist, 0, np.minimum(w, 1.0))
             sub = mask[y0:y1, x0:x1]
             mask[y0:y1, x0:x1] = 1 - (1 - sub) * (1 - cov)
-    log(f"brows: {n} hairs drawn into the face's map ({px_mm:.1f} texels a mm; {far} of {len(W)} points over 2 mm off "
+    log(f"{label}: {n} hairs drawn into the face's map ({px_mm:.1f} texels a mm; {far} of {len(W)} points over 2 mm off "
         f"the skin)")
     return mask
 
@@ -718,6 +718,99 @@ def skin_maps(o, out, size=SKIN_SIZE):
         save_png(orm, stem + "_ORM.png", srgb=False)
         log(f"skin maps: {stem}_*.png")
     return res
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# the beards (the character builder's: the base face is clean-shaven, the owner, 2026-11-16): the groom's beard grown
+# three ways and drawn hair by hair into a map of the face's own (as the brows are: cards of hairs read as shingles),
+# `orion_male_skin_face_Beard.png`: R a stubble, G a short boxed beard, B a full trimmed one. M_SOSkin lays the hair's
+# colour over the skin by the one the outfit picks (BeardMask).
+
+BEARDS = (("stubble", dict(n=150000, scale=.22, lift=.75), (.070, .050)),
+          ("short", dict(n=85000, scale=1.0, lift=.5), (.100, .040)),
+          ("full", dict(n=125000, scale=2.6, lift=.38), (.110, .040)))
+
+
+def face_masks(o, out, size, log=log):
+    """the face's hair mask again without baking the skin (the ORM's B: the brows and the scalp's hair, its R and G kept)"""
+    import hair_cards as HC
+    me = o.data
+    region = read(me, "region", len(me.polygons), np.int32)
+    face_set = np.isin(region, [B.REGIONS.index(r) for r in FACE_SET])
+    path = os.path.join(out, NAMES["face"] + "_ORM.png")
+    im = bpy.data.images.load(path, check_existing=False)
+    im.colorspace_settings.name = 'Non-Color'
+    w, h = im.size
+    px = np.array(im.pixels[:], np.float32).reshape(h, w, 4)
+    brows = brow_mask(o, face_set, size)
+    scalp, _ = HC.scalp_mask(o, face_set, size, log=log)
+    px[..., 2] = np.maximum(brows, scalp)
+    save_png(px[..., :3], path, srgb=False)
+    log(f"face masks: {path}")
+
+
+BEARD_FLOOR = (.30, .55, .78)      # how dark each beard's skin reads under its hairs (stubble, short, full)
+
+
+def beard_floor(o, face_set, size, hd):
+    """the beard's density (groom.beard_mask, soft: fuller on the chin and the moustache, fading at its borders) laid
+    over the head's own triangles in the face's map, grown a few texels past each island's rim (hair_cards.scalp_mask's
+    way: discs at the vertices showed as dots)"""
+    import groom as GR
+    import hair_cards as HC
+    me = o.data
+    n = len(me.vertices)
+    co = np.zeros(n * 3, np.float32); me.vertices.foreach_get("co", co); co = co.reshape(n, 3)
+    nf = len(me.polygons)
+    ls = np.zeros(nf, np.int64); me.polygons.foreach_get("loop_start", ls)
+    lt = np.zeros(nf, np.int64); me.polygons.foreach_get("loop_total", lt)
+    lv = np.zeros(len(me.loops), np.int64); me.loops.foreach_get("vertex_index", lv)
+    uv = np.zeros(len(me.loops) * 2, np.float32); me.uv_layers["UVMap"].data.foreach_get("uv", uv); uv = uv.reshape(-1, 2)
+    _, _, head_v = HC.head_verts(me)
+    Q = GR.to_head(co[head_v], hd)
+    dens = (GR.beard_mask(Q, hd, soft=True) * (hd.ear(Q) > .6)).astype(np.float32)
+    fv = np.zeros(n, np.float32)
+    fv[head_v] = dens
+    tri = []
+    for f in np.flatnonzero(face_set):
+        s_, t_ = ls[f], lt[f]
+        for j in range(1, t_ - 1):
+            tri.append((s_, s_ + j, s_ + j + 1))
+    tri = np.array(tri, np.int64)
+    mask = np.zeros((size, size), np.float32)
+    HC.raster_max(mask, uv[tri] * size, fv[lv[tri]])
+    for _ in range(4):
+        grown = mask.copy()
+        np.maximum(grown[1:], mask[:-1], out=grown[1:])
+        np.maximum(grown[:-1], mask[1:], out=grown[:-1])
+        np.maximum(grown[:, 1:], mask[:, :-1], out=grown[:, 1:])
+        np.maximum(grown[:, :-1], mask[:, 1:], out=grown[:, :-1])
+        mask = grown
+    return np.clip(mask, 0, 1)
+
+
+def beard_maps(o, out, size, log=log):
+    import groom as GR
+    import head as HD
+    import hair_cards as HC
+    me = o.data
+    region = read(me, "region", len(me.polygons), np.int32)
+    face_set = np.isin(region, [B.REGIONS.index(r) for r in FACE_SET])
+    hd = HD.Head()
+    rng = np.random.default_rng(11)
+    V, N = HC.head_surface(me, 320000, rng)
+    floor = beard_floor(o, face_set, size, hd)
+    masks = []
+    for (name, kw, width), level in zip(BEARDS, BEARD_FLOOR):
+        S = np.asarray(GR.beard(V, N, hd, rng=rng, **kw), np.float64)
+        hairs = brow_mask(o, face_set, size, S=S, width=width, label=f"beard ({name})")
+        # under the hairs a shade of how densely they grow: drawn alone, hairs thinner than a pixel at a few metres
+        # averaged out to nothing but a faint olive cast
+        masks.append(1 - (1 - hairs) * (1 - floor * level))
+    path = os.path.join(out, NAMES["face"] + "_Beard.png")
+    save_png(np.dstack(masks), path, srgb=False)
+    log(f"beards: {path}")
+    return path
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -1635,7 +1728,8 @@ def write_glb(path, arm, wardrobe=None, defaults=None):
 
 # ---------------------------------------------------------------------------------------------------------------
 
-STAGES = ("normals", "uv", "skin", "eyes", "lashes", "hair", "rig", "suit", "clips", "export")
+STAGES = ("normals", "uv", "skin", "eyes", "lashes", "hair", "beard", "masks", "rig", "suit", "clips", "export")
+HAIR_LABELS = {"swept": "Swept back", "crop": "Textured crop", "slick": "Slicked back", "buzz": "Buzz cut"}
 
 
 def main():
@@ -1671,10 +1765,24 @@ def main():
     hair = None
     if "hair" in stages:
         import hair_cards as HC
-        hair, _ = HC.make_hair(o, out, log=log)
+        import groom as GR
+        import json as _json
         arm0 = next((ob for ob in bpy.context.scene.objects if ob.type == 'ARMATURE'), None)
-        if arm0 is not None and "rig" not in stages:           # (grown again on a rigged build: onto its head bone)
-            attach_eyes(hair, arm0)
+        for style in GR.STYLES:
+            h, _ = HC.make_hair(o, out, log=log, style=style)
+            hair = hair or h
+            if arm0 is not None and "rig" not in stages:       # (grown again on a rigged build: onto its head bone)
+                attach_eyes(h, arm0)
+        if arm0 is not None:
+            meta = _json.loads(arm0.get("worldex", "{}")) if "worldex" in arm0.keys() else {}
+            # (no buzz cut yet: the scalp's short hair drawn on the face does not read in the game, the scalp looked shaved)
+            meta.setdefault("wardrobe", {})["hair"] = {s: {"label": HAIR_LABELS[s]} for s in GR.STYLES}
+            meta.setdefault("defaults", {})["hair"] = "swept"
+            arm0["worldex"] = _json.dumps(meta)
+    if "beard" in stages:
+        beard_maps(o, out, int(flags.get("--size", SKIN_SIZE)))
+    if "masks" in stages:
+        face_masks(o, out, int(flags.get("--size", SKIN_SIZE)))
     arm = foot_pts = None
     if "rig" in stages:
         arm, J, foot_pts = make_rig(o)
@@ -1684,9 +1792,8 @@ def main():
         lashes = lashes or bpy.data.objects.get("B_lashes")
         if lashes is not None:
             attach_eyes(lashes, arm)                     # (on the head bone, as the eyes)
-        hair = hair or bpy.data.objects.get("B_hair")
-        if hair is not None:
-            attach_eyes(hair, arm)
+        for h in [ob for ob in bpy.context.scene.objects if ob.name.startswith("C_hair__") or ob.name == "B_hair"]:
+            attach_eyes(h, arm)
     wardrobe, defaults = {}, {}
     if "suit" in stages:
         arm = arm or next(ob for ob in bpy.context.scene.objects if ob.type == 'ARMATURE')

@@ -444,7 +444,28 @@ made; `ASOHUD::DrawHUD`, never in a test, a capture series, the two-player check
 armoury after it ends the first start. The hair is laid over a face's skin (`HairAmount` 1) ONLY where the face has maps
 of its own whose mask's B is the hair (the new male's `skin_face`): the female's head wears the body's map, whose B is
 white, and with it her whole face took the brows' colour (`import_assets.player_extra`; the test holds her at 0).
-Pictures: set 19's `SO_u10*_creator_*` (her body: `u10j` / `u10k`); tests `ShatteredOrbit.Creator.*`. A gun carried low (a sprint, the
+Pictures: set 19's `SO_u10*_creator_*` (her body: `u10j` / `u10k`); tests `ShatteredOrbit.Creator.*`. **Hairstyles and
+beards** (the builder's hair group, 2026-11-22; the base face is clean-shaven, the owner, 2026-11-16): a hairstyle is an
+item of the wardrobe's HAIR slot (never empty; a sealed helmet hides it), so the male's hair is no longer part of his
+body: `game.py --stages=hair` grows every style of `groom.STYLES` (swept, crop, slick: one groom, the top cut and
+combed another way, the fade the same; the crop's cards from strands of 9 mm, `cards_min`) as `C_hair__<style>` on
+the head bone, and writes the slot into the armature's `worldex` (the import also makes a meshless item of a non-armour
+entry with no piece, which the game wears as nothing: a buzz cut was one, dropped because the scalp's short hair drawn
+on the face does not read in the game, the head looked shaved, though the map carries it: open); the face's sliders are set on every worn piece too
+(`ASOCharacter::ApplyFace`: the hair's roots ride the forehead). A beard is DRAWN, hair by hair, as the brows are:
+`--stages=beard` (`beard_maps`, `groom.beard(..., scale=)`) writes `orion_male_skin_face_Beard.png` beside the face's
+maps (BC7: three masks, one a channel), R a stubble, G a short boxed beard, B a full trimmed one, each its hairs over a
+floor of how densely they grow (`beard_floor`, `BEARD_FLOOR`: hairs alone, thinner than a pixel at a few metres, came
+out a faint olive cast); `M_SOSkin` adds `dot(BeardTex, BeardMask)` to the brows' mask under the hair's colour and
+turns the subsurface scattering OFF under all hair drawn on the skin (Scatter x (1 - hair): the scattered light washed
+the brows out entirely and made a beard olive; with it off the brows show for the first time), and
+`ASOCharacter::BeardMask` picks the channel from the outfit's `Beard`. `--stages=masks` writes the face map's hair
+channel again (brows and scalp) without baking the skin. The
+inventory keeps `HairStyle` and `Beard` (saves version 12; `ServerSetHairStyle` / `ServerSetBeard`); `GetOutfit` puts
+the style in the hair slot where the body's wardrobe has it; `Data/creator.json` `"beards"` names the beards and the
+bodies whose faces carry them (the male). The tab's hair group: STYLE (the body's hair items, its default first), BEARD,
+then the colour. Pictures `SOCaptureSeries 1 46` (files `SO_hb_<style>_<beard>_<yaw>`); test
+`ShatteredOrbit.Creator.HairAndBeard`. A gun carried low (a sprint, the
 armoury's stand-in: `USOLocomotionAnimInstance::bCarried`) keeps the third-person firing elbow by the side (the arm IK's
 swing toward the straightest wrist is held to 0.55 rad there: it stood out level with the shoulder, the owner's "arm
 seems very bend out"). Known: `vr_sniper`'s third-person support palm lands on its fore end's blade fins (the body's
@@ -464,7 +485,7 @@ smooth-subdivided (`CATMULL_CLARK`: a SIMPLE cut kept the body's facets and the 
 bands across every plate), the muscles' panels are OFF (`suit.MUSCLE_PANELS`: the sheet's suit is cut in angular
 plates and the body shows through), the knee's pad a hexagon, the thigh's plate wide at the hip, a plate down the
 shin, cuffs at the wrists and ankles, a stitched channel inside every rim, real ribs in the flex zones, charcoal
-base and grey plates at the sheet's contrast, matte woven; the hair (`hair_cards.py`, stage `hair`, `B_hair`,
+base and grey plates at the sheet's contrast, matte woven; the hair (`hair_cards.py`, stage `hair`, a piece of the hair slot per style `C_hair__<style>` (once `B_hair` on the body),
 material `hair`): the groom's strands rooted on the game head's own surface (`head_surface`: its vertices alone
 gave 5000 roots), the long ones grouped into locks and drawn as cards in two layers (each lock's own line, and the
 same lock pressed onto the scalp from the atlas's dense columns), the scalp's short hair drawn into the face map's

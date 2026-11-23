@@ -63,12 +63,12 @@ def head_surface(me, n, rng):
     return P.astype(F32), N.astype(F32)
 
 
-def grow(body, hd, n=120000, seed=7):
-    """the groom's strands rooted on the game head (head cm, (m, k, 3))"""
+def grow(body, hd, n=120000, seed=7, style="swept"):
+    """the groom's strands rooted on the game head (head cm, (m, k, 3)), in one of groom.STYLES"""
     import groom as GR
     rng = np.random.default_rng(seed)
     V, N = head_surface(body.data, 260000, rng)
-    return np.asarray(GR.hair(V, N, hd, n=n, rng=rng), F32)
+    return np.asarray(GR.hair(V, N, hd, n=n, rng=rng, style=style), F32)
 
 
 def lengths(P):
@@ -123,23 +123,26 @@ def build_cards(P, hd, rng, n_cards=1400, min_len=3.0, width=1.0, sample=14000):
     return V, F, UV
 
 
-def make_hair(body, out, hd=None, P=None, log=_log):
-    """B_hair on the body: the cards, their atlas, the face's keys from the skin under each vertex"""
+def make_hair(body, out, hd=None, P=None, log=_log, style="swept"):
+    """one hairstyle's cards (C_hair__<style>: a piece of the wardrobe's hair slot, the character builder's choice), their
+    atlas, the face's keys from the skin under each vertex"""
     import bpy
     import game as G
     import head as HD
     hd = hd or HD.Head()
     rng = np.random.default_rng(23)
-    for ob in [ob for ob in bpy.context.scene.objects if ob.name.startswith("B_hair")]:
+    name = f"C_hair__{style}"
+    for ob in [ob for ob in bpy.context.scene.objects if ob.name.startswith("B_hair") or ob.name.startswith(name)]:
         bpy.data.objects.remove(ob, do_unlink=True)
     png = os.path.join(out, "orion_male_hair_strands.png")
     # (the game draws the alpha MASKED, cut at a third: the strands need gaps between them, or every card is a tile)
     G.hair_atlas(png, size=2048, seed=5, base=(.026, .018, .013), tip=(.070, .050, .036), coarse=.85, per=(10, 16),
                  taper=.6, dense=0)
     if P is None:
-        P = grow(body, hd)
-    V, F, UV = build_cards(P, hd, rng)
-    me = bpy.data.meshes.new("B_hair")
+        P = grow(body, hd, style=style)
+    import groom as GR
+    V, F, UV = build_cards(P, hd, rng, min_len=GR.STYLES[style].get("cards_min", 3.0))
+    me = bpy.data.meshes.new(name)
     me.from_pydata(V.astype(F32).tolist(), [], [tuple(int(v) for v in f) for f in F])
     me.update()
     uv = me.uv_layers.new(name="UVMap")
@@ -147,9 +150,10 @@ def make_hair(body, out, hd=None, P=None, log=_log):
     uv.data.foreach_set("uv", np.asarray(UV)[lv].astype(F32).ravel())
     for p in me.polygons:
         p.use_smooth = True
-    o = bpy.data.objects.new("B_hair", me)
+    o = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(o)
-    m = G.fresh_material("hair")
+    m = bpy.data.materials.get("hair") if style != "swept" else None    # (every style one material: the creator tints it)
+    m = m or G.fresh_material("hair")
     nt = m.node_tree
     b = nt.nodes["Principled BSDF"]
     t = nt.nodes.new("ShaderNodeTexImage")
@@ -182,7 +186,7 @@ def make_hair(body, out, hd=None, P=None, log=_log):
             nk = o.shape_key_add(name=kb.name, from_mix=False)
             nk.value = 0.0
             nk.data.foreach_set("co", (V + D).astype(F32).ravel())
-    log(f"hair: {len(V)} vertices, {len(F)} cards' quads")
+    log(f"hair ({style}): {len(V)} vertices, {len(F)} cards' quads")
     return o, P
 
 

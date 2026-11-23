@@ -272,6 +272,24 @@ namespace
 	}
 }
 
+FLinearColor ASOCharacter::BeardMask(FName Beard)
+{
+	// the face's beard map (game.py beard_maps): R a stubble, G a short boxed beard, B a full trimmed one
+	if (Beard == TEXT("stubble"))
+	{
+		return FLinearColor(1.0f, 0.0f, 0.0f, 0.0f);
+	}
+	if (Beard == TEXT("short"))
+	{
+		return FLinearColor(0.0f, 1.0f, 0.0f, 0.0f);
+	}
+	if (Beard == TEXT("full"))
+	{
+		return FLinearColor(0.0f, 0.0f, 1.0f, 0.0f);
+	}
+	return FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 void ASOCharacter::SetOutfit(const FSOOutfit& NewOutfit)
 {
 	if (NewOutfit == Outfit && AppliedBody == NewOutfit.Body && WornThirdPerson.Num() > 0)
@@ -284,6 +302,7 @@ void ASOCharacter::SetOutfit(const FSOOutfit& NewOutfit)
 	Same.FaceValues = Outfit.FaceValues;
 	Same.SkinTone = Outfit.SkinTone;
 	Same.HairTone = Outfit.HairTone;
+	Same.Beard = Outfit.Beard;
 	if (Same == Outfit && AppliedBody == NewOutfit.Body && WornThirdPerson.Num() > 0)
 	{
 		SetLook(NewOutfit);
@@ -468,6 +487,7 @@ void ASOCharacter::SetLook(const FSOOutfit& From)
 	Outfit.FaceValues = From.FaceValues;
 	Outfit.SkinTone = From.SkinTone;
 	Outfit.HairTone = From.HairTone;
+	Outfit.Beard = From.Beard;
 	ApplyFace();
 }
 
@@ -479,10 +499,21 @@ void ASOCharacter::ApplyFace()
 	{
 		return;
 	}
-	Body->ClearMorphTargets();
-	for (int32 i = 0; i < FMath::Min(Outfit.FaceKeys.Num(), Outfit.FaceValues.Num()); ++i)
+	TArray<USkeletalMeshComponent*, TInlineAllocator<8>> Faced = { Body };
+	for (const TPair<FName, TObjectPtr<USkeletalMeshComponent>>& P : WornThirdPerson)
 	{
-		Body->SetMorphTarget(FName(*(TEXT("face_") + Outfit.FaceKeys[i].ToString())), Outfit.FaceValues[i]);
+		if (P.Value)
+		{
+			Faced.Add(P.Value.Get());                           // (the hair, a piece of its own: its roots ride the face)
+		}
+	}
+	for (USkeletalMeshComponent* Part : Faced)
+	{
+		Part->ClearMorphTargets();
+		for (int32 i = 0; i < FMath::Min(Outfit.FaceKeys.Num(), Outfit.FaceValues.Num()); ++i)
+		{
+			Part->SetMorphTarget(FName(*(TEXT("face_") + Outfit.FaceKeys[i].ToString())), Outfit.FaceValues[i]);
+		}
 	}
 	// the skin's and the hair's tones (the character builder's) over every skin and hair material of the body and of
 	// the first-person arms: the skin's tint over its own maps, the hair's tint (the strands' atlas is neutral), the
@@ -505,7 +536,8 @@ void ASOCharacter::ApplyFace()
 			{
 				continue;
 			}
-			const bool bTone = bSkin ? Outfit.SkinTone.A > 0.0f || (Name == TEXT("MI_skin_face") && Outfit.HairTone.A > 0.0f) : Outfit.HairTone.A > 0.0f;
+			const bool bBeard = Name == TEXT("MI_skin_face") && !Outfit.Beard.IsNone();
+			const bool bTone = bSkin ? Outfit.SkinTone.A > 0.0f || bBeard || (Name == TEXT("MI_skin_face") && Outfit.HairTone.A > 0.0f) : Outfit.HairTone.A > 0.0f;
 			if (!bTone)
 			{
 				if (MID)
@@ -540,6 +572,10 @@ void ASOCharacter::ApplyFace()
 			{
 				// the brows a shade lighter than the hair over them (game.py brow_mask: the brows' tone over the hair's)
 				MID->SetVectorParameterValue(TEXT("HairColor"), FLinearColor(Outfit.HairTone.R * 1.6f, Outfit.HairTone.G * 1.6f, Outfit.HairTone.B * 1.6f, 1.0f));
+			}
+			if (bBeard)
+			{
+				MID->SetVectorParameterValue(TEXT("BeardMask"), BeardMask(Outfit.Beard));
 			}
 			if (bHair)
 			{

@@ -761,6 +761,97 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		CaptureHud();   // the HUD in play (SOPlayerControllerHudDev.cpp)
 		return;
 	}
+	if (Set == 46)
+	{
+		// The character builder's hairstyles and beards (files hb_<style>_<beard>): the head close, a three-quarter view
+		// and the side, turned to the sun, one exposure, nothing carried, no HUD
+		auto Head = [this, Hero](float Yaw)
+		{
+			ASOCharacter* H = Hero();
+			if (!H || !H->GetMesh())
+			{
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			// (the head's joint is at the skull's base: the face's middle is a few centimetres above and ahead of it)
+			const FVector Focus = H->GetMesh()->GetBoneLocation(TEXT("head")) + FVector(0.0f, 0.0f, 4.0f) + H->GetActorForwardVector() * 4.0f;
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + Yaw, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * 125.0f + FVector(0.0f, 0.0f, 2.0f);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
+			{
+				UCameraComponent* C = Cam->GetCameraComponent();
+				C->SetFieldOfView(24.0f);
+				C->SetConstraintAspectRatio(false);
+				float EV = 2.2f;
+				FParse::Value(FCommandLine::Get(), TEXT("-SOOutfitEV="), EV);
+				C->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+				C->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+				C->PostProcessSettings.AutoExposureMinBrightness = EV;
+				C->PostProcessSettings.AutoExposureMaxBrightness = EV;
+				C->PostProcessBlendWeight = 1.0f;
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			View(ESOViewMode::ThirdPerson);
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+				Inv->SetBody(TEXT("male"));
+			}
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			ASOCharacter* H = Hero();
+			if (!H)
+			{
+				return;
+			}
+			H->SetEmptyHanded(true);
+			for (TActorIterator<ADirectionalLight> It(GetWorld()); It; ++It)
+			{
+				FVector ToSun = -It->GetActorForwardVector();
+				ToSun.Z = 0.0f;
+				if (ToSun.Normalize())
+				{
+					const FRotator Face(0.0f, ToSun.Rotation().Yaw - 30.0f, 0.0f);
+					SetControlRotation(Face);
+					H->SetActorRotation(Face);
+				}
+				break;
+			}
+		});
+		static const TCHAR* Looks[][2] = { { TEXT("swept"), TEXT("none") }, { TEXT("crop"), TEXT("stubble") },
+			{ TEXT("slick"), TEXT("short") }, { TEXT("crop"), TEXT("full") }, { TEXT("swept"), TEXT("full") } };
+		for (const auto& L : Looks)
+		{
+			const FName Style = L[0], Beard = L[1];
+			Act([=, this]()
+			{
+				if (USOInventoryComponent* Inv = SOFindInventory(this))
+				{
+					Inv->SetHairStyle(Style);
+					Inv->SetBeard(Beard);
+				}
+			});
+			Do(1.0f, []() {});
+			for (const float Yaw : { 30.0f, 80.0f })
+			{
+				Act([=]() { Head(Yaw); });
+				Snap(1.5f, FString::Printf(TEXT("hb_%s_%s_%d"), *Style.ToString(), *Beard.ToString(), int32(Yaw)));
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 45)
 	{
 		// The male's outfit (files of_<view>), built to the owner's sheet: the whole body round about from front to back,

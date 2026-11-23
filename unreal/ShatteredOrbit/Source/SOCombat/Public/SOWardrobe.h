@@ -184,6 +184,11 @@ struct SOCOMBAT_API FSOOutfit
 	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
 	FLinearColor HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
+	/** The beard drawn on the face (the character builder's: none = clean-shaven, the base face; stubble, short, full:
+	 *  the face's beard map's channels, M_SOSkin's BeardMask). The hairstyle is the hair slot's item. */
+	UPROPERTY(BlueprintReadOnly, Category = "Outfit")
+	FName Beard;
+
 	FName Get(FName Slot) const
 	{
 		const int32 i = Slots.IndexOfByKey(Slot);
@@ -205,6 +210,6 @@ struct SOCOMBAT_API FSOOutfit
 	bool operator==(const FSOOutfit& O) const
 	{
 		return Body == O.Body && Slots == O.Slots && Items == O.Items && FaceKeys == O.FaceKeys && FaceValues == O.FaceValues
-			&& SkinTone.Equals(O.SkinTone, 1e-4f) && HairTone.Equals(O.HairTone, 1e-4f);
+			&& SkinTone.Equals(O.SkinTone, 1e-4f) && HairTone.Equals(O.HairTone, 1e-4f) && Beard == O.Beard;
 	}
 };

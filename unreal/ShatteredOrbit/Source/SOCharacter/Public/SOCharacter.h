@@ -683,6 +683,8 @@ public:
 	/** Only the face's sliders and the skin's and the hair's tones from an outfit, on this body as it is dressed (the
 	 *  armoury's stand-in while a slider is dragged: nothing dressed again). */
 	void SetLook(const FSOOutfit& From);
+	/** The face's BeardMask for a beard (stubble, short, full: the beard map's R, G, B; none: nothing). */
+	static FLinearColor BeardMask(FName Beard);
 
 protected:
 	/** Every piece is a skeletal mesh following the body's pose (leader pose), in both views. */

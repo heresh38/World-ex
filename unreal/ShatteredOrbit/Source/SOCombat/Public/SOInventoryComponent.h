@@ -30,7 +30,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 11;
+	static constexpr int32 CurrentVersion = 12;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;
@@ -90,6 +90,14 @@ public:
 
 	UPROPERTY(SaveGame)
 	FLinearColor HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	/** Version 12: the hairstyle (an item of the body's hair slot; none = the body's own default) and the beard (none =
+	 *  clean-shaven; stubble, short, full), the character builder's. */
+	UPROPERTY(SaveGame)
+	FName HairStyle;
+
+	UPROPERTY(SaveGame)
+	FName Beard;
 
 	/** Version 9: the character builder was seen once (a new profile opens it at the first start; a profile from
 	 *  before it counts as made). */
@@ -207,6 +215,19 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetHairTone(FLinearColor Tone);
+
+	/** The hairstyle (an item of the body's wardrobe's hair slot; none = its default) and the beard (stubble, short,
+	 *  full; none = clean-shaven), server. */
+	void SetHairStyle(FName Style);
+	void SetBeard(FName Style);
+	FName GetHairStyle() const { return HairStyle; }
+	FName GetBeard() const { return Beard; }
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetHairStyle(FName Style);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetBeard(FName Style);
 
 	/** The whole look at once (the builder's reset, its reset of a group, its random face): the face's sliders
 	 *  replaced by these, the tones set (alpha 0 = the body's own); one change, one save. Server. */
@@ -451,6 +472,12 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
 	FLinearColor HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	FName HairStyle;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Inventory)
+	FName Beard;
 
 	/** (true until a new profile is made: an inventory with no profile, a test's or a bot's, never opens the builder) */
 	UPROPERTY(Replicated)

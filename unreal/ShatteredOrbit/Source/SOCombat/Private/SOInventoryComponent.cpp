@@ -33,6 +33,8 @@ void USOInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION(USOInventoryComponent, Goods, COND_OwnerOnly);
 	DOREPLIFETIME(USOInventoryComponent, SkinTone);
 	DOREPLIFETIME(USOInventoryComponent, HairTone);
+	DOREPLIFETIME(USOInventoryComponent, HairStyle);
+	DOREPLIFETIME(USOInventoryComponent, Beard);
 	DOREPLIFETIME_CONDITION(USOInventoryComponent, bCharacterMade, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(USOInventoryComponent, Learned, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(USOInventoryComponent, JournalRead, COND_OwnerOnly);
@@ -136,10 +138,17 @@ FSOOutfit USOInventoryComponent::GetOutfit() const
 		const FSOArmorInstance* A = GetEquippedArmor(Slot);
 		Outfit.Set(Slot, A ? A->Item : FName(TEXT("none")));
 	}
+	// the hairstyle chosen, where this body's wardrobe has it (the other body's choice leaves this one's default)
+	const USOWardrobeData* Wardrobe = USOWardrobeData::Get(Body);
+	if (!HairStyle.IsNone() && Wardrobe && Wardrobe->Find(TEXT("hair"), HairStyle))
+	{
+		Outfit.Set(TEXT("hair"), HairStyle);
+	}
 	Outfit.FaceKeys = FaceKeys;
 	Outfit.FaceValues = FaceValues;
 	Outfit.SkinTone = SkinTone;
 	Outfit.HairTone = HairTone;
+	Outfit.Beard = Beard;
 	return Outfit;
 }
 
@@ -161,6 +170,35 @@ void USOInventoryComponent::SetHairTone(const FLinearColor& Tone)
 		HairTone = Clamped;
 		Changed(false, true);
 	}
+}
+
+void USOInventoryComponent::SetHairStyle(FName Style)
+{
+	if (Style != HairStyle)
+	{
+		HairStyle = Style;
+		Changed(false, true);
+	}
+}
+
+void USOInventoryComponent::SetBeard(FName Style)
+{
+	const FName Clean = Style == TEXT("none") ? NAME_None : Style;
+	if (Clean != Beard)
+	{
+		Beard = Clean;
+		Changed(false, true);
+	}
+}
+
+void USOInventoryComponent::ServerSetHairStyle_Implementation(FName Style)
+{
+	SetHairStyle(Style);
+}
+
+void USOInventoryComponent::ServerSetBeard_Implementation(FName Style)
+{
+	SetBeard(Style);
 }
 
 void USOInventoryComponent::ServerSetSkinTone_Implementation(FLinearColor Tone)
@@ -786,6 +824,7 @@ void USOInventoryComponent::NewProfile()
 	FaceKeys.Reset();
 	FaceValues.Reset();
 	SkinTone = HairTone = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	HairStyle = Beard = NAME_None;
 	bCharacterMade = false;                                     // (a new player: the builder opens at the first start)
 	Learned.Reset();
 	JournalRead.Reset();
@@ -874,6 +913,8 @@ bool USOInventoryComponent::LoadProfile()
 	}
 	SkinTone = Save->SkinTone;
 	HairTone = Save->HairTone;
+	HairStyle = Save->HairStyle;
+	Beard = Save->Beard;
 	bCharacterMade = Save->bCharacterMade;
 	Learned = Save->Learned;
 	JournalRead = Save->JournalRead;
@@ -960,6 +1001,8 @@ void USOInventoryComponent::SaveProfile() const
 	Save->Goods = Goods;
 	Save->SkinTone = SkinTone;
 	Save->HairTone = HairTone;
+	Save->HairStyle = HairStyle;
+	Save->Beard = Beard;
 	Save->bCharacterMade = bCharacterMade;
 	Save->Learned = Learned;
 	Save->JournalRead = JournalRead;

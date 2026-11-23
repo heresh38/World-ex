@@ -1,5 +1,5 @@
 {
-  "_doc": "The character builder (the armoury's CHARACTER tab; the owner, 2026-11-16: \"the face will be heavily customizable in game when the player first starts\"). groups: the tab's list, in order; a face group's sliders are the body's morph targets face_<key> (tools/blender/hero/orion/headcage.FACE_SLIDERS), each -1..1. skinTones and hairColours: linear tints over the body's own maps (the first of each is the default). Read at runtime (SOData; tools/package.sh stages it). A slider shows only on a body that has its morph target (the two bodies' faces were built apart: eye_tilt, lips_full and jaw_width are the female body's).",
+  "_doc": "The character builder (the armoury's CHARACTER tab; the owner, 2026-11-16: \"the face will be heavily customizable in game when the player first starts\"). groups: the tab's list, in order; a face group's sliders are the body's morph targets face_<key> (tools/blender/hero/orion/headcage.FACE_SLIDERS), each -1..1. skinTones and hairColours: linear tints over the body's own maps (the first of each is the default). Read at runtime (SOData; tools/package.sh stages it). A slider shows only on a body that has its morph target (the two bodies' faces were built apart: eye_tilt, lips_full and jaw_width are the female body's). beards: the builder's beards (none = clean-shaven, the base face; the face's beard map's channels, game.py beard_maps) and the bodies whose faces carry them; the hairstyles are the body's wardrobe's hair slot.",
   "groups": [
     {
       "id": "body",
@@ -9,7 +9,7 @@
     {
       "id": "hair",
       "name": "Hair",
-      "line": "The colour of your hair and brows"
+      "line": "Its style, the beard, the colour"
     },
     {
       "id": "brow",
@@ -292,5 +292,28 @@
         0.155
       ]
     }
-  ]
+  ],
+  "beards": {
+    "bodies": [
+      "male"
+    ],
+    "styles": [
+      {
+        "id": "none",
+        "name": "Clean-shaven"
+      },
+      {
+        "id": "stubble",
+        "name": "Stubble"
+      },
+      {
+        "id": "short",
+        "name": "Short beard"
+      },
+      {
+        "id": "full",
+        "name": "Full beard"
+      }
+    ]
+  }
 }

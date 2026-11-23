@@ -669,7 +669,8 @@ def finish(body, arm, out_dir, T=None):
         skin(main, body, arm, hard_faces)
         log(f"{piece}: {len(main.data.polygons)} faces, {len(hard_faces)} of them hard")
     meta = json.loads(arm.get("worldex", "{}"))
-    meta.update({"wardrobe": WARDROBE, "defaults": DEFAULTS})
+    meta.setdefault("wardrobe", {}).update(WARDROBE)           # (beside what the build already wears: the hair slot)
+    meta.setdefault("defaults", {}).update(DEFAULTS)
     arm["worldex"] = json.dumps(meta)
 
 

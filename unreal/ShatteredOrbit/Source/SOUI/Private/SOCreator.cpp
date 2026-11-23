@@ -68,6 +68,29 @@ namespace
 		};
 		Tones(TEXT("skinTones"), Out.SkinTones);
 		Tones(TEXT("hairColours"), Out.HairColours);
+		const TSharedPtr<FJsonObject>* Beards = nullptr;
+		if (Root->TryGetObjectField(TEXT("beards"), Beards) && Beards->IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+			if ((*Beards)->TryGetArrayField(TEXT("styles"), List))
+			{
+				for (const TSharedPtr<FJsonValue>& V : *List)
+				{
+					const TSharedPtr<FJsonObject> B = V.IsValid() ? V->AsObject() : nullptr;
+					if (B.IsValid())
+					{
+						Out.Beards.Add({ FName(*B->GetStringField(TEXT("id"))), B->GetStringField(TEXT("name")) });
+					}
+				}
+			}
+			if ((*Beards)->TryGetArrayField(TEXT("bodies"), List))
+			{
+				for (const TSharedPtr<FJsonValue>& V : *List)
+				{
+					Out.BeardBodies.Add(FName(*V->AsString()));
+				}
+			}
+		}
 		return Out;
 	}
 }
