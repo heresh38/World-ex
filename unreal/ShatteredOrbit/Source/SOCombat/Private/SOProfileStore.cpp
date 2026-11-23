@@ -98,48 +98,10 @@ bool USOProfileStore::Migrate(USOSaveGame* Save)
 	}
 	// version 9 -> 10: the journal; nothing learned before it (the makers of the guns owned are learned as it loads,
 	// what the field teaches from the next kill on), nothing to do
-	if (Save->Version < 11)
-	{
-		// version 10 -> 11: the Orion male's own outfit (built to the owner's sheet, 2026-11-22: "i want this exact
-		// outfit in the game"): the male body wears it, once, in every armour slot where it wore nothing
-		static const TCHAR* OutfitSlots[] = { TEXT("top"), TEXT("vest"), TEXT("outer"), TEXT("hands"), TEXT("legs"), TEXT("feet") };
-		const FName Male(TEXT("male"));
-		for (const TCHAR* SlotName : OutfitSlots)
-		{
-			const FName Slot(SlotName);
-			const bool bWornThere = Save->Armor.ContainsByPredicate([&](const FSOArmorInstance& A)
-			{
-				return A.Slot == Slot && (Save->Body == Male ? A.bEquipped : A.WornBy.Contains(Male));
-			});
-			if (bWornThere)
-			{
-				continue;
-			}
-			FSOArmorInstance* Piece = Save->Armor.FindByPredicate([&](const FSOArmorInstance& A) { return A.Slot == Slot && A.Item == TEXT("orion"); });
-			if (!Piece)
-			{
-				FSOArmorInstance A;
-				A.Uid = FString::Printf(TEXT("ar_%s_orion_%s"), SlotName, *FGuid::NewGuid().ToString(EGuidFormats::Short));
-				A.Slot = Slot;
-				A.Item = TEXT("orion");
-				A.Rarity = 3;
-				A.Power = 10;
-				Piece = &Save->Armor.Add_GetRef(A);
-			}
-			Piece->WornBy.AddUnique(Male);
-			if (Save->Body == Male)
-			{
-				for (FSOArmorInstance& A : Save->Armor)
-				{
-					if (A.Slot == Slot)
-					{
-						A.bEquipped = false;
-					}
-				}
-				Piece->bEquipped = true;
-			}
-		}
-	}
+	// version 10 -> 11 dressed the male in the Orion outfit built to the owner's sheet; the owner withdrew it (2026-11-22:
+	// "delete the new player clothing ... we will keep the undersuit for now"): nothing to do, and a piece a profile was
+	// given then is worn by no body (his wardrobe has none of them)
+	// version 11 -> 12: the hairstyle and the beard (none: the body's default hair, clean-shaven), nothing to do
 	Save->Version = USOSaveGame::CurrentVersion;
 	return true;
 }

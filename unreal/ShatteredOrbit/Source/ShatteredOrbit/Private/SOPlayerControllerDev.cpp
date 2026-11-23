@@ -761,6 +761,111 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		CaptureHud();   // the HUD in play (SOPlayerControllerHudDev.cpp)
 		return;
 	}
+	if (Set == 47)
+	{
+		// The third-person combat stance (files st_<gun>_<state>_<view>): each gun in the hands, the body turned to the
+		// sun, at rest then aiming, seen from in front, from the support side, from the side and from behind; one
+		// exposure, no HUD. -SOGuns=<archetype>[,...] (one of each class by default), -SOStanceViews=0,90,180,270.
+		FString List = TEXT("smg,rifle,hmg,sniper,shotgun,pistol,rocket");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		FString ViewList = TEXT("20,90,180,270");
+		FParse::Value(FCommandLine::Get(), TEXT("SOStanceViews="), ViewList, false);
+		TArray<FString> Guns, ViewStr;
+		List.ParseIntoArray(Guns, TEXT(","));
+		ViewList.ParseIntoArray(ViewStr, TEXT(","));
+		auto Body = [this, Hero](float Yaw)
+		{
+			ASOCharacter* H = Hero();
+			if (!H || !H->GetMesh())
+			{
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Focus = H->GetMesh()->GetBoneLocation(TEXT("hips")) + FVector(0.0f, 0.0f, 12.0f);
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + Yaw, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * 400.0f + FVector(0.0f, 0.0f, 25.0f);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
+			{
+				UCameraComponent* C = Cam->GetCameraComponent();
+				C->SetFieldOfView(40.0f);
+				C->SetConstraintAspectRatio(false);
+				float EV = 2.2f;
+				FParse::Value(FCommandLine::Get(), TEXT("-SOOutfitEV="), EV);
+				C->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+				C->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+				C->PostProcessSettings.AutoExposureMinBrightness = EV;
+				C->PostProcessSettings.AutoExposureMaxBrightness = EV;
+				C->PostProcessBlendWeight = 1.0f;
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		auto FaceSun = [this, Hero]()
+		{
+			ASOCharacter* H = Hero();
+			for (TActorIterator<ADirectionalLight> It(GetWorld()); H && It; ++It)
+			{
+				FVector ToSun = -It->GetActorForwardVector();
+				ToSun.Z = 0.0f;
+				if (ToSun.Normalize())
+				{
+					const FRotator Face(0.0f, ToSun.Rotation().Yaw - 20.0f, 0.0f);
+					SetControlRotation(Face);
+					H->SetActorRotation(Face);
+				}
+				break;
+			}
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			View(ESOViewMode::ThirdPerson);
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			FaceSun();
+		});
+		for (const FString& Gun : Guns)
+		{
+			Act([=, this]()
+			{
+				if (ASOCharacter* H = Hero())
+				{
+					FRandomStream Rng(FCrc::StrCrc32(*Gun));
+					FSOWeaponInstance W = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+					W.Sight = TEXT("default");
+					H->EquipInstance(W);
+				}
+				FaceSun();
+			});
+			Do(1.2f, []() {});
+			for (int32 State = 0; State < 2; ++State)
+			{
+				if (State == 1)
+				{
+					Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimPressed(); } FaceSun(); });
+					Do(0.8f, []() {});
+				}
+				for (const FString& V : ViewStr)
+				{
+					const float Yaw = FCString::Atof(*V);
+					Act([=, this]() { FaceSun(); Body(Yaw); });
+					Snap(0.6f, FString::Printf(TEXT("st_%s_%s_%d"), *Gun, State ? TEXT("aim") : TEXT("ready"), int32(Yaw)));
+				}
+				if (State == 1)
+				{
+					Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleAimReleased(); } });
+				}
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 46)
 	{
 		// The character builder's hairstyles and beards (files hb_<style>_<beard>): the head close, a three-quarter view
