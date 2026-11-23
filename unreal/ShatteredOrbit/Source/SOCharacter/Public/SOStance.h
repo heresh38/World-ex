@@ -15,15 +15,21 @@ struct SOCHARACTER_API FSOStance
 	FName Id;
 	// The gun. A long gun's butt rides the right shoulder pocket: shifted this much at the ready and on the sights (cm,
 	// actor axes: forward, right, up); its muzzle dips this much at the ready (degrees). A handgun's grip from the
-	// shoulders' middle (cm, forward, right, up), at the ready and aimed. Relaxed: carried from the chest point (cm) and
-	// turned against the facing (pitch, yaw, roll).
+	// shoulders' middle (cm, forward, right, up), at the ready and aimed. Relaxed: the gun at the ready turned by
+	// RelaxRot (pitch, yaw, roll in the body's facing: the muzzle down and turned in) about a point between the firing
+	// hand's place on it (RelaxPivot 0) and the support hand's (1: a launcher's fore end is so far out that turned about
+	// the firing hand it left the support arm's reach), and moved by RelaxOffset (cm, forward, right, up): from the eyes
+	// it stays in the lower right of the picture. RelaxReach: relaxed, the gun comes in until the support hand is within
+	// this share of its arm (the arms easy; 0 = as at the ready, USOViewmodelComponent::SupportReach).
 	FVector ReadyShift = FVector(0.0f, 0.0f, 2.0f);
 	FVector AimShift = FVector(1.5f, -2.5f, 7.0f);
 	float ReadyDip = 0.0f;
 	FVector HandHold = FVector(38.0f, 6.0f, -2.0f);
 	FVector HandAimHold = FVector(44.0f, 5.0f, 2.0f);
-	FVector RelaxOffset = FVector(24.0f, 8.0f, -24.0f);
-	FRotator RelaxRot = FRotator(-32.0f, -38.0f, -16.0f);
+	FVector RelaxOffset = FVector(-2.0f, 0.0f, -5.0f);
+	FRotator RelaxRot = FRotator(-14.0f, -6.0f, -8.0f);
+	float RelaxPivot = 0.0f;
+	float RelaxReach = 0.0f;
 	// The arms (0 the firing arm, 1 the support arm). Each elbow is carried at a swing round the line from its shoulder to
 	// its wrist (radians from straight down, + out round the arm's outside, - in toward the body), at the ready and on the
 	// sights; it goes WristShare of the way from there toward where its wrist runs straightest, stays between the least

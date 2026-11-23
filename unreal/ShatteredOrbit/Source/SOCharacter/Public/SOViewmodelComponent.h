@@ -190,7 +190,7 @@ private:
 	FTransform InFiringReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold) const;
 	/** Never further from the support shoulder than that arm reaches with a bend left in it: the gun comes in toward it
 	 *  (the support hand is on the gun too; slid back along the gun its fingers closed in it, or it left a handgun). */
-	FTransform InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach) const;
+	FTransform InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach, float StockOff = 0.0f) const;
 	/** The support wrist's place on the gun (the rig's frame, the fitted hold), its shoulder and arm in the body's last pose. */
 	bool SupportArm(const ASOCharacter* Character, const USOGunRigComponent* Rig, FVector& OutInGun, FVector& OutShoulder, float& OutArm) const;
 	/** A handgun held out on the sights: how far ahead of the eye its sight is, from the reach of the arms. */

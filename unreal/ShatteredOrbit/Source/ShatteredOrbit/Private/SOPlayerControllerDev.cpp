@@ -948,6 +948,115 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 49)
+	{
+		// The gun from the player's own eyes, standing and walking, relaxed and at the ready (the owner, 2026-11-23:
+		// "weapons are not very visible, i think the camera is too high so lower it a bit maybe so we see more of the gun
+		// when idle/walking"; files gv_<gun>_<relaxed|ready>_<still|walk>_d<drop>): GUNVIEW lines say how much of the gun
+		// is in the picture (points through its bounds), how much of the picture its seen part spans and how far down it
+		// begins. -SOGuns=<archetype>[,...]; -SOEyeDrop=<cm> lowers the camera on the head further for the run (to compare).
+		FString List = TEXT("rifle,smg,pistol,shotgun,hmg,sniper");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		float Drop = 0.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("SOEyeDrop="), Drop);
+		const int32 DropTag = FMath::RoundToInt(Drop);
+		auto GunView = [this, Hero](const FString& Label)
+		{
+			const ASOCharacter* H = Hero();
+			const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
+			const USOGunRigComponent* Rig = W ? W->GetRig() : nullptr;
+			int32 SX = 0, SY = 0;
+			GetViewportSize(SX, SY);
+			if (!Rig || !H->GetViewmodel() || SX <= 0 || SY <= 0)
+			{
+				return true;
+			}
+			const FBox B = Rig->GetRigBounds();
+			const FTransform T = H->GetViewmodel()->GetComponentTransform();   // (the gun's frame: the hold)
+			int32 In = 0, All = 0;
+			FBox2D Seen(ForceInit);
+			for (int32 i = 0; i <= 15; ++i)
+			{
+				for (int32 j = 0; j <= 2; ++j)
+				{
+					for (int32 k = 0; k <= 2; ++k)
+					{
+						const FVector Local(FMath::Lerp(B.Min.X, B.Max.X, i / 15.0), FMath::Lerp(B.Min.Y, B.Max.Y, j / 2.0), FMath::Lerp(B.Min.Z, B.Max.Z, k / 2.0));
+						FVector2D S;
+						++All;
+						if (ProjectWorldLocationToScreen(T.TransformPosition(Local), S, false) && S.X >= 0.0 && S.Y >= 0.0 && S.X <= SX && S.Y <= SY)
+						{
+							++In;
+							Seen += S;
+						}
+					}
+				}
+			}
+			UE_LOG(LogShatteredOrbit, Display, TEXT("GUNVIEW %s: %.0f %% of the gun in the picture, its seen part %.0f %% across and %.0f %% up the picture, from %.0f %% down (the camera %.1f above the head joint)"),
+				*Label, 100.0f * In / FMath::Max(All, 1), Seen.bIsValid ? 100.0f * static_cast<float>(Seen.Max.X - Seen.Min.X) / SX : 0.0f,
+				Seen.bIsValid ? 100.0f * static_cast<float>(Seen.Max.Y - Seen.Min.Y) / SY : 0.0f, Seen.bIsValid ? 100.0f * static_cast<float>(Seen.Min.Y) / SY : 100.0f,
+				H->EyeFromHead.Z);
+			return true;
+		};
+		TSharedRef<FVector> Start = MakeShared<FVector>(FVector::ZeroVector);
+		TSharedRef<FRotator> Facing = MakeShared<FRotator>(FRotator::ZeroRotator);
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+			}
+			View(ESOViewMode::FirstPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				H->EyeFromHead.Z -= Drop;
+				*Start = H->GetActorLocation();
+				*Facing = FRotator(0.0f, GetControlRotation().Yaw, 0.0f);
+			}
+			SetViewTarget(Hero());
+		});
+		for (const FString& Gun : Guns)
+		{
+			const FString Pre = FString::Printf(TEXT("gv_%s"), *Gun);
+			auto Back = [=, this]()
+			{
+				CaptureMove = FVector2D::ZeroVector;
+				if (ASOCharacter* H = Hero())
+				{
+					H->SetActorLocation(*Start, false, nullptr, ETeleportType::TeleportPhysics);
+					H->GetCharacterMovement()->StopMovementImmediately();
+				}
+				SetControlRotation(*Facing);
+			};
+			Act([=, this]()
+			{
+				Back();
+				if (ASOCharacter* H = Hero())
+				{
+					FRandomStream Rng(FCrc::StrCrc32(*Gun));
+					H->EquipInstance(USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng));
+					H->CancelCombat();
+				}
+			});
+			// relaxed (out of a fight): standing, then walking forward
+			Snap(2.0f, FString::Printf(TEXT("%s_relaxed_still_d%d"), *Pre, DropTag), [=]() { return GunView(FString::Printf(TEXT("%s relaxed standing"), *Gun)); });
+			Act([=, this]() { CaptureMove = FVector2D(0.0f, 1.0f); });
+			Snap(0.9f, FString::Printf(TEXT("%s_relaxed_walk_d%d"), *Pre, DropTag), [=]() { return GunView(FString::Printf(TEXT("%s relaxed walking"), *Gun)); });
+			// at the ready (a fight on): standing, then walking forward
+			Act([=, this]() { Back(); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
+			Snap(1.2f, FString::Printf(TEXT("%s_ready_still_d%d"), *Pre, DropTag), [=]() { return GunView(FString::Printf(TEXT("%s ready standing"), *Gun)); });
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureMove = FVector2D(0.0f, 1.0f); });
+			Snap(0.9f, FString::Printf(TEXT("%s_ready_walk_d%d"), *Pre, DropTag), [=]() { return GunView(FString::Printf(TEXT("%s ready walking"), *Gun)); });
+			Act([=, this]() { Back(); if (ASOCharacter* H = Hero()) { H->CancelCombat(); } });
+			Do(0.8f, []() {});
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 48)
 	{
 		// The gun in the hands (the owner's ULTIMATE rule, 2026-11-23: "all players hands must always at all times be on

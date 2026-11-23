@@ -129,7 +129,12 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	}
 	// Where the body holds it (the stance's place, relaxed or at the ready, the sprint's carry, the reload's; on the
 	// sights a long gun shouldered, the butt in the pocket).
-	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), SupportReach));
+	// (relaxed the arms are easy: a class may bring the gun nearer the support shoulder then, FSOStance::RelaxReach)
+	const FSOStance& Stance = FSOStanceData::Get().For(Data ? Data->Family : NAME_None);
+	const float Relaxed = (1.0f - Character->GetCombatReady()) * (1.0f - Ads);
+	const float Reach = Stance.RelaxReach > 0.0f ? FMath::Lerp(SupportReach, Stance.RelaxReach, Relaxed) : SupportReach;
+	const float StockOff = Stance.RelaxReach > 0.0f ? Relaxed : 0.0f;    // (and the stock may come off the shoulder for it)
+	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), Reach, StockOff));
 
 	// On the sights (one body, one camera, the owner, 2026-11-23): the sight on the camera's line. A long gun stays where
 	// the body shoulders it and the CAMERA alone comes to its sight's line, where a cheek on the comb would put an eye
@@ -236,7 +241,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// (both hands again after the motion's sway and the kick: they carried a pump's fore end out of the support hand's reach;
 	// on the sights the sight stays on the eye's line, the gun was put in reach before the eye came to it)
 	{
-		FTransform Reached = InSupportReach(Character, Rig, Hold, SupportReachLast);
+		FTransform Reached = InSupportReach(Character, Rig, Hold, SupportReachLast, StockOff);
 		Reached.SetTranslation(FMath::Lerp(Reached.GetTranslation(), Hold.GetTranslation(), static_cast<double>(Ads)));
 		Hold = InFiringReach(Character, Rig, Reached);
 	}
@@ -354,14 +359,29 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 		// (a long fore end past the support arm's reach: the gun comes in toward that shoulder, InSupportReach)
 	}
 
-	// Relaxed (out of a fight, FSOStance; the owner's reference): the gun carried low across the body, the arms easy (from
-	// the eyes it is below the picture); it comes up to the ready on a shot, an aim, a reload or a hit
-	// (ASOCharacter::GetCombatReady), never a body walking about on the sights.
+	// Relaxed (out of a fight, FSOStance): the gun lowered from the ready, turned about the firing hand's place on it (the
+	// hand stays where it is at the ready, the muzzle dips and turns in round it), so from the eyes it stays in the lower
+	// right of the picture (the owner, 2026-11-23: "weapons are not very visible ... so we see more of the gun when
+	// idle/walking": carried low across the body it was out of the picture altogether, at any height of the camera;
+	// turned about its butt the fore end dropped out of the support arm's reach and the gun was pulled back into the
+	// middle). It comes up to the ready on a shot, an aim, a reload or a hit (ASOCharacter::GetCombatReady), never a body
+	// walking about on the sights.
 	if (const float Relax = (1.0f - Character->GetCombatReady()) * (1.0f - Ads); Relax > 1e-3f)
 	{
-		const FTransform LowCarry(Facing * St.RelaxRot.Quaternion(), Actor.TransformPosition(Chest + St.RelaxOffset));
+		// (about the firing hand's place on the gun, or toward the support hand's: FSOStance::RelaxPivot)
+		FVector Grip = FVector::ZeroVector;
+		FTransform RT, LT;
+		if (Rig && Rig->IsBuilt() && Rig->GetHandTargets(RT, LT))
+		{
+			const FTransform InRig = Rig->GetComponentTransform();
+			Grip = FMath::Lerp(InRig.InverseTransformPosition(RT.GetLocation()), InRig.InverseTransformPosition(LT.GetLocation()),
+				static_cast<double>(FMath::Clamp(St.RelaxPivot, 0.0f, 1.0f)));
+		}
+		const FVector Pivot = Hold.TransformPosition(Grip);
+		const FQuat Turn = Facing * St.RelaxRot.Quaternion() * Facing.Inverse();   // (pitch, yaw, roll in the body's facing)
+		const FTransform Lowered(Turn * Hold.GetRotation(), Pivot + Turn.RotateVector(Hold.GetLocation() - Pivot) + Facing.RotateVector(St.RelaxOffset));
 		FTransform Eased;
-		Eased.Blend(Hold, LowCarry, Relax * Relax * (3.0f - 2.0f * Relax));
+		Eased.Blend(Hold, Lowered, Relax * Relax * (3.0f - 2.0f * Relax));
 		Hold = Eased;
 	}
 	// Off the shoulder: a sprint carries the gun low across the chest (muzzle down and to the left); a reload brings it
@@ -499,7 +519,7 @@ bool USOViewmodelComponent::SupportArm(const ASOCharacter* Character, const USOG
 	return true;
 }
 
-FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach) const
+FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach, float StockOff) const
 {
 	// The support hand is on the gun too (the owner's ULTIMATE rule, 2026-11-23: "the gun is placed where the hand can
 	// be, never the hand chasing a gun out of its reach"): its place on the gun past the support arm's reach (looking
@@ -520,9 +540,10 @@ FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, 
 		return Hold;
 	}
 	FVector Move = (Shoulder - Wrist) / D * (D - Reach * Arm);
-	// (pointed steeply down the stock is off the shoulder: the gun hangs in front of the body and comes in freely)
+	// (pointed steeply down the stock is off the shoulder: the gun hangs in front of the body and comes in freely; so it
+	// does carried relaxed by a class whose arms are easy then, FSOStance::RelaxReach)
 	const float PitchDeg = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
-	const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f);
+	const float Down = FMath::Max(FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f), FMath::Clamp(StockOff, 0.0f, 1.0f));
 	// (and pointed steeply up the shoulder rises under the stock: a long fore end may bring it back a little further)
 	const float Up = FMath::Clamp((PitchDeg - 35.0f) / 25.0f, 0.0f, 1.0f);
 	if (!Rig->IsHandgun() && Down < 1.0f)

@@ -789,9 +789,24 @@ Tests `ShatteredOrbit.Melee.*`; pictures
 the owner, 2026-11-15: "the guns cover too much of the screen ... shouldn't be at the center of the screen, better to be
 on the right ... on running we lower the gun for rifles ... smaller guns like smg/pistol/revolver/handcannon we take it
 up"): where the body holds it (`HoldTransform`: the stance's place: from the eyes a long gun at the ready is in the
-lower right; relaxed, out of a fight, it is carried low across the body, below the eyes' picture, as the owner's stance
-reference has it, and comes up on a shot, an aim, a reload or a hit; held up near the ready instead, the firing wrist
-bent past 75 degrees on several guns), and on a sprint each gun is carried as its data says (`"carry"` in
+lower right; relaxed, out of a fight, it is LOWERED from the ready and comes up on a shot, an aim, a reload or a hit.
+**Seen idle and walking** (the owner, 2026-11-23: "weapons are not very visible, i think the camera is too high so lower
+it a bit maybe so we see more of the gun when idle/walking"; measured, capture set 49, `GUNVIEW` lines: carried low
+across the body when relaxed, 0 % of every gun was in the picture, at any height of the camera): the camera sits 5 cm
+under the eyeballs (`EyeFromHead` 10 / 0 / -0.4: at the ready a fifth more of the gun is seen, the rifle 48 % of it
+instead of 40), and the relaxed carry is the ready turned by the class's `relaxRot` (pitch, yaw, roll in the body's
+facing: the muzzle down and in, long guns -6 / -20 / -10) about the firing hand's place on the gun and moved by
+`relaxOffset` (`Data/stances.json`; the hand stays where it is at the ready): from the eyes its side in the lower right,
+the rifle 47 % in the picture relaxed, the pistol 64. Turned about the BUTT the fore end dropped out of the support
+arm's reach and the reach rule pulled the whole gun 11 cm back into the middle; turned too little the fore end stays
+far out. A launcher's fore end is so far out that it turns about the SUPPORT hand (`relaxPivot` 1), and a class whose
+support hand would sit at the edge of its reach relaxed brings the gun nearer the support shoulder (`relaxReach`, the
+arms easy: heavy .88, sniper .87), the stock off the shoulder if it must (`InSupportReach`'s `StockOff`, as looking
+steeply down); all of a class's support hand at .8 folded the firing arm instead (the carbine's wrist 77, the dmr's 84,
+the living launcher's 99). Test `ShatteredOrbit.Hold.GunInThePicture` (every class, relaxed and at the ready, standing
+and walking: 15 % of the gun in the picture at least; most a third to a half). Pictures `SOCaptureSeries 1 49
+-SOGuns=<arch>,...` (files `SO_gv_<gun>_<relaxed|ready>_<still|walk>_d<drop>`; `-SOEyeDrop=<cm>` lowers the camera
+further to compare). And on a sprint each gun is carried as its data says (`"carry"` in
 `Data/game_data.json` -> `USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready,
 across the chest, muzzle down and to the left; `CarryOffset` / `CarryRot`), `short` (SMGs: up part of the way,
 `ShortCarry*`), `high` (handguns: up by the face in both hands, muzzle to the sky, `HandgunCarry*`). A gun's length does
@@ -1383,7 +1398,8 @@ smg, rifle, lmg, sniper, shotgun, pistol, heavy, chosen by the gun's family): wh
 the sights (the shoulder pocket's shift, a handgun's grip), the relaxed carry, each elbow's lean out and how far it may
 swing, how much of the collarbones' pull is taken out (square shoulders), the trunk's turn and forward lean, the chin
 down, the knees (the hips lower), the support foot forward and the feet wider standing. THREE STATES: relaxed (out of a
-fight: the gun carried low across the body, the arms easy), ready (up and forward, the body in its stance) and on the
+fight: the gun lowered from the ready, the muzzle down and turned in, the arms easy; carried low across the body until
+2026-11-23, when the owner asked to see the gun idle and walking: "Where the gun sits"), ready (up and forward, the body in its stance) and on the
 sights (the cheek on the stock); `ASOCharacter::GetCombatReady` (0 relaxed .. 1 ready) comes up on a shot, an aim, a
 reload or a hit (`MarkCombat`) and goes back down `combatSeconds` after the last, eased (`raiseTime`, `lowerTime`;
 replicated as `bCombatReady` for the other machines). Applied where it already lived: the gun's place in
@@ -1499,7 +1515,8 @@ the floor"). The runtime leg IK's knee can only bend ahead of the hip-ankle line
 (`KneeAhead`: an almost straight animated leg says nothing about the knee's side). Test `ShatteredOrbit.Anim.CrouchWalk`
 (feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). **The one camera is in the
 body's own eyes** (`ASOCharacter::UpdateEye`: the head joint in the body's last pose and the eyes on it, `EyeFromHead`
-10 / 0 / 4.6, measured on the Orion male; in the capsule's frame, a stiff spring `EyeFollow` 30 never more than
+10 / 0 / -0.4: the Orion male's eyeballs are 4.6 above the joint, the camera 5 cm under them since 2026-11-23 so more of
+the gun is seen (the owner: "the camera is too high"); in the capsule's frame, a stiff spring `EyeFollow` 30 never more than
 `EyeMaxLag` 2 cm behind: a soft one left the eyes 30 cm off the head in a crouch); the camera rides the boom
 `CameraBoom`, its length 0 in the eyes and out behind the right shoulder for the test view (`ViewBlend`, eased over
 `ViewSwitchTime` 0.35 s; through a scope it is in the eyes at once). The head is hidden from its own player's camera

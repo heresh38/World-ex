@@ -87,6 +87,8 @@ namespace
 				S.HandAimHold = Vec(O, TEXT("handAimHold"), S.HandAimHold);
 				S.RelaxOffset = Vec(O, TEXT("relaxOffset"), S.RelaxOffset);
 				S.RelaxRot = Rot(O, TEXT("relaxRot"), S.RelaxRot);
+				Num(O, TEXT("relaxPivot"), S.RelaxPivot);
+				Num(O, TEXT("relaxReach"), S.RelaxReach);
 				Pair(O, TEXT("elbowSwing"), S.ElbowSwing);
 				Pair(O, TEXT("elbowSwingAim"), S.ElbowSwingAim);
 				Pair(O, TEXT("wristShare"), S.WristShare);

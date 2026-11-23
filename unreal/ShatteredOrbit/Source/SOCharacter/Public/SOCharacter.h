@@ -125,10 +125,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float EyeHeightInterpSpeed = 14.0f;
 
-	/** The eyes from the head joint at rest (cm: forward, right, up in the body's facing): the Orion male's eyeballs'
-	 *  middle is 8.6 ahead of the joint and 4.6 above it, the corneas 9.9 ahead. The camera sits here in first person. */
+	/** The camera's place from the head joint at rest (cm: forward, right, up in the body's facing), where the shots
+	 *  start: the Orion male's eyeballs' middle is 8.6 ahead of the joint and 4.6 above it, the corneas 9.9 ahead, and
+	 *  the camera sits 5 cm under them (the owner, 2026-11-23: "weapons are not very visible, i think the camera is too
+	 *  high so lower it a bit maybe so we see more of the gun": at the ready a fifth more of the gun is in the picture),
+	 *  inside the head its own camera does not see. On the sights a long gun's sight line takes it (SetSightEye). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	FVector EyeFromHead = FVector(10.0f, 0.0f, 4.6f);
+	FVector EyeFromHead = FVector(10.0f, 0.0f, -0.4f);
 
 	/** How the camera follows the eyes (a spring, per second: the pose's jitter smoothed), and never further behind
 	 *  them than EyeMaxLag (cm): a crouch, a slide, the cheek coming down onto the stock carry the eyes all the way. */

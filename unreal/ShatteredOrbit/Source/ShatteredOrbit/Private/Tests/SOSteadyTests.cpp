@@ -302,4 +302,96 @@ bool FSOSmoothOnTheMoveTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOGunInThePictureTest, "ShatteredOrbit.Hold.GunInThePicture", SOTest::Flags)
+bool FSOGunInThePictureTest::RunTest(const FString& Parameters)
+{
+	// The gun is seen from the eyes (the owner, 2026-11-23: "weapons are not very visible, i think the camera is too high
+	// so lower it a bit maybe so we see more of the gun when idle/walking"): first person, standing and walking, relaxed
+	// and at the ready, a gun of every class has 15 % or more of it in the picture (most have a third to a half) (points through its bounds, a 16:9
+	// picture at the camera's own field of view). Carried low across the body when relaxed none of it was.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-20000, -20000, -100), FVector(20000, 20000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	PC->SetControlRotation(FRotator::ZeroRotator);
+	Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Player->SetViewMode(ESOViewMode::FirstPerson);
+	// how much of the gun is in the picture: points through its bounds, in the camera's frame
+	auto InPicture = [&](const ASOWeapon* Gun)
+	{
+		const USOGunRigComponent* Rig = Gun ? Gun->GetRig() : nullptr;
+		if (!Rig || !Rig->IsBuilt() || !Player->GetViewmodel())
+		{
+			return 0.0f;
+		}
+		const FTransform Cam = Player->GetCamera()->GetComponentTransform();
+		const float TanX = FMath::Tan(FMath::DegreesToRadians(Player->GetCamera()->FieldOfView * 0.5f)), TanY = TanX * 9.0f / 16.0f;
+		const FBox B = Rig->GetRigBounds();
+		const FTransform T = Player->GetViewmodel()->GetComponentTransform();
+		int32 In = 0, All = 0;
+		for (int32 i = 0; i <= 15; ++i)
+		{
+			for (int32 j = 0; j <= 2; ++j)
+			{
+				for (int32 k = 0; k <= 2; ++k)
+				{
+					const FVector P = Cam.InverseTransformPosition(T.TransformPosition(FVector(FMath::Lerp(B.Min.X, B.Max.X, i / 15.0),
+						FMath::Lerp(B.Min.Y, B.Max.Y, j / 2.0), FMath::Lerp(B.Min.Z, B.Max.Z, k / 2.0))));
+					++All;
+					In += P.X > 1.0 && FMath::Abs(P.Y / P.X) <= TanX && FMath::Abs(P.Z / P.X) <= TanY ? 1 : 0;
+				}
+			}
+		}
+		return 100.0f * In / FMath::Max(All, 1);
+	};
+	FRandomStream Rng(17);
+	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("smg"), TEXT("pistol"), TEXT("shotgun"), TEXT("hmg"), TEXT("sniper"), TEXT("rocket") })
+	{
+		Player->SetActorLocation(FVector(0.0f, 0.0f, 92.0f));
+		PC->SetControlRotation(FRotator::ZeroRotator);
+		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
+		if (!TestNotNull(FString::Printf(TEXT("%s in the hands"), Arch), Gun))
+		{
+			continue;
+		}
+		auto Face = [&]() { Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt); };
+		Player->CancelCombat();
+		W.Run(1.6f, Face);
+		const float RelaxedStill = InPicture(Gun);
+		float RelaxedWalk = 100.0f;
+		W.Run(0.9f, [&]() { Player->AddMovementInput(Player->GetActorForwardVector(), 1.0f); Face(); RelaxedWalk = FMath::Min(RelaxedWalk, InPicture(Gun)); });
+		W.Run(0.6f, Face);
+		Player->MarkCombat();
+		W.Run(1.0f, [&]() { Player->MarkCombat(); Face(); });
+		const float ReadyStill = InPicture(Gun);
+		float ReadyWalk = 100.0f;
+		W.Run(0.9f, [&]() { Player->MarkCombat(); Player->AddMovementInput(Player->GetActorForwardVector(), 1.0f); Face(); ReadyWalk = FMath::Min(ReadyWalk, InPicture(Gun)); });
+		AddInfo(FString::Printf(TEXT("GUNSEEN %s: relaxed %.0f %% standing, %.0f %% walking at least; at the ready %.0f %% standing, %.0f %% walking at least"),
+			Arch, RelaxedStill, RelaxedWalk, ReadyStill, ReadyWalk));
+		TestTrue(FString::Printf(TEXT("%s relaxed: %.0f %% of the gun in the picture standing, %.0f %% walking (15 at least)"), Arch, RelaxedStill, RelaxedWalk),
+			RelaxedStill >= 15.0f && RelaxedWalk >= 15.0f);
+		TestTrue(FString::Printf(TEXT("%s at the ready: %.0f %% of the gun in the picture standing, %.0f %% walking (15 at least)"), Arch, ReadyStill, ReadyWalk),
+			ReadyStill >= 15.0f && ReadyWalk >= 15.0f);
+		Player->CancelCombat();
+		W.Run(0.3f, Face);
+	}
+	return true;
+}
+
 #endif

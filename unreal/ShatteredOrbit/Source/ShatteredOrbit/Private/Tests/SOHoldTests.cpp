@@ -418,7 +418,7 @@ bool FSOThirdPersonShoulderTest::RunTest(const FString& Parameters)
 				const FTransform HeadT = Body->GetBoneTransform(HeadIndex);
 				const FVector Off = Player->GetActorTransform().InverseTransformVector(Player->GetEyeTransform(false).GetLocation()
 					- (HeadT.GetLocation() + HeadT.GetRotation().RotateVector(OnHead)));
-				AddInfo(FString::Printf(TEXT("%s aimed: the camera on the sights is %.1f cm from the head's eyes (forward %.1f, right %.1f, up %.1f)"), Name,
+				AddInfo(FString::Printf(TEXT("%s aimed: the camera on the sights is %.1f cm from its place on the head (forward %.1f, right %.1f, up %.1f)"), Name,
 					Off.Size(), Off.X, Off.Y, Off.Z));
 			}
 			if (!bHandgun)
