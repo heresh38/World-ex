@@ -1,4 +1,5 @@
 #include "SOCharacter.h"
+#include "SOSpring.h"
 #include "SOStance.h"
 
 #include "AnimationRuntime.h"
@@ -19,6 +20,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/PlayerController.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
@@ -1194,10 +1196,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	// Eye height eases across crouch / slide transitions (a damped spring: it drops into a slide and comes up out of
 	// it with a settle, the owner's "fluid, like water"); steps, landings and the head bob ride on top.
 	{
-		const float Dt = FMath::Min(DeltaSeconds, 0.05f);
-		const float Omega = EyeHeightInterpSpeed * 1.1f, Zeta = 0.86f;
-		EyeVel += (Omega * Omega * (GetTargetEyeOffset() - EyeOffset) - 2.0f * Zeta * Omega * EyeVel) * Dt;
-		EyeOffset += EyeVel * Dt;
+		SOSpring::Step(EyeOffset, EyeVel, GetTargetEyeOffset(), EyeHeightInterpSpeed * 1.1f, 0.86f, FMath::Min(DeltaSeconds, 0.1f));
 	}
 	UpdateEye(DeltaSeconds);
 
@@ -1229,6 +1228,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		ApplyViewMode();
 	}
 	UpdateCamera(DeltaSeconds, Ads, EyeFov, ShoulderFov);
+	UpdateHeadHiding();
 	CurrentFov = Camera->FieldOfView;
 	Look->SetAim(bAiming, MoveFov, CurrentFov);
 
@@ -2360,9 +2360,8 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	{
 		LastAirVz = Velocity.Z;
 	}
-	const float Stiff = 190.0f, Damp = 2.0f * FMath::Sqrt(Stiff) * 0.72f;
-	LandDipVel += (-Stiff * LandDip - Damp * LandDipVel) * Dt;
-	LandDip = FMath::Clamp(LandDip + LandDipVel * Dt, -14.0f, 6.0f);
+	SOSpring::Step(LandDip, LandDipVel, 0.0f, FMath::Sqrt(190.0f), 0.72f, Dt);
+	LandDip = FMath::Clamp(LandDip, -14.0f, 6.0f);
 
 	// 3. (the step's bob and the breath are the body's own: the camera is in its eyes, and its head walks and breathes)
 	const float Ads = AimProgress * AimProgress * (3.0f - 2.0f * AimProgress);
@@ -2377,13 +2376,10 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 		+ DodgeSide * DodgeCameraRoll;
 	{
 		// a spring (at a straight exponential the lean stopped dead: a machine's motion)
-		const float Omega = 9.0f, Zeta = 0.78f, SDt = FMath::Min(Dt, 0.05f);
-		CameraRollVel += (Omega * Omega * (WantRoll - CameraRoll) - 2.0f * Zeta * Omega * CameraRollVel) * SDt;
-		CameraRoll += CameraRollVel * SDt;
+		SOSpring::Step(CameraRoll, CameraRollVel, WantRoll, 9.0f, 0.78f, FMath::Min(Dt, 0.1f));
 	}
-	const float ShakeStiff = 520.0f, ShakeDamp = 2.0f * FMath::Sqrt(ShakeStiff) * 0.32f;
-	ShakeRollVel += (-ShakeStiff * ShakeRoll - ShakeDamp * ShakeRollVel) * Dt;
-	ShakeRoll = FMath::Clamp(ShakeRoll + ShakeRollVel * Dt, -4.0f, 4.0f);
+	SOSpring::Step(ShakeRoll, ShakeRollVel, 0.0f, FMath::Sqrt(520.0f), 0.32f, Dt);
+	ShakeRoll = FMath::Clamp(ShakeRoll, -4.0f, 4.0f);
 	BlastPunch = FMath::FInterpTo(BlastPunch, 0.0f, Dt, 7.0f);
 
 	// 5. Field of view widens with speed (the guide: walk 95, sprint 103-108), and the view leans into a sprint.
@@ -2433,10 +2429,9 @@ void ASOCharacter::UpdateEye(float DeltaSeconds)
 		bHaveEye = true;
 		return;
 	}
-	const float Dt = FMath::Min(DeltaSeconds, 0.05f);
-	const float Omega = EyeFollow;
-	EyeVelCS += (Omega * Omega * (Want - EyeCS) - 2.0f * Omega * EyeVelCS) * Dt;   // (critically damped: no overshoot)
-	EyeCS += EyeVelCS * Dt;
+	// (critically damped, no overshoot; stepped stably at any frame time: once a frame it went unstable below 36 frames
+	// a second and the camera shook 2 cm every frame, the owner's "the gun is constantly shaking")
+	SOSpring::Step(EyeCS, EyeVelCS, Want, EyeFollow, 1.0f, FMath::Min(DeltaSeconds, 0.1f));
 	const FVector Behind = EyeCS - Want;
 	if (Behind.SizeSquared() > FMath::Square(EyeMaxLag))
 	{
@@ -2535,6 +2530,37 @@ void ASOCharacter::ToggleViewMode()
 	SetViewMode(ViewMode == ESOViewMode::FirstPerson ? ESOViewMode::ThirdPerson : ESOViewMode::FirstPerson);
 }
 
+void ASOCharacter::UpdateHeadHiding()
+{
+	// (the owner, 2026-11-23: the shadow of a body seen from its own eyes had no head: the head was shrunk into its joint
+	// for its own camera, and the shadow pass drew it shrunk too)
+	USkeletalMeshComponent* Body = GetMesh();
+	const USkeletalMesh* Asset = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+	if (HeadPartMesh.Get() != Asset)
+	{
+		HeadPartMesh = Asset;
+		bHeadByMaterial = false;
+		const int32 Slot = Asset ? Body->GetMaterialIndex(TEXT("skin__head")) : INDEX_NONE;
+		float Part = 0.0f;
+		if (const UMaterialInterface* Material = Slot != INDEX_NONE ? Body->GetMaterial(Slot) : nullptr;
+			Material && Material->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("HeadPart")), Part))
+		{
+			bHeadByMaterial = Part > 0.5f;
+		}
+		bHeadHiddenNow = !IsHeadHidden();                     // (a new body: put it right below)
+	}
+	const bool bHide = IsHeadHidden();
+	if (bHide != bHeadHiddenNow)
+	{
+		bHeadHiddenNow = bHide;
+		if (Body)
+		{
+			Body->SetCustomPrimitiveDataFloat(0, bHide && bHeadByMaterial ? 1.0f : 0.0f);
+		}
+		ApplyViewMode();
+	}
+}
+
 void ASOCharacter::ApplyViewMode()
 {
 	// One body, one gun, one camera (the owner, 2026-11-23): nothing changes model between the views; the camera moves
@@ -2548,7 +2574,10 @@ void ASOCharacter::ApplyViewMode()
 	{
 		if (Piece.Value)
 		{
-			Piece.Value->SetOwnerNoSee(bHideOwn);
+			// (what is worn on the head, the hair, a helmet: hidden from its own camera in the eyes, its shadow falling)
+			const bool bOnHead = Piece.Key == TEXT("hair") || Piece.Key == TEXT("head");
+			Piece.Value->SetOwnerNoSee(bHideOwn || (bOnHead && bHeadHiddenNow));
+			Piece.Value->bCastHiddenShadow = true;
 		}
 	}
 	if (Weapon && !Weapon->IsDropped())

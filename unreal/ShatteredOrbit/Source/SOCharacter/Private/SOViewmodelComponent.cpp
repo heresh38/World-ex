@@ -1,4 +1,5 @@
 #include "SOViewmodelComponent.h"
+#include "SOSpring.h"
 #include "SOStance.h"
 #include "SOWeaponData.h"
 
@@ -47,9 +48,7 @@ namespace
 	 *  little; the owner, 2026-11-20: "very fluid, like water": nothing moves on a straight line and stops dead). */
 	void Spring(float& X, float& V, float Target, float Omega, float Zeta, float Dt)
 	{
-		const float Accel = Omega * Omega * (Target - X) - 2.0f * Zeta * Omega * V;
-		V += Accel * Dt;
-		X += V * Dt;
+		SOSpring::Step(X, V, Target, Omega, Zeta, Dt);   // (stable at any frame time: SOSpring.h)
 	}
 }
 
@@ -368,7 +367,7 @@ FTransform USOViewmodelComponent::ClearOfWalls(const ASOCharacter* Character, co
 			Want = FMath::Clamp(Length + 4.0f - static_cast<float>(Hit.Distance), 0.0f, Length);
 		}
 	}
-	Spring(WallK, WallV, Want, 18.0f, 0.95f, FMath::Min(Dt, 0.05f));
+	Spring(WallK, WallV, Want, 18.0f, 0.95f, FMath::Min(Dt, 0.1f));
 	WallK = FMath::Max(WallK, 0.0f);
 	if (WallK < 0.2f || !Rig || !Rig->IsBuilt())
 	{

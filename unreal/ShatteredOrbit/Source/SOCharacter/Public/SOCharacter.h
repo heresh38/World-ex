@@ -151,9 +151,14 @@ public:
 	void SetSightEye(const FVector& InCapsuleFrame, float Alpha) { SightEyeCS = InCapsuleFrame; SightEyeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f); }
 	float GetSightEye(FVector& OutCapsuleFrame) const { OutCapsuleFrame = SightEyeCS; return SightEyeAlpha; }
 
-	/** Its own player's camera is in this body's head (first person): the head is hidden from it, on this machine only
-	 *  (USOLocomotionAnimInstance: the head shrinks into its joint). */
+	/** Its own player's camera is in this body's head (first person): the head is hidden from it, on this machine only,
+	 *  and its shadow still falls (the owner, 2026-11-23). The head's own parts (its face, eyes, lashes) are cut out of
+	 *  that camera's picture by their materials (the body's custom primitive data 0, OwnViewHide; import_assets
+	 *  HEAD_PARTS), what is worn on the head (the hair, a helmet) is hidden from it casting its shadow; a body whose head
+	 *  materials cannot (IsHeadHiddenByMaterial false: the female until her new body) has the head shrunk into its joint
+	 *  by USOLocomotionAnimInstance, shadow and all. */
 	bool IsHeadHidden() const;
+	bool IsHeadHiddenByMaterial() const { return bHeadByMaterial; }
 
 	// --- The camera's feel in the eyes (local player; behind the shoulder the boom has its own lag) ---
 	/** Extra field of view while sprinting / sliding / dodging (degrees, eased in and out). The owner's movement guide
@@ -744,6 +749,13 @@ private:
 	/** The camera's place on the sights (the capsule's frame) and how far on them: SetSightEye. */
 	FVector SightEyeCS = FVector::ZeroVector;
 	float SightEyeAlpha = 0.0f;
+
+	/** The head hidden from its own player's camera, its shadow kept (IsHeadHidden): the body's custom primitive data and
+	 *  the head's worn pieces, as the camera comes into the eyes or leaves them. */
+	void UpdateHeadHiding();
+	bool bHeadHiddenNow = false;
+	bool bHeadByMaterial = false;
+	TWeakObjectPtr<const USkeletalMesh> HeadPartMesh;
 
 	/** The one camera: in the eyes, or out behind the shoulder (ViewBlend), its field of view between the two. */
 	void UpdateCamera(float DeltaSeconds, float Ads, float EyeFov, float ShoulderFov);

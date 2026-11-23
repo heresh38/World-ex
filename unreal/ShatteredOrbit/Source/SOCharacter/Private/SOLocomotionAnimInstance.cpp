@@ -1,4 +1,5 @@
 #include "SOLocomotionAnimInstance.h"
+#include "SOSpring.h"
 
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimationPoseData.h"
@@ -240,7 +241,9 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	const ASOCharacter* Player = Cast<ASOCharacter>(Character);
 	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
 	// (one body in every view: first person is this body's own eyes, its head hidden from that camera alone)
-	bHideHead = Player && Mesh && Mesh == Player->GetMesh() && Player->IsHeadHidden();
+	// (a body whose head parts are cut out of its own camera's picture by their materials keeps its head, and the head's
+	// shadow: ASOCharacter::UpdateHeadHiding; the head is shrunk into its joint only for a body whose materials cannot)
+	bHideHead = Player && Mesh && Mesh == Player->GetMesh() && Player->IsHeadHidden() && !Player->IsHeadHiddenByMaterial();
 	{
 		const USOCharacterMovementComponent* Move = Player ? Cast<USOCharacterMovementComponent>(Player->GetCharacterMovement()) : nullptr;
 		bCarried = Player && ((Move && Move->IsSprinting()) || Player->IsDisplayCarry());
@@ -1900,9 +1903,8 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	CrouchAlpha = FMath::FInterpTo(CrouchAlpha, bCrouched ? 1.0f : 0.0f, Dt, 9.0f);
 	const float SunkCrouch = HasCrouchClips() ? 0.0f : CrouchAlpha;
 	WantPitch -= 15.0f * SunkCrouch;
-	const float Stiff = 260.0f, Damp = 2.0f * FMath::Sqrt(Stiff) * 0.75f;
-	CompressVel += (-Stiff * Compress - Damp * CompressVel) * Dt;
-	Compress = FMath::Max(Compress + CompressVel * Dt, 0.0f);
+	SOSpring::Step(Compress, CompressVel, 0.0f, FMath::Sqrt(260.0f), 0.75f, Dt);
+	Compress = FMath::Max(Compress, 0.0f);
 	WantPitch -= Compress * 0.6f;
 	LeanRoll = FMath::FInterpTo(LeanRoll, WantRoll, Dt, bMantling ? 14.0f : 8.0f);
 	LeanPitch = FMath::FInterpTo(LeanPitch, WantPitch, Dt, bMantling ? 14.0f : 8.0f);

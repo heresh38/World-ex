@@ -424,6 +424,48 @@ def master_material(defaults):
 # Slots that use another parent than M_SOStandard (key -> material), filled in main().
 PARENT_FOR = {}
 
+# The head's own materials on a player's body (its face's skin, its eyes, its lashes): hidden from its own player's camera
+# in first person (the camera is in the head), their shadow still falls (the owner, 2026-11-23). ASOCharacter sets the
+# body's custom primitive data 0 (OwnViewHide) on its own player's machine while that camera is in the eyes.
+HEAD_PARTS = ("skin_face", "eye", "hair__lash")
+OWN_VIEW_HIDE = 0                       # the body's custom primitive data index
+
+
+def own_view_switch(mat, E, x, y):
+    """OpacityMask for a head part: 1 - OwnViewHide x HeadPart, and always 1 in the shadow pass (so the head that its
+    own camera does not see still casts its shadow). OwnViewHide comes from the body (custom primitive data 0), HeadPart
+    is 1 on the head's instances (0 in the master: nothing else is hidden)."""
+    hide = E(unreal.MaterialExpressionScalarParameter, x, y)
+    hide.set_editor_property("parameter_name", "OwnViewHide")
+    hide.set_editor_property("default_value", 0.0)
+    hide.set_editor_property("use_custom_primitive_data", True)
+    hide.set_editor_property("primitive_data_index", OWN_VIEW_HIDE)
+    part = E(unreal.MaterialExpressionScalarParameter, x, y + 140)
+    part.set_editor_property("parameter_name", "HeadPart")
+    part.set_editor_property("default_value", 0.0)
+    both = E(unreal.MaterialExpressionMultiply, x + 220, y + 60)
+    mel.connect_material_expressions(hide, "", both, "A")
+    mel.connect_material_expressions(part, "", both, "B")
+    keep = E(unreal.MaterialExpressionOneMinus, x + 380, y + 60)
+    mel.connect_material_expressions(both, "", keep, "")
+    # (the engine's shadow pass switch: not exposed to Python as a type, taken by its class; else the same in HLSL)
+    cls = unreal.load_class(None, "/Script/Engine.MaterialExpressionShadowPassSwitch")
+    if cls:
+        switch = mel.create_material_expression(mat, cls, x + 540, y + 60)
+        mel.connect_material_expressions(keep, "", switch, "Default")
+        one = E(unreal.MaterialExpressionConstant, x + 380, y + 200)
+        one.set_editor_property("r", 1.0)
+        mel.connect_material_expressions(one, "", switch, "Shadow")
+        return switch
+    code = E(unreal.MaterialExpressionCustom, x + 540, y + 60)
+    code.set_editor_property("code", "\n".join(("#if SHADOW_DEPTH_SHADER", "return 1;", "#else", "return V;", "#endif")))
+    code.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    ci = unreal.CustomInput(); ci.set_editor_property("input_name", "V")
+    code.set_editor_property("inputs", [ci])
+    mel.connect_material_expressions(keep, "", code, "V")
+    log("own_view_switch: the shadow pass switch class not found, HLSL used")
+    return code
+
 
 def skin_material(defaults):
     """/Game/Materials/M_SOSkin: the players' skin (skin, skin_face and every skin__<region> section): Unreal's
@@ -525,9 +567,78 @@ def skin_material(defaults):
     mel.connect_material_expressions(scalar("Scatter", .65, 900), "", scatter, "A")
     mel.connect_material_expressions(bare, "", scatter, "B")
     mel.connect_material_property(scatter, "", unreal.MaterialProperty.MP_OPACITY)
+    # (the face hidden from its own player's camera, its shadow kept: used where an instance is masked, the face's)
+    mel.connect_material_property(own_view_switch(mat, E, -900, 1900), "", unreal.MaterialProperty.MP_OPACITY_MASK)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     return mat
+
+
+def eye_material(defaults):
+    """/Game/Materials/M_SOEye: a player's eyes (their own map, wet and smooth), and like every head part hidden from
+    its own player's camera with its shadow kept (own_view_switch). Same parameter names as the master (BaseColorTex,
+    BaseColorTint, Roughness)."""
+    path = "/Game/Materials/M_SOEye"
+    if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        mel.delete_all_material_expressions(mat)
+    else:
+        mat = tools.create_asset("M_SOEye", "/Game/Materials", unreal.Material, unreal.MaterialFactoryNew())
+    for prop, value in (("used_with_skeletal_mesh", True), ("used_with_morph_targets", True), ("two_sided", True),
+                        ("blend_mode", unreal.BlendMode.BLEND_MASKED), ("opacity_mask_clip_value", 0.5)):
+        mat.set_editor_property(prop, value)
+    E = lambda cls, x, y: mel.create_material_expression(mat, cls, x, y)
+    tex = E(unreal.MaterialExpressionTextureSampleParameter2D, -900, -200)
+    tex.set_editor_property("parameter_name", "BaseColorTex")
+    tex.set_editor_property("texture", defaults["white"])
+    tint = E(unreal.MaterialExpressionVectorParameter, -900, 40)
+    tint.set_editor_property("parameter_name", "BaseColorTint")
+    tint.set_editor_property("default_value", unreal.LinearColor(1, 1, 1, 1))
+    colour = E(unreal.MaterialExpressionMultiply, -500, -100)
+    mel.connect_material_expressions(tex, "RGB", colour, "A")
+    mel.connect_material_expressions(tint, "", colour, "B")
+    mel.connect_material_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = E(unreal.MaterialExpressionScalarParameter, -500, 160)
+    rough.set_editor_property("parameter_name", "Roughness")
+    rough.set_editor_property("default_value", 0.08)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    spec = E(unreal.MaterialExpressionScalarParameter, -500, 260)
+    spec.set_editor_property("parameter_name", "Specular")
+    spec.set_editor_property("default_value", 0.5)
+    mel.connect_material_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
+    mel.connect_material_property(own_view_switch(mat, E, -900, 500), "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    log("eye material ready")
+    return mat
+
+
+def player_head(sexes=("male",)):
+    """The head parts of a body's own instances (HEAD_PARTS) marked so its own player's camera does not see them and
+    their shadow still falls: HeadPart 1, masked; the eyes on M_SOEye. (SO_IMPORT_ONLY=player_head, with player_skin: the
+    masters again; the female's body is left as it is until her new one comes: she keeps the head shrunk into its joint.)"""
+    eye = eal.load_asset("/Game/Materials/M_SOEye")
+    for sex in sexes:
+        Sex = sex.capitalize()
+        for key in HEAD_PARTS:
+            path = f"/Game/Characters/Player{Sex}/MI_{key}"
+            if not eal.does_asset_exist(path):
+                log(f"{path}: missing, skipped")
+                continue
+            mi = eal.load_asset(path)
+            if key == "eye" and eye:
+                mel.set_material_instance_parent(mi, eye)
+            mel.set_material_instance_scalar_parameter_value(mi, "HeadPart", 1.0)
+            overrides = mi.get_editor_property("base_property_overrides")
+            overrides.set_editor_property("override_blend_mode", True)
+            overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+            if key != "hair__lash":                                  # (the lashes keep their own cut)
+                overrides.set_editor_property("override_opacity_mask_clip_value", True)
+                overrides.set_editor_property("opacity_mask_clip_value", 0.5)
+            mi.set_editor_property("base_property_overrides", overrides)
+            mel.update_material_instance(mi)
+            eal.save_loaded_asset(mi, only_if_is_dirty=False)
+            log(f"{path}: a head part (hidden from its own camera, its shadow kept)")
 
 
 def hair_material(defaults):
@@ -587,11 +698,16 @@ def hair_material(defaults):
         sat = E(unreal.MaterialExpressionSaturate, -600, 600)
         mel.connect_material_expressions(gain, "", sat, "")
         ok = mel.connect_material_expressions(sat, "", dither, "Alpha Threshold")
-        if ok:
-            mel.connect_material_property(dither, "", unreal.MaterialProperty.MP_OPACITY_MASK)
-    if not ok:
-        mel.connect_material_property(tex, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    # (a head part's, the lashes', hidden from its own player's camera, its shadow kept: own_view_switch)
+    own = own_view_switch(mat, E, -900, 800)
+    masked = E(unreal.MaterialExpressionMultiply, -300, 600)
+    mel.connect_material_expressions(own, "", masked, "B")
+    if ok:
+        mel.connect_material_expressions(dither, "", masked, "A")
+    else:
+        mel.connect_material_expressions(tex, "A", masked, "A")
         log("hair: DitherTemporalAA unavailable, plain alpha")
+    mel.connect_material_property(masked, "", unreal.MaterialProperty.MP_OPACITY_MASK)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, only_if_is_dirty=False)
     log("hair material ready")
@@ -3893,6 +4009,7 @@ def main():
     if want("player") or "player_skin" in only:
         skin = skin_material(defaults)
         PARENT_FOR.update({k: skin for k in ("skin", "skin_face")})                       # the players' skin
+        PARENT_FOR["eye"] = eye_material(defaults)                                         # the players' eyes
     if want("player"):
         sexes = [x for x in os.environ.get("SO_PLAYER_SEX", "male,female").split(",") if x in ("male", "female")]
         for sex in sexes:                                     # (SO_PLAYER_SEX=male: one body again, the other left)
@@ -3902,6 +4019,8 @@ def main():
             player_clips(sex)
     if "player_pieces" in only:
         player_pieces(os.environ.get("SO_PLAYER_PIECES", ""))
+    if want("player") or "player_head" in only:
+        player_head()
     if want("stalker"):
         character(os.path.join(SOURCE, "Characters", "Stalker"), "/Game/Characters/Stalker", "SK_Stalker", "A_Stalker_",
                   master, stalker_extra, flesh=fleshy(os.path.join(SOURCE, "Characters", "Stalker")))

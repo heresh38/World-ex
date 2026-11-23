@@ -1,0 +1,196 @@
+// The gun is steady in the eyes (the owner, 2026-11-23: "in first person the gun is constantly shaking, it's maybe the
+// hands shaking that does that"). Standing still in first person, relaxed, at the ready and on the sights, the gun's
+// place in the camera's picture may drift with the breath, smoothly, and never shake: frame to frame it changes by no
+// more than a smooth motion does (the second difference of its place and turn, what a shake is made of).
+
+#include "SOTestWorld.h"
+
+#if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
+
+#include "Camera/CameraComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "SOCharacter.h"
+#include "SOGunRigComponent.h"
+#include "SOInventoryComponent.h"
+#include "SOLootLibrary.h"
+#include "SOLootTypes.h"
+#include "SOPlayerState.h"
+#include "SOViewmodelComponent.h"
+#include "SOWeapon.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSteadyGunTest, "ShatteredOrbit.Hold.SteadyInTheEyes", SOTest::Flags)
+bool FSOSteadyGunTest::RunTest(const FString& Parameters)
+{
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-5000, -5000, -100), FVector(5000, 5000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	PC->SetControlRotation(FRotator::ZeroRotator);
+	Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Player->SetViewMode(ESOViewMode::FirstPerson);
+	FString Only;
+	FParse::Value(FCommandLine::Get(), TEXT("SOHoldOnly="), Only);
+	FRandomStream Rng(3);
+	// (a frame of its own length: the owner's machine is not a test world's steady 60 a second)
+	float Step = SOTest::Dt;
+	auto RunAt = [&](float Seconds, TFunctionRef<void()> Each)
+	{
+		for (int32 i = 0, n = FMath::CeilToInt(Seconds / Step); i < n; ++i)
+		{
+			Each();
+			W.World->Tick(LEVELTICK_All, Step);
+			++GFrameCounter;
+		}
+	};
+	for (const float Rate : { 60.0f, 30.0f, 24.0f })
+	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("pistol"), TEXT("smg"), TEXT("sniper") })
+	{
+		Step = 1.0f / Rate;
+		if (!Only.IsEmpty() && Only != Arch)
+		{
+			continue;
+		}
+		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
+		RunAt(1.0f, [] {});
+		if (!TestNotNull(FString::Printf(TEXT("%s in the hands"), Arch), Gun) || !Gun->GetRig())
+		{
+			continue;
+		}
+		for (int32 Mode = 0; Mode < 3; ++Mode)
+		{
+			const TCHAR* State = Mode == 0 ? TEXT("relaxed") : (Mode == 1 ? TEXT("at the ready") : TEXT("on the sights"));
+			if (Mode == 0)
+			{
+				Player->CancelCombat();
+			}
+			if (Mode == 2)
+			{
+				Player->HandleAimPressed();
+			}
+			RunAt(1.2f, [&]() { if (Mode > 0) { Player->MarkCombat(); } PC->SetControlRotation(FRotator::ZeroRotator); Player->FaceRotation(PC->GetControlRotation(), Step); });
+			// the gun in the camera's frame, the camera in the capsule's, every frame for two seconds
+			TArray<FVector> Place, Eye, Hold, HandR, HandL;
+			TArray<FRotator> Turn;
+			RunAt(2.0f, [&]()
+			{
+				if (Mode > 0)
+				{
+					Player->MarkCombat();
+				}
+				PC->SetControlRotation(FRotator::ZeroRotator);
+				Player->FaceRotation(PC->GetControlRotation(), Step);
+				const FTransform Cam = Player->GetCamera()->GetComponentTransform();
+				const FTransform G = Gun->GetRig()->GetComponentTransform().GetRelativeTransform(Cam);
+				Place.Add(G.GetLocation());
+				Turn.Add(G.Rotator());
+				Eye.Add(Player->GetActorTransform().InverseTransformPosition(Cam.GetLocation()));
+				Hold.Add(Player->GetActorTransform().InverseTransformPosition(Gun->GetRig()->GetComponentLocation()));
+				// (the hands on the gun, in the gun's own frame: the owner thought it might be the hands)
+				const FTransform& RigT = Gun->GetRig()->GetComponentTransform();
+				HandR.Add(RigT.InverseTransformPosition(Player->GetMesh()->GetBoneLocation(TEXT("hand_R"))));
+				HandL.Add(RigT.InverseTransformPosition(Player->GetMesh()->GetBoneLocation(TEXT("hand_L"))));
+			});
+			// a shake: the second difference (how much the frame's step differs from the one before)
+			float ShakePlace = 0.0f, ShakeTurn = 0.0f, ShakeEye = 0.0f, ShakeHold = 0.0f, Drift = 0.0f, ShakeHands = 0.0f;
+			for (int32 i = 2; i < Place.Num(); ++i)
+			{
+				ShakePlace = FMath::Max(ShakePlace, static_cast<float>((Place[i] - 2.0 * Place[i - 1] + Place[i - 2]).Size()));
+				const FRotator D2 = (Turn[i] - Turn[i - 1]).GetNormalized() - (Turn[i - 1] - Turn[i - 2]).GetNormalized();
+				ShakeTurn = FMath::Max(ShakeTurn, FMath::Abs(D2.Pitch) + FMath::Abs(D2.Yaw) + FMath::Abs(D2.Roll));
+				ShakeEye = FMath::Max(ShakeEye, static_cast<float>((Eye[i] - 2.0 * Eye[i - 1] + Eye[i - 2]).Size()));
+				ShakeHold = FMath::Max(ShakeHold, static_cast<float>((Hold[i] - 2.0 * Hold[i - 1] + Hold[i - 2]).Size()));
+				Drift = FMath::Max(Drift, static_cast<float>((Place[i] - Place[0]).Size()));
+				ShakeHands = FMath::Max(ShakeHands, static_cast<float>(FMath::Max((HandR[i] - 2.0 * HandR[i - 1] + HandR[i - 2]).Size(),
+					(HandL[i] - 2.0 * HandL[i - 1] + HandL[i - 2]).Size())));
+			}
+			AddInfo(FString::Printf(TEXT("STEADY %.0f fps %s %s: gun in the picture shakes %.3f cm / %.3f deg a frame (drift %.2f cm); the camera on the capsule %.3f, the gun on the capsule %.3f; the hands on the gun %.3f"),
+				Rate, Arch, State, ShakePlace, ShakeTurn, Drift, ShakeEye, ShakeHold, ShakeHands));
+			// (a millimetre of jerk a frame at most: the breath's own motion is a third of that; the camera's shake was 80)
+			TestTrue(FString::Printf(TEXT("%.0f fps, %s %s: the gun is steady in the picture (%.3f cm, %.3f deg of shake a frame)"), Rate, Arch, State, ShakePlace, ShakeTurn),
+				ShakePlace < 0.1f && ShakeTurn < 0.1f);
+			TestTrue(FString::Printf(TEXT("%.0f fps, %s %s: the hands are steady on the gun (%.3f cm of shake a frame)"), Rate, Arch, State, ShakeHands), ShakeHands < 0.1f);
+			if (Mode == 2)
+			{
+				Player->HandleAimReleased();
+				RunAt(0.5f, [] {});
+			}
+		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOHeadShadowTest, "ShatteredOrbit.Camera.HeadKeepsItsShadow", SOTest::Flags)
+bool FSOHeadShadowTest::RunTest(const FString& Parameters)
+{
+	// One body seen from its own eyes (the owner, 2026-11-23: its shadow had no head): its own player's camera does not
+	// see the head (its face, eyes and lashes cut out of that picture by their materials, the hair worn on it hidden from
+	// that camera), and the head is whole for the shadow and for every other camera: never shrunk into its joint.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-3000, -3000, -100), FVector(3000, 3000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	PC->SetViewTarget(Player);
+	USkeletalMeshComponent* Body = Player->GetMesh();
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Player->SetViewMode(ESOViewMode::FirstPerson);
+	W.Run(1.0f);
+	TestTrue(TEXT("first person: the head is hidden from its own camera"), Player->IsHeadHidden());
+	if (!TestTrue(TEXT("the male's head parts are hidden by their materials"), Player->IsHeadHiddenByMaterial()))
+	{
+		return false;
+	}
+	const TArray<float>& Data = Body->GetCustomPrimitiveData().Data;
+	TestTrue(TEXT("the body tells its head parts to stay out of its own camera's picture"), Data.Num() > 0 && Data[0] > 0.5f);
+	const FVector HeadScale = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head"))).GetScale3D();
+	TestTrue(FString::Printf(TEXT("the head is whole, for its shadow (scale %.2f)"), HeadScale.X), HeadScale.X > 0.9f);
+	if (const USkeletalMeshComponent* Hair = Player->GetWornPiece(TEXT("hair")))
+	{
+		TestTrue(TEXT("the hair is hidden from its own camera"), Hair->bOwnerNoSee);
+		TestTrue(TEXT("and still casts its shadow"), Hair->bCastHiddenShadow);
+	}
+	// the camera out behind the shoulder: the whole head seen
+	Player->SetViewMode(ESOViewMode::ThirdPerson);
+	W.Run(1.0f);
+	TestFalse(TEXT("third person: the head is seen"), Player->IsHeadHidden());
+	TestTrue(TEXT("third person: the head parts are in the picture"), Body->GetCustomPrimitiveData().Data.Num() > 0 && Body->GetCustomPrimitiveData().Data[0] < 0.5f);
+	if (const USkeletalMeshComponent* Hair = Player->GetWornPiece(TEXT("hair")))
+	{
+		TestFalse(TEXT("third person: the hair is seen"), Hair->bOwnerNoSee);
+	}
+	return true;
+}
+
+#endif

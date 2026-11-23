@@ -1503,9 +1503,19 @@ body's own eyes** (`ASOCharacter::UpdateEye`: the head joint in the body's last 
 `CameraBoom`, its length 0 in the eyes and out behind the right shoulder for the test view (`ViewBlend`, eased over
 `ViewSwitchTime` 0.35 s; through a scope it is in the eyes at once). The head is hidden from its own player's camera
 alone (`IsHeadHidden`: local, alive, the camera in the eyes AND that player's view target is the body: a capture's or
-a spectator's camera sees the whole body; the anim shrinks the head bone into its joint, `HideHead`, after
-everything else). Its shadow has no head yet (open: the head as its own piece on the body's skeleton, hidden from its
-owner and casting a shadow). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
+a spectator's camera sees the whole body), and its SHADOW keeps the head (the owner, 2026-11-23): the head's own parts
+(the face's skin, the eyes, the lashes: `import_assets.HEAD_PARTS`, their instances `HeadPart` 1 and masked; `M_SOSkin`,
+`M_SOHair` and the eyes' own `M_SOEye` carry `own_view_switch`) are cut out of that camera's picture by the body's
+custom primitive data 0 (`OwnViewHide`, set by `ASOCharacter::UpdateHeadHiding`) and kept in the shadow pass
+(`#if SHADOW_DEPTH_SHADER`); what is worn on the head (the hair, a helmet) is `OwnerNoSee` with `bCastHiddenShadow`. A
+body whose head materials cannot (`IsHeadHiddenByMaterial` false: the female until her new body) still has the head
+shrunk into its joint (`HideHead`), shadow and all. Import: `SO_IMPORT_ONLY=player_skin,player_head`. Test
+`ShatteredOrbit.Camera.HeadKeepsItsShadow`. **Every spring is stable at any frame rate** (`SOSpring.h`: sub-steps of
+at most 0.3 / Omega; the owner, 2026-11-23: "in first person the gun is constantly shaking": stepped once a frame the
+camera's spring, Omega 30, went unstable below 36 frames a second and shook the picture 2 cm every frame, the gun on
+the sights with it; the viewmodel's, the eye height's, the landing's, the roll's and the anim's springs the same).
+Test `ShatteredOrbit.Hold.SteadyInTheEyes` (at 60, 30 and 24 frames a second: the gun in the picture, the hands on the
+gun). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
 pose they were taken from). Braking out of a run plays the body's `Stop` clip (by how fast it was going);
 a turn on the spot is stepped (`TurnLift`: the foot on the side of the turn comes off the ground first); on a vault,
 mantle or climb the gun is put away and the hands go onto the edge. Test
