@@ -45,6 +45,8 @@
 #include "SOHUD.h"
 #include "SOTimeOfDaySubsystem.h"
 #include "SOWeather.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/LightComponent.h"
 #include "SOCombatStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "SOInventoryWidget.h"
@@ -757,6 +759,138 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 	if (Set == 38)
 	{
 		CaptureHud();   // the HUD in play (SOPlayerControllerHudDev.cpp)
+		return;
+	}
+	if (Set == 45)
+	{
+		// The male's outfit (files of_<view>), built to the owner's sheet: the whole body round about from front to back,
+		// then close on the collar and the gaiter, the chest, the belt, a knee, the boots, a glove; the profile is not
+		// saved meanwhile, every piece of the outfit put on
+		auto Frame = [this, Hero](float Yaw, float Distance, float Up, float Fov, const TCHAR* Bone, FVector Offset)
+		{
+			ASOCharacter* H = Hero();
+			if (!H || !H->GetMesh())
+			{
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Fwd = H->GetActorForwardVector(), Right = H->GetActorRightVector();
+			const FVector Focus = H->GetMesh()->GetBoneLocation(Bone) + Fwd * Offset.X + Right * Offset.Y + FVector(0.0f, 0.0f, Offset.Z);
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + Yaw, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * Distance + FVector(0.0f, 0.0f, Up);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* Cam = Cast<ACameraActor>(CaptureCamera))
+			{
+				UCameraComponent* C = Cam->GetCameraComponent();
+				C->SetFieldOfView(Fov);
+				C->SetConstraintAspectRatio(false);
+				// one exposure for every shot (EV100, -SOOutfitEV=): the eye adapted to each, so the coat came out black
+				// from across the range and pale grey up close, and no two pictures could be compared
+				float EV = 3.6f;
+				FParse::Value(FCommandLine::Get(), TEXT("-SOOutfitEV="), EV);
+				C->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+				C->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+				C->PostProcessSettings.AutoExposureMinBrightness = EV;
+				C->PostProcessSettings.AutoExposureMaxBrightness = EV;
+				C->PostProcessBlendWeight = 1.0f;
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			View(ESOViewMode::ThirdPerson);
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+				Inv->SetBody(TEXT("male"));
+				for (const FSOArmorInstance& A : TArray<FSOArmorInstance>(Inv->GetArmor()))
+				{
+					if (A.Item == TEXT("orion") && !A.bEquipped)
+					{
+						Inv->EquipArmor(A.Uid);                           // (it toggles: only what is off)
+					}
+				}
+			}
+			ASOCharacter* H = Hero();
+			if (!H)
+			{
+				return;
+			}
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+			// (the guns out of the pictures, in the hands and on the back alike: the body in its own idle)
+			H->SetEmptyHanded(true);
+			for (TActorIterator<ASOWeapon> It(GetWorld()); It; ++It)
+			{
+				It->SetActorHiddenInGame(true);
+			}
+			// an open spot for the turnaround: 5 m round it clear of anything, floor under it
+			const FVector Feet = H->GetActorLocation() - FVector(0.0f, 0.0f, H->GetSimpleCollisionHalfHeight());
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(OutfitSpot), false, H);
+			TArray<AActor*> Carried;
+			H->GetAttachedActors(Carried, true, true);
+			Q.AddIgnoredActors(Carried);
+			bool bFound = false;
+			for (float Ring = 0.0f; Ring <= 4200.0f && !bFound; Ring += 600.0f)
+			{
+				for (int32 k = 0; k < (Ring > 0.0f ? 16 : 1) && !bFound; ++k)
+				{
+					const FVector At = Feet + FRotator(0.0f, GetControlRotation().Yaw + k * 22.5f, 0.0f).Vector() * Ring;
+					FHitResult Floor;
+					if (!GetWorld()->LineTraceSingleByChannel(Floor, At + FVector(0, 0, 300), At - FVector(0, 0, 400), ECC_Visibility, Q))
+					{
+						continue;
+					}
+					const FVector Mid = Floor.ImpactPoint;
+					if (!GetWorld()->OverlapAnyTestByChannel(Mid + FVector(0, 0, 170), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeBox(FVector(500.0f, 500.0f, 125.0f)), Q))
+					{
+						H->SetActorLocation(Mid + FVector(0, 0, H->GetSimpleCollisionHalfHeight() + 2.0f), false, nullptr, ETeleportType::TeleportPhysics);
+						bFound = true;
+					}
+				}
+			}
+			// turned to the sun, a little off it (the front views lit from the front: against the light everything was black)
+			for (TActorIterator<ADirectionalLight> It(GetWorld()); It; ++It)
+			{
+				FVector ToSun = -It->GetActorForwardVector();
+				ToSun.Z = 0.0f;
+				if (ToSun.Normalize())
+				{
+					const FRotator Face(0.0f, ToSun.Rotation().Yaw - 30.0f, 0.0f);
+					SetControlRotation(Face);
+					H->SetActorRotation(Face);
+				}
+				break;
+			}
+			UE_LOG(LogShatteredOrbit, Display, TEXT("Outfit capture: %s"), bFound ? TEXT("open floor found") : TEXT("no open floor: where the player stands"));
+		});
+		struct FShot { float Yaw, Distance, Up, Fov; const TCHAR* Bone; FVector Offset; const TCHAR* Name; };
+		static const FShot Shots[] = {
+			{ 0.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("1_front") },
+			{ 40.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("2_quarter") },
+			{ 90.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("3_side") },
+			{ 145.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("4_back_quarter") },
+			{ 180.0f, 420.0f, 10.0f, 52.0f, TEXT("hips"), FVector(0, 0, -6), TEXT("5_back") },
+			{ 25.0f, 110.0f, 5.0f, 30.0f, TEXT("neck"), FVector(0, 0, -8), TEXT("6_collar") },
+			{ 15.0f, 150.0f, 0.0f, 30.0f, TEXT("chest"), FVector(0, 0, -5), TEXT("7_chest") },
+			{ 30.0f, 140.0f, -5.0f, 30.0f, TEXT("hips"), FVector(0, 0, 8), TEXT("8_belt") },
+			{ 20.0f, 110.0f, 0.0f, 30.0f, TEXT("shin_L"), FVector(0, 0, 0), TEXT("9_knee") },
+			{ 30.0f, 120.0f, 15.0f, 30.0f, TEXT("foot_L"), FVector(4, 0, 0), TEXT("10_boots") },
+			{ 50.0f, 70.0f, 10.0f, 30.0f, TEXT("hand_L"), FVector(0, 0, 0), TEXT("11_glove") } };
+		for (const FShot& S : Shots)
+		{
+			const FShot Shot1 = S;
+			Act([=]() { Frame(Shot1.Yaw, Shot1.Distance, Shot1.Up, Shot1.Fov, Shot1.Bone, Shot1.Offset); });
+			Snap(2.5f, FString::Printf(TEXT("of_%s"), Shot1.Name));
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
 	if (Set == 37)

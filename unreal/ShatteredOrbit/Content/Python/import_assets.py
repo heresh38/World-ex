@@ -961,11 +961,17 @@ def player_extra(key, m):
 # Outfit wear per material: (EdgeWear, Scratches, Grime, WearMetal, WearTiling). Plates rub through to metal at the
 # edges and carry scratches; cloth only takes grime; glow, visor, skin and hair none.
 ARMOUR_WEAR = {
-    "orion_plate": (1.0, .45, .35, 1.0, .35), "orion_plate_white": (1.0, .40, .40, 1.0, .35),
+    "orion_plate": (1.0, .14, .30, 1.0, .35), "orion_plate_white": (1.0, .40, .40, 1.0, .35),
     "orion_steel": (.8, .50, .30, 1.0, .40),
-    "orion_coat": (0.0, .10, .45, 0.0, .30), "orion_white": (0.0, .10, .50, 0.0, .30), "orion_cloth": (0.0, .08, .45, 0.0, .30),
-    "orion_black": (0.0, .05, .40, 0.0, .30), "orion_strap": (0.0, .20, .45, 0.0, .30),
+    "orion_coat": (0.0, 0.0, .20, 0.0, .30), "orion_white": (0.0, .10, .50, 0.0, .30), "orion_cloth": (0.0, 0.0, .35, 0.0, .30),
+    "orion_black": (0.0, 0.0, .30, 0.0, .30), "orion_strap": (0.0, .04, .40, 0.0, .30),
     "orion_leather": (0.0, .35, .50, 0.0, .30), "orion_sole": (0.0, .10, .60, 0.0, .30),
+    # the Orion male's own outfit (tools/blender/hero/orion/outfit.py): its lapels and hood, the lining, the vest's cells,
+    # the gloves, the boots' grey panels
+    # (no scratches on cloth: the shared mask's scratches are bright strokes, and on the dark twill and the vest they
+    # read as white rain over the whole surface; a plate's rubbed edges come from its paint's alpha, its convex edges)
+    "orion_coat_light": (0.0, 0.0, .25, 0.0, .30), "orion_lining": (0.0, 0.0, .25, 0.0, .30),
+    "orion_vest": (.55, .04, .30, .45, .35), "orion_glove": (0.0, .04, .40, 0.0, .30), "orion_boot_panel": (.8, .06, .40, .7, .35),
 }
 ARMOR_SLOT = {"head": 10, "top": 4, "vest": 20, "outer": 14, "dress": 4, "hands": 6, "legs": 10, "feet": 6}
 HEAVY = re.compile(r"plate|armou?r|guard|helmet|vest|harness|pauldron|greave|gauntlet|tactical|carrier|kevlar|combat", re.I)

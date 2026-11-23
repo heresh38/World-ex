@@ -418,6 +418,8 @@ public:
 	/** The loadout's stand-in: the gun carried low across the chest (the sprint's carry), a hero's stance for the picture. */
 	void SetDisplayCarry(bool bOn) { bDisplayCarry = bOn; }
 	bool IsDisplayCarry() const { return bDisplayCarry; }
+	/** Nothing carried: no gun in the hands or on the body, the body in its own idle (an outfit's pictures). */
+	void SetEmptyHanded(bool bOn) { bEmptyHanded = bOn; }
 	void SetFists(bool bOn);
 	/** The style in use: "fists", or a blade the player owns (USOInventoryComponent::HasBlade). Key 4 goes from the gun
 	 *  to the first blade owned (or the fists), from a blade to the fists, from the fists back to the gun. */
@@ -539,6 +541,7 @@ protected:
 	TArray<FName> HolsterPlaces;
 	float HolsterTimer = 0.0f;
 	bool bHeldStowed = false;
+	bool bEmptyHanded = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;

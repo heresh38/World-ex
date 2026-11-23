@@ -1614,9 +1614,22 @@ def attach_eyes(eyes, arm):
 def write_glb(path, arm, wardrobe=None, defaults=None):
     import json
     arm["worldex"] = json.dumps({"wardrobe": wardrobe or {}, "defaults": defaults or {}, "regions": list(B.REGIONS)})
+    # the worn pieces' paint goes to the game (their corner colour `Col`: RGB the paint, A one less the edge wear; the
+    # game multiplies it in where a material says VertexColorAmount); nothing else carries a colour (the body's beard
+    # and lip masks are build data, already in its maps: exported, the skin would have been multiplied by them)
+    for o in bpy.context.scene.objects:
+        if o.type != 'MESH':
+            continue
+        cols = o.data.color_attributes
+        keep = o.name.startswith("C_") and not o.name.startswith("C_suit") and cols.get("Col") is not None
+        for name in [c.name for c in cols if not (keep and c.name == "Col")]:
+            cols.remove(cols[name])                      # (by name: a removal can move the others in memory)
+        if keep:
+            cols.active_color = cols["Col"]
+            cols.render_color_index = cols.active_color_index
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_animations=True, export_morph=True,
                               export_skins=True, export_yup=True, export_apply=False, use_selection=False,
-                              export_extras=True, export_vertex_color='NONE')
+                              export_extras=True, export_vertex_color='ACTIVE')
     log(f"glb: {path} ({os.path.getsize(path) / 1e6:.1f} MB)")
 
 
@@ -1695,6 +1708,13 @@ def main():
         if not wardrobe and "suit_hide" in arm.keys():
             wardrobe["suit"] = {"orion": {"label": "Orion Undersuit", "hide": list(arm["suit_hide"])}}
             defaults["suit"] = "orion"
+        # the outfit's pieces (outfit.py --finish wrote them on the armature): beside the suit
+        import json as _json
+        meta = _json.loads(arm.get("worldex", "{}")) if "worldex" in arm.keys() else {}
+        for slot, items in meta.get("wardrobe", {}).items():
+            wardrobe.setdefault(slot, {}).update(items)
+        for slot, item in meta.get("defaults", {}).items():
+            defaults.setdefault(slot, item)
         if o is not None:
             split_regions(o, out)
         write_glb(os.path.join(out, flags.get("--glb", "orion_male.glb")), arm, wardrobe, defaults)

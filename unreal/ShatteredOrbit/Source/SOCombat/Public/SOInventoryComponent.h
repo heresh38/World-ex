@@ -30,7 +30,7 @@ class SOCOMBAT_API USOSaveGame : public USaveGame
 public:
 	/** The version this build writes. Raise it with every change to what is saved, and teach
 	 *  USOProfileStore::Migrate the step from the one before. */
-	static constexpr int32 CurrentVersion = 10;
+	static constexpr int32 CurrentVersion = 11;
 
 	UPROPERTY(SaveGame)
 	int32 Version = 1;

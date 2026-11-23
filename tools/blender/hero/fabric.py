@@ -80,8 +80,14 @@ def weave(threads, pattern, rng, size=SIZE, bump=1.0):
     return height * bump + .06 * fibre, tone, fibre
 
 
-def save(path, rgb, alpha=None, srgb=True):
+def save(path, rgb, alpha=None, srgb=True, encode=False):
+    """(an 8-bit image's pixels are its stored bytes: a colour map's values go in as they will be read, sRGB. With
+    encode the values given are LINEAR and are encoded first; without it a linear .12 grey was stored as byte 31 and
+    read back by the game as .013, ten times too dark)"""
     H, W = rgb.shape[:2]
+    if encode:
+        rgb = np.clip(rgb, 0, 1)
+        rgb = np.where(rgb <= .0031308, rgb * 12.92, 1.055 * np.power(rgb, 1 / 2.4) - .055)
     a = np.ones((H, W), np.float32) if alpha is None else alpha
     img = np.dstack([np.clip(rgb, 0, 1), np.clip(a, 0, 1)])[::-1]
     name = os.path.splitext(os.path.basename(path))[0]
@@ -96,10 +102,12 @@ def save(path, rgb, alpha=None, srgb=True):
     return path
 
 
-def make(kind, colour, rough, out_dir, prefix, metal=0.0, seed=1):
-    """writes <prefix>_<kind>_c/_n/_m.png in out_dir (skips existing) and returns the three paths"""
+def make(kind, colour, rough, out_dir, prefix, metal=0.0, seed=1, linear=False, force=False):
+    """writes <prefix>_<kind>_c/_n/_m.png in out_dir (skips existing unless `force`) and returns the three paths.
+    linear: `colour` is a linear colour (the Orion outfit's palette, sampled from its sheet), written sRGB-encoded;
+    without it the colour is stored as given (the older pieces' colours were chosen that way)"""
     paths = [os.path.join(out_dir, f"{prefix}_{kind}_{s}.png") for s in ("c", "n", "m")]
-    if all(os.path.exists(p) for p in paths):
+    if not force and all(os.path.exists(p) for p in paths):
         return paths
     os.makedirs(out_dir, exist_ok=True)
     rng = np.random.RandomState(seed)
@@ -238,7 +246,7 @@ def make(kind, colour, rough, out_dir, prefix, metal=0.0, seed=1):
     for arr in (alb, nrm, r):
         assert np.isfinite(arr).all(), f"{kind}: non-finite texels"
     mr = np.dstack([np.ones_like(r), r, np.full_like(r, metal)])
-    save(paths[0], alb, alpha)
+    save(paths[0], alb, alpha, encode=linear)
     save(paths[1], nrm, srgb=False)
     save(paths[2], mr, srgb=False)
     return paths

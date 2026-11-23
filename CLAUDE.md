@@ -379,7 +379,41 @@ points; the knee's IK pole angle is SEARCHED to a tenth of a degree with the leg
 feet brought in under the body with the hips left at the rest height bent the knees 20; measure with the scratch
 checks of the knee plane and the stance, idle knees 22 cm apart, ankles 26); the export (`B_<region>`, `B_eyes`,
 `B_lashes`, the suit, `worldex` meta). `export_unreal.sh` runs both into
-`SourceArt/Characters/src/orion_male.glb` (delete it to rebuild). In the game every armour slot may be empty
+`SourceArt/Characters/src/orion_male.glb` (delete it to rebuild). **The Orion outfit** (the owner, 2026-11-22: "i want
+this exact outfit in the game, 100% the same with the same colours"; their sheets `art/reference/image-1794017268247.png`
+and `art/reference/player/orion_tpose_outfit.png`; the old wardrobe's port and its helmet were deleted at their word) is
+built fresh on this body over the undersuit: `blender -b SourceArt/Characters/src/orion_male/game.blend -P
+tools/blender/hero/orion/outfit.py -- <out> --pieces=all --finish --save=x.blend` (`--compare` lays a build over the
+sheet's own views; `outfit_sheet.py`, system Python, writes the sheet's masks), then `game.py --stages=export`,
+`export_fbx.py --per-item` (and `--arms-only`), `SO_IMPORT_ONLY=player SO_PLAYER_SEX=male`. The parts: `outfit_coat.py`
+(the long coat: the bodice carried out to the sheet's outline, a lofted skirt open in front with a back vent, the
+lapels, collar and blue lining; its shell SMOOTHED, `outfit_mat.taubin`, and held a cloth's ease out, `hold_out`: carried
+out from the suited body it showed the abs and the arm's muscles through the cloth), `outfit_legs.py` (cargo trousers
+the same way), `outfit_boots.py` (combat boots on a last measured from the foot: a wide, LOW toe box, a lugged sole cut
+away under the arch, laces between steel eyelets, a padded collar, the grey ankle strap and front plate; the foot is
+hidden under them, so they keep a boot's shape: holding the toes inside made 16 cm balls), `outfit_torso.py` (vest,
+gaiter, belt, pouches, lights), `outfit_hands.py` (fingerless gloves, lit bracers), `outfit_parts.py` (the knee plates
+as the sheet measures them, 13 x 18 cm, with their slot and the dark chevron under them, the straps round the leg and
+the grey ones crossing the calf, the shoulders' lames, the harness, the back module). Slots outer / vest / top / legs /
+feet / hands, item `orion`; a profile saved before version 11 is dressed in them. **Its colours** are the sheet's
+sampled on the LIT side of each part (`outfit_mat.PALETTE`, linear; its medians read black in the game's daylight), and
+the cloth maps take them as linear colours (`fabric.make(..., linear=True, force=True)`: fabric.py's 8-bit maps store
+their values as sRGB bytes, so a linear .12 grey went in as byte 31 and came out .013, and an existing file was never
+written again). The coat's and the trousers' grey patches and the skirt's back panel are PAINT in the corner colour
+`Col` (RGB multiplies the material, which wears the lighter grey; only on the coat's own cloth, not its lapels or
+lining; A is one less the edge wear, only on plates' convex edges, `WEAR_OBJECTS`: a strap is all edge and went bare
+metal end to end), which `game.py`'s export now writes for the worn pieces alone (`export_vertex_color='ACTIVE'`, every
+other colour attribute dropped first: the body's beard and lip masks would have multiplied the skin; exported 'NONE'
+before, the game never saw it). Unreal's FBX import stores a vertex colour unconverted (byte = 255 x value), so the
+paint is read as the linear value written. The cloth takes no scratches from the shared wear mask (`ARMOUR_WEAR`:
+its strokes read as white rain on dark twill). The shoulders' lames are whole but skinned like the body
+(`outfit.FOLLOW`: rigid on one bone they stood up like horns as the arm came down from the T-pose). Pictures
+`SOCaptureSeries 1 45` (files `SO_of_*`: the turnaround turned to the sun, no gun in the hands or on the body,
+`ASOCharacter::SetEmptyHanded`, no HUD, ONE exposure for every shot, EV100 `-SOOutfitEV=` 3.6 by default, 2.2 the
+range's daylight: the eye adapted to each and the dark coat came out black from afar and pale grey up close). Still
+to do: the sheet's big spine plate on the back, the hood black with a grey edge, the cloth maps at 4K on the texture
+engine, a unique UV set and baked maps, LODs within the player's budget (the gate fails the whole player: 289k
+triangles, 30 materials). In the game every armour slot may be empty
 (`USOWardrobeData::IsOptionalSlot`); the skin is `M_SOSkin` (subsurface profile `SP_SOSkin`, `import_assets.skin_material`);
 the face rides the outfit (`FSOOutfit::FaceKeys / FaceValues`, kept by the inventory, saves version 7) onto the body's
 morph targets (`ASOCharacter::ApplyFace`); console `SOFace <key> <value>` (dev). **The character builder** (the

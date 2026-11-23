@@ -361,6 +361,18 @@ void ASOCharacter::ApplyOutfit()
 			Worn.Add(Outfit.Slots[i], Item);
 		}
 	}
+	// a slot that is never empty and the outfit does not name at all (an outfit made on the other body: his has no hair
+	// piece, his hair is his body's own): this body's own default
+	for (const TPair<FName, FName>& D : Wardrobe->Defaults)
+	{
+		if (!Worn.Contains(D.Key) && !USOWardrobeData::ArmourSlots().Contains(D.Key) && !Outfit.Slots.Contains(D.Key))
+		{
+			if (const FSOWardrobeItem* Item = Wardrobe->Find(D.Key, D.Value))
+			{
+				Worn.Add(D.Key, Item);
+			}
+		}
+	}
 	TSet<FName> Gone;
 	for (const TPair<FName, const FSOWardrobeItem*>& P : Worn)
 	{
@@ -920,7 +932,7 @@ void ASOCharacter::RefreshHolsters()
 	int32 Stowed = INDEX_NONE;
 	for (int32 Slot = 0; Slot < Num; ++Slot)
 	{
-		const FSOWeaponInstance* Copy = Inventory && Asset && !bDead ? Inventory->GetEquipped(Slot) : nullptr;
+		const FSOWeaponInstance* Copy = Inventory && Asset && !bDead && !bEmptyHanded ? Inventory->GetEquipped(Slot) : nullptr;
 		const bool bHeld = Copy && Weapon && Weapon->GetInstance().Uid == Copy->Uid;
 		if (!Copy || (bHeld && !bHeldStowed))
 		{
@@ -1112,7 +1124,7 @@ void ASOCharacter::Tick(float DeltaSeconds)
 	{
 		// (and while the body plays an ability's clip: a throw, a blow, a brace)
 		const USOLocomotionAnimInstance* BodyAnim = GetMesh() ? Cast<USOLocomotionAnimInstance>(GetMesh()->GetAnimInstance()) : nullptr;
-		const bool bStow = (SOMove->IsMantling() || (BodyAnim && BodyAnim->IsPlayingAction()) || bFists) && !bDead;
+		const bool bStow = (SOMove->IsMantling() || (BodyAnim && BodyAnim->IsPlayingAction()) || bFists || bEmptyHanded) && !bDead;
 		if (bStow != bHeldStowed)
 		{
 			bHeldStowed = bStow;
