@@ -129,7 +129,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	}
 	// Where the body holds it (the stance's place, relaxed or at the ready, the sprint's carry, the reload's; on the
 	// sights a long gun shouldered, the butt in the pocket).
-	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT)));
+	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), SupportReach));
 
 	// On the sights (one body, one camera, the owner, 2026-11-23): the sight on the camera's line. A long gun stays where
 	// the body shoulders it and the CAMERA alone comes to its sight's line, where a cheek on the comb would put an eye
@@ -138,6 +138,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// through the shoulder and out of the back. A handgun comes up to the eyes' line, held out at the arms' reach.
 	FVector AdsOffset(AdsSightDistance, 0.0f, 0.0f);
 	FVector SightPivot = FVector::ZeroVector;
+	FVector SightShift = FVector::ZeroVector;
 	{
 		const FTransform Eye = Character->GetEyeTransform(true);
 		float SightEye = 0.0f;
@@ -160,8 +161,12 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 				const float PitchDeg = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
 				const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f);
 				const FVector SightWorld = Hold.TransformPosition(SightRig);
-				SightEyeCS = Character->GetCapsuleComponent()->GetComponentTransform().InverseTransformPosition(SightWorld - Eye.GetRotation().GetForwardVector() * Relief);
+				const FTransform Capsule = Character->GetCapsuleComponent()->GetComponentTransform();
+				SightEyeCS = Capsule.InverseTransformPosition(SightWorld - Eye.GetRotation().GetForwardVector() * Relief);
 				SightEye = Ads * (1.0f - Down);
+				// (the camera comes to the sight on a spring as the gun comes up: until it is there the gun is laid against
+				// where the camera is going, not where it is: below)
+				SightShift = Capsule.TransformVector((SightEyeCS - Character->GetHeadEyeCS()) * (1.0f - Down));
 			}
 			AdsOffset = FVector(Relief - SightRig.X, -SightRig.Y, -SightRig.Z);
 			SightPivot = SightRig;
@@ -179,6 +184,34 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 			FVector(-TZ * 100.0f, TX * 100.0f, TY * 100.0f));
 		Hold = Ride * Hold;
 	}
+	// Walking off the sights the gun rides steadier than the shoulder carries it: its place against the eyes' steady place
+	// (the view's turn at the eyes' height on the capsule) follows the body's hold through a soft spring (the owner,
+	// 2026-11-23: "when in first person not scoped and walking the guns shake too much"). Against the steady place, never
+	// the camera itself: the camera carries the head's bob and comes back from a sight, and smoothed against it the gun
+	// dragged behind it coming off the sights, the hand round the heavy machine gun's grip bent 84 degrees.
+	{
+		// (walking only: standing the hold is as it is, and a reload's and a sprint's own moves are never held back: smoothed,
+		// the reload's swing left the gun out of both arms' reach)
+		const FTransform Eye(Character->GetEyeTransform(true).GetRotation(),
+			Character->GetCapsuleComponent()->GetComponentTransform().TransformPosition(Character->GetSteadyEyeCS()));
+		const FTransform Against = Hold.GetRelativeTransform(Eye);
+		const float Walking = bGrounded ? FMath::Clamp(static_cast<float>(Vel.Size2D()) / 250.0f, 0.0f, 1.0f) * (1.0f - ReloadK) * (1.0f - FMath::Clamp(RunT, 0.0f, 1.0f)) : 0.0f;
+		if (!bInEyesValid || Dt > 0.25f)
+		{
+			InEyesPos = Against.GetLocation();
+			InEyesVel = FVector::ZeroVector;
+			InEyesRot = Against.GetRotation();
+			bInEyesValid = true;
+		}
+		SOSpring::Step(InEyesPos, InEyesVel, Against.GetLocation(), InEyesFollowMoving, 1.0f, Dt);
+		InEyesRot = FQuat::Slerp(InEyesRot, Against.GetRotation(), 1.0f - FMath::Exp(-InEyesFollowMoving * Dt)).GetNormalized();
+		if (Walking > 1e-3f)
+		{
+			FTransform Ridden;
+			Ridden.Blend(Hold, FTransform(InEyesRot, InEyesPos) * Eye, Walking);
+			Hold = Ridden;
+		}
+	}
 	// On the sights (the same gun in the same hands, first person or not): the sight on the line of the body's eyes,
 	// where the camera is in first person; the kick turns the gun about its SIGHT, so the reticle stays on the point the
 	// rounds hit (the owner: "the bullets don't even hit where the scope is").
@@ -188,7 +221,13 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		const float EZ = (G[5] * GunMoves + InRoll) * 0.15f;
 		const FRotator Turn(FMath::RadiansToDegrees(EX), 0.0f, FMath::RadiansToDegrees(-EZ));
 		const FVector Offset = AdsOffset + (SightPivot - Turn.RotateVector(SightPivot)) + FVector(-KickBack * 15.0f, 0.0f, 0.0f);
-		const FTransform Sighted = FTransform(Turn, Offset) * Character->GetEyeTransform(true);   // (the eye: on the shouldered gun's sight line)
+		// (the eye: on the shouldered gun's sight line. The camera comes to it on a spring: on the way the frame is moved to
+		// where the camera is going, so a long gun stays shouldered as it comes up and only the camera moves (laid against
+		// the camera on its way, the gun was pulled toward the head's eyes and the hand round the heavy machine gun's grip
+		// bent 80 degrees halfway up); on the sights it is the camera's own line again)
+		FTransform Frame = Character->GetEyeTransform(true);
+		Frame.AddToTranslation(SightShift * (1.0f - Ads));
+		const FTransform Sighted = FTransform(Turn, Offset) * Frame;
 		FTransform Mixed;
 		Mixed.Blend(Hold, Sighted, Ads);
 		Hold = Mixed;
@@ -197,7 +236,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// (both hands again after the motion's sway and the kick: they carried a pump's fore end out of the support hand's reach;
 	// on the sights the sight stays on the eye's line, the gun was put in reach before the eye came to it)
 	{
-		FTransform Reached = InSupportReach(Character, Rig, Hold);
+		FTransform Reached = InSupportReach(Character, Rig, Hold, SupportReachLast);
 		Reached.SetTranslation(FMath::Lerp(Reached.GetTranslation(), Hold.GetTranslation(), static_cast<double>(Ads)));
 		Hold = InFiringReach(Character, Rig, Reached);
 	}
@@ -460,7 +499,7 @@ bool USOViewmodelComponent::SupportArm(const ASOCharacter* Character, const USOG
 	return true;
 }
 
-FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold) const
+FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach) const
 {
 	// The support hand is on the gun too (the owner's ULTIMATE rule, 2026-11-23: "the gun is placed where the hand can
 	// be, never the hand chasing a gun out of its reach"): its place on the gun past the support arm's reach (looking
@@ -476,11 +515,11 @@ FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, 
 	}
 	const FVector Wrist = Hold.TransformPosition(InGun);
 	const float D = static_cast<float>(FVector::Dist(Wrist, Shoulder));
-	if (D <= SupportReach * Arm || D < 1e-3f)
+	if (D <= Reach * Arm || D < 1e-3f)
 	{
 		return Hold;
 	}
-	FVector Move = (Shoulder - Wrist) / D * (D - SupportReach * Arm);
+	FVector Move = (Shoulder - Wrist) / D * (D - Reach * Arm);
 	// (pointed steeply down the stock is off the shoulder: the gun hangs in front of the body and comes in freely)
 	const float PitchDeg = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
 	const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f);

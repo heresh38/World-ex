@@ -2394,30 +2394,29 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 
 void ASOCharacter::UpdateEye(float DeltaSeconds)
 {
-	// The body's own eyes (true first person: the camera sits in them): the head joint's place and turn in the body's
-	// last pose, with the eyes' place on it (EyeFromHead, measured at rest), in the capsule's frame; on the sights of a
-	// long gun the camera alone goes to the shouldered gun's sight line (SetSightEye; the head stays as it is: the
-	// owner, "just move the camera"). Followed by a stiff spring (the pose's jitter smoothed) never more than EyeMaxLag
-	// behind: a crouch carries the eyes all the way, at once (a soft spring left them 30 cm off the head in a crouch).
-	// Until the body has a head, the capsule's eye.
+	// The body's own eyes (true first person: the camera sits in them): the head joint's place in the body's last pose,
+	// and the eyes' place before it (EyeFromHead, measured at rest) in the body's facing, the capsule's frame: never turned
+	// by the head bone itself (turned with it, the camera swung 4 cm round the neck as the head lagged and led the view,
+	// the owner's "when moving the mouse in first person ... the camera seems too wobbly instead of smooth"; turning the
+	// view now only turns the camera). On the sights of a long gun the camera alone goes to the shouldered gun's sight
+	// line (SetSightEye; the head stays as it is: the owner, "just move the camera"). Followed by a stiff spring (the
+	// pose's jitter smoothed) never more than EyeMaxLag behind (a crouch carries the eyes all the way, at once: a soft
+	// spring left them 30 cm off the head in a crouch); on the move off the sights a softer one (EyeFollowMoving: the
+	// walk's bob ridden, not taken). Until the body has a head, the capsule's eye.
 	FVector Want(EyeFromHead.X, 0.0f, EyeOffset);
 	const USkeletalMeshComponent* Body = GetMesh();
 	const USkeletalMesh* BodyAsset = Body ? Body->GetSkeletalMeshAsset() : nullptr;
 	const int32 Head = BodyAsset ? Body->GetBoneIndex(TEXT("head")) : INDEX_NONE;
 	if (Head != INDEX_NONE && Body->GetComponentSpaceTransforms().IsValidIndex(Head))
 	{
-		if (EyeMesh.Get() != BodyAsset)
-		{
-			// the eyes in the head bone's own frame, from the rest pose (the body's component space: +Y forward, +X the
-			// character's left, +Z up)
-			const FTransform RefHead = FAnimationRuntime::GetComponentSpaceTransformRefPose(BodyAsset->GetRefSkeleton(), Head);
-			EyeInHead = RefHead.GetRotation().UnrotateVector(FVector(-EyeFromHead.Y, EyeFromHead.X, EyeFromHead.Z));
-			EyeMesh = BodyAsset;
-		}
-		const FTransform HeadCS = Body->GetComponentSpaceTransforms()[Head];
-		const FVector EyeWorld = Body->GetComponentTransform().TransformPosition(HeadCS.GetLocation() + HeadCS.GetRotation().RotateVector(EyeInHead));
-		Want = GetCapsuleComponent()->GetComponentTransform().InverseTransformPosition(EyeWorld);
+		const FVector HeadWorld = Body->GetComponentTransform().TransformPosition(Body->GetComponentSpaceTransforms()[Head].GetLocation());
+		Want = GetCapsuleComponent()->GetComponentTransform().InverseTransformPosition(HeadWorld) + EyeFromHead;
+		// (on the body's middle, side to side: standing, the feet stay planted and the body lags the view's turn until it
+		// steps round, and the head, ahead of the body's axis, swung 3 cm across the picture with it; its height and how
+		// far forward it leans are kept)
+		Want.Y = EyeFromHead.Y;
 	}
+	EyeHeadCS = Want;
 	if (SightEyeAlpha > 1e-3f)
 	{
 		Want = FMath::Lerp(Want, SightEyeCS, SightEyeAlpha);
@@ -2431,11 +2430,14 @@ void ASOCharacter::UpdateEye(float DeltaSeconds)
 	}
 	// (critically damped, no overshoot; stepped stably at any frame time: once a frame it went unstable below 36 frames
 	// a second and the camera shook 2 cm every frame, the owner's "the gun is constantly shaking")
-	SOSpring::Step(EyeCS, EyeVelCS, Want, EyeFollow, 1.0f, FMath::Min(DeltaSeconds, 0.1f));
+	const USOCharacterMovementComponent* Move = GetSOMovement();
+	const float Moving = Move && Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(GetVelocity().Size2D()) / 250.0f, 0.0f, 1.0f) * (1.0f - AimProgress) : 0.0f;
+	SOSpring::Step(EyeCS, EyeVelCS, Want, FMath::Lerp(EyeFollow, EyeFollowMoving, Moving), 1.0f, FMath::Min(DeltaSeconds, 0.1f));
+	const float MaxLag = FMath::Lerp(EyeMaxLag, EyeMaxLagMoving, Moving);
 	const FVector Behind = EyeCS - Want;
-	if (Behind.SizeSquared() > FMath::Square(EyeMaxLag))
+	if (Behind.SizeSquared() > FMath::Square(MaxLag))
 	{
-		EyeCS = Want + Behind.GetSafeNormal() * EyeMaxLag;
+		EyeCS = Want + Behind.GetSafeNormal() * MaxLag;
 	}
 }
 

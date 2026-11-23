@@ -193,4 +193,113 @@ bool FSOHeadShadowTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSmoothOnTheMoveTest, "ShatteredOrbit.Hold.SmoothOnTheMove", SOTest::Flags)
+bool FSOSmoothOnTheMoveTest::RunTest(const FString& Parameters)
+{
+	// First person, off the sights, the gun in the picture walking and the camera turning with the mouse (the owner,
+	// 2026-11-23: "when in first person not scoped and walking the guns shake too much ... when moving the mouse in first
+	// person not zoomed the camera seems too wobbly instead of smooth"): how far the gun moves in the picture, how hard
+	// its motion jerks from frame to frame, and how far the camera itself moves while only the view turns (MOVE lines).
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-20000, -20000, -100), FVector(20000, 20000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	PC->SetControlRotation(FRotator::ZeroRotator);
+	Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Player->SetViewMode(ESOViewMode::FirstPerson);
+	FRandomStream Rng(5);
+	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("pistol") })
+	{
+		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
+		W.Run(1.0f);
+		if (!TestNotNull(FString::Printf(TEXT("%s in the hands"), Arch), Gun) || !Gun->GetRig())
+		{
+			continue;
+		}
+		for (int32 Case = 0; Case < 3; ++Case)
+		{
+			const TCHAR* What = Case == 0 ? TEXT("walking") : (Case == 1 ? TEXT("walking at the ready") : TEXT("turning the view"));
+			Player->CancelCombat();
+			float Yaw = PC->GetControlRotation().Yaw;
+			auto Each = [&](float T)
+			{
+				if (Case == 1)
+				{
+					Player->MarkCombat();
+				}
+				if (Case < 2)
+				{
+					Player->AddMovementInput(Player->GetActorForwardVector(), 1.0f);
+				}
+				else
+				{
+					// a hand on a mouse: 120 degrees a second, never quite even
+					Yaw += (120.0f + 60.0f * FMath::Sin(T * 7.0f)) * SOTest::Dt;
+				}
+				PC->SetControlRotation(FRotator(0.0f, Yaw, 0.0f));
+				Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt);
+			};
+			float T = 0.0f;
+			W.Run(1.0f, [&]() { Each(T); T += SOTest::Dt; });
+			TArray<FVector> Place, Eye;
+			W.Run(2.0f, [&]()
+			{
+				Each(T);
+				T += SOTest::Dt;
+				const FTransform Cam = Player->GetCamera()->GetComponentTransform();
+				Place.Add(Gun->GetRig()->GetComponentTransform().GetRelativeTransform(Cam).GetLocation());
+				Eye.Add(Player->GetActorTransform().InverseTransformPosition(Cam.GetLocation()));
+			});
+			FBox PlaceBox(ForceInit), EyeBox(ForceInit);
+			float Step = 0.0f, Jerk = 0.0f, EyeStep = 0.0f, EyeJerk = 0.0f;
+			for (int32 i = 0; i < Place.Num(); ++i)
+			{
+				PlaceBox += Place[i];
+				EyeBox += Eye[i];
+				if (i >= 1)
+				{
+					Step = FMath::Max(Step, static_cast<float>((Place[i] - Place[i - 1]).Size()));
+					EyeStep = FMath::Max(EyeStep, static_cast<float>((Eye[i] - Eye[i - 1]).Size()));
+				}
+				if (i >= 2)
+				{
+					Jerk = FMath::Max(Jerk, static_cast<float>((Place[i] - 2.0 * Place[i - 1] + Place[i - 2]).Size()));
+					EyeJerk = FMath::Max(EyeJerk, static_cast<float>((Eye[i] - 2.0 * Eye[i - 1] + Eye[i - 2]).Size()));
+				}
+			}
+			const FVector Sway = PlaceBox.GetSize(), EyeSway = EyeBox.GetSize();
+			AddInfo(FString::Printf(TEXT("MOVE %s %s: the gun in the picture sways %.1f x %.1f x %.1f cm, steps %.2f cm, jerks %.3f cm a frame; the camera on the capsule sways %.1f x %.1f x %.1f, steps %.2f, jerks %.3f"),
+				Arch, What, Sway.X, Sway.Y, Sway.Z, Step, Jerk, EyeSway.X, EyeSway.Y, EyeSway.Z, EyeStep, EyeJerk));
+			// (walking, the gun in the picture jerked half a centimetre a frame before the owner's word, 0.02 after; turning
+			// the view, the camera swung 3-4 cm side to side round the neck, none after)
+			if (Case < 2)
+			{
+				TestTrue(FString::Printf(TEXT("%s %s: the gun in the picture jerks %.3f cm a frame (under 0.1)"), Arch, What, Jerk), Jerk < 0.1f);
+				TestTrue(FString::Printf(TEXT("%s %s: the gun in the picture sways %.1f cm up and down (under 1.5)"), Arch, What, Sway.Z), Sway.Z < 1.5f);
+			}
+			else
+			{
+				TestTrue(FString::Printf(TEXT("%s %s: the camera moves %.2f cm side to side on the capsule (under 0.5)"), Arch, What, EyeSway.Y), EyeSway.Y < 0.5f);
+			}
+		}
+	}
+	return true;
+}
+
 #endif

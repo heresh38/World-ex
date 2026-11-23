@@ -13,6 +13,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "GameFramework/PlayerController.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "SOCharacter.h"
 #include "SOCharacterMovementComponent.h"
 #include "SOInventoryComponent.h"
@@ -185,8 +187,15 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	};
 
 	FRandomStream Rng(31);
+	// (-SOHoldOnly=<arch>: one gun while working on it; -SORangeAll: every state's measures as info lines, RANGE)
+	FString Only;
+	FParse::Value(FCommandLine::Get(), TEXT("SOHoldOnly="), Only);
 	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("pistol"), TEXT("smg"), TEXT("hmg"), TEXT("sniper"), TEXT("shotgun"), TEXT("rocket") })
 	{
+		if (!Only.IsEmpty() && Only != Arch)
+		{
+			continue;
+		}
 		Player->SetActorLocation(FVector(0.0f, 0.0f, 92.0f));
 		PC->SetControlRotation(FRotator::ZeroRotator);
 		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
@@ -266,6 +275,7 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	Hold(TEXT("fists, sprinting"), 0.8f, [&]() { Player->AddMovementInput(Player->GetActorForwardVector(), 1.0f); });
 	Move->SetWantsToSprint(false);
 
+	const bool bLogAll = FParse::Param(FCommandLine::Get(), TEXT("SORangeAll"));
 	for (const TPair<FString, TPair<float, float>>& It : Worst)
 	{
 		const int32 Joint = static_cast<int32>(Algo::IndexOfByPredicate(Limits, [&](const FLimit& L) { return It.Key.EndsWith(L.Joint); }));
@@ -274,6 +284,10 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 			continue;
 		}
 		const FLimit& L = Limits[Joint];
+		if (bLogAll)
+		{
+			AddInfo(FString::Printf(TEXT("RANGE %s: %.1f to %.1f"), *It.Key, It.Value.Key, It.Value.Value));
+		}
 		TestTrue(FString::Printf(TEXT("%s: %.1f to %.1f, a human's %.0f to %.0f"), *It.Key, It.Value.Key, It.Value.Value, L.Least, L.Most),
 			It.Value.Key >= L.Least && It.Value.Value <= L.Most);
 	}

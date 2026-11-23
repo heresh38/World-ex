@@ -836,11 +836,14 @@ bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
 	}
 	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	W.Run(1.0f);
-	// the eyes from the head joint, in the head's own frame (the same on the head whatever the head does)
+	// the eyes from the head joint, in the body's facing (the capsule's frame: the camera is not turned by the head bone),
+	// ahead of it and above it (side to side the camera is on the body's middle: ASOCharacter::UpdateEye)
 	auto OnHead = [&]()
 	{
 		const FTransform Head = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));
-		return Head.GetRotation().UnrotateVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation());
+		FVector Off = C->GetActorTransform().InverseTransformVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation());
+		Off.Y = 0.0;
+		return Off;
 	};
 	const FVector Standing = OnHead();
 	const float EyeStanding = static_cast<float>(C->GetEyeTransform(false).GetLocation().Z) - SOTest::Feet(C);
@@ -848,7 +851,12 @@ bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
 	float Worst = 0.0f;
 	// (the eyes are set from the pose drawn the frame before: the gun and the arms follow from them in the frame, the head
 	// itself is hidden from that camera; measured against that pose)
-	auto OnHeadOf = [&](const FTransform& Head) { return Head.GetRotation().UnrotateVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation()); };
+	auto OnHeadOf = [&](const FTransform& Head)
+	{
+		FVector Off = C->GetActorTransform().InverseTransformVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation());
+		Off.Y = 0.0;
+		return Off;
+	};
 	FTransform Drawn = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));
 	W.Run(1.5f, [&]
 	{

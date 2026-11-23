@@ -127,8 +127,20 @@ public:
 	 *  toward that shoulder (a long gun's butt no further back than this far in front of the firing shoulder joint, cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float SupportReach = 0.87f;
+	/** ...and after the sway, the kick and the walls, a safety only: this share of the arm (the gun's place is set by the
+	 *  body's hold before; at the same share the walk's shoulder pushed the rifle's fore end over it and back every few
+	 *  frames, and the gun jerked in the picture). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float SupportReachLast = 0.93f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float ButtAheadOfShoulder = 2.0f;
+
+	/** Walking off the sights the gun's place against the eyes' steady place follows the body's hold through this spring
+	 *  (the owner, 2026-11-23: "when in first person not scoped and walking the guns shake too much": the walk's shoulder
+	 *  bob and twist came through as a shake in the picture; now a slow sway). Standing, reloading and sprinting the hold
+	 *  is as it is. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float InEyesFollowMoving = 9.0f;
 
 	/** The shoulder pocket and the shoulders' middle (actor space, cm) from the body's last pose; false = defaults. */
 	bool GetShoulderPoints(const ASOCharacter* Character, FVector& OutPocket, FVector& OutChest) const;
@@ -165,6 +177,10 @@ private:
 	float WallK = 0.0f, WallV = 0.0f;
 	FVector HoldDir = FVector::ForwardVector;
 	bool bHoldDirValid = false;
+	/** The gun's place against the eyes' steady place, followed (InEyesFollowMoving). */
+	FVector InEyesPos = FVector::ZeroVector, InEyesVel = FVector::ZeroVector;
+	FQuat InEyesRot = FQuat::Identity;
+	bool bInEyesValid = false;
 
 	/** Where the body holds the gun: the stance's place, the sprint's carry, the reload's, a steep look down. */
 	FTransform HoldTransform(const ASOCharacter* Character, const USOWeaponData* Data, bool bHandgun, float Dt, float RunT);
@@ -174,7 +190,7 @@ private:
 	FTransform InFiringReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold) const;
 	/** Never further from the support shoulder than that arm reaches with a bend left in it: the gun comes in toward it
 	 *  (the support hand is on the gun too; slid back along the gun its fingers closed in it, or it left a handgun). */
-	FTransform InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold) const;
+	FTransform InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach) const;
 	/** The support wrist's place on the gun (the rig's frame, the fitted hold), its shoulder and arm in the body's last pose. */
 	bool SupportArm(const ASOCharacter* Character, const USOGunRigComponent* Rig, FVector& OutInGun, FVector& OutShoulder, float& OutArm) const;
 	/** A handgun held out on the sights: how far ahead of the eye its sight is, from the reach of the arms. */

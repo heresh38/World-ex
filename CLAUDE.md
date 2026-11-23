@@ -154,8 +154,9 @@ existing classes, never second systems.
   own pose, the stance's small cant toward the stock (`HeadCant` 14 degrees). Before, the gun went to the eyes at a
   fixed 9 cm: with one body its butt went through the shoulder and out of the back. A handgun comes up to the eyes'
   line held out at the arms' reach (`HandgunReach` 0.88 of the firing arm, the support arm's too). A red dot's window
-  is as wide as it is from there (most long guns 7-13 degrees; the rifle's rail sits far forward on its handguard: its
-  reflex is 3.6 degrees across from 50 cm, a model change to move it back). **Every bend a normal amount** (the owner,
+  is as wide as it is from there (most long guns 7-13 degrees; the rifle's rail is on its top cover's crown since
+  2026-11-23, the owner: on the handguard "it is too far down the gun now": its reflex 6.5 degrees across from 28 cm,
+  3.6 from 51 before; weapons.py `rifle()`, `rail=(0, -.06, .1145)`). **Every bend a normal amount** (the owner,
   2026-11-23: "head/arms/legs/body bends a normal amount not crazy"): the trunk takes 60 % of the aim's pitch (within
   -40..+45) and the neck and the head only what the trunk did not, within -55..+50 degrees (they took the whole aim on
   top of the trunk's share: looking 60 degrees up the face pointed 100 degrees up); an ankle draws the toes up at most
@@ -1510,7 +1511,24 @@ custom primitive data 0 (`OwnViewHide`, set by `ASOCharacter::UpdateHeadHiding`)
 (`#if SHADOW_DEPTH_SHADER`); what is worn on the head (the hair, a helmet) is `OwnerNoSee` with `bCastHiddenShadow`. A
 body whose head materials cannot (`IsHeadHiddenByMaterial` false: the female until her new body) still has the head
 shrunk into its joint (`HideHead`), shadow and all. Import: `SO_IMPORT_ONLY=player_skin,player_head`. Test
-`ShatteredOrbit.Camera.HeadKeepsItsShadow`. **Every spring is stable at any frame rate** (`SOSpring.h`: sub-steps of
+`ShatteredOrbit.Camera.HeadKeepsItsShadow`. **Smooth on the move** (the owner, 2026-11-23: "when in first person not scoped
+and walking the guns shake too much ... when moving the mouse in first person not zoomed the camera seems too wobbly"):
+the camera is the head JOINT's place and the eyes' offset in the body's facing, never turned by the head bone, and on
+the body's middle side to side (turned with the head it swung 4 cm round the neck; standing, the planted feet let the
+body lag the view's turn and the head swung 3 cm across the picture), softer while walking off the sights
+(`EyeFollowMoving` 10, `EyeMaxLagMoving` 5 cm); walking off the sights the gun's place against the eyes' STEADY place
+(`ASOCharacter::GetSteadyEyeCS`: the view's turn at the eyes' height on the capsule's middle) follows the body's hold
+through a spring (`InEyesFollowMoving` 9: the walk's shoulder step and twist come as a slow sway; standing, reloading
+and sprinting it is the hold as it is: smoothed in a reload the gun swung out of both arms' reach). Never against the
+camera itself: it carries the head's bob and comes back from a sight, and the gun smoothed against it dragged behind it
+coming off the sights (the hand round the heavy machine gun's grip bent 84 degrees). The last support reach is a safety
+at `SupportReachLast` 0.93 (at the first one's 0.87 the walk pushed the rifle's fore end over and back and the gun
+jerked). Coming up onto the sights a long gun is laid against where the camera is GOING, not where it is on its spring
+(`SightShift`: on the sights it is the camera's own line again): laid against the camera on its way the gun was pulled
+toward the head's eyes and the same hand bent 80 degrees halfway up. Measured (`ShatteredOrbit.Hold.SmoothOnTheMove`,
+held to a jerk under 1 mm a frame): walking, the gun in the picture sways 0.9 x 0.4 x 0.3 cm and jerks 0.2 mm a frame (5
+before), turning the view the camera does not move side to side. `ShatteredOrbit.Body.HumanRange -SOHoldOnly=<arch>
+-SORangeAll` measures one gun and logs every state's joints (`RANGE` lines). **Every spring is stable at any frame rate** (`SOSpring.h`: sub-steps of
 at most 0.3 / Omega; the owner, 2026-11-23: "in first person the gun is constantly shaking": stepped once a frame the
 camera's spring, Omega 30, went unstable below 36 frames a second and shook the picture 2 cm every frame, the gun on
 the sights with it; the viewmodel's, the eye height's, the landing's, the roll's and the anim's springs the same).

@@ -137,6 +137,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float EyeMaxLag = 2.0f;
 
+	/** On the move off the sights the camera rides the head's bob softer (the owner, 2026-11-23: "when in first person
+	 *  not scoped and walking the guns shake too much so smooth the camera a bit more there"): this spring, and this far
+	 *  behind the head at most (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float EyeFollowMoving = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
+	float EyeMaxLagMoving = 5.0f;
+
 	/** How long the camera takes to move between the eyes and the test view behind the shoulder (s). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float ViewSwitchTime = 0.35f;
@@ -150,6 +158,10 @@ public:
 	 *  cm) and how far on the sights (0..1) each frame; the camera and the shots go there. */
 	void SetSightEye(const FVector& InCapsuleFrame, float Alpha) { SightEyeCS = InCapsuleFrame; SightEyeAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f); }
 	float GetSightEye(FVector& OutCapsuleFrame) const { OutCapsuleFrame = SightEyeCS; return SightEyeAlpha; }
+	/** The eyes' place on the head (the capsule's frame) before the camera goes to a sight (UpdateEye), and their steady
+	 *  place without the head's own motion (the walk's bob): the eyes' height on the capsule, on its middle. */
+	FVector GetHeadEyeCS() const { return EyeHeadCS; }
+	FVector GetSteadyEyeCS() const { return FVector(EyeFromHead.X, EyeFromHead.Y, EyeOffset); }
 
 	/** Its own player's camera is in this body's head (first person): the head is hidden from it, on this machine only,
 	 *  and its shadow still falls (the owner, 2026-11-23). The head's own parts (its face, eyes, lashes) are cut out of
@@ -743,9 +755,8 @@ private:
 	void UpdateEye(float DeltaSeconds);
 	FVector EyeCS = FVector::ZeroVector;
 	FVector EyeVelCS = FVector::ZeroVector;
+	FVector EyeHeadCS = FVector::ZeroVector;
 	bool bHaveEye = false;
-	FVector EyeInHead = FVector::ZeroVector;
-	TWeakObjectPtr<const USkeletalMesh> EyeMesh;
 	/** The camera's place on the sights (the capsule's frame) and how far on them: SetSightEye. */
 	FVector SightEyeCS = FVector::ZeroVector;
 	float SightEyeAlpha = 0.0f;

@@ -1042,6 +1042,9 @@ def assault_rifle():
     P.append(G.rprism('cover_block', [(-.205, .084), (-.205, .103), (-.219, .103), (-.226, .096), (-.226, .084)], .032, S, .003))
     P.append(G.rprism('cover_catch', [(.178, .078), (.178, .089), (.167, .091), (.167, .078)], .014, S, .003))
     P.append(lathe('catch_button', [(.181, 0), (.181, .0032), (.177, .0036), (.177, 0)], S, .083, 0, 12))
+    # the optic's rail on the top cover's crown, a cheek's length from the eye (the owner, 2026-11-23: on the handguard
+    # "it is too far down the gun now": a red dot 51 cm from the eye was a 3.6 degree window; here about 6)
+    P += K.rail(M, .01, -.13, .105, .02, PK)
 
     # ---------------------------------------------------------------- magazine well and trigger housing
     Wl = G.Body([(.04, .02, .032, .0125, 4.0), (.01, .017, .032, .0155, 5.0), (-.03, .015, .032, .0165, 5.0), (-.06, .012, .032, .0175, 5.5), (-.076, .004, .032, .0196, 6.0),
@@ -1087,7 +1090,6 @@ def assault_rifle():
     HG.checker(P, 'fore_checker', W, -.3, -.4, -.64, -.32, 28, 5, .0007, d=.0001)
     HG.collar(P, 'ferrule', S, -.256, .014, .0012)
     HG.collar(P, 'hg_cap', S, -.42, .014, .0012)
-    P += K.rail(M, -.278, -.392, .1075, .02, PK)
 
     # ---------------------------------------------------------------- stock: walnut through ten sections
     # the wrist grows out of the tang with a palm swell, the comb rolls over and drops to the heel, a cheek flat on the left
@@ -1129,7 +1131,7 @@ def assault_rifle():
     MAG.append(prism('floor_catch', [fl[3], (fl[3][0] + .006, fl[3][1] + .003), (fl[0][0] + .006, fl[0][1] + .012), (fl[0][0] + .001, fl[0][1] + .01)], .01, PK, .001))
     G.feed_lips(MAG, -.085, -.149, .02, .03, S, M['brass'])
     sz = .1195
-    finish('gun_rifle', P, (0, -.69, zb), (0, -.345, .012), (0, .06, sz), rail=(0, -.335, .117),
+    finish('gun_rifle', P, (0, -.69, zb), (0, -.345, .012), (0, .06, sz), rail=(0, -.06, .1145),
            moving=[('mag', MAG, (0, -.149, .02)), ('bolt', BOLT, (RIGHT * .049, -.128, .074))])
 
 
