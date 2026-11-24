@@ -638,6 +638,15 @@ RunSpeed), leg IK + foot orientation baked to FK, the hips lowered (smoothed ove
 over-reach, arm bends about the elbow hinge (`Body.elbow`), finger curls (`Pose.curl`). Unreal: walk and run share one
 cycle phase (both start on the left foot); a Fidget layer plays an idle variation after 7-15 s standing still and not
 aiming (`USOLocomotionAnimInstance::FidgetDelay`). Test: `ShatteredOrbit.Anim.OwnClipsPerBody`.
+**MotionBricks, a trial** (`tools/motionbricks`, its README; the owner, 2026-11-23: "can we use it for our animation",
+then "Yes, trial it"): NVIDIA's motion model (Apache code, NVIDIA Open Model Agreement weights: commercial use allowed,
+no claim on its output; its sample clips are evaluation-only and used nowhere) fills in the motion between four poses
+and up to four targets, here both from OUR clips. Our male body's clips go onto its SOMA rig through each bone's
+anatomical frame (along the bone, the body's forward square to it; both rigs' T-poses), the transitions are generated
+(3.4 ms each on the RTX 4070 Ti), come back onto our bones, the planted feet held where it says they are down (its feet
+slide 7-45 cm/s as generated, 0.3-14 held), measured and rendered. Installed outside the repository
+(`C:/Dev/motionbricks`, its own `uv` environment, an NVIDIA card). Nothing of it is in the game: the owner decides from
+the pictures (`Saved/MotionBricksTrial`).
 Male and female heads differ on purpose (his heavy brow ridge, square wide jaw, big chin, broad nose; her narrow face
 tapering to a small chin, high round cheekbones, small nose, full lips, bigger eyes). Face keys `face_*` are created
 at 0 (Blender 5 adds new keys at 1.0). Heat weights are solved on a cleaned copy of the body (`rig.heat_weights`).
