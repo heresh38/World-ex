@@ -1,5 +1,7 @@
 #include "SOViewmodelComponent.h"
 #include "SOSpring.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "SOStance.h"
 #include "SOWeaponData.h"
 
@@ -135,6 +137,14 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float Reach = Stance.RelaxReach > 0.0f ? FMath::Lerp(SupportReach, Stance.RelaxReach, Relaxed) : SupportReach;
 	const float StockOff = Stance.RelaxReach > 0.0f ? Relaxed : 0.0f;    // (and the stock may come off the shoulder for it)
 	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), Reach, StockOff));
+	// (the camera's framing, HoldTransform; it gives way as the player looks down or up, the camera back in the eyes by
+	// 55 degrees: set behind them, looking at the floor it saw down through the body, and looking up the raised arms are
+	// nearer it)
+	{
+		const float Look = FMath::Clamp((FMath::Abs(FRotator::NormalizeAxis(Character->GetAimRotation().Pitch)) - 15.0f) / 40.0f, 0.0f, 1.0f);
+		const float Framed = 1.0f - Look * Look * (3.0f - 2.0f * Look);
+		Character->SetFrame(FrameDrop * Framed, FrameSide * Framed, FrameBack * Framed);
+	}
 
 	// On the sights (one body, one camera, the owner, 2026-11-23): the sight on the camera's line. A long gun stays where
 	// the body shoulders it and the CAMERA alone comes to its sight's line, where a cheek on the comb would put an eye
@@ -164,7 +174,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 				// (on the view's line through the shouldered gun's sight: the rounds go along it; looking steeply down
 				// the stock comes off the shoulder and the head stays up: the gun comes to the eyes there)
 				const float PitchDeg = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
-				const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f);
+				const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f) * (1.0f - Ads);
 				const FVector SightWorld = Hold.TransformPosition(SightRig);
 				const FTransform Capsule = Character->GetCapsuleComponent()->GetComponentTransform();
 				SightEyeCS = Capsule.InverseTransformPosition(SightWorld - Eye.GetRotation().GetForwardVector() * Relief);
@@ -200,7 +210,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		const FTransform Eye(Character->GetEyeTransform(true).GetRotation(),
 			Character->GetCapsuleComponent()->GetComponentTransform().TransformPosition(Character->GetSteadyEyeCS()));
 		const FTransform Against = Hold.GetRelativeTransform(Eye);
-		const float Walking = bGrounded ? FMath::Clamp(static_cast<float>(Vel.Size2D()) / 250.0f, 0.0f, 1.0f) * (1.0f - ReloadK) * (1.0f - FMath::Clamp(RunT, 0.0f, 1.0f)) : 0.0f;
+		const float Walking = bGrounded ? Character->GetMovingEase() * (1.0f - ReloadK) * (1.0f - FMath::Clamp(RunT, 0.0f, 1.0f)) : 0.0f;
 		if (!bInEyesValid || Dt > 0.25f)
 		{
 			InEyesPos = Against.GetLocation();
@@ -305,7 +315,9 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 	// pocket it pointed down along the body, the support hand beyond reach and the firing hand at the hip (the
 	// owner, 2026-11-20: "looking down completely ... the players hand splits and the gun moves weirdly").
 	const float PitchDeg = FRotator::NormalizeAxis(Character->GetAimRotation().Pitch);
-	const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f) * (1.0f - Ads * 0.35f);
+	// (only off the sights: on them a long gun stays shouldered at any pitch and the trunk bows with the aim,
+	// USOLocomotionAnimInstance; a handgun comes up to the eyes)
+	const float Down = FMath::Clamp((-PitchDeg - 20.0f) / 50.0f, 0.0f, 1.0f) * (1.0f - Ads * (bHandgun ? 0.35f : 1.0f));
 	if (bHandgun)
 	{
 		Start = Actor.TransformPosition(Chest + FVector(6.0f, 0.0f, -14.0f) * Down);
@@ -315,18 +327,33 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 		const FVector Low = Chest + LowHold;                               // low and ahead of the chest, a little right
 		// (at 10 cm ahead the gun hung against the belly and thighs with the hands stacked on it)
 		// (the butt in the shoulder pocket, raised by the class at the ready so the gun is up and forward; on the sights
-		// the sight goes on the eyes' line: UpdateHold)
-		Start = Actor.TransformPosition(FMath::Lerp(Pocket + FMath::Lerp(St.ReadyShift, St.AimShift, Ads), Low, Down));
+		// the sight goes on the eyes' line: UpdateHold. The raise is the CHEST's: on the sights looking down the trunk
+		// bows with the aim, USOLocomotionAnimInstance (up to 95 % of it to 70 degrees), and a raise kept upright pushed
+		// the butt up the bowed chest toward the face: the firing arm folded into the body, its wrist bent past 85)
+		FVector Shift = FMath::Lerp(St.ReadyShift, St.AimShift, Ads);
+		if (PitchDeg < 0.0f && Ads > 0.0f)
+		{
+			const float BowDeg = FMath::Clamp(PitchDeg, FMath::Lerp(-40.0f, -70.0f, Ads), 0.0f) * FMath::Lerp(0.6f, 0.95f, Ads) * Ads;
+			Shift = FRotator(BowDeg, 0.0f, 0.0f).RotateVector(Shift);
+		}
+		Start = Actor.TransformPosition(FMath::Lerp(Pocket + Shift, Low, Down));
 		Butt.X = FMath::Lerp(Butt.X, Butt.X + 16.0f, Down);               // (the butt no longer in a pocket: the gun's middle hangs from the point)
 	}
 	FVector WantDir = (Target - Start).GetSafeNormal(1e-4f, Character->GetEyeTransform(true).GetRotation().GetForwardVector());
+	// (on the sights along the eyes' line, as the sight is laid on it, UpdateHold: in the third-person test view the
+	// crosshair's point is the shoulder camera's, and at the floor close under a gun aimed down it turned the shouldered
+	// gun a few degrees off the line the sight then went onto, and the firing wrist past its range)
+	WantDir = FMath::Lerp(WantDir, Character->GetEyeTransform(true).GetRotation().GetForwardVector(), static_cast<double>(Ads)).GetSafeNormal(1e-4f, WantDir);
 	// The gun's own pitch is held within what a body can do (a rifle at the low ready points down at most about 55
 	// degrees: the shooter bends to look at the ground, the stock stays under the arm): pointed straight down from
 	// the chest the stock stood up along the face (the owner, 2026-11-21). The shot still goes where the eyes look.
 	if (!bHandgun)
 	{
 		FRotator R = WantDir.Rotation();
-		R.Pitch = FMath::Clamp(static_cast<float>(R.Pitch), -MaxDownPitch, MaxUpPitch);
+		// (on the sights it points where the eyes look, the trunk bowing under it, USOLocomotionAnimInstance: held at 48
+		// while the sight's line went to 60, the gun turned 12 degrees about its sight, the butt rose into the face and the
+		// firing arm folded into the body)
+		R.Pitch = FMath::Clamp(static_cast<float>(R.Pitch), FMath::Lerp(-MaxDownPitch, -80.0f, Ads), MaxUpPitch);
 		R.Pitch -= St.ReadyDip * (1.0f - Ads);                      // (at the ready the muzzle a touch under the line)
 		WantDir = R.Vector();
 	}
@@ -359,6 +386,54 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 		// (a long fore end past the support arm's reach: the gun comes in toward that shoulder, InSupportReach)
 	}
 
+	// The gun framed in the picture (the owner, 2026-11-23: "the pistol and hand cannon are good but the rest are bad and
+	// need to be in the screen more just like the pistol/hand cannon ... this fix should be automated because what if we
+	// have a fov slider"): off the sights the camera settles behind the eyes by the class's FrameBack, and under them and
+	// toward the gun's side as far as FrameDrop and FrameSide allow, so that the sight of the gun at the ready lies
+	// FrameDown of the way down the picture and FrameAcross of the way across, for the field of view the player has set
+	// and the picture's shape (ASOCharacter::SetFrame). Worked out from the READY hold (before the relaxed carry, the
+	// sprint and the reload) and the camera as it follows the head (the walk's lean in it: walking the eyes go 5 cm
+	// forward), only while the view is near level and off the sights: looking up or down, or on the sights, the last
+	// answer holds (the camera would slide about as the player looked at the floor). Eased slowly, so a switch of gun or
+	// of the field of view glides and nothing ever shakes. The body is not moved for it (moved up or in, a long gun put
+	// the firing elbow across the chest). On the sights the camera goes to the sight's line as before.
+	{
+		const bool bFrames = St.FrameDrop > 0.0f || St.FrameSide > 0.0f || St.FrameBack > 0.0f;
+		SOSpring::Step(FrameBack, FrameBackVel, bFrames ? St.FrameBack : 0.0f, 3.0f, 1.0f, FMath::Min(Dt, 0.1f));
+		float Want = bFrames ? FrameWant : 0.0f, WantSide = bFrames ? FrameSideWant : 0.0f;
+		if (Weapon && Rig && Rig->IsBuilt() && bFrames && Down <= 0.0f && PitchDeg < 20.0f && Ads < 0.02f)
+		{
+			const FVector SightRig = USOGunRigComponent::MeshToRig(Weapon->GetSightLocation());
+			const FTransform Capsule = Character->GetCapsuleComponent()->GetComponentTransform();
+			const FVector Cam = Capsule.TransformPosition(Character->GetHeadCameraCS() - FVector(St.FrameBack, 0.0f, 0.0f));
+			const FQuat View = Character->GetEyeTransform(false).GetRotation();
+			const FVector L = View.UnrotateVector(Hold.TransformPosition(SightRig) - Cam);   // (forward, right, up)
+			if (L.X > 5.0f)
+			{
+				float Aspect = 16.0f / 9.0f;
+				if (GEngine && GEngine->GameViewport)
+				{
+					FVector2D Size;
+					GEngine->GameViewport->GetViewportSize(Size);
+					if (Size.X > 1.0 && Size.Y > 1.0)
+					{
+						Aspect = static_cast<float>(Size.X / Size.Y);
+					}
+				}
+				const float TanH = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(Character->GetHipFov(), 40.0f, 140.0f) * 0.5f)), TanV = TanH / Aspect;
+				const float Yt = 1.0f - 2.0f * St.FrameDown;                                 // (the picture's height, -1 at the foot)
+				const float Xt = 2.0f * St.FrameAcross - 1.0f;                               // (its width, -1 at the left)
+				// (the camera h lower sees the sight h higher: (L.Z + h) / (L.X TanV) = Yt; s to the right sees it s further
+				// left: (L.Y - s) / (L.X TanH) = Xt)
+				Want = FMath::Clamp(Yt * static_cast<float>(L.X) * TanV - static_cast<float>(L.Z), 0.0f, St.FrameDrop);
+				WantSide = FMath::Clamp(static_cast<float>(L.Y) - Xt * static_cast<float>(L.X) * TanH, 0.0f, St.FrameSide);
+			}
+			FrameWant = Want;
+			FrameSideWant = WantSide;
+		}
+		SOSpring::Step(FrameDrop, FrameDropVel, Want, 3.0f, 1.0f, FMath::Min(Dt, 0.1f));   // (UpdateHold hands all three to the body)
+		SOSpring::Step(FrameSide, FrameSideVel, WantSide, 3.0f, 1.0f, FMath::Min(Dt, 0.1f));
+	}
 	// Relaxed (out of a fight, FSOStance): the gun lowered from the ready, turned about the firing hand's place on it (the
 	// hand stays where it is at the ready, the muzzle dips and turns in round it), so from the eyes it stays in the lower
 	// right of the picture (the owner, 2026-11-23: "weapons are not very visible ... so we see more of the gun when

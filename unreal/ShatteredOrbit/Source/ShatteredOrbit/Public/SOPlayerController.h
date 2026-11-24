@@ -75,6 +75,8 @@ private:
 	float CaptureWait = 0.0f;
 	/** Forward move input the capture series holds down (fed in PlayerTick, where real input arrives, before the movement tick). */
 	FVector2D CaptureMove = FVector2D::ZeroVector;   // x right, y forward
+	/** How fast the capture series turns the view (degrees a second, + to the right). */
+	float CaptureTurn = 0.0f;
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> CaptureCamera;
 	float BenchWarmup = -1.0f;

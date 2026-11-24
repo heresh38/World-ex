@@ -30,6 +30,22 @@ struct SOCHARACTER_API FSOStance
 	FRotator RelaxRot = FRotator(-14.0f, -6.0f, -8.0f);
 	float RelaxPivot = 0.0f;
 	float RelaxReach = 0.0f;
+	// The gun framed in the picture off the sights (the owner, 2026-11-23: "need to be in the screen more just like the
+	// pistol/hand cannon ... this fix should be automated because what if we have a fov slider"): the camera settles up
+	// to FrameDrop cm under the eyes so that the gun's sight at the ready lies FrameDown of the way down the picture, for
+	// the field of view and the picture's shape the player has (0 = in the eyes). The body is not moved for it: moved up
+	// or in, the long guns put the firing elbow across the chest.
+	float FrameDown = 0.66f;
+	float FrameDrop = 0.0f;
+	// ...and rides up to FrameSide cm toward the gun's side so that its sight lies FrameAcross of the way across: the gun
+	// nearer the middle, as a handgun is, and the slide onto the sights that much shorter (from the body's middle it was
+	// 17 cm across in a fifth of a second).
+	float FrameAcross = 0.62f;
+	float FrameSide = 0.0f;
+	// ...and sits FrameBack cm behind the eyes (inside the head, which its own camera never sees): a shouldered gun's sight
+	// is only 13 to 19 cm ahead of the eyes, so from them it lies far out in the picture's corner whatever the camera's
+	// height; seen from a little further back it lies nearer the middle, as a handgun held out does.
+	float FrameBack = 0.0f;
 	// The arms (0 the firing arm, 1 the support arm). Each elbow is carried at a swing round the line from its shoulder to
 	// its wrist (radians from straight down, + out round the arm's outside, - in toward the body), at the ready and on the
 	// sights; it goes WristShare of the way from there toward where its wrist runs straightest, stays between the least
@@ -84,6 +100,9 @@ struct SOCHARACTER_API FSOStanceInputs
 	bool bPlayer = false;
 	/** 0 relaxed, 1 at the ready or on the sights (eased). */
 	float Ready = 0.0f;
+	/** How far on the sights (the viewmodel's eased aim): a long gun stays shouldered there and the trunk bows with a
+	 *  downward aim. */
+	float Aim = 0.0f;
 	float ElbowSwing[2] = { 0.0f, 0.0f };
 	float WristShare[2] = { 1.0f, 0.6f };
 	float ElbowLeast[2] = { -0.5f, -0.5f };

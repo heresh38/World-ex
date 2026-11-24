@@ -2416,29 +2416,56 @@ void ASOCharacter::UpdateEye(float DeltaSeconds)
 		// far forward it leans are kept)
 		Want.Y = EyeFromHead.Y;
 	}
+	// (first person, off the sights: the camera settled a little under, beside and behind the eyes to frame the gun,
+	// SetFrame)
+	Want += FVector(-FrameBack, FrameSide, -FrameDrop) * (1.0f - ViewBlend);
 	EyeHeadCS = Want;
-	if (SightEyeAlpha > 1e-3f)
-	{
-		Want = FMath::Lerp(Want, SightEyeCS, SightEyeAlpha);
-	}
 	if (!bHaveEye || DeltaSeconds > 0.25f)
 	{
-		EyeCS = Want;
+		HeadCamCS = Want;
+		HeadCamFree = Want;
 		EyeVelCS = FVector::ZeroVector;
+		SightCamCS = SightEyeAlpha > 1e-3f ? SightEyeCS : Want;
+		SightCamVelCS = FVector::ZeroVector;
+		EyeCS = FMath::Lerp(HeadCamCS, SightCamCS, SightEyeAlpha);
 		bHaveEye = true;
 		return;
 	}
-	// (critically damped, no overshoot; stepped stably at any frame time: once a frame it went unstable below 36 frames
-	// a second and the camera shook 2 cm every frame, the owner's "the gun is constantly shaking")
+	// The head's eyes, followed by a spring (critically damped, no overshoot; stepped stably at any frame time: once a
+	// frame it went unstable below 36 frames a second and the camera shook 2 cm every frame, the owner's "the gun is
+	// constantly shaking") that runs free, and the camera held within EyeMaxLag of the eyes by a smooth curve (a crouch
+	// carries the eyes all the way): the lag was CLAMPED, and the clamp jerked the picture 0.9 cm in a frame as a walk
+	// began. The spring itself is caught only by a net at three times the lag (the curve hardly passes anything there).
+	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	const USOCharacterMovementComponent* Move = GetSOMovement();
-	const float Moving = Move && Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(GetVelocity().Size2D()) / 250.0f, 0.0f, 1.0f) * (1.0f - AimProgress) : 0.0f;
-	SOSpring::Step(EyeCS, EyeVelCS, Want, FMath::Lerp(EyeFollow, EyeFollowMoving, Moving), 1.0f, FMath::Min(DeltaSeconds, 0.1f));
+	SOSpring::Step(MovingEase, MovingEaseVel, Move && Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(GetVelocity().Size2D()) / 250.0f, 0.0f, 1.0f) : 0.0f, 12.0f, 1.0f, Dt);
+	const float Moving = GetMovingEase() * (1.0f - AimProgress);
 	const float MaxLag = FMath::Lerp(EyeMaxLag, EyeMaxLagMoving, Moving);
-	const FVector Behind = EyeCS - Want;
-	if (Behind.SizeSquared() > FMath::Square(MaxLag))
+	SOSpring::Step(HeadCamFree, EyeVelCS, Want, FMath::Lerp(EyeFollow, EyeFollowMoving, Moving), 1.0f, Dt);
+	FVector Behind = HeadCamFree - Want;
+	if (Behind.SizeSquared() > FMath::Square(3.0f * MaxLag))
 	{
-		EyeCS = Want + Behind.GetSafeNormal() * MaxLag;
+		HeadCamFree = Want + Behind.GetSafeNormal() * (3.0f * MaxLag);
+		Behind = HeadCamFree - Want;
 	}
+	{
+		const float Soft = 1.3f * MaxLag, Far = static_cast<float>(Behind.Size());
+		HeadCamCS = Want + (Far > 1e-4f ? Behind * (Soft * FMath::Tanh(Far / Soft) / Far) : Behind);
+	}
+	// The sight's eye, followed the same way (the shouldered gun's breath smoothed); off the sights it waits on the head's.
+	// The camera is one blended to the other by how far on the sights, eased: a clean slide whatever the distance, the
+	// field of view or the frame rate (a spring chasing the blend lagged and its clamp jerked the slide, 2.5 cm a frame at
+	// 30 frames a second).
+	if (SightEyeAlpha > 1e-3f)
+	{
+		SOSpring::Step(SightCamCS, SightCamVelCS, SightEyeCS, EyeFollow, 1.0f, Dt);
+	}
+	else
+	{
+		SightCamCS = HeadCamCS;
+		SightCamVelCS = FVector::ZeroVector;
+	}
+	EyeCS = FMath::Lerp(HeadCamCS, SightCamCS, SightEyeAlpha);
 }
 
 void ASOCharacter::UpdateCamera(float DeltaSeconds, float Ads, float EyeFov, float ShoulderFov)
@@ -2466,6 +2493,9 @@ void ASOCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightA
 	// The capsule centre dropped; keep the eyes where they were (the body's pose and Tick bring them down).
 	EyeOffset += ScaledHalfHeightAdjust;
 	EyeCS.Z += ScaledHalfHeightAdjust;
+	HeadCamCS.Z += ScaledHalfHeightAdjust;
+	HeadCamFree.Z += ScaledHalfHeightAdjust;
+	SightCamCS.Z += ScaledHalfHeightAdjust;
 }
 
 void ASOCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
@@ -2474,6 +2504,9 @@ void ASOCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdj
 	LastFeelZ += ScaledHalfHeightAdjust;
 	EyeOffset -= ScaledHalfHeightAdjust;
 	EyeCS.Z -= ScaledHalfHeightAdjust;
+	HeadCamCS.Z -= ScaledHalfHeightAdjust;
+	HeadCamFree.Z -= ScaledHalfHeightAdjust;
+	SightCamCS.Z -= ScaledHalfHeightAdjust;
 }
 
 bool ASOCharacter::CanJumpInternal_Implementation() const

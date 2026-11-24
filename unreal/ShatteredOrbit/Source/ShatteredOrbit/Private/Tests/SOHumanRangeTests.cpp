@@ -182,7 +182,10 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	{
 		State = Name;
 		int32 Frame = 0;
-		const int32 Settle = Name.Contains(TEXT("reload")) || Name.Contains(TEXT("blow")) ? 0 : FMath::RoundToInt(0.2f / SOTest::Dt);
+		// (a state once it is under way: the aim is flicked between states in one frame, from 60 up to 60 down on the
+		// sights, and the gun and the camera's springs take a third of a second to come round; a reload and a blow are
+		// measured whole)
+		const int32 Settle = Name.Contains(TEXT("reload")) || Name.Contains(TEXT("blow")) ? 0 : FMath::RoundToInt(0.35f / SOTest::Dt);
 		W.Run(Seconds, [&]() { Each(); Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt); if (++Frame > Settle && (Frame % 2) == 0) { Sample(); } });
 	};
 
@@ -293,6 +296,126 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	}
 	AddInfo(FString::Printf(TEXT("%d frames of %d states measured"), Frames, Worst.Num() / NumLimits));
 	TestTrue(TEXT("the body was measured"), Frames > 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOArmsOutOfTheBodyTest, "ShatteredOrbit.Body.ArmsOutOfTheBody", SOTest::Flags)
+bool FSOArmsOutOfTheBodyTest::RunTest(const FString& Parameters)
+{
+	// The arms stay outside the body (the owner, 2026-11-23: "when scoping in third person and looking down and moving
+	// counter clockwise the right arm is basically gone and moved into the body, remember we said not unnatural
+	// movements"): on the sights, looking ahead and down, turning on the spot either way, in both views, the elbows and
+	// the middles of the upper arms and the forearms never lie inside the trunk (an ellipse round the spine at their
+	// height in the chest's own frame: 15 cm to either side, 10 cm before and behind, 85 % of that at the waist). ARMS lines: the deepest each got.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-20000, -20000, -100), FVector(20000, 20000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	USkeletalMeshComponent* Body = Player->GetMesh();
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	const USkeletalMesh* Mesh = Body->GetSkeletalMeshAsset();
+	if (!Mesh)
+	{
+		return true;
+	}
+	const FReferenceSkeleton& Ref = Mesh->GetRefSkeleton();
+	auto Axis = [&](const TCHAR* Name, const FVector& RestAxis)
+	{
+		const int32 I = Body->GetBoneIndex(Name);
+		const FQuat Rest = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, I).GetRotation();
+		return Body->GetComponentSpaceTransforms()[I].GetRotation().RotateVector(Rest.UnrotateVector(RestAxis)).GetSafeNormal();
+	};
+	auto At = [&](const TCHAR* Name) { return Body->GetComponentSpaceTransforms()[Body->GetBoneIndex(Name)].GetLocation(); };
+	// how deep a point lies in the trunk: (x/a)^2 + (y/b)^2 round the line from the hips to the neck, in the chest's frame
+	auto Depth = [&](const FVector& P)
+	{
+		const FVector Hips = At(TEXT("hips")), Neck = At(TEXT("neck"));
+		const FVector Up = (Neck - Hips).GetSafeNormal();
+		const float T = static_cast<float>(FVector::DotProduct(P - Hips, Up));
+		if (T < 0.0f || T > FVector::Dist(Hips, Neck))
+		{
+			return 9.0f;                                     // (above or below the trunk)
+		}
+		const FVector Off = (P - Hips) - Up * T;
+		const FVector Fwd = Axis(TEXT("chest"), FVector(0.0f, 1.0f, 0.0f)), Left = Axis(TEXT("chest"), FVector(1.0f, 0.0f, 0.0f));
+		// (the waist narrower than the ribs: 85 % below the trunk's middle)
+		const float Taper = FMath::Lerp(0.85f, 1.0f, FMath::SmoothStep(0.3f, 0.65f, T / FMath::Max(static_cast<float>(FVector::Dist(Hips, Neck)), 1.0f)));
+		const float X = static_cast<float>(FVector::DotProduct(Off, Left)) / (15.0f * Taper), Y = static_cast<float>(FVector::DotProduct(Off, Fwd)) / (10.0f * Taper);
+		return X * X + Y * Y;
+	};
+	FRandomStream Rng(23);
+	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("sidearm"), TEXT("smg"), TEXT("hmg"), TEXT("sniper") })
+	{
+		Player->SetActorLocation(FVector(0.0f, 0.0f, 92.0f));
+		PC->SetControlRotation(FRotator::ZeroRotator);
+		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
+		W.Run(0.8f);
+		if (!TestNotNull(FString::Printf(TEXT("%s in the hands"), Arch), Gun))
+		{
+			continue;
+		}
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			Player->SetViewMode(Pass == 0 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson);
+			for (const float Pitch : { 0.0f, -40.0f, -65.0f })
+			{
+				for (const float Rate : { -120.0f, 120.0f })
+				{
+					float Yaw = PC->GetControlRotation().Yaw;
+					PC->SetControlRotation(FRotator(Pitch, Yaw, 0.0f));
+					Player->HandleAimPressed();
+					W.Run(0.5f, [&]() { Player->MarkCombat(); Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt); });
+					float Worst = 9.0f;
+					const TCHAR* Where = TEXT("");
+					W.Run(1.5f, [&]()
+					{
+						Yaw += Rate * SOTest::Dt;
+						PC->SetControlRotation(FRotator(Pitch, Yaw, 0.0f));
+						Player->MarkCombat();
+						Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt);
+						for (int32 Side = 0; Side < 2; ++Side)
+						{
+							const FVector Sh = At(Side == 0 ? TEXT("upperarm_R") : TEXT("upperarm_L")), El = At(Side == 0 ? TEXT("forearm_R") : TEXT("forearm_L"));
+							const FVector Wr = At(Side == 0 ? TEXT("hand_R") : TEXT("hand_L"));
+							const TPair<FVector, const TCHAR*> Points[] = { { (Sh + El) * 0.5, Side == 0 ? TEXT("right upper arm") : TEXT("left upper arm") },
+								{ El, Side == 0 ? TEXT("right elbow") : TEXT("left elbow") }, { (El + Wr) * 0.5, Side == 0 ? TEXT("right forearm") : TEXT("left forearm") } };
+							for (const TPair<FVector, const TCHAR*>& P : Points)
+							{
+								const float D = Depth(P.Key);
+								if (D < Worst)
+								{
+									Worst = D;
+									Where = P.Value;
+								}
+							}
+						}
+					});
+					Player->HandleAimReleased();
+					W.Run(0.3f);
+					const FString Label = FString::Printf(TEXT("%s, %s, on the sights looking %s, turning %s"), Arch, Pass == 0 ? TEXT("first person") : TEXT("third person"),
+						Pitch < -1.0f ? *FString::Printf(TEXT("down %.0f"), -Pitch) : TEXT("ahead"), Rate < 0.0f ? TEXT("left (counter-clockwise)") : TEXT("right"));
+					AddInfo(FString::Printf(TEXT("ARMS %s: the deepest %s, %.2f of the trunk's edge (under 1 is inside)"), *Label, Where, Worst));
+					TestTrue(FString::Printf(TEXT("%s: the arms outside the body (the %s at %.2f of the trunk's edge, under 1 is inside)"), *Label, Where, Worst), Worst >= 1.0f);
+				}
+			}
+		}
+	}
 	return true;
 }
 

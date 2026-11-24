@@ -838,11 +838,15 @@ bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
 	W.Run(1.0f);
 	// the eyes from the head joint, in the body's facing (the capsule's frame: the camera is not turned by the head bone),
 	// ahead of it and above it (side to side the camera is on the body's middle: ASOCharacter::UpdateEye)
+	// (the eyes' own place: the camera settles a little under them to frame the gun, by the gun and the field of view,
+	// ASOCharacter::GetFrameDrop)
 	auto OnHead = [&]()
 	{
 		const FTransform Head = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));
 		FVector Off = C->GetActorTransform().InverseTransformVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation());
 		Off.Y = 0.0;
+		Off.Z += C->GetFrameDrop();
+		Off.X += C->GetFrameBack();
 		return Off;
 	};
 	const FVector Standing = OnHead();
@@ -855,6 +859,8 @@ bool FSOCrouchFirstPersonTest::RunTest(const FString& Parameters)
 	{
 		FVector Off = C->GetActorTransform().InverseTransformVector(C->GetEyeTransform(false).GetLocation() - Head.GetLocation());
 		Off.Y = 0.0;
+		Off.Z += C->GetFrameDrop();
+		Off.X += C->GetFrameBack();
 		return Off;
 	};
 	FTransform Drawn = Body->GetBoneTransform(Body->GetBoneIndex(TEXT("head")));

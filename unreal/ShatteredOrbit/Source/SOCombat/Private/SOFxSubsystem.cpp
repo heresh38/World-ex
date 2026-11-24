@@ -444,7 +444,7 @@ void USOFxSubsystem::MuzzleFlash(const FVector& Muzzle, const FVector& Dir, floa
 	// so the gun itself does not flare white on every shot.
 	// the light of the flash, in its own colour. In first person it stands well ahead of the muzzle and under the
 	// bore: beside the muzzle it raked along the top of the gun and every grain of its finish sparkled.
-	FlashLight(Muzzle + D * (bOwnEyes ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 22.0f : 0.0f), 220.0f * Scale * P.Light * (bOwnEyes ? 0.25f : 1.0f),
+	FlashLight(Muzzle + D * (bOwnEyes ? 50.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 10.0f : 0.0f), 220.0f * Scale * P.Light * (bOwnEyes ? 0.25f : 1.0f),
 		FMath::Lerp(Color, Fire, 0.35f), 0.05f);
 }
 
@@ -528,6 +528,18 @@ void USOFxSubsystem::PlasmaBolt(const FVector& From, const FVector& To, float Sp
 	Tail.Intensity0 = Tail.Intensity1 = 16.0f;
 	Tail.Color = Color;
 	Spawn(Tail);
+	// the launch: for its first moments the bolt is joined to the gun by a line of its light from the muzzle (a streak's
+	// tail grows out behind it from where it began). Fast enough to be metres out by the next frame, the bolt's head and
+	// the muzzle's bloom were two lights apart with nothing between them (the owner, 2026-11-23: "when shot there are 2
+	// particle effects")
+	FSOFxParticle Launch = Tail;
+	Launch.Length = FMath::Min(Distance, 1400.0f);
+	Launch.Life = FMath::Min(Flight, 0.06f);
+	Launch.Size0 = 5.0f * Size;
+	Launch.Size1 = 2.0f * Size;
+	Launch.Intensity0 = 14.0f;
+	Launch.Intensity1 = 0.0f;
+	Spawn(Launch);
 	// the head rides the FRONT of the tail (a streak's position is its front: the tail grows out behind it).
 	// the corona: the gun's own colour, wide and soft
 	FSOFxParticle Corona;
@@ -827,7 +839,9 @@ void USOFxSubsystem::PlasmaImpact(const FVector& Point, const FVector& Normal, c
 	{
 		LastPlasmaLightTime = Now;
 		LastPlasmaLightAt = Point;
-		PendingLights.Add({ Point + N * 30.0f, Color, FMath::Clamp(230.0f * Size * Size, 90.0f, 1400.0f), 0.1f, Delay });
+		// (a glow where it lands, not the wall lit up: at 230 a pistol's bolt turned a whole wall white for a tenth of a
+		// second, a second flash out there, the owner's "when shot there are 2 particle effects")
+		PendingLights.Add({ Point + N * 20.0f, Color, FMath::Clamp(75.0f * Size * Size, 30.0f, 480.0f), 0.08f, Delay });
 	}
 	if (bFlesh)
 	{
@@ -1103,7 +1117,7 @@ void USOFxSubsystem::SlugFlash(const FVector& Muzzle, const FVector& Dir, float 
 		Mote.Color = SOSlug::SparkGold;
 		Spawn(Mote);
 	}
-	FlashLight(Muzzle + D * (bOwnEyes ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 22.0f : 0.0f), 220.0f * Scale * (bOwnEyes ? 0.25f : 1.0f),
+	FlashLight(Muzzle + D * (bOwnEyes ? 50.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 10.0f : 0.0f), 220.0f * Scale * (bOwnEyes ? 0.25f : 1.0f),
 		SOSlug::Shell, 0.05f);
 }
 
@@ -1146,7 +1160,9 @@ void USOFxSubsystem::PlasmaFlash(const FVector& Muzzle, const FVector& Dir, floa
 		Mote.Color = Color;
 		Spawn(Mote);
 	}
-	FlashLight(Muzzle + D * (bOwnEyes ? 120.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 22.0f : 0.0f), 240.0f * Scale * (bOwnEyes ? 0.25f : 1.0f),
+	// (its light at the muzzle; seen from its own player's eyes half a metre on and dimmer, off the arms: thrown 1.2 m on
+	// it lit whatever stood in front like a second flash out there, the owner's "2 particle effects")
+	FlashLight(Muzzle + D * (bOwnEyes ? 50.0f : 10.0f) - FVector(0.0f, 0.0f, bOwnEyes ? 10.0f : 0.0f), 240.0f * Scale * (bOwnEyes ? 0.25f : 1.0f),
 		Color, 0.06f);
 }
 

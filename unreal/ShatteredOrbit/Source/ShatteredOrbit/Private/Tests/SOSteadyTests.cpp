@@ -8,16 +8,20 @@
 #if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "SOCharacter.h"
 #include "SOGunRigComponent.h"
+#include "SOGameUserSettings.h"
+#include "Engine/Engine.h"
 #include "SOInventoryComponent.h"
 #include "SOLootLibrary.h"
 #include "SOLootTypes.h"
 #include "SOPlayerState.h"
 #include "SOViewmodelComponent.h"
 #include "SOWeapon.h"
+#include "SOWeaponData.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSteadyGunTest, "ShatteredOrbit.Hold.SteadyInTheEyes", SOTest::Flags)
 bool FSOSteadyGunTest::RunTest(const FString& Parameters)
@@ -391,6 +395,212 @@ bool FSOGunInThePictureTest::RunTest(const FString& Parameters)
 		Player->CancelCombat();
 		W.Run(0.3f, Face);
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSteadyAtAnyFovTest, "ShatteredOrbit.Camera.SteadyAtAnyFov", SOTest::Flags)
+bool FSOSteadyAtAnyFovTest::RunTest(const FString& Parameters)
+{
+	// The picture holds still and the gun stays framed whatever the field of view and the frame rate (the owner,
+	// 2026-11-23: "the screen shakes again since we moved the camera again, this fix should be automated because what if
+	// we have a fov slider in the game settings"). First person at 75, 95 and 110 degrees, 60 and 30 frames a second:
+	// standing at the ready, a hand on the mouse (small turns every frame), walking, onto the sights and off them. In
+	// PIXELS of a 1920 x 1080 picture, as the player sees it: the gun's sight frame to frame (its second difference: a
+	// shake turns back every frame) and the camera on the body; and the long guns framed (their sight's height in the
+	// picture). FOVSTEADY lines.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-20000, -20000, -100), FVector(20000, 20000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Player->SetViewMode(ESOViewMode::FirstPerson);
+	USOGameUserSettings* Settings = Cast<USOGameUserSettings>(GEngine ? GEngine->GetGameUserSettings() : nullptr);
+	if (!TestNotNull(TEXT("the game's settings"), Settings))
+	{
+		return false;
+	}
+	const float FovBefore = Settings->FieldOfView;
+	float Step = SOTest::Dt;
+	auto RunAt = [&](float Seconds, TFunctionRef<void()> Each)
+	{
+		for (int32 i = 0, n = FMath::CeilToInt(Seconds / Step); i < n; ++i)
+		{
+			Each();
+			W.World->Tick(LEVELTICK_All, Step);
+			++GFrameCounter;
+		}
+	};
+	// a point in the picture (pixels of 1920 x 1080 at the camera's own field of view)
+	auto Pixel = [&](const FVector& World)
+	{
+		const FTransform Cam = Player->GetCamera()->GetComponentTransform();
+		const FVector L = Cam.InverseTransformPosition(World);
+		const float TanH = FMath::Tan(FMath::DegreesToRadians(Player->GetCamera()->FieldOfView * 0.5f)), TanV = TanH * 9.0f / 16.0f;
+		const float F = FMath::Max(static_cast<float>(L.X), 1.0f);
+		return FVector2D(960.0 * (1.0 + L.Y / (F * TanH)), 540.0 * (1.0 - L.Z / (F * TanV)));
+	};
+	FRandomStream Rng(9), Hand(11);
+	for (const float Fov : { 75.0f, 95.0f, 110.0f })
+	for (const float Rate : { 60.0f, 30.0f })
+	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("smg"), TEXT("pistol") })
+	{
+		Settings->FieldOfView = Fov;
+		Step = 1.0f / Rate;
+		Player->SetActorLocation(FVector(0.0f, 0.0f, 92.0f));
+		PC->SetControlRotation(FRotator::ZeroRotator);
+		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
+		if (!TestNotNull(FString::Printf(TEXT("%s in the hands"), Arch), Gun) || !Gun->GetRig())
+		{
+			continue;
+		}
+		const bool bLong = !Gun->GetRig()->IsHandgun();
+		float Yaw = 0.0f, Pitch = 0.0f, YawRate = 0.0f, PitchRate = 0.0f;
+		auto Face = [&]() { PC->SetControlRotation(FRotator(Pitch, Yaw, 0.0f)); Player->MarkCombat(); Player->FaceRotation(PC->GetControlRotation(), Step); };
+		RunAt(2.5f, Face);
+		const float AdsTime = Gun->GetData() ? Gun->GetData()->AdsTime : 0.24f;
+		static const TCHAR* Names[] = { TEXT("standing at the ready"), TEXT("a hand on the mouse"), TEXT("starting to walk"), TEXT("walking"),
+			TEXT("onto the sights"), TEXT("off the sights") };
+		for (int32 Case = 0; Case < 6; ++Case)
+		{
+			if (Case == 4)
+			{
+				RunAt(1.2f, Face);                                           // (stopped, settled)
+				Player->HandleAimPressed();
+			}
+			if (Case == 5)
+			{
+				Player->HandleAimReleased();
+			}
+			const bool bWalk = Case == 2 || Case == 3;
+			TArray<FVector2D> Sight;
+			TArray<FVector> Eye;
+			RunAt(Case == 2 || Case >= 4 ? 0.6f : 1.5f, [&]()
+			{
+				if (Case == 1)
+				{
+					// (a hand's small corrections: the turn's rate wanders a few degrees a second either way, changing a few
+					// times a second, never white noise a frame)
+					const float Ease = 1.0f - FMath::Exp(-6.0f * Step);
+					YawRate += (Hand.FRandRange(-6.0f, 6.0f) - YawRate) * Ease;
+					PitchRate += (Hand.FRandRange(-4.0f, 4.0f) - PitchRate) * Ease;
+					Yaw += YawRate * Step;
+					Pitch = FMath::Clamp(Pitch + PitchRate * Step, -2.0f, 2.0f);
+				}
+				if (bWalk)
+				{
+					Player->AddMovementInput(Player->GetActorForwardVector(), 1.0f);
+				}
+				Face();
+				Sight.Add(Pixel(Gun->GetRig()->GetComponentTransform().TransformPosition(USOGunRigComponent::MeshToRig(Gun->GetSightLocation()))));
+				Eye.Add(Player->GetActorTransform().InverseTransformPosition(Player->GetCamera()->GetComponentLocation()));
+			});
+			float SightJerk = 0.0f, EyeJerk = 0.0f, SightWay = 0.0f, EyeWay = 0.0f;
+			for (int32 k = 2; k < Sight.Num(); ++k)
+			{
+				SightJerk = FMath::Max(SightJerk, static_cast<float>((Sight[k] - 2.0 * Sight[k - 1] + Sight[k - 2]).Size()));
+				EyeJerk = FMath::Max(EyeJerk, static_cast<float>((Eye[k] - 2.0 * Eye[k - 1] + Eye[k - 2]).Size()));
+			}
+			// A SHAKE turns back and forth: on any axis the motion reversing three times within a fifth of a second (above a
+			// whisker of motion a frame), whatever its size; a sway, a slide or a lean does not
+			auto Shakes = [&](auto Get, int32 Axes, float Whisker)
+			{
+				int32 Worst = 0;
+				for (int32 Ax = 0; Ax < Axes; ++Ax)
+				{
+					TArray<int32> Turns;
+					for (int32 k = 2; k < Sight.Num(); ++k)
+					{
+						const float A = Get(k - 1, Ax) - Get(k - 2, Ax), B = Get(k, Ax) - Get(k - 1, Ax);
+						if (FMath::Abs(A) > Whisker && FMath::Abs(B) > Whisker && A * B < 0.0f)
+						{
+							Turns.Add(k);
+						}
+					}
+					const int32 Window = FMath::Max(FMath::RoundToInt(0.2f * Rate), 3);
+					for (int32 t = 0; t < Turns.Num(); ++t)
+					{
+						int32 n = 1;
+						while (t + n < Turns.Num() && Turns[t + n] - Turns[t] <= Window)
+						{
+							++n;
+						}
+						Worst = FMath::Max(Worst, n);
+					}
+				}
+				return Worst;
+			};
+			const int32 SightTurns = Shakes([&](int32 k, int32 Ax) { return static_cast<float>(Ax == 0 ? Sight[k].X : Sight[k].Y); }, 2, 1.0f * 60.0f / Rate);
+			const int32 EyeTurns = Shakes([&](int32 k, int32 Ax) { return static_cast<float>(Eye[k][Ax]); }, 3, 0.05f * 60.0f / Rate);
+			for (int32 k = 1; k < Sight.Num(); ++k)
+			{
+				SightWay = FMath::Max(SightWay, static_cast<float>((Sight[k] - Sight[0]).Size()));
+				EyeWay = FMath::Max(EyeWay, static_cast<float>((Eye[k] - Eye[0]).Size()));
+			}
+			const float Down = Sight.Num() > 0 ? static_cast<float>(Sight.Last().Y / 1080.0) : 0.0f;
+			const float Across = Sight.Num() > 0 ? static_cast<float>(Sight.Last().X / 1920.0) : 0.0f;
+			const FString Label = FString::Printf(TEXT("FOV %.0f, %.0f fps, %s %s"), Fov, Rate, Arch, Names[Case]);
+			AddInfo(FString::Printf(TEXT("FOVSTEADY %s: the sight jerks %.2f px a frame at most (moves %.0f px, turns back %d times in a fifth of a second at most), sits %.0f %% across, %.0f %% down the picture; the camera on the body jerks %.3f cm (moves %.1f cm, turns back %d times)"),
+				*Label, SightJerk, SightWay, SightTurns, 100.0f * Across, 100.0f * Down, EyeJerk, EyeWay, EyeTurns));
+			TestTrue(FString::Printf(TEXT("%s: the picture does not shake (the sight turns back %d times, the camera %d, in a fifth of a second)"), *Label, SightTurns, EyeTurns),
+				SightTurns < 3 && EyeTurns < 3);
+			if (Case == 0 && Rate == 60.0f)
+			{
+				const FTransform Cam = Player->GetCamera()->GetComponentTransform();
+				const FVector S = Cam.InverseTransformPosition(Gun->GetRig()->GetComponentTransform().TransformPosition(USOGunRigComponent::MeshToRig(Gun->GetSightLocation())));
+				AddInfo(FString::Printf(TEXT("FRAMING %s FOV %.0f: the sight %.1f ahead, %.1f right, %.1f up of the camera; the camera %.1f back, %.1f right, %.1f down of the eyes"),
+					Arch, Fov, S.X, S.Y, S.Z, Player->GetFrameBack(), Player->GetFrameSide(), Player->GetFrameDrop()));
+			}
+			if (Case <= 1 || Case == 3)
+			{
+				// (steady: standing, turning by hand or walking along, the gun's sight in the picture turns no harder than 6 px a
+				// frame at 60 frames a second, nor the camera on the body 1.5 mm: the same motion at 30 frames a second turns 4
+				// times as far a frame)
+				const float PerFrame = FMath::Square(60.0f / Rate);
+				TestTrue(FString::Printf(TEXT("%s: the gun steady in the picture (%.2f px of jerk a frame, %.1f at most)"), *Label, SightJerk, 6.0f * PerFrame), SightJerk < 6.0f * PerFrame);
+				TestTrue(FString::Printf(TEXT("%s: the camera steady on the body (%.3f cm of jerk a frame, %.2f at most)"), *Label, EyeJerk, 0.15f * PerFrame), EyeJerk < 0.15f * PerFrame);
+			}
+			else
+			{
+				// (a move, not a shake: onto the sights, off them, the body leaning into a walk, the picture and the camera
+				// turn within four times as hard as an eased slide of the same length over the move's time, the aim's or the
+				// walk's lean (a slide eased in and out turns at most 6 x its length / its frames squared a frame; coming onto
+				// the sights the sight's own perspective quickens as the camera nears it, and the view zooms), whatever the
+				// field of view and the frame rate; a shake turns back every frame)
+				const float Frames = FMath::Max((Case == 2 ? 0.2f : AdsTime) * Rate, 2.0f);      // (the body leans into a walk in a fifth of a second)
+				const float SightMost = 4.0f * 6.0f * SightWay / FMath::Square(Frames) + 3.0f;
+				const float EyeMost = 4.0f * 6.0f * EyeWay / FMath::Square(Frames) + 0.05f;
+				TestTrue(FString::Printf(TEXT("%s: the gun moves smoothly in the picture (%.2f px of jerk a frame, %.2f at most)"), *Label, SightJerk, SightMost),
+					SightJerk <= SightMost);
+				TestTrue(FString::Printf(TEXT("%s: the camera moves smoothly on the body (%.3f cm of jerk a frame, %.3f at most)"), *Label, EyeJerk, EyeMost),
+					EyeJerk <= EyeMost);
+			}
+			if (Case == 0)
+			{
+				// (framed: the sight near its class's place in the picture whatever the field of view, the long guns as the
+				// handguns are: FSOStance::FrameDown / FrameAcross; narrow, the camera can go only so far inside the head, and a
+				// long gun is seen nearer the picture's corner)
+				TestTrue(FString::Printf(TEXT("%s: the gun framed in the picture (its sight %.0f %% across, %.0f %% down)"), *Label, 100.0f * Across, 100.0f * Down),
+					Down > 0.55f && Down < (Fov < 90.0f ? 0.85f : 0.75f) && Across > 0.45f && Across < (bLong ? (Fov < 90.0f ? 0.9f : 0.78f) : 0.65f));
+			}
+		}
+	}
+	Settings->FieldOfView = FovBefore;
 	return true;
 }
 

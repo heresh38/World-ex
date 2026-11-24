@@ -1425,6 +1425,8 @@ def gun_instances(master, src, dest, materials, clear, model=None):
         key = base_slot(k)
         m = dict(v)
         extra = None
+        if key == "gun_dot":
+            PARENT_FOR[key] = reticle_master()          # (a reticle: seen only from the sight's own line, M_SOReticle)
         if key.startswith("gun_glass"):
             # a part MADE of glass (the Sarketh's crest sight: the owner, "entirely out of glass but a thin edge in the
             # guns colors"): seen as glass, clear face on, catching light at its edges (M_SOGlass), not cut away as a
@@ -2949,6 +2951,80 @@ def glass_master():
     return mat
 
 
+RETICLE_HLSL = "\n".join((
+    "float3 V = -Rel;",                                  # (from the pixel to the camera)
+    "float3 A = normalize(Axis);",
+    "float along = dot(V, A);",
+    "float d = length(V - A * along);",                  # (the eye's distance from the line through this pixel along the gun)
+    "float m = 1.0 - smoothstep(Box, Box * 2.0, d);",
+    "return along < 0.0 ? m : 0.0;",                     # (and only from behind the sight)
+))
+
+
+def reticle_master():
+    """/Game/Weapons/M_SOReticle: a sight's reticle (gun_dot: a reflex's dot, a holo's ring). A real one is an image at
+    infinity along the sight's axis, seen only when the eye is on that line: from the hip it is not there. Shown only
+    where the eye lies within EyeBox (cm) of the line through the pixel along the gun's forward axis (a gun mesh's local
+    +Y, USOGunRigComponent::MeshToRig), from behind (the owner, 2026-11-23: "that pistol have multiple different
+    crosshair": the dot showed on the glass from the hip beside the crosshair). Unlit, masked: EmissiveColor x
+    EmissiveStrength, the gun_dot instances' own parameters."""
+    if "m" in _RETICLE:
+        return _RETICLE["m"]
+    ensure_dir("/Game/Weapons")
+    mat = _material("/Game/Weapons/M_SOReticle", {"blend_mode": unreal.BlendMode.BLEND_MASKED, "two_sided": True,
+                                                  "shading_model": unreal.MaterialShadingModel.MSM_UNLIT})
+    col = _param(mat, unreal.MaterialExpressionVectorParameter, "EmissiveColor", (1.0, 0.16, 0.16, 1.0), -900, 0)
+    strength = _param(mat, unreal.MaterialExpressionScalarParameter, "EmissiveStrength", 40.0, -900, 120)
+    box = _param(mat, unreal.MaterialExpressionScalarParameter, "EyeBox", 1.5, -900, 240)
+    emit = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -500, 40)
+    mel.connect_material_expressions(col, "", emit, "A")
+    mel.connect_material_expressions(strength, "", emit, "B")
+    mel.connect_material_property(emit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    rel = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -900, 360)
+    rel.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_CAMERA_RELATIVE)
+    fwd = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -1100, 480)
+    fwd.set_editor_property("constant", unreal.LinearColor(0.0, 1.0, 0.0, 1.0))
+    axis = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, -900, 480)
+    axis.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL)
+    axis.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    mel.connect_material_expressions(fwd, "", axis, "")
+    node = _custom(mat, RETICLE_HLSL, ("Rel", "Axis", "Box"), unreal.CustomMaterialOutputType.CMOT_FLOAT1, -500, 360)
+    for src, pin in ((rel, "Rel"), (axis, "Axis"), (box, "Box")):
+        mel.connect_material_expressions(src, "", node, pin)
+    mel.connect_material_property(node, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat, only_if_is_dirty=False)
+    _RETICLE["m"] = mat
+    return mat
+
+
+_RETICLE = {}
+
+
+def reticles():
+    """SO_IMPORT_ONLY=reticle: every gun's gun_dot instance onto M_SOReticle (its own colour and strength kept)."""
+    master = reticle_master()
+    n = 0
+    for path in eal.list_assets("/Game/Weapons", recursive=True, include_folder=False):
+        name = path.split(".")[0].rsplit("/", 1)[-1]
+        if not name.startswith("MI_gun_dot"):
+            continue
+        mi = eal.load_asset(path.split(".")[0])
+        if not isinstance(mi, unreal.MaterialInstanceConstant):
+            continue
+        mel.set_material_instance_parent(mi, master)
+        overrides = mi.get_editor_property("base_property_overrides")
+        overrides.set_editor_property("override_blend_mode", True)
+        overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+        overrides.set_editor_property("override_opacity_mask_clip_value", True)
+        overrides.set_editor_property("opacity_mask_clip_value", 0.5)
+        mi.set_editor_property("base_property_overrides", overrides)
+        mel.update_material_instance(mi)
+        eal.save_loaded_asset(mi, only_if_is_dirty=False)
+        n += 1
+    log(f"reticles: {n} gun_dot instances on M_SOReticle")
+
+
 def energy_materials():
     """/Game/Environments/Meridian/M_SOEnergy: unlit additive light (the barriers, the crown's beam): Color x Intensity
     in drifting bands, brighter at the edges. MI_SOEnergy_Barrier for ASOOperationBarrier's panel; MI_ru_beam (the
@@ -4044,6 +4120,8 @@ def main():
         icons_only()
     if "gunslots" in only:
         gun_slots()
+    if "reticle" in only:
+        reticles()
     if "guntextures" in only:
         gun_textures()
     if "worldmaps" in only:

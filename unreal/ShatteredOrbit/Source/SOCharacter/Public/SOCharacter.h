@@ -125,16 +125,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float EyeHeightInterpSpeed = 14.0f;
 
-	/** The camera's place from the head joint at rest (cm: forward, right, up in the body's facing), where the shots
-	 *  start: the Orion male's eyeballs' middle is 8.6 ahead of the joint and 4.6 above it, the corneas 9.9 ahead, and
-	 *  the camera sits 5 cm under them (the owner, 2026-11-23: "weapons are not very visible, i think the camera is too
-	 *  high so lower it a bit maybe so we see more of the gun": at the ready a fifth more of the gun is in the picture),
-	 *  inside the head its own camera does not see. On the sights a long gun's sight line takes it (SetSightEye). */
+	/** The eyes from the head joint at rest (cm: forward, right, up in the body's facing): the Orion male's eyeballs'
+	 *  middle is 8.6 ahead of the joint and 4.6 above it, the corneas 9.9 ahead. The camera sits here in first person, and
+	 *  off the sights settles a little behind, under and beside them to FRAME the gun in the picture, worked out for the
+	 *  field of view the player has (SetFrame, USOViewmodelComponent, FSOStance::FrameDown; the owner, 2026-11-23: "the
+	 *  pistol and hand cannon are good but the rest are bad and need to be in the screen more ... this fix should be
+	 *  automated because what if we have a fov slider"; a fixed 5 cm under the eyes framed one field of view). On the
+	 *  sights a long gun's sight line takes it (SetSightEye). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	FVector EyeFromHead = FVector(10.0f, 0.0f, -0.4f);
+	FVector EyeFromHead = FVector(10.0f, 0.0f, 4.6f);
 
-	/** How the camera follows the eyes (a spring, per second: the pose's jitter smoothed), and never further behind
-	 *  them than EyeMaxLag (cm): a crouch, a slide, the cheek coming down onto the stock carry the eyes all the way. */
+	/** How the camera follows the eyes (a spring, per second: the pose's jitter smoothed), and never much further behind
+	 *  them than EyeMaxLag (cm): a crouch, a slide, the walk's lean carry the eyes all the way. The lag is limited SOFTLY
+	 *  (the spring runs free and the camera is held within the limit by a smooth curve, tanh): a clamp on it jerked the
+	 *  picture as a walk began (the body leans into a walk and the head goes 8 cm forward in a fifth of a second), and a
+	 *  spring stiffened by its lag jerked it worse. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float EyeFollow = 30.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
@@ -164,6 +169,16 @@ public:
 	/** The eyes' place on the head (the capsule's frame) before the camera goes to a sight (UpdateEye), and their steady
 	 *  place without the head's own motion (the walk's bob): the eyes' height on the capsule, on its middle. */
 	FVector GetHeadEyeCS() const { return EyeHeadCS; }
+	/** How far under, beside (toward the gun) and behind the eyes the camera sits in first person off the sights to frame
+	 *  the gun (cm, set each frame by the viewmodel from the gun and the field of view: USOViewmodelComponent,
+	 *  FSOStance::FrameDown). */
+	void SetFrame(float DropCm, float SideCm, float BackCm) { FrameDrop = FMath::Max(DropCm, 0.0f); FrameSide = FMath::Max(SideCm, 0.0f); FrameBack = FMath::Max(BackCm, 0.0f); }
+	float GetFrameDrop() const { return FrameDrop; }
+	float GetFrameSide() const { return FrameSide; }
+	float GetFrameBack() const { return FrameBack; }
+	/** The camera in the head's eyes as it follows them (the capsule's frame), without the framing: where the gun is framed
+	 *  from. */
+	FVector GetHeadCameraCS() const { return HeadCamCS + FVector(FrameBack, -FrameSide, FrameDrop) * (1.0f - ViewBlend); }
 	FVector GetSteadyEyeCS() const { return FVector(EyeFromHead.X, EyeFromHead.Y, EyeOffset); }
 
 	/** Its own player's camera is in this body's head (first person): the head is hidden from it, on this machine only,
@@ -218,6 +233,10 @@ public:
 
 	/** Current camera dip (cm, negative = down) from landings and jumps; the viewmodel lags it a little. */
 	float GetLandDip() const { return LandDip; }
+	/** How much the body is walking or running on the ground (0..1, eased in and out over about a quarter of a second, so
+	 *  what follows the walk's gait (the camera's softer spring, the gun's ride) comes in smoothly as the body sets off:
+	 *  read from the speed it switched in a tenth of a second and jerked the picture). */
+	float GetMovingEase() const { return FMath::Clamp(MovingEase, 0.0f, 1.0f); }
 
 	/** Roll of the eye while vaulting (degrees). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
@@ -758,7 +777,14 @@ private:
 	void UpdateEye(float DeltaSeconds);
 	FVector EyeCS = FVector::ZeroVector;
 	FVector EyeVelCS = FVector::ZeroVector;
+	float MovingEase = 0.0f, MovingEaseVel = 0.0f;
 	FVector EyeHeadCS = FVector::ZeroVector;
+	float FrameDrop = 0.0f, FrameSide = 0.0f, FrameBack = 0.0f;
+	/** The head's eyes followed (the spring), and the sight's eye followed: the camera is the one blended to the other by
+	 *  how far on the sights, never a spring chasing a point that leaps (a clamp on its lag made the slide onto the sights
+	 *  a lurch). */
+	FVector HeadCamCS = FVector::ZeroVector, HeadCamFree = FVector::ZeroVector;
+	FVector SightCamCS = FVector::ZeroVector, SightCamVelCS = FVector::ZeroVector;
 	bool bHaveEye = false;
 	/** The camera's place on the sights (the capsule's frame) and how far on them: SetSightEye. */
 	FVector SightEyeCS = FVector::ZeroVector;

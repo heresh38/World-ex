@@ -7,6 +7,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "ReferenceSkeleton.h"
 #include "Engine/World.h"
 #include "Misc/ScopeExit.h"
@@ -270,8 +271,13 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		// the hands fitted to this gun (once per gun, when it is at rest in them). The fit is a search of the gun's own
 		// shape (tens of thousands of sweeps) and the same gun in the same hands always comes out the same: it is kept
 		// per gun and body, and a switch back to a gun already fitted takes the kept one (the owner: "when switching
-		// guns the entire game freezes for a second": every switch fitted both bodies again from nothing)
-		const FString MemoKey = Rig ? FString::Printf(TEXT("%s|%s|%d"), *Rig->GetArchetype().ToString(),
+		// guns the entire game freezes for a second": every switch fitted both bodies again from nothing). The optic on its
+		// rail is part of the gun's shape (a scope's mount is where the firing thumb wraps): kept per optic too, or a copy
+		// of the gun with another sight took the first one's fit (the bolt-action's firing wrist at 83 degrees on its irons
+		// with the fit made round a scope, 54 fitted to its own shape)
+		const UStaticMeshComponent* Optic = Rig ? Rig->GetOptic() : nullptr;
+		const FString MemoKey = Rig ? FString::Printf(TEXT("%s|%s|%s|%d"), *Rig->GetArchetype().ToString(),
+			Optic && Optic->GetStaticMesh() ? *Optic->GetStaticMesh()->GetName() : TEXT("own"),
 			Mesh->GetSkeletalMeshAsset() ? *Mesh->GetSkeletalMeshAsset()->GetPathName() : TEXT("-"), Holder->HoldsWithOneHand() ? 1 : 0) : FString();
 		if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading() && RestoreFit(MemoKey, Rig))
 		{
@@ -352,6 +358,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			const float R = Ready * Ready * (3.0f - 2.0f * Ready);
 			Stance.bPlayer = true;
 			Stance.Ready = R;
+			Stance.Aim = Ads;
 			// The elbows carried OUT at the sides at the ready and on the sights (the owner, 2026-11-23, on the first pass:
 			// "arm not showing ... the arms are gone and the gun is in the players shoulder": an elbow put where the wrist
 			// ran straightest hung under the gun in front of the chest, and from behind the body hid the whole arm). Each
@@ -2025,6 +2032,8 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	WarpYaw = Instance->WarpYaw;
 	StandYaw = Instance->GetStandYaw();
 	MaxWaistTwist = Instance->MaxWaistTwist;
+	TrunkHalfWidth = Instance->TrunkHalfWidth;
+	TrunkHalfDepth = Instance->TrunkHalfDepth;
 	HoldAlpha = Instance->GetHoldAlpha();
 	LeanRoll = Instance->LeanRoll + Instance->FlinchRoll + Instance->ReelBlend * 7.0f * FMath::Sin(Instance->ReelClock * 4.3f);
 	LeanPitch = Instance->LeanPitch + Instance->FlinchPitch - Instance->ReelBlend * (18.0f + 5.0f * FMath::Sin(Instance->ReelClock * 6.1f));
@@ -2557,6 +2566,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		return MeshIndex == INDEX_NONE ? INDEX_NONE : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex)).GetInt();
 	};
 	const int32 Spine = Find(TEXT("spine")), Chest = Find(TEXT("chest")), Neck = Find(TEXT("neck")), HeadBone = Find(TEXT("head"));
+	const int32 Hips = Find(TEXT("hips"));
 	const int32 Arm[2][3] = { { Find(TEXT("upperarm_R")), Find(TEXT("forearm_R")), Find(TEXT("hand_R")) },
 		{ Find(TEXT("upperarm_L")), Find(TEXT("forearm_L")), Find(TEXT("hand_L")) } };
 	const int32 Clavicle[2] = { Find(TEXT("clavicle_R")), Find(TEXT("clavicle_L")) }; // (older rigs have none)
@@ -2619,16 +2629,24 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 	// leans a little, the gun comes down in front of him instead: USOViewmodelComponent::HoldTransform. Every bend a
 	// normal amount, the owner, 2026-11-23: "head/arms/legs/body bends a normal amount not crazy": at 70 % of up to 57
 	// degrees the trunk leaned back 40 looking up.)
-	const float StancePitch = FMath::DegreesToRadians(FMath::Clamp(AimPitch, -40.0f, 45.0f));
+	// On the sights a long gun stays shouldered whatever the pitch (USOViewmodelComponent: the stock comes off the
+	// shoulder looking down only off the sights), so the trunk BOWS with a downward aim, from the lower back and the
+	// chest, as a body bends to aim at the ground: up to 85 % of it, down to 70 degrees (the chest's forward bend on the
+	// hips stays inside a body's 80). Held at 60 % of 40 with the gun on the eye's line, the firing elbow went into the
+	// chest and the wrist bent past 120 (the owner, 2026-11-23: "looking down ... the right arm is basically gone and
+	// moved into the body").
+	const float Bow = Stance.bPlayer && !bHandgunHold && AimPitch < 0.0f ? FMath::Clamp(Stance.Aim, 0.0f, 1.0f) : 0.0f;
+	const float StancePitch = FMath::DegreesToRadians(FMath::Clamp(AimPitch, FMath::Lerp(-40.0f, -70.0f, Bow), 45.0f));
+	const float SpineShare = FMath::Lerp(0.25f, 0.4f, Bow), ChestShare = FMath::Lerp(0.35f, 0.55f, Bow);
 	if (Spine != INDEX_NONE)
 	{
-		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * 0.25f - LeanRad * 0.5f));
+		Turn(Spine, FQuat(Up, BladeRad * 0.4f) * FQuat(Side, StancePitch * SpineShare - LeanRad * 0.5f));
 	}
 	if (Chest != INDEX_NONE)
 	{
-		Turn(Chest, FQuat(Up, BladeRad * 0.6f) * FQuat(Side, StancePitch * 0.35f - LeanRad * 0.5f));
+		Turn(Chest, FQuat(Up, BladeRad * 0.6f) * FQuat(Side, StancePitch * ChestShare - LeanRad * 0.5f));
 	}
-	const float TrunkPitch = StancePitch * 0.6f - LeanRad;     // (what the trunk took of the aim's pitch, up +)
+	const float TrunkPitch = StancePitch * (SpineShare + ChestShare) - LeanRad;     // (what the trunk took of the aim's pitch, up +)
 	// 2. The head looks along the aim: neck and head share the aim pitch ON TOP of what the clip gave them (the
 	//    idle's breathing, a glance, a fidget's turn), about their own pivots. Set to the rest facing instead, the
 	//    head stood dead still over a body that breathed and shifted (the owner, 2026-11-21, on the armoury's
@@ -2681,15 +2699,18 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		// upper arm twisting it flat.
 		if (const int32 Clav = Clavicle[SideIndex]; Clav != INDEX_NONE)
 		{
+			// (forward, out and up are the TRUNK's: a body bowed over a gun aimed at the ground reaches forward of its chest
+			// where the world's axes said down, and its shoulders stayed back with the arms folded into it)
+			const FQuat Bowed(Side, TrunkPitch + LeanRad);
 			const FVector Joint = CS[Upper].GetLocation();
-			const FVector Reach = (Target.GetLocation() - Joint).GetSafeNormal();
+			const FVector Reach = Bowed.UnrotateVector((Target.GetLocation() - Joint).GetSafeNormal());
 			const float Out = bLeft ? Reach.X : -Reach.X;                 // + = out to its own side, - = across the body
 			const float Forward = FMath::Max(0.0f, (float)Reach.Y);
 			// (the stance squares the shoulders: all of this pull rounded them, the chest closed)
 			const float Protract = FMath::Clamp(Forward * 0.22f + FMath::Max(0.0f, -Out) * 0.30f, 0.0f, 0.42f) * (Stance.bPlayer ? 1.0f - Stance.Shoulders : 1.0f);   // rad (~24 deg max)
 			const float Elevate = FMath::Clamp((float)Reach.Z * 0.30f + 0.04f * Forward, 0.0f, 0.30f);          // rad (~17 deg max)
 			const float Sign = bLeft ? 1.0f : -1.0f;
-			Turn(Clav, FQuat(Up, Sign * Protract) * FQuat(FVector(0.0f, 1.0f, 0.0f), -Sign * Elevate));
+			Turn(Clav, FQuat(Bowed.RotateVector(Up), Sign * Protract) * FQuat(Bowed.RotateVector(FVector(0.0f, 1.0f, 0.0f)), -Sign * Elevate));
 		}
 
 		// Hand bone vs its anatomical basis, from the rest pose (relaxed hands: thumb forward, palm to the thigh).
@@ -2723,10 +2744,14 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				}
 			}
 		}
-		// The swing's frame round the shoulder-to-wrist line: straight down from it, and out round the arm's outside.
-		auto SwingFrame = [bLeft](const FVector& Line, FVector& OutDown, FVector& OutOut)
+		// The swing's frame round the shoulder-to-wrist line: straight down from it, and out round the arm's outside. "Down"
+		// is the TRUNK's (turned with what it took of the aim's pitch): measured from the world's down, the elbows of a body
+		// bowed over a gun aimed at the ground hung toward the floor, into the chest (the owner, 2026-11-23: "the right arm
+		// is basically gone and moved into the body").
+		const FVector TrunkDown = FQuat(Side, TrunkPitch + LeanRad).RotateVector(FVector(0.0f, 0.0f, -1.0f));
+		auto SwingFrame = [bLeft, TrunkDown](const FVector& Line, FVector& OutDown, FVector& OutOut)
 		{
-			OutDown = FVector(0.0f, 0.0f, -1.0f) - Line * FVector::DotProduct(FVector(0.0f, 0.0f, -1.0f), Line);
+			OutDown = TrunkDown - Line * FVector::DotProduct(TrunkDown, Line);
 			if (!OutDown.Normalize(1e-3f))
 			{
 				return false;
@@ -2745,7 +2770,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		const float Height = FMath::Sqrt(FMath::Max(L1 * L1 - Along * Along, 0.0f));
 		// out, back, down
 		const float PoleOut = 0.45f;
-		const FVector Pole(bLeft ? PoleOut : -PoleOut, -0.25f, -1.0f);
+		const FVector Pole = FQuat(Side, TrunkPitch + LeanRad).RotateVector(FVector(bLeft ? PoleOut : -PoleOut, -0.25f, -1.0f));   // (the trunk's, as the swing's)
 		FVector Bend = Pole - Dir * FVector::DotProduct(Pole, Dir);
 		Bend = Bend.GetSafeNormal(1e-4f, FVector(0.0f, 0.0f, -1.0f));
 		// The elbow swings round the shoulder-to-wrist line toward where the WRIST bends least (the forearm running
@@ -2821,6 +2846,84 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					float* Sw = USOLocomotionAnimInstance::DebugSwing[SideIndex]; Sw[0] = A0; Sw[1] = A1; Sw[2] = A; Sw[3] = Ask; Sw[4] = Most;
 				}
 #endif
+			}
+		}
+		// The arm stays out of the body (the owner, 2026-11-23: "when scoping in third person and looking down ... the right
+		// arm is basically gone and moved into the body, remember we said not unnatural movements"): on the sights looking
+		// down the swing put the firing elbow deep in the chest. The trunk: an ellipse round the line from the hips to the
+		// neck in the chest's own frame (TrunkHalfWidth to either side, TrunkHalfDepth before and behind, the arm's own
+		// thickness in them); the elbow and the middles of the upper arm and the forearm lie outside it. Of the swings round
+		// the shoulder-to-wrist line, the nearest that does, outward first (the elbow flares out, as a body's does).
+		if (Hips != INDEX_NONE && Neck != INDEX_NONE && Chest != INDEX_NONE)
+		{
+			FVector Down, Out;
+			if (SwingFrame(Dir, Down, Out))
+			{
+				const FVector Base = CS[Hips].GetLocation(), Top = CS[Neck].GetLocation();
+				const FVector TrunkUp = (Top - Base).GetSafeNormal(1e-4f, FVector(0.0f, 0.0f, 1.0f));
+				const float TrunkLength = static_cast<float>(FVector::Dist(Base, Top));
+				const FQuat ChestTurn = CS[Chest].GetRotation() * RefCS[Chest].GetRotation().Inverse();
+				const FVector TrunkFwd = ChestTurn.RotateVector(FVector(0.0f, 1.0f, 0.0f)), TrunkLeft = ChestTurn.RotateVector(FVector(1.0f, 0.0f, 0.0f));
+				auto Depth = [&](const FVector& P)
+				{
+					const float T = static_cast<float>(FVector::DotProduct(P - Base, TrunkUp));
+					if (T < 0.0f || T > TrunkLength)
+					{
+						return 9.0f;
+					}
+					const FVector Off = (P - Base) - TrunkUp * T;
+					// (narrower at the waist than at the ribs: 85 % of the chest's breadth and depth below its middle)
+					const float Taper = FMath::Lerp(0.85f, 1.0f, FMath::SmoothStep(0.3f, 0.65f, T / FMath::Max(TrunkLength, 1.0f)));
+					const float X = static_cast<float>(FVector::DotProduct(Off, TrunkLeft)) / (TrunkHalfWidth * Taper);
+					const float Y = static_cast<float>(FVector::DotProduct(Off, TrunkFwd)) / (TrunkHalfDepth * Taper);
+					return X * X + Y * Y;
+				};
+				const FVector W = S + Dir * D;
+				auto Clear = [&](float Sw)
+				{
+					const FVector E = S + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
+					return FMath::Min3(Depth(E), Depth((S + E) * 0.5), Depth((E + W) * 0.5));
+				};
+				const float A = FMath::Atan2(static_cast<float>(FVector::DotProduct(Bend, Out)), static_cast<float>(FVector::DotProduct(Bend, Down)));
+				if (Clear(A) < 1.0f)
+				{
+					// (the nearest swing either way that is clear of the trunk AND leaves the wrist within its range: the hand's
+					// place on the gun stays, so the forearm's line decides the wrist; failing both, the clear one with the
+					// straightest wrist: nothing is solved by bending a joint past what a body does)
+					const FVector HandAxis = Target.GetRotation().GetAxisX();
+					const float WristLimit = FMath::Cos(FMath::DegreesToRadians(Stance.bPlayer ? Stance.WristMax[SideIndex] : 75.0f));
+					auto WristCos = [&](float Sw)
+					{
+						const FVector E = S + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
+						return static_cast<float>(FVector::DotProduct((W - E).GetSafeNormal(), HandAxis));
+					};
+					float Best = A, BestCos = -2.0f;
+					bool bFound = false;
+					for (int32 Step = 1; Step <= 32 && !bFound; ++Step)
+					{
+						for (const float Sign : { 1.0f, -1.0f })                 // (out first)
+						{
+							const float Try = A + Sign * Step * 0.07f;
+							if (Try > 2.2f || Try < -1.2f || Clear(Try) < 1.0f)
+							{
+								continue;
+							}
+							const float C = WristCos(Try);
+							if (C >= WristLimit)
+							{
+								Best = Try;
+								bFound = true;
+								break;
+							}
+							if (C > BestCos)
+							{
+								Best = Try;
+								BestCos = C;
+							}
+						}
+					}
+					Bend = Down * FMath::Cos(Best) + Out * FMath::Sin(Best);
+				}
 			}
 		}
 		const FVector Elbow = S + Dir * Along + Bend * Height;

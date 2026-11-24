@@ -89,6 +89,11 @@ namespace
 				S.RelaxRot = Rot(O, TEXT("relaxRot"), S.RelaxRot);
 				Num(O, TEXT("relaxPivot"), S.RelaxPivot);
 				Num(O, TEXT("relaxReach"), S.RelaxReach);
+				Num(O, TEXT("frameDown"), S.FrameDown);
+				Num(O, TEXT("frameDrop"), S.FrameDrop);
+				Num(O, TEXT("frameAcross"), S.FrameAcross);
+				Num(O, TEXT("frameSide"), S.FrameSide);
+				Num(O, TEXT("frameBack"), S.FrameBack);
 				Pair(O, TEXT("elbowSwing"), S.ElbowSwing);
 				Pair(O, TEXT("elbowSwingAim"), S.ElbowSwingAim);
 				Pair(O, TEXT("wristShare"), S.WristShare);

@@ -39,6 +39,8 @@
 #include "SOLootLibrary.h"
 #include "SOExplosive.h"
 #include "Misc/App.h"
+#include "Containers/Ticker.h"
+#include "SOGameUserSettings.h"
 #include "SOFxSubsystem.h"
 #include "SOWeaponData.h"
 #include "SOProjectileSubsystem.h"
@@ -640,7 +642,22 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				Snap(0.15f, *FString::Printf(TEXT("hp_%s_face"), *Tag));
 			}
 		}
-		Act([=, this]() { Aim(false); Look(0.0f); Cam(-1); });
+		// On the sights looking down and turning counter-clockwise (the owner, 2026-11-23: "when scoping in third person and
+		// looking down and moving counter clockwise the right arm is basically gone and moved into the body"): from the
+		// player's own shoulder camera, ahead and beside, half a second into a turn to the left (files hp_turn_<pitch>_*)
+		for (const float P : { -45.0f, -70.0f })
+		{
+			const FString Tag = FString::Printf(TEXT("turn_%d"), FMath::RoundToInt(P));
+			Act([=, this]() { Look(P); Aim(true); Cam(-1); CaptureTurn = -90.0f; });
+			Snap(0.6f, *FString::Printf(TEXT("hp_%s_cam"), *Tag), [=, this]() { Report(Tag); return true; });
+			Act([=, this]() { Cam(0); });
+			Snap(0.1f, *FString::Printf(TEXT("hp_%s_front"), *Tag));
+			Act([=, this]() { Cam(1); });
+			Snap(0.1f, *FString::Printf(TEXT("hp_%s_side"), *Tag));
+			Act([=, this]() { CaptureTurn = 0.0f; Aim(false); Look(0.0f); Cam(-1); });
+			Do(0.6f, []() {});
+		}
+		Act([=, this]() { Aim(false); Look(0.0f); Cam(-1); CaptureTurn = 0.0f; });
 		Do(0.5f, []() {});
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
@@ -948,6 +965,294 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 51)
+	{
+		// One shot, slowed nearly to a stop, from the player's own eyes at the hip and on the sights (the owner,
+		// 2026-11-23: "when shot there are 2 particle effects"; files fs_<gun>_<hip|aim>_<n>): what a shot draws and where.
+		FString List = TEXT("sidearm,rifle");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+			}
+			View(ESOViewMode::FirstPerson);
+			SetViewTarget(Hero());
+		});
+		for (const FString& Gun : Guns)
+		{
+			for (int32 Pass = 0; Pass < 2; ++Pass)
+			{
+				const TCHAR* Where = Pass == 0 ? TEXT("hip") : TEXT("aim");
+				Act([=, this]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						FRandomStream Rng(FCrc::StrCrc32(*Gun));
+						FSOWeaponInstance Wi = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+						Wi.Sight = TEXT("reflex");
+						H->EquipInstance(Wi);
+						H->MarkCombat();
+					}
+					if (Pass == 1)
+					{
+						Aim(true);
+					}
+				});
+				Do(1.5f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } ConsoleCommand(TEXT("slomo 0.04")); });
+				Act([=, this]() { Fire(true); });
+				for (int32 f = 0; f < 8; ++f)
+				{
+					Snap(f == 0 ? 0.0f : 0.004f, FString::Printf(TEXT("fs_%s_%s_%d"), *Gun, Where, f));
+				}
+				Act([=, this]() { Fire(false); ConsoleCommand(TEXT("slomo 1")); Aim(false); });
+				Do(1.0f, []() {});
+			}
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
+	if (Set == 50)
+	{
+		// The camera, frame by frame, in every state a player is in (the owner, 2026-11-23: "the screen shakes again since
+		// we moved the camera again, this fix should be automated because what if we have a fov slider"): at the game's own
+		// frame rate, standing and walking, relaxed, at the ready and on the sights, turning; SHAKE lines: the camera's
+		// place against the body (second differences, and how often its motion turns back on itself: a shake turns back
+		// every frame or two, a sway seldom), its turn, the gun against the camera. -SOGuns=<archetype>[,...];
+		// -SOEyeDrop=<cm> moves the camera on the head for the run; -SOFov=<deg> sets the field of view.
+		FString List = TEXT("rifle,sidearm");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		float Drop = 0.0f, Fov = 0.0f, MaxFps = 0.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("SOEyeDrop="), Drop);
+		FParse::Value(FCommandLine::Get(), TEXT("SOFov="), Fov);
+		FParse::Value(FCommandLine::Get(), TEXT("SOMaxFps="), MaxFps);
+		struct FProbe
+		{
+			bool bOn = false;
+			float Jitter = 0.0f;
+			FRandomStream Hand = FRandomStream(7);
+			FString Label;
+			TArray<FVector> Cam, Gun;
+			TArray<FQuat> Rot;
+			TArray<float> Dt;
+			FTSTicker::FDelegateHandle Handle;
+		};
+		TSharedRef<FProbe> Probe = MakeShared<FProbe>();
+		TSharedRef<FVector> Home = MakeShared<FVector>(FVector::ZeroVector);
+		TWeakObjectPtr<ASOPlayerController> Self(this);
+		Probe->Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Probe, Self](float Dt)
+		{
+			ASOPlayerController* PC = Self.Get();
+			const ASOCharacter* H = PC ? Cast<ASOCharacter>(PC->GetPawn()) : nullptr;
+			if (PC && Probe->Jitter > 0.0f)
+			{
+				// (a hand on a mouse: small turns every frame, this way and that)
+				PC->SetControlRotation(PC->GetControlRotation() + FRotator(Probe->Hand.FRandRange(-Probe->Jitter, Probe->Jitter), Probe->Hand.FRandRange(-Probe->Jitter, Probe->Jitter), 0.0f));
+			}
+			if (!Probe->bOn || !H || !PC->PlayerCameraManager)
+			{
+				return true;
+			}
+			const FMinimalViewInfo& V = PC->PlayerCameraManager->GetCameraCacheView();
+			const FTransform Cam(V.Rotation, V.Location);
+			Probe->Cam.Add(H->GetActorTransform().InverseTransformPosition(V.Location));
+			Probe->Rot.Add(V.Rotation.Quaternion());
+			Probe->Gun.Add(H->GetViewmodel() ? Cam.InverseTransformPosition(H->GetViewmodel()->GetComponentLocation()) : FVector::ZeroVector);
+			Probe->Dt.Add(Dt);
+			return true;
+		}));
+		auto Start = [Probe](const FString& Label) { Probe->Label = Label; Probe->Cam.Reset(); Probe->Gun.Reset(); Probe->Rot.Reset(); Probe->Dt.Reset(); Probe->bOn = true; };
+		auto Stop = [Probe]()
+		{
+			Probe->bOn = false;
+			const TArray<FVector>& C = Probe->Cam;
+			const int32 N = C.Num();
+			if (N < 4)
+			{
+				return;
+			}
+			float Jerk = 0.0f, JerkSum = 0.0f, GunJerk = 0.0f, RotJerk = 0.0f, DtMax = 0.0f, DtSum = 0.0f;
+			int32 Flips = 0, Steps = 0;
+			for (int32 i = 0; i < N; ++i)
+			{
+				DtMax = FMath::Max(DtMax, Probe->Dt[i]);
+				DtSum += Probe->Dt[i];
+				if (i < 2)
+				{
+					continue;
+				}
+				const float J = static_cast<float>((C[i] - 2.0 * C[i - 1] + C[i - 2]).Size());
+				Jerk = FMath::Max(Jerk, J);
+				JerkSum += J * J;
+				GunJerk = FMath::Max(GunJerk, static_cast<float>((Probe->Gun[i] - 2.0 * Probe->Gun[i - 1] + Probe->Gun[i - 2]).Size()));
+				const FQuat D1 = Probe->Rot[i] * Probe->Rot[i - 1].Inverse(), D0 = Probe->Rot[i - 1] * Probe->Rot[i - 2].Inverse();
+				RotJerk = FMath::Max(RotJerk, FMath::RadiansToDegrees(static_cast<float>((D1 * D0.Inverse()).GetAngle())));
+				// (the motion turning back on itself: up and down, side to side, along the body)
+				const FVector A = C[i] - C[i - 1], B = C[i - 1] - C[i - 2];
+				for (int32 k = 0; k < 3; ++k)
+				{
+					if (FMath::Abs(A[k]) > 0.02 && FMath::Abs(B[k]) > 0.02)
+					{
+						++Steps;
+						Flips += A[k] * B[k] < 0.0 ? 1 : 0;
+					}
+				}
+			}
+			FBox Box(ForceInit);
+			for (const FVector& P : C)
+			{
+				Box += P;
+			}
+			UE_LOG(LogShatteredOrbit, Display, TEXT("SHAKE %s: %d frames, %.1f ms (at worst %.1f); the camera on the body sways %.2f x %.2f x %.2f cm, jerks %.3f cm a frame at worst (%.3f rms), turns back %d of %d steps; its turn jerks %.3f deg; the gun against it jerks %.3f cm"),
+				*Probe->Label, N, 1000.0f * DtSum / N, 1000.0f * DtMax, Box.GetSize().X, Box.GetSize().Y, Box.GetSize().Z, Jerk, FMath::Sqrt(JerkSum / FMath::Max(N - 2, 1)), Flips, Steps, RotJerk, GunJerk);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+			}
+			View(ESOViewMode::FirstPerson);
+			if (ASOCharacter* H = Hero())
+			{
+				H->EyeFromHead.Z -= Drop;
+				// open floor, 16 m clear every way (a walk into a box climbs it: the camera goes up and over)
+				*Home = H->GetActorLocation();
+				const FVector Feet = H->GetActorLocation() - FVector(0.0f, 0.0f, H->GetSimpleCollisionHalfHeight());
+				FCollisionQueryParams Q(SCENE_QUERY_STAT(ShakeSpot), false, H);
+				TArray<AActor*> Carried;
+				H->GetAttachedActors(Carried, true, true);
+				Q.AddIgnoredActors(Carried);
+				bool bFound = false;
+				for (float Ring = 0.0f; Ring <= 8000.0f && !bFound; Ring += 600.0f)
+				{
+					for (int32 k = 0; k < (Ring > 0.0f ? 16 : 1) && !bFound; ++k)
+					{
+						const FVector At = Feet + FRotator(0.0f, k * 22.5f, 0.0f).Vector() * Ring;
+						FHitResult Floor;
+						if (GetWorld()->LineTraceSingleByChannel(Floor, At + FVector(0, 0, 300), At - FVector(0, 0, 400), ECC_Visibility, Q)
+							&& !GetWorld()->OverlapAnyTestByChannel(Floor.ImpactPoint + FVector(0, 0, 170), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeBox(FVector(800.0f, 800.0f, 125.0f)), Q))
+						{
+							*Home = Floor.ImpactPoint + FVector(0, 0, H->GetSimpleCollisionHalfHeight() + 2.0f);
+							bFound = true;
+						}
+					}
+				}
+				UE_LOG(LogShatteredOrbit, Display, TEXT("Shake probe: %s"), bFound ? TEXT("open floor found") : TEXT("no open floor: where the player stands"));
+			}
+			if (Fov > 1.0f)
+			{
+				if (USOGameUserSettings* GS = Cast<USOGameUserSettings>(GEngine ? GEngine->GetGameUserSettings() : nullptr))
+				{
+					GS->FieldOfView = Fov;
+				}
+			}
+			SetViewTarget(Hero());
+			if (MaxFps > 1.0f)
+			{
+				ConsoleCommand(FString::Printf(TEXT("t.MaxFPS %.0f"), MaxFps));
+			}
+		});
+		for (const FString& Gun : Guns)
+		{
+			Act([=, this]()
+			{
+				CaptureMove = FVector2D::ZeroVector;
+				if (ASOCharacter* H = Hero())
+				{
+					FRandomStream Rng(FCrc::StrCrc32(*Gun));
+					FSOWeaponInstance Wi = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+					Wi.Sight = TEXT("reflex");
+					H->EquipInstance(Wi);
+					H->CancelCombat();
+				}
+				View(ESOViewMode::FirstPerson);
+			});
+			auto Phase = [=, this](const FString& What, TFunction<void()> Setup, float Seconds)
+			{
+				Act([=, this]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						H->SetActorLocation(*Home, false, nullptr, ETeleportType::TeleportPhysics);
+						H->GetCharacterMovement()->StopMovementImmediately();
+					}
+					Setup();
+				});
+				Do(1.0f, [=]() { Start(FString::Printf(TEXT("%s %s"), *Gun, *What)); });
+				Do(Seconds, [=]() { Stop(); });
+			};
+			Phase(TEXT("relaxed standing"), [=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } }, 2.0f);
+			Phase(TEXT("ready standing"), [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } }, 2.0f);
+			Phase(TEXT("ready walking"), [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Phase(TEXT("relaxed walking back"), [=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } CaptureMove = FVector2D(0.0f, -1.0f); }, 1.5f);
+			Phase(TEXT("aimed standing"), [=, this]() { CaptureMove = FVector2D::ZeroVector; Aim(true); }, 2.0f);
+			Phase(TEXT("aimed strafing"), [=, this]() { CaptureMove = FVector2D(1.0f, 0.0f); }, 1.2f);
+			Phase(TEXT("ready turning"), [=, this]() { CaptureMove = FVector2D::ZeroVector; Aim(false); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureTurn = -60.0f; }, 1.5f);
+			// the moments between: coming up from relaxed, onto the sights and off them (sampled from the press)
+			auto Moment = [=, this](const FString& What, TFunction<void()> Setup, TFunction<void()> Press, float Seconds)
+			{
+				Act([=, this]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						H->SetActorLocation(*Home, false, nullptr, ETeleportType::TeleportPhysics);
+						H->GetCharacterMovement()->StopMovementImmediately();
+					}
+					CaptureTurn = 0.0f;
+					Setup();
+				});
+				Do(1.2f, [=]() { Start(FString::Printf(TEXT("%s %s"), *Gun, *What)); Press(); });
+				Do(Seconds, [=]() { Stop(); });
+			};
+			if (FParse::Param(FCommandLine::Get(), TEXT("SOShakeFrames")))
+			{
+				Act([=, this]()
+				{
+					if (ASOCharacter* H = Hero())
+					{
+						H->SetActorLocation(*Home, false, nullptr, ETeleportType::TeleportPhysics);
+						H->GetCharacterMovement()->StopMovementImmediately();
+						H->MarkCombat();
+					}
+					CaptureTurn = 0.0f;
+				});
+				Do(1.2f, [=, this]() { Aim(true); });
+				for (int32 f = 0; f < 12; ++f)
+				{
+					Snap(0.0f, FString::Printf(TEXT("sk_%s_sights_%02d"), *Gun, f));
+				}
+				Do(0.6f, [=, this]() { Aim(false); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureMove = FVector2D(0.0f, 1.0f); });
+				Do(0.6f, []() {});
+				for (int32 f = 0; f < 12; ++f)
+				{
+					Snap(0.0f, FString::Printf(TEXT("sk_%s_walk_%02d"), *Gun, f));
+				}
+				Act([=, this]() { CaptureMove = FVector2D::ZeroVector; });
+			}
+			Moment(TEXT("coming up to the ready"), [=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } }, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } }, 0.8f);
+			Moment(TEXT("onto the sights"), [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } }, [=, this]() { Aim(true); }, 0.6f);
+			Moment(TEXT("off the sights"), []() {}, [=, this]() { Aim(false); }, 0.6f);
+			Phase(TEXT("ready standing, the hand on the mouse"), [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } Probe->Jitter = 0.08f; }, 2.0f);
+			Phase(TEXT("aimed standing, the hand on the mouse"), [=, this]() { Aim(true); Probe->Jitter = 0.08f; }, 2.0f);
+			Phase(TEXT("ready walking, the hand on the mouse"), [=, this]() { Aim(false); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } Probe->Jitter = 0.08f; CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Act([=, this]() { Probe->Jitter = 0.0f; CaptureMove = FVector2D::ZeroVector; });
+			Phase(TEXT("third person aimed"), [=, this]() { CaptureTurn = 0.0f; View(ESOViewMode::ThirdPerson); Aim(true); }, 2.0f);
+			Act([=, this]() { Aim(false); View(ESOViewMode::FirstPerson); CaptureMove = FVector2D::ZeroVector; CaptureTurn = 0.0f; });
+			Do(0.8f, []() {});
+		}
+		Do(0.5f, [Probe]() { FTSTicker::GetCoreTicker().RemoveTicker(Probe->Handle); });
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 49)
 	{
 		// The gun from the player's own eyes, standing and walking, relaxed and at the ready (the owner, 2026-11-23:
@@ -994,10 +1299,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 					}
 				}
 			}
-			UE_LOG(LogShatteredOrbit, Display, TEXT("GUNVIEW %s: %.0f %% of the gun in the picture, its seen part %.0f %% across and %.0f %% up the picture, from %.0f %% down (the camera %.1f above the head joint)"),
+			UE_LOG(LogShatteredOrbit, Display, TEXT("GUNVIEW %s: %.0f %% of the gun in the picture, its seen part %.0f %% across and %.0f %% up the picture, from %.0f %% down (the eyes %.1f above the head joint; the camera framed %.1f behind, %.1f beside, %.1f under them)"),
 				*Label, 100.0f * In / FMath::Max(All, 1), Seen.bIsValid ? 100.0f * static_cast<float>(Seen.Max.X - Seen.Min.X) / SX : 0.0f,
 				Seen.bIsValid ? 100.0f * static_cast<float>(Seen.Max.Y - Seen.Min.Y) / SY : 0.0f, Seen.bIsValid ? 100.0f * static_cast<float>(Seen.Min.Y) / SY : 100.0f,
-				H->EyeFromHead.Z);
+				H->EyeFromHead.Z, H->GetFrameBack(), H->GetFrameSide(), H->GetFrameDrop());
 			return true;
 		};
 		TSharedRef<FVector> Start = MakeShared<FVector>(FVector::ZeroVector);
@@ -4870,6 +5175,10 @@ void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)
 
 void ASOPlayerController::DevTick(float DeltaTime)
 {
+	if (CaptureTurn != 0.0f)
+	{
+		SetControlRotation(GetControlRotation() + FRotator(0.0f, CaptureTurn * DeltaTime, 0.0f));
+	}
 	if (!CaptureMove.IsZero())
 	{
 		if (APawn* P = GetPawn())

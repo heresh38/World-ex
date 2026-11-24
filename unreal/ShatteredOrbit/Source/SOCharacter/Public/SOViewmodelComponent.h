@@ -70,15 +70,16 @@ public:
 	float MinAimDistance = 400.0f;
 
 	/** A long gun pointed steeply down: where its middle hangs from, in actor space off the chest point (ahead, right,
-	 *  up); the gun's own pitch is held within these (degrees), and it cants inward this much at the full low hold. */
+	 *  up); the gun's own pitch is held within these off the sights (degrees), and it cants this much at the full low hold (+
+	 *  inward: -10, a little out, since the elbows keep out of the trunk: canted 28 in, the wrists bent past 80 for it). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	FVector LowHold = FVector(22.0f, 10.0f, -27.0f);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float MaxDownPitch = 48.0f;
+	float MaxDownPitch = 44.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float MaxUpPitch = 65.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float LowCant = 28.0f;
+	float LowCant = -10.0f;
 
 	/** Sprinting, as the gun's data says (USOWeaponData::SprintCarry, the owner, 2026-11-15: "on running we lower the gun
 	 *  for rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): the grip from the shoulders'
@@ -177,6 +178,10 @@ private:
 	float WallK = 0.0f, WallV = 0.0f;
 	FVector HoldDir = FVector::ForwardVector;
 	bool bHoldDirValid = false;
+	/** How far under the eyes the camera settles to frame the gun in the picture (FSOStance::FrameDown, cm), eased. */
+	float FrameDrop = 0.0f, FrameDropVel = 0.0f, FrameWant = 0.0f;
+	float FrameSide = 0.0f, FrameSideVel = 0.0f, FrameSideWant = 0.0f;
+	float FrameBack = 0.0f, FrameBackVel = 0.0f;
 	/** The gun's place against the eyes' steady place, followed (InEyesFollowMoving). */
 	FVector InEyesPos = FVector::ZeroVector, InEyesVel = FVector::ZeroVector;
 	FQuat InEyesRot = FQuat::Identity;

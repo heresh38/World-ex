@@ -136,7 +136,11 @@ existing classes, never second systems.
   archetype in `Data/game_data.json` has a
   class: `energy`, `kinetic` (real projectiles with muzzle velocity and drop) and `horror` (living biomass). Sights
   (`gun_attach.glb`: reflex, holo, 2x/4x/8x and the compact 4x `prism`; the importer takes every sight the data's
-  `sights` table names) mount per copy; magnified optics use the object name `scope` + `gun_lens`. What a gun may
+  `sights` table names) mount per copy; magnified optics use the object name `scope` + `gun_lens`. A red dot's or a
+  holo's reticle (`gun_dot`) is COLLIMATED, as a real one is: `/Game/Weapons/M_SOReticle` (`SO_IMPORT_ONLY=reticle`;
+  the gun import parents every `gun_dot` instance on it) draws it only where the eye looks through the window along the
+  sight's axis (within `EyeBox` 1.5 cm of the line through the pixel), so from the hip the dot is not seen beside the
+  HUD's crosshair (the owner, 2026-11-23: "that pistol have multiple different crosshair"). What a gun may
   carry follows its kind (the owner, 2026-11-12: "a sniper scope on a shotgun makes no sense"): rifles default /
   reflex / holo / 4x, scout and battle rifles 4x / prism / 8x, sniper 4x / 8x, handguns, SMGs, shotguns and launchers
   irons / reflex / holo, the heavy machine guns up to 2x, living guns their own; a copy with a sight its gun may not
@@ -187,7 +191,11 @@ existing classes, never second systems.
   shooter's velocity and the bolt is aimed to land where the round hits: fixed in the world, a player firing on the
   move left every trail hanging beside the barrel, the owner's "bullets don't come out of the barrel"; capture set
   33) and `PlasmaImpact` (a flare, drops thrown out along the surface, vapour, a glow that cools; no
-  bullet hole; a pattern of pellets lights the place once); the bolt's size follows the gun's damage. A bolt is SEEN
+  bullet hole; a pattern of pellets lights the place once); the bolt's size follows the gun's damage. ONE effect a shot
+  (the owner, 2026-11-23: "when shot there are 2 particle effects"): the bolt leaves the muzzle as a streak joined to
+  the flash (`PlasmaBolt`'s launch; before, a head appeared apart from the flash), the flash's light is held at the
+  muzzle in the eyes' view, and an impact's light is small and close to the surface (it flooded the target as a second
+  flash); slowed pictures `SOCaptureSeries 1 51 -SOGuns=<arch>` (files `SO_fs_<gun>_<hip|aim>_<n>`). A bolt is SEEN
   to fly: the energy archetypes' `vel` in `Data/game_data.json` is 170-380 m/s (the sniper's lance 900) against a
   bullet's 700+, so a light gun is led at range and creatures lead a moving target with it (`ASOEnemy::ShotLead`,
   `GetAimDirection`). `SO_IMPORT_ONLY=gunnumbers` re-reads the guns' numbers without touching a mesh. Test
@@ -665,7 +673,9 @@ model and one camera ... i do not want these 2 models", the arms copies and `--a
 modular (`USOWardrobeData` per body, one follower skeletal mesh per slot, armour owned / worn through the inventory),
 both views hold the gun with arm IK onto the rig's grips and the fingers close by grip preset (`USOGunRigComponent`,
 `FSOFingerPose`, `USOLocomotionAnimInstance`). **The hands are FITTED to each gun's own shape** as it is picked up
-(`USOLocomotionAnimInstance::FitGrip`, shape queries on the gun's meshes; the owner, 2026-11-15: "hands keep glitching
+(`USOLocomotionAnimInstance::FitGrip`, kept for the session per gun, OPTIC and body: kept per gun alone, a copy with
+another sight took the first one's fit, the bolt-action's firing wrist 83 degrees on its irons round a scope's fit, 54
+on its own; shape queries on the gun's meshes; the owner, 2026-11-15: "hands keep glitching
 or bending or wrapping in or they're in the gun ... the gun needs to be a solid object"): the firing hand seated on the
 grip's backstrap, the support hand slid along the fore end to where the whole hand has room, a vertical fore grip (a
 POST: found by its narrow sections, hanging free) wrapped like a handle with the KNUCKLES at its front (palm level with
@@ -792,9 +802,8 @@ up"): where the body holds it (`HoldTransform`: the stance's place: from the eye
 lower right; relaxed, out of a fight, it is LOWERED from the ready and comes up on a shot, an aim, a reload or a hit.
 **Seen idle and walking** (the owner, 2026-11-23: "weapons are not very visible, i think the camera is too high so lower
 it a bit maybe so we see more of the gun when idle/walking"; measured, capture set 49, `GUNVIEW` lines: carried low
-across the body when relaxed, 0 % of every gun was in the picture, at any height of the camera): the camera sits 5 cm
-under the eyeballs (`EyeFromHead` 10 / 0 / -0.4: at the ready a fifth more of the gun is seen, the rifle 48 % of it
-instead of 40), and the relaxed carry is the ready turned by the class's `relaxRot` (pitch, yaw, roll in the body's
+across the body when relaxed, 0 % of every gun was in the picture, at any height of the camera): the camera is FRAMED
+(below), and the relaxed carry is the ready turned by the class's `relaxRot` (pitch, yaw, roll in the body's
 facing: the muzzle down and in, long guns -6 / -20 / -10) about the firing hand's place on the gun and moved by
 `relaxOffset` (`Data/stances.json`; the hand stays where it is at the ready): from the eyes its side in the lower right,
 the rifle 47 % in the picture relaxed, the pistol 64. Turned about the BUTT the fore end dropped out of the support
@@ -806,7 +815,25 @@ steeply down); all of a class's support hand at .8 folded the firing arm instead
 the living launcher's 99). Test `ShatteredOrbit.Hold.GunInThePicture` (every class, relaxed and at the ready, standing
 and walking: 15 % of the gun in the picture at least; most a third to a half). Pictures `SOCaptureSeries 1 49
 -SOGuns=<arch>,...` (files `SO_gv_<gun>_<relaxed|ready>_<still|walk>_d<drop>`; `-SOEyeDrop=<cm>` lowers the camera
-further to compare). And on a sprint each gun is carried as its data says (`"carry"` in
+further to compare). **Framed at any field of view** (the owner, 2026-11-23: "the pistol and hand cannon are good but the
+rest are bad and need to be in the screen more just like the pistol/hand cannon ... this fix should be automated because
+what if we have a fov slider"; a fixed 5 cm under the eyes framed one field of view, and the screen shook): a shouldered
+gun's sight is only 13 to 19 cm ahead of the eyes (measured, `FRAMING` lines), so from the eyes it lies in the picture's
+far corner whatever the camera's height. Off the sights in first person the camera sits behind the eyes by the class's
+`frameBack` (long guns 8 cm: inside the head and the neck, which its own camera never sees) and settles under them and
+toward the gun's side as far as `frameDrop` / `frameSide` allow (long guns 9 / 4; aside no more than 4, or the camera
+stood at the jaw's side over the throat), so that the sight of the gun at the READY lies `frameDown` of the way down the
+picture and `frameAcross` across (long guns .68 / .62; the handguns .65 down, as the owner saw and approved them), worked
+out for the field of view the player has set (`USOGameUserSettings::FieldOfView`, `GetHipFov`) and the picture's shape
+(`USOViewmodelComponent::HoldTransform`, `ASOCharacter::SetFrame`, `Data/stances.json`). Worked out from the ready hold
+and the camera as it follows the head (`GetHeadCameraCS`: the walk's lean in it), only while the view is near level and
+off the sights (the last answer holds otherwise), eased slowly (a gun or field-of-view change glides); the body is not
+moved for it (moved up or in, a long gun put the firing elbow across the chest). Looking down or up the framing gives way,
+the camera back in the eyes by 55 degrees (set behind them, looking at the floor it saw down through the body). The SMG
+class rides 3 cm further in at the ready (`readyShift`: its short fore end leaves it at the pocket, 16 cm right of the
+eyes). At 95 degrees the rifle's sight is 66 % across and 71 % down (65 % of the gun in the picture at the ready, 48
+before), the SMG's 76 / 69; at 75 degrees the camera can go only so far inside the head and a long gun sits nearer the
+corner. Test `ShatteredOrbit.Camera.SteadyAtAnyFov` (below). And on a sprint each gun is carried as its data says (`"carry"` in
 `Data/game_data.json` -> `USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready,
 across the chest, muzzle down and to the left; `CarryOffset` / `CarryRot`), `short` (SMGs: up part of the way,
 `ShortCarry*`), `high` (handguns: up by the face in both hands, muzzle to the sky, `HandgunCarry*`). A gun's length does
@@ -1469,11 +1496,21 @@ pointed down along it, the support hand beyond the arm), and below -20 degrees t
 the chest (`Low`), the gun's middle hanging from it, both hands on it with the elbows bent; the support hand may
 slide 30 cm back along the gun (14 left it floating). Pictures `SOCaptureSeries 1 40` (files `SO_hp_<pitch>_*`,
 at rest and aiming, -89 to +75). **Pass 2 of the look-down** (the owner, 2026-11-21: "the third person gun placement is in the players
-face ... the wrist should not be twisting like that"): the gun's OWN pitch is held within `MaxDownPitch` 48 /
-`MaxUpPitch` 65 degrees (pointed straight down from the chest the stock stood up along the face; the shot still goes
-along the eye's axis), it hangs from `LowHold` (22 ahead, 10 right, 27 under the chest point) canted `LowCant` 28
-degrees inward, and the trunk's share of the pitch
-stops at -40 (the head does the looking). The firing wrist at the full look-down went from 120 degrees to about 60-80;
+face ... the wrist should not be twisting like that"): the gun's OWN pitch is held within `MaxDownPitch` 44 /
+`MaxUpPitch` 65 degrees off the sights (pointed straight down from the chest the stock stood up along the face; the shot
+still goes along the eye's axis), it hangs from `LowHold` (22 ahead, 10 right, 27 under the chest point) canted
+`LowCant` -10 degrees (a little out: since the elbows keep out of the trunk, canted 28 in the wrists bent past 80), and
+the trunk's share of the pitch stops at -40 off the sights (the head does the looking). **Pass 3** (the owner,
+2026-11-23: "when scoping in third person and looking down and moving counter clockwise the right arm is basically gone
+and moved into the body, remember we said not unnatural movements"): ON THE SIGHTS looking down the long gun stays
+shouldered and the trunk BOWS with the aim (to -70, up to 95 % of the pitch, `USOLocomotionAnimInstance::ApplyHold`; the
+stock's raise is the chest's and turns with the bow, the collarbones and the elbows' swing are laid in the bowed chest's
+frame, the gun points along the eye's line), and the ELBOWS ARE KEPT OUT OF THE TRUNK: an ellipse round the hips-to-neck
+line in the chest's frame (`TrunkHalfWidth` 15.5, `TrunkHalfDepth` 11, narrower at the waist), the arm's own thickness
+in it; an elbow or the middle of an arm inside it has its swing searched outward for one that is clear and leaves the
+wrist within its range (else the clear one with the straightest wrist). Test `ShatteredOrbit.Body.ArmsOutOfTheBody`;
+pictures set 40's `SO_hp_turn_<pitch>_<cam|front|side>` (on the sights, looking down 45 and 70 degrees, half a second
+into a turn to the left, from the player's own shoulder camera, ahead and beside). The firing wrist at the full look-down went from 120 degrees to about 60-80;
 a hand round a raked pistol grip is 60-75 degrees from its forearm (`ShatteredOrbit.Hold.TheGunIsSolid` allows 75).
 Where the stock, the grip, the trigger and the fore end are comes from each gun's own shape (the rig's bounds and
 `FitGrip`), never from hand-written numbers per gun. **Pass 3** (2026-11-21): letting the sprint go eases down to the run over `SprintEaseTime` 0.35 s (it braked
@@ -1515,9 +1552,12 @@ the floor"). The runtime leg IK's knee can only bend ahead of the hip-ankle line
 (`KneeAhead`: an almost straight animated leg says nothing about the knee's side). Test `ShatteredOrbit.Anim.CrouchWalk`
 (feet over the floor, knees up and ahead, hips level: still, forward, sideways, backward). **The one camera is in the
 body's own eyes** (`ASOCharacter::UpdateEye`: the head joint in the body's last pose and the eyes on it, `EyeFromHead`
-10 / 0 / -0.4: the Orion male's eyeballs are 4.6 above the joint, the camera 5 cm under them since 2026-11-23 so more of
-the gun is seen (the owner: "the camera is too high"); in the capsule's frame, a stiff spring `EyeFollow` 30 never more than
-`EyeMaxLag` 2 cm behind: a soft one left the eyes 30 cm off the head in a crouch); the camera rides the boom
+10 / 0 / 4.6: the Orion male's eyeballs are 4.6 above the joint; off the sights the camera is FRAMED behind, under and
+beside them for the gun and the field of view: "Framed at any field of view" above; in the capsule's frame, a stiff
+spring `EyeFollow` 30 that runs free, the camera held within `EyeMaxLag` 2 cm of the eyes by a smooth curve (tanh; a
+clamp on the lag jerked the picture 0.9 cm in a frame as a walk began, the body leaning into it and the head 8 cm forward
+in a fifth of a second, and a spring stiffened by its lag jerked it worse; a soft spring left the eyes 30 cm off the head
+in a crouch); the camera rides the boom
 `CameraBoom`, its length 0 in the eyes and out behind the right shoulder for the test view (`ViewBlend`, eased over
 `ViewSwitchTime` 0.35 s; through a scope it is in the eyes at once). The head is hidden from its own player's camera
 alone (`IsHeadHidden`: local, alive, the camera in the eyes AND that player's view target is the body: a capture's or
@@ -1533,7 +1573,9 @@ and walking the guns shake too much ... when moving the mouse in first person no
 the camera is the head JOINT's place and the eyes' offset in the body's facing, never turned by the head bone, and on
 the body's middle side to side (turned with the head it swung 4 cm round the neck; standing, the planted feet let the
 body lag the view's turn and the head swung 3 cm across the picture), softer while walking off the sights
-(`EyeFollowMoving` 10, `EyeMaxLagMoving` 5 cm); walking off the sights the gun's place against the eyes' STEADY place
+(`EyeFollowMoving` 10, `EyeMaxLagMoving` 5 cm), the walk EASED in and out (`ASOCharacter::GetMovingEase`, about a quarter
+of a second: read from the speed it switched in a tenth of a second as the body set off and jerked the picture; the
+gun's ride below takes the same); walking off the sights the gun's place against the eyes' STEADY place
 (`ASOCharacter::GetSteadyEyeCS`: the view's turn at the eyes' height on the capsule's middle) follows the body's hold
 through a spring (`InEyesFollowMoving` 9: the walk's shoulder step and twist come as a slow sway; standing, reloading
 and sprinting it is the hold as it is: smoothed in a reload the gun swung out of both arms' reach). Never against the
@@ -1542,7 +1584,9 @@ coming off the sights (the hand round the heavy machine gun's grip bent 84 degre
 at `SupportReachLast` 0.93 (at the first one's 0.87 the walk pushed the rifle's fore end over and back and the gun
 jerked). Coming up onto the sights a long gun is laid against where the camera is GOING, not where it is on its spring
 (`SightShift`: on the sights it is the camera's own line again): laid against the camera on its way the gun was pulled
-toward the head's eyes and the same hand bent 80 degrees halfway up. Measured (`ShatteredOrbit.Hold.SmoothOnTheMove`,
+toward the head's eyes and the same hand bent 80 degrees halfway up. The camera onto the sights is the head's camera
+blended to the sight's (`HeadCamCS`, `SightCamCS`: each followed by its own spring, blended by how far on the sights,
+eased): a spring chasing the blend lagged and its clamp jerked the slide, 2.5 cm a frame at 30 frames a second. Measured (`ShatteredOrbit.Hold.SmoothOnTheMove`,
 held to a jerk under 1 mm a frame): walking, the gun in the picture sways 0.9 x 0.4 x 0.3 cm and jerks 0.2 mm a frame (5
 before), turning the view the camera does not move side to side. `ShatteredOrbit.Body.HumanRange -SOHoldOnly=<arch>
 -SORangeAll` measures one gun and logs every state's joints (`RANGE` lines). **Every spring is stable at any frame rate** (`SOSpring.h`: sub-steps of
@@ -1550,7 +1594,13 @@ at most 0.3 / Omega; the owner, 2026-11-23: "in first person the gun is constant
 camera's spring, Omega 30, went unstable below 36 frames a second and shook the picture 2 cm every frame, the gun on
 the sights with it; the viewmodel's, the eye height's, the landing's, the roll's and the anim's springs the same).
 Test `ShatteredOrbit.Hold.SteadyInTheEyes` (at 60, 30 and 24 frames a second: the gun in the picture, the hands on the
-gun). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
+gun). Test `ShatteredOrbit.Camera.SteadyAtAnyFov` (the owner, 2026-11-23: "the screen shakes again since we moved the
+camera again, this fix should be automated because what if we have a fov slider"): at 75, 95 and 110 degrees, 60 and 30
+frames a second, the rifle, the SMG and the pistol standing, turning by hand, setting off, walking, onto the sights and
+off: no SHAKE (nothing turns back three times in a fifth of a second), steady within 6 px / 1.5 mm of turn a frame at
+60 frames a second (the same motion turns four times as far a frame at 30), a move (the aim, the lean into a walk)
+within four times an eased slide's turn, and the guns framed (`FOVSTEADY` and `FRAMING` lines); the shake probe is
+`SOCaptureSeries 1 50` (`SHAKE` lines; `-SOFov=`, `-SOMaxFps=`, `-SOEyeDrop=`). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
 pose they were taken from). Braking out of a run plays the body's `Stop` clip (by how fast it was going);
 a turn on the spot is stepped (`TurnLift`: the foot on the side of the turn comes off the ground first); on a vault,
 mantle or climb the gun is put away and the hands go onto the edge. Test

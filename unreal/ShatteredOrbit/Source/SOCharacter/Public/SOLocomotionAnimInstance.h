@@ -160,6 +160,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	/** The hips and legs stay where they stood while the aim turns on the spot (degrees, see StandYaw). */
 	float StandYaw = 0.0f;
 	float MaxWaistTwist = 20.0f;
+	float TrunkHalfWidth = 15.5f;
+	float TrunkHalfDepth = 11.0f;
 	float LeanRoll = 0.0f;
 	float LeanPitch = 0.0f;
 	float FlinchTwist = 0.0f;
@@ -281,6 +283,13 @@ public:
 	 *  the twist, up to this many degrees; past it the body steps round (a turn on the spot). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
 	float TurnInPlaceAngle = 36.0f;
+
+	/** The trunk the arms keep out of (cm): an ellipse round the line from the hips to the neck in the chest's frame, this
+	 *  far to either side and before and behind, the arm's own thickness in it (ApplyHold: the elbow's swing). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float TrunkHalfWidth = 15.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float TrunkHalfDepth = 11.0f;
 
 	/** The most the pelvis turns against the chest (degrees), whatever the legs are doing: strafing, or standing
 	 *  while the aim turns. The legs take the rest of the turn about their own hip joints. */
