@@ -190,7 +190,7 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 		// (a state once it is under way: the aim is flicked between states in one frame, from 60 up to 60 down on the
 		// sights, and the gun and the camera's springs take a third of a second to come round; a reload and a blow are
 		// measured whole)
-		const int32 Settle = Name.Contains(TEXT("reload")) || Name.Contains(TEXT("blow")) ? 0 : FMath::RoundToInt(0.35f / SOTest::Dt);
+		const int32 Settle = Name.Contains(TEXT("reload")) || Name.Contains(TEXT("blow")) || Name.Contains(TEXT("inspect")) ? 0 : FMath::RoundToInt(0.35f / SOTest::Dt);
 		const bool bTrace = !Trace.IsEmpty() && Name.Contains(Trace);
 		W.Run(Seconds, [&]()
 		{
@@ -260,6 +260,9 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 			Gun->SetAmmo(0, 200);
 			Gun->StartReload();
 			Hold(Name(TEXT("reloading")), FMath::Max(Gun->GetReloadDuration(), 0.5f) + 0.3f, [&]() {});
+			W.Run(0.3f);
+			Gun->StartInspect();
+			Hold(Name(TEXT("inspecting")), 3.9f, [&]() {});
 			if (Pass == 1)
 			{
 				continue;   // (the body moves the same whichever view is on it: the movement once)

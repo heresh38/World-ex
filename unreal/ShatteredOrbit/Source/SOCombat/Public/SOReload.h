@@ -162,6 +162,19 @@ namespace SOReload
 	/** The cycling after a shot (pump rack, bolt throw); empty when the gun has none. Delay: seconds after the shot. */
 	SOCOMBAT_API bool BuildCycle(FName Archetype, FSOReloadSegment& OutCycle, float& OutDelay);
 
+	/** The inspect (the owner, 2026-11-24, a video of first-person guns: "its satisfying animations"): the gun brought up
+	 *  and turned to show its left flank, its manual of arms worked as a shooter checks a gun (a pistol's press check, a
+	 *  rifle's chamber and magazine, a revolver's cylinder swung out and spun, a pump eased back, a bolt lifted, a light
+	 *  gun's cell unlocked and turned home, its flap opened on the light inside, a living gun's hatch breathing), turned
+	 *  over to show the top and the right flank, and back into the hands' hold. Both hands stay on the gun; nothing is
+	 *  loaded or spent (no seat, grant or drop events). The gun channel is the gun's own turn about the FIRING hand's
+	 *  place on it (USOViewmodelComponent applies it whole, the reloads' a third). bHandgun: turned further in the hand. */
+	SOCOMBAT_API TArray<FSOReloadSegment> BuildInspect(FName Archetype, bool bEnergy, bool bHorror, bool bHandgun);
+
+	/** An inspect cut short (a shot, a sight, a reload): from the pose it is in back to the hands' hold, every part home
+	 *  and the support hand back on its hold, in Seconds. */
+	SOCOMBAT_API FSOReloadSegment BuildInspectReturn(const FSOReloadPose& From, float Seconds);
+
 	/** The manual of arms an archetype reloads with. The Void Requiem set (vr_*) was built on the same parts as the
 	 *  kinetic guns (cell magazine + charging handle, straight-pull bolt, slide, pump and shells, crane and cylinder),
 	 *  so each maps to that family; the belt-fed gun, the fusion rifle and the launcher have sequences of their own. */

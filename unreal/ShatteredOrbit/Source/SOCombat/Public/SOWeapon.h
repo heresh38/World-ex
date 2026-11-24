@@ -71,6 +71,19 @@ public:
 	bool CanReload() const;
 	bool IsReloading() const { return bReloading; }
 
+	/** The inspect (the owner, 2026-11-24, a video of first-person guns: "its satisfying animations"; SOReload::
+	 *  BuildInspect): the gun brought up and looked over, its manual of arms worked as a shooter checks a gun, both hands
+	 *  on it throughout. Cosmetic: nothing is loaded or spent. Every machine plays it (the player's own at once, the
+	 *  others through the server). A shot, the sights, a reload or a sprint cut it short: the gun comes back into the
+	 *  hands' hold first (InspectReturnTime), then the shot or the reload. */
+	void StartInspect();
+	void StopInspect();
+	bool CanInspect() const;
+	bool IsInspecting() const { return bInspecting; }
+	/** The hands follow a choreography on the gun (a reload or an inspect): the support hand on its anchors, not fitted. */
+	bool IsWorkingTheGun() const { return bReloading || bInspecting; }
+	static constexpr float InspectReturnTime = 0.18f;
+
 	/** Thermal accumulation (the Sarketh's guns, docs/orion/SARKETH_WEAPONS.md): the crystal's heat 0..1, every shot
 	 *  adds the data's HeatPerShot, it cools once the trigger rests. Medium heat: the rounds burn brighter; high heat:
 	 *  they fly faster; full heat: the gun vents by itself and cannot fire until it has. */
@@ -164,6 +177,16 @@ protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastReload(bool bStart, bool bEmpty, int32 Rounds, float TimeScale);
 
+	UFUNCTION(Server, Reliable)
+	void ServerInspect(bool bStart);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastInspect(bool bStart);
+
+	void BeginInspectLocal();
+	/** From the pose the inspect is in back to the hands' hold (InspectReturnTime). */
+	void EndInspectLocal();
+
 	/** A spent magazine / speedloader / husk falls from the world rig (cosmetic). */
 	void DropPart(FName Part);
 
@@ -202,6 +225,10 @@ protected:
 	float ShotQueuedUntil = 0.0f;
 	void QueueShot(float Window);
 	bool bReloading = false;
+	/** An inspect is playing (its return included), and it is on its way back; a reload asked for meanwhile comes after. */
+	bool bInspecting = false;
+	bool bInspectReturning = false;
+	bool bReloadAfterInspect = false;
 	bool bDropped = false;
 	float NextShotTime = 0.0f;
 	float LastShotTime = -100.0f;

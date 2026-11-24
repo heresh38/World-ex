@@ -330,6 +330,10 @@ public:
 	 *  chosen (the owner's HUD ideas: "a quick-use key for consumables"). */
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
 	TSoftObjectPtr<UInputAction> QuickUseAction;
+	/** The inspect key (Y): the gun brought up and looked over (ASOWeapon::StartInspect; the reload key on a gun with nothing
+	 *  to load does the same, the pad's way to it). */
+	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
+	TSoftObjectPtr<UInputAction> InspectAction;
 
 	// the kit's abilities, one action per slot (ASOCombatCharacter::ActivateSlot)
 	UPROPERTY(EditDefaultsOnly, Category = "SO|Input")
@@ -411,6 +415,7 @@ public:
 	void HandleMap();
 	void HandleFlashlight();
 	void HandleQuickUsePressed();
+	void HandleInspect();
 	void HandleQuickUseReleased();
 
 	/** The consumable the quick-use key uses: the one chosen while it is held, else the first held (none: none held). */

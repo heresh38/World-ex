@@ -250,7 +250,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bCarried = Player && ((Move && Move->IsSprinting()) || Player->IsDisplayCarry());
 		{
 			const ASOWeapon* Reloaded = Player ? Player->GetWeapon() : nullptr;
-			bReloadHold = Reloaded && Reloaded->IsReloading();
+			bReloadHold = Reloaded && Reloaded->IsWorkingTheGun();   // (a reload's or an inspect's choreography)
 		}
 		// (a creature's head stays on its aim whatever its clip twitches; a player's and the stand-in's breathe with the clip)
 		bHeadFree = Character->IsPlayerControlled() || !Character->GetController();
@@ -275,7 +275,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		const FTransform ToMesh = Mesh->GetComponentTransform();
 		RightTarget = Right.GetRelativeTransform(ToMesh);
 		LeftTarget = Left.GetRelativeTransform(ToMesh);
-		GunAxis = Held->IsReloading() ? FVector::ZeroVector : ToMesh.InverseTransformVectorNoScale(Rig->GetComponentTransform().GetUnitAxis(EAxis::X));
+		GunAxis = Held->IsWorkingTheGun() ? FVector::ZeroVector : ToMesh.InverseTransformVectorNoScale(Rig->GetComponentTransform().GetUnitAxis(EAxis::X));
 		Rig->GetFingerPoses(RightFingers, LeftFingers);
 		// the hands fitted to this gun (once per gun, when it is at rest in them). The fit is a search of the gun's own
 		// shape (tens of thousands of sweeps) and the same gun in the same hands always comes out the same: it is kept
@@ -288,10 +288,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		const FString MemoKey = Rig ? FString::Printf(TEXT("%s|%s|%s|%d"), *Rig->GetArchetype().ToString(),
 			Optic && Optic->GetStaticMesh() ? *Optic->GetStaticMesh()->GetName() : TEXT("own"),
 			Mesh->GetSkeletalMeshAsset() ? *Mesh->GetSkeletalMeshAsset()->GetPathName() : TEXT("-"), Holder->HoldsWithOneHand() ? 1 : 0) : FString();
-		if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading() && RestoreFit(MemoKey, Rig))
+		if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsWorkingTheGun() && RestoreFit(MemoKey, Rig))
 		{
 		}
-		else if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsReloading())
+		else if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsWorkingTheGun())
 		{
 			FitGripDrop = 0.0f;
 			FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
@@ -326,7 +326,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			// the hand is on its fitted hold there, so it comes home onto it; eased back in after the reload had ended, it
 			// lay a centimetre or three into the gun for a tenth of a second)
 			float FitTarget = 1.0f;
-			if (const FSOReloadPose& P = Held->GetPose(); Held->IsReloading() && P.bHand)
+			if (const FSOReloadPose& P = Held->GetPose(); Held->IsWorkingTheGun() && P.bHand)
 			{
 				auto AtHold = [](FName Anchor, const float* Off)
 				{

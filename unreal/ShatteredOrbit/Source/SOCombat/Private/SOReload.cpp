@@ -1028,4 +1028,306 @@ namespace SOReload
 		}
 		return false;
 	}
+
+	// ---------------------------------------------------------------------------------------------
+	// The inspect (SOReload.h BuildInspect): the gun shown, its manual of arms worked as a shooter checks a gun, shown
+	// again from the other side, and back into the hands' hold. Nothing is loaded or spent.
+
+	/** Where the gun is held to be looked at (the gun channel, about the firing hand's place on it): up and in toward the
+	 *  eyes with its left flank turned to them (L), then turned over, the top and the right flank to them (R). A handgun
+	 *  is turned further: a wrist turns it in the hand, as a long gun's two hands cannot. */
+	static void InspectShows(bool bHandgun, F6& OutL, F6& OutR)
+	{
+		if (bHandgun)
+		{
+			OutL = F6{ -0.06f, 0.07f, 0.06f, 0.42f, -0.32f, -0.75f };
+			OutR = F6{ -0.07f, 0.08f, 0.05f, 0.48f, 0.22f, 1.15f };
+		}
+		else
+		{
+			// (a long gun turned about its middle, between the hands, so both go with it: the muzzle swung right and the top
+			// canted away to show the left flank, then the muzzle back left and canted the other way for the top and the
+			// right. Turned about its bore alone it kept pointing away and the eyes saw its back end; swung about the firing
+			// hand, the fore end went 8 cm past the support arm's reach)
+			OutL = F6{ -0.07f, 0.06f, 0.02f, 0.18f, -0.6f, -0.55f };
+			OutR = F6{ -0.06f, 0.07f, 0.02f, 0.2f, 0.3f, 0.85f };
+		}
+	}
+
+	/** The manual of arms worked while the gun is held to be looked at. bOutRight: the check is made with the right flank
+	 *  to the eyes (an ejection port, a charging handle, a bolt, a pump, a top cover), otherwise with the left (a cylinder,
+	 *  a cell, a flap, a hatch). */
+	static FSOReloadSegment InspectCheck(FName Style, FName Own, bool bHorror, const F6& L, const F6& R, bool& bOutRight)
+	{
+		bOutRight = Style == TEXT("pistol") || Style == TEXT("rifle") || Style == TEXT("dmr") || Style == TEXT("carbine") || Style == TEXT("ksmg")
+			|| Style == TEXT("pump") || Style == TEXT("bolt") || Own == TEXT("vr_lmg") || Own == TEXT("vr_rocket");
+		const F6 B = bOutRight ? R : L;
+		const F6 Hook{ 0, -0.012f, 0, -0.2f, 0, -0.4f };
+		if (Style == TEXT("pistol"))
+		{
+			// a press check: the slide eased back a finger's breadth to show the round in the chamber, and let go
+			FSOReloadSegment S = Seg(1.0f);
+			const F6 Hk{ 0, 0.015f, -0.06f, -0.5f, -0.2f, -0.35f };
+			S.Channels.Add(NGun, { K(0, B), K(0.3f, B.Add(4, 0.06f)), K(0.62f, B.Add(4, 0.08f).Add(5, -0.05f)), K(0.7f, B.Add(3, 0.03f).Add(4, 0.08f), ESOEase::Out),
+				K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.26f, TEXT("slide"), Hk), H(0.64f, TEXT("slide"), Hk), H(0.74f, TEXT("slide"), Hk), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NSlide, { K1(0, 0), K1(0.32f, 0), K1(0.46f, 0.02f), K1(0.62f, 0.02f), K1(0.69f, 0, ESOEase::Out) });
+			Ev(S, 0.42f, TEXT("sfx"), TEXT("slideback"));
+			Ev(S, 0.69f, TEXT("sfx"), TEXT("slidefwd"));
+			return S;
+		}
+		if (Style == TEXT("rifle") || Style == TEXT("dmr") || Style == TEXT("carbine") || Style == TEXT("ksmg"))
+		{
+			// a chamber check (the handle drawn back a little and let ride home; a tap under the magazine after it bent the
+			// support wrist 84 degrees as the hand went from the handle to the magazine's base)
+			const bool bCharge = Style == TEXT("carbine") || Style == TEXT("ksmg");
+			const TCHAR* Part = bCharge ? TEXT("charge") : TEXT("bolt");
+			const F6 Hk{ 0.004f, -0.03f, -0.01f, -0.35f, 0, 0.25f };
+			FSOReloadSegment S = Seg(1.25f);
+			S.Channels.Add(NGun, { K(0, B), K(0.2f, B.Add(5, 0.08f)), K(0.5f, B.Add(5, 0.1f)), K(0.56f, B.Add(5, 0.1f).Add(3, 0.025f), ESOEase::Out),
+				K(0.66f, B.Add(5, 0.06f)), K(0.8f, B.Add(1, 0.01f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.2f, Part, Hk), H(0.5f, Part, Hk), H(0.56f, Part, Hk), H(0.84f, TEXT("fore"), Zero),
+				H(1.0f, TEXT("fore"), Zero) });
+			const TArray<FSOKey> Draw = { K1(0, 0), K1(0.24f, 0), K1(0.36f, 0.028f), K1(0.5f, 0.028f), K1(0.56f, 0, ESOEase::Out) };
+			S.Channels.Add(FName(Part), Draw);
+			if (bCharge)
+			{
+				S.Channels.Add(NBolt, { K1(0, 0), K1(0.24f, 0), K1(0.36f, 0.022f), K1(0.5f, 0.022f), K1(0.56f, 0, ESOEase::Out) });
+			}
+			Ev(S, 0.32f, TEXT("sfx"), TEXT("rackback"));
+			Ev(S, 0.56f, TEXT("sfx"), TEXT("rackfwd"));
+			return S;
+		}
+		if (Style == TEXT("pump"))
+		{
+			// the fore end eased back to show the shell in the chamber, and home again
+			FSOReloadSegment S = Seg(1.0f);
+			S.Channels.Add(NGun, { K(0, B), K(0.3f, B.Add(5, 0.06f)), K(0.66f, B.Add(5, 0.06f)), K(0.72f, B.Add(3, 0.025f).Add(5, 0.06f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.2f, TEXT("pump"), { 0, -0.02f, 0, 0, 0, 0 }), H(0.8f, TEXT("pump"), { 0, -0.02f, 0, 0, 0, 0 }),
+				H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NPump, { K1(0, 0), K1(0.25f, 0), K1(0.42f, 0.03f, ESOEase::Out), K1(0.62f, 0.03f), K1(0.72f, 0, ESOEase::Out) });
+			Ev(S, 0.36f, TEXT("sfx"), TEXT("pumpback"));
+			Ev(S, 0.72f, TEXT("sfx"), TEXT("pumpfwd"));
+			return S;
+		}
+		if (Style == TEXT("bolt"))
+		{
+			// the bolt lifted and drawn back a little to see the round, run home and turned down
+			const F6 Knob{ 0, 0, 0, -0.45f, -0.2f, -0.5f };
+			FSOReloadSegment S = Seg(1.4f);
+			S.Channels.Add(NGun, { K(0, B), K(0.25f, B.Add(5, 0.08f)), K(0.7f, B.Add(5, 0.08f)), K(0.76f, B.Add(5, 0.08f).Add(3, 0.02f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.2f, TEXT("bolt"), Knob), H(0.78f, TEXT("bolt"), Knob), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NBoltRot, { K1(0, 0), K1(0.24f, 0), K1(0.34f, -1.05f, ESOEase::Out), K1(0.66f, -1.05f), K1(0.76f, 0, ESOEase::Out) });
+			S.Channels.Add(NBolt, { K1(0, 0), K1(0.34f, 0), K1(0.44f, 0.03f, ESOEase::Out), K1(0.56f, 0.03f), K1(0.64f, 0, ESOEase::Out) });
+			Ev(S, 0.32f, TEXT("sfx"), TEXT("boltup"));
+			Ev(S, 0.43f, TEXT("sfx"), TEXT("boltback"));
+			Ev(S, 0.63f, TEXT("sfx"), TEXT("boltfwd"));
+			Ev(S, 0.75f, TEXT("sfx"), TEXT("boltdown"));
+			return S;
+		}
+		if (Style == TEXT("revolver"))
+		{
+			// the cylinder swung out, spun by the thumb and slowing, flicked home with the gun
+			FSOReloadSegment S = Seg(1.6f);
+			const F6 Cyl{ 0.01f, 0, 0, -0.2f, 0, -0.6f };
+			S.Channels.Add(NGun, { K(0, B), K(0.14f, B.Add(5, -0.12f)), K(0.3f, B.Add(5, -0.16f)), K(0.8f, B.Add(5, -0.16f)),
+				K(0.86f, B.Add(5, 0.22f).Add(3, 0.04f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.12f, TEXT("cyl"), Cyl), H(0.3f, TEXT("cyl"), Cyl), H(0.36f, TEXT("cyl"), Cyl.Add(1, 0.012f).Add(0, 0.004f)),
+				H(0.42f, TEXT("cyl"), Cyl), H(0.8f, TEXT("cyl"), Cyl), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NCrane, { K1(0, 0), K1(0.12f, 0), K1(0.24f, -1.5f, ESOEase::Back), K1(0.82f, -1.5f), K1(0.88f, 0, ESOEase::Out) });
+			S.Channels.Add(NSpin, { K1(0, 0), K1(0.34f, 0), K1(0.8f, 2.0f * UE_TWO_PI, ESOEase::Out) });
+			Ev(S, 0.1f, TEXT("sfx"), TEXT("latch"));
+			Ev(S, 0.22f, TEXT("sfx"), TEXT("cylopen"));
+			Ev(S, 0.88f, TEXT("sfx"), TEXT("cylclose"));
+			return S;
+		}
+		if (Style == TEXT("cell"))
+		{
+			// the cell's lock released with a hiss (it drops a finger's breadth), looked at, pushed home and turned to
+			// lock; the gun charges up again
+			FSOReloadSegment S = Seg(1.2f);
+			const F6 Grip{ 0, -0.01f, 0, -0.2f, 0, -0.3f };
+			S.Channels.Add(NGun, { K(0, B), K(0.28f, B.Add(5, -0.08f)), K(0.32f, B.Add(5, -0.08f).Add(1, 0.005f), ESOEase::Out), K(0.6f, B.Add(5, -0.08f)),
+				K(0.74f, B.Add(5, -0.08f).Add(3, 0.02f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.18f, TEXT("mag"), Grip), H(0.8f, TEXT("mag"), Grip), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NMag, { K(0, Zero), K(0.26f, Zero), K(0.3f, { 0, -0.012f, 0, 0, 0, 0 }, ESOEase::Out), K(0.56f, { 0, -0.012f, 0, 0, 0, 0 }),
+				K(0.62f, Zero, ESOEase::In), K(0.68f, { 0, 0, 0, 0, 0.5f, 0 }), K(0.76f, Zero, ESOEase::Back) });
+			Ev(S, 0.28f, TEXT("sfx"), TEXT("cellpop"));
+			Ev(S, 0.28f, TEXT("fx"), TEXT("cellpop"), 120);
+			Ev(S, 0.62f, TEXT("sfx"), TEXT("cellin"));
+			Ev(S, 0.75f, TEXT("sfx"), TEXT("celllock"));
+			Ev(S, 0.76f, TEXT("fx"), TEXT("charge"), 110);
+			Ev(S, 0.76f, TEXT("sfx"), TEXT("charge"));
+			return S;
+		}
+		if (Style == TEXT("vent"))
+		{
+			// the flap thrown open on the light inside, a breath of heat let out, slapped shut
+			const float Open = 1.1f * 0.6f;
+			FSOReloadSegment S = Seg(1.15f);
+			S.Channels.Add(NGun, { K(0, B), K(0.3f, B), K(0.34f, B.Add(3, -0.03f), ESOEase::Out), K(0.42f, B.Add(3, 0.008f)), K(0.5f, B), K(0.76f, B),
+				K(0.8f, B.Add(3, 0.025f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.14f, TEXT("hatch"), Hook), H(0.28f, TEXT("hatch"), Hook), H(0.38f, TEXT("fore"), Zero), H(0.66f, TEXT("fore"), Zero),
+				H(0.74f, TEXT("hatch"), { 0, 0.02f, 0, -0.2f, 0, -0.4f }), H(0.79f, TEXT("hatch"), { 0, -0.004f, 0, -0.2f, 0, -0.4f }, ESOEase::In), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NHatch, { K1(0, 0), K1(0.18f, 0), K1(0.28f, Open * 1.08f, ESOEase::Back), K1(0.32f, Open), K1(0.74f, Open), K1(0.79f, 0, ESOEase::In) });
+			Ev(S, 0.2f, TEXT("sfx"), TEXT("flapopen"));
+			Ev(S, 0.32f, TEXT("sfx"), TEXT("overheat"));
+			Ev(S, 0.32f, TEXT("fx"), TEXT("overheat"), 400);
+			Ev(S, 0.79f, TEXT("sfx"), TEXT("flapclose"));
+			return S;
+		}
+		if (Style == TEXT("intake"))
+		{
+			// the flap opens by itself and the gun draws a little light in from the air; shut, it charges up (the hands
+			// stay on the gun and steady it)
+			const float Open = 1.1f * 0.7f;
+			FSOReloadSegment S = Seg(1.3f);
+			S.Channels.Add(NGun, { K(0, B), K(0.3f, B), K(0.5f, B.Add(1, 0.006f)), K(0.66f, B.Add(1, 0.008f).Add(5, 0.01f)), K(0.7f, B.Add(1, 0.008f).Add(5, -0.01f)),
+				K(0.74f, B.Add(1, 0.006f)), K(0.8f, B.Add(3, 0.03f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NHatch, { K1(0, 0), K1(0.12f, 0), K1(0.22f, Open * 1.08f, ESOEase::Back), K1(0.26f, Open), K1(0.74f, Open), K1(0.79f, 0, ESOEase::In) });
+			Ev(S, 0.14f, TEXT("sfx"), TEXT("flapopen"));
+			Ev(S, 0.26f, TEXT("fx"), TEXT("intake"), 420);
+			Ev(S, 0.79f, TEXT("sfx"), TEXT("flapclose"));
+			Ev(S, 0.8f, TEXT("fx"), TEXT("charge"), 110);
+			Ev(S, 0.8f, TEXT("sfx"), TEXT("charge"));
+			return S;
+		}
+		if (Own == TEXT("vr_lmg") || Own == TEXT("vr_fusion") || Own == TEXT("vr_rocket") || bHorror)
+		{
+			// a cover, a hatch or a lid lifted on what is inside and let down again; a living gun's hatch breathes
+			const bool bBrood = Style == TEXT("brood"), bBile = Style == TEXT("bile");
+			const float Open = Own == TEXT("vr_lmg") ? 1.15f * 0.5f : Own == TEXT("vr_fusion") ? 1.4f * 0.45f : Own == TEXT("vr_rocket") ? 1.5f * 0.4f
+				: (bBrood ? 1.25f : bBile ? -1.35f : 1.45f) * 0.45f;
+			const F6 Lid{ 0, 0.02f, 0, -0.2f, 0, -0.4f };
+			FSOReloadSegment S = Seg(1.3f);
+			S.Channels.Add(NGun, { K(0, B), K(0.3f, B.Add(1, 0.005f)), K(0.55f, B.Add(1, -0.003f)), K(0.8f, B.Add(3, 0.02f), ESOEase::Out), K(1.0f, B) });
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.14f, TEXT("hatch"), Lid), H(0.3f, TEXT("hatch"), Lid.Add(1, 0.01f)), H(0.42f, TEXT("fore"), Zero),
+				H(0.66f, TEXT("fore"), Zero), H(0.74f, TEXT("hatch"), Lid.Add(1, -0.005f)), H(0.8f, TEXT("hatch"), Lid.Add(1, -0.015f), ESOEase::Out), H(1.0f, TEXT("fore"), Zero) });
+			S.Channels.Add(NHatch, bHorror
+				? TArray<FSOKey>{ K1(0, 0), K1(0.16f, 0), K1(0.26f, Open * 1.15f, ESOEase::Back), K1(0.34f, Open * 0.9f), K1(0.44f, Open * 1.05f), K1(0.54f, Open * 0.9f),
+					K1(0.64f, Open), K1(0.76f, Open), K1(0.8f, -Open * 0.06f, ESOEase::Out), K1(0.86f, 0) }
+				: TArray<FSOKey>{ K1(0, 0), K1(0.16f, 0), K1(0.26f, Open * 1.08f, ESOEase::Back), K1(0.32f, Open), K1(0.76f, Open), K1(0.8f, 0, ESOEase::In) });
+			Ev(S, 0.2f, TEXT("sfx"), TEXT("hatchopen"));
+			Ev(S, 0.8f, TEXT("sfx"), TEXT("hatchclose"));
+			if (bHorror)
+			{
+				Ev(S, 0.24f, TEXT("drip"), TEXT("hatch"));
+				Ev(S, 0.84f, TEXT("drip"), TEXT("hatch"));
+			}
+			else
+			{
+				Ev(S, 0.82f, TEXT("fx"), TEXT("charge"), 110);
+			}
+			return S;
+		}
+		// anything else: a tap under it and the light coming up
+		FSOReloadSegment S = Seg(0.8f);
+		S.Channels.Add(NGun, { K(0, B), K(0.5f, B), K(0.58f, B.Add(1, 0.01f), ESOEase::Out), K(1.0f, B) });
+		S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.4f, TEXT("magbase"), { 0, -0.035f, 0, -0.1f, 0, -0.15f }),
+			H(0.56f, TEXT("magbase"), { 0, -0.006f, 0, -0.1f, 0, -0.15f }, ESOEase::Out), H(1.0f, TEXT("fore"), Zero) });
+		Ev(S, 0.56f, TEXT("sfx"), TEXT("tap"));
+		Ev(S, 0.6f, TEXT("fx"), TEXT("charge"), 110);
+		return S;
+	}
+
+	TArray<FSOReloadSegment> BuildInspect(FName Arch, bool bEnergy, bool bHorror, bool bHandgun)
+	{
+		const FName Own = Arch;
+		const FName Style = GetStyle(Arch);
+		F6 L, R;
+		InspectShows(bHandgun, L, R);
+		bool bRight = false;
+		const FSOReloadSegment Check = InspectCheck(Style, Own, bHorror, L, R, bRight);
+		TArray<FSOReloadSegment> Segs;
+		// up into the eyes' view, the left flank turned to them
+		FSOReloadSegment Lift = Seg(0.45f);
+		Lift.Channels.Add(NGun, { K(0, Zero), K(0.72f, L.Add(1, 0.006f), ESOEase::Out), K(1.0f, L) });
+		Lift.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		Ev(Lift, 0.05f, TEXT("sfx"), TEXT("pouch"));                 // (the rustle of a gun handled)
+		Segs.Add(Lift);
+		const F6 L2 = L.Add(5, -0.05f).Add(3, 0.02f);
+		if (!bRight)
+		{
+			Segs.Add(Check);
+		}
+		else
+		{
+			FSOReloadSegment Look = Seg(0.45f);                        // (a look at the left flank first)
+			Look.Channels.Add(NGun, { K(0, L), K(1.0f, L2) });
+			Look.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+			Segs.Add(Look);
+		}
+		// turned over: the top and the right flank (the support hand stays on its hold: keyed from where it was, the hand
+		// flew out and back between two grips that were the same)
+		FSOReloadSegment Turn = Seg(0.55f);
+		Turn.Channels.Add(NGun, { K(0, bRight ? L2 : L), K(1.0f, R) });
+		Turn.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		Segs.Add(Turn);
+		if (bRight)
+		{
+			Segs.Add(Check);
+		}
+		// a moment to look at it, and back into the hands' hold, settling
+		const F6 R2 = R.Add(5, 0.06f).Add(3, -0.03f);
+		FSOReloadSegment Look = Seg(bRight ? 0.3f : 0.45f);
+		Look.Channels.Add(NGun, { K(0, R), K(1.0f, R2) });
+		Look.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		Segs.Add(Look);
+		FSOReloadSegment Back = Seg(0.42f);
+		Back.Channels.Add(NGun, { K(0, R2), K(0.8f, R2.Scale(-0.06f)), K(1.0f, Zero) });
+		Back.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		Segs.Add(Back);
+		for (FSOReloadSegment& S : Segs)
+		{
+			for (FSOReloadEvent& E : S.Events)
+			{
+				if (E.Name == TEXT("fx"))
+				{
+					E.Count = FMath::RoundToInt(E.Count * S.Duration);   // (written as thousandths of the segment: now ms)
+				}
+			}
+		}
+		return Segs;
+	}
+
+	FSOReloadSegment BuildInspectReturn(const FSOReloadPose& From, float Seconds)
+	{
+		FSOReloadSegment S = Seg(FMath::Max(Seconds, 0.05f));
+		const F6 Gun{ From.Gun[0], From.Gun[1], From.Gun[2], From.Gun[3], From.Gun[4], From.Gun[5] };
+		S.Channels.Add(NGun, { K(0, Gun), K(1.0f, Zero, ESOEase::Out) });
+		S.Channels.Add(NHand, { H(0, TEXT("cur"), Zero), H(0.85f, TEXT("fore"), Zero), H(1.0f, TEXT("fore"), Zero) });
+		auto Home = [&S](FName Name, float V)
+		{
+			if (FMath::Abs(V) > 1e-5f)
+			{
+				S.Channels.Add(Name, { K1(0, V), K1(1.0f, 0, ESOEase::Out) });
+			}
+		};
+		Home(NSlide, From.Slide);
+		Home(NBolt, From.Bolt);
+		Home(NCharge, From.Charge);
+		Home(NChargeUp, From.ChargeUp);
+		Home(NPump, From.Pump);
+		Home(NBoltRot, From.BoltRot);
+		Home(NCrane, From.Crane);
+		Home(NHatch, From.Hatch);
+		// (a cylinder stops on the next chamber: every sixth of a turn looks as it did)
+		if (FMath::Abs(From.Spin) > 1e-5f)
+		{
+			const float Step = UE_TWO_PI / 6.0f;
+			S.Channels.Add(NSpin, { K1(0, From.Spin), K1(1.0f, FMath::CeilToFloat(From.Spin / Step - 1e-3f) * Step, ESOEase::Out) });
+		}
+		const F6 Mag{ From.Mag[0], From.Mag[1], From.Mag[2], From.Mag[3], From.Mag[4], From.Mag[5] };
+		bool bMag = false;
+		for (const float V : Mag.V)
+		{
+			bMag |= FMath::Abs(V) > 1e-5f;
+		}
+		if (bMag)
+		{
+			S.Channels.Add(NMag, { K(0, Mag), K(1.0f, Zero, ESOEase::Out) });
+		}
+		return S;
+	}
 }

@@ -274,12 +274,14 @@ void ASOWeapon::SetHiddenFromOwner(bool bHide)
 
 void ASOWeapon::StartFire()
 {
+	// (a shot cuts an inspect short: the gun comes back into the hands' hold, then it fires)
+	StopInspect();
 	if (!HasAuthority())
 	{
 		ServerSetTrigger(true);
 	}
 	bTriggerHeld = true;
-	QueueShot(0.25f);
+	QueueShot(0.25f + (bInspecting ? InspectReturnTime : 0.0f));
 	// Click on an empty gun with nothing left to load.
 	UWorld* World = GetWorld();
 	if (World && Mag <= 0 && Reserve <= 0 && World->GetTimeSeconds() - LastDryFireTime > 0.2f)
@@ -300,10 +302,14 @@ void ASOWeapon::StopFire()
 
 void ASOWeapon::ServerSetTrigger_Implementation(bool bHeld)
 {
+	if (bHeld)
+	{
+		StopInspect();
+	}
 	bTriggerHeld = bHeld;
 	if (bHeld)
 	{
-		QueueShot(0.25f);
+		QueueShot(0.25f + (bInspecting ? InspectReturnTime : 0.0f));
 	}
 }
 
@@ -945,6 +951,14 @@ void ASOWeapon::StartReload()
 	{
 		return;
 	}
+	if (bInspecting)
+	{
+		// (the gun comes back into the hands' hold first: begun from the middle of the look, the reload's first keys
+		// snapped the gun from wherever the look had it)
+		bReloadAfterInspect = true;
+		StopInspect();
+		return;
+	}
 	bReloading = true;
 	// (Hot Hands: begun just after a kill, it is quicker)
 	const bool bAfterKill = Stats.Perks.KillReload != 1.0f && GetWorld() && GetWorld()->GetTimeSeconds() - LastKillTime <= Stats.Perks.KillReloadTime;
@@ -1017,6 +1031,8 @@ void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds, float TimeScale)
 		return;
 	}
 	bReloading = true;
+	bInspecting = false;
+	bInspectReturning = false;
 	// Whatever the trigger did before the reload is done with: no shot comes out of the gun after it unless the
 	// trigger is pressed again.
 	bShotQueued = false;
@@ -1028,6 +1044,108 @@ void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds, float TimeScale)
 	Reload.Start(MoveTemp(Segments), LoopFrom, LoopTo);
 	OnWeaponEvent.Broadcast(TEXT("reload"));
 	PlayEventSound(TEXT("reload"));
+}
+
+// --- Inspect ---------------------------------------------------------------------------------
+
+bool ASOWeapon::CanInspect() const
+{
+	const ASOCombatCharacter* Holder = GetHolder();
+	return Data && !bReloading && !bInspecting && !bDropped && !IsVenting() && Holder && !Holder->IsDead() && Holder->GetWeapon() == this
+		&& Holder->CanFireWeapon();
+}
+
+void ASOWeapon::StartInspect()
+{
+	if (!CanInspect())
+	{
+		return;
+	}
+	BeginInspectLocal();                         // (at once on the player's own machine; the server tells the others)
+	if (HasAuthority())
+	{
+		MulticastInspect(true);
+	}
+	else
+	{
+		ServerInspect(true);
+	}
+}
+
+void ASOWeapon::StopInspect()
+{
+	if (!bInspecting || bInspectReturning)
+	{
+		return;
+	}
+	EndInspectLocal();
+	if (HasAuthority())
+	{
+		MulticastInspect(false);
+	}
+	else
+	{
+		ServerInspect(false);
+	}
+}
+
+void ASOWeapon::ServerInspect_Implementation(bool bStart)
+{
+	if (bStart)
+	{
+		if (CanInspect())
+		{
+			BeginInspectLocal();
+			MulticastInspect(true);
+		}
+	}
+	else if (bInspecting && !bInspectReturning)
+	{
+		EndInspectLocal();
+		MulticastInspect(false);
+	}
+}
+
+void ASOWeapon::MulticastInspect_Implementation(bool bStart)
+{
+	// (the player's own machine and the server began or ended it already)
+	if (bStart)
+	{
+		if (!bInspecting && !bReloading)
+		{
+			BeginInspectLocal();
+		}
+	}
+	else if (bInspecting && !bInspectReturning)
+	{
+		EndInspectLocal();
+	}
+}
+
+void ASOWeapon::BeginInspectLocal()
+{
+	if (!Data || bReloading)
+	{
+		return;
+	}
+	bInspecting = true;
+	bInspectReturning = false;
+	const bool bHandgun = Data->MuzzleLocation.Y < 35.0f;
+	Reload.Start(SOReload::BuildInspect(Data->Archetype, Data->WeaponClass == ESOWeaponClass::Energy, Data->WeaponClass == ESOWeaponClass::Horror, bHandgun));
+	OnWeaponEvent.Broadcast(TEXT("inspect"));
+}
+
+void ASOWeapon::EndInspectLocal()
+{
+	if (!bInspecting || bInspectReturning)
+	{
+		return;
+	}
+	bInspectReturning = true;
+	const FSOReloadPose From = Reload.GetPose();
+	TArray<FSOReloadSegment> Back;
+	Back.Add(SOReload::BuildInspectReturn(From, InspectReturnTime));
+	Reload.Start(MoveTemp(Back));
 }
 
 void ASOWeapon::GrantAmmo()
@@ -1060,7 +1178,7 @@ void ASOWeapon::Tick(float DeltaSeconds)
 			bShotQueued = false; // a click is a request for now, not for whenever the gun is ready again
 		}
 		const bool bBurstRunning = BurstLeft > 0;
-		if ((bTriggerHeld || bShotQueued || bBurstRunning) && !bReloading && !IsVenting() && Now >= NextShotTime && Holder->CanFireWeapon())
+		if ((bTriggerHeld || bShotQueued || bBurstRunning) && !bReloading && !bInspecting && !IsVenting() && Now >= NextShotTime && Holder->CanFireWeapon())
 		{
 			bShotQueued = false;
 			if (Mag > 0)
@@ -1113,6 +1231,20 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	}
 	Reload.SetSlideLock(Mag <= 0);
 
+	// An inspect ends where the gun can no longer be used: the holder down, another gun in the hands, or this one put
+	// away for a sprint, a traversal or an ability (decided where the holder's state is known: its own machine and the
+	// server; the others are told). Out of every hand it simply stops.
+	if (bInspecting && !bInspectReturning && Holder && (Holder->IsLocallyControlled() || HasAuthority())
+		&& (Holder->IsDead() || Holder->GetWeapon() != this || !Holder->CanFireWeapon()))
+	{
+		StopInspect();
+	}
+	if (bInspecting && (!Holder || bDropped))
+	{
+		Reload.Cancel();
+		bInspecting = bInspectReturning = bReloadAfterInspect = false;
+	}
+
 	TArray<FSOReloadEvent> Events;
 	const bool bFinished = Reload.Update(DeltaSeconds, Events);
 	const FName ReloadStyle = Data ? SOReload::GetStyle(Data->Archetype) : NAME_None;
@@ -1147,6 +1279,17 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	if (bFinished)
 	{
 		bReloading = false;
+		if (bInspecting)
+		{
+			bInspecting = false;
+			bInspectReturning = false;
+			// (a reload asked for while the gun was being looked at begins now that it is back in the hands' hold)
+			if (bReloadAfterInspect && HasAuthority())
+			{
+				bReloadAfterInspect = false;
+				StartReload();
+			}
+		}
 	}
 
 	// Thermal accumulation: while it vents the heat runs out of it; otherwise it cools once the trigger has rested.

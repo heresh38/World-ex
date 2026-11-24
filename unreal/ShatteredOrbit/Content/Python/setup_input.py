@@ -50,6 +50,9 @@ ACTIONS = {
     "IA_PadShoulderLeft": unreal.InputActionValueType.BOOLEAN,
     # the quick-use key: a consumable (tapped: used; held: the next one chosen) (the owner's HUD ideas)
     "IA_QuickUse": unreal.InputActionValueType.BOOLEAN,
+    # the inspect: the gun brought up and looked over (the reload key does the same on a gun with nothing to load: the
+    # pad's way to it, every button of the pad being taken)
+    "IA_Inspect": unreal.InputActionValueType.BOOLEAN,
 }
 
 # (action, key, modifiers) - modifiers: "neg" negate, "swz" swizzle YXZ (so a 1D key drives Y), "dz" radial dead zone
@@ -94,6 +97,7 @@ MAPPINGS = [
     ("IA_Map", "Gamepad_Special_Right", []),          # (the d-pad's down went to the quick-use key)
     ("IA_QuickUse", "H", []),
     ("IA_QuickUse", "Gamepad_DPad_Down", []),
+    ("IA_Inspect", "Y", []),
     ("IA_Flashlight", "F", []),
     ("IA_Flashlight", "Gamepad_RightThumbstick", []),
     ("IA_Grenade", "G", []),

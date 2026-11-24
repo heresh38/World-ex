@@ -67,6 +67,7 @@ namespace SOInputPaths
 	static const TCHAR* Crouch = TEXT("/Game/Input/IA_Crouch.IA_Crouch");
 	static const TCHAR* Dodge = TEXT("/Game/Input/IA_Dodge.IA_Dodge");
 	static const TCHAR* QuickUse = TEXT("/Game/Input/IA_QuickUse.IA_QuickUse");
+	static const TCHAR* Inspect = TEXT("/Game/Input/IA_Inspect.IA_Inspect");
 	static const TCHAR* PadCrouchDodge = TEXT("/Game/Input/IA_PadCrouchDodge.IA_PadCrouchDodge");
 	static const TCHAR* ToggleView = TEXT("/Game/Input/IA_ToggleView.IA_ToggleView");
 	static const TCHAR* Interact = TEXT("/Game/Input/IA_Interact.IA_Interact");
@@ -171,6 +172,7 @@ ASOCharacter::ASOCharacter(const FObjectInitializer& ObjectInitializer)
 	MapAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Map));
 	FlashlightAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Flashlight));
 	QuickUseAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::QuickUse));
+	InspectAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Inspect));
 	GrenadeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Grenade));
 	MeleeAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::Melee));
 	ClassAbilityAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(SOInputPaths::ClassAbility));
@@ -1242,6 +1244,10 @@ void ASOCharacter::Tick(float DeltaSeconds)
 			{
 				Weapon->CancelReload(); // sprinting cancels a reload
 			}
+			if (Weapon && IsLocallyControlled())
+			{
+				Weapon->StopInspect();  // (and an inspect)
+			}
 		}
 		if (bSprintLatched)
 		{
@@ -1311,6 +1317,7 @@ void ASOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleQuickUsePressed);
 		Input->BindAction(A, ETriggerEvent::Completed, this, &ASOCharacter::HandleQuickUseReleased);
 	}
+	if (UInputAction* A = Load(InspectAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInspect); }
 	if (UInputAction* A = Load(ToggleViewAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleToggleView); }
 	if (UInputAction* A = Load(InteractAction)) { Input->BindAction(A, ETriggerEvent::Started, this, &ASOCharacter::HandleInteract); }
 	if (UInputAction* A = Load(FireAction))
@@ -1783,6 +1790,10 @@ void ASOCharacter::HandleAimPressed()
 		return;
 	}
 	bAiming = true;
+	if (Weapon)
+	{
+		Weapon->StopInspect();                             // (the gun back into the hands' hold, on its way to the sights)
+	}
 	if (USOCharacterMovementComponent* Move = GetSOMovement())
 	{
 		bSprintLatched = false;
@@ -1809,7 +1820,22 @@ void ASOCharacter::HandleReload()
 	}
 	if (Weapon && !bDead)
 	{
+		// (nothing to load, nothing to vent: the gun looked over instead, as the inspect key does)
+		const bool bHot = Weapon->Condenses() && Weapon->GetHeat() > 0.01f;
+		if (!Weapon->IsReloading() && !Weapon->CanReload() && !bHot && !Weapon->IsVenting())
+		{
+			Weapon->StartInspect();
+			return;
+		}
 		Weapon->StartReload();
+	}
+}
+
+void ASOCharacter::HandleInspect()
+{
+	if (Weapon && !bDead && !bFists && !bAiming)
+	{
+		Weapon->StartInspect();
 	}
 }
 

@@ -175,6 +175,9 @@ private:
 	float SlideK = 0.0f;
 	float MantleK = 0.0f;
 	float ReloadK = 0.0f;
+	/** How far an inspect (ASOWeapon::IsInspecting) has the gun: it is looked over from the ready hold, never the relaxed
+	 *  carry (eased: the gun comes up out of the carry into it). */
+	float InspectK = 0.0f;
 	float WallK = 0.0f, WallV = 0.0f;
 	FVector HoldDir = FVector::ForwardVector;
 	/** HoldDir in the view's own frame, where it is eased (HoldTransform). */

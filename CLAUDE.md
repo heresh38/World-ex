@@ -347,7 +347,26 @@ existing classes, never second systems.
   show it). **Overheat**: a light gun that fired a long burst (half
   its cell, 8 to 40 bolts) vents a little by itself as the trigger is let go (`HeatShots`). Sounds `sfx_synth.py`
   `cell_pop cell_lock light_charge flap_open flap_close light_vent light_vent_small light_intake`. Test
-  `ShatteredOrbit.Loot.LightGunsReloadTheirOwnWay`. Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.
+  `ShatteredOrbit.Loot.LightGunsReloadTheirOwnWay`. **The inspect** (the owner, 2026-11-24, a video of first-person guns
+  from another game, its caption "its satisfying animations": a quality target only; IN PROGRESS, saved at the owner's
+  word mid-pass): Y (`IA_Inspect`), or the reload key on a gun with nothing to load (the pad's way to it), brings the gun
+  up and looks it over: `ASOWeapon::StartInspect` plays `SOReload::BuildInspect` on the reload's own player (every
+  machine: the player's own at once, the others through `ServerInspect` / `MulticastInspect`): the gun shown, its manual
+  of arms worked as a shooter checks a gun (`InspectCheck`: a pistol's press check, a rifle's / carbine's chamber check,
+  a pump eased back, a bolt lifted, a revolver's cylinder swung out, spun twice by the thumb and flicked home, a light
+  gun's cell unlocked and turned home as it charges, a flap opened on the light inside, a cover / hatch / lid lifted, a
+  living gun's hatch breathing), turned over, and back into the hands' hold. Nothing loaded or spent; a shot, the sights,
+  a sprint or a reload cut it short (`StopInspect` -> `BuildInspectReturn`, `InspectReturnTime` 0.18 s, then the shot or
+  the reload, `bReloadAfterInspect`). The viewmodel turns the gun by its gun channel WHOLE (a reload's is a third), a
+  handgun about the firing hand, a long gun about its middle between the hands (`InspectK`: from the ready hold, never the
+  relaxed carry); the support-reach rule stays on with the hand where the choreography has it; `ASOWeapon::
+  IsWorkingTheGun` (a reload or an inspect) is what the arm solve reads. Lessons: turned about its bore alone a long gun
+  kept pointing away (the eye saw its back end); swung about the firing hand its fore end left the support arm's reach;
+  a hand moved from a charging handle to a magazine's base bent the support wrist 84 degrees; a hand keyed from `cur` to
+  the same grip flies out and back. Tests `ShatteredOrbit.Weapon.InspectChecksTheGun` and the inspect in
+  `ShatteredOrbit.Hold.AlwaysInHand` / `ShatteredOrbit.Body.HumanRange` (passed before the last change of the long guns'
+  poses, to turn about their middle: not yet run on it; `-SOHandTrace=<state>` HANDTRACE lines). Pictures
+  `SOCaptureSeries 1 52 -SOGuns=<arch>,...` (files `SO_in_<gun>_<first|side>_<n>`). Gun wear: the `_wear` attribute (convex edges) goes into the vertex colour alpha.
 - Material **names are an API** (`gun_body`, `gun_glow`, `orion_*`, `skin__<region>`, `hair*`, `nx_*`, `nc_*`, ...).
 - Weapon / loot numbers: `unreal/ShatteredOrbit/Data/game_data.json` is their source (edit it, re-import).
 - Check models with `tools/blender/preview.py -- out.png model.glb:Action:frame:view ...` (Cycles contact sheet).

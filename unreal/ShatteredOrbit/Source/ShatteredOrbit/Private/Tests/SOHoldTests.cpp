@@ -1000,6 +1000,9 @@ bool FSOAlwaysInHandTest::RunTest(const FString& Parameters)
 			Wt.X = FMath::Max(Wt.X, Firing);
 			Wt.Y = FMath::Max(Wt.Y, Support);
 		};
+		// (-SOHandTrace=<part of a state's name>: every frame of those states, HANDTRACE lines: both hands' measures)
+		FString HandTrace;
+		FParse::Value(FCommandLine::Get(), TEXT("SOHandTrace="), HandTrace);
 		auto Hold = [&](const TCHAR* Name, float Seconds, TFunctionRef<void()> Each)
 		{
 			State = Name;
@@ -1008,8 +1011,24 @@ bool FSOAlwaysInHandTest::RunTest(const FString& Parameters)
 			// controller made by hand in a test world has no player and never ticks it)
 			// (a state is measured once it is under way, a fifth of a second in: an aim snapped 60 degrees in one frame is
 			// followed in a tenth; a reload is measured from its first frame to its last)
-			const int32 Settle = State == TEXT("reloading") ? 0 : FMath::RoundToInt(0.2f / SOTest::Dt);
-			W.Run(Seconds, [&]() { Each(); Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt); if (++Frame > Settle && (Frame % 2) == 0) { Sample(); } });
+			const int32 Settle = State == TEXT("reloading") || State == TEXT("inspecting") ? 0 : FMath::RoundToInt(0.2f / SOTest::Dt);
+			const bool bTrace = !HandTrace.IsEmpty() && State.Contains(HandTrace);
+			W.Run(Seconds, [&]()
+			{
+				Each();
+				Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt);
+				if (++Frame > Settle && (Frame % 2) == 0)
+				{
+					Sample();
+				}
+				if (bTrace && Gun->GetRig())
+				{
+					const USOLocomotionAnimInstance::FHoldReport R = USOLocomotionAnimInstance::MeasureHold(Gun->GetRig(), Body);
+					const FSOReloadPose& P = Gun->GetPose();
+					UE_LOG(LogTemp, Display, TEXT("HANDTRACE %s %s %s %d: inspecting %d hand %d %s->%s %.2f | %s"), *Arch, View, *State, Frame, Gun->IsInspecting() ? 1 : 0,
+						P.bHand ? 1 : 0, *P.HandAnchorA.ToString(), *P.HandAnchorB.ToString(), P.HandAlpha, *R.ToString());
+				}
+			});
 		};
 		for (int32 Pass = 0; Pass < 2; ++Pass)
 		{
@@ -1034,6 +1053,10 @@ bool FSOAlwaysInHandTest::RunTest(const FString& Parameters)
 			Gun->SetAmmo(0, 200);
 			Gun->StartReload();
 			Hold(TEXT("reloading"), FMath::Max(Gun->GetReloadDuration(), 0.5f) + 0.3f, [&]() {});
+			// the inspect: the gun looked over and its parts worked, both hands on it from its first frame to its last
+			W.Run(0.3f);
+			Gun->StartInspect();
+			Hold(TEXT("inspecting"), 3.9f, [&]() {});
 			if (Pass == 1)
 			{
 				continue;   // (the body moves the same whichever view is on it: the movement once)

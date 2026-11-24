@@ -2589,6 +2589,82 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 52)
+	{
+		// The inspect (files in_<gun>_<view>_<n>; ASOWeapon::StartInspect, the owner, 2026-11-24: "its satisfying
+		// animations"): seven moments through one look at the gun, from the eyes and from a camera beside the player
+		// looking at the gun's left flank. -SOGuns=<archetype>[,...] (one of each manual of arms by default).
+		FString List = TEXT("rifle,pistol,revolver,auto,sniper");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		auto Progress = [Weapon](float F) { return [Weapon, F]() { const ASOWeapon* W = Weapon(); return W && W->IsInspecting() && W->GetReloadProgress() > F; }; };
+		auto Beside = [this, Hero](bool bOn)
+		{
+			ASOCharacter* H = Hero();
+			if (!bOn || !H)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			CaptureCamera->AttachToActor(H, FAttachmentTransformRules::KeepRelativeTransform);
+			const FVector Rel(95.0f, -75.0f, 70.0f), At(25.0f, 5.0f, 45.0f);
+			CaptureCamera->SetActorRelativeLocation(Rel);
+			CaptureCamera->SetActorRelativeRotation((At - Rel).Rotation());
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			Look(0.0f);
+			SetControlRotation(GetControlRotation() + FRotator(0.0f, 180.0f, 0.0f));
+			if (ASOHUD* Hud = Cast<ASOHUD>(GetHUD()))
+			{
+				Hud->bShowHUD = false;
+			}
+		});
+		const float Moments[] = { 0.08f, 0.2f, 0.34f, 0.46f, 0.6f, 0.74f, 0.9f };
+		for (const FString& Gun : Guns)
+		{
+			for (int32 Pass = 0; Pass < 2; ++Pass)
+			{
+				const TCHAR* V = Pass == 0 ? TEXT("first") : TEXT("side");
+				Act([=, this]()
+				{
+					View(Pass == 0 ? ESOViewMode::FirstPerson : ESOViewMode::ThirdPerson);
+					Beside(Pass == 1);
+					if (ASOCharacter* H = Hero())
+					{
+						FRandomStream Rng(FCrc::StrCrc32(*Gun));
+						FSOWeaponInstance W = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+						W.Sight = TEXT("default");
+						H->EquipInstance(W);
+					}
+				});
+				Do(1.5f, [=]()
+				{
+					if (ASOWeapon* W = Weapon())
+					{
+						W->StartInspect();
+					}
+				});
+				for (int32 i = 0; i < UE_ARRAY_COUNT(Moments); ++i)
+				{
+					auto Ready = Progress(Moments[i]);
+					Snap(0.0f, *FString::Printf(TEXT("in_%s_%s_%d"), *Gun, V, i), [=]() { return Ready(); });
+				}
+				Do(2.0f, []() {});
+			}
+		}
+		Act([=, this]() { Beside(false); });
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 33)
 	{
 		// A light gun fired ON THE MOVE (files mf_<gun>_*), slowed to a tenth: strafing and walking forward, from

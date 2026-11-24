@@ -114,12 +114,15 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float InRoll = (StrafeK * 0.05f + SlideT * 0.22f + MantleT * 0.35f) * Free;
 
 	ReloadK = FMath::FInterpTo(ReloadK, Weapon && Weapon->IsReloading() ? 1.0f : 0.0f, Dt, 7.0f);
+	const bool bInspect = Weapon && Weapon->IsInspecting();
+	InspectK = FMath::FInterpTo(InspectK, bInspect ? 1.0f : 0.0f, Dt, 9.0f);
 
 	// The reload's own moves of the gun (reload.js: the cant, the lift, the slap), a share of them in the hands: the gun
 	// works in them and never leaves them (the owner's ULTIMATE rule, 2026-11-23: "all players hands must always at all
 	// times be on this ... to ensure we get no floating guns"; whole, they swung the gun up beside the head).
 	static const float Zero[6] = { 0, 0, 0, 0, 0, 0 };
-	const float* G = Weapon ? Weapon->GetPose().Gun : Zero;
+	// (an inspect's moves are the gun shown to the eyes: turned whole about the firing hand, below, not a share of them here)
+	const float* G = Weapon && !bInspect ? Weapon->GetPose().Gun : Zero;
 	static constexpr float GunMoves = 0.35f;
 
 	const bool bHandgun = Data && Data->MuzzleLocation.Y < 35.0f;
@@ -133,7 +136,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	// sights a long gun shouldered, the butt in the pocket).
 	// (relaxed the arms are easy: a class may bring the gun nearer the support shoulder then, FSOStance::RelaxReach)
 	const FSOStance& Stance = FSOStanceData::Get().For(Data ? Data->Family : NAME_None);
-	const float Relaxed = (1.0f - Character->GetCombatReady()) * (1.0f - Ads);
+	const float Relaxed = (1.0f - Character->GetCombatReady()) * (1.0f - Ads) * (1.0f - InspectK);
 	const float Reach = Stance.RelaxReach > 0.0f ? FMath::Lerp(SupportReach, Stance.RelaxReach, Relaxed) : SupportReach;
 	const float StockOff = Stance.RelaxReach > 0.0f ? Relaxed : 0.0f;    // (and the stock may come off the shoulder for it)
 	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), Reach, StockOff));
@@ -199,6 +202,29 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 			FVector(-TZ * 100.0f, TX * 100.0f, TY * 100.0f));
 		Hold = Ride * Hold;
 	}
+	// The inspect (ASOWeapon::IsInspecting, SOReload::BuildInspect; the owner, 2026-11-24, a video of first-person guns:
+	// "its satisfying animations"): the gun turned about the FIRING hand's place on it, as a wrist turns a gun in the hand,
+	// and moved up and in toward the eyes, whole: a reload's moves are the gun working in the hands (a third of them, above),
+	// these are the gun shown to the eyes. The hands' reach below keeps the gun where the arms can hold it.
+	if (bInspect && Rig && Rig->IsBuilt())
+	{
+		const float* S = Weapon->GetPose().Gun;
+		FVector Grip = FVector::ZeroVector;
+		FTransform RT, LT;
+		if (Rig->GetHandTargets(RT, LT))
+		{
+			Grip = Rig->GetComponentTransform().InverseTransformPosition(RT.GetLocation());
+		}
+		// (a long gun about its middle, between its two hands, at the grip's height: both hands go with it)
+		if (!bHandgun)
+		{
+			const FBox GunBox = Rig->GetRigBounds();
+			Grip.X = FMath::Clamp(static_cast<float>(GunBox.GetCenter().X), static_cast<float>(Grip.X), static_cast<float>(Grip.X) + 25.0f);
+		}
+		const FQuat Turn = FRotator(FMath::RadiansToDegrees(S[3]), FMath::RadiansToDegrees(-S[4]), FMath::RadiansToDegrees(-S[5])).Quaternion();
+		const FVector Shift(-S[2] * 100.0f, S[0] * 100.0f, S[1] * 100.0f);     // (the gun's frame: forward, right, up)
+		Hold = FTransform(Turn, Grip - Turn.RotateVector(Grip) + Shift) * Hold;
+	}
 	// Walking off the sights the gun rides steadier than the shoulder carries it: its place against the eyes' steady place
 	// (the view's turn at the eyes' height on the capsule) follows the body's hold through a soft spring (the owner,
 	// 2026-11-23: "when in first person not scoped and walking the guns shake too much"). Against the steady place, never
@@ -210,7 +236,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		const FTransform Eye(Character->GetEyeTransform(true).GetRotation(),
 			Character->GetCapsuleComponent()->GetComponentTransform().TransformPosition(Character->GetSteadyEyeCS()));
 		const FTransform Against = Hold.GetRelativeTransform(Eye);
-		const float Walking = bGrounded ? Character->GetMovingEase() * (1.0f - ReloadK) * (1.0f - FMath::Clamp(RunT, 0.0f, 1.0f)) : 0.0f;
+		const float Walking = bGrounded ? Character->GetMovingEase() * (1.0f - FMath::Max(ReloadK, InspectK)) * (1.0f - FMath::Clamp(RunT, 0.0f, 1.0f)) : 0.0f;
 		if (!bInEyesValid || Dt > 0.25f)
 		{
 			InEyesPos = Against.GetLocation();
@@ -448,7 +474,7 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 	// turned about its butt the fore end dropped out of the support arm's reach and the gun was pulled back into the
 	// middle). It comes up to the ready on a shot, an aim, a reload or a hit (ASOCharacter::GetCombatReady), never a body
 	// walking about on the sights.
-	if (const float Relax = (1.0f - Character->GetCombatReady()) * (1.0f - Ads); Relax > 1e-3f)
+	if (const float Relax = (1.0f - Character->GetCombatReady()) * (1.0f - Ads) * (1.0f - InspectK); Relax > 1e-3f)
 	{
 		// (about the firing hand's place on the gun, or toward the support hand's: FSOStance::RelaxPivot)
 		FVector Grip = FVector::ZeroVector;
@@ -592,9 +618,13 @@ bool USOViewmodelComponent::SupportArm(const ASOCharacter* Character, const USOG
 	OutShoulder = Body->GetBoneLocation(Body->GetBoneName(Sh));
 	const FVector Elbow = Body->GetBoneLocation(Body->GetBoneName(El));
 	OutArm = static_cast<float>(FVector::Dist(OutShoulder, Elbow) + FVector::Dist(Elbow, Body->GetBoneLocation(Body->GetBoneName(Wr))));
-	// where the hand is fitted on this gun (the rig's own target, moved onto the gun's surfaces)
+	// where the hand is fitted on this gun (the rig's own target, moved onto the gun's surfaces); an inspect's hand where
+	// its choreography has it (a handle, a hatch: the fit is the fore end's)
 	OutInGun = Rig->GetComponentTransform().InverseTransformPosition(L.GetLocation());
-	if (const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance()); Anim && Anim->HasFittedGrip())
+	const ASOWeapon* Weapon = Character->GetWeapon();
+	const bool bAway = Weapon && Weapon->IsInspecting() && Weapon->GetPose().bHand
+		&& !(Weapon->GetPose().HandAnchorA == TEXT("fore") && Weapon->GetPose().HandAnchorB == TEXT("fore"));
+	if (const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance()); Anim && Anim->HasFittedGrip() && !bAway)
 	{
 		OutInGun += Anim->GetFittedOffset(true);
 	}
@@ -607,11 +637,14 @@ FTransform USOViewmodelComponent::InSupportReach(const ASOCharacter* Character, 
 	// be, never the hand chasing a gun out of its reach"): its place on the gun past the support arm's reach (looking
 	// far up or down, a long fore end) brings the gun in toward that shoulder. A long gun's butt goes no further back
 	// than in front of the firing shoulder (pulled into it, the owner's "the gun is in the players shoulder"); what is
-	// left the anim's hold slides the hand back along the gun for. Not while a reload or an action works the hand.
+	// left the anim's hold slides the hand back along the gun for. Not while a reload or an action works the hand; an
+	// inspect does, with the hand wherever its choreography has it on the gun (a handle, a hatch): turned to be looked at,
+	// a long fore end went 8 cm past the support arm's reach and the arm hung straight with the palm off the gun.
 	const ASOWeapon* Weapon = Character->GetWeapon();
 	FVector InGun, Shoulder;
 	float Arm = 0.0f;
-	if (!Weapon || Weapon->IsReloading() || Weapon->GetPose().bHand || Character->HoldsWithOneHand() || !SupportArm(Character, Rig, InGun, Shoulder, Arm))
+	if (!Weapon || Weapon->IsReloading() || (Weapon->GetPose().bHand && !Weapon->IsInspecting()) || Character->HoldsWithOneHand()
+		|| !SupportArm(Character, Rig, InGun, Shoulder, Arm))
 	{
 		return Hold;
 	}
