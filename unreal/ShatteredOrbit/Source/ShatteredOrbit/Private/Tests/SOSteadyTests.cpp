@@ -593,10 +593,10 @@ bool FSOSteadyAtAnyFovTest::RunTest(const FString& Parameters)
 			if (Case == 0)
 			{
 				// (framed: the sight near its class's place in the picture whatever the field of view, the long guns as the
-				// handguns are: FSOStance::FrameDown / FrameAcross; narrow, the camera can go only so far inside the head, and a
-				// long gun is seen nearer the picture's corner)
+				// handguns are: FSOStance::FrameDown / FrameAcross; the camera goes at most 5 cm under the eyes (the owner,
+				// 2026-11-23: "it feels like the player is very short"), so narrow, a long gun is seen nearer the picture's foot)
 				TestTrue(FString::Printf(TEXT("%s: the gun framed in the picture (its sight %.0f %% across, %.0f %% down)"), *Label, 100.0f * Across, 100.0f * Down),
-					Down > 0.55f && Down < (Fov < 90.0f ? 0.85f : 0.75f) && Across > 0.45f && Across < (bLong ? (Fov < 90.0f ? 0.9f : 0.78f) : 0.65f));
+					Down > 0.55f && Down < (Fov < 90.0f ? 0.93f : 0.8f) && Across > 0.45f && Across < (bLong ? (Fov < 90.0f ? 0.9f : 0.78f) : 0.65f));
 			}
 		}
 	}

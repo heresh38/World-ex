@@ -248,6 +248,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		const USOCharacterMovementComponent* Move = Player ? Cast<USOCharacterMovementComponent>(Player->GetCharacterMovement()) : nullptr;
 		bCarried = Player && ((Move && Move->IsSprinting()) || Player->IsDisplayCarry());
+		{
+			const ASOWeapon* Reloaded = Player ? Player->GetWeapon() : nullptr;
+			bReloadHold = Reloaded && Reloaded->IsReloading();
+		}
 		// (a creature's head stays on its aim whatever its clip twitches; a player's and the stand-in's breathe with the clip)
 		bHeadFree = Character->IsPlayerControlled() || !Character->GetController();
 	}
@@ -258,6 +262,11 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	if (Player && Player->IsWeaponStowed())
 	{
 		Rig = nullptr;                                           // (the gun is put away: the hands are free)
+	}
+	if (HoldSerialRig.Get() != Rig)
+	{
+		HoldSerialRig = Rig;
+		++HoldSerial;
 	}
 	FTransform Right, Left;
 	GunAxis = FVector::ZeroVector;
@@ -1640,7 +1649,7 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 	UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %d fingers fitted on %d parts, offsets %s / %s"), Fitted, Parts.Num(), *FitOffset[0].ToCompactString(), *FitOffset[1].ToCompactString());
 }
 
-float USOLocomotionAnimInstance::DebugSwing[2][5] = {};
+float USOLocomotionAnimInstance::DebugSwing[2][9] = {};
 
 FString USOLocomotionAnimInstance::FHoldReport::ToString() const
 {
@@ -1989,6 +1998,13 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 {
 	FAnimInstanceProxy::PreUpdate(InAnimInstance, DeltaSeconds);
 	// (this frame's state arrives at the end of NativeUpdateAnimation, which the engine runs after this: CopyFrom)
+	// (the elbows' swing goes on from where the last frame's pose left it)
+	for (int32 k = 0; k < 2; ++k)
+	{
+		ElbowDirStart[k] = ElbowDir[k];
+		SwingOutStart[k] = SwingOut[k];
+	}
+	ElbowDt = DeltaSeconds;
 }
 
 void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
@@ -2013,6 +2029,17 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 	bHandgunHold = Instance->bHandgunHold;
 	bHideHead = Instance->bHideHead;
 	bCarried = Instance->bCarried;
+	bReloadHold = Instance->bReloadHold;
+	if (HoldSerial != Instance->HoldSerial)
+	{
+		// (another gun in the hands: the elbows' memory of the last one's swing means nothing for it; kept, the hold of a gun
+		// came out one way after another gun and another from nothing)
+		HoldSerial = Instance->HoldSerial;
+		for (int32 k = 0; k < 2; ++k)
+		{
+			ElbowDirStart[k] = SwingOutStart[k] = FVector::ZeroVector;
+		}
+	}
 	bHeadFree = Instance->bHeadFree;
 	AimPitch = Instance->AimPitch;
 	Blade = Instance->Blade;
@@ -2717,6 +2744,19 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		const FVector RestAlong = (RefCS[Hand].GetLocation() - RefCS[Lower].GetLocation()).GetSafeNormal();
 		const FQuat RestBasis = FSOHandGrip::MakeBasis(RestAlong, FVector(0.0f, 1.0f, 0.0f), bLeft);
 		const FQuat HandOffset = RestBasis.Inverse() * RefCS[Hand].GetRotation();
+		// The hand's own line as a wrist is measured (the forearm's line against the line from the wrist to the middle
+		// finger's root): the target's axis is the REST pose's forearm line, and a hand at rest is not straight on its
+		// forearm, so near a human's limit the two read up to five degrees apart, either way (ShatteredOrbit.Body.HumanRange
+		// measures the bones): the checks against a human's limit below read this one.
+		FVector HandLine = Target.GetRotation().GetAxisX();
+		if (const int32 Knuckle = Find(bLeft ? TEXT("middle_01_L") : TEXT("middle_01_R")); Knuckle != INDEX_NONE)
+		{
+			const FVector RestLine = RefCS[Hand].GetRotation().UnrotateVector((RefCS[Knuckle].GetLocation() - RefCS[Hand].GetLocation()).GetSafeNormal());
+			if (!RestLine.IsNearlyZero())
+			{
+				HandLine = (Target.GetRotation() * HandOffset).RotateVector(RestLine);
+			}
+		}
 
 		const FVector S = CS[Upper].GetLocation();
 		const float L1 = FVector::Dist(S, CS[Lower].GetLocation());
@@ -2749,15 +2789,31 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		// bowed over a gun aimed at the ground hung toward the floor, into the chest (the owner, 2026-11-23: "the right arm
 		// is basically gone and moved into the body").
 		const FVector TrunkDown = FQuat(Side, TrunkPitch + LeanRad).RotateVector(FVector(0.0f, 0.0f, -1.0f));
-		auto SwingFrame = [bLeft, TrunkDown](const FVector& Line, FVector& OutDown, FVector& OutOut)
+		const FVector TrunkBack = FQuat(Side, TrunkPitch + LeanRad).RotateVector(FVector(0.0f, -1.0f, 0.0f));
+		const FVector PrevOut = SwingOutStart[SideIndex];
+		auto SwingFrame = [bLeft, TrunkDown, TrunkBack, PrevOut](const FVector& Line, FVector& OutDown, FVector& OutOut)
 		{
-			OutDown = TrunkDown - Line * FVector::DotProduct(TrunkDown, Line);
+			// (an arm that hangs along the trunk's down has no "down" round it: there the frame's down turns toward the
+			// trunk's back, eased in, or it spun about the arm and the elbow with it, 20 cm standing at rest)
+			const float AlongDown = FMath::Abs(static_cast<float>(FVector::DotProduct(TrunkDown, Line)));
+			const FVector Ref = TrunkDown + TrunkBack * FMath::SmoothStep(0.92f, 0.99f, AlongDown);
+			OutDown = Ref - Line * FVector::DotProduct(Ref, Line);
 			if (!OutDown.Normalize(1e-3f))
 			{
 				return false;
 			}
 			OutOut = FVector::CrossProduct(Line, OutDown);
-			if ((bLeft ? OutOut.X : -OutOut.X) < 0.0f)
+			// (out round the arm's own side; where that is unclear, the line running across the body's left and right,
+			// the side it was on last frame: decided by the sign alone it flipped, and the elbow went to the mirror side)
+			const float OwnSide = bLeft ? static_cast<float>(OutOut.X) : -static_cast<float>(OutOut.X);
+			if (FMath::Abs(OwnSide) > 0.25f || PrevOut.IsNearlyZero())
+			{
+				if (OwnSide < 0.0f)
+				{
+					OutOut = -OutOut;
+				}
+			}
+			else if (FVector::DotProduct(OutOut, PrevOut) < 0.0f)
 			{
 				OutOut = -OutOut;
 			}
@@ -2765,6 +2821,13 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		};
 		const FVector ToTarget = Target.GetLocation() - S;
 		const FVector Dir = ToTarget.GetSafeNormal(1e-4f, FVector(0.0f, 1.0f, 0.0f));
+		{
+			FVector FrameDown, FrameOut;
+			if (SwingFrame(Dir, FrameDown, FrameOut))
+			{
+				SwingOut[SideIndex] = FrameOut;
+			}
+		}
 		const float D = FMath::Clamp(ToTarget.Size(), FMath::Abs(L1 - L2) + 0.5f, (L1 + L2) * 0.999f);
 		const float Along = (L1 * L1 - L2 * L2 + D * D) / (2.0f * D);
 		const float Height = FMath::Sqrt(FMath::Max(L1 * L1 - Along * Along, 0.0f));
@@ -2817,22 +2880,46 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					// is within it (the hand's place on the gun is fitted and stays: turned round the grip to follow the
 					// forearm, the palm went into the grip's front)
 					const float MinCos = FMath::Cos(FMath::DegreesToRadians(Stance.WristMax[SideIndex]));
+					// (the wrist read as a body's is measured, HandLine: read on the rest pose's axis it was five degrees more
+					// than it was walking at the ready, past the class's limit where the wrist was well within it, and the
+					// search below took the firing elbow 20 cm in toward the body and back with every step)
 					auto Straightness = [&](float Swing)
 					{
 						const FVector E = S + Dir * Along + (Down * FMath::Cos(Swing) + Out * FMath::Sin(Swing)) * Height;
-						return static_cast<float>(FVector::DotProduct((S + Dir * D - E).GetSafeNormal(), HandAxis));
+						return static_cast<float>(FVector::DotProduct((S + Dir * D - E).GetSafeNormal(), HandLine));
 					};
 					if (Ask > 0.15f && Straightness(Want) < MinCos)
 					{
+						// (the first swing from the class's toward the straightest wrist that is within its range, found to a
+						// hair between the last swing short of it and the first within it; and taken only as far as the hand
+						// asks: a hand near the arm's own line asks little and its straightest swing is barely defined there,
+						// and taken whole from an ask of 0.15 the firing elbow leapt from out at the side to across the body
+						// each time the walk carried the ask past it: the owner, 2026-11-23, "player elbow is still moving
+						// weirdly")
 						const float From = Want;
-						for (int32 Step = 1; Step <= 12; ++Step)
+						float Short = From, Found = A1;
+						for (int32 Step = 1; Step <= 24; ++Step)
 						{
-							Want = FMath::Lerp(From, A1, Step / 12.0f);
-							if (Straightness(Want) >= MinCos)
+							const float Try = FMath::Lerp(From, A1, Step / 24.0f);
+							if (Straightness(Try) >= MinCos)
 							{
+								Found = Try;
 								break;
 							}
+							Short = Try;
 						}
+						for (int32 Halve = 0; Halve < 5; ++Halve)
+						{
+							const float Mid = 0.5f * (Short + Found);
+							(Straightness(Mid) >= MinCos ? Found : Short) = Mid;
+						}
+						// (a hand that runs along the arm's line bends its wrist the same wherever the elbow swings round that line:
+						// pulled by the wrist's bend alone there, the elbow swung across and back each time the bend passed the
+						// limit, 28 cm standing at the ready)
+						// (but wholly where the wrist would come near a human's own limit, 80, however little the hand asks: there
+						// the swing does help, and the stance at the ready never comes so near, so it does not flip across)
+						const float Bent = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Straightness(From), -1.0f, 1.0f)));
+						Want = FMath::Lerp(From, Found, FMath::Max(FMath::SmoothStep(0.15f, 0.22f, Ask), FMath::SmoothStep(78.5f, 81.5f, Bent)));
 					}
 					A = FMath::Lerp(A, Want, Stance.Ready);
 					bSwung = true;
@@ -2854,51 +2941,65 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 		// neck in the chest's own frame (TrunkHalfWidth to either side, TrunkHalfDepth before and behind, the arm's own
 		// thickness in them); the elbow and the middles of the upper arm and the forearm lie outside it. Of the swings round
 		// the shoulder-to-wrist line, the nearest that does, outward first (the elbow flares out, as a body's does).
-		if (Hips != INDEX_NONE && Neck != INDEX_NONE && Chest != INDEX_NONE)
+		const bool bTrunk = Hips != INDEX_NONE && Neck != INDEX_NONE && Chest != INDEX_NONE;
+		const FVector TrunkBase = bTrunk ? CS[Hips].GetLocation() : FVector::ZeroVector;
+		const FVector TrunkUp = bTrunk ? (CS[Neck].GetLocation() - TrunkBase).GetSafeNormal(1e-4f, FVector(0.0f, 0.0f, 1.0f)) : FVector::UpVector;
+		const float TrunkLength = bTrunk ? static_cast<float>(FVector::Dist(TrunkBase, CS[Neck].GetLocation())) : 0.0f;
+		const FQuat ChestTurn = bTrunk ? CS[Chest].GetRotation() * RefCS[Chest].GetRotation().Inverse() : FQuat::Identity;
+		const FVector TrunkFwd = ChestTurn.RotateVector(FVector(0.0f, 1.0f, 0.0f)), TrunkLeft = ChestTurn.RotateVector(FVector(1.0f, 0.0f, 0.0f));
+		auto Depth = [&](const FVector& P)
+		{
+			const float T = static_cast<float>(FVector::DotProduct(P - TrunkBase, TrunkUp));
+			if (!bTrunk || T < 0.0f || T > TrunkLength)
+			{
+				return 9.0f;
+			}
+			const FVector Off = (P - TrunkBase) - TrunkUp * T;
+			// (narrower at the waist than at the ribs: 85 % of the chest's breadth and depth below its middle)
+			const float Taper = FMath::Lerp(0.85f, 1.0f, FMath::SmoothStep(0.3f, 0.65f, T / FMath::Max(TrunkLength, 1.0f)));
+			const float X = static_cast<float>(FVector::DotProduct(Off, TrunkLeft)) / (TrunkHalfWidth * Taper);
+			const float Y = static_cast<float>(FVector::DotProduct(Off, TrunkFwd)) / (TrunkHalfDepth * Taper);
+			return X * X + Y * Y;
+		};
+		const FVector W = S + Dir * D;
+		if (bTrunk)
 		{
 			FVector Down, Out;
 			if (SwingFrame(Dir, Down, Out))
 			{
-				const FVector Base = CS[Hips].GetLocation(), Top = CS[Neck].GetLocation();
-				const FVector TrunkUp = (Top - Base).GetSafeNormal(1e-4f, FVector(0.0f, 0.0f, 1.0f));
-				const float TrunkLength = static_cast<float>(FVector::Dist(Base, Top));
-				const FQuat ChestTurn = CS[Chest].GetRotation() * RefCS[Chest].GetRotation().Inverse();
-				const FVector TrunkFwd = ChestTurn.RotateVector(FVector(0.0f, 1.0f, 0.0f)), TrunkLeft = ChestTurn.RotateVector(FVector(1.0f, 0.0f, 0.0f));
-				auto Depth = [&](const FVector& P)
-				{
-					const float T = static_cast<float>(FVector::DotProduct(P - Base, TrunkUp));
-					if (T < 0.0f || T > TrunkLength)
-					{
-						return 9.0f;
-					}
-					const FVector Off = (P - Base) - TrunkUp * T;
-					// (narrower at the waist than at the ribs: 85 % of the chest's breadth and depth below its middle)
-					const float Taper = FMath::Lerp(0.85f, 1.0f, FMath::SmoothStep(0.3f, 0.65f, T / FMath::Max(TrunkLength, 1.0f)));
-					const float X = static_cast<float>(FVector::DotProduct(Off, TrunkLeft)) / (TrunkHalfWidth * Taper);
-					const float Y = static_cast<float>(FVector::DotProduct(Off, TrunkFwd)) / (TrunkHalfDepth * Taper);
-					return X * X + Y * Y;
-				};
-				const FVector W = S + Dir * D;
 				auto Clear = [&](float Sw)
 				{
 					const FVector E = S + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
 					return FMath::Min3(Depth(E), Depth((S + E) * 0.5), Depth((E + W) * 0.5));
 				};
 				const float A = FMath::Atan2(static_cast<float>(FVector::DotProduct(Bend, Out)), static_cast<float>(FVector::DotProduct(Bend, Down)));
+				const float WristLimit = FMath::Cos(FMath::DegreesToRadians(Stance.bPlayer ? Stance.WristMax[SideIndex] : 75.0f));
+				auto HumanCos = [&](float Sw)          // (the wrist as a body's is measured: HandLine)
+				{
+					const FVector E = S + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
+					return static_cast<float>(FVector::DotProduct((W - E).GetSafeNormal(), HandLine));
+				};
+#if !UE_BUILD_SHIPPING
+				{
+					float* Sw = USOLocomotionAnimInstance::DebugSwing[SideIndex];
+					Sw[5] = Clear(A); Sw[6] = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(HumanCos(A), -1.0f, 1.0f))); Sw[7] = A; Sw[8] = 0.0f;
+				}
+#endif
+				// (only where the arm is in the trunk: a search set off by the wrist alone near its limit, a hard line, went on and
+				// off with every step of a walk at the ready, and the firing elbow swung 22 cm out and in with it; the stance's
+				// own pull toward the straight wrist above is the smooth one)
 				if (Clear(A) < 1.0f)
 				{
 					// (the nearest swing either way that is clear of the trunk AND leaves the wrist within its range: the hand's
-					// place on the gun stays, so the forearm's line decides the wrist; failing both, the clear one with the
-					// straightest wrist: nothing is solved by bending a joint past what a body does)
-					const FVector HandAxis = Target.GetRotation().GetAxisX();
-					const float WristLimit = FMath::Cos(FMath::DegreesToRadians(Stance.bPlayer ? Stance.WristMax[SideIndex] : 75.0f));
-					auto WristCos = [&](float Sw)
-					{
-						const FVector E = S + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
-						return static_cast<float>(FVector::DotProduct((W - E).GetSafeNormal(), HandAxis));
-					};
-					float Best = A, BestCos = -2.0f;
-					bool bFound = false;
+					// place on the gun stays, so the forearm's line decides the wrist; failing that, the NEAREST clear one whose
+					// wrist is still well inside a human's range, and only failing both the clear one with the straightest
+					// wrist: nothing is solved by bending a joint past what a body does. The straightest one alone was found
+					// at two swings far apart that bent the wrist nearly alike, and as the body settled the choice went from
+					// one to the other: the firing elbow swung 120 degrees round the arm on the sights looking down, the
+					// wrist through 80.8 on the way)
+					static const float HumanWrist = FMath::Cos(FMath::DegreesToRadians(77.5f));
+					float Best = A, BestCos = -2.0f, Near = A, BestFrom = A, NearFrom = A;
+					bool bFound = false, bNear = false;
 					for (int32 Step = 1; Step <= 32 && !bFound; ++Step)
 					{
 						for (const float Sign : { 1.0f, -1.0f })                 // (out first)
@@ -2908,23 +3009,80 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 							{
 								continue;
 							}
-							const float C = WristCos(Try);
-							if (C >= WristLimit)
+							const float H = HumanCos(Try);
+							if (H >= WristLimit && H >= HumanWrist)
 							{
 								Best = Try;
+								BestFrom = A + Sign * (Step - 1) * 0.07f;
 								bFound = true;
 								break;
 							}
-							if (C > BestCos)
+							if (!bNear && H >= HumanWrist)
+							{
+								Near = Try;
+								NearFrom = A + Sign * (Step - 1) * 0.07f;
+								bNear = true;
+							}
+							if (H > BestCos)
 							{
 								Best = Try;
-								BestCos = C;
+								BestCos = H;
 							}
 						}
 					}
+					if (!bFound && bNear)
+					{
+						Best = Near;
+						BestFrom = NearFrom;
+					}
+					// (to the edge itself, between the last swing short of it and the first past it: in steps the elbow ticked a step
+					// back and forth as the edge moved past one)
+					if (bFound || bNear)
+					{
+						auto Passes = [&](float Sw)
+						{
+							return Sw <= 2.2f && Sw >= -1.2f && Clear(Sw) >= 1.0f && HumanCos(Sw) >= HumanWrist && (!bFound || HumanCos(Sw) >= WristLimit);
+						};
+						float Short = BestFrom;
+						for (int32 Halve = 0; Halve < 6; ++Halve)
+						{
+							const float Mid = 0.5f * (Short + Best);
+							(Passes(Mid) ? Best : Short) = Mid;
+						}
+					}
 					Bend = Down * FMath::Cos(Best) + Out * FMath::Sin(Best);
+#if !UE_BUILD_SHIPPING
+					{
+						float* Sw = USOLocomotionAnimInstance::DebugSwing[SideIndex];
+						Sw[7] = Best; Sw[8] = bFound ? 1.0f : (bNear ? 3.0f : 2.0f);
+					}
+#endif
 				}
 			}
+		}
+		// The elbow's way out from the line to the wrist, held to a rate (the owner, 2026-11-23: "player elbow is still moving
+		// weirdly"): every choice above is made afresh each frame, and where two of them could each be right (the wrist's
+		// limit, the trunk's edge, a swing's frame turning over) the elbow leapt to the arm's other side and back, 30-45 cm in
+		// a frame. A choice that moves on smoothly is followed exactly; what changes sides turns round the line at most
+		// ElbowTurnRate a second (holding to last frame's choice instead made a hold depend on what came before it). Only
+		// the elbow moves: the hand stays on its target.
+		{
+			const float ElbowTurnRate = bReloadHold ? 24.0f : 14.0f;
+			// (followed exactly where it moves no faster than ElbowTurnRate, so nothing lags behind its swing; only what
+			// changes sides faster is held to that rate: eased by a spring the elbow lagged its swing turning on the sights
+			// looking down, the wrist went past 80, and fed the swing's own speed it took every wobble of it, 37 cm walking)
+			FVector ElbowWas = ElbowDirStart[SideIndex] - Dir * FVector::DotProduct(ElbowDirStart[SideIndex], Dir);
+			// (an update that passes no time holds the elbow where it was: taken as no limit at all, one snapped it 29 cm in a
+			// frame as a sprint began; a long hitch, or a first frame, takes the swing whole)
+			if (ElbowDt >= 0.0f && ElbowDt < 0.25f && ElbowWas.Normalize(1e-3f))
+			{
+				const float ElbowToGo = FMath::Atan2(static_cast<float>(FVector::DotProduct(FVector::CrossProduct(ElbowWas, Bend), Dir)), static_cast<float>(FVector::DotProduct(ElbowWas, Bend)));
+				// (never quicker: let through at 30 a second where the wrist on the way neared its limit, an elbow went 70 degrees
+				// round the arm in one frame at 25 frames a second, 28 cm, coming onto the sights)
+				const float Most = ElbowTurnRate * ElbowDt;
+				Bend = FQuat(Dir, FMath::Clamp(ElbowToGo, -Most, Most)).RotateVector(ElbowWas);
+			}
+			ElbowDir[SideIndex] = Bend;
 		}
 		const FVector Elbow = S + Dir * Along + Bend * Height;
 		const FVector Wrist = S + Dir * D;

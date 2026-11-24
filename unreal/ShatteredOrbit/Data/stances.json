@@ -1,5 +1,5 @@
 {
-  "_doc": "The third-person combat stance, one profile per class of gun (the owner, 2026-11-23: a confident, aggressive, disciplined military combat stance; never a pose per gun). Read at runtime (SOStance.h). families: a gun's family (game_data.json archetypes' family) -> its class. combatSeconds: how long the gun stays up after the last shot, aim, reload or hit; raiseTime / lowerTime: how fast it comes up from relaxed and goes back down. Per class. The gun: readyShift / aimShift (cm, actor axes forward, right, up): where a long gun's butt rides in the right shoulder pocket at the ready and on the sights; readyDip: the muzzle's dip at the ready (deg); handHold / handAimHold: a handgun's grip from the shoulders' middle (cm); relaxOffset / relaxRot: the relaxed carry (the owner, 2026-11-23: the gun seen from the eyes idle and walking): the gun at the ready turned by relaxRot (pitch, yaw, roll in the body's facing: the muzzle down and turned in) about a point between the firing hand's place on it (relaxPivot 0, the default) and the support hand's (1: a launcher's fore end is so far out that turned about the firing hand it left the support arm's reach), and moved by relaxOffset (cm, forward, right, up); relaxReach: relaxed, the gun comes in until the support hand is within this share of its arm (the arms easy; none = as at the ready). frameDown / frameDrop / frameAcross / frameSide / frameBack: off the sights in first person the camera sits frameBack cm behind the eyes (inside the head and the neck, which its own camera never sees: 4 cm aside at most, or the camera stood at the jaw's side over the throat) and settles up to frameDrop cm under them and up to frameSide cm toward the gun's side so that the sight of the gun at the ready lies frameDown of the way down the picture and frameAcross of the way across, for the player's field of view and the picture's shape (the owner, 2026-11-23: \"the pistol and hand cannon are good but the rest are bad and need to be in the screen more just like the pistol/hand cannon ... automated because what if we have a fov slider\"); the handguns as the owner saw them (their sight 65 % down at 95 degrees), the long guns like them; the body is not moved for it; looking down or up the camera comes back into the eyes (by 55 degrees: set behind them it saw down through the body).",
+  "_doc": "The third-person combat stance, one profile per class of gun (the owner, 2026-11-23: a confident, aggressive, disciplined military combat stance; never a pose per gun). Read at runtime (SOStance.h). families: a gun's family (game_data.json archetypes' family) -> its class. combatSeconds: how long the gun stays up after the last shot, aim, reload or hit; raiseTime / lowerTime: how fast it comes up from relaxed and goes back down. Per class. The gun: readyShift / aimShift (cm, actor axes forward, right, up): where a long gun's butt rides in the right shoulder pocket at the ready and on the sights; readyDip: the muzzle's dip at the ready (deg); handHold / handAimHold: a handgun's grip from the shoulders' middle (cm); relaxOffset / relaxRot: the relaxed carry (the owner, 2026-11-23: the gun seen from the eyes idle and walking): the gun at the ready turned by relaxRot (pitch, yaw, roll in the body's facing: the muzzle down and turned in) about a point between the firing hand's place on it (relaxPivot 0, the default) and the support hand's (1: a launcher's fore end is so far out that turned about the firing hand it left the support arm's reach), and moved by relaxOffset (cm, forward, right, up); relaxReach: relaxed, the gun comes in until the support hand is within this share of its arm (the arms easy; none = as at the ready). frameDown / frameDrop / frameAcross / frameSide / frameBack: off the sights in first person the camera sits frameBack cm behind the eyes (inside the head and the neck, which its own camera never sees: 4 cm aside at most, or the camera stood at the jaw's side over the throat) and settles up to frameDrop cm under them and up to frameSide cm toward the gun's side so that the sight of the gun at the ready lies frameDown of the way down the picture and frameAcross of the way across, for the player's field of view and the picture's shape (the owner, 2026-11-23: \"the pistol and hand cannon are good but the rest are bad and need to be in the screen more just like the pistol/hand cannon ... automated because what if we have a fov slider\"); the handguns as the owner saw them (their sight 65 % down at 95 degrees), the long guns like them; no more than 5 cm under the eyes (at 9 the owner, 2026-11-23: \"it feels like the player is very short like the gun is too low\": the long guns are held higher instead, readyShift / aimShift); the body is not moved for it; looking down or up the camera comes back into the eyes (by 55 degrees: set behind them it saw down through the body).",
   "combatSeconds": 8.0,
   "raiseTime": 0.18,
   "lowerTime": 0.7,
@@ -18,11 +18,11 @@
   },
   "classes": {
     "smg": {
-      "readyShift": [2, -3, 5],
+      "readyShift": [2, -3, 7],
       "aimShift": [1.5, -2.5, 7.5],
       "readyDip": 0,
-      "relaxOffset": [-2, 4, -2],
-      "relaxRot": [-6, -20, -10], "frameDown": 0.68, "frameDrop": 9, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxOffset": [-2, 4, 0],
+      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
       "elbowSwing": [0.7, 0.35],
       "elbowSwingAim": [0.6, 0.3],
       "wristShare": [0.0, 0.0],
@@ -42,11 +42,11 @@
       "turnStep": 18
     },
     "rifle": {
-      "readyShift": [2, 0, 5],
+      "readyShift": [2, 0, 7],
       "aimShift": [1.5, -2.5, 7],
       "readyDip": 0,
-      "relaxOffset": [-2, 4, -2],
-      "relaxRot": [-6, -20, -10], "frameDown": 0.68, "frameDrop": 9, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxOffset": [-2, 4, 0],
+      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
       "elbowSwing": [0.7, 0.35],
       "elbowSwingAim": [0.6, 0.3],
       "wristShare": [0.0, 0.0],
@@ -66,11 +66,11 @@
       "turnStep": 18
     },
     "lmg": {
-      "readyShift": [2, 0, 4],
+      "readyShift": [2, 0, 5.5],
       "aimShift": [1, -2, 5.5],
       "readyDip": 2,
-      "relaxOffset": [-2, 4, -2],
-      "relaxRot": [-5, -17, -8], "frameDown": 0.68, "frameDrop": 9, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxOffset": [-2, 4, 0],
+      "relaxRot": [-3, -17, -8], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
       "elbowSwing": [0.65, 0.55],
       "elbowSwingAim": [0.55, 0.5],
       "wristShare": [0.0, 0.0],
@@ -93,8 +93,8 @@
       "readyShift": [2, 0, 5],
       "aimShift": [1.5, -3, 8],
       "readyDip": 0,
-      "relaxOffset": [-2, 4, -2],
-      "relaxRot": [-6, -20, -10], "frameDown": 0.68, "frameDrop": 9, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8, "relaxReach": 0.87,
+      "relaxOffset": [-2, 4, 0],
+      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8, "relaxReach": 0.87,
       "elbowSwing": [0.7, 0.35],
       "elbowSwingAim": [0.6, 0.3],
       "wristShare": [0.0, 0.0],
@@ -114,11 +114,11 @@
       "turnStep": 18
     },
     "shotgun": {
-      "readyShift": [2, 0, 5],
+      "readyShift": [2, 0, 7],
       "aimShift": [1.5, -2.5, 7],
       "readyDip": 0,
-      "relaxOffset": [-2, 4, -2],
-      "relaxRot": [-6, -20, -10], "frameDown": 0.68, "frameDrop": 9, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxOffset": [-2, 4, 0],
+      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
       "elbowSwing": [0.7, 0.4],
       "elbowSwingAim": [0.6, 0.35],
       "wristShare": [0.0, 0.0],
@@ -139,7 +139,7 @@
     },
     "pistol": {
       "handHold": [54, 4, 3],
-      "handAimHold": [58, 3, 6], "frameDown": 0.65, "frameDrop": 6,
+      "handAimHold": [58, 3, 6], "frameDown": 0.65, "frameDrop": 5,
       "relaxOffset": [-2, 8, -4],
       "relaxRot": [-14, -14, -10],
       "elbowSwing": [0.5, 0.45],
@@ -161,11 +161,11 @@
       "turnStep": 18
     },
     "heavy": {
-      "readyShift": [2, 0, 4],
+      "readyShift": [2, 0, 5.5],
       "aimShift": [0.5, -1.5, 6],
       "readyDip": 2,
       "relaxOffset": [-2, 0, -2],
-      "relaxRot": [-5, -17, -8], "frameDown": 0.68, "frameDrop": 9, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8, "relaxPivot": 1, "relaxReach": 0.88,
+      "relaxRot": [-5, -17, -8], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8, "relaxPivot": 1, "relaxReach": 0.88,
       "elbowSwing": [0.65, 0.55],
       "elbowSwingAim": [0.55, 0.5],
       "wristShare": [0.0, 0.0],

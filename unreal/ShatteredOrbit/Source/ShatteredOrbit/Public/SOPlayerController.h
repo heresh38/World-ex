@@ -58,6 +58,9 @@ protected:
 private:
 	// Developer tools (SOPlayerControllerDev.cpp: empty bodies in a shipping build)
 	void DevTick(float DeltaTime);
+	/** Before the frame's input: a capture's turn of the view goes in where a mouse's does, so the body faces it in the
+	 *  same frame (set after the input, the body faced the turn a frame late and the shoulder camera shook against it). */
+	void DevPreTick(float DeltaTime);
 	/** -SONetCheck=host|join on the command line starts the two-player check on this machine's own controller. */
 	void DevBegin();
 	void CaptureStep();

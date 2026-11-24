@@ -18,6 +18,7 @@
 #include "SOCharacter.h"
 #include "SOCharacterMovementComponent.h"
 #include "SOInventoryComponent.h"
+#include "SOLocomotionAnimInstance.h"
 #include "SOLootLibrary.h"
 #include "SOLootTypes.h"
 #include "SOPlayerState.h"
@@ -178,6 +179,10 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 			Seen.Value = FMath::Max(Seen.Value, M[i]);
 		}
 	};
+	// (-SORangeTrace=<part of a state's name>: every frame of those states, settling included, as TRACE lines: the
+	// elbows, the wrists, the head on the chest and the chest on the hips)
+	FString Trace;
+	FParse::Value(FCommandLine::Get(), TEXT("SORangeTrace="), Trace);
 	auto Hold = [&](const FString& Name, float Seconds, TFunctionRef<void()> Each)
 	{
 		State = Name;
@@ -186,7 +191,24 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 		// sights, and the gun and the camera's springs take a third of a second to come round; a reload and a blow are
 		// measured whole)
 		const int32 Settle = Name.Contains(TEXT("reload")) || Name.Contains(TEXT("blow")) ? 0 : FMath::RoundToInt(0.35f / SOTest::Dt);
-		W.Run(Seconds, [&]() { Each(); Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt); if (++Frame > Settle && (Frame % 2) == 0) { Sample(); } });
+		const bool bTrace = !Trace.IsEmpty() && Name.Contains(Trace);
+		W.Run(Seconds, [&]()
+		{
+			Each();
+			Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt);
+			if (++Frame > Settle && (Frame % 2) == 0)
+			{
+				Sample();
+			}
+			float M[NumLimits];
+			if (bTrace && Measure(Body, M))
+			{
+				const float* Sw = USOLocomotionAnimInstance::DebugSwing[0];
+				AddInfo(FString::Printf(TEXT("TRACE %s %d%s: elbow R %.1f L %.1f, wrist R %.1f L %.1f, head %.1f / %.1f, chest %.1f / %.1f | swing A0 %.2f A1 %.2f A %.2f ask %.2f clear %.2f wrist %.1f trunk %.2f (%.0f)"),
+					*Name, Frame, Frame > Settle ? TEXT("") : TEXT(" (settling)"), M[6], M[7], M[8], M[9], M[0], M[1], M[3], M[4],
+					Sw[0], Sw[1], Sw[2], Sw[3], Sw[5], Sw[6], Sw[7], Sw[8]));
+			}
+		});
 	};
 
 	FRandomStream Rng(31);

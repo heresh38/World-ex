@@ -357,15 +357,22 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 		R.Pitch -= St.ReadyDip * (1.0f - Ads);                      // (at the ready the muzzle a touch under the line)
 		WantDir = R.Vector();
 	}
+	// (eased so a trace flicking between near and far things never snaps the gun, in the VIEW's own frame: the view's own
+	// turn is taken whole. Eased in the world's frame the gun trailed every turn of the view by a share that changed with
+	// each frame's length, and shook in the picture as the player turned, half a centimetre a frame at a quick turn: the
+	// owner, 2026-11-23, "Camera is still very shake in first person")
+	const FQuat ViewQ = Character->GetEyeTransform(true).GetRotation();
+	const FVector WantView = ViewQ.UnrotateVector(WantDir);
 	if (!bHoldDirValid || Dt > 0.2f)
 	{
-		HoldDir = WantDir;
+		HoldDirView = WantView;
 		bHoldDirValid = true;
 	}
 	else
 	{
-		HoldDir = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(HoldDir, WantDir), FMath::Min(1.0f, Dt * 30.0f)).RotateVector(HoldDir).GetSafeNormal();
+		HoldDirView = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(HoldDirView, WantView), 1.0f - FMath::Exp(-30.0f * Dt)).RotateVector(HoldDirView).GetSafeNormal();
 	}
+	HoldDir = ViewQ.RotateVector(HoldDirView);
 	FRotator AimRot = HoldDir.Rotation(); // level roll
 	if (!bHandgun)
 	{

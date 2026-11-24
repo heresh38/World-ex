@@ -831,9 +831,11 @@ what if we have a fov slider"; a fixed 5 cm under the eyes framed one field of v
 gun's sight is only 13 to 19 cm ahead of the eyes (measured, `FRAMING` lines), so from the eyes it lies in the picture's
 far corner whatever the camera's height. Off the sights in first person the camera sits behind the eyes by the class's
 `frameBack` (long guns 8 cm: inside the head and the neck, which its own camera never sees) and settles under them and
-toward the gun's side as far as `frameDrop` / `frameSide` allow (long guns 9 / 4; aside no more than 4, or the camera
-stood at the jaw's side over the throat), so that the sight of the gun at the READY lies `frameDown` of the way down the
-picture and `frameAcross` across (long guns .68 / .62; the handguns .65 down, as the owner saw and approved them), worked
+toward the gun's side as far as `frameDrop` / `frameSide` allow (long guns 5 / 4: at 9 the owner, 2026-11-23: "it feels
+like the player is very short like the gun is too low in first person"; the long guns are held 2 cm higher instead, at
+the ready `readyShift` and relaxed `relaxOffset` / `relaxRot`; aside no more than 4, or the camera stood at the jaw's
+side over the throat), so that the sight of the gun at the READY lies `frameDown` of the way down the
+picture and `frameAcross` across (long guns .7 / .62; the handguns .65 down, as the owner saw and approved them), worked
 out for the field of view the player has set (`USOGameUserSettings::FieldOfView`, `GetHipFov`) and the picture's shape
 (`USOViewmodelComponent::HoldTransform`, `ASOCharacter::SetFrame`, `Data/stances.json`). Worked out from the ready hold
 and the camera as it follows the head (`GetHeadCameraCS`: the walk's lean in it), only while the view is near level and
@@ -841,9 +843,11 @@ off the sights (the last answer holds otherwise), eased slowly (a gun or field-o
 moved for it (moved up or in, a long gun put the firing elbow across the chest). Looking down or up the framing gives way,
 the camera back in the eyes by 55 degrees (set behind them, looking at the floor it saw down through the body). The SMG
 class rides 3 cm further in at the ready (`readyShift`: its short fore end leaves it at the pocket, 16 cm right of the
-eyes). At 95 degrees the rifle's sight is 66 % across and 71 % down (65 % of the gun in the picture at the ready, 48
-before), the SMG's 76 / 69; at 75 degrees the camera can go only so far inside the head and a long gun sits nearer the
-corner. Test `ShatteredOrbit.Camera.SteadyAtAnyFov` (below). And on a sprint each gun is carried as its data says (`"carry"` in
+eyes). At 95 degrees the rifle's sight is 66 % across and 75 % down (58 % of the gun in the picture at the ready; 71 %
+down with the camera 9 cm under the eyes, which read as a short player), the SMG's 70 / 71; at 75 degrees the camera can
+go only so far inside the head and a long gun sits nearer the corner. Where the camera stands (set 50's `TRACE` lines, the
+capsule's middle 90 cm up): relaxed 167 cm, at the ready 161 (the stance's bent knees and lean take the head down 5 cm;
+the eyes of the 184 cm male stand at 171). Test `ShatteredOrbit.Camera.SteadyAtAnyFov` (below). And on a sprint each gun is carried as its data says (`"carry"` in
 `Data/game_data.json` -> `USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready,
 across the chest, muzzle down and to the left; `CarryOffset` / `CarryRot`), `short` (SMGs: up part of the way,
 `ShortCarry*`), `high` (handguns: up by the face in both hands, muzzle to the sky, `HandgunCarry*`). A gun's length does
@@ -1518,10 +1522,41 @@ stock's raise is the chest's and turns with the bow, the collarbones and the elb
 frame, the gun points along the eye's line), and the ELBOWS ARE KEPT OUT OF THE TRUNK: an ellipse round the hips-to-neck
 line in the chest's frame (`TrunkHalfWidth` 15.5, `TrunkHalfDepth` 11, narrower at the waist), the arm's own thickness
 in it; an elbow or the middle of an arm inside it has its swing searched outward for one that is clear and leaves the
-wrist within its range (else the clear one with the straightest wrist). Test `ShatteredOrbit.Body.ArmsOutOfTheBody`;
+wrist within its range, else the NEAREST clear one whose wrist is within 77.5 degrees, either found to its edge (a
+bisection: in steps the elbow ticked back and forth as the edge moved past one); the clear one with the straightest wrist
+only failing both (alone, it was found at two swings far apart that bent the wrist nearly alike, and as the body settled
+the choice went from one to the other: the firing elbow swung 120 degrees round the arm, the wrist through 80.8). Test `ShatteredOrbit.Body.ArmsOutOfTheBody`;
 pictures set 40's `SO_hp_turn_<pitch>_<cam|front|side>` (on the sights, looking down 45 and 70 degrees, half a second
 into a turn to the left, from the player's own shoulder camera, ahead and beside). The firing wrist at the full look-down went from 120 degrees to about 60-80;
 a hand round a raked pistol grip is 60-75 degrees from its forearm (`ShatteredOrbit.Hold.TheGunIsSolid` allows 75).
+**The elbows keep to their side** (the owner, 2026-11-23: "player elbow is still moving weirdly in third person"; measured
+in the game, `SOCaptureSeries 1 50`'s `ELBOW` lines, the elbows leapt 30-45 cm in a frame walking with the view turning,
+turning on the spot and looking down): each frame's choice of swing round the shoulder-to-wrist line is made afresh, and
+where two could each be right (the wrist's limit, the trunk's edge, the swing's frame turning over) they took turns. Now
+(`USOLocomotionAnimInstance::ApplyHold`): the swing's frame holds still (its down turns toward the trunk's back where the
+arm hangs along the trunk's down, and its out keeps last frame's side where the arm's own side is unclear: it spun about
+a hanging arm and the elbow with it, 20 cm standing relaxed); the stance's pull toward the straightest wrist grows with
+how much the hand asks (`Ask` .15-.22) or how near the wrist comes to a human's limit (78.5-81.5 degrees) and is found to a
+hair, never switched on at a threshold (taken whole from an ask of .15 the firing elbow went from out at the side to across
+the body each time a walk carried the ask past it; read on the rest pose's axis the wrist was five degrees over the class's
+limit walking at the ready where the body's wrist was well within it, and the pull took the elbow 20 cm in and out with
+every step); the trunk's search runs only where the arm is IN the trunk (set off by the wrist near its limit too, a hard
+line, it went on and off with every step); the elbow follows its swing exactly but turns round the line no faster than 14
+radians a second, never quicker (24 in a reload, whose choreography moves the hands; let through at 30 where the wrist
+neared its limit, an elbow went 70 degrees round the arm in one frame at 25 frames a second), an update that passes no
+time holds it where it was (taken as no limit, one snapped 29 cm as a sprint began), kept from frame to frame in the proxy
+(`ElbowDir`, taken at the frame's start, so a pose evaluated twice is the same) and started afresh with another gun
+(`HoldSerial`). Eased by a spring it lagged its swing and the wrist went past 80; holding to last frame's choice made a
+hold depend on what came before it (both tried, both dropped). Measured (set 50 at about 135 frames a second, `ELBOW`
+lines, five guns): standing, walking, turning and strafing at the ready and on the sights the elbows move 7 cm at most and
+under 0.5 cm a frame (22-45 cm before); the long
+guns' hands go no higher at the ready than `readyShift` +2 cm: at +4 the wrist asks past its range and the firing elbow
+hunts, 28-31 cm walking. Every check against a
+human's range reads the wrist as the body is measured (`HandLine`: the forearm's line against the line to the middle
+finger's root; the target's own axis is the rest pose's forearm line, and a resting hand is not straight on its forearm:
+near the limit the two read up to five degrees apart, either way). `ShatteredOrbit.Body.HumanRange -SOHoldOnly=<arch>
+-SORangeTrace=<part of a state's name>` logs every frame of those states, settling included (`TRACE` lines: the elbows,
+the wrists, the head and the chest, and the firing arm's swing: `USOLocomotionAnimInstance::DebugSwing`).
 Where the stock, the grip, the trigger and the fore end are comes from each gun's own shape (the rig's bounds and
 `FitGrip`), never from hand-written numbers per gun. **Pass 3** (2026-11-21): letting the sprint go eases down to the run over `SprintEaseTime` 0.35 s (it braked
 to it in a tenth: a lurch); the pad's B is one action (`IA_PadCrouchDodge`, `ASOCharacter::HandlePadCrouchDodgePressed`:
@@ -1588,7 +1623,11 @@ of a second: read from the speed it switched in a tenth of a second as the body 
 gun's ride below takes the same); walking off the sights the gun's place against the eyes' STEADY place
 (`ASOCharacter::GetSteadyEyeCS`: the view's turn at the eyes' height on the capsule's middle) follows the body's hold
 through a spring (`InEyesFollowMoving` 9: the walk's shoulder step and twist come as a slow sway; standing, reloading
-and sprinting it is the hold as it is: smoothed in a reload the gun swung out of both arms' reach). Never against the
+and sprinting it is the hold as it is: smoothed in a reload the gun swung out of both arms' reach). What the gun points at
+(the trace ahead of it) is eased in the VIEW's own frame (`HoldDirView`: the view's turn taken whole; the owner,
+2026-11-23, "Camera is still very shake in first person": eased in the world's frame the gun trailed every turn of the
+view by a share that changed with each frame's length and shook in the picture, half a centimetre a frame at a quick
+turn, half a millimetre now). Never against the
 camera itself: it carries the head's bob and comes back from a sight, and the gun smoothed against it dragged behind it
 coming off the sights (the hand round the heavy machine gun's grip bent 84 degrees). The last support reach is a safety
 at `SupportReachLast` 0.93 (at the first one's 0.87 the walk pushed the rifle's fore end over and back and the gun
@@ -1610,7 +1649,14 @@ frames a second, the rifle, the SMG and the pistol standing, turning by hand, se
 off: no SHAKE (nothing turns back three times in a fifth of a second), steady within 6 px / 1.5 mm of turn a frame at
 60 frames a second (the same motion turns four times as far a frame at 30), a move (the aim, the lean into a walk)
 within four times an eased slide's turn, and the guns framed (`FOVSTEADY` and `FRAMING` lines); the shake probe is
-`SOCaptureSeries 1 50` (`SHAKE` lines; `-SOFov=`, `-SOMaxFps=`, `-SOEyeDrop=`). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
+`SOCaptureSeries 1 50` (`SHAKE` lines: the camera and the gun in the picture; `ELBOW` lines: each elbow in the actor's
+frame, how far it went in a frame at most, its jerks and turns back; standing, walking, setting off, turning by hand and
+fast, walking and turning, onto the sights and off, on the sights looking down and up, crouched, sprinting, and third
+person on the sights, turning, looking down turning, walking, strafing; `-SOFov=`, `-SOMaxFps=`, `-SOEyeDrop=`,
+`-SOTrace=<phase>` every frame's camera, head, hips and speed, `-SOElbowTrace` the swing's choices; a capture's turn is
+given before the controller's own tick, `ASOPlayerController::DevPreTick`: given after it, the view turned a frame after
+the body and the third-person camera jittered in the probe alone; a sprint's camera "jumps" there are the steps' own
+smoothing, the actor dropping as the camera keeps its height). Test `ShatteredOrbit.Anim.CrouchFirstPerson` (the eyes on the head, measured against the
 pose they were taken from). Braking out of a run plays the body's `Stop` clip (by how fast it was going);
 a turn on the spot is stepped (`TurnLift`: the foot on the side of the turn comes off the ground first); on a vault,
 mantle or climb the gun is put away and the hands go onto the edge. Test

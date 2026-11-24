@@ -110,6 +110,7 @@ bool ASOPlayerController::AddDefaultMappingContext()
 
 void ASOPlayerController::PlayerTick(float DeltaTime)
 {
+	DevPreTick(DeltaTime); // (a capture's turn of the view, where a mouse's goes in: nothing in a shipping build)
 	Super::PlayerTick(DeltaTime);
 	DevTick(DeltaTime); // the developer tools' share of the tick (nothing in a shipping build)
 }

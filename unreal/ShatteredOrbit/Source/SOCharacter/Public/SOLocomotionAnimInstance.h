@@ -135,6 +135,8 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	/** Its own player's camera is in this head (first person): the head shrinks into its joint, on this machine only. */
 	bool bHideHead = false;
 	bool bCarried = false;
+	/** The held gun is being reloaded (its choreography moves the hands: the elbows follow it, ApplyHold). */
+	bool bReloadHold = false;
 	bool bHeadFree = false;     // the head carries its clip's own motion under the aim (a player's body, the stand-in); a creature's is held on its aim      // the gun carried low (a sprint, the armoury's stand-in): the firing elbow stays down
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
@@ -154,6 +156,20 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 
 	/** How much of the arm / stance solve shows (1 = all; hands coming onto and off a ledge blend through it). */
 	float HoldAlpha = 1.0f;
+
+	/** Each elbow's way out from its shoulder-to-wrist line last frame (ApplyHold): chosen afresh every frame it leapt to
+	 *  the arm's other side when the swing's search flipped (30-45 cm in a frame walking with the mouse moving, turning,
+	 *  looking down; the owner, 2026-11-23: "player elbow is still moving weirdly"), so it turns round the line to the wrist
+	 *  no faster than a set rate. The hands are unaffected: only the elbow turns. Taken from the frame's start (PreUpdate),
+	 *  so evaluating the pose twice in a frame gives the same pose. */
+	mutable FVector ElbowDir[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	FVector ElbowDirStart[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	/** The swing's "out" round each arm last frame (ApplyHold's SwingFrame keeps to its side where the arm's own side is unclear). */
+	mutable FVector SwingOut[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	FVector SwingOutStart[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	/** Which gun the elbows' memory above belongs to (USOLocomotionAnimInstance::HoldSerial): another gun starts it afresh. */
+	int32 HoldSerial = 0;
+	float ElbowDt = 0.0f;
 
 	// Body motion (third-person bodies; see USOLocomotionAnimInstance).
 	float WarpYaw = 0.0f;
@@ -373,6 +389,11 @@ public:
 	bool bHideHead = false;
 	/** The gun is carried low (a sprint, the armoury's stand-in): the firing elbow stays by the side. */
 	bool bCarried = false;
+	/** The held gun is being reloaded (its choreography moves the hands: the elbows follow it, ApplyHold). */
+	bool bReloadHold = false;
+	/** Counted up whenever the gun in the hands changes (the proxy's elbow memory starts afresh with another gun). */
+	int32 HoldSerial = 0;
+	TWeakObjectPtr<const class USOGunRigComponent> HoldSerialRig;
 	bool bHeadFree = false;     // the head carries its clip's own motion under the aim (a player's body, the stand-in); a creature's is held on its aim
 	float AimPitch = 0.0f;
 	float Blade = 0.0f;
@@ -426,7 +447,7 @@ public:
 	/** The last elbow swing solved (not in shipping; a measurement aid for the capture series): per side the swing
 	 *  the pole asked (rad from straight down, + outward), the one that straightens the wrist, what was taken, how
 	 *  much the hand asked, and the most allowed. */
-	static float DebugSwing[2][5];
+	static float DebugSwing[2][9];
 	/** The turn that brings a finger's line (FingerDir) Amount of the way toward the middle finger's, in the palm's plane. */
 	static FQuat FingersTogether(const FVector& FingerDir, const FVector& MiddleDir, const FVector& Palm, float Amount);
 	/** How far the snug way brings the fingers together (FSOFingerPose::Together). */

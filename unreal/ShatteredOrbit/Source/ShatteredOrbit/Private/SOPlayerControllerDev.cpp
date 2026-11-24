@@ -74,6 +74,7 @@ void ASOPlayerController::SOFace(const FString& Key, float Value) {}
 void ASOPlayerController::SOFxStats(int32 bReset) {}
 void ASOPlayerController::FinishBenchmark() {}
 void ASOPlayerController::DevTick(float DeltaTime) {}
+void ASOPlayerController::DevPreTick(float DeltaTime) {}
 void ASOPlayerController::DevBegin() {}
 
 #else
@@ -1037,9 +1038,10 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		{
 			bool bOn = false;
 			float Jitter = 0.0f;
+			float Sweep = 0.0f, SweepTime = 0.0f;     // (looking down and up: degrees down at most, over two seconds)
 			FRandomStream Hand = FRandomStream(7);
 			FString Label;
-			TArray<FVector> Cam, Gun;
+			TArray<FVector> Cam, Gun, ElbowL, ElbowR;
 			TArray<FQuat> Rot;
 			TArray<float> Dt;
 			FTSTicker::FDelegateHandle Handle;
@@ -1056,6 +1058,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				// (a hand on a mouse: small turns every frame, this way and that)
 				PC->SetControlRotation(PC->GetControlRotation() + FRotator(Probe->Hand.FRandRange(-Probe->Jitter, Probe->Jitter), Probe->Hand.FRandRange(-Probe->Jitter, Probe->Jitter), 0.0f));
 			}
+			if (PC && Probe->Sweep > 0.0f)
+			{
+				// (looking down and back up, eased, over two seconds)
+				Probe->SweepTime += Dt;
+				const float Pitch = -Probe->Sweep * 0.5f * (1.0f - FMath::Cos(2.0f * PI * Probe->SweepTime / 2.0f));
+				PC->SetControlRotation(FRotator(Pitch, PC->GetControlRotation().Yaw, 0.0f));
+			}
 			if (!Probe->bOn || !H || !PC->PlayerCameraManager)
 			{
 				return true;
@@ -1065,10 +1074,38 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Probe->Cam.Add(H->GetActorTransform().InverseTransformPosition(V.Location));
 			Probe->Rot.Add(V.Rotation.Quaternion());
 			Probe->Gun.Add(H->GetViewmodel() ? Cam.InverseTransformPosition(H->GetViewmodel()->GetComponentLocation()) : FVector::ZeroVector);
+			// (the elbows on the body, the actor's frame: the forearm's root)
+			const USkeletalMeshComponent* Body = H->GetMesh();
+			Probe->ElbowL.Add(Body ? H->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(TEXT("forearm_L"))) : FVector::ZeroVector);
+			Probe->ElbowR.Add(Body ? H->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(TEXT("forearm_R"))) : FVector::ZeroVector);
 			Probe->Dt.Add(Dt);
+			FString TraceOf;
+			if (FParse::Value(FCommandLine::Get(), TEXT("SOTrace="), TraceOf) && Probe->Label.Contains(TraceOf) && Body)
+			{
+				// (one phase frame by frame: the camera and the head on the body, the hips, how the body moves)
+				const FVector Hd = H->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(TEXT("head")));
+				const FVector Hp = H->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(TEXT("hips")));
+				const USOCharacterMovementComponent* Mv = H->GetSOMovement();
+				UE_LOG(LogShatteredOrbit, Display, TEXT("TRACE %s %d: camera %.1f %.1f %.1f head %.1f %.1f %.1f hips %.1f %.1f %.1f; speed %.0f, state %d, crouched %d, sprinting %d, dt %.1f ms"),
+					*Probe->Label, Probe->Cam.Num(), Probe->Cam.Last().X, Probe->Cam.Last().Y, Probe->Cam.Last().Z, Hd.X, Hd.Y, Hd.Z, Hp.X, Hp.Y, Hp.Z,
+					H->GetVelocity().Size2D(), Mv ? static_cast<int32>(Mv->GetMovementState()) : -1, H->bIsCrouched ? 1 : 0, Mv && Mv->IsSprinting() ? 1 : 0, 1000.0f * Dt);
+			}
+			FString ElbowOf = TEXT("ready walking");        // (-SOElbowTrace, or -SOElbowTrace=<part of a phase's name>)
+			const bool bElbowTrace = FParse::Param(FCommandLine::Get(), TEXT("SOElbowTrace")) || FParse::Value(FCommandLine::Get(), TEXT("SOElbowTrace="), ElbowOf);
+			if (bElbowTrace && Probe->Label.Contains(ElbowOf) && Body && Probe->ElbowR.Num() % 2 == 0)
+			{
+				// (the firing elbow frame by frame: where it is on the body, the swing the hold pass asked for, and the hand
+				// and the shoulder it hangs between)
+				const float* Sw = USOLocomotionAnimInstance::DebugSwing[0];
+				const FVector Sh = H->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(TEXT("upperarm_R")));
+				const FVector Hd = H->GetActorTransform().InverseTransformPosition(Body->GetBoneLocation(TEXT("hand_R")));
+				const FVector& El = Probe->ElbowR.Last();
+				UE_LOG(LogShatteredOrbit, Display, TEXT("ELBOWTRACE %s %d: elbow %.1f %.1f %.1f shoulder %.1f %.1f %.1f hand %.1f %.1f %.1f; swing asked %.2f straight %.2f taken %.2f ask %.2f; trunk clear %.2f wrist %.1f swing %.2f (%.0f)"),
+					*Probe->Label, Probe->ElbowR.Num(), El.X, El.Y, El.Z, Sh.X, Sh.Y, Sh.Z, Hd.X, Hd.Y, Hd.Z, Sw[0], Sw[1], Sw[2], Sw[3], Sw[5], Sw[6], Sw[7], Sw[8]);
+			}
 			return true;
 		}));
-		auto Start = [Probe](const FString& Label) { Probe->Label = Label; Probe->Cam.Reset(); Probe->Gun.Reset(); Probe->Rot.Reset(); Probe->Dt.Reset(); Probe->bOn = true; };
+		auto Start = [Probe](const FString& Label) { Probe->Label = Label; Probe->Cam.Reset(); Probe->Gun.Reset(); Probe->ElbowL.Reset(); Probe->ElbowR.Reset(); Probe->Rot.Reset(); Probe->Dt.Reset(); Probe->bOn = true; };
 		auto Stop = [Probe]()
 		{
 			Probe->bOn = false;
@@ -1112,6 +1149,38 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			}
 			UE_LOG(LogShatteredOrbit, Display, TEXT("SHAKE %s: %d frames, %.1f ms (at worst %.1f); the camera on the body sways %.2f x %.2f x %.2f cm, jerks %.3f cm a frame at worst (%.3f rms), turns back %d of %d steps; its turn jerks %.3f deg; the gun against it jerks %.3f cm"),
 				*Probe->Label, N, 1000.0f * DtSum / N, 1000.0f * DtMax, Box.GetSize().X, Box.GetSize().Y, Box.GetSize().Z, Jerk, FMath::Sqrt(JerkSum / FMath::Max(N - 2, 1)), Flips, Steps, RotJerk, GunJerk);
+			// the elbows on the body: how far each moves at worst in a frame, how hard it turns (second differences), how
+			// often its motion turns back (a twitch turns back every frame or two)
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const TArray<FVector>& E = Side ? Probe->ElbowR : Probe->ElbowL;
+				float Step = 0.0f, EJerk = 0.0f;
+				int32 EFlips = 0, ESteps = 0;
+				FBox EBox(ForceInit);
+				for (int32 i = 0; i < E.Num(); ++i)
+				{
+					EBox += E[i];
+					if (i >= 1)
+					{
+						Step = FMath::Max(Step, static_cast<float>((E[i] - E[i - 1]).Size()));
+					}
+					if (i >= 2)
+					{
+						EJerk = FMath::Max(EJerk, static_cast<float>((E[i] - 2.0 * E[i - 1] + E[i - 2]).Size()));
+						const FVector A = E[i] - E[i - 1], B = E[i - 1] - E[i - 2];
+						for (int32 k = 0; k < 3; ++k)
+						{
+							if (FMath::Abs(A[k]) > 0.05 && FMath::Abs(B[k]) > 0.05)
+							{
+								++ESteps;
+								EFlips += A[k] * B[k] < 0.0 ? 1 : 0;
+							}
+						}
+					}
+				}
+				UE_LOG(LogShatteredOrbit, Display, TEXT("ELBOW %s %s: moves %.2f x %.2f x %.2f cm, %.2f cm a frame at most, jerks %.2f cm a frame at worst, turns back %d of %d steps"),
+					*Probe->Label, Side ? TEXT("right") : TEXT("left"), EBox.GetSize().X, EBox.GetSize().Y, EBox.GetSize().Z, Step, EJerk, EFlips, ESteps);
+			}
 		};
 		Do(6.0f, [=, this]()
 		{
@@ -1245,8 +1314,24 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			Phase(TEXT("aimed standing, the hand on the mouse"), [=, this]() { Aim(true); Probe->Jitter = 0.08f; }, 2.0f);
 			Phase(TEXT("ready walking, the hand on the mouse"), [=, this]() { Aim(false); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } Probe->Jitter = 0.08f; CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
 			Act([=, this]() { Probe->Jitter = 0.0f; CaptureMove = FVector2D::ZeroVector; });
+			// (more of what a player does: aimed on the move, a fast turn, turning while walking, looking down and back up,
+			// crouched, sprinting)
+			Phase(TEXT("aimed walking"), [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } Aim(true); CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Phase(TEXT("ready fast turning"), [=, this]() { Aim(false); CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureTurn = -240.0f; }, 1.5f);
+			Phase(TEXT("ready walking turning"), [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureTurn = -90.0f; CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Phase(TEXT("ready looking down and up"), [=, this]() { CaptureTurn = 0.0f; CaptureMove = FVector2D::ZeroVector; if (ASOCharacter* H = Hero()) { H->MarkCombat(); } Probe->Sweep = 50.0f; Probe->SweepTime = 0.0f; }, 2.0f);
+			Phase(TEXT("relaxed looking down and up"), [=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } Probe->Sweep = 50.0f; Probe->SweepTime = 0.0f; }, 2.0f);
+			Phase(TEXT("crouched walking"), [=, this]() { Probe->Sweep = 0.0f; Look(0.0f); if (ASOCharacter* H = Hero()) { H->MarkCombat(); H->Crouch(); } CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Phase(TEXT("sprinting"), [=, this]() { if (ASOCharacter* H = Hero()) { H->UnCrouch(); H->HandleSprintPressed(); } CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Act([=, this]() { if (ASOCharacter* H = Hero()) { H->HandleSprintReleased(); } CaptureMove = FVector2D::ZeroVector; });
+			// third person (how the others see the body): the elbows above all
 			Phase(TEXT("third person aimed"), [=, this]() { CaptureTurn = 0.0f; View(ESOViewMode::ThirdPerson); Aim(true); }, 2.0f);
-			Act([=, this]() { Aim(false); View(ESOViewMode::FirstPerson); CaptureMove = FVector2D::ZeroVector; CaptureTurn = 0.0f; });
+			Phase(TEXT("third person ready turning"), [=, this]() { Aim(false); if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureTurn = -90.0f; }, 1.5f);
+			Phase(TEXT("third person aimed looking down turning"), [=, this]() { Aim(true); Look(-50.0f); CaptureTurn = 90.0f; }, 1.5f);
+			Phase(TEXT("third person ready walking"), [=, this]() { Aim(false); Look(0.0f); CaptureTurn = 0.0f; if (ASOCharacter* H = Hero()) { H->MarkCombat(); } CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Phase(TEXT("third person aimed strafing"), [=, this]() { Aim(true); CaptureMove = FVector2D(1.0f, 0.0f); }, 1.5f);
+			Phase(TEXT("third person relaxed walking"), [=, this]() { Aim(false); if (ASOCharacter* H = Hero()) { H->CancelCombat(); } CaptureMove = FVector2D(0.0f, 1.0f); }, 1.5f);
+			Act([=, this]() { Aim(false); Look(0.0f); View(ESOViewMode::FirstPerson); CaptureMove = FVector2D::ZeroVector; CaptureTurn = 0.0f; });
 			Do(0.8f, []() {});
 		}
 		Do(0.5f, [Probe]() { FTSTicker::GetCoreTicker().RemoveTicker(Probe->Handle); });
@@ -5173,12 +5258,16 @@ void ASOPlayerController::SOBenchmark(float Seconds, int32 bQuitWhenDone)
 	UE_LOG(LogShatteredOrbit, Log, TEXT("Benchmark: 5 s warm-up, then %.0f s"), BenchLeft);
 }
 
-void ASOPlayerController::DevTick(float DeltaTime)
+void ASOPlayerController::DevPreTick(float DeltaTime)
 {
 	if (CaptureTurn != 0.0f)
 	{
 		SetControlRotation(GetControlRotation() + FRotator(0.0f, CaptureTurn * DeltaTime, 0.0f));
 	}
+}
+
+void ASOPlayerController::DevTick(float DeltaTime)
+{
 	if (!CaptureMove.IsZero())
 	{
 		if (APawn* P = GetPawn())

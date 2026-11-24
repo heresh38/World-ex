@@ -177,6 +177,8 @@ private:
 	float ReloadK = 0.0f;
 	float WallK = 0.0f, WallV = 0.0f;
 	FVector HoldDir = FVector::ForwardVector;
+	/** HoldDir in the view's own frame, where it is eased (HoldTransform). */
+	FVector HoldDirView = FVector::ForwardVector;
 	bool bHoldDirValid = false;
 	/** How far under the eyes the camera settles to frame the gun in the picture (FSOStance::FrameDown, cm), eased. */
 	float FrameDrop = 0.0f, FrameDropVel = 0.0f, FrameWant = 0.0f;
