@@ -645,8 +645,9 @@ and up to four targets, here both from OUR clips. Our male body's clips go onto 
 anatomical frame (along the bone, the body's forward square to it; both rigs' T-poses), the transitions are generated
 (3.4 ms each on the RTX 4070 Ti), come back onto our bones, the planted feet held where it says they are down (its feet
 slide 7-45 cm/s as generated, 0.3-14 held), measured and rendered. Installed outside the repository
-(`C:/Dev/motionbricks`, its own `uv` environment, an NVIDIA card). Nothing of it is in the game: the owner decides from
-the pictures (`Saved/MotionBricksTrial`).
+(`C:/Dev/motionbricks`, its own `uv` environment, an NVIDIA card). Nothing of it is in the game, and it is ON HOLD (the
+owner, 2026-11-23: "hold of on it for now", having heard that the turn on the spot and the crouch would take about a day
+and improve the transitions only, seen mostly in third person and by others; pictures in `Saved/MotionBricksTrial`).
 Male and female heads differ on purpose (his heavy brow ridge, square wide jaw, big chin, broad nose; her narrow face
 tapering to a small chin, high round cheekbones, small nose, full lips, bigger eyes). Face keys `face_*` are created
 at 0 (Blender 5 adds new keys at 1.0). Heat weights are solved on a cleaned copy of the body (`rig.heat_weights`).
