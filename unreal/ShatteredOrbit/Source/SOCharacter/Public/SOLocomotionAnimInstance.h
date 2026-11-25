@@ -291,6 +291,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
 	float MaxLean = 9.0f;
 
+	/** The player's own body seen from its own eyes leans this share of it (movement pass 4): the camera is in its eyes and
+	 *  the gun at its shoulder, and leaning whole into a start or a stop the view lunged with the body. Everyone else, and
+	 *  the third-person test view, sees the whole lean. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
+	float OwnViewLean = 0.2f;
+
 	/** Feet find the ground (stairs, slopes, ledges) within this many cm of the capsule's floor. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Anim")
 	float FootReach = 40.0f;
@@ -403,6 +409,7 @@ public:
 	FSOStanceInputs Stance;
 	float StanceBody = 0.0f;
 	float StanceStill = 0.0f;
+	float StanceBodyVel = 0.0f, StanceStillVel = 0.0f;   // (springs)
 	FTransform RightTarget;
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;
@@ -462,6 +469,8 @@ public:
 	/** Current blend weights (for tests): Idle, Walk, Run, Jump, Death, Attack, Slide, Fidget, Stroll, Land, Vault,
 	 *  Mantle, Climb, Crouch, CrouchWalk, Stop. */
 	float Weights[17] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	float WeightState[17] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // (each weight's spring, before the weights are normalised)
+	float WeightVel[17] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	float Times[17] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 	/** Seconds of standing still before an idle variation, picked between these (random each time). */
@@ -554,7 +563,9 @@ protected:
 	float TurnLift[2] = { 0.0f, 0.0f };
 
 	FVector LastVelocityCS = FVector::ZeroVector;
+	FVector LastVelocity = FVector::ZeroVector;     // (the world's: a turn at a run is an acceleration too)
 	FVector AccelCS = FVector::ZeroVector;
+	float LeanRollVel = 0.0f, LeanPitchVel = 0.0f;  // (the lean is a spring: in, and a small settle)
 	float LastAirVz = 0.0f;
 	bool bWasInAir = false;
 	float Compress = 0.0f;       // landing: cm the hips sink (spring)

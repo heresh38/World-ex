@@ -173,6 +173,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
 	float RunIn = 0.5f;
 
+	/** The gun's weight (movement pass 2, 2026-11-24): as the body sets off the gun is drawn after it, this many cm back
+	 *  toward the eyes and its muzzle lifting this many degrees, as it stops it swings on as far forward with its muzzle
+	 *  dipping, and settles; a unit is a change of pace of 440 cm/s within about MoveInertiaLag (a stop from a run). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Weight")
+	float MoveInertiaBack = 1.4f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Weight")
+	float MoveInertiaPitch = 1.6f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Weight", meta = (Units = "s"))
+	float MoveInertiaLag = 0.14f;
+	/** A landing dips the muzzle this many degrees for every cm the view dips with it (ASOCharacter::GetLandDip). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Weight")
+	float LandMuzzleDip = 0.3f;
+
 	/** The shoulder pocket and the shoulders' middle (actor space, cm) from the body's last pose; false = defaults. */
 	bool GetShoulderPoints(const ASOCharacter* Character, FVector& OutPocket, FVector& OutChest) const;
 
@@ -201,7 +214,8 @@ private:
 	float StrafeK = 0.0f;
 	float StrafeV = 0.0f;
 	float SlideV = 0.0f, MantleV = 0.0f;
-	float AirK = 0.0f;
+	float AirK = 0.0f, AirV = 0.0f;
+	float FwdLag = 0.0f, FwdK = 0.0f, FwdV = 0.0f;   // (the body's pace along its facing, lagged; the weight's spring)
 	float SlideK = 0.0f;
 	float MantleK = 0.0f;
 	float ReloadK = 0.0f;
@@ -219,11 +233,14 @@ private:
 	float FrameBack = 0.0f, FrameBackVel = 0.0f;
 	/** The gun's place against the eyes' steady place, followed (InEyesFollowMoving). */
 	FVector InEyesPos = FVector::ZeroVector, InEyesVel = FVector::ZeroVector;
+	float WalkK = 0.0f, WalkV = 0.0f;   // (how much of the walk's smoothing counts, eased)
 	FQuat InEyesRot = FQuat::Identity;
 	bool bInEyesValid = false;
 
 	/** Where the body holds the gun: the stance's place, the sprint's carry, the reload's, a steep look down. */
 	FTransform HoldTransform(const ASOCharacter* Character, const USOWeaponData* Data, bool bHandgun, float Dt, float RunT);
+	/** The sprint's carry and the reload's workspace, blended onto a hold the hands' reach has already been laid on. */
+	FTransform OffTheShoulder(const ASOCharacter* Character, const USOWeaponData* Data, bool bHandgun, float RunT, const FTransform& Hold) const;
 	/** Pulled back from a wall in front (along itself, then the muzzle turned up past it), eased. */
 	FTransform ClearOfWalls(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Dt);
 	/** Never further from the firing shoulder than the arm reaches, nor folded into it: the hand stays on its handle. */

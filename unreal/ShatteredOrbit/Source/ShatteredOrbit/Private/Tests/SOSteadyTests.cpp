@@ -8,10 +8,12 @@
 #if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
 #include "Camera/CameraComponent.h"
+#include "Camera/CameraTypes.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "SOCharacter.h"
+#include "SOCharacterMovementComponent.h"
 #include "SOGunRigComponent.h"
 #include "SOGameUserSettings.h"
 #include "Engine/Engine.h"
@@ -601,6 +603,180 @@ bool FSOSteadyAtAnyFovTest::RunTest(const FString& Parameters)
 		}
 	}
 	Settings->FieldOfView = FovBefore;
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOSmoothThroughEveryMoveTest, "ShatteredOrbit.Movement.SmoothThroughEveryMove", SOTest::Flags)
+bool FSOSmoothThroughEveryMoveTest::RunTest(const FString& Parameters)
+{
+	// Every move the body makes, from its own eyes (the owner, 2026-11-24: "movement and gunplay are the most important and
+	// core part of our game ... do 5 passes of the movement"): setting off and stopping, a strafe turned the other way, the
+	// sprint begun and let go, a jump with its take-off, its hang and its landing, a slide in and out, a dodge, crouching and
+	// standing again. For each, how hard the camera's place on the capsule jerks from frame to frame and how hard the gun
+	// jerks in the picture (EVERYMOVE lines; a jerk is the second difference a frame at 60 frames a second): a move may
+	// carry the view and the gun far, never in a jolt.
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	SOTest::FTestWorld W;
+	W.AddBox(FVector(-20000, -20000, -100), FVector(20000, 20000, 0));
+	ASOCharacter* Player = W.SpawnCharacter(FVector(0, 0, 0));
+	if (!TestNotNull(TEXT("player"), Player))
+	{
+		return false;
+	}
+	APlayerController* PC = W.World->SpawnActor<APlayerController>();
+	PC->SetAsLocalPlayerController();
+	FActorSpawnParameters StateParams;
+	StateParams.bDeferConstruction = true;
+	ASOPlayerState* PS = W.World->SpawnActor<ASOPlayerState>(ASOPlayerState::StaticClass(), FTransform::Identity, StateParams);
+	PS->GetInventory()->bPersist = false;
+	PS->FinishSpawning(FTransform::Identity);
+	PC->PlayerState = PS;
+	PC->Possess(Player);
+	PC->SetControlRotation(FRotator::ZeroRotator);
+	Player->GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	Player->SetViewMode(ESOViewMode::FirstPerson);
+	USOCharacterMovementComponent* Move = Player->GetSOMovement();
+	FRandomStream Rng(9);
+	ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(TEXT("rifle"), 2, 20, Rng));
+	W.Run(1.0f);
+	if (!TestNotNull(TEXT("rifle in the hands"), Gun) || !Gun->GetRig())
+	{
+		return false;
+	}
+	FVector Stick = FVector::ZeroVector;
+	auto Frame = [&]()
+	{
+		Player->MarkCombat();                   // (at the ready throughout: the fight's own state)
+		if (!Stick.IsNearlyZero())
+		{
+			Player->AddMovementInput(Player->GetActorTransform().TransformVectorNoScale(Stick), 1.0f);
+		}
+		Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt);
+	};
+	// one move: what to do as it begins and how long to watch it. Measured each frame from the view the player is given
+	// (UCameraComponent::GetCameraView: the view's own roll, lean and width are in it): the gun in that picture (its grip and
+	// a point 50 cm out along it, so a turn of it shows too), the view's place over the FEET (the capsule's middle jumps
+	// as it shrinks for a crouch or a slide; the feet do not), its turn against the aim and its width.
+	// (-SOMoveTrace=<part of a move's name>, or all: every frame of those moves as MOVETRACE lines)
+	FString TraceMoves;
+	FParse::Value(FCommandLine::Get(), TEXT("SOMoveTrace="), TraceMoves);
+	struct FWorst { const TCHAR* What; float Gun; float Eye; float Turn; float Fov; int32 GunFlips; int32 EyeFlips; };
+	TArray<FWorst> Worst;
+	auto Measure = [&](const TCHAR* What, TFunctionRef<void()> Begin, float Seconds)
+	{
+		Begin();
+		const bool bTrace = !TraceMoves.IsEmpty() && (TraceMoves == TEXT("all") || FString(What).Contains(TraceMoves));
+		TArray<FVector> Grip, Front, Eye, Turn, Fov;
+		W.Run(Seconds, [&]()
+		{
+			Frame();
+			FMinimalViewInfo View;
+			Player->GetCamera()->GetCameraView(SOTest::Dt, View);
+			const FTransform Cam(View.Rotation, View.Location);
+			const FTransform InPicture = Gun->GetRig()->GetComponentTransform().GetRelativeTransform(Cam);
+			Grip.Add(InPicture.GetLocation());
+			Front.Add(InPicture.TransformPosition(FVector(50.0f, 0.0f, 0.0f)));
+			const float Half = Player->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+			Eye.Add(Player->GetActorTransform().InverseTransformPosition(View.Location) + FVector(0.0f, 0.0f, Half));
+			const FRotator Feel = (PC->GetControlRotation().Quaternion().Inverse() * View.Rotation.Quaternion()).Rotator();
+			Turn.Add(FVector(Feel.Pitch, Feel.Yaw, Feel.Roll));
+			Fov.Add(FVector(View.FOV, 0.0f, 0.0f));
+			if (bTrace)
+			{
+				const FVector V = Player->GetVelocity();
+				// (the head and the firing shoulder over the feet too: the camera follows the one, the gun the other)
+				const FVector Feet(0.0f, 0.0f, Half);
+				const FVector Head = Player->GetActorTransform().InverseTransformPosition(Player->GetMesh()->GetBoneLocation(TEXT("head"))) + Feet;
+				const FVector Shoulder = Player->GetActorTransform().InverseTransformPosition(Player->GetMesh()->GetBoneLocation(TEXT("upperarm_R"))) + Feet;
+				// (each hand's reach: the wrist's distance from its shoulder over the arm's length, the hands' limits in it)
+				auto ReachOf = [&](const TCHAR* Up, const TCHAR* Fore, const TCHAR* Hand)
+				{
+					const FVector S = Player->GetMesh()->GetBoneLocation(Up), E = Player->GetMesh()->GetBoneLocation(Fore), H = Player->GetMesh()->GetBoneLocation(Hand);
+					return static_cast<float>(FVector::Dist(S, H) / FMath::Max(FVector::Dist(S, E) + FVector::Dist(E, H), 1.0));
+				};
+				const float ReachR = ReachOf(TEXT("upperarm_R"), TEXT("forearm_R"), TEXT("hand_R")), ReachL = ReachOf(TEXT("upperarm_L"), TEXT("forearm_L"), TEXT("hand_L"));
+				AddInfo(FString::Printf(TEXT("MOVETRACE %s %d: grip %s front %s eye %s turn %s fov %.2f | speed %.0f vz %.0f feet %.1f %s%s | head %s shoulder %s | reach %.3f %.3f"),
+					What, Grip.Num(), *Grip.Last().ToCompactString(), *Front.Last().ToCompactString(), *Eye.Last().ToCompactString(),
+					*Turn.Last().ToCompactString(), View.FOV, V.Size2D(), V.Z, Player->GetActorLocation().Z - Half,
+					Move->IsMovingOnGround() ? TEXT("ground") : TEXT("air"), Player->bIsCrouched ? TEXT(" crouched") : TEXT(""),
+					*Head.ToCompactString(), *Shoulder.ToCompactString(), ReachR, ReachL));
+			}
+		});
+		auto JerkOf = [](const TArray<FVector>& P)
+		{
+			float J = 0.0f;
+			for (int32 i = 2; i < P.Num(); ++i)
+			{
+				J = FMath::Max(J, static_cast<float>((P[i] - 2.0 * P[i - 1] + P[i - 2]).Size()));
+			}
+			return J;
+		};
+		// (a JOLT: on any axis the motion turned back on itself between one frame and the next while going at speed both
+		// ways, half a centimetre a frame or more, 30 cm a second: a smooth reversal passes through rest, a jolt does not)
+		auto FlipsOf = [](const TArray<FVector>& P, float Fast)
+		{
+			int32 N = 0;
+			for (int32 i = 2; i < P.Num(); ++i)
+			{
+				for (int32 Ax = 0; Ax < 3; ++Ax)
+				{
+					const double A = P[i - 1][Ax] - P[i - 2][Ax], B = P[i][Ax] - P[i - 1][Ax];
+					if (A * B < 0.0 && FMath::Min(FMath::Abs(A), FMath::Abs(B)) > Fast)
+					{
+						++N;
+					}
+				}
+			}
+			return N;
+		};
+		auto SpanOf = [](const TArray<FVector>& P)
+		{
+			FBox B(ForceInit);
+			for (const FVector& V : P)
+			{
+				B += V;
+			}
+			return static_cast<float>(B.GetSize().Size());
+		};
+		const float GunJerk = FMath::Max(JerkOf(Grip), JerkOf(Front)), EyeJerk = JerkOf(Eye), TurnJerk = JerkOf(Turn), FovJerk = JerkOf(Fov);
+		const int32 GunFlips = FMath::Max(FlipsOf(Grip, 0.5f), FlipsOf(Front, 0.5f)), EyeFlips = FlipsOf(Eye, 0.5f);
+		AddInfo(FString::Printf(TEXT("EVERYMOVE %s: the gun in the picture moves %.1f cm (its front %.1f), jerks %.3f cm a frame, jolts %d; the view over the feet moves %.1f cm, jerks %.3f, jolts %d; its own turn %.1f deg, jerks %.3f; its width %.1f deg, jerks %.3f"),
+			What, SpanOf(Grip), SpanOf(Front), GunJerk, GunFlips, SpanOf(Eye), EyeJerk, EyeFlips, SpanOf(Turn), TurnJerk, SpanOf(Fov), FovJerk));
+		Worst.Add({ What, GunJerk, EyeJerk, TurnJerk, FovJerk, GunFlips, EyeFlips });
+	};
+	W.Run(0.8f, Frame);
+	Measure(TEXT("setting off"), [&]() { Stick = FVector(1, 0, 0); }, 0.8f);
+	Measure(TEXT("stopping"), [&]() { Stick = FVector::ZeroVector; }, 0.8f);
+	Measure(TEXT("strafing right"), [&]() { Stick = FVector(0, 1, 0); }, 0.6f);
+	Measure(TEXT("the strafe turned left"), [&]() { Stick = FVector(0, -1, 0); }, 0.8f);
+	Measure(TEXT("stopping a strafe"), [&]() { Stick = FVector::ZeroVector; }, 0.6f);
+	Measure(TEXT("into a sprint"), [&]() { Stick = FVector(1, 0, 0); Move->SetWantsToSprint(true); }, 1.2f);
+	Measure(TEXT("the sprint let go"), [&]() { Move->SetWantsToSprint(false); }, 0.8f);
+	Measure(TEXT("a jump: the take-off and the hang"), [&]() { Move->SetWantsToMantle(true); Player->Jump(); }, 0.45f);
+	Measure(TEXT("a jump: the landing"), [&]() { Move->SetWantsToMantle(false); Player->StopJumping(); }, 0.9f);
+	Measure(TEXT("into a slide"), [&]() { Move->SetWantsToSprint(true); }, 0.9f);
+	Measure(TEXT("the slide"), [&]() { Player->Crouch(); }, 0.9f);
+	Measure(TEXT("out of the slide"), [&]() { Move->SetWantsToSprint(false); Player->UnCrouch(); }, 0.9f);
+	Measure(TEXT("a dodge"), [&]() { Stick = FVector(0, -1, 0); Move->SetWantsToDodge(true); }, 0.7f);
+	Measure(TEXT("crouching"), [&]() { Stick = FVector::ZeroVector; Player->Crouch(); }, 0.7f);
+	Measure(TEXT("standing up"), [&]() { Player->UnCrouch(); }, 0.7f);
+	// What may never happen in any move: a JOLT (the gun in the picture or the view turning back on itself between two
+	// frames while going at speed both ways). And how hard either may lurch in a frame at 60 frames a second: a big move done
+	// quickly needs some (a slide drops the view 60 cm in a fifth of a second; the sprint's carry swings the gun's front 47
+	// cm in as long), a jump in its pose does not: before these passes a landing snapped the view 19 cm in a frame, and the
+	// gun jolted 4-8 cm a frame into a sprint and out of it, a jump, a slide and a crouch (17 jolts in these 15 moves).
+	for (const FWorst& M : Worst)
+	{
+		TestTrue(FString::Printf(TEXT("%s: the gun in the picture never jolts (%d)"), M.What, M.GunFlips), M.GunFlips == 0);
+		TestTrue(FString::Printf(TEXT("%s: the view never jolts (%d)"), M.What, M.EyeFlips), M.EyeFlips == 0);
+		TestTrue(FString::Printf(TEXT("%s: the gun in the picture lurches %.2f cm a frame at most (under 4)"), M.What, M.Gun), M.Gun < 4.0f);
+		TestTrue(FString::Printf(TEXT("%s: the view over the feet lurches %.2f cm a frame at most (under 4)"), M.What, M.Eye), M.Eye < 4.0f);
+		TestTrue(FString::Printf(TEXT("%s: the view's own turn changes %.3f degrees a frame at most (under 0.15)"), M.What, M.Turn), M.Turn < 0.15f);
+		TestTrue(FString::Printf(TEXT("%s: its width changes %.3f degrees a frame at most (under 0.15)"), M.What, M.Fov), M.Fov < 0.15f);
+	}
 	return true;
 }
 

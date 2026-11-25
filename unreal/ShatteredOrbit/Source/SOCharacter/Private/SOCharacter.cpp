@@ -2357,7 +2357,7 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 		StepSmooth = bShoulder ? FMath::FInterpTo(StepSmooth, 0.0f, Dt, 11.0f) : 0.0f;
 		CameraBoom->TargetOffset = FVector(0.0f, 0.0f, StepSmooth);
 		FeelOffset = FVector::ZeroVector;
-		LandDip = LandDipVel = CameraRoll = CameraRollVel = FovBoost = FeelPitch = ShakeRoll = ShakeRollVel = 0.0f;
+		LandDip = LandDipVel = CameraRoll = CameraRollVel = FovBoost = FovBoostVel = FeelPitch = FeelPitchVel = ShakeRoll = ShakeRollVel = 0.0f;
 		LastFeelZ = Z;
 		bHaveFeelZ = true;
 		return;
@@ -2411,8 +2411,10 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 	// 5. Field of view widens with speed (the guide: walk 95, sprint 103-108), and the view leans into a sprint.
 	const float SprintK = Move->IsSprinting() ? FMath::Clamp((Speed - 440.0f) / 420.0f, 0.0f, 1.0f) : 0.0f;
 	const float WantFov = Move->IsSliding() ? SlideFovBoost : Move->IsVaulting() ? SprintFovBoost : Move->IsDodging() ? DodgeFovBoost : SprintFovBoost * SprintK;
-	FovBoost = FMath::FInterpTo(FovBoost, WantFov, Dt, 5.0f);
-	FeelPitch = FMath::FInterpTo(FeelPitch, SprintCameraPitch * SprintK * (1.0f - Ads), Dt, 4.0f);
+	// (springs, critically damped, movement pass 3: an exponential sets off at its full speed, and the width popped as a
+	// sprint, a slide or a dodge began; a spring sets off from rest)
+	SOSpring::Step(FovBoost, FovBoostVel, WantFov, 8.0f, 1.0f, Dt);
+	SOSpring::Step(FeelPitch, FeelPitchVel, SprintCameraPitch * SprintK * (1.0f - Ads), 6.0f, 1.0f, Dt);
 
 	FeelOffset = FVector(0.0f, 0.0f, StepSmooth + LandDip * 0.5f);
 	(void)bGrounded;
@@ -2465,7 +2467,11 @@ void ASOCharacter::UpdateEye(float DeltaSeconds)
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	const USOCharacterMovementComponent* Move = GetSOMovement();
 	SOSpring::Step(MovingEase, MovingEaseVel, Move && Move->IsMovingOnGround() ? FMath::Clamp(static_cast<float>(GetVelocity().Size2D()) / 250.0f, 0.0f, 1.0f) : 0.0f, 12.0f, 1.0f, Dt);
-	const float Moving = GetMovingEase() * (1.0f - AimProgress);
+	// (while the eyes go down into a crouch or up out of one, the camera keeps to them as it does standing, movement pass 5:
+	// on the walk's softer follow it lagged the falling head 5 cm, and the gun at the shoulder swooped 15 cm down the picture
+	// and back up as a crouch began off a run)
+	const float StanceChange = FMath::SmoothStep(20.0f, 80.0f, FMath::Abs(EyeVel));
+	const float Moving = GetMovingEase() * (1.0f - AimProgress) * (1.0f - StanceChange);
 	const float MaxLag = FMath::Lerp(EyeMaxLag, EyeMaxLagMoving, Moving);
 	SOSpring::Step(HeadCamFree, EyeVelCS, Want, FMath::Lerp(EyeFollow, EyeFollowMoving, Moving), 1.0f, Dt);
 	FVector Behind = HeadCamFree - Want;

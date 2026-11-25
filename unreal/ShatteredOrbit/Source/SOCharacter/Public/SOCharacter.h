@@ -823,6 +823,7 @@ private:
 	float CameraRollVel = 0.0f;   // (the roll is a spring: it leans in and settles, never a straight line)
 	float EyeVel = 0.0f;          // (so is the eye's height across crouch, slide and stand)
 	float FeelPitch = 0.0f;       // degrees: the sprint's forward lean
+	float FeelPitchVel = 0.0f;    // (a spring, as the field of view's widening is)
 	float BlastPunch = 0.0f;      // degrees: a nearby blast's punch on the view (decays)
 	float LastBlastTime = -100.0f;
 	float LastBlastStrength = 0.0f;
@@ -833,6 +834,7 @@ private:
 	float ShakeRoll = 0.0f;       // degrees: a landing's wobble (a spring)
 	float ShakeRollVel = 0.0f;
 	float FovBoost = 0.0f;
+	float FovBoostVel = 0.0f;
 	FVector FeelOffset = FVector::ZeroVector;
 	float CurrentFov = 90.0f;
 

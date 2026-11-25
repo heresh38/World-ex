@@ -9,6 +9,7 @@
 #include "SOCharacterMovementComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "SOLocomotionAnimInstance.h"
+#include "GameFramework/PlayerController.h"
 
 namespace SOTest
 {
@@ -942,6 +943,108 @@ bool FSOStopsAndTurnsTest::RunTest(const FString& Parameters)
 		TestTrue(FString::Printf(TEXT("never both off the ground at once (%.1f cm)"), Both), Both < 1.5f);
 		TestTrue(TEXT("both planted again after the turn"), Anim->GetTurnLift(0) < 0.2f && Anim->GetTurnLift(1) < 0.2f);
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSOLeansIntoTheMoveTest, "ShatteredOrbit.Anim.LeansIntoTheMove", SOTest::Flags)
+bool FSOLeansIntoTheMoveTest::RunTest(const FString& Parameters)
+{
+	// The body leans into a start, back against a stop and into a turn at a run (movement pass 4, 2026-11-24), measured on
+	// the bones: the neck against the hips in the body's own frame. The same moves are made twice, by a body as everyone
+	// else sees it and by a player's own body seen from its own eyes, which leans only a fifth of it (the camera is in its
+	// eyes: leaning whole, the view lunged with every start and stop); the clips are the same in both, so what one leans
+	// more than the other is the lean (LEAN lines).
+	if (SOTest::PlayerBodyMissing(*this))
+	{
+		return true;
+	}
+	TArray<FVector> Series[2];
+	TArray<int32> Phase[2];
+	for (int32 Own = 0; Own < 2; ++Own)
+	{
+		SOTest::FTestWorld W;
+		W.AddBox(FVector(-20000, -20000, -100), FVector(20000, 20000, 0));
+		ASOCharacter* C = W.SpawnCharacter(FVector(0, 0, 0));
+		if (!TestNotNull(TEXT("a body"), C))
+		{
+			return false;
+		}
+		USkeletalMeshComponent* Body = C->GetMesh();
+		Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+		APlayerController* PC = nullptr;
+		if (Own == 1)
+		{
+			PC = W.World->SpawnActor<APlayerController>();
+			PC->SetAsLocalPlayerController();
+			PC->Possess(C);
+			C->SetViewMode(ESOViewMode::FirstPerson);
+		}
+		float Yaw = 0.0f;
+		auto Face = [&]()
+		{
+			C->SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+			if (PC)
+			{
+				PC->SetControlRotation(FRotator(0.0f, Yaw, 0.0f));
+			}
+		};
+		auto Lean = [&]()
+		{
+			return C->GetActorTransform().InverseTransformVector(Body->GetBoneLocation(TEXT("neck")) - Body->GetBoneLocation(TEXT("hips")));
+		};
+		auto Record = [&](int32 Part, float Seconds, bool bGo, float TurnRate)
+		{
+			W.Run(Seconds, [&]()
+			{
+				Yaw += TurnRate * SOTest::Dt;
+				Face();
+				if (bGo)
+				{
+					C->AddMovementInput(C->GetActorForwardVector(), 1.0f);
+				}
+				Series[Own].Add(Lean());
+				Phase[Own].Add(Part);
+			});
+		};
+		Face();
+		Record(0, 1.0f, false, 0.0f);      // standing
+		Record(1, 0.6f, true, 0.0f);       // setting off
+		Record(2, 0.8f, true, 0.0f);       // running on
+		Record(3, 1.0f, true, 150.0f);     // a turn to the right at a run
+		Record(4, 0.6f, true, 0.0f);       // straight again
+		Record(5, 0.7f, false, 0.0f);      // stopping
+	}
+	if (!TestEqual(TEXT("the two bodies made the same moves"), Series[0].Num(), Series[1].Num()))
+	{
+		return false;
+	}
+	// what the body others see leans more than the player's own, in each part of the run, each against how it stood:
+	// forward (X), to the right (Y)
+	FVector Still[2];
+	for (int32 Own = 0; Own < 2; ++Own)
+	{
+		int32 Last = 0;
+		while (Last + 1 < Phase[Own].Num() && Phase[Own][Last + 1] == 0)
+		{
+			++Last;
+		}
+		Still[Own] = Series[Own][Last];
+	}
+	float Most[6] = { 0, 0, 0, 0, 0, 0 }, Least[6] = { 0, 0, 0, 0, 0, 0 };
+	for (int32 i = 0; i < Series[0].Num(); ++i)
+	{
+		const FVector D = (Series[0][i] - Still[0]) - (Series[1][i] - Still[1]);
+		const int32 P = Phase[0][i];
+		const float V = P == 3 ? static_cast<float>(D.Y) : static_cast<float>(D.X);
+		Most[P] = FMath::Max(Most[P], V);
+		Least[P] = FMath::Min(Least[P], V);
+	}
+	AddInfo(FString::Printf(TEXT("LEAN as others see it, against its own eyes' share: setting off %.1f cm further forward, stopping %.1f cm further back, a turn to the right at a run %.1f cm further into it (%.1f the other way), standing %.1f"),
+		Most[1], -Least[5], Most[3], -Least[3], FMath::Max(Most[0], -Least[0])));
+	TestTrue(FString::Printf(TEXT("standing, nothing leans (%.2f cm)"), FMath::Max(Most[0], -Least[0])), FMath::Max(Most[0], -Least[0]) < 0.5f);
+	TestTrue(FString::Printf(TEXT("setting off, the body leans into the start (%.1f cm further forward)"), Most[1]), Most[1] > 2.0f);
+	TestTrue(FString::Printf(TEXT("stopping, it leans back against the stop (%.1f cm further back)"), -Least[5]), -Least[5] > 2.0f);
+	TestTrue(FString::Printf(TEXT("turning at a run, it banks into the turn (%.1f cm to the right, %.1f the other way)"), Most[3], -Least[3]), Most[3] > 1.5f && -Least[3] < Most[3] * 0.5f);
 	return true;
 }
 

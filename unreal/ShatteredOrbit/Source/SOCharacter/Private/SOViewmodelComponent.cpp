@@ -100,13 +100,24 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	Spring(StrafeK, StrafeV, bGrounded ? Strafe : Strafe * 0.5f, 9.0f, 0.62f, Dt);
 	StrafeK = FMath::Clamp(StrafeK, -2.0f, 2.0f);
 	const float AirLift = Move && Move->IsFalling() ? FMath::Clamp(static_cast<float>(Vel.Z) / 900.0f, -1.0f, 1.0f) : 0.0f;
-	AirK = FMath::FInterpTo(AirK, AirLift, Dt, 8.0f);
+	Spring(AirK, AirV, AirLift, 10.0f, 0.9f, Dt);   // (a spring: as an exponential the gun jumped into its tilt at a take-off)
+	// (the weight: the body's change of pace along its facing, its pace against a lagged copy of it: a steady pace carries
+	// nothing; on a spring with a little overshoot, below)
+	{
+		const float Pace = static_cast<float>(FVector::DotProduct(Vel, Character->GetActorForwardVector().GetSafeNormal2D()));
+		FwdLag += (Pace - FwdLag) * (1.0f - FMath::Exp(-Dt / FMath::Max(MoveInertiaLag, 0.02f)));
+		// (nearly critically damped: with a spring's overshoot the weight's return crossed the step's sway, and setting off
+		// at 30 frames a second the SMG's sight turned back three times in a fifth of a second)
+		Spring(FwdK, FwdV, FMath::Clamp((Pace - FwdLag) / 440.0f, -1.5f, 1.5f), 10.0f, 0.9f, Dt);
+		FwdK = FMath::Clamp(FwdK, -1.8f, 1.8f);
+	}
 	Spring(SlideK, SlideV, Move && Move->IsSliding() ? 1.0f : 0.0f, 13.0f, 0.85f, Dt);
 	Spring(MantleK, MantleV, Move && Move->IsMantling() ? 1.0f : 0.0f, 16.0f, 0.9f, Dt);
 	SlideK = FMath::Clamp(SlideK, -0.1f, 1.1f);
 	MantleK = FMath::Clamp(MantleK, -0.1f, 1.1f);
 	const float SlideT = SlideK, MantleT = FMath::Clamp(MantleK, 0.0f, 1.0f);
-	const float DodgeT = Move && Move->IsDodging() ? FMath::Sin(Move->GetDodgeAlpha() * PI) : 0.0f;
+	// (a dodge's dip and tilt in and out on a smooth window: on a sine's half the gun started and stopped at full speed)
+	const float DodgeT = Move && Move->IsDodging() ? FMath::Square(FMath::Sin(Move->GetDodgeAlpha() * PI)) : 0.0f;
 	const float Free = 1.0f - Ads * 0.85f;
 	const float InX = (-StrafeK * 0.006f + SlideT * 0.008f) * Free;
 	// (in the air the gun tilts with the rise and the fall: the guide's "weapon tilts naturally"; at 0.03 / 0.008 it barely
@@ -141,7 +152,8 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float Relaxed = (1.0f - Character->GetCombatReady()) * (1.0f - Ads) * (1.0f - InspectK);
 	const float Reach = Stance.RelaxReach > 0.0f ? FMath::Lerp(SupportReach, Stance.RelaxReach, Relaxed) : SupportReach;
 	const float StockOff = Stance.RelaxReach > 0.0f ? Relaxed : 0.0f;    // (and the stock may come off the shoulder for it)
-	FTransform Hold = InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), Reach, StockOff));
+	FTransform Hold = OffTheShoulder(Character, Data, bHandgun, RunT,
+		InFiringReach(Character, Rig, InSupportReach(Character, Rig, HoldTransform(Character, Data, bHandgun, Dt, RunT), Reach, StockOff)));
 	// (the camera's framing, HoldTransform; it gives way as the player looks down or up, the camera back in the eyes by
 	// 55 degrees: set behind them, looking at the floor it saw down through the body, and looking up the raised arms are
 	// nearer it)
@@ -244,14 +256,29 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 			InEyesPos = Against.GetLocation();
 			InEyesVel = FVector::ZeroVector;
 			InEyesRot = Against.GetRotation();
+			WalkK = Walking;
+			WalkV = 0.0f;
 			bInEyesValid = true;
 		}
-		SOSpring::Step(InEyesPos, InEyesVel, Against.GetLocation(), InEyesFollowMoving, 1.0f, Dt);
-		InEyesRot = FQuat::Slerp(InEyesRot, Against.GetRotation(), 1.0f - FMath::Exp(-InEyesFollowMoving * Dt)).GetNormalized();
-		if (Walking > 1e-3f)
+		// (how much of it counts is eased, movement pass 3: a jump's take-off and its landing switched it in a frame, and
+		// the gun jumped across the smoothing's own lag, 2.9 cm a frame as the feet left the ground; stiffening the follow as
+		// it was let go as well made setting off shakier at 30 frames a second, and was dropped)
+		SOSpring::Step(WalkK, WalkV, Walking, 20.0f, 1.0f, Dt);   // (at 12 a share of it lingered a third of a second after a walk and held the gun off the hold)
+		WalkK = FMath::Clamp(WalkK, 0.0f, 1.0f);
+		// (and while the gun swings into or out of the sprint's carry, a reload or an inspect, the smoothed place keeps close
+		// to the hold, movement pass 5: lagging the swing, it held the gun back as the walk's share rose with the pace and let
+		// it go as the carry took over, and the gun turned back on itself, 4 cm a frame setting off into a sprint)
+		const float Swinging = FMath::Max(FMath::Clamp(RunT, 0.0f, 1.0f) * (1.0f - FMath::Clamp(RunT, 0.0f, 1.0f)) * 4.0f, FMath::Max(ReloadK, InspectK));
+		const float Follow = InEyesFollowMoving * (1.0f + 8.0f * FMath::Max(Swinging, bRunning ? 1.0f : 0.0f));
+		SOSpring::Step(InEyesPos, InEyesVel, Against.GetLocation(), Follow, 1.0f, Dt);
+		InEyesRot = FQuat::Slerp(InEyesRot, Against.GetRotation(), 1.0f - FMath::Exp(-Follow * Dt)).GetNormalized();
+		// (its last two hundredths cut off smoothly: a lingering share of a smoothed place a long way off the hold, after a
+		// walk and an aim flicked from the sky to the floor, bent a crouched sniper's wrist past 80)
+		const float Share = FMath::Max(WalkK - 0.02f, 0.0f) / 0.98f;
+		if (Share > 1e-4f)
 		{
 			FTransform Ridden;
-			Ridden.Blend(Hold, FTransform(InEyesRot, InEyesPos) * Eye, Walking);
+			Ridden.Blend(Hold, FTransform(InEyesRot, InEyesPos) * Eye, Share);
 			Hold = Ridden;
 		}
 	}
@@ -279,6 +306,16 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		const FRotator Turn(-0.25f * Dip * FMath::Cos(2.0f * Phase), 0.5f * Yaw * FMath::Sin(Phase + 0.25f * PI), 0.5f * Roll * FMath::Sin(Phase) - RunCant * Running);
 		const FVector Shift(0.0f, -0.5f * Sway * FMath::Sin(Phase) - RunIn * Running, -0.5f * Dip * FMath::Cos(2.0f * Phase) - RunDrop * Running);
 		Hold = FTransform(Turn, Shift) * Hold;
+	}
+	// The gun's weight (movement pass 2, 2026-11-24): held in two hands its mass is above and ahead of them, so as the body
+	// sets off it is drawn after it, back toward the eyes with its muzzle lifting a little, and as the body stops it swings
+	// on, forward with its muzzle dipping, and settles; a landing dips the muzzle with the view's own dip. After the walk's smoothing (smoothed, it lagged and lost half itself). A little of it on the sights (they stay
+	// still: the guide's "ADS stable"), half of it in a reload or an inspect.
+	{
+		const float Weight = (1.0f - Ads * 0.85f) * (1.0f - 0.5f * FMath::Max(ReloadK, InspectK));
+		const float Back = FwdK * MoveInertiaBack * Weight;
+		const float Lift = (FwdK * MoveInertiaPitch + Character->GetLandDip() * LandMuzzleDip) * Weight;
+		Hold = FTransform(FRotator(Lift, 0.0f, 0.0f), FVector(-Back, 0.0f, 0.0f)) * Hold;
 	}
 	// On the sights (the same gun in the same hands, first person or not): the sight on the line of the body's eyes,
 	// where the camera is in first person; the kick turns the gun about its SIGHT, so the reticle stays on the point the
@@ -519,8 +556,22 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 		Eased.Blend(Hold, Lowered, Relax * Relax * (3.0f - 2.0f * Relax));
 		Hold = Eased;
 	}
+	return Hold;
+}
+
+FTransform USOViewmodelComponent::OffTheShoulder(const ASOCharacter* Character, const USOWeaponData* Data, bool bHandgun, float RunT, const FTransform& In) const
+{
 	// Off the shoulder: a sprint carries the gun low across the chest (muzzle down and to the left); a reload brings it
-	// down in front of the chest, canted so the support hand works the mag well in front of the body.
+	// down in front of the chest, canted so the support hand works the mag well in front of the body. Blended onto the hold
+	// AFTER the hands' reach has been laid on it (movement pass 5): the long guns' hold at the ready sits on the support
+	// arm's reach, and laid on the blend, the reach let go of the gun the frame the carry's turn brought the fore end in,
+	// and the gun turned back on itself, 5 cm a frame setting off into a sprint; now its hold on the gun fades as the carry
+	// comes in.
+	FTransform Hold = In;
+	const FTransform Actor = Character->GetActorTransform();
+	FVector Pocket, Chest;
+	GetShoulderPoints(Character, Pocket, Chest);
+	const FQuat Facing = FRotator(0.0f, Character->GetAimRotation().Yaw, 0.0f).Quaternion();
 	const float Reload = ReloadK * ReloadK * (3.0f - 2.0f * ReloadK) * (1.0f - Ads);
 	if (RunT > 1e-3f || Reload > 1e-3f)
 	{

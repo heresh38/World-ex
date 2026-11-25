@@ -229,8 +229,11 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			JumpPose = FMath::FInterpTo(JumpPose, Want, FMath::Max(DeltaSeconds, 1e-4f), 14.0f);
 			AirTuck = JumpPose <= Tuck ? JumpPose / FMath::Max(Tuck, 1e-3f) : 1.0f - 0.75f * (JumpPose - Tuck) / FMath::Max(Length - Tuck, 1e-3f);
 		}
-		else if (!bMantling)
+		else if (!bMantling && Weights[Jump] < 1e-3f)
 		{
+			// (only once the jump's layer has faded: set back to its first frame at the landing, the body took the
+			// take-off's pose while the layer faded and the head, and the camera in its eyes, leapt 19 cm in a frame,
+			// movement pass 3)
 			JumpPose = 0.0f;
 		}
 		const ASOCombatCharacter* Combat = Cast<ASOCombatCharacter>(Character);
@@ -267,6 +270,12 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		HoldSerialRig = Rig;
 		++HoldSerial;
+		// (a gun taken in hand or put away is something done: the idle's variations wait their full delay again, and one
+		// under way gives way; a shoulder rolled in a variation as a gun came into the hands left the firing arm folded, the
+		// brood's wrist at 82 degrees)
+		StillTime = 0.0f;
+		NextFidget = -1.0f;
+		ActiveFidget = -1;
 	}
 	FTransform Right, Left;
 	GunAxis = FVector::ZeroVector;
@@ -567,7 +576,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// Idle variations: standing still, not aiming.
 	const bool bAimingNow = Player && Player->GetViewmodel() && Player->GetViewmodel()->GetAds() > 0.01f;
-	const bool bStill = Target[Idle] > 0.99f && Speed < 10.0f && !bAimingNow && Clips.Fidgets.Num() > 0;
+	// (never on the player's own body seen from its own eyes: the camera is in them, and a neck stretched or a look round
+	// moved the view standing still; everyone else, and the third-person test view, sees them)
+	const bool bOwnEyes = Player && Player->IsLocallyControlled() && Player->GetViewBlend() < 0.5f;
+	const bool bStill = Target[Idle] > 0.99f && Speed < 10.0f && !bAimingNow && !bOwnEyes && Clips.Fidgets.Num() > 0;
 	if (!bStill)
 	{
 		StillTime = 0.0f;
@@ -617,9 +629,22 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	float Sum = 0.0f;
 	for (int32 i = 0; i < Count; ++i)
 	{
-		// (linear progress, eased shape: a blend starts and ends gently instead of at full rate)
+		// (linear progress, eased shape: a blend starts and ends gently instead of at full rate; then a light spring, movement
+		// pass 5: a ramp that caught up with a target moving under it (the speed's own share of a layer) stopped dead there,
+		// and the body's pose turned in a frame: crouching off a run the head's fall stalled for a frame and went on, 5 cm a
+		// frame in the eyes' view. Not for the dead: death snaps)
 		Ramp[i] = FMath::FInterpConstantTo(Ramp[i], Target[i], 1.0f, Rate);
-		Weights[i] = Ramp[i] * Ramp[i] * (3.0f - 2.0f * Ramp[i]);
+		const float Eased = Ramp[i] * Ramp[i] * (3.0f - 2.0f * Ramp[i]);
+		if (bDead)
+		{
+			WeightState[i] = Eased;
+			WeightVel[i] = 0.0f;
+		}
+		else
+		{
+			SOSpring::Step(WeightState[i], WeightVel[i], Eased, 30.0f, 1.0f, DeltaSeconds);
+		}
+		Weights[i] = FMath::Clamp(WeightState[i], 0.0f, 1.0f);   // (the spring's own state is kept apart: normalised below)
 		Sum += Weights[i];
 	}
 	if (Sum > 1e-4f)
@@ -1806,7 +1831,7 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	bBodyMotion = Character && Mesh && !bDead;
 	if (!bBodyMotion)
 	{
-		WarpYaw = LeanRoll = LeanPitch = PelvisDrop = FootIKAlpha = StandYaw = 0.0f;
+		WarpYaw = LeanRoll = LeanPitch = LeanRollVel = LeanPitchVel = PelvisDrop = FootIKAlpha = StandYaw = 0.0f;
 		bHaveYaw = bTurning = bCrouchPose = false;
 		TurnTime = TurnLift[0] = TurnLift[1] = 0.0f;
 		return;
@@ -1878,13 +1903,25 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 		}
 	}
 
-	// Lean into the acceleration (smoothed), a touch forward with speed.
-	const FVector RawAccel = (VelCS - LastVelocityCS) / Dt;
+	// Lean into the acceleration (smoothed), a touch forward with speed. The acceleration is the WORLD's, read in the
+	// body's frame (movement pass 4): read as the change of the velocity in the body's own frame, a turn at a run, the
+	// velocity turning with the body, was no acceleration at all and the body ran upright round every corner; now it
+	// banks into the turn as a runner does. The player's own body seen from its own eyes leans only OwnViewLean of it (the
+	// camera is in its eyes: the view lunged with every start and stop); everyone else sees all of it.
+	const FVector Velocity = Character->GetVelocity();
+	const FVector RawAccel = ToMesh.InverseTransformVectorNoScale(Velocity - LastVelocity) / Dt;
+	LastVelocity = Velocity;
 	LastVelocityCS = VelCS;
 	AccelCS = FMath::VInterpTo(AccelCS, bInAir ? FVector::ZeroVector : RawAccel, Dt, 7.0f);
-	const float K = LeanPerAccel / 100.0f; // per cm/s2
+	float Leans = 1.0f;
+	if (const ASOCharacter* Own = Cast<ASOCharacter>(Character); Own && Own->IsLocallyControlled())
+	{
+		const float Behind = Own->GetViewBlend();
+		Leans = FMath::Lerp(OwnViewLean, 1.0f, Behind * Behind * (3.0f - 2.0f * Behind));
+	}
+	const float K = LeanPerAccel / 100.0f * Leans; // per cm/s2
 	float WantRoll = FMath::Clamp(AccelCS.X * K, -MaxLean, MaxLean);
-	float WantPitch = FMath::Clamp(-AccelCS.Y * K, -MaxLean, MaxLean) - FMath::Min(Speed2D / 860.0f, 1.0f) * 2.0f * (bBackward ? -1.0f : 1.0f);
+	float WantPitch = FMath::Clamp(-AccelCS.Y * K, -MaxLean, MaxLean) - FMath::Min(Speed2D / 860.0f, 1.0f) * 2.0f * Leans * (bBackward ? -1.0f : 1.0f);
 	if (bSliding)
 	{
 		WantRoll = 0.0f;
@@ -1922,8 +1959,10 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 	SOSpring::Step(Compress, CompressVel, 0.0f, FMath::Sqrt(260.0f), 0.75f, Dt);
 	Compress = FMath::Max(Compress, 0.0f);
 	WantPitch -= Compress * 0.6f;
-	LeanRoll = FMath::FInterpTo(LeanRoll, WantRoll, Dt, bMantling ? 14.0f : 8.0f);
-	LeanPitch = FMath::FInterpTo(LeanPitch, WantPitch, Dt, bMantling ? 14.0f : 8.0f);
+	// (springs: the body leans in and settles back a little past upright, as a body does; over an obstacle stiffer and
+	// without the settle. As exponentials the lean began at full speed and stopped dead)
+	SOSpring::Step(LeanRoll, LeanRollVel, WantRoll, bMantling ? 14.0f : 9.0f, bMantling ? 1.0f : 0.72f, Dt);
+	SOSpring::Step(LeanPitch, LeanPitchVel, WantPitch, bMantling ? 14.0f : 9.0f, bMantling ? 1.0f : 0.72f, Dt);
 	// a blow's knock comes back by itself; reeling holds the trunk bowed and swaying
 	FlinchRoll = FMath::FInterpTo(FlinchRoll, 0.0f, Dt, 5.5f);
 	FlinchPitch = FMath::FInterpTo(FlinchPitch, 0.0f, Dt, 5.5f);
@@ -1978,8 +2017,12 @@ void USOLocomotionAnimInstance::UpdateBodyMotion(const ACharacter* Character, fl
 		const bool bStanceBody = Stance.bPlayer && bHold && !bCarried && !bInAir && !bSliding && !bMantling && !bCrouched && !bDodging;
 		const float Moving = 1.0f - FMath::SmoothStep(260.0f, 520.0f, Speed);
 		const float Still = 1.0f - FMath::SmoothStep(40.0f, 160.0f, Speed);
-		StanceBody = FMath::FInterpTo(StanceBody, bStanceBody ? Moving : 0.0f, Dt, 6.0f);
-		StanceStill = FMath::FInterpTo(StanceStill, bStanceBody ? Still : 0.0f, Dt, 5.0f);
+		// (springs, movement pass 3: as exponentials the knees' bend and the feet's step began at full speed as the body
+		// crouched, set off or stopped)
+		SOSpring::Step(StanceBody, StanceBodyVel, bStanceBody ? Moving : 0.0f, 7.0f, 1.0f, Dt);
+		SOSpring::Step(StanceStill, StanceStillVel, bStanceBody ? Still : 0.0f, 6.0f, 1.0f, Dt);
+		StanceBody = FMath::Clamp(StanceBody, 0.0f, 1.0f);
+		StanceStill = FMath::Clamp(StanceStill, 0.0f, 1.0f);
 		PelvisDrop += Stance.Knees * StanceBody;
 	}
 }

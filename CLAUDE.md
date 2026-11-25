@@ -1599,7 +1599,43 @@ gun rides the gait's own cycle (`USOViewmodelComponent`, after the walk's smooth
 foot takes the weight and sways across with the stride), at the run it is canted in a little, lower and further in
 (`RunCant` 7 degrees, `RunDrop`, `RunIn`: a run reads apart from a walk), it tilts more with a jump's rise and fall
 (`AirK`), and the view leans 3.5 degrees into a strafe (`StrafeCameraRoll`; 2.5 was under the guide's 3-5); none of it
-on the sights, in a reload or an inspect. Built sprint, coyote time,
+on the sights, in a reload or an inspect. Pass 2, the weight: the gun is drawn after the body as it sets off (back toward
+the eyes, `MoveInertiaBack` 1.4 cm, its muzzle lifting `MoveInertiaPitch` 1.6 degrees) and swings on as it stops
+(forward, the muzzle dipping), and settles (`FwdK`: a spring on the body's change of pace along its facing, its pace
+against a copy lagged `MoveInertiaLag`, so a steady pace carries nothing; nearly critically damped: with an overshoot,
+setting off at 30 frames a second the SMG's sight turned back three times in a fifth of a second); a landing dips the
+muzzle with the view's own dip (`LandMuzzleDip` 0.3 degrees a cm). Pass 3, the moves' ends: the view's widening and its
+sprint lean are springs (`FovBoost`, `FeelPitch`: an exponential sets off at full speed, and the width popped as a sprint,
+a slide or a dodge began), so are the gun's tilt in the air (`AirK`) and the stance's body (`StanceBody`, `StanceStill`),
+a dodge's dip is a smooth window (sin squared), the walk's smoothing of the gun is eased in and out (`WalkK`, its last
+2 % cut off smoothly: a take-off switched it off in a frame and the gun jumped across its lag; a share left lingering
+after a walk bent a crouched sniper's wrist past 80; making its follow stiffen as it was let go made 30 frames a second
+walk-offs shakier and was dropped), and the jump's pose is held while its layer fades (`JumpPose`: set back to the
+take-off's frame at the landing, the head, and the camera in its eyes, leapt 19 cm in a frame on EVERY landing). Pass 4,
+the body's lean (`USOLocomotionAnimInstance`): the acceleration is the world's, read in the body's frame (read as the
+change of the velocity in the body's own frame, a turn at a run was no acceleration at all and the body ran upright round
+corners; now it banks into them), the lean is a spring (in, and a small settle), and the player's own body seen from its
+own eyes leans `OwnViewLean` 0.2 of it and plays no idle variations (`bOwnEyes`: the camera is in its eyes; the view
+lunged with every start and stop and moved standing still; everyone else, and the test view, sees all of it); a gun taken
+in hand or put away starts the idle's clock again (a variation that rolled the shoulder as a gun came into the hands
+folded the firing arm: `TheGunIsSolid` failed on whichever gun it fell). Test `ShatteredOrbit.Anim.LeansIntoTheMove`.
+Pass 5, every move measured: `ShatteredOrbit.Movement.SmoothThroughEveryMove` makes fifteen moves from the eyes at the
+ready (setting off, stopping, a strafe and its turn and stop, a sprint in and out, a jump's take-off and landing, a slide
+in, through and out, a dodge, crouching, standing) and fails on any JOLT (the gun in the picture or the view turning back
+on itself between two frames at half a centimetre a frame or more both ways) or a lurch over 4 cm a frame (`EVERYMOVE`
+lines; `-SOMoveTrace=all|<move>` writes every frame as `MOVETRACE`: the gun, the view over the FEET (the capsule's middle
+jumps in a crouch), the head, the firing shoulder, each hand's reach; the scratch `movetrace.py` reads them). It found:
+the clip weights' ramps stopped dead when they caught a target moving under them, and the pose turned in a frame (a crouch
+off a run stalled the head's fall a frame, 5 cm a frame in the eyes: each weight now follows its eased ramp through a
+spring, `WeightState`, never for the dead); the sprint's carry was blended UNDER the hands' reach, and the support arm's
+reach, holding the gun at the ready, let go of it the frame the carry's turn brought the fore end in (the gun turned back
+on itself, 5 cm a frame: `USOViewmodelComponent::OffTheShoulder`, the carry and the reload blended onto the hold after
+the reach is laid on it, so its hold fades as the carry comes in); the camera keeps to the eyes while they drop into a
+crouch or rise out of one (`ASOCharacter::UpdateEye`, `StanceChange` from the eye height's own spring: on the walk's
+softer follow it lagged the falling head 5 cm, and the gun swooped 15 cm down the picture and back as a crouch began off a
+run; 7 now). A soft (tanh) reach limit was tried and dropped: it
+moved the steady holds and two looking-down wrists went past 80. Jolts in the fifteen moves: 17 before these fixes
+(the landing's snap, a sprint in and out, the slide, the crouch), none now. Built sprint, coyote time,
 buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
 measured from the obstacle (`ESOTraversal`: low / medium vault over a thin obstacle met at speed, automatic at a sprint;
