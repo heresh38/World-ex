@@ -60,6 +60,11 @@ existing classes, never second systems.
   and gun seen from its eyes (its head hidden from its own player's camera only); the one camera sits at the eyes in
   first person and moves out behind the shoulder for the third-person test view. Never a second copy of arms, a gun or
   anything else for one view.
+- **ULTIMATE RULE: movement and gunplay come first** (the owner, 2026-11-24, word for word: "movement and gunplay are the
+  most important and core part of our game so we will continue to itterate on them and make them better, the ultimate
+  rule"; then "first do another pass at our movement then add other things like prone and faster sprint"). They are never
+  done: each reference the owner sends (other shooters' movement and gun handling: a quality target only, nothing of
+  their names or look) is studied for what ours lacks, then built, measured (tests, set 50's probe, pictures) and shown.
 - **ULTIMATE RULE: the hands are always on the gun** (the owner, 2026-11-23, word for word: "this is an ultimate rule
   remember it always for all current and future guns, every single gun must have a place where the players hand hold it
   like the handle, all guns must have this and all players hands must always at all times be on this. this is to ensure
@@ -1585,7 +1590,16 @@ body stretches out). The capture's stepper runs ONE cue a frame (`CaptureStep`: 
 several times in a slow frame, and an Act 0.05 s after a Snap moved the camera before the screenshot was drawn:
 every picture showed the step after its own; set 40's face cameras are on the support side, where the gun is not).
 Still the guide's: no grapple (the owner, 2026-11-21: "don't add grapple yet, we will do that much later"), the ground
-slam is the melee's air slam. Built sprint, coyote time,
+slam is the melee's air slam. **The movement passes of 2026-11-24** (the owner sent a video of another shooter's
+movement, "watch this to make our movement better", then "do 5 passes of the movement", and nothing new: "dont add
+anything new like prone or anything now"; a faster sprint built that morning was taken out again). Pass 1, the step: the
+gun rides the gait's own cycle (`USOViewmodelComponent`, after the walk's smoothing, which lagged it and lost half of it:
+`StepDip` / `StepSway` / `StepRoll` at a walk or a run, `SprintStepDip` / `SprintStepSway` / `SprintStepRoll` /
+`SprintStepYaw` on the sprint's carry, locked to `USOLocomotionAnimInstance::CyclePhase` less `StepLag`: it dips as each
+foot takes the weight and sways across with the stride), at the run it is canted in a little, lower and further in
+(`RunCant` 7 degrees, `RunDrop`, `RunIn`: a run reads apart from a walk), it tilts more with a jump's rise and fall
+(`AirK`), and the view leans 3.5 degrees into a strafe (`StrafeCameraRoll`; 2.5 was under the guide's 3-5); none of it
+on the sights, in a reload or an inspect. Built sprint, coyote time,
 buffered jump, variable jump height (letting go cuts the rise: "jump held" = `SetWantsToMantle`), air jumps
 (`MaxAirJumps`, 1 by default; they turn the carried speed toward the stick), strong air control, slide, and traversal
 measured from the obstacle (`ESOTraversal`: low / medium vault over a thin obstacle met at speed, automatic at a sprint;

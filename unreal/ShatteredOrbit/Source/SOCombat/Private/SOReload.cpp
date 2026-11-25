@@ -1049,7 +1049,7 @@ namespace SOReload
 			// canted away to show the left flank, then the muzzle back left and canted the other way for the top and the
 			// right. Turned about its bore alone it kept pointing away and the eyes saw its back end; swung about the firing
 			// hand, the fore end went 8 cm past the support arm's reach)
-			OutL = F6{ -0.07f, 0.06f, 0.02f, 0.18f, -0.6f, -0.55f };
+			OutL = F6{ -0.07f, 0.06f, 0.02f, 0.16f, -0.5f, -0.5f };      // (swung 0.6 and canted 0.55, the heavy machine gun's support wrist reached 80.7)
 			OutR = F6{ -0.06f, 0.07f, 0.02f, 0.2f, 0.3f, 0.85f };
 		}
 	}
@@ -1162,17 +1162,19 @@ namespace SOReload
 		}
 		if (Style == TEXT("vent"))
 		{
-			// the flap thrown open on the light inside, a breath of heat let out, slapped shut
+			// the flap thrown open on the light inside, a breath of heat let out, slapped shut (the hand goes to the flap in a
+			// quarter of a second and comes back to it for the slap in a sixth: crossed in a tenth, the heavy machine gun's
+			// support wrist bent past 80 on the way)
 			const float Open = 1.1f * 0.6f;
 			FSOReloadSegment S = Seg(1.15f);
-			S.Channels.Add(NGun, { K(0, B), K(0.3f, B), K(0.34f, B.Add(3, -0.03f), ESOEase::Out), K(0.42f, B.Add(3, 0.008f)), K(0.5f, B), K(0.76f, B),
+			S.Channels.Add(NGun, { K(0, B), K(0.34f, B), K(0.38f, B.Add(3, -0.03f), ESOEase::Out), K(0.46f, B.Add(3, 0.008f)), K(0.54f, B), K(0.76f, B),
 				K(0.8f, B.Add(3, 0.025f), ESOEase::Out), K(1.0f, B) });
-			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.14f, TEXT("hatch"), Hook), H(0.28f, TEXT("hatch"), Hook), H(0.38f, TEXT("fore"), Zero), H(0.66f, TEXT("fore"), Zero),
+			S.Channels.Add(NHand, { H(0, TEXT("fore"), Zero), H(0.2f, TEXT("hatch"), Hook), H(0.32f, TEXT("hatch"), Hook), H(0.44f, TEXT("fore"), Zero), H(0.6f, TEXT("fore"), Zero),
 				H(0.74f, TEXT("hatch"), { 0, 0.02f, 0, -0.2f, 0, -0.4f }), H(0.79f, TEXT("hatch"), { 0, -0.004f, 0, -0.2f, 0, -0.4f }, ESOEase::In), H(1.0f, TEXT("fore"), Zero) });
-			S.Channels.Add(NHatch, { K1(0, 0), K1(0.18f, 0), K1(0.28f, Open * 1.08f, ESOEase::Back), K1(0.32f, Open), K1(0.74f, Open), K1(0.79f, 0, ESOEase::In) });
-			Ev(S, 0.2f, TEXT("sfx"), TEXT("flapopen"));
-			Ev(S, 0.32f, TEXT("sfx"), TEXT("overheat"));
-			Ev(S, 0.32f, TEXT("fx"), TEXT("overheat"), 400);
+			S.Channels.Add(NHatch, { K1(0, 0), K1(0.22f, 0), K1(0.32f, Open * 1.08f, ESOEase::Back), K1(0.36f, Open), K1(0.74f, Open), K1(0.79f, 0, ESOEase::In) });
+			Ev(S, 0.24f, TEXT("sfx"), TEXT("flapopen"));
+			Ev(S, 0.36f, TEXT("sfx"), TEXT("overheat"));
+			Ev(S, 0.36f, TEXT("fx"), TEXT("overheat"), 400);
 			Ev(S, 0.79f, TEXT("sfx"), TEXT("flapclose"));
 			return S;
 		}

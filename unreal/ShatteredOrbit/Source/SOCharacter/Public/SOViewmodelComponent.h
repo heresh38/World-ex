@@ -106,6 +106,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	FRotator HandgunCarryRot = FRotator(72.0f, -8.0f, 0.0f);
 
+
 	/** Reloading: the gun up in the workspace in front of the chest, where the eyes see the work (one body: the camera
 	 *  is in its eyes; held at the belly, 14 cm lower, a first-person reload showed the muzzle alone at the foot of the
 	 *  picture), muzzle a little up and in, canted toward the body. */
@@ -142,6 +143,35 @@ public:
 	 *  is as it is. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float InEyesFollowMoving = 9.0f;
+
+	/** The step's own motion (the owner's movement guide: "walk: subtle bob and sway ... sprint: dynamic arm movement"):
+	 *  locked to the gait's cycle, each the full swing at the run (a stroll a part of it, crouched 0.6): how far the gun
+	 *  dips as each foot takes the weight and sways across a stride (cm) and rolls with it (degrees), how late after the
+	 *  footfall it is lowest (of a cycle); and the sprint carry's swing on top (cm, degrees: the arms pump it). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float StepDip = 0.35f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float StepSway = 0.45f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float StepRoll = 0.7f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float StepLag = 0.05f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float SprintStepDip = 0.6f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float SprintStepSway = 1.2f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float SprintStepRoll = 2.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float SprintStepYaw = 1.6f;
+	/** At the run (not a stroll, not a sprint) the gun rides canted in this many degrees, this much lower and further in
+	 *  (cm): running reads apart from walking (the owner's second movement video, 2026-11-24). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float RunCant = 7.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float RunDrop = 0.6f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold|Step")
+	float RunIn = 0.5f;
 
 	/** The shoulder pocket and the shoulders' middle (actor space, cm) from the body's last pose; false = defaults. */
 	bool GetShoulderPoints(const ASOCharacter* Character, FVector& OutPocket, FVector& OutChest) const;

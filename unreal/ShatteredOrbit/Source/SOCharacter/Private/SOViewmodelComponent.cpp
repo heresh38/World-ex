@@ -109,8 +109,10 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	const float DodgeT = Move && Move->IsDodging() ? FMath::Sin(Move->GetDodgeAlpha() * PI) : 0.0f;
 	const float Free = 1.0f - Ads * 0.85f;
 	const float InX = (-StrafeK * 0.006f + SlideT * 0.008f) * Free;
-	const float InY = (Character->GetLandDip() * 0.0025f - AirK * 0.008f - SlideT * 0.012f - MantleT * 0.09f - DodgeT * 0.012f) * Free;
-	const float InPitch = (-MantleT * 0.5f + AirK * 0.03f + DodgeT * 0.06f) * Free;
+	// (in the air the gun tilts with the rise and the fall: the guide's "weapon tilts naturally"; at 0.03 / 0.008 it barely
+	// showed)
+	const float InY = (Character->GetLandDip() * 0.0025f - AirK * 0.012f - SlideT * 0.012f - MantleT * 0.09f - DodgeT * 0.012f) * Free;
+	const float InPitch = (-MantleT * 0.5f + AirK * 0.05f + DodgeT * 0.06f) * Free;
 	const float InRoll = (StrafeK * 0.05f + SlideT * 0.22f + MantleT * 0.35f) * Free;
 
 	ReloadK = FMath::FInterpTo(ReloadK, Weapon && Weapon->IsReloading() ? 1.0f : 0.0f, Dt, 7.0f);
@@ -252,6 +254,31 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 			Ridden.Blend(Hold, FTransform(InEyesRot, InEyesPos) * Eye, Walking);
 			Hold = Ridden;
 		}
+	}
+	// The step's own motion (the owner's movement guide, 2026-11-20: "walk: subtle bob and sway ... sprint: dynamic arm
+	// movement"; the owner, 2026-11-24: "first do another pass at our movement"): the gun dips as each foot takes the
+	// body's weight and sways across with the stride, locked to the gait's own cycle (USOLocomotionAnimInstance::CyclePhase:
+	// the walk and the run start on the left foot), as large as the pace asks: a stroll barely, the run a little, the
+	// sprint's carry swung with the arms. Two sines a stride, after the walk's smoothing above (smoothed, it lagged and lost
+	// half itself): a rhythm, never a shake. Off on the sights, in a reload and an inspect. At the run (not a stroll, not a
+	// sprint) the gun rides canted in a little, lower and further in: running reads apart from walking (the owner's second
+	// movement video, 2026-11-24).
+	if (const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr); Anim && bGrounded)
+	{
+		const float Speed = static_cast<float>(Vel.Size2D());
+		const float Moving = Character->GetMovingEase();
+		const float Paced = FMath::SmoothStep(30.0f, 440.0f, Speed) * Moving;
+		const float Sprinted = FMath::Clamp(RunT, 0.0f, 1.0f) * FMath::SmoothStep(500.0f, 860.0f, Speed);
+		const float Step = (1.0f - Ads) * (1.0f - FMath::Max(ReloadK, InspectK)) * (Character->bIsCrouched ? 0.6f : 1.0f);
+		const float Phase = UE_TWO_PI * (Anim->CyclePhase - StepLag);
+		const float Dip = (StepDip * Paced + SprintStepDip * Sprinted) * Step;
+		const float Sway = (StepSway * Paced + SprintStepSway * Sprinted) * Step;
+		const float Roll = (StepRoll * Paced + SprintStepRoll * Sprinted) * Step;
+		const float Yaw = SprintStepYaw * Sprinted * Step;
+		const float Running = FMath::SmoothStep(250.0f, 440.0f, Speed) * (1.0f - Sprinted) * Step * Moving;
+		const FRotator Turn(-0.25f * Dip * FMath::Cos(2.0f * Phase), 0.5f * Yaw * FMath::Sin(Phase + 0.25f * PI), 0.5f * Roll * FMath::Sin(Phase) - RunCant * Running);
+		const FVector Shift(0.0f, -0.5f * Sway * FMath::Sin(Phase) - RunIn * Running, -0.5f * Dip * FMath::Cos(2.0f * Phase) - RunDrop * Running);
+		Hold = FTransform(Turn, Shift) * Hold;
 	}
 	// On the sights (the same gun in the same hands, first person or not): the sight on the line of the body's eyes,
 	// where the camera is in first person; the kick turns the gun about its SIGHT, so the reticle stays on the point the

@@ -207,7 +207,7 @@ public:
 	float SlideCameraRoll = 3.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
-	float StrafeCameraRoll = 2.5f;
+	float StrafeCameraRoll = 3.5f;                // (2.5 was under the guide's 3-5)
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float DodgeCameraRoll = 5.0f;
@@ -221,6 +221,7 @@ public:
 	/** At a sprint the view leans forward this many degrees (the guide: "camera leans forward"). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
 	float SprintCameraPitch = 1.2f;
+
 
 	/** A hard landing shakes the view: degrees of roll it is knocked by at the hardest (a wobble that settles). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SO|Camera")
