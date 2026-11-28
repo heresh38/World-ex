@@ -170,6 +170,17 @@ struct SOCHARACTER_API FSOLocomotionProxy : public FAnimInstanceProxy
 	/** Which gun the elbows' memory above belongs to (USOLocomotionAnimInstance::HoldSerial): another gun starts it afresh. */
 	int32 HoldSerial = 0;
 	float ElbowDt = 0.0f;
+	/** How far the support hand may turn about its palm's normal on what it holds (degrees either way, the rig's:
+	 *  USOGunRigComponent::GetSupportSpinFree), and how far it is turned (ApplyHold: toward where its arm comes from, at a
+	 *  hand's pace; from the frame's start, as the elbows). */
+	float SupportSpinFree = 0.0f;
+	mutable float WorkSpin = 0.0f;
+	float WorkSpinStart = 0.0f;
+	/** The support hand on its arm in the last pose, as an arm is measured (SOArmBones: the forearm's twist, the wrist
+	 *  toward the palm and to the side, degrees; W below 0: none kept): the hand turns from one hold to the next THROUGH
+	 *  its own range at a hand's pace, never across a frame (ApplyHold). From the frame's start, as the elbows. */
+	mutable FVector4f HandTurn = FVector4f(0.0f, 0.0f, 0.0f, -1.0f);
+	FVector4f HandTurnStart = FVector4f(0.0f, 0.0f, 0.0f, -1.0f);
 
 	// Body motion (third-person bodies; see USOLocomotionAnimInstance).
 	float WarpYaw = 0.0f;
@@ -414,6 +425,8 @@ public:
 	FTransform LeftTarget;
 	FSOFingerPose RightFingers;
 	FSOFingerPose LeftFingers;
+	/** How far the support hand may turn on what it holds right now (USOGunRigComponent::GetSupportSpinFree). */
+	float SupportSpinFree = 0.0f;
 	/** The way the held gun points, in the mesh's space (zero: no gun): the support hand slides back along it where
 	 *  the arm would not reach. */
 	FVector GunAxis = FVector::ZeroVector;
@@ -455,11 +468,18 @@ public:
 	 *  the pole asked (rad from straight down, + outward), the one that straightens the wrist, what was taken, how
 	 *  much the hand asked, and the most allowed. */
 	static float DebugSwing[2][9];
+	/** Developer: how far each hand (firing, support) was turned off the hold it was asked for by the bones' guard in the
+	 *  last pose (degrees; ApplyHold, SOArmBones::Within), and how far the working hand is turned on what it holds. */
+	static float DebugGive[2];
+	static float DebugSpin;
 	/** The turn that brings a finger's line (FingerDir) Amount of the way toward the middle finger's, in the palm's plane. */
 	static FQuat FingersTogether(const FVector& FingerDir, const FVector& MiddleDir, const FVector& Palm, float Amount);
 	/** How far the snug way brings the fingers together (FSOFingerPose::Together). */
 	static constexpr float SnugTogether = 0.85f;
 	FVector GetFittedOffset(bool bLeft) const { return FitOffset[bLeft ? 1 : 0]; }
+	/** The firing hand's basis on the gun where the fit turned it back toward square on the grip (rig space): false where
+	 *  it holds the grip as the rig has it. */
+	bool GetFittedFiringBasis(FQuat& OutBasis) const { OutBasis = FitFiringBasis; return bFitDone && FitGripEase > 0.01f; }
 	bool HasFittedGrip() const { return bFitDone; }
 	/** The support hand was turned to another hold than the rig's own (a vertical fore grip): its basis in the gun's frame. */
 	bool GetFittedTurn(FQuat& OutBasis) const { OutBasis = FitBasis; return bFitTurn; }
@@ -497,6 +517,13 @@ protected:
 	// how far the firing hand is set below its usual seat (cm), and whether the trigger finger's root started in the gun
 	// at the last fit: a grip whose frame comes down low ahead of it is held lower, so the finger clears the frame
 	float FitGripDrop = 0.0f;
+	/** The firing hand turned back toward square on a long gun's grip, degrees (FitGrip): it holds the grip obliquely
+	 *  (USOGunRigComponent: RifleGrip) wherever the grip's own shape lets its fingers close that way, and less so where
+	 *  they would start inside the gun (a grip with a thumb hole, a short fat one). Its basis on the gun then (rig space). */
+	float FitGripEase = 0.0f;
+	FQuat FitFiringBasis = FQuat::Identity;
+	/** How many of the firing hand's three wrapping fingers (middle, ring, little) started INSIDE the gun in the last fit. */
+	int32 FitFiringStuck = 0;
 	bool bFitIndexInside = false;
 
 	TWeakObjectPtr<const class USOGunRigComponent> FitRig;

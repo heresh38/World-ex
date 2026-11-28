@@ -3,6 +3,15 @@
 // way a normal human cant or in a way harmful to a humans"). Every joint of the player's body is measured, in every
 // state a player puts it in and in both views, against a normal, healthy human range of motion: the head on the chest,
 // the chest on the hips, the elbows, the wrists, the knees (never bent backward), the ankles.
+//
+// And the arms as BONES (the owner, 2026-11-27, with red marks on our own pictures of a reload: "the players hands can't
+// bend in a way that is not posible for a real human, learn it once and apply it to all guns and done ... humans have
+// bones and can't bend their hands/arms in such manner so mark where they are in the body and ensure these rules are
+// always followed at all times for everything"): SOArmBones marks each joint of an arm where it is in the body and
+// measures it as an examiner does: the upper arm's turn about itself, the elbow's hinge, the forearm's twist (the palm
+// turned up or down), and the wrist bent toward the palm or the back of the hand AND to either side, which a wrist does
+// only a little. One angle under 80 degrees, as it was, passed wrists folded sideways and palms turned past what the
+// forearm's two bones allow. ARM lines: every state's worst, both arms.
 
 #include "SOTestWorld.h"
 
@@ -15,6 +24,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "SOArmBones.h"
 #include "SOCharacter.h"
 #include "SOCharacterMovementComponent.h"
 #include "SOInventoryComponent.h"
@@ -22,6 +32,8 @@
 #include "SOLootLibrary.h"
 #include "SOLootTypes.h"
 #include "SOPlayerState.h"
+#include "SOReload.h"
+#include "SOGunRigComponent.h"
 #include "SOWeapon.h"
 
 namespace SOHumanRange
@@ -52,7 +64,24 @@ namespace SOHumanRange
 		{ TEXT("left knee behind its line (cm)"), -100.0f, 2.0f },
 		{ TEXT("right ankle (90 standing)"), 54.0f, 145.0f },   // (35 degrees up with the knee bent, a deep squat's; 55 down)
 		{ TEXT("left ankle (90 standing)"), 54.0f, 145.0f },
+		// the arms as bones (SOArmBones::FRange: the clinical norms)
+		{ TEXT("right forearm twist (+ palm up)"), -80.0f, 85.0f },
+		{ TEXT("left forearm twist (+ palm up)"), -80.0f, 85.0f },
+		{ TEXT("right wrist toward the palm (- the back)"), -68.0f, 75.0f },
+		{ TEXT("left wrist toward the palm (- the back)"), -68.0f, 75.0f },
+		{ TEXT("right wrist sideways (+ thumb, - little finger)"), -35.0f, 20.0f },
+		{ TEXT("left wrist sideways (+ thumb, - little finger)"), -35.0f, 20.0f },
+		{ TEXT("right wrist as one joint (1 its edge)"), 0.0f, 1.0f },
+		{ TEXT("left wrist as one joint (1 its edge)"), 0.0f, 1.0f },
+		{ TEXT("right upper arm turned about itself (+ in)"), -75.0f, 95.0f },
+		{ TEXT("left upper arm turned about itself (+ in)"), -75.0f, 95.0f },
+		// how far the arm solve's guard turned each hand off the hold it was asked for, to keep the bones in range: a hold
+		// that leans on the guard is a hold to put right where it is made (the firing hand is on its grip: hardly at all)
+		{ TEXT("right hand turned off its hold by the bones' guard"), 0.0f, 16.5f },   // (the worst: on the sights looking 60 degrees down with a grip its fit had to ease)
+		{ TEXT("left hand turned off its hold by the bones' guard"), 0.0f, 40.0f },
 	};
+	/** Where the arms' measures begin in Limits (two of each: right, left). */
+	static constexpr int32 ArmFirst = 16;
 	static constexpr int32 NumLimits = UE_ARRAY_COUNT(Limits);
 
 	/** Every measure of the body's last pose, in the order of Limits; false when the skeleton lacks a bone. */
@@ -128,6 +157,31 @@ namespace SOHumanRange
 		};
 		Out[14] = Ankle(TEXT("shin_R"), TEXT("foot_R"));
 		Out[15] = Ankle(TEXT("shin_L"), TEXT("foot_L"));
+		// the arms as bones: from where the joints are (the knuckles give the hand's line and its thumb side)
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const bool bLeft = Side == 1;
+			auto Bone = [&](const TCHAR* Base) { return Index(*FString::Printf(TEXT("%s_%s"), Base, bLeft ? TEXT("L") : TEXT("R"))); };
+			const int32 Knuckle = Bone(TEXT("middle_01")), First = Bone(TEXT("index_01")), Last = Bone(TEXT("pinky_01"));
+			for (int32 k = 0; k < 5; ++k)
+			{
+				Out[ArmFirst + k * 2 + Side] = 0.0f;
+			}
+			if (First == INDEX_NONE || Last == INDEX_NONE || !CS.IsValidIndex(First) || !CS.IsValidIndex(Last))
+			{
+				continue;                                    // (a body without finger bones: its wrists as one angle only)
+			}
+			const FVector Wrist = CS[Bone(TEXT("hand"))].GetLocation();
+			const SOArmBones::FArm Arm = SOArmBones::Measure(CS[Bone(TEXT("upperarm"))].GetLocation(), CS[Bone(TEXT("forearm"))].GetLocation(), Wrist,
+				CS[Knuckle].GetLocation() - Wrist, CS[First].GetLocation() - CS[Last].GetLocation(), bLeft, Axis(TEXT("chest"), Fwd), Axis(TEXT("chest"), Up));
+			Out[ArmFirst + 0 + Side] = Arm.Twist;
+			Out[ArmFirst + 2 + Side] = Arm.Flex;
+			Out[ArmFirst + 4 + Side] = Arm.Deviate;
+			Out[ArmFirst + 6 + Side] = Arm.WristStrain();
+			Out[ArmFirst + 8 + Side] = Arm.Turn;
+		}
+		Out[ArmFirst + 10] = USOLocomotionAnimInstance::DebugGive[0];
+		Out[ArmFirst + 11] = USOLocomotionAnimInstance::DebugGive[1];
 		return true;
 	}
 }
@@ -164,6 +218,7 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	TMap<FString, TPair<float, float>> Worst;   // (state + joint) -> (least, most) seen
 	FString State;
 	int32 Frames = 0;
+	int32 SinceFlight = 100;                       // (frames since the support hand last flew between two places of a reload)
 	auto Sample = [&]()
 	{
 		float M[NumLimits];
@@ -172,6 +227,21 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 			return;
 		}
 		++Frames;
+		// (a support hand in flight between two places of a reload holds nothing: how far the guard turned it off the turn
+		// it was asked for on the way says nothing of a hold)
+		// (nor in the tenth of a second after it arrives: it turns over onto its new hold at a hand's pace, ApplyHold)
+		if (const ASOWeapon* Held = Player->GetWeapon(); Held && Held->IsWorkingTheGun() && Held->GetPose().bHand)
+		{
+			const FSOReloadPose& P = Held->GetPose();
+			if (P.HandAnchorA != P.HandAnchorB && P.HandAlpha > 0.02f && P.HandAlpha < 0.98f)
+			{
+				SinceFlight = 0;
+			}
+		}
+		if (SinceFlight < 7)
+		{
+			M[ArmFirst + 11] = 0.0f;
+		}
 		for (int32 i = 0; i < NumLimits; ++i)
 		{
 			TPair<float, float>& Seen = Worst.FindOrAdd(State + TEXT(": ") + Limits[i].Joint, TPair<float, float>(M[i], M[i]));
@@ -196,6 +266,7 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 		{
 			Each();
 			Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt);
+			++SinceFlight;
 			if (++Frame > Settle && (Frame % 2) == 0)
 			{
 				Sample();
@@ -204,9 +275,40 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 			if (bTrace && Measure(Body, M))
 			{
 				const float* Sw = USOLocomotionAnimInstance::DebugSwing[0];
-				AddInfo(FString::Printf(TEXT("TRACE %s %d%s: elbow R %.1f L %.1f, wrist R %.1f L %.1f, head %.1f / %.1f, chest %.1f / %.1f | swing A0 %.2f A1 %.2f A %.2f ask %.2f clear %.2f wrist %.1f trunk %.2f (%.0f)"),
+				// (in a reload, where the support hand is going: the anchors and how far between them)
+				FString Work;
+				if (const ASOWeapon* Held = Player->GetWeapon(); Held && Held->GetPose().bHand)
+				{
+					Work = FString::Printf(TEXT(" | hand %s -> %s %.2f"), *Held->GetPose().HandAnchorA.ToString(), *Held->GetPose().HandAnchorB.ToString(), Held->GetPose().HandAlpha);
+				}
+				AddInfo(FString::Printf(TEXT("TRACE %s %d%s: elbow R %.1f L %.1f, wrist R %.1f L %.1f, head %.1f / %.1f, chest %.1f / %.1f | swing A0 %.2f A1 %.2f A %.2f ask %.2f clear %.2f wrist %.1f trunk %.2f (%.0f)%s"),
 					*Name, Frame, Frame > Settle ? TEXT("") : TEXT(" (settling)"), M[6], M[7], M[8], M[9], M[0], M[1], M[3], M[4],
-					Sw[0], Sw[1], Sw[2], Sw[3], Sw[5], Sw[6], Sw[7], Sw[8]));
+					Sw[0], Sw[1], Sw[2], Sw[3], Sw[5], Sw[6], Sw[7], Sw[8], *Work));
+				// (the arms as bones: twist, toward the palm, sideways, the wrist as one joint, the upper arm's turn)
+				AddInfo(FString::Printf(TEXT("BONES %s %d: R twist %.0f flex %.0f side %.0f wrist %.2f turn %.0f gave %.0f | L twist %.0f flex %.0f side %.0f wrist %.2f turn %.0f gave %.0f spin %.0f"),
+					*Name, Frame, M[ArmFirst], M[ArmFirst + 2], M[ArmFirst + 4], M[ArmFirst + 6], M[ArmFirst + 8], M[ArmFirst + 10],
+					M[ArmFirst + 1], M[ArmFirst + 3], M[ArmFirst + 5], M[ArmFirst + 7], M[ArmFirst + 9], M[ArmFirst + 11], USOLocomotionAnimInstance::DebugSpin));
+				// (and where every joint is, the body's own frame, cm: +X its left, +Y forward, +Z up; the gun's grip, bore and
+				// top in it; the camera: GEOM lines, for working an arm out on paper)
+				{
+					const TArray<FTransform>& CS = Body->GetComponentSpaceTransforms();
+					auto P = [&](const TCHAR* Bone) { const int32 I = Body->GetBoneIndex(Bone); return CS.IsValidIndex(I) ? CS[I].GetLocation() : FVector::ZeroVector; };
+					auto V = [](const FVector& A) { return FString::Printf(TEXT("(%.1f %.1f %.1f)"), A.X, A.Y, A.Z); };
+					const FTransform ToBody = Body->GetComponentTransform();
+					FString Gun;
+					if (const ASOWeapon* Held = Player->GetWeapon(); Held && Held->GetRig())
+					{
+						const FTransform G = Held->GetRig()->GetComponentTransform();
+						Gun = FString::Printf(TEXT(" | gun at %s fwd %s up %s"), *V(ToBody.InverseTransformPosition(G.GetLocation())),
+							*V(ToBody.InverseTransformVectorNoScale(G.GetRotation().GetForwardVector())), *V(ToBody.InverseTransformVectorNoScale(G.GetRotation().GetUpVector())));
+					}
+					const FTransform Eye = Player->GetEyeTransform(false);
+					AddInfo(FString::Printf(TEXT("GEOM %s %d: R S %s E %s W %s K %s I %s P %s | L S %s E %s W %s K %s I %s P %s | chest %s neck %s hips %s%s | cam %s fwd %s"),
+						*Name, Frame, *V(P(TEXT("upperarm_R"))), *V(P(TEXT("forearm_R"))), *V(P(TEXT("hand_R"))), *V(P(TEXT("middle_01_R"))), *V(P(TEXT("index_01_R"))), *V(P(TEXT("pinky_01_R"))),
+						*V(P(TEXT("upperarm_L"))), *V(P(TEXT("forearm_L"))), *V(P(TEXT("hand_L"))), *V(P(TEXT("middle_01_L"))), *V(P(TEXT("index_01_L"))), *V(P(TEXT("pinky_01_L"))),
+						*V(P(TEXT("chest"))), *V(P(TEXT("neck"))), *V(P(TEXT("hips"))), *Gun, *V(ToBody.InverseTransformPosition(Eye.GetLocation())),
+						*V(ToBody.InverseTransformVectorNoScale(Eye.GetRotation().GetForwardVector()))));
+				}
 			}
 		});
 	};
@@ -257,6 +359,10 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 			Hold(Name(TEXT("on the sights looking down 60")), 0.7f, [&]() { PC->SetControlRotation(FRotator(-60.0f, Yaw, 0.0f)); Player->MarkCombat(); });
 			Player->HandleAimReleased();
 			PC->SetControlRotation(FRotator(0.0f, Yaw, 0.0f));
+			// (the view level again before the reload is measured: flicked from 60 degrees down to level in one frame, the
+			// gun's hold trails the body's by a frame, and both arms were measured stretched straight to a gun still at the
+			// knees: the flick's own frame, not the reload's)
+			W.Run(0.3f, [&]() { Player->FaceRotation(PC->GetControlRotation(), SOTest::Dt); });
 			Gun->SetAmmo(0, 200);
 			Gun->StartReload();
 			Hold(Name(TEXT("reloading")), FMath::Max(Gun->GetReloadDuration(), 0.5f) + 0.3f, [&]() {});
@@ -304,6 +410,31 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	Move->SetWantsToSprint(false);
 
 	const bool bLogAll = FParse::Param(FCommandLine::Get(), TEXT("SORangeAll"));
+	// (ARM lines: every state's arms at their worst, both arms on one line: -SOArms)
+	if (FParse::Param(FCommandLine::Get(), TEXT("SOArms")) || bLogAll)
+	{
+		TArray<FString> States;
+		for (const TPair<FString, TPair<float, float>>& It : Worst)
+		{
+			if (It.Key.EndsWith(Limits[6].Joint))
+			{
+				States.Add(It.Key.LeftChop(FCString::Strlen(Limits[6].Joint) + 2));
+			}
+		}
+		for (const FString& S : States)
+		{
+			auto Seen = [&](int32 Joint) { const TPair<float, float>* P = Worst.Find(S + TEXT(": ") + Limits[Joint].Joint); return P ? *P : TPair<float, float>(0.0f, 0.0f); };
+			FString Line = FString::Printf(TEXT("ARM %s"), *S);
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				Line += FString::Printf(TEXT(" | %s elbow %.0f-%.0f twist %.0f..%.0f flex %.0f..%.0f side %.0f..%.0f wrist %.2f turn %.0f..%.0f gave %.0f"), Side == 0 ? TEXT("R") : TEXT("L"),
+					Seen(6 + Side).Key, Seen(6 + Side).Value, Seen(ArmFirst + Side).Key, Seen(ArmFirst + Side).Value, Seen(ArmFirst + 2 + Side).Key, Seen(ArmFirst + 2 + Side).Value,
+					Seen(ArmFirst + 4 + Side).Key, Seen(ArmFirst + 4 + Side).Value, Seen(ArmFirst + 6 + Side).Value, Seen(ArmFirst + 8 + Side).Key, Seen(ArmFirst + 8 + Side).Value,
+					Seen(ArmFirst + 10 + Side).Value);
+			}
+			AddInfo(Line);
+		}
+	}
 	for (const TPair<FString, TPair<float, float>>& It : Worst)
 	{
 		const int32 Joint = static_cast<int32>(Algo::IndexOfByPredicate(Limits, [&](const FLimit& L) { return It.Key.EndsWith(L.Joint); }));

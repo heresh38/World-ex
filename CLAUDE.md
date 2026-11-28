@@ -81,6 +81,20 @@ existing classes, never second systems.
   fingers, the hips, the knees (never past straight, never in or backward), the ankles. Nothing is ever solved by
   bending a joint further: the gun, the camera or the stance gives way instead (on the sights only the camera moves to
   the sight line, never the head or the eyes: "just move the camera"). Test `ShatteredOrbit.Body.HumanRange`.
+- **Arms and hands move as BONES allow** (the owner, 2026-11-27, with red marks on our own side pictures of a pistol's
+  and a pump shotgun's reload, word for word: "the players hands can't bend in a way that is not posible for a real human,
+  learn it once and apply it to all guns and done" and "from your own images these hand positions are not possible for a
+  human, humans have bones and can't bend their hands/arms in such manner so mark where they are in the body and ensure
+  these rules are always followed at all times for everything"). An arm is its bones, written ONCE for every gun, state
+  and view (`SOArmBones.h`): the elbow a hinge, the forearm's two bones turning the palm so far and no further, the
+  wrist bending far up and down but only a little to either side, each joint marked where it is in the body. A hand's
+  hold on the part it works, or the gun's place, gives way: never a joint. Test `ShatteredOrbit.Body.HumanRange`
+  (every gun, every state, every frame of a reload and an inspect).
+- **The hands and the WHOLE gun are in the picture, always** (the owner, 2026-11-27, word for word: "the player
+  hands/guns need to be fully visible at all times, this means the entire gun and not 20% of it. have this as a hard
+  rule"). In first person every state is judged by how much of the gun and of both hands lies inside the picture,
+  measured for every gun (test `ShatteredOrbit.Hold.GunInThePicture`), and it is got by where the gun is held and where
+  the one camera sits: never a second model or camera, never a hand off the gun, never a joint past its range.
 - **One colour palette a set** (the owner, 2026-11-15: "all guns in the set need to have the same color pallet and shoot
   the same color, this is our rule going forward"): every gun of a set (its `"set"`; a gun of no set: its class's
   family, light / kinetic / horror) fires the same colour and carries the same light. `Data/game_data.json`
@@ -875,8 +889,27 @@ the eyes of the 184 cm male stand at 171). Test `ShatteredOrbit.Camera.SteadyAtA
 `Data/game_data.json` -> `USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready,
 across the chest, muzzle down and to the left; `CarryOffset` / `CarryRot`), `short` (SMGs: up part of the way,
 `ShortCarry*`), `high` (handguns: up by the face in both hands, muzzle to the sky, `HandgunCarry*`). A gun's length does
-not tell (the heavy machine gun is shorter than the SMG). A reload brings the gun up into the workspace in front of the
-chest where the eyes see it (`ReloadOffset` 40 / 6 / -2: at the belly a first-person reload showed the muzzle alone).
+not tell (the heavy machine gun is shorter than the SMG). **A reload is SEEN** (the owner, 2026-11-24: "During reloads
+most guns are either not visible in the screen or they're facing the wrong way, the m4 for example should tilt more to
+the right so the reload clip is visible or player should raise the gun with one hand and then reload ... the player can
+see the magazine fully"; before, one pose for every gun in front of the chest, canted 28 degrees to the left: for nearly
+every gun the magazine lay under the foot of the picture and was seen from straight above, the receiver over it):
+`USOViewmodelComponent::ReloadPose` raises the gun so the part its reload works (`KeepReloadWork`, by
+`SOReload::GetStyle`: the magazine or cell, a revolver's cylinder, a bolt-action's bolt, a pump's loading port, a light
+or living gun's flap; kept from before the reload begins, so the gun never chases a magazine on its way out) lies
+`ReloadWorkAcross` .56 of the way across the picture and `ReloadWorkDown` .68 down, `ReloadWorkAhead` 40 cm in front of
+the eyes (a handgun `ReloadWorkAheadHandgun` 36), worked out for the player's field of view; the muzzle up `ReloadPitch`
+14 and in `ReloadYaw` 20 degrees; canted about its bore to turn that part toward the eyes (up to `ReloadCantRight` 26
+degrees for a magazine under the gun or a flap on its left, `ReloadCantLeft` 18 for a port on its top or right), and
+back level and toward the hold while a handle or a slide is racked over its top (`RackK`: canted and raised, reaching
+over a pistol's slide bent the wrist 100 degrees). The magazine POUCH is on the body now (`USOGunRigComponent::
+PouchOnBody`: a chest rig's, the chest's front left of the middle; a point under the gun went up with the gun raised to
+be seen, to the shoulder, and the arm folded shut; on the belt the trip down and back up was so long that the arm turned
+over on the way and the wrist bent past 90 arriving at the gun), the hand's trip out to it swings out ahead of the chest,
+and at it the hand already holds the magazine as it will at the gun. Test `ShatteredOrbit.Reload.TheWorkInView` (every gun from its own eyes:
+where it is worked in the picture, seen from its side, the magazine whole while it is in the gun; `RELOADVIEW` lines,
+`-SOReloadOnly=`, `-SOReloadTrace`); pictures `SOCaptureSeries 1 53 -SOGuns=<arch>,...` (files `SO_rl_<gun>_<1..6>`
+from the eyes, `_side` from beside).
 **The hands are where the gun is, the gun where the hands can be** (the ULTIMATE rule): `InFiringReach` (the firing
 wrist within 0.33-0.95 of its arm) and `InSupportReach` (the support hand's fitted place within `SupportReach` 0.87 of
 its arm: the gun comes in toward that shoulder, a long gun's butt no further back than `ButtAheadOfShoulder` in front

@@ -1044,6 +1044,10 @@ void ASOWeapon::BeginReloadLocal(bool bEmpty, int32 Rounds, float TimeScale)
 	Reload.Start(MoveTemp(Segments), LoopFrom, LoopTo);
 	OnWeaponEvent.Broadcast(TEXT("reload"));
 	PlayEventSound(TEXT("reload"));
+	if (ASOCombatCharacter* Holder = GetHolder())
+	{
+		Holder->OnWeaponHandled(TEXT("reload"));
+	}
 }
 
 // --- Inspect ---------------------------------------------------------------------------------
@@ -1275,9 +1279,17 @@ void ASOWeapon::Tick(float DeltaSeconds)
 		const FName Name = Event.Name == TEXT("sfx") ? Event.Arg : Event.Name;
 		OnWeaponEvent.Broadcast(Name);
 		PlayEventSound(Name);
+		if (Holder)
+		{
+			Holder->OnWeaponHandled(Name);
+		}
 	}
 	if (bFinished)
 	{
+		if (Holder && bReloading && !bInspecting)
+		{
+			Holder->OnWeaponHandled(TEXT("reloaded"));
+		}
 		bReloading = false;
 		if (bInspecting)
 		{

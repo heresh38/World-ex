@@ -1,4 +1,6 @@
 #include "SOLocomotionAnimInstance.h"
+
+#include "SOArmBones.h"
 #include "SOSpring.h"
 
 #include "Animation/AnimSequenceBase.h"
@@ -118,6 +120,8 @@ namespace
 		bool bIndexInside = false;
 		FQuat Basis = FQuat::Identity;
 		float Drop = 0.0f;
+		float Ease = 0.0f;
+		FQuat FiringBasis = FQuat::Identity;
 	};
 	TMap<FString, FSOFitMemo>& FitMemos()
 	{
@@ -141,6 +145,8 @@ bool USOLocomotionAnimInstance::RestoreFit(const FString& Key, const USOGunRigCo
 	bFitIndexInside = M->bIndexInside;
 	FitBasis = M->Basis;
 	FitGripDrop = M->Drop;
+	FitGripEase = M->Ease;
+	FitFiringBasis = M->FiringBasis;
 	FitRig = Rig;
 	bFitDone = true;
 	return true;
@@ -161,6 +167,8 @@ void USOLocomotionAnimInstance::KeepFit(const FString& Key)
 	M.bIndexInside = bFitIndexInside;
 	M.Basis = FitBasis;
 	M.Drop = FitGripDrop;
+	M.Ease = FitGripEase;
+	M.FiringBasis = FitFiringBasis;
 }
 
 void USOLocomotionAnimInstance::ForgetFits()
@@ -286,6 +294,7 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		LeftTarget = Left.GetRelativeTransform(ToMesh);
 		GunAxis = Held->IsWorkingTheGun() ? FVector::ZeroVector : ToMesh.InverseTransformVectorNoScale(Rig->GetComponentTransform().GetUnitAxis(EAxis::X));
 		Rig->GetFingerPoses(RightFingers, LeftFingers);
+		SupportSpinFree = Rig->GetSupportSpinFree();
 		// the hands fitted to this gun (once per gun, when it is at rest in them). The fit is a search of the gun's own
 		// shape (tens of thousands of sweeps) and the same gun in the same hands always comes out the same: it is kept
 		// per gun and body, and a switch back to a gun already fitted takes the kept one (the owner: "when switching
@@ -302,27 +311,67 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		}
 		else if ((FitRig.Get() != Rig || !bFitDone) && !Held->IsWorkingTheGun())
 		{
-			FitGripDrop = 0.0f;
-			FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
-			// (the trigger finger starts in the gun: this grip's trigger, frame or what hangs ahead of it (a drum) stands
-			// where the usual seat puts the finger. The hand a little higher, then a little lower, the first that frees it.)
-			for (const float Drop : { -0.75f, -1.5f, 0.75f, 1.5f, 2.25f })
+			// The firing hand holds a long gun's grip OBLIQUELY (the rig's own basis: the wrist's bones ask it, SOArmBones)
+			// wherever this grip's shape lets the fingers close that way: where the ring or the little finger would not wrap
+			// it (they touched before they moved: a thumb-hole stock, a short fat grip: the ksmg's lay straight along its
+			// grip, in it), the hand is turned back toward square on the grip, 9 degrees, then 18, and the least turn whose
+			// fingers wrap is kept (the measure ShatteredOrbit.Hold.FittedGrip holds every gun to: the ring finger's knuckle
+			// and middle joint 70 degrees between them, the little finger's 40).
+			auto Wraps = [this]()
 			{
-				if (!bFitDone || !bFitIndexInside)
+				return FMath::Min(FitFingers[0].Curl[2][0] + FitFingers[0].Curl[2][1] - 70.0f, FitFingers[0].Curl[3][0] + FitFingers[0].Curl[3][1] - 40.0f);
+			};
+			auto FitOnce = [&]()
+			{
+				FitGripDrop = 0.0f;
+				FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
+				// (the trigger finger starts in the gun: this grip's trigger, frame or what hangs ahead of it (a drum) stands
+				// where the usual seat puts the finger. The hand a little higher, then a little lower, the first that frees it.)
+				for (const float Drop : { -0.75f, -1.5f, 0.75f, 1.5f, 2.25f })
 				{
-					break;
+					if (!bFitDone || !bFitIndexInside)
+					{
+						break;
+					}
+					FitGripDrop = Drop;
+					FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
 				}
-				FitGripDrop = Drop;
-				FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
-			}
-			if (bFitIndexInside && FitGripDrop != 0.0f)
+				if (bFitIndexInside && FitGripDrop != 0.0f)
+				{
+					FitGripDrop = 0.0f;                               // (no better lower: as it was)
+					FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
+				}
+				else if (FitGripDrop != 0.0f)
+				{
+					UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %s firing hand set %.2f cm lower (negative: higher): the trigger finger is free"), *Rig->GetArchetype().ToString(), FitGripDrop);
+				}
+			};
+			FitGripEase = 0.0f;
+			FitOnce();
+			if (bFitDone && !Rig->IsHandgun() && !Rig->HasHold() && Wraps() <= 0.0f)
 			{
-				FitGripDrop = 0.0f;                               // (no better lower: as it was)
-				FitGrip(Rig, Mesh, Holder->HoldsWithOneHand());
-			}
-			else if (FitGripDrop != 0.0f)
-			{
-				UE_LOG(LogTemp, Verbose, TEXT("FitGrip: %s firing hand set %.2f cm lower (negative: higher): the trigger finger is free"), *Rig->GetArchetype().ToString(), FitGripDrop);
+				float BestEase = 0.0f, BestWrap = Wraps();
+				for (const float Ease : { 9.0f, 18.0f })
+				{
+					FitGripEase = Ease;
+					FitOnce();
+					if (bFitDone && Wraps() > BestWrap + 4.0f)
+					{
+						BestWrap = Wraps();
+						BestEase = Ease;
+					}
+					if (BestWrap > 0.0f)
+					{
+						break;
+					}
+				}
+				if (FitGripEase != BestEase)
+				{
+					FitGripEase = BestEase;
+					FitOnce();
+				}
+				UE_LOG(LogTemp, Display, TEXT("FitGrip: %s firing hand turned %.0f degrees back toward square on its grip (its fingers wrap by %.0f degrees to spare)"),
+					*Rig->GetArchetype().ToString(), FitGripEase, BestWrap);
 			}
 			KeepFit(MemoKey);
 		}
@@ -331,6 +380,10 @@ void USOLocomotionAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			const FTransform& RigT = Rig->GetComponentTransform();
 			RightFingers = FitFingers[0];
 			RightTarget.AddToTranslation(ToMesh.InverseTransformVector(RigT.TransformVector(FitOffset[0])));
+			if (FitGripEase > 0.01f)
+			{
+				RightTarget.SetRotation(ToMesh.GetRotation().Inverse() * (RigT.GetRotation() * FitFiringBasis));
+			}
 			// (away only while the reload's own hand works a part: as far as its choreography has the hand at the fore end,
 			// the hand is on its fitted hold there, so it comes home onto it; eased back in after the reload had ended, it
 			// lay a centimetre or three into the gun for a tenth of a second)
@@ -742,6 +795,7 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 	bFitDone = false;
 	bFitSlid = SlideBack > 0.0f;
 	bFitIndexInside = false;
+	FitFiringStuck = 0;
 	FitOffset[0] = FitOffset[1] = FVector::ZeroVector;
 	bFitTurn = false;
 	Rig->GetFingerPoses(FitFingers[0], FitFingers[1]);
@@ -832,6 +886,15 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 		const FQuat RestBasis = FSOHandGrip::MakeBasis(RestAlong, FVector(0.0f, 1.0f, 0.0f), bLeft);
 		const FQuat HandOffset = RestBasis.Inverse() * HandRef.GetRotation();
 		FQuat Basis = Target[Side].GetRotation();
+		if (!bLeft && FitGripEase > 0.01f)
+		{
+			// (turned back toward square on the grip: the fingers down, about the gun's own side axis)
+			Basis = FQuat(RigT.GetUnitAxis(EAxis::Y), FMath::DegreesToRadians(FitGripEase)) * Basis;
+		}
+		if (!bLeft)
+		{
+			FitFiringBasis = RigT.GetRotation().Inverse() * Basis;
+		}
 		FVector Along = Basis.GetAxisX();
 		FVector Palm = FSOHandGrip::PalmNormal(Basis, bLeft);
 		bool bPost = false;
@@ -1542,6 +1605,10 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 				}
 			}
 			const bool bStartsInside = Blocked(0) && !bOnTrigger;
+			if (!bLeft && F >= 1 && F <= 3 && bStartsInside)
+			{
+				++FitFiringStuck;
+			}
 			if (!bLeft && F == 0 && bStartsInside)
 			{
 				bFitIndexInside = true;
@@ -1675,6 +1742,8 @@ void USOLocomotionAnimInstance::FitGrip(const USOGunRigComponent* Rig, const USk
 }
 
 float USOLocomotionAnimInstance::DebugSwing[2][9] = {};
+float USOLocomotionAnimInstance::DebugGive[2] = {};
+float USOLocomotionAnimInstance::DebugSpin = 0.0f;
 
 FString USOLocomotionAnimInstance::FHoldReport::ToString() const
 {
@@ -2047,6 +2116,8 @@ void FSOLocomotionProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSec
 		ElbowDirStart[k] = ElbowDir[k];
 		SwingOutStart[k] = SwingOut[k];
 	}
+	WorkSpinStart = WorkSpin;
+	HandTurnStart = HandTurn;
 	ElbowDt = DeltaSeconds;
 }
 
@@ -2082,7 +2153,10 @@ void FSOLocomotionProxy::CopyFrom(const USOLocomotionAnimInstance* Instance)
 		{
 			ElbowDirStart[k] = SwingOutStart[k] = FVector::ZeroVector;
 		}
+		WorkSpinStart = 0.0f;
+		HandTurnStart = FVector4f(0.0f, 0.0f, 0.0f, -1.0f);
 	}
+	SupportSpinFree = Instance->SupportSpinFree;
 	bHeadFree = Instance->bHeadFree;
 	AimPitch = Instance->AimPitch;
 	Blade = Instance->Blade;
@@ -2801,6 +2875,30 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			}
 		}
 
+		// The arm as BONES (SOArmBones; the owner, 2026-11-27: "the players hands can't bend in a way that is not posible
+		// for a real human, learn it once and apply it to all guns and done ... humans have bones and can't bend their
+		// hands/arms in such manner so mark where they are in the body and ensure these rules are always followed at all times
+		// for everything"): the hand's long line and its thumb side in the hand bone's own frame, from the rest pose's
+		// knuckles, so every choice below can ask what a pose would take of the forearm's twist and of the wrist's two ways
+		// of bending. A player's body (one with those knuckles).
+		FVector LineLocal = FVector::ZeroVector, ThumbLocal = FVector::ZeroVector;
+		bool bBones = false;
+		if (Stance.bPlayer)
+		{
+			const int32 Knuckle = Find(bLeft ? TEXT("middle_01_L") : TEXT("middle_01_R")), First = Find(bLeft ? TEXT("index_01_L") : TEXT("index_01_R"));
+			const int32 Last = Find(bLeft ? TEXT("pinky_01_L") : TEXT("pinky_01_R"));
+			if (Knuckle != INDEX_NONE && First != INDEX_NONE && Last != INDEX_NONE)
+			{
+				const FQuat RestInv = RefCS[Hand].GetRotation().Inverse();
+				LineLocal = RestInv.RotateVector(RefCS[Knuckle].GetLocation() - RefCS[Hand].GetLocation());
+				ThumbLocal = RestInv.RotateVector(RefCS[First].GetLocation() - RefCS[Last].GetLocation());
+				bBones = !LineLocal.IsNearlyZero() && !ThumbLocal.IsNearlyZero();
+			}
+		}
+		const FQuat ChestNow = Chest != INDEX_NONE ? CS[Chest].GetRotation() * RefCS[Chest].GetRotation().Inverse() : FQuat::Identity;
+		const FVector BodyFwd = ChestNow.RotateVector(FVector(0.0f, 1.0f, 0.0f)), BodyUp = ChestNow.RotateVector(FVector(0.0f, 0.0f, 1.0f));
+		static const SOArmBones::FRange Human;
+
 		const FVector S = CS[Upper].GetLocation();
 		const float L1 = FVector::Dist(S, CS[Lower].GetLocation());
 		const float L2 = FVector::Dist(CS[Lower].GetLocation(), CS[Hand].GetLocation());
@@ -2825,6 +2923,21 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					// further it came off the pistol's back, round nothing: the viewmodel brings a handgun into reach)
 					Target.AddToTranslation(-GunAxis * FMath::Clamp(Va - FMath::Sqrt(Disc), 0.0f, bHandgunHold ? 2.0f : 30.0f));
 				}
+			}
+		}
+		// A support hand at WORK (a reload's or an inspect's choreography carries it from the fore end to a magazine, the
+		// pouch on the chest, a handle, a flap) never folds its arm shut: its place is no nearer its shoulder than the arm
+		// reaches folded to 140 degrees (a human's elbow closes to about 150; fetching a magazine from the chest with the gun
+		// raised to be seen, the hand passed 15 cm from the shoulder and the elbow folded to 175). The hand's place gives way,
+		// never the joint.
+		if (bLeft && bReloadHold)
+		{
+			const float Least = FMath::Sqrt(L1 * L1 + L2 * L2 - 2.0f * L1 * L2 * FMath::Cos(FMath::DegreesToRadians(40.0f)));
+			const FVector V = Target.GetLocation() - S;
+			const float Near = static_cast<float>(V.Size());
+			if (Near < Least && Near > 1e-3f)
+			{
+				Target.SetLocation(S + V * (Least / Near));
 			}
 		}
 		// The swing's frame round the shoulder-to-wrist line: straight down from it, and out round the arm's outside. "Down"
@@ -2862,6 +2975,103 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			}
 			return true;
 		};
+		// A hand at WORK takes what it works from where its arm comes: it turns about its own palm's normal on the part (a
+		// magazine from its side or end on from below, a floor plate, a shell, a flap: as far as the rig says the part lets
+		// it, USOGunRigComponent::GetSupportSpinFree), the palm staying where it is on the part, to the turn that asks least
+		// of the arm's bones and stays nearest the choreography's own. Held to the grip's own angle with the gun raised and
+		// turned to be seen, the forearm twisted through 179 degrees and the wrist folded 65 to either side.
+		if (bLeft)
+		{
+			float Spin = 0.0f;
+			if (bBones && SupportSpinFree > 1.0f)
+			{
+				const FQuat Rot0 = Target.GetRotation();
+				const FVector PalmN = FSOHandGrip::PalmNormal(Rot0, true);
+				const FVector Contact = Target.GetLocation() + Rot0.GetAxisX() * 5.0f + PalmN * 1.3f;
+				auto Spun = [&](float Deg)
+				{
+					const FQuat R = FQuat(PalmN, FMath::DegreesToRadians(Deg)) * Rot0;
+					return FTransform(R, Contact - R.GetAxisX() * 5.0f - PalmN * 1.3f);
+				};
+				// what a turn asks of the arm: the least over where the elbow may swing
+				auto Asks = [&](float Deg)
+				{
+					const FTransform T = Spun(Deg);
+					const FVector To = T.GetLocation() - S;
+					const FVector Line = To.GetSafeNormal(1e-4f, FVector(0.0f, 1.0f, 0.0f));
+					FVector Down, Out;
+					if (!SwingFrame(Line, Down, Out))
+					{
+						return 9.0f;
+					}
+					const float Dist = FMath::Clamp(static_cast<float>(To.Size()), FMath::Abs(L1 - L2) + 0.5f, (L1 + L2) * 0.999f);
+					const float Al = (L1 * L1 - L2 * L2 + Dist * Dist) / (2.0f * Dist), Hi = FMath::Sqrt(FMath::Max(L1 * L1 - Al * Al, 0.0f));
+					const FQuat HandRot = T.GetRotation() * HandOffset;
+					const FVector LineNow = HandRot.RotateVector(LineLocal), ThumbNow = HandRot.RotateVector(ThumbLocal);
+					float Least = 9.0f;
+					for (int32 i = 0; i <= 7; ++i)
+					{
+						const float Sw = FMath::Lerp(-0.5f, 1.4f, i / 7.0f);
+						const FVector E = S + Line * Al + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Hi;
+						Least = FMath::Min(Least, SOArmBones::Measure(S, E, S + Line * Dist, LineNow, ThumbNow, true, BodyFwd, BodyUp).Asks(Human));
+					}
+					// (an arm well inside its range is as good as any other: the choreography's own turn wins there)
+					return FMath::Max(Least, 0.6f) + 0.0015f * FMath::Abs(Deg);
+				};
+				float Best = 0.0f, BestAsk = Asks(0.0f);
+				const int32 Steps = FMath::Max(FMath::CeilToInt(SupportSpinFree / 15.0f), 1);
+				for (int32 i = 1; i <= Steps; ++i)
+				{
+					for (const float Sign : { 1.0f, -1.0f })
+					{
+						const float Deg = Sign * SupportSpinFree * i / Steps;
+						if (const float Ask = Asks(Deg); Ask < BestAsk)
+						{
+							BestAsk = Ask;
+							Best = Deg;
+						}
+					}
+				}
+				float Span = SupportSpinFree / Steps;
+				for (int32 Halve = 0; Halve < 3; ++Halve)
+				{
+					Span *= 0.5f;
+					for (const float Sign : { 1.0f, -1.0f })
+					{
+						const float Deg = FMath::Clamp(Best + Sign * Span, -SupportSpinFree, SupportSpinFree);
+						if (const float Ask = Asks(Deg); Ask < BestAsk)
+						{
+							BestAsk = Ask;
+							Best = Deg;
+						}
+					}
+				}
+				// (at a hand's pace: the turn that asks least can change sides between two frames)
+				Spin = Best;
+				if (ElbowDt >= 0.0f && ElbowDt < 0.25f)
+				{
+					const float Most = 420.0f * ElbowDt;
+					Spin = WorkSpinStart + FMath::Clamp(Best - WorkSpinStart, -Most, Most);
+				}
+				Spin = FMath::Clamp(Spin, -SupportSpinFree, SupportSpinFree);
+				if (FMath::Abs(Spin) > 0.05f)
+				{
+					Target = Spun(Spin);
+					if (const int32 Knuckle = Find(TEXT("middle_01_L")); Knuckle != INDEX_NONE)
+					{
+						const FVector RestLine = RefCS[Hand].GetRotation().UnrotateVector((RefCS[Knuckle].GetLocation() - RefCS[Hand].GetLocation()).GetSafeNormal());
+						if (!RestLine.IsNearlyZero())
+						{
+							HandLine = (Target.GetRotation() * HandOffset).RotateVector(RestLine);
+						}
+					}
+				}
+			}
+			WorkSpin = Spin;
+#if !UE_BUILD_SHIPPING
+			USOLocomotionAnimInstance::DebugSpin = Spin;
+#endif
+		}
 		const FVector ToTarget = Target.GetLocation() - S;
 		const FVector Dir = ToTarget.GetSafeNormal(1e-4f, FVector(0.0f, 1.0f, 0.0f));
 		{
@@ -2976,6 +3186,88 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					float* Sw = USOLocomotionAnimInstance::DebugSwing[SideIndex]; Sw[0] = A0; Sw[1] = A1; Sw[2] = A; Sw[3] = Ask; Sw[4] = Most;
 				}
 #endif
+			}
+		}
+		// The elbow by the BONES: where the swing the look asks for would take more of the arm than a human's has (the
+		// forearm's twist, the wrist toward the palm or the back of the hand and, far less, to either side, the upper arm's
+		// turn about itself: SOArmBones), the elbow swings round the shoulder-to-wrist line toward the swing that asks least,
+		// as far as the first that is inside (to a hair: where the look's own swing is at the edge the elbow has not moved,
+		// so nothing switches on at a line); where none is inside, to the one that asks least. The hand's place and turn on
+		// the gun stay. A shouldered gun's grip is 32 cm from the shoulder, so the forearm comes to it 68 degrees off the
+		// line from the shoulder whichever way the elbow hangs: hung low, all of that was a sideways bend of the wrist (52
+		// degrees toward the little finger, where a wrist goes 35); carried out to the side it is the wrist bent back, which
+		// a wrist does.
+		if (bBones)
+		{
+			FVector Down, Out;
+			if (SwingFrame(Dir, Down, Out))
+			{
+				const FQuat HandRot = Target.GetRotation() * HandOffset;
+				const FVector LineNow = HandRot.RotateVector(LineLocal), ThumbNow = HandRot.RotateVector(ThumbLocal);
+				const FVector WristAt = S + Dir * D;
+				auto StrainAt = [&](float Sw)
+				{
+					const FVector E = S + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
+					// (what the swing can change: the elbow's own bend is the same wherever it hangs, and counted in, a gun held
+					// close with the elbow folded to its end made every swing as bad as every other)
+					return SOArmBones::Measure(S, E, WristAt, LineNow, ThumbNow, bLeft, BodyFwd, BodyUp).Asks(Human);
+				};
+				// (at the ready the look's own swing holds up to the edge of the range: a shouldered gun's firing wrist has
+				// little to spare wherever the elbow is; while the gun is WORKED, a reload or an inspect, the elbows settle
+				// well inside it, as arms at work do: held at the edge through a reload the firing forearm stayed twisted 78
+				// degrees and the wrist 18 to the thumb's side the whole way)
+				const float Soft = bReloadHold ? 0.7f : 0.92f;
+				const float Low = -0.6f, High = bLeft ? 1.45f : 1.7f;
+				const float A = FMath::Atan2(static_cast<float>(FVector::DotProduct(Bend, Out)), static_cast<float>(FVector::DotProduct(Bend, Down)));
+				if (const float Now = StrainAt(A); Now > Soft)
+				{
+					float BestA = A, Best = Now;
+					static const int32 Steps = 28;
+					for (int32 i = 0; i <= Steps; ++i)
+					{
+						const float Sw = FMath::Lerp(Low, High, i / static_cast<float>(Steps));
+						if (const float St = StrainAt(Sw); St < Best)
+						{
+							Best = St;
+							BestA = Sw;
+						}
+					}
+					float Span = (High - Low) / Steps;
+					for (int32 Halve = 0; Halve < 5; ++Halve)
+					{
+						Span *= 0.5f;
+						for (const float Sign : { 1.0f, -1.0f })
+						{
+							const float Sw = FMath::Clamp(BestA + Sign * Span, Low, High);
+							if (const float St = StrainAt(Sw); St < Best)
+							{
+								Best = St;
+								BestA = Sw;
+							}
+						}
+					}
+					float Found = BestA;
+					if (Best < Soft)
+					{
+						float Short = A;
+						for (int32 Step = 1; Step <= 24; ++Step)
+						{
+							const float Try = FMath::Lerp(A, BestA, Step / 24.0f);
+							if (StrainAt(Try) <= Soft)
+							{
+								Found = Try;
+								break;
+							}
+							Short = Try;
+						}
+						for (int32 Halve = 0; Halve < 6; ++Halve)
+						{
+							const float Mid = 0.5f * (Short + Found);
+							(StrainAt(Mid) <= Soft ? Found : Short) = Mid;
+						}
+					}
+					Bend = Down * FMath::Cos(Found) + Out * FMath::Sin(Found);
+				}
 			}
 		}
 		// The arm stays out of the body (the owner, 2026-11-23: "when scoping in third person and looking down ... the right
@@ -3127,14 +3419,75 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 			}
 			ElbowDir[SideIndex] = Bend;
 		}
-		const FVector Elbow = S + Dir * Along + Bend * Height;
-		const FVector Wrist = S + Dir * D;
+		FVector Elbow = S + Dir * Along + Bend * Height;
+		FVector Wrist = S + Dir * D;
+		// The guard: whatever asked for this hold (a fit, a reload's choreography, the gun's place), the hand's turn is
+		// brought inside what this arm's bones allow (SOArmBones::Within: the forearm's twist within its range, the wrist
+		// inside its ellipse), the palm staying where it is on what it holds and the arm reaching the wrist that turn puts
+		// behind it. The hand's hold gives way, never a joint. How far it gave is kept (DebugGive): a hold that leans on
+		// the guard is a hold to put right where it is made.
+		FQuat Wanted = Target.GetRotation() * HandOffset;
+		if (bBones)
+		{
+			const FQuat Asked = Wanted;
+			const FVector Contact = Target.GetLocation() + Target.GetRotation().GetAxisX() * 5.0f + FSOHandGrip::PalmNormal(Target.GetRotation(), bLeft) * 1.3f;
+			for (int32 Pass = 0; Pass < 3; ++Pass)
+			{
+				SOArmBones::FArm Was;
+				const FQuat Allowed = SOArmBones::Within(S, Elbow, Wrist, Wanted, LineLocal, ThumbLocal, bLeft, Human, 0.97f, &Was);
+				if (Was.WristStrain(Human) <= 0.97f && Was.TwistStrain(Human) <= 0.97f)
+				{
+					break;
+				}
+				Wanted = Allowed;
+				const FQuat Basis = Wanted * HandOffset.Inverse();
+				const FVector To = Contact - Basis.GetAxisX() * 5.0f - FSOHandGrip::PalmNormal(Basis, bLeft) * 1.3f - S;
+				const FVector Line = To.GetSafeNormal(1e-4f, Dir);
+				const float Dist = FMath::Clamp(static_cast<float>(To.Size()), FMath::Abs(L1 - L2) + 0.5f, (L1 + L2) * 0.999f);
+				const float Al = (L1 * L1 - L2 * L2 + Dist * Dist) / (2.0f * Dist), Hi = FMath::Sqrt(FMath::Max(L1 * L1 - Al * Al, 0.0f));
+				const FVector Round = (Bend - Line * FVector::DotProduct(Bend, Line)).GetSafeNormal(1e-4f, Bend);
+				Elbow = S + Line * Al + Round * Hi;
+				Wrist = S + Line * Dist;
+			}
+			// The support hand goes from one hold to the next THROUGH its own range, at a hand's pace: between a handle on the
+			// top of the gun and the fore end under it, the turn asked for passes straight across from one end of the
+			// forearm's twist to the other, and the guard above put the hand at the near end one frame and the far end the
+			// next (the palm turned over 160 degrees in a sixtieth of a second). Its place on its arm, as an arm is measured
+			// (twist, toward the palm, to the side), moves from where it was last frame toward where it is asked at no more
+			// than 1500 / 1000 degrees a second: through thumb-up, as a hand turns over (a tenth of a second for a whole turn
+			// over). A hand that is on its hold moves far slower than that and is not held back.
+			if (bLeft)
+			{
+				const FVector LineNow = Wanted.RotateVector(LineLocal), ThumbNow = Wanted.RotateVector(ThumbLocal);
+				const SOArmBones::FArm Now = SOArmBones::Measure(S, Elbow, Wrist, LineNow, ThumbNow, true, BodyFwd, BodyUp);
+				FVector3f Turned(Now.Twist, Now.Flex, Now.Deviate);
+				if (Now.bBent && HandTurnStart.W >= 0.0f && ElbowDt >= 0.0f && ElbowDt < 0.25f)
+				{
+					// (along the straight line between the two: both ends are inside the range and the range is convex, so
+					// every place on the way is; each measure held to its own pace, the wrist was taken outside its ellipse on
+					// the way from one bend to another)
+					const FVector3f Was(HandTurnStart.X, HandTurnStart.Y, HandTurnStart.Z);
+					const float MostTwist = 1500.0f * ElbowDt, MostBend = 1000.0f * ElbowDt;
+					const float Share = FMath::Min3(1.0f, MostTwist / FMath::Max(FMath::Abs(Turned.X - Was.X), 1e-3f),
+						MostBend / FMath::Max(FMath::Max(FMath::Abs(Turned.Y - Was.Y), FMath::Abs(Turned.Z - Was.Z)), 1e-3f));
+					if (Share < 0.999f)
+					{
+						Turned = Was + (Turned - Was) * Share;
+						Wanted = SOArmBones::Compose(S, Elbow, Wrist, Turned.X, Turned.Y, Turned.Z, LineLocal, ThumbLocal, true);
+					}
+				}
+				HandTurn = Now.bBent ? FVector4f(Turned.X, Turned.Y, Turned.Z, 1.0f) : FVector4f(0.0f, 0.0f, 0.0f, -1.0f);
+			}
+			Target.SetRotation(Wanted * HandOffset.Inverse());
+#if !UE_BUILD_SHIPPING
+			USOLocomotionAnimInstance::DebugGive[SideIndex] = FMath::RadiansToDegrees(static_cast<float>(Asked.AngularDistance(Wanted)));
+#endif
+		}
 
 		Turn(Upper, FQuat::FindBetweenNormals((CS[Lower].GetLocation() - S).GetSafeNormal(), (Elbow - S).GetSafeNormal()));
 		const FVector E = CS[Lower].GetLocation();
 		Turn(Lower, FQuat::FindBetweenNormals((CS[Hand].GetLocation() - E).GetSafeNormal(), (Wrist - E).GetSafeNormal()));
 
-		const FQuat Wanted = Target.GetRotation() * HandOffset;
 		const FVector ForearmAxis = (CS[Hand].GetLocation() - CS[Lower].GetLocation()).GetSafeNormal();
 		FQuat Swing, Twist;
 		(Wanted * CS[Hand].GetRotation().Inverse()).ToSwingTwist(ForearmAxis, Swing, Twist);

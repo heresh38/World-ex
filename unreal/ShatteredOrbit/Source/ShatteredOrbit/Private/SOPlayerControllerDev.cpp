@@ -1447,6 +1447,85 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
 		return;
 	}
+	if (Set == 53)
+	{
+		// The reload SEEN (the owner, 2026-11-24: "During reloads most guns are either not visible in the screen or they're
+		// facing the wrong way ... so reload is visible and the player can see the magazine fully"; files rl_<gun>_<n>): a
+		// reload from empty from the player's own eyes at six moments, and once from beside the body (how others see it).
+		// -SOGuns=<archetype>[,...]
+		FString List = TEXT("rifle,carbine,dmr,ksmg,pistol,auto,smg,pump,revolver,bolt,sniper,shotgun,hmg,rocket");
+		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
+		TArray<FString> Guns;
+		List.ParseIntoArray(Guns, TEXT(","));
+		auto Beside = [this, Hero](bool bOn)
+		{
+			ASOCharacter* H = Hero();
+			if (!H || !bOn)
+			{
+				SetViewTarget(H);
+				return;
+			}
+			if (!CaptureCamera)
+			{
+				CaptureCamera = GetWorld()->SpawnActor<ACameraActor>();
+			}
+			const FVector Focus = H->GetMesh()->GetBoneLocation(TEXT("spine")) + FVector(0.0f, 0.0f, 25.0f);
+			const FRotator Around(0.0f, H->GetActorRotation().Yaw + 40.0f, 0.0f);
+			const FVector Eye = Focus + Around.Vector() * 230.0f + FVector(0.0f, 0.0f, 15.0f);
+			CaptureCamera->SetActorLocationAndRotation(Eye, (Focus - Eye).Rotation());
+			if (ACameraActor* C = Cast<ACameraActor>(CaptureCamera))
+			{
+				C->GetCameraComponent()->SetFieldOfView(45.0f);
+				C->GetCameraComponent()->SetConstraintAspectRatio(false);
+			}
+			SetViewTarget(CaptureCamera);
+		};
+		Do(6.0f, [=, this]()
+		{
+			ConsoleCommand(TEXT("DisableAllScreenMessages"));
+			if (USOInventoryComponent* Inv = SOFindInventory(this))
+			{
+				Inv->bPersist = false;
+			}
+			View(ESOViewMode::FirstPerson);
+		});
+		for (const FString& Gun : Guns)
+		{
+			Act([=, this]()
+			{
+				if (ASOCharacter* H = Hero())
+				{
+					FRandomStream Rng(FCrc::StrCrc32(*Gun));
+					FSOWeaponInstance Wi = USOLootLibrary::MakeWeapon(FName(*Gun), 2, 20, Rng);
+					Wi.Sight = TEXT("default");
+					H->EquipInstance(Wi);
+					H->MarkCombat();
+				}
+				Beside(false);
+			});
+			Do(1.3f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
+			Act([=, this]() { EmptyReload(); });
+			float Last = 0.0f;
+			int32 N = 0;
+			for (const float At : { 0.3f, 0.65f, 1.0f, 1.35f, 1.75f, 2.2f })
+			{
+				Do(At - Last, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
+				Snap(0.0f, FString::Printf(TEXT("rl_%s_%d"), *Gun, ++N));
+				Last = At;
+				if (N == 3)
+				{
+					Act([=, this]() { Beside(true); });
+					Snap(0.0f, FString::Printf(TEXT("rl_%s_side"), *Gun));
+					Act([=, this]() { Beside(false); });
+					Last += 0.1f;
+				}
+			}
+			Do(1.6f, [=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } });
+		}
+		Do(0.5f, []() {});
+		GetWorldTimerManager().SetTimer(CaptureTimer, this, &ASOPlayerController::CaptureStep, 0.02f, true);
+		return;
+	}
 	if (Set == 48)
 	{
 		// The gun in the hands (the owner's ULTIMATE rule, 2026-11-23: "all players hands must always at all times be on

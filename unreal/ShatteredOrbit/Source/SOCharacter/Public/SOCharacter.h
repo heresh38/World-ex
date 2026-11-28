@@ -113,6 +113,7 @@ public:
 	virtual float GetSpreadScale() const override;
 	virtual USceneComponent* GetWeaponParent() const override { return GunHold; }
 	virtual void OnWeaponFired(float Kick) override;
+	virtual void OnWeaponHandled(FName Event) override;
 	virtual bool IsFirstPersonView() const override;
 
 	/** Eye height above the feet when standing / crouched (cm). */
@@ -835,6 +836,11 @@ private:
 	float ShakeRollVel = 0.0f;
 	float FovBoost = 0.0f;
 	float FovBoostVel = 0.0f;
+	/** The view nudged by the gun's handling (degrees: up, left, a roll to the right): a spring knocked by each beat of a
+	 *  reload (OnWeaponHandled, FSOHandlingBeat::View), back to nothing. The view's own, like the sprint's lean: it turns
+	 *  no shot. */
+	FVector HandleView = FVector::ZeroVector;
+	FVector HandleViewVel = FVector::ZeroVector;
 	FVector FeelOffset = FVector::ZeroVector;
 	float CurrentFov = 90.0f;
 

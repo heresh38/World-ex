@@ -1,5 +1,6 @@
 #include "SOCharacter.h"
 #include "SOSpring.h"
+#include "SOReloadShow.h"
 #include "SOStance.h"
 
 #include "AnimationRuntime.h"
@@ -773,6 +774,23 @@ float ASOCharacter::GetSpreadScale() const
 	return Scale;
 }
 
+void ASOCharacter::OnWeaponHandled(FName Event)
+{
+	// (the gun jolts in the hands for everyone who sees it; the view is nudged for the one who holds it, in its own eyes)
+	if (Viewmodel)
+	{
+		Viewmodel->Handle(Event);
+	}
+	if (IsLocallyControlled() && ViewMode == ESOViewMode::FirstPerson)
+	{
+		const FSOReloadShowData& Shows = FSOReloadShowData::Get();
+		if (const FSOHandlingBeat* Beat = Shows.Beat(Event))
+		{
+			HandleViewVel += Beat->View * (Shows.JoltOmega / 0.55f);
+		}
+	}
+}
+
 void ASOCharacter::OnWeaponFired(float Kick)
 {
 	if (Viewmodel)
@@ -1187,11 +1205,13 @@ void ASOCharacter::Tick(float DeltaSeconds)
 		// (the view's own feel, a roll and a lean, belongs to the eyes: it goes as the camera goes out behind the shoulder)
 		const float AtEyes = 1.0f - ViewBlend;
 		Camera->ClearAdditiveOffset();
-		const float Roll = (CameraRoll + ShakeRoll) * AtEyes;
-		const float Pitch = GetRecoilPitch() + AbilityKick + (FeelPitch + BlastPunch) * AtEyes;
-		if (FMath::Abs(Pitch) > 1e-3f || FMath::Abs(Roll) > 1e-3f)
+		// (and the handling's nudge: each beat of a reload knocks the view a little, OnWeaponHandled)
+		const float Roll = (CameraRoll + ShakeRoll + static_cast<float>(HandleView.Z)) * AtEyes;
+		const float Pitch = GetRecoilPitch() + AbilityKick + (FeelPitch + BlastPunch + static_cast<float>(HandleView.X)) * AtEyes;
+		const float Yaw = -static_cast<float>(HandleView.Y) * AtEyes;
+		if (FMath::Abs(Pitch) > 1e-3f || FMath::Abs(Roll) > 1e-3f || FMath::Abs(Yaw) > 1e-3f)
 		{
-			Camera->AddAdditiveOffset(FTransform(FRotator(Pitch, 0.0f, Roll)), 0.0f);
+			Camera->AddAdditiveOffset(FTransform(FRotator(Pitch, Yaw, Roll)), 0.0f);
 		}
 	}
 
@@ -2358,6 +2378,7 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 		CameraBoom->TargetOffset = FVector(0.0f, 0.0f, StepSmooth);
 		FeelOffset = FVector::ZeroVector;
 		LandDip = LandDipVel = CameraRoll = CameraRollVel = FovBoost = FovBoostVel = FeelPitch = FeelPitchVel = ShakeRoll = ShakeRollVel = 0.0f;
+		HandleView = HandleViewVel = FVector::ZeroVector;
 		LastFeelZ = Z;
 		bHaveFeelZ = true;
 		return;
@@ -2405,6 +2426,10 @@ void ASOCharacter::UpdateCameraFeel(float DeltaSeconds)
 		SOSpring::Step(CameraRoll, CameraRollVel, WantRoll, 9.0f, 0.78f, FMath::Min(Dt, 0.1f));
 	}
 	SOSpring::Step(ShakeRoll, ShakeRollVel, 0.0f, FMath::Sqrt(520.0f), 0.32f, Dt);
+	{
+		const FSOReloadShowData& Shows = FSOReloadShowData::Get();
+		SOSpring::Step(HandleView, HandleViewVel, FVector::ZeroVector, Shows.JoltOmega * 0.8f, 0.6f, Dt);
+	}
 	ShakeRoll = FMath::Clamp(ShakeRoll, -4.0f, 4.0f);
 	BlastPunch = FMath::FInterpTo(BlastPunch, 0.0f, Dt, 7.0f);
 

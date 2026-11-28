@@ -289,6 +289,11 @@ public:
 	/** A shot left the muzzle (all machines): recoil, viewmodel kick. */
 	virtual void OnWeaponFired(float Kick) {}
 
+	/** One beat of the gun being handled (all machines): a reload begun ("reload") or done ("reloaded"), and each of its
+	 *  sound events as it falls (magrelease, magin, slap, rackback, rackfwd ...): the gun jolts in the hands, the view is
+	 *  nudged. */
+	virtual void OnWeaponHandled(FName Event) {}
+
 	//~ AActor
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;

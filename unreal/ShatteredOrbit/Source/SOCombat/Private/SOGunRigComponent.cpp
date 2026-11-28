@@ -11,6 +11,8 @@
 #include "SOLootLibrary.h"
 #include "SOReload.h"
 #include "SOWeaponData.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
 
 namespace
 {
@@ -53,8 +55,19 @@ namespace
 	// Firing hand: palm on the right of the grip, fingers round its front, thumb on top.
 	FSOHandGrip RifleGrip()
 	{
-		// (the hand runs forward and only a little down: square to a raked grip, 22 degrees down, it left the wrist
-		// that much more to make up from a forearm that comes up to the grip from below)
+		// A long gun's grip is held OBLIQUELY, as a hand holds a handle: the grip crosses the palm from the web of the thumb
+		// to the heel on the little finger's side, so the hand's own line runs a little UP along the bore (5 degrees; its
+		// knuckles' line 10), not square to the raked grip. Square to it (22 degrees down, then 13) the forearm, which comes
+		// up to a shouldered gun's grip from an elbow below, met the hand's line 68 degrees off, and the wrist was bent 52
+		// degrees toward the little finger, where a wrist goes 35 (the owner, 2026-11-27: "humans have bones and can't bend
+		// their hands/arms in such manner"; SOArmBones).
+		return FSOHandGrip::AtPalm(FVector(-2.2f, 1.6f, -4.5f), FVector(0.9957f, 0.0f, 0.0924f), FVector(-0.0924f, 0.0f, 0.9957f), false);
+	}
+
+	// A handgun's: held out at the arms' reach the forearm runs along the bore, and the hand a little down from it (the
+	// grip's rake): the wrist nearly straight.
+	FSOHandGrip HandgunGrip()
+	{
 		return FSOHandGrip::AtPalm(FVector(-2.2f, 1.6f, -4.5f), FVector(0.975f, 0.0f, -0.22f), FVector(0.22f, 0.0f, 0.975f), false);
 	}
 
@@ -339,7 +352,7 @@ void USOGunRigComponent::Build(const USOWeaponData* Data)
 	Archetype = Data->Archetype;
 	bHandgun = Data->MuzzleLocation.Y < 35.0f; // short barrel, the support hand on the grip
 	bSnugGrip = Data->bSnugGrip;
-	RightGrip = RifleGrip();
+	RightGrip = bHandgun ? HandgunGrip() : RifleGrip();
 	LeftGrip = bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip));
 	RightFingers = FSOFingerPose::Trigger();
 	LeftFingers = FingersForAnchor(NFore);
@@ -412,6 +425,23 @@ FBox USOGunRigComponent::GetWornBounds() const
 	}
 	Add(Optic);
 	return Out;
+}
+
+float USOGunRigComponent::SpinFreeForAnchor(FName Anchor) const
+{
+	if (Anchor == NFore || Anchor.IsNone() || Anchor == TEXT("pump"))
+	{
+		return 0.0f;                                             // (wrapped round the fore end: as it is fitted)
+	}
+	if (Anchor == NBolt || Anchor == TEXT("charge") || Anchor == TEXT("slide"))
+	{
+		return 40.0f;                                            // (hooked over a handle, gripping a slide: only a little)
+	}
+	if (Anchor == NMag || Anchor == NSpare || Anchor == NPouch || Anchor == TEXT("biomass"))
+	{
+		return 120.0f;                                           // (round a magazine: from its side, or end on from below)
+	}
+	return 180.0f;                                               // (a palm under a floor plate, a pinch of rounds, a flap: from wherever the arm comes)
 }
 
 FSOFingerPose USOGunRigComponent::FingersForAnchor(FName Anchor) const
@@ -674,7 +704,13 @@ FVector USOGunRigComponent::ResolveAnchor(FName Anchor) const
 	};
 
 	if (Anchor == NFore || Anchor.IsNone()) return Foregrip;
-	if (Anchor == NPouch) return GltfToMesh(0.1f, -0.42f, -0.22f);
+	if (Anchor == NPouch)
+	{
+		// a place on the holder's own body (the reload seen, 2026-11-24): kept as a point under the gun, it went up with a
+		// gun raised to be seen, to the holder's shoulder, and the arm folded shut fetching a magazine
+		FVector OnBody;
+		return PouchOnBody(OnBody) && GunSpace ? GunSpace->GetComponentTransform().InverseTransformPosition(OnBody) : GltfToMesh(0.1f, -0.42f, -0.22f);
+	}
 	if (Anchor == TEXT("free")) return FVector::ZeroVector;
 	if (Anchor == NMag) return MagPoint(GetPart(NMag), 3.5f);
 	if (Anchor == NMagBase) return MagPoint(GetPart(NMag), 0.0f);
@@ -702,9 +738,52 @@ FVector USOGunRigComponent::ResolveAnchor(FName Anchor) const
 	return Centre(Anchor); // pump, hatch, biomass, ...
 }
 
+bool USOGunRigComponent::PouchOnBody(FVector& OutWorld, FQuat* OutFacing) const
+{
+	// The magazine pouch on the front of the chest, left of the middle, on whoever holds the gun (the chest's joint, in the
+	// holder's facing): a chest rig's pouch. On the belt, the trip down from a gun raised to be seen and back up was so long
+	// that the support arm turned over on the way and its wrist bent past 90 arriving at the gun
+	const AActor* Gun = GetOwner();
+	const ACharacter* Holder = Cast<ACharacter>(Gun ? Gun->GetOwner() : nullptr);
+	if (!Holder && GetAttachParent())
+	{
+		Holder = Cast<ACharacter>(GetAttachParent()->GetOwner());
+	}
+	const USkeletalMeshComponent* Wearer = Holder ? Holder->GetMesh() : nullptr;
+	if (!Wearer || Wearer->GetBoneIndex(TEXT("chest")) == INDEX_NONE)
+	{
+		return false;
+	}
+	const FQuat Facing = Holder->GetActorQuat();
+	OutWorld = Wearer->GetBoneLocation(TEXT("chest")) + Facing.RotateVector(FVector(17.0f, -9.0f, -16.0f));
+	if (OutFacing)
+	{
+		*OutFacing = Facing;
+	}
+	return true;
+}
+
 FSOHandGrip USOGunRigComponent::GripForAnchor(FName Anchor) const
 {
 	const FVector Point = MeshToRig(ResolveAnchor(Anchor));
+	if (Anchor == NPouch)
+	{
+		// At the pouch on the body the hand is turned as an arm reaches its own chest rig, in the BODY's frame: its line
+		// forward and in across the body from an elbow at the side, the thumb up, the palm toward the body. Turned as it
+		// holds a magazine at the gun (the gun's frame: raised and rolled to be seen, any way at all against the arm), the
+		// forearm was asked to twist half a turn at the chest and the bones' guard turned the hand 97 degrees off it.
+		FVector OnBody;
+		FQuat Facing;
+		if (PouchOnBody(OnBody, &Facing))
+		{
+			const FQuat Basis = Facing * FSOHandGrip::MakeBasis(FVector(0.75f, 0.6f, -0.1f), FVector(0.0f, 0.0f, 1.0f), true);
+			const FVector Wrist = OnBody - Basis.GetAxisX() * 5.0f - FSOHandGrip::PalmNormal(Basis, true) * 1.3f;
+			FSOHandGrip Grip;
+			Grip.Basis = GetComponentQuat().Inverse() * Basis;
+			Grip.Wrist = GetComponentTransform().InverseTransformPosition(Wrist);
+			return Grip;
+		}
+	}
 	if (Anchor == NFore || Anchor.IsNone())
 	{
 		return bHasHold ? Hold.Support : (bHandgun ? HandgunSupportGrip() : SupportGrip(MeshToRig(Foregrip)));
@@ -819,6 +898,7 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		LastSegment = Pose.Segment;
 		CurGrip = LeftGrip;
 		CurFingers = LeftFingers;
+		CurSpinFree = LeftSpinFree;
 	}
 	if (Pose.bHand)
 	{
@@ -829,7 +909,8 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 				return CurGrip;
 			}
 			FSOHandGrip G = GripForAnchor(Anchor);
-			if (Anchor != NBolt && Anchor != TEXT("charge") && Anchor != TEXT("slide"))
+			FVector OnBody;
+			if (Anchor != NBolt && Anchor != TEXT("charge") && Anchor != TEXT("slide") && !(Anchor == NPouch && PouchOnBody(OnBody)))
 			{
 				G.Wrist += MeshToRig(GltfToMesh(Offset[0], Offset[1], Offset[2]));
 			}
@@ -838,7 +919,17 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		const FSOHandGrip A = Grip(Pose.HandAnchorA, Pose.HandA);
 		const FSOHandGrip B = Grip(Pose.HandAnchorB, Pose.HandB);
 		LeftGrip.Wrist = FMath::Lerp(A.Wrist, B.Wrist, Pose.HandAlpha);
-		LeftGrip.Basis = FQuat::Slerp(A.Basis, B.Basis, Pose.HandAlpha);
+		// In flight between two places the hand keeps the turn it leaves with for the first quarter of the way and is then
+		// asked for the turn it will ARRIVE with: the arm solve turns it over at a hand's pace through its own range
+		// (USOLocomotionAnimInstance::ApplyHold, the hand's turn eased), so it arrives turned for what it takes hold of.
+		// Turned evenly between the two the whole way (a slerp in the gun's frame), the turn asked for halfway was one no
+		// forearm makes (from a handle on the gun's top to the fore end under it: straight across from one end of the
+		// twist's range to the other) and the hand arrived at the fore end still turning over.
+		LeftGrip.Basis = Pose.HandAnchorA != Pose.HandAnchorB ? (Pose.HandAlpha < 0.25f ? A.Basis : B.Basis) : FQuat::Slerp(A.Basis, B.Basis, Pose.HandAlpha);
+		{
+			auto Free = [this](FName Anchor) { return Anchor == TEXT("cur") ? CurSpinFree : SpinFreeForAnchor(Anchor); };
+			LeftSpinFree = FMath::Lerp(Free(Pose.HandAnchorA), Free(Pose.HandAnchorB), FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f));
+		}
 		// the fingers open in flight and close on what the hand arrives at
 		auto Fingers = [this](FName Anchor) { return Anchor == TEXT("cur") ? CurFingers : FingersForAnchor(Anchor); };
 		const float Close = FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f);
@@ -853,11 +944,21 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 			auto Over = [](FName N) { return N == NBolt || N == TEXT("charge") || N == TEXT("slide"); };
 			const bool bOverTop = Over(Pose.HandAnchorA) || Over(Pose.HandAnchorB);
 			LeftGrip.Wrist += FVector(0.0f, -8.0f, bOverTop ? 9.0f : 0.0f) * Arc;
+			// (out to the pouch on the body the hand swings out ahead of the chest: straight from a gun raised to be seen it
+			// passed by the shoulder and the arm folded shut)
+			FVector OnBody;
+			FQuat Facing;
+			if (Pose.HandAnchorB == NPouch && Pose.HandAnchorA != NPouch && PouchOnBody(OnBody, &Facing))
+			{
+				LeftGrip.Wrist += GetComponentQuat().Inverse().RotateVector(Facing.RotateVector(FVector(14.0f, -5.0f, 0.0f))) * Arc;
+			}
+
 		}
 	}
 	else
 	{
 		LeftGrip = GripForAnchor(NFore);
 		LeftFingers = FingersForAnchor(NFore);
+		LeftSpinFree = 0.0f;
 	}
 }

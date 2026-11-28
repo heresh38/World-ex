@@ -134,6 +134,9 @@ public:
 	UStaticMeshComponent* GetPart(FName Name) const;
 	UStaticMeshComponent* GetSpare() const { return Spare; }
 
+	/** The magazine pouch on the holder's body (world), and the holder's facing: false without a holder's body. */
+	bool PouchOnBody(FVector& OutWorld, FQuat* OutFacing = nullptr) const;
+
 	/** World-space wrist targets with the hand bases as rotations (see FSOHandGrip). False until built. */
 	bool GetHandTargets(FTransform& OutRight, FTransform& OutLeft) const;
 
@@ -142,6 +145,14 @@ public:
 
 	/** Finger pose for the off hand on an anchor (fore, mag, magbase, bolt, round, ...). */
 	FSOFingerPose FingersForAnchor(FName Anchor) const;
+
+	/** How far the off hand may turn about its own palm's normal on what it holds at an anchor, degrees either way: a
+	 *  hand takes a magazine, a floor plate, a shell or a flap from wherever its arm comes (the owner, 2026-11-27:
+	 *  "humans have bones and can't bend their hands/arms in such manner"), a handle it hooks only a little, the fore end
+	 *  it is fitted to not at all. */
+	float SpinFreeForAnchor(FName Anchor) const;
+	/** That freedom right now (between the two places the reload's hand is going from and to). */
+	float GetSupportSpinFree() const { return LeftSpinFree; }
 
 	/** The gun body's bounds in rig space (+X barrel, +Y right, +Z up, cm). */
 	FBox GetRigBounds() const;
@@ -215,6 +226,8 @@ private:
 	bool bHasHold = false;
 	/** Where the off hand was when the current reload segment began (anchor "cur"). */
 	FSOHandGrip CurGrip;
+	float LeftSpinFree = 0.0f;
+	float CurSpinFree = 0.0f;
 	int32 LastSegment = -1;
 	FName Archetype;
 	bool bShown = true;

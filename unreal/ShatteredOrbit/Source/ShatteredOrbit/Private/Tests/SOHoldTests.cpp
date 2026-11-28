@@ -986,8 +986,16 @@ bool FSOAlwaysInHandTest::RunTest(const FString& Parameters)
 			{
 				// working a part (a reload, a vent, a bolt or a pump worked, and the hand coming home from it): the support
 				// hand at that work, the magazine it takes from the belt and brings to the well, the bolt, never off in the air
+				// (or at the magazine pouch on the body, where it takes the magazine from: a gun raised to be seen is further
+				// from the belt than 50 cm)
 				const FBox Box = Gun->GetRig()->GetRigBounds().ExpandBy(50.0f);
 				Support = Box.IsInside(R.PalmAt[1]) ? 0.0f : FMath::Sqrt(Box.ComputeSquaredDistanceToPoint(R.PalmAt[1])) + 2.5f;
+				FVector Pouch;
+				if (Support > 0.0f && Gun->GetRig()->PouchOnBody(Pouch))
+				{
+					const FVector PalmWorld = Gun->GetRig()->GetComponentTransform().TransformPosition(R.PalmAt[1]);
+					Support = FVector::Dist(PalmWorld, Pouch) < 30.0 ? 0.0f : Support;
+				}
 			}
 			const FString Key = FString::Printf(TEXT("%s, %s"), View, *State);
 			FVector2f& Wt = Worst.FindOrAdd(Key, FVector2f(0.0f, 0.0f));

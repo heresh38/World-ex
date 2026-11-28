@@ -5,6 +5,7 @@
 #include "SOViewmodelComponent.generated.h"
 
 class ASOCharacter;
+class ASOWeapon;
 class USOGunRigComponent;
 class USOWeaponData;
 
@@ -73,13 +74,13 @@ public:
 	 *  up); the gun's own pitch is held within these off the sights (degrees), and it cants this much at the full low hold (+
 	 *  inward: -10, a little out, since the elbows keep out of the trunk: canted 28 in, the wrists bent past 80 for it). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FVector LowHold = FVector(22.0f, 10.0f, -27.0f);
+	FVector LowHold = FVector(22.0f, 10.0f, -39.0f);            // (27 under: the grip hung 27 cm under its shoulder and 20 ahead, and no elbow suits a wrist there)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float MaxDownPitch = 44.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float MaxUpPitch = 65.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	float LowCant = -10.0f;
+	float LowCant = -22.0f;
 
 	/** Sprinting, as the gun's data says (USOWeaponData::SprintCarry, the owner, 2026-11-15: "on running we lower the gun
 	 *  for rifles ... smaller guns like smg/pistol/revolver/handcannon we take it up"): the grip from the shoulders'
@@ -107,14 +108,25 @@ public:
 	FRotator HandgunCarryRot = FRotator(72.0f, -8.0f, 0.0f);
 
 
-	/** Reloading: the gun up in the workspace in front of the chest, where the eyes see the work (one body: the camera
-	 *  is in its eyes; held at the belly, 14 cm lower, a first-person reload showed the muzzle alone at the foot of the
-	 *  picture), muzzle a little up and in, canted toward the body. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FVector ReloadOffset = FVector(40.0f, 6.0f, -2.0f);
+	/** Reloading, the reload SEEN (the owner, 2026-11-24: "During reloads most guns are either not visible in the screen or
+	 *  they're facing the wrong way, the m4 for example should tilt more to the right so the reload clip is visible or
+	 *  player should raise the gun with one hand and then reload ... the player can see the magazine fully"; and
+	 *  2026-11-27, a showcase of another game's first-person guns: "this is how my first person must look and feel ...
+	 *  these reloads, these animations"): the gun is SHOWN (FSOReloadShow, Data/reload_shows.json): swung up large into the
+	 *  picture with the part its reload works (KeepReloadWork: its magazine, cell, cylinder, flap, loading port) where the
+	 *  show says and the gun turned as it says, for the field of view the player has set; the show changes with what the
+	 *  support hand is doing (the choreography's hand anchors: the magazine out, the fresh one in, a handle racked) and the
+	 *  gun follows it on a spring (ShowNow): it swings, overshoots a little and settles. Each beat of the handling (a
+	 *  reload's sound events: Handle) jolts the gun in the hands and nudges the view. Before, one pose for every gun in
+	 *  front of the chest, canted 28 degrees the other way: the work lay under the foot of the picture and was seen from
+	 *  straight above, the receiver over it. */
+	void Handle(FName Event);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
-	FRotator ReloadRot = FRotator(12.0f, -18.0f, -28.0f);
+	/** The part the reload works, at rest, in the gun rig's frame, and the side of the bore it lies on (rig Y, Z) (tests). */
+	FVector GetReloadWork() const { return ReloadWork; }
+	FVector2D GetReloadSide() const { return ReloadSide; }
+	/** The show the gun is in now (tests): FSOReloadShow's six numbers. */
+	const float* GetReloadShow() const { return ShowNow; }
 
 	/** Without a body pose yet: the pocket in actor space (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
@@ -124,6 +136,11 @@ public:
 	 *  would be further: the hand is always on its handle). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float FiringReach = 0.95f;
+	/** ... nor nearer than this share of it: a gun whose grip sat a third of the arm from the shoulder (a short gun
+	 *  shouldered: the ksmg) folded the firing arm shut with the forearm square across the gun, and no wrist follows that
+	 *  (SOArmBones): the gun goes out to where the arm has a bend an arm makes. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float FiringReachLeast = 0.42f;
 
 	/** The support hand's place on the gun is kept within this share of its arm from its shoulder: the gun comes in
 	 *  toward that shoulder (a long gun's butt no further back than this far in front of the firing shoulder joint, cm). */
@@ -234,6 +251,22 @@ private:
 	/** The gun's place against the eyes' steady place, followed (InEyesFollowMoving). */
 	FVector InEyesPos = FVector::ZeroVector, InEyesVel = FVector::ZeroVector;
 	float WalkK = 0.0f, WalkV = 0.0f;   // (how much of the walk's smoothing counts, eased)
+	/** The reload's work (ReloadPose): where on the gun, the side of the bore it lies on (rig Y, Z), and which gun. */
+	FVector ReloadWork = FVector(10.0f, 0.0f, -8.0f);
+	FVector2D ReloadSide = FVector2D(0.0f, -1.0f);
+	TWeakObjectPtr<const USOGunRigComponent> ReloadWorkRig;
+	/** The show the gun is in (FSOReloadShow's six numbers, sprung toward the one the hand's work asks), the one a
+	 *  segment began in (the hand anchor "cur"), and whether a reload is under way. */
+	float ShowNow[6] = { 38.0f, 0.55f, 0.64f, 30.0f, 20.0f, 45.0f };
+	float ShowVel[6] = { 0, 0, 0, 0, 0, 0 };
+	float ShowCur[6] = { 38.0f, 0.55f, 0.64f, 30.0f, 20.0f, 45.0f };
+	float ShowWant[6] = { 38.0f, 0.55f, 0.64f, 30.0f, 20.0f, 45.0f };
+	int32 ShowSegment = -1;
+	bool bShowing = false;
+	/** The handling's jolts on the gun in the hands (cm: right, up, back; degrees: the muzzle up, the muzzle left, the
+	 *  top to the left): springs knocked by each beat, back to nothing. */
+	FVector JoltMove = FVector::ZeroVector, JoltMoveVel = FVector::ZeroVector;
+	FVector JoltTurn = FVector::ZeroVector, JoltTurnVel = FVector::ZeroVector;
 	FQuat InEyesRot = FQuat::Identity;
 	bool bInEyesValid = false;
 
@@ -241,10 +274,19 @@ private:
 	FTransform HoldTransform(const ASOCharacter* Character, const USOWeaponData* Data, bool bHandgun, float Dt, float RunT);
 	/** The sprint's carry and the reload's workspace, blended onto a hold the hands' reach has already been laid on. */
 	FTransform OffTheShoulder(const ASOCharacter* Character, const USOWeaponData* Data, bool bHandgun, float RunT, const FTransform& Hold) const;
+	/** Finds the part the gun's reload works, at rest (kept from before a reload begins: the gun never chases a magazine
+	 *  on its way out). */
+	void KeepReloadWork(const ASOWeapon* Weapon, const USOGunRigComponent* Rig);
+	/** Where the gun is held to be reloaded: its work in the picture and turned toward the eyes (ReloadWorkAhead ...). */
+	FTransform ReloadPose(const ASOCharacter* Character) const;
 	/** Pulled back from a wall in front (along itself, then the muzzle turned up past it), eased. */
 	FTransform ClearOfWalls(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Dt);
 	/** Never further from the firing shoulder than the arm reaches, nor folded into it: the hand stays on its handle. */
 	FTransform InFiringReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold) const;
+	/** Never turned further than the firing arm's bones can hold it (SOArmBones): the gun gives way about the hand on its
+	 *  grip, eased. Off the sights (on them the gun is on the eye's line). */
+	FTransform InFiringRange(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Dt);
+	FQuat RangeGive = FQuat::Identity;
 	/** Never further from the support shoulder than that arm reaches with a bend left in it: the gun comes in toward it
 	 *  (the support hand is on the gun too; slid back along the gun its fingers closed in it, or it left a handgun). */
 	FTransform InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach, float StockOff = 0.0f) const;
