@@ -86,6 +86,7 @@ namespace
 			Num(*Spring, TEXT("joltOmega"), Out.JoltOmega);
 			Num(*Spring, TEXT("joltZeta"), Out.JoltZeta);
 			Num(*Spring, TEXT("gunMoves"), Out.GunMoves);
+			Num(*Spring, TEXT("handleLead"), Out.HandleLead);
 		}
 		const TSharedPtr<FJsonObject>* Default = nullptr;
 		if (Root->TryGetObjectField(TEXT("default"), Default))

@@ -63,6 +63,11 @@
 #include "Engine/CollisionProfile.h"
 #include "Kismet/GameplayStatics.h"
 #include "SOCharacterMovementComponent.h"
+#include "SOArmBones.h"
+#include "DrawDebugHelpers.h"
+#include "AnimationRuntime.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 
 
 #if UE_BUILD_SHIPPING
@@ -1452,11 +1457,41 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		// The reload SEEN (the owner, 2026-11-24: "During reloads most guns are either not visible in the screen or they're
 		// facing the wrong way ... so reload is visible and the player can see the magazine fully"; files rl_<gun>_<n>): a
 		// reload from empty from the player's own eyes at six moments, and once from beside the body (how others see it).
-		// -SOGuns=<archetype>[,...]
+		// -SOGuns=<archetype>[,...]. -SOArmMarks: the side view once more with both arms' BONES marked on the body
+		// (rl_<gun>_bones; the owner, 2026-11-27: "humans have bones ... mark where they are in the body"): the shoulder,
+		// the elbow, the wrist and the knuckles, the upper arm, the forearm and the hand's own line between them, each
+		// coloured by how much of its range it uses (SOArmBones: green under 70 %, amber to the edge, red past it: the
+		// upper arm by its turn about itself and the elbow's hinge, the forearm by its twist, the hand by the wrist), and
+		// the measures in the log (ARMMARK lines).
+		// The moments are taken by the reload's OWN clock, as shares of each gun's reload (RELOADSNAP lines say when), with
+		// time slowed (-SOReloadSlow=, 0.2): a picture costs a frame or two, and counted from the last picture at full
+		// speed the six ran up to a second late and missed the magazine going in. The side views are taken at the third
+		// moment with the body and its gun held still (their own time stopped). -SOReloadShare=<share>,... or -SOReloadAt=<s>,...: moments of one's own
+		// choosing, from the eyes only, slowed to 0.1 (a part of a reload looked at closely: the hand's way to a handle, a
+		// magazine coming up from the pouch).
 		FString List = TEXT("rifle,carbine,dmr,ksmg,pistol,auto,smg,pump,revolver,bolt,sniper,shotgun,hmg,rocket");
 		FParse::Value(FCommandLine::Get(), TEXT("SOGuns="), List, false);
 		TArray<FString> Guns;
 		List.ParseIntoArray(Guns, TEXT(","));
+		// (the hand going to the magazine, the magazine out, the fresh one coming in, seated, the handle, the way back)
+		TArray<float> Moments = { 0.12f, 0.27f, 0.48f, 0.56f, 0.74f, 0.9f };
+		FString MomentList;
+		const bool bSeconds = FParse::Value(FCommandLine::Get(), TEXT("SOReloadAt="), MomentList, false);
+		const bool bOwnMoments = bSeconds || FParse::Value(FCommandLine::Get(), TEXT("SOReloadShare="), MomentList, false);
+		const bool bShares = !bSeconds;
+		float Slow = bOwnMoments ? 0.1f : 0.2f;
+		FParse::Value(FCommandLine::Get(), TEXT("SOReloadSlow="), Slow);
+		Slow = FMath::Clamp(Slow, 0.01f, 1.0f);
+		if (bOwnMoments)
+		{
+			TArray<FString> Parts;
+			MomentList.ParseIntoArray(Parts, TEXT(","));
+			Moments.Reset();
+			for (const FString& Part : Parts)
+			{
+				Moments.Add(FCString::Atof(*Part));
+			}
+		}
 		auto Beside = [this, Hero](bool bOn)
 		{
 			ASOCharacter* H = Hero();
@@ -1479,6 +1514,59 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 				C->GetCameraComponent()->SetConstraintAspectRatio(false);
 			}
 			SetViewTarget(CaptureCamera);
+		};
+		const bool bArmMarks = FParse::Param(FCommandLine::Get(), TEXT("SOArmMarks"));
+		auto MarkArms = [this, Hero](const FString& Gun)
+		{
+			ASOCharacter* H = Hero();
+			const USkeletalMeshComponent* Body = H ? H->GetMesh() : nullptr;
+			const USkeletalMesh* Mesh = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+			if (!Mesh)
+			{
+				return;
+			}
+			const TArray<FTransform>& CS = Body->GetComponentSpaceTransforms();
+			const FTransform ToWorld = Body->GetComponentTransform();
+			const int32 Chest = Body->GetBoneIndex(TEXT("chest"));
+			if (!CS.IsValidIndex(Chest))
+			{
+				return;
+			}
+			const FQuat ChestTurn = CS[Chest].GetRotation() * FAnimationRuntime::GetComponentSpaceTransformRefPose(Mesh->GetRefSkeleton(), Chest).GetRotation().Inverse();
+			const FVector Fwd = ChestTurn.RotateVector(FVector(0.0f, 1.0f, 0.0f)), Up = ChestTurn.RotateVector(FVector(0.0f, 0.0f, 1.0f));
+			static const SOArmBones::FRange Human;
+			FString Line = FString::Printf(TEXT("ARMMARK %s:"), *Gun);
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const bool bLeft = Side == 1;
+				auto At = [&](const TCHAR* Base, FVector& Out)
+				{
+					const int32 I = Body->GetBoneIndex(*FString::Printf(TEXT("%s_%s"), Base, bLeft ? TEXT("L") : TEXT("R")));
+					Out = CS.IsValidIndex(I) ? CS[I].GetLocation() : FVector::ZeroVector;
+					return CS.IsValidIndex(I);
+				};
+				FVector S, E, W, K, I, P;
+				if (!At(TEXT("upperarm"), S) || !At(TEXT("forearm"), E) || !At(TEXT("hand"), W) || !At(TEXT("middle_01"), K) || !At(TEXT("index_01"), I) || !At(TEXT("pinky_01"), P))
+				{
+					continue;
+				}
+				const SOArmBones::FArm Arm = SOArmBones::Measure(S, E, W, K - W, I - P, bLeft, Fwd, Up);
+				auto Colour = [](float Share) { return Share > 1.0f ? FColor(255, 40, 30) : (Share > 0.7f ? FColor(255, 190, 30) : FColor(60, 230, 90)); };
+				auto World = [&](const FVector& At) { return ToWorld.TransformPosition(At); };
+				const float Life = 0.12f;                               // (the world's seconds, slowed: long enough for the picture's frame, gone before the next moment)
+				DrawDebugLine(GetWorld(), World(S), World(E), Colour(FMath::Max(Arm.TurnStrain(Human), Arm.Elbow / Human.Elbow)), false, Life, SDPG_Foreground, 0.9f);
+				DrawDebugLine(GetWorld(), World(E), World(W), Colour(Arm.TwistStrain(Human)), false, Life, SDPG_Foreground, 0.9f);
+				DrawDebugLine(GetWorld(), World(W), World(K), Colour(Arm.WristStrain(Human)), false, Life, SDPG_Foreground, 0.9f);
+				DrawDebugLine(GetWorld(), World(P), World(I), Colour(Arm.WristStrain(Human)), false, Life, SDPG_Foreground, 0.5f);
+				for (const FVector& Joint : { S, E, W })
+				{
+					DrawDebugPoint(GetWorld(), World(Joint), 13.0f, FColor::White, false, Life, SDPG_Foreground);
+				}
+				DrawDebugPoint(GetWorld(), World(K), 8.0f, FColor::White, false, Life, SDPG_Foreground);
+				Line += FString::Printf(TEXT(" %s elbow %.0f of 150, forearm twist %.0f (-80..85), wrist to the palm %.0f (-68..75) and sideways %.0f (-35..20): %.0f %% of its range, upper arm turned %.0f (-75..95) |"),
+					bLeft ? TEXT("LEFT") : TEXT("RIGHT"), Arm.Elbow, Arm.Twist, Arm.Flex, Arm.Deviate, 100.0f * Arm.WristStrain(Human), Arm.Turn);
+			}
+			UE_LOG(LogTemp, Display, TEXT("%s"), *Line);
 		};
 		Do(6.0f, [=, this]()
 		{
@@ -1505,21 +1593,69 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			});
 			Do(1.3f, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
 			Act([=, this]() { EmptyReload(); });
-			float Last = 0.0f;
+			Act([=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, Slow); });
 			int32 N = 0;
-			for (const float At : { 0.3f, 0.65f, 1.0f, 1.35f, 1.75f, 2.2f })
+			for (const float At : Moments)
 			{
-				Do(At - Last, [=, this]() { if (ASOCharacter* H = Hero()) { H->MarkCombat(); } });
-				Snap(0.0f, FString::Printf(TEXT("rl_%s_%d"), *Gun, ++N));
-				Last = At;
-				if (N == 3)
+				// (by the reload's own clock: a picture costs a frame or two, and counted from the last picture the moments
+				// ran late, more with each one)
+				const int32 Number = ++N;
+				Snap(0.0f, FString::Printf(TEXT("rl_%s_%d"), *Gun, Number), [=, this]()
+				{
+					const ASOCharacter* H = Hero();
+					const ASOWeapon* W = H ? H->GetWeapon() : nullptr;
+					const float Elapsed = W ? W->GetReloadProgress() * W->GetReloadDuration() : 0.0f;
+					if (W && W->IsReloading() && (bShares ? W->GetReloadProgress() : Elapsed) < At)
+					{
+						return false;
+					}
+					UE_LOG(LogTemp, Display, TEXT("RELOADSNAP %s %d: %.3f s of %.3f"), *Gun, Number, Elapsed, W ? W->GetReloadDuration() : 0.0f);
+					if (Number == 3 && !bOwnMoments)
+					{
+						// (the body and its gun HELD STILL from this very frame, their own time all but stopped: the views
+						// from beside are of the SAME moment, and the marks lie on the pose they were measured from. The
+						// world's time slowed instead, as it first was, does not hold them: this series steps on a timer of
+						// the world's own time, so every cue cost the reload six hundredths of a second however slow, and
+						// the side view showed the next move, the marks the one after)
+						if (ASOCharacter* Body = Hero())
+						{
+							Body->CustomTimeDilation = 0.0005f;
+							if (AActor* Held = Body->GetWeapon())
+							{
+								Held->CustomTimeDilation = 0.0005f;
+							}
+						}
+					}
+					return true;
+				});
+				if (Number == 3 && !bOwnMoments)
 				{
 					Act([=, this]() { Beside(true); });
 					Snap(0.0f, FString::Printf(TEXT("rl_%s_side"), *Gun));
+					if (bArmMarks)
+					{
+						Act([=, this]() { MarkArms(Gun); });
+						Snap(0.0f, FString::Printf(TEXT("rl_%s_bones"), *Gun));
+					}
 					Act([=, this]() { Beside(false); });
-					Last += 0.1f;
+					// (the eye adapts back to its own view before the reload goes on, at the world's own pace: slowed, it
+					// was still on the side view's exposure a moment later, and every fourth picture came out washed)
+					Act([=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.0f); });
+					Do(1.5f, [=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, Slow); });
+					Act([=, this]()
+					{
+						if (ASOCharacter* Body = Hero())
+						{
+							Body->CustomTimeDilation = 1.0f;
+							if (AActor* Held = Body->GetWeapon())
+							{
+								Held->CustomTimeDilation = 1.0f;
+							}
+						}
+					});
 				}
 			}
+			Act([=, this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.0f); });
 			Do(1.6f, [=, this]() { if (ASOCharacter* H = Hero()) { H->CancelCombat(); } });
 		}
 		Do(0.5f, []() {});

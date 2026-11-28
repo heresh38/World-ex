@@ -121,6 +121,11 @@ public:
 
 	const FSOReloadPose& GetPose() const { return Pose; }
 
+	/** The hand a little AHEAD of now (the choreography Seconds on): the two places it will be going from and to and how
+	 *  far along. "cur" (wherever the segment before left the hand) is named as the place that segment ends on. False past
+	 *  the sequence's end, or where the segment then has no hand channel. */
+	bool PeekHand(float Seconds, FName& OutA, FName& OutB, float& OutAlpha) const;
+
 	static float Ease(ESOEase Mode, float X);
 	static void SampleKeys(const TArray<FSOKey>& Keys, float T, int32 Count, float* Out);
 

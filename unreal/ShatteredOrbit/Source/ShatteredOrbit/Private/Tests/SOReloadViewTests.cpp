@@ -222,7 +222,9 @@ bool FSOReloadInViewTest::RunTest(const FString& Parameters)
 			Names += (Names.IsEmpty() ? TEXT("") : TEXT(" ")) + A.ToString();
 		}
 		const float WellShare = Work > 0 ? 100.0f * WellIn / Work : 0.0f, TurnedShare = Work > 0 ? 100.0f * Turned / Work : 0.0f;
-		const float WholeShare = InPlace > 0 ? 100.0f * Whole / InPlace : 100.0f;
+		// (judged where the part is in the gun for a tenth of a second or more: a flap that swings open is "in place" for
+		// two or three frames as it leaves and comes home, and one of three says nothing)
+		const float WholeShare = InPlace >= 6 ? 100.0f * Whole / InPlace : 100.0f;
 		const FVector2D Out = Player->GetViewmodel()->GetReloadSide();
 		AddInfo(FString::Printf(TEXT("RELOADVIEW %s (%s; the hands at %s, %d frames; it lies %s): where it is worked in the picture %.0f %% of them (%.0f..%.0f %% across, %.0f..%.0f %% down), seen from %.0f..%.0f deg (0 above, 90 its left), turned to the eyes %.0f %%; the part whole in the picture while in the gun %.0f %% (%d frames)"),
 			*Arch, *Style.ToString(), *Names, Work, Out.Y > 0.5f ? TEXT("on top") : Out.X > 0.5f ? TEXT("on the right") : Out.X < -0.5f ? TEXT("on the left") : TEXT("underneath"),

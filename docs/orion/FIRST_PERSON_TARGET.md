@@ -32,13 +32,34 @@ sits under the hard rules: one body and one camera, the hands always on the gun,
 6. **Firing is felt**: the gun kicks back and up, the view climbs, smoke hangs at the muzzle, cases fly.
 7. **On the sights** the gun is dead centre and still; only the shot moves it.
 
+## What the owner said of our first try
+
+On the first pictures (2026-11-27, with red marks on a pistol's and a pump shotgun's reload seen from beside): "the
+player hands/guns need to be fully visible at all times, this means the entire gun and not 20% of it. have this as a
+hard rule, the players hands can't bend in a way that is not posible for a real human, learn it once and apply it to
+all guns and done"; "from your own images these hand positions are not possible for a human, humans have bones and
+can't bend their hands/arms in such manner so mark where they are in the body and ensure these rules are always
+followed at all times for everything"; and: "you have all the referecne images you can ask for from the video i send,
+just compare where their arms are and how to fix yours".
+
+What the comparison showed (a rifle's, a pistol's, two shotguns' and a sniper rifle's reload, stepped through): their
+firing fist stays at the FOOT of the picture, 85 to 95 % down and 58 to 70 % across, the forearm behind it coming from
+the lower right corner; the gun is turned UP about that fist (a rifle 30 to 45 degrees, a shotgun and a pistol 60 to
+90) and rolled, so it stands up into the middle of the picture; the support forearm rises from the bottom edge, 30 to
+48 % across, steeply, to a hand 55 to 85 % down; both wrists are straight. Ours had lifted the work, and so the hands,
+to the chin. Both hard rules are in `CLAUDE.md`; the arm as bones is `SOArmBones.h`.
+
 ## Where ours stands (keep this honest)
 
 | | state |
 |---|---|
-| 2, 3: reloads shown, sprung, jolted, the view nudged | built 2026-11-27: `FSOReloadShow`, `Data/reload_shows.json`, `USOViewmodelComponent::ReloadPose / Handle`, `ASOCharacter::OnWeaponHandled` |
-| 4: each kind its own way | the choreography was already per kind (`SOReload.cpp`); every kind now has its own shows |
-| 1: large and near at the hip | not yet: the framing of 2026-11-23 holds (`Data/stances.json`) |
+| 2, 3: reloads shown, sprung, jolted, the view nudged | built 2026-11-27, and rebuilt the same day about a low firing hand: `FSOReloadShow`, `Data/reload_shows.json`, `USOViewmodelComponent::ReloadPose / Handle`, `ASOCharacter::OnWeaponHandled` |
+| the hand's way from one job to the next | flown in the body's space, from where it let go to where the part WILL be, the gun turned a little ahead of it for a handle (`USOGunRigComponent::SetShowLead`, `FSOReloadPlayer::PeekHand`): the hand goes up the near flank and the gun is rolled into it; before, it chased the handle across the top of the gun with the forearm over the picture |
+| the fresh magazine brought up from the foot of the picture | in the hand, its fingers closed on it, from the pouch on the chest (`USOGunRigComponent::SeatCarried`; a speedloader, a shell, a round and biomass the same); before, it hung in the air beside the gun while the hand was still at the pouch |
+| not yet in them | the old magazine is let fall, not carried off; no empty-well pause of its own; a tactical (not empty) reload keeps the same show; the reference's finer finger work (a thumb on a release, a magazine indexed by the forefinger) |
+| the arms in them | every joint inside a human's range, measured (`ShatteredOrbit.Body.HumanRange`) |
+| 4: each kind its own way | the choreography was already per kind (`SOReload.cpp`); every kind has its own shows |
+| 1: large and near at the hip | not yet: the framing of 2026-11-23 holds (`Data/stances.json`): the rifle shows 58-62 % of itself, the sniper 62-66, the SMG 51-56, the shotgun 50-54, the pistol 92-94, the heavy machine gun 35-39; a shouldered long gun's butt is behind the picture's corner, as in the reference, but theirs is drawn larger (a separate, narrower view for the gun, which one body and one camera have not) |
 | 5: a draw of its own | not yet (the inspect exists, mid-pass) |
 | 6: firing felt | kick, view climb, flash, cases exist; not yet judged against the reference |
 | 7: on the sights | holds (`ShatteredOrbit.Hold.SteadyInTheEyes`) |

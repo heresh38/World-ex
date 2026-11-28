@@ -457,7 +457,11 @@ FSOFingerPose USOGunRigComponent::FingersForAnchor(FName Anchor) const
 	}
 	if (Anchor == NMagBase || Anchor == TEXT("hatch"))
 	{
-		return FSOFingerPose::Flat();
+		// (a flat hand strikes with its fingers TOGETHER: fanned as a resting hand's are, the slap on a magazine's base was
+		// a spread hand held up beside the gun)
+		FSOFingerPose Palm = FSOFingerPose::Flat();
+		Palm.Together = 0.85f;
+		return Palm;
 	}
 	if (Anchor == NBolt || Anchor == TEXT("charge") || Anchor == TEXT("slide"))
 	{
@@ -819,6 +823,31 @@ bool USOGunRigComponent::GetHandTargets(FTransform& OutRight, FTransform& OutLef
 	return true;
 }
 
+void USOGunRigComponent::SeatCarried(const FTransform& HandGripWorld)
+{
+	UStaticMeshComponent* Part = CarriedPart.Get();
+	if (!Part || CarriedShare <= 0.0f)
+	{
+		return;
+	}
+	// Where the choreography has the thing, and the hold the hand will have on it there (both in the world): the thing in
+	// that hold's own frame is the thing in the hand's.
+	const FTransform RigT = GetComponentTransform();
+	const FTransform Keyed = Part->GetComponentTransform();
+	const FTransform HoldThere(RigT.GetRotation() * CarriedGrip.Basis, RigT.TransformPosition(CarriedGrip.Wrist));
+	// (a hand that is not coming for it, a body that holds its gun in one hand: left where the choreography has it)
+	if (FVector::DistSquared(HandGripWorld.GetLocation(), RigT.TransformPosition(LeftGrip.Wrist)) > FMath::Square(30.0))
+	{
+		return;
+	}
+	FTransform InHand = Keyed.GetRelativeTransform(HoldThere) * FTransform(HandGripWorld.GetRotation(), HandGripWorld.GetLocation());
+	InHand.SetScale3D(Keyed.GetScale3D());
+	FTransform Out;
+	Out.Blend(Keyed, InHand, CarriedShare);
+	Out.SetScale3D(Keyed.GetScale3D());
+	Part->SetWorldTransform(Out);
+}
+
 void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 {
 	if (!bBuilt)
@@ -916,8 +945,50 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 			}
 			return G;
 		};
-		const FSOHandGrip A = Grip(Pose.HandAnchorA, Pose.HandA);
-		const FSOHandGrip B = Grip(Pose.HandAnchorB, Pose.HandB);
+		FSOHandGrip A = Grip(Pose.HandAnchorA, Pose.HandA);
+		FSOHandGrip B = Grip(Pose.HandAnchorB, Pose.HandB);
+		// What the hand BRINGS rides in the hand (SeatCarried): on its way to a fresh magazine, a speedloader, a shell, a
+		// round or a lump of biomass, which the choreography flies in from below the gun on a path of its own. Left on
+		// that path the thing hung in the air beside the gun while the hand was still coming up from the pouch for it (the
+		// rifle's fresh magazine: a fifth of a second alone in the picture, capture set 53 slowed).
+		CarriedPart = nullptr;
+		CarriedShare = 0.0f;
+		if (Pose.HandAnchorA != Pose.HandAnchorB)
+		{
+			UStaticMeshComponent* Brought = Pose.HandAnchorB == NSpare ? Spare.Get()
+				: Pose.HandAnchorB == TEXT("loader") ? GetPart(TEXT("x_speedloader")) : Pose.HandAnchorB == TEXT("shell") ? GetPart(TEXT("x_shell"))
+				: Pose.HandAnchorB == TEXT("round") ? GetPart(TEXT("x_round")) : Pose.HandAnchorB == TEXT("biomass") ? GetPart(TEXT("biomass")) : nullptr;
+			if (Brought && Brought->IsVisible())
+			{
+				CarriedPart = Brought;
+				CarriedGrip = B;
+				CarriedShare = 1.0f - FMath::SmoothStep(0.72f, 1.0f, Pose.HandAlpha);
+			}
+		}
+		// A flight runs in the BODY's space, not the gun's. The gun is turning under the hand as it flies (a reload shows
+		// each job: from a magazine well on its left to a handle on its right the gun rolls 130 degrees and more), so:
+		// the hand LEAVES from where it let go (ShowLeft: the gun as it was then, in its own frame of now: the place it
+		// left no longer carries it), and makes for the MEETING place, where the part it is going to WILL be once the gun
+		// has been turned for it (ShowLead: the viewmodel's show for that job), and the gun brings the part to the hand;
+		// from the middle of the way it closes on the part where it is. Flown in the gun's frame, the hand rode the
+		// magazine round behind the gun as the gun rolled, and chased the handle: across the top of the gun, the forearm
+		// over the whole picture, and back as the gun rolled the handle up to it (the owner's reference, 2026-11-27: the
+		// hand goes up the near flank and the gun is rolled into it). A pouch on the body is in the body's space already.
+		if (Pose.HandAnchorA != Pose.HandAnchorB)
+		{
+			FVector OnBody;
+			const bool bPouchOnBody = PouchOnBody(OnBody);
+			if (!(Pose.HandAnchorA == NPouch && bPouchOnBody))
+			{
+				A.Wrist = ShowLeft.TransformPosition(A.Wrist);
+				A.Basis = ShowLeft.GetRotation() * A.Basis;
+			}
+			if (const float Meet = 1.0f - FMath::SmoothStep(0.45f, 1.0f, Pose.HandAlpha); Meet > 0.0f && !(Pose.HandAnchorB == NPouch && bPouchOnBody))
+			{
+				B.Wrist = FMath::Lerp(B.Wrist, ShowLead.TransformPosition(B.Wrist), Meet);
+				B.Basis = FQuat::Slerp(B.Basis, ShowLead.GetRotation() * B.Basis, Meet);
+			}
+		}
 		LeftGrip.Wrist = FMath::Lerp(A.Wrist, B.Wrist, Pose.HandAlpha);
 		// In flight between two places the hand keeps the turn it leaves with for the first quarter of the way and is then
 		// asked for the turn it will ARRIVE with: the arm solve turns it over at a hand's pace through its own range
@@ -925,7 +996,11 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		// Turned evenly between the two the whole way (a slerp in the gun's frame), the turn asked for halfway was one no
 		// forearm makes (from a handle on the gun's top to the fore end under it: straight across from one end of the
 		// twist's range to the other) and the hand arrived at the fore end still turning over.
-		LeftGrip.Basis = Pose.HandAnchorA != Pose.HandAnchorB ? (Pose.HandAlpha < 0.25f ? A.Basis : B.Basis) : FQuat::Slerp(A.Basis, B.Basis, Pose.HandAlpha);
+		// (the turn it will arrive with is the part's where the part WILL be, the meeting place above: asked for the
+		// part's turn of the moment on the way to a handle, with the gun still coming round, the hand came down palm first
+		// over the top of the gun)
+		const float Arrive = 0.25f;
+		LeftGrip.Basis = Pose.HandAnchorA != Pose.HandAnchorB ? (Pose.HandAlpha < Arrive ? A.Basis : B.Basis) : FQuat::Slerp(A.Basis, B.Basis, Pose.HandAlpha);
 		{
 			auto Free = [this](FName Anchor) { return Anchor == TEXT("cur") ? CurSpinFree : SpinFreeForAnchor(Anchor); };
 			LeftSpinFree = FMath::Lerp(Free(Pose.HandAnchorA), Free(Pose.HandAnchorB), FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f));
@@ -934,16 +1009,21 @@ void USOGunRigComponent::ApplyPose(const FSOReloadPose& Pose)
 		auto Fingers = [this](FName Anchor) { return Anchor == TEXT("cur") ? CurFingers : FingersForAnchor(Anchor); };
 		const float Close = FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f);
 		const FSOFingerPose Between = FSOFingerPose::Lerp(Fingers(Pose.HandAnchorA), Fingers(Pose.HandAnchorB), Close);
-		const float Open = Pose.HandAnchorA != Pose.HandAnchorB ? FMath::Sin(PI * Close) * 0.6f : 0.0f;
-		LeftFingers = FSOFingerPose::Lerp(Between, FSOFingerPose::Flat(), Open);
+		// (a short HOP goes straight and stays closed: from a magazine just pushed home to the slap on its base, from a
+		// floor plate to a tap, a few centimetres: with the arc and the open hand of a real trip the hand flew out a hand's
+		// breadth to the side, fingers spread, and back, in a tenth of a second between the push and the slap)
+		const float Far = Pose.HandAnchorA != Pose.HandAnchorB ? FMath::SmoothStep(5.0f, 20.0f, static_cast<float>(FVector::Dist(A.Wrist, B.Wrist))) : 0.0f;
+		const float Open = FMath::Sin(PI * Close) * 0.6f * Far;
+		// (a hand that is bringing something keeps its fingers closed on it the whole way)
+		LeftFingers = CarriedPart.IsValid() ? Fingers(Pose.HandAnchorB) : FSOFingerPose::Lerp(Between, FSOFingerPose::Flat(), Open);
 		if (Pose.HandAnchorA != Pose.HandAnchorB)
 		{
 			// Between two grips the hand arcs out past the gun's left side instead of cutting through it, and comes
 			// down onto a charging handle / slide from above (over the top edge of the receiver).
-			const float Arc = FMath::Sin(PI * FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f));
+			const float Arc = FMath::Sin(PI * FMath::Clamp(Pose.HandAlpha, 0.0f, 1.0f)) * Far;
 			auto Over = [](FName N) { return N == NBolt || N == TEXT("charge") || N == TEXT("slide"); };
 			const bool bOverTop = Over(Pose.HandAnchorA) || Over(Pose.HandAnchorB);
-			LeftGrip.Wrist += FVector(0.0f, -8.0f, bOverTop ? 9.0f : 0.0f) * Arc;
+			LeftGrip.Wrist += FVector(0.0f, -8.0f, bOverTop ? 4.0f : 0.0f) * Arc;   // (9 over the top: the gun is turned top toward the hand for a handle now, and the hand rose over it)
 			// (out to the pouch on the body the hand swings out ahead of the chest: straight from a gun raised to be seen it
 			// passed by the shoulder and the arm folded shut)
 			FVector OnBody;

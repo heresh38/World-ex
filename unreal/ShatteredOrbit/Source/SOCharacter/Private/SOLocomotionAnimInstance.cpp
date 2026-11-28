@@ -3011,7 +3011,7 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 					float Least = 9.0f;
 					for (int32 i = 0; i <= 7; ++i)
 					{
-						const float Sw = FMath::Lerp(-0.5f, 1.4f, i / 7.0f);
+						const float Sw = FMath::Lerp(-1.2f, 1.4f, i / 7.0f);
 						const FVector E = S + Line * Al + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Hi;
 						Least = FMath::Min(Least, SOArmBones::Measure(S, E, S + Line * Dist, LineNow, ThumbNow, true, BodyFwd, BodyUp).Asks(Human));
 					}
@@ -3217,7 +3217,11 @@ void FSOLocomotionProxy::ApplyHold(FPoseContext& Output) const
 				// well inside it, as arms at work do: held at the edge through a reload the firing forearm stayed twisted 78
 				// degrees and the wrist 18 to the thumb's side the whole way)
 				const float Soft = bReloadHold ? 0.7f : 0.92f;
-				const float Low = -0.6f, High = bLeft ? 1.45f : 1.7f;
+				// (the support elbow may tuck IN under the gun, across the front of the chest, as far as its bones ask: a
+				// vertical fore grip close to the body (the ksmg's, 37 cm from the support shoulder) is reached with a wrist a
+				// wrist has only from there; kept to the gun's own side, the elbow went out level with the hand, the wrist was
+				// asked 93 degrees and the guard turned the hand off its post)
+				const float Low = bLeft ? -1.3f : -0.6f, High = bLeft ? 1.45f : 1.7f;
 				const float A = FMath::Atan2(static_cast<float>(FVector::DotProduct(Bend, Out)), static_cast<float>(FVector::DotProduct(Bend, Down)));
 				if (const float Now = StrainAt(A); Now > Soft)
 				{

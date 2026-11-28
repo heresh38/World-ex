@@ -235,6 +235,45 @@ void FSOReloadPlayer::Sample(const FSOReloadSegment& Segment, float T)
 	}
 }
 
+bool FSOReloadPlayer::PeekHand(float Seconds, FName& OutA, FName& OutB, float& OutAlpha) const
+{
+	int32 I = Index;
+	float At = Local + FMath::Max(Seconds, 0.0f);
+	while (I < Segments.Num() && At >= Segments[I].Duration)
+	{
+		At -= Segments[I].Duration;
+		++I;
+	}
+	const TArray<FSOKey>* Keys = Segments.IsValidIndex(I) ? Segments[I].Channels.Find(NHand) : nullptr;
+	if (!Keys || Keys->Num() == 0)
+	{
+		return false;
+	}
+	const float T = At / FMath::Max(Segments[I].Duration, 1e-4f);
+	int32 K = 0;
+	while (K < Keys->Num() - 1 && (*Keys)[K + 1].T <= T) { ++K; }
+	const FSOKey& A = (*Keys)[K];
+	const FSOKey& B = (*Keys)[FMath::Min(K + 1, Keys->Num() - 1)];
+	const float F = (&A == &B || T <= A.T) ? 0.0f : FMath::Min(1.0f, (T - A.T) / FMath::Max(1e-6f, B.T - A.T));
+	// ("cur": the place the segment before ends on, and so on back)
+	auto Named = [&](FName Anchor)
+	{
+		static const FName NCur(TEXT("cur"));
+		for (int32 J = I - 1; Anchor == NCur && J >= 0; --J)
+		{
+			if (const TArray<FSOKey>* Before = Segments[J].Channels.Find(NHand); Before && Before->Num() > 0)
+			{
+				Anchor = Before->Last().Anchor;
+			}
+		}
+		return Anchor;
+	};
+	OutA = Named(A.Anchor);
+	OutB = Named(B.Anchor);
+	OutAlpha = Ease(B.Ease, F);
+	return true;
+}
+
 void FSOReloadPlayer::NotifyShot(FName Archetype)
 {
 	KickTime = 0.0f;
@@ -420,17 +459,20 @@ namespace SOReload
 		float DropT;
 		if (bRifle)
 		{
-			Mag = { K(0, Zero), K(0.25f, Zero), K(0.42f, { 0, -0.004f, 0.004f, -0.45f, 0, 0 }), K(0.55f, { 0, -0.07f, 0.02f, -0.6f, 0, 0.1f }) };
-			Hand = { H(0, TEXT("fore"), Zero), H(0.22f, TEXT("mag"), { 0, -0.01f, -0.01f, -0.2f, 0, -0.3f }), H(0.55f, TEXT("mag"), { 0, -0.01f, -0.01f, -0.3f, 0, -0.3f }),
-				H(0.7f, TEXT("pouch"), { 0.04f, 0.1f, 0.1f, 0.4f, 0.3f, -0.5f }) };
-			DropT = 0.55f;
+			// (the old magazine is out by half way and the hand at the pouch by 0.62, where the fresh one is taken: it got
+			// there at 0.7, eight hundredths after the fresh magazine had left, and the keys ran backward in time: the hand
+			// leapt to two thirds of the way up to the gun in one frame)
+			Mag = { K(0, Zero), K(0.23f, Zero), K(0.38f, { 0, -0.004f, 0.004f, -0.45f, 0, 0 }), K(0.5f, { 0, -0.07f, 0.02f, -0.6f, 0, 0.1f }) };
+			Hand = { H(0, TEXT("fore"), Zero), H(0.2f, TEXT("mag"), { 0, -0.01f, -0.01f, -0.2f, 0, -0.3f }), H(0.5f, TEXT("mag"), { 0, -0.01f, -0.01f, -0.3f, 0, -0.3f }),
+				H(0.62f, TEXT("pouch"), { 0.04f, 0.1f, 0.1f, 0.4f, 0.3f, -0.5f }) };
+			DropT = 0.5f;
 		}
 		else if (bKsmg)
 		{
-			Mag = { K(0, Zero), K(0.24f, Zero), K(0.4f, { 0, -0.03f, 0.012f, -0.15f, 0, 0 }), K(0.52f, { 0, -0.09f, 0.05f, -0.35f, 0, 0 }) };
-			Hand = { H(0, TEXT("fore"), Zero), H(0.2f, TEXT("mag"), { 0, -0.02f, 0.02f, -0.3f, 0, -0.2f }), H(0.52f, TEXT("mag"), { 0, -0.02f, 0.03f, -0.4f, 0, -0.2f }),
-				H(0.7f, TEXT("pouch"), { 0.05f, 0.12f, 0.1f, 0.4f, 0.3f, -0.5f }) };
-			DropT = 0.52f;
+			Mag = { K(0, Zero), K(0.22f, Zero), K(0.36f, { 0, -0.03f, 0.012f, -0.15f, 0, 0 }), K(0.48f, { 0, -0.09f, 0.05f, -0.35f, 0, 0 }) };
+			Hand = { H(0, TEXT("fore"), Zero), H(0.18f, TEXT("mag"), { 0, -0.02f, 0.02f, -0.3f, 0, -0.2f }), H(0.48f, TEXT("mag"), { 0, -0.02f, 0.03f, -0.4f, 0, -0.2f }),
+				H(0.62f, TEXT("pouch"), { 0.05f, 0.12f, 0.1f, 0.4f, 0.3f, -0.5f }) };
+			DropT = 0.48f;
 		}
 		else
 		{
@@ -482,7 +524,7 @@ namespace SOReload
 		}
 		Ev(Main, 0.18f, TEXT("sfx"), TEXT("magrelease"));
 		Ev(Main, DropT, TEXT("drop"));
-		Ev(Main, 0.5f, TEXT("sfx"), TEXT("pouch"));
+		Ev(Main, (bRifle || bKsmg) ? 0.6f : 0.5f, TEXT("sfx"), TEXT("pouch"));
 		Ev(Main, 0.62f, TEXT("spare"));
 		Ev(Main, SeatT - 0.04f, TEXT("sfx"), TEXT("magin"));
 		Ev(Main, SlapT, TEXT("seat"));

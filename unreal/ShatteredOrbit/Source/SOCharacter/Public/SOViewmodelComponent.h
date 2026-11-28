@@ -141,6 +141,10 @@ public:
 	 *  (SOArmBones): the gun goes out to where the arm has a bend an arm makes. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
 	float FiringReachLeast = 0.42f;
+	/** A handgun's: it is held OUT, both arms: crouched, the hold came in to 57 % of the arm, the forearm steep across to
+	 *  it, and the firing wrist was asked past its range (the hand turned 1.6 cm into the revolver's grip). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SO|Hold")
+	float HandgunReachLeast = 0.66f;
 
 	/** The support hand's place on the gun is kept within this share of its arm from its shoulder: the gun comes in
 	 *  toward that shoulder (a long gun's butt no further back than this far in front of the firing shoulder joint, cm). */
@@ -261,6 +265,18 @@ private:
 	float ShowVel[6] = { 0, 0, 0, 0, 0, 0 };
 	float ShowCur[6] = { 38.0f, 0.55f, 0.64f, 30.0f, 20.0f, 45.0f };
 	float ShowWant[6] = { 38.0f, 0.55f, 0.64f, 30.0f, 20.0f, 45.0f };
+	/** The show of the place the reload's hand is on its way to (while it is in flight between two places: bShowFlight):
+	 *  where the gun will be when the hand arrives (USOGunRigComponent::SetShowLead). */
+	float ShowTo[6] = { 38.0f, 0.55f, 0.64f, 30.0f, 20.0f, 45.0f };
+	bool bShowFlight = false;
+	/** That flight (its segment and its two places), and the gun's hold as it was when the hand let go, in the show's own
+	 *  frame (the view's, ShowFrame): the hand's way begins where it was then, whatever the gun has done since. */
+	int32 FlightSegment = -1;
+	FName FlightA, FlightB;
+	bool bFlightBegan = false;
+	FTransform FlightHold = FTransform::Identity;
+	/** The frame the shows are laid in: at the eyes, the view's turn with its pitch held within 35 degrees and no roll. */
+	FTransform ShowFrame(const ASOCharacter* Character) const;
 	int32 ShowSegment = -1;
 	bool bShowing = false;
 	/** The handling's jolts on the gun in the hands (cm: right, up, back; degrees: the muzzle up, the muzzle left, the
@@ -278,7 +294,7 @@ private:
 	 *  on its way out). */
 	void KeepReloadWork(const ASOWeapon* Weapon, const USOGunRigComponent* Rig);
 	/** Where the gun is held to be reloaded: its work in the picture and turned toward the eyes (ReloadWorkAhead ...). */
-	FTransform ReloadPose(const ASOCharacter* Character) const;
+	FTransform ReloadPose(const ASOCharacter* Character, const float* Show = nullptr) const;
 	/** Pulled back from a wall in front (along itself, then the muzzle turned up past it), eased. */
 	FTransform ClearOfWalls(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Dt);
 	/** Never further from the firing shoulder than the arm reaches, nor folded into it: the hand stays on its handle. */
@@ -287,6 +303,7 @@ private:
 	 *  grip, eased. Off the sights (on them the gun is on the eye's line). */
 	FTransform InFiringRange(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Dt);
 	FQuat RangeGive = FQuat::Identity;
+	float WorkedTail = 0.0f;
 	/** Never further from the support shoulder than that arm reaches with a bend left in it: the gun comes in toward it
 	 *  (the support hand is on the gun too; slid back along the gun its fingers closed in it, or it left a handgun). */
 	FTransform InSupportReach(const ASOCharacter* Character, const USOGunRigComponent* Rig, const FTransform& Hold, float Reach, float StockOff = 0.0f) const;

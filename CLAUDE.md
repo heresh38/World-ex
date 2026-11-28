@@ -87,14 +87,18 @@ existing classes, never second systems.
   human, humans have bones and can't bend their hands/arms in such manner so mark where they are in the body and ensure
   these rules are always followed at all times for everything"). An arm is its bones, written ONCE for every gun, state
   and view (`SOArmBones.h`): the elbow a hinge, the forearm's two bones turning the palm so far and no further, the
-  wrist bending far up and down but only a little to either side, each joint marked where it is in the body. A hand's
-  hold on the part it works, or the gun's place, gives way: never a joint. Test `ShatteredOrbit.Body.HumanRange`
-  (every gun, every state, every frame of a reload and an inspect).
+  wrist bending far up and down but only a little to either side, the upper arm's turn about itself, each joint marked
+  where it is in the body and measured from where the joints are. The arm solve keeps inside it by construction: a
+  hand's hold on the part it works, or the gun's place, gives way: never a joint. Test `ShatteredOrbit.Body.HumanRange`
+  (every arm joint, eight kinds of gun and any other by name, every state, every frame of a reload and an inspect).
 - **The hands and the WHOLE gun are in the picture, always** (the owner, 2026-11-27, word for word: "the player
   hands/guns need to be fully visible at all times, this means the entire gun and not 20% of it. have this as a hard
   rule"). In first person every state is judged by how much of the gun and of both hands lies inside the picture,
-  measured for every gun (test `ShatteredOrbit.Hold.GunInThePicture`), and it is got by where the gun is held and where
-  the one camera sits: never a second model or camera, never a hand off the gun, never a joint past its range.
+  measured for every gun (`ShatteredOrbit.Hold.GunInThePicture` at the hip, `ShatteredOrbit.Reload.TheWorkInView` in a
+  reload), and it is got by where the gun is held and where the one camera sits: never a second model or camera, never
+  a hand off the gun, never a joint past its range. What one body and one camera at the eyes cannot show is said
+  plainly with its measure: a shouldered long gun's butt lies behind the picture's corner (at the hip the rifle shows
+  58-62 % of itself, the sniper 62-66, the pistol 92, the heavy machine gun 35-39: still to raise).
 - **One colour palette a set** (the owner, 2026-11-15: "all guns in the set need to have the same color pallet and shoot
   the same color, this is our rule going forward"): every gun of a set (its `"set"`; a gun of no set: its class's
   family, light / kinetic / horror) fires the same colour and carries the same light. `Data/game_data.json`
@@ -889,27 +893,113 @@ the eyes of the 184 cm male stand at 171). Test `ShatteredOrbit.Camera.SteadyAtA
 `Data/game_data.json` -> `USOWeaponData::SprintCarry`, `SO_IMPORT_ONLY=gunnumbers`): `low` (long guns: the low ready,
 across the chest, muzzle down and to the left; `CarryOffset` / `CarryRot`), `short` (SMGs: up part of the way,
 `ShortCarry*`), `high` (handguns: up by the face in both hands, muzzle to the sky, `HandgunCarry*`). A gun's length does
-not tell (the heavy machine gun is shorter than the SMG). **A reload is SEEN** (the owner, 2026-11-24: "During reloads
-most guns are either not visible in the screen or they're facing the wrong way, the m4 for example should tilt more to
-the right so the reload clip is visible or player should raise the gun with one hand and then reload ... the player can
-see the magazine fully"; before, one pose for every gun in front of the chest, canted 28 degrees to the left: for nearly
-every gun the magazine lay under the foot of the picture and was seen from straight above, the receiver over it):
-`USOViewmodelComponent::ReloadPose` raises the gun so the part its reload works (`KeepReloadWork`, by
-`SOReload::GetStyle`: the magazine or cell, a revolver's cylinder, a bolt-action's bolt, a pump's loading port, a light
-or living gun's flap; kept from before the reload begins, so the gun never chases a magazine on its way out) lies
-`ReloadWorkAcross` .56 of the way across the picture and `ReloadWorkDown` .68 down, `ReloadWorkAhead` 40 cm in front of
-the eyes (a handgun `ReloadWorkAheadHandgun` 36), worked out for the player's field of view; the muzzle up `ReloadPitch`
-14 and in `ReloadYaw` 20 degrees; canted about its bore to turn that part toward the eyes (up to `ReloadCantRight` 26
-degrees for a magazine under the gun or a flap on its left, `ReloadCantLeft` 18 for a port on its top or right), and
-back level and toward the hold while a handle or a slide is racked over its top (`RackK`: canted and raised, reaching
-over a pistol's slide bent the wrist 100 degrees). The magazine POUCH is on the body now (`USOGunRigComponent::
-PouchOnBody`: a chest rig's, the chest's front left of the middle; a point under the gun went up with the gun raised to
-be seen, to the shoulder, and the arm folded shut; on the belt the trip down and back up was so long that the arm turned
-over on the way and the wrist bent past 90 arriving at the gun), the hand's trip out to it swings out ahead of the chest,
-and at it the hand already holds the magazine as it will at the gun. Test `ShatteredOrbit.Reload.TheWorkInView` (every gun from its own eyes:
-where it is worked in the picture, seen from its side, the magazine whole while it is in the gun; `RELOADVIEW` lines,
-`-SOReloadOnly=`, `-SOReloadTrace`); pictures `SOCaptureSeries 1 53 -SOGuns=<arch>,...` (files `SO_rl_<gun>_<1..6>`
-from the eyes, `_side` from beside).
+not tell (the heavy machine gun is shorter than the SMG). **A reload is SEEN, the way the owner's
+first-person target shows one** (the owner, 2026-11-24: "During reloads most guns are either not visible in the screen
+or they're facing the wrong way ... the player can see the magazine fully"; 2026-11-27, with a video of another game's
+first-person guns, `docs/orion/FIRST_PERSON_TARGET.md`, a quality target only: "this is how my first person must look
+and feel"; and on our first try at it: "just compare where their arms are and how to fix yours"). In the reference the
+firing fist never leaves the foot of the picture and the gun is turned UP about it: it stands into the middle of the
+picture and both forearms come to it from below with straight wrists. A SHOW (`FSOReloadShow`, `Data/reload_shows.json`,
+read at runtime, staged by `tools/package.sh`) is six numbers: where the FIRING hand holds the gun (the top of its grip,
+the rig's origin: cm ahead of the eyes, share of the picture across and down, worked out for the player's field of view)
+and the gun's turn about that hand (muzzle up, muzzle in, top rolled to the right: + turns the left flank and the
+underside to the eyes and to the support hand, a magazine well, a loading port, a flap; - the top and the right flank,
+a handle, a slide, a bolt). Every reload style (or archetype) has a base show and one for each place the support hand
+goes (the choreography's anchors; a name begun with + adds to the base); the show of the moment lies between the two
+the hand is going from and to and is followed on springs (`USOViewmodelComponent::UpdateHold`, `ReloadPose`); a flap
+that stands open is shown for as long as it is open; the part the reload works (`KeepReloadWork`) is kept inside the
+picture by sliding the whole hold the least that does it, a hand's breadth at most. Long guns: the hand 38 cm ahead,
+.63 across, .80 down, the gun 30-40 degrees up and rolled 50-62 for a magazine or a port, -85 to -88 for a handle on
+the right flank or the top (the top to the LEFT: the support hand comes to it from the left); a handle at the
+receiver's REAR (the carbine's) is worked 45 cm out, .72 down, rolled -62 (at 38 and .80 it was pulled under the foot
+of the picture; with the gun kept on its left side the forearm came over the whole picture); a flap that lies on a
+gun's TOP (the scout's) wants a small roll, 24 (rolled 54 the eye was past it: the test said 79 %); handguns 44 cm out
+and 55 up, in front of the upper chest. Each sound event of a reload is a BEAT (`"beats"`: the gun
+knocked in the hands, `USOViewmodelComponent::Handle`; the view nudged, `ASOCharacter::OnWeaponHandled`).
+**A hand's way between two places is flown in the BODY's space** (`USOGunRigComponent::SetShowLead`, set by the
+viewmodel each frame): the gun turns under the hand as it flies (from a magazine well shown on its left to a handle
+on its right: 130 degrees about the bore), so the hand leaves from where it LET GO (the gun as it was then, kept in
+the show's own frame: `ShowFrame`, `FlightHold`) and makes for the MEETING place, where the part WILL be once the gun
+is in the show of that place (`ShowTo`), closing on the part itself from the middle of the way; and where the next
+place is a handle or a slide the gun's turn runs `handleLead` 0.12 s AHEAD of the hand (`FSOReloadPlayer::PeekHand`,
+`ASOWeapon::PeekReloadHand`: it is nearly round as the hand arrives). Flown in the gun's own frame, the hand rode the
+magazine round behind the gun as the gun rolled and chased the handle across the top, the forearm over the whole
+picture. **What the hand BRINGS rides in the hand** (`USOGunRigComponent::SeatCarried`, `ASOWeapon::
+GetSupportHandGrip`: a fresh magazine, a speedloader, a shell, a round, biomass, laid in the support hand's own bones
+as the body has them that frame, in the hold the hand will have on it at the gun, the fingers closed on it; the gun
+ticks after the body's pose is made): on the choreography's own path the rifle's fresh magazine hung in the air beside
+the gun for a fifth of a second while the hand was still at the pouch. A channel's keys run FORWARD in time (the
+rifle's and the compact SMG's pouch key stood at 0.7, after the next key's 0.62, and the hand leapt two thirds of the
+way to the gun in one frame: their old magazine is out by half way now and the hand at the pouch by 0.62;
+`ShatteredOrbit.Weapon.ReloadTimeline` holds every gun's keys to it). A short HOP goes straight and stays closed (the
+flight's arc out past the gun and its open fingers scale with its length, `Far`: nothing under 5 cm, whole from 20):
+from a magazine pushed home to the slap on its base the hand flew out a hand's breadth, fingers spread, and back, in a
+tenth of a second. Lessons:
+placed by the part it WORKS (the first try: the magazine two thirds down the picture) the hands went up to the chin
+with the gun, the arms folded in front of the face and the wrists bent as no wrist does (the owner's red marks); a
+handgun's magazine is in the fist at the foot of the picture and comes in from below, as in the reference (lifted to
+show it whole, the pistol stood in front of the face again); the show at the fore end is the ready hold a little
+raised (further out, the fore end left the support arm's reach and the arm went dead straight); a gun seen about 57
+degrees off its top toward its left flank shows a cover on its top AND a magazine under it (the vr_lmg: no turning
+over between the two). The magazine POUCH is on the body (`USOGunRigComponent::PouchOnBody`: a chest rig's, the
+chest's front left of the middle), the hand's trip out to it swings out ahead of the chest, and at it the hand is
+turned as an arm reaches its own chest, in the BODY's frame (`GripForAnchor`: in the gun's frame, with the gun raised
+and rolled, the forearm was asked half a turn there). Test `ShatteredOrbit.Reload.TheWorkInView` (every gun from its
+own eyes: where it is worked in the picture, turned to the eyes for the part the hand is on NOW, the part whole while
+it is in the gun; `RELOADVIEW` lines, `-SOReloadOnly=`, `-SOReloadTrace`); pictures `SOCaptureSeries 1 53
+-SOGuns=<arch>,...` (files `SO_rl_<gun>_<1..6>` from the eyes, `_side` from beside: look at the side one before
+showing a reload; `-SOArmMarks`: `_bones`, both arms' bones marked and measured, `ARMMARK` lines). The six moments are
+taken by the reload's OWN clock, as shares of each gun's reload, with time slowed (`RELOADSNAP` lines say when;
+`-SOReloadSlow=`): a picture costs a frame or two, and counted from the last picture at full speed they ran up to a
+second late and missed the magazine going in; the views from beside are of the third moment itself, the body and its
+gun held still for them (their own time stopped, `CustomTimeDilation`: with the world's time slowed instead every cue
+of the series still cost the reload six hundredths of a second, and the side view showed the next move). **Look at a
+reload in slow motion before judging it**:
+`-SOReloadShare=<share>,...` or `-SOReloadAt=<s>,...` takes any moments of one's own (the hand's way to a handle, a
+magazine coming up from the pouch: twelve pictures across a quarter of a second showed what six across the whole
+reload never did).
+**The arms are BONES** (the hard rule; the owner, 2026-11-27). `SOArmBones.h` measures an arm from where its joints
+are (shoulder, elbow, wrist, the knuckles of the index, middle and little fingers): the elbow's hinge (to 150 degrees),
+the forearm's twist (0 a handshake, the thumb up: the palm turned up 85, down 80), the wrist toward the palm (75) or the
+back of the hand (68) and to the thumb's side (20) or the little finger's (35), the two held inside ONE ellipse
+(`WristStrain`: 1 its edge), and the upper arm's turn about itself (95 in, 75 out): the clinical norms. Until then a
+wrist was one angle under 80 degrees and poses passed that no arm makes: at the ready every long gun's firing wrist
+was bent 52 degrees toward the little finger, in a reload the support forearm twisted 179. In the arm solve
+(`FSOLocomotionProxy::ApplyHold`, a player's body): (1) the ELBOW swings round the shoulder-to-wrist line, from where
+the look puts it toward the swing that asks least of the bones, as far as the first that is inside (`Soft`: .92 at the
+ready, .7 while the gun is worked; the support elbow may tuck in under the gun, to -1.3 rad, where a fore grip close
+to the body asks it: the ksmg's): a shouldered gun's grip is 32 cm from its shoulder, so the forearm meets the hand 68
+degrees off whichever way the elbow hangs: hung low that was all a sideways bend; carried out at the side, the
+rifleman's high elbow, it is the wrist bent back, which a wrist does. (2) A hand at WORK turns about its own palm's
+normal on the part it holds, as far as the part lets it (`USOGunRigComponent::SpinFreeForAnchor`: round a magazine 120
+degrees, under a floor plate or on a shell any way, hooked over a handle 40, the fore end none), to the turn that asks
+least. (3) The GUARD: what is still past the range is taken out of the HAND's turn (`SOArmBones::Within`), the palm
+staying where it is on what it holds (how far it gave: `DebugGive`; the test holds it small: a hold that leans on the
+guard is put right where it is made). (4) The support hand turns from one hold to the next THROUGH its own range at a
+hand's pace (its twist and bends along a straight line in their own measures, 1500 / 1000 degrees a second); in flight
+between two places it is asked, from a quarter of the way, for the turn it will ARRIVE with (turned evenly in the gun's
+frame it crossed from one end of the twist to the other in one frame). In the hold (`USOViewmodelComponent`): a long
+gun's grip is held OBLIQUELY (`RifleGrip`: the hand's line 5 degrees up along the bore, as a handle crosses a palm; a
+handgun's stays square: held out, its forearm runs along the bore), turned back toward square 9 or 18 degrees by the
+fit where the ring or the little finger would not wrap (`FitGripEase`: sniper, scout, dmr); the GUN gives way to the
+firing arm (`InFiringRange`: what is past the range is taken out of the gun's turn about the palm on its grip, off the
+sights, at the elbow the body has: a long gun only while it is worked, a reload or an inspect, and a third of a second
+after, `WorkedTail`, at once and to .93 of the range; a handgun at any time, eased, at the range itself);
+the firing hand no nearer its shoulder than `FiringReachLeast` .42 of the arm (a handgun `HandgunReachLeast` .66: held
+out); the low hold (looking down off the sights) hangs 39 cm under the chest point (at 27 the grip was 27 cm under its
+shoulder and 20 ahead, where no elbow suits a wrist). `ShatteredOrbit.Body.HumanRange -SOArms` prints every state's
+arms (`ARM` lines), `-SOHoldOnly=<any gun>` one gun, `-SORangeTrace=<part of a state's name>` every frame (`BONES`,
+`SWINGL`, and `GEOM`: where every joint, the gun and the camera are, for working an arm out on paper: the scratch
+`arm/lab*.py` did). Lessons: the measure must come from the joints' places, never a bone's own turn; a handgun held out has two swings
+nearly alike, the elbow low and tucked or far out at the side, and the elbow crosses from one to the other as a reload
+or an inspect ends: the gun gives for a third of a second after the work is done (`WorkedTail`), or the hand turned 18
+degrees off its grip on the way; walked downhill to the NEAREST low point instead, the elbow changed its mind from
+frame to frame near the ridge between the two and the pistol's hands shook on the sights (tried, taken out); a rule that turns
+the GUN inside the range makes it shake at the ready (a shouldered wrist lives at .92-.95 of its range), and one that
+turns a long gun at all in ordinary movement saws in the picture (read at the elbow's own place on a walk the gun
+jerked with every step; given at once and eased back, a rifle lurched 8 cm in a frame out of a slide): a long gun's
+holds are made inside the arm's range where they are made, and it gives way only while it is worked; a fit judged by "a finger starts inside" eases nearly every gun (most do, harmlessly):
+judge it as `ShatteredOrbit.Hold.FittedGrip` does; the reach rules must read the wrist where the hand is FITTED.
 **The hands are where the gun is, the gun where the hands can be** (the ULTIMATE rule): `InFiringReach` (the firing
 wrist within 0.33-0.95 of its arm) and `InSupportReach` (the support hand's fitted place within `SupportReach` 0.87 of
 its arm: the gun comes in toward that shoulder, a long gun's butt no further back than `ButtAheadOfShoulder` in front

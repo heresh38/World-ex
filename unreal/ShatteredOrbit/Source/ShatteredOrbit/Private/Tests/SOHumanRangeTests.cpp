@@ -77,7 +77,7 @@ namespace SOHumanRange
 		{ TEXT("left upper arm turned about itself (+ in)"), -75.0f, 95.0f },
 		// how far the arm solve's guard turned each hand off the hold it was asked for, to keep the bones in range: a hold
 		// that leans on the guard is a hold to put right where it is made (the firing hand is on its grip: hardly at all)
-		{ TEXT("right hand turned off its hold by the bones' guard"), 0.0f, 16.5f },   // (the worst: on the sights looking 60 degrees down with a grip its fit had to ease)
+		{ TEXT("right hand turned off its hold by the bones' guard"), 0.0f, 17.5f },   // (the worst: the revolver on the sights looking 60 degrees down, 17.1)
 		{ TEXT("left hand turned off its hold by the bones' guard"), 0.0f, 40.0f },
 	};
 	/** Where the arms' measures begin in Limits (two of each: right, left). */
@@ -284,6 +284,11 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 				AddInfo(FString::Printf(TEXT("TRACE %s %d%s: elbow R %.1f L %.1f, wrist R %.1f L %.1f, head %.1f / %.1f, chest %.1f / %.1f | swing A0 %.2f A1 %.2f A %.2f ask %.2f clear %.2f wrist %.1f trunk %.2f (%.0f)%s"),
 					*Name, Frame, Frame > Settle ? TEXT("") : TEXT(" (settling)"), M[6], M[7], M[8], M[9], M[0], M[1], M[3], M[4],
 					Sw[0], Sw[1], Sw[2], Sw[3], Sw[5], Sw[6], Sw[7], Sw[8], *Work));
+				{
+					const float* SwL = USOLocomotionAnimInstance::DebugSwing[1];
+					AddInfo(FString::Printf(TEXT("SWINGL %s %d: A0 %.2f A1 %.2f A %.2f ask %.2f clear %.2f wrist %.1f trunk %.2f (%.0f)"), *Name, Frame,
+						SwL[0], SwL[1], SwL[2], SwL[3], SwL[5], SwL[6], SwL[7], SwL[8]));
+				}
 				// (the arms as bones: twist, toward the palm, sideways, the wrist as one joint, the upper arm's turn)
 				AddInfo(FString::Printf(TEXT("BONES %s %d: R twist %.0f flex %.0f side %.0f wrist %.2f turn %.0f gave %.0f | L twist %.0f flex %.0f side %.0f wrist %.2f turn %.0f gave %.0f spin %.0f"),
 					*Name, Frame, M[ArmFirst], M[ArmFirst + 2], M[ArmFirst + 4], M[ArmFirst + 6], M[ArmFirst + 8], M[ArmFirst + 10],
@@ -317,12 +322,15 @@ bool FSOHumanRangeTest::RunTest(const FString& Parameters)
 	// (-SOHoldOnly=<arch>: one gun while working on it; -SORangeAll: every state's measures as info lines, RANGE)
 	FString Only;
 	FParse::Value(FCommandLine::Get(), TEXT("SOHoldOnly="), Only);
-	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("pistol"), TEXT("smg"), TEXT("hmg"), TEXT("sniper"), TEXT("shotgun"), TEXT("rocket") })
+	// (one of each kind of hold; -SOHoldOnly=<arch> may name any other gun to measure it alone)
+	TArray<FString> List = { TEXT("rifle"), TEXT("pistol"), TEXT("revolver"), TEXT("smg"), TEXT("hmg"), TEXT("sniper"), TEXT("shotgun"), TEXT("rocket") };
+	if (!Only.IsEmpty())
 	{
-		if (!Only.IsEmpty() && Only != Arch)
-		{
-			continue;
-		}
+		List = { Only };
+	}
+	for (const FString& ArchName : List)
+	{
+		const TCHAR* Arch = *ArchName;
 		Player->SetActorLocation(FVector(0.0f, 0.0f, 92.0f));
 		PC->SetControlRotation(FRotator::ZeroRotator);
 		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));

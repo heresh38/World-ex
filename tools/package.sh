@@ -15,7 +15,7 @@ CONFIG="${1:-Development}"
 STAGED="$PRJ_DIR/Content/Staged/Data"
 rm -rf "$PRJ_DIR/Content/Staged"
 mkdir -p "$STAGED"
-cp "$PRJ_DIR/Data/areas.json" "$PRJ_DIR/Data/creator.json" "$PRJ_DIR/Data/journal.json" "$PRJ_DIR/Data/stances.json" "$PRJ_DIR/Data/nexus_plan.json" "$PRJ_DIR/Data/nexus_city.json" \
+cp "$PRJ_DIR/Data/areas.json" "$PRJ_DIR/Data/creator.json" "$PRJ_DIR/Data/journal.json" "$PRJ_DIR/Data/stances.json" "$PRJ_DIR/Data/reload_shows.json" "$PRJ_DIR/Data/nexus_plan.json" "$PRJ_DIR/Data/nexus_city.json" \
    "$PRJ_DIR/Data/nexus_instances.bin" "$STAGED/"
 for f in "$PRJ_DIR"/Data/op_*.json; do
   case "$f" in *_art.json) ;; *) cp "$f" "$STAGED/" ;; esac

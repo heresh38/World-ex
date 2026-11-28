@@ -153,6 +153,18 @@ public:
 	float SpinFreeForAnchor(FName Anchor) const;
 	/** That freedom right now (between the two places the reload's hand is going from and to). */
 	float GetSupportSpinFree() const { return LeftSpinFree; }
+	/** Where the gun WILL be once it has been turned for the reload hand's next job (InLead: the viewmodel's show for
+	 *  that job) and where it WAS when the hand let go of the place it is leaving (InLeft), both in the gun's own frame of
+	 *  now (identity: where it is). In flight between two places the hand goes from where it let go to where the part it
+	 *  makes for will be, in the body's space, and the gun brings the part to the hand (ApplyPose). */
+	void SetShowLead(const FTransform& InLead, const FTransform& InLeft) { ShowLead = InLead; ShowLeft = InLeft; }
+	/** The reload's hand is BRINGING something to the gun (a fresh magazine, a speedloader, a shell, a round, a lump of
+	 *  biomass: on its way from the pouch to where the choreography puts the thing): it rides in the hand that carries it.
+	 *  SeatCarried lays it in that hand as the body has it NOW (the hand's own grip frame in the world: the wrist, and the
+	 *  hand's basis as FSOHandGrip::MakeBasis makes one), in the hold the hand will have on it at the gun; near the gun it
+	 *  goes over to its place in the choreography. Called after ApplyPose, by whoever knows the body (ASOWeapon::Tick). */
+	bool IsCarrying() const { return CarriedPart.IsValid() && CarriedShare > 0.0f; }
+	void SeatCarried(const FTransform& HandGripWorld);
 
 	/** The gun body's bounds in rig space (+X barrel, +Y right, +Z up, cm). */
 	FBox GetRigBounds() const;
@@ -228,6 +240,13 @@ private:
 	FSOHandGrip CurGrip;
 	float LeftSpinFree = 0.0f;
 	float CurSpinFree = 0.0f;
+	FTransform ShowLead = FTransform::Identity;
+	FTransform ShowLeft = FTransform::Identity;
+	/** What the reload's hand is bringing (ApplyPose), the hold it will have on it at its place in the choreography (rig
+	 *  space), and how much of it is still the hand's (1 on the way, 0 as it arrives). */
+	TWeakObjectPtr<UStaticMeshComponent> CarriedPart;
+	FSOHandGrip CarriedGrip;
+	float CarriedShare = 0.0f;
 	int32 LastSegment = -1;
 	FName Archetype;
 	bool bShown = true;

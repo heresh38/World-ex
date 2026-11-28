@@ -1,6 +1,8 @@
 #include "SOWeapon.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "AnimationRuntime.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "SOCombatCharacter.h"
@@ -1365,6 +1367,40 @@ void ASOWeapon::Tick(float DeltaSeconds)
 	const FSOReloadPose& Pose = Reload.GetPose();
 	Rig->SetBarrelSpin(BarrelSpin);
 	Rig->ApplyPose(Pose);
+	// (what the reload's hand is bringing to the gun rides in that hand as the body has it this frame: the gun ticks after
+	// the body's pose is made)
+	if (FTransform Hand; Rig->IsCarrying() && GetSupportHandGrip(Hand))
+	{
+		Rig->SeatCarried(Hand);
+	}
+}
+
+bool ASOWeapon::GetSupportHandGrip(FTransform& OutWorld) const
+{
+	const ASOCombatCharacter* Holder = GetHolder();
+	const USkeletalMeshComponent* Body = Holder ? Holder->GetMesh() : nullptr;
+	const USkeletalMesh* Asset = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+	if (!Asset)
+	{
+		return false;
+	}
+	const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+	const int32 Hand = Ref.FindBoneIndex(TEXT("hand_L"));
+	const int32 Lower = Hand != INDEX_NONE ? Ref.GetParentIndex(Hand) : INDEX_NONE;
+	const TArray<FTransform>& Pose = Body->GetComponentSpaceTransforms();
+	if (Lower == INDEX_NONE || !Pose.IsValidIndex(Hand))
+	{
+		return false;
+	}
+	// The hand bone against its anatomical basis, from the rest pose: as the arm solve has it (USOLocomotionAnimInstance:
+	// the bone's turn is the grip's basis times this offset)
+	const FTransform HandRef = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Hand);
+	const FVector RestAlong = (HandRef.GetLocation() - FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Lower).GetLocation()).GetSafeNormal();
+	const FQuat RestBasis = FSOHandGrip::MakeBasis(RestAlong, FVector(0.0f, 1.0f, 0.0f), true);
+	const FQuat Basis = Pose[Hand].GetRotation() * HandRef.GetRotation().Inverse() * RestBasis;
+	const FTransform ToWorld = Body->GetComponentTransform();
+	OutWorld = FTransform(ToWorld.GetRotation() * Basis, ToWorld.TransformPosition(Pose[Hand].GetLocation()));
+	return true;
 }
 
 void ASOWeapon::DropOnDeath(const FVector& HolderVelocity)

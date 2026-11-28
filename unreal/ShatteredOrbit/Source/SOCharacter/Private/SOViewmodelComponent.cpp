@@ -147,19 +147,61 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 				FMemory::Memcpy(ShowCur, bShowing ? ShowWant : Style.For(NFore).V, sizeof(ShowCur));
 				ShowSegment = P.Segment;
 			}
+			// The hand's job as the gun's turn reads it. Where the hand's next place is a handle or a slide, which the gun
+			// is turned right over for (from a magazine well shown on its left to a handle on its right: 130 degrees and
+			// more about the bore), the gun's turn runs a little AHEAD of the hand (Shows.HandleLead; "cur" named by the
+			// player): it is rolling before the hand lets go of the magazine and is nearly round as the hand arrives.
+			// Turned with the hand, the gun was still showing the last job when the hand reached the handle on its far
+			// side: the forearm lay across the top of the gun and over the picture (rack frames, capture set 53).
+			bool bHand = P.bHand;
+			FName HandA = P.HandAnchorA, HandB = P.HandAnchorB;
+			float HandAlpha = P.HandAlpha;
+			{
+				static const FName NBolt(TEXT("bolt")), NCharge(TEXT("charge")), NSlide(TEXT("slide"));
+				FName AheadA, AheadB;
+				float AheadAlpha = 0.0f;
+				if (Shows.HandleLead > 0.0f && Weapon->PeekReloadHand(Shows.HandleLead, AheadA, AheadB, AheadAlpha)
+					&& (AheadB == NBolt || AheadB == NCharge || AheadB == NSlide))
+				{
+					bHand = true;
+					HandA = AheadA;
+					HandB = AheadB;
+					HandAlpha = AheadAlpha;
+				}
+			}
 			FSOReloadShow From, To;
-			FMemory::Memcpy(From.V, P.bHand && P.HandAnchorA != NCur ? Style.For(P.HandAnchorA).V : ShowCur, sizeof(From.V));
-			FMemory::Memcpy(To.V, !P.bHand ? Style.Base.V : (P.HandAnchorB != NCur ? Style.For(P.HandAnchorB).V : From.V), sizeof(To.V));
-			const float T = P.bHand ? FMath::Clamp(P.HandAlpha, 0.0f, 1.0f) : 1.0f;
+			FMemory::Memcpy(From.V, bHand && HandA != NCur ? Style.For(HandA).V : ShowCur, sizeof(From.V));
+			FMemory::Memcpy(To.V, !bHand ? Style.Base.V : (HandB != NCur ? Style.For(HandB).V : From.V), sizeof(To.V));
+			// (the gun is turned for the hand's next job while the hand is still on its way there, done by six tenths of the
+			// way: turned evenly with the hand, it was still showing the last job as the hand arrived for this one)
+			const float T = bHand ? FMath::Clamp(HandAlpha * 1.65f, 0.0f, 1.0f) : 1.0f;
 			FSOReloadShow Want = FSOReloadShow::Lerp(From, To, T * T * (3.0f - 2.0f * T));
 			// (a flap that stands open is shown for as long as it is open, wherever the hands are: a light gun's vent is
 			// thrown open and the hand goes back to the fore end while the heat is purged, and with the hand's show the gun
 			// went back down with the flap still open and venting under the picture)
-			if (const float Open = FMath::SmoothStep(0.03f, 0.3f, FMath::Abs(P.Hatch)); Open > 0.0f)
+			const float Open = FMath::SmoothStep(0.03f, 0.3f, FMath::Abs(P.Hatch));
+			if (Open > 0.0f)
 			{
 				Want = FSOReloadShow::Lerp(Want, Style.Base, Open);
 			}
 			FMemory::Memcpy(ShowWant, Want.V, sizeof(ShowWant));
+			// (and the show of the place the hand is flying to NOW: where the gun will be when it arrives, for the rig)
+			const bool bWasFlight = bShowFlight;
+			bShowFlight = P.bHand && P.HandAnchorA != P.HandAnchorB && P.HandAnchorB != NCur;
+			if (bShowFlight && (!bWasFlight || P.Segment != FlightSegment || P.HandAnchorA != FlightA || P.HandAnchorB != FlightB))
+			{
+				// (the hand lets go: where the gun is held now is where its way begins, below)
+				FlightSegment = P.Segment;
+				FlightA = P.HandAnchorA;
+				FlightB = P.HandAnchorB;
+				bFlightBegan = true;
+			}
+			if (bShowFlight)
+			{
+				FSOReloadShow Arrive;
+				FMemory::Memcpy(Arrive.V, Style.For(P.HandAnchorB).V, sizeof(Arrive.V));
+				FMemory::Memcpy(ShowTo, FSOReloadShow::Lerp(Arrive, Style.Base, Open).V, sizeof(ShowTo));
+			}
 			if (!bShowing)
 			{
 				FMemory::Memcpy(ShowNow, ShowWant, sizeof(ShowNow));
@@ -170,6 +212,10 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		else if (ReloadK < 0.02f)
 		{
 			bShowing = false;
+		}
+		if (!bReloading)
+		{
+			bShowFlight = false;
 		}
 		if (bShowing)
 		{
@@ -404,6 +450,47 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 	Hold = InFiringRange(Character, Rig, Hold, Dt);
 	Held->SetWorldTransform(Hold);
 	SetWorldTransform(Hold);
+	// A reload's hand in flight between two places flies in the BODY's space (USOGunRigComponent::SetShowLead): from where
+	// the gun WAS when the hand let go (kept in the show's own frame, the view's), to where the gun WILL be when the hand
+	// arrives: the show of the place it is flying to, with what the hands' reach and the handling lay on the show now
+	// carried along by as much as the reload's pose is in. Both in the gun's own frame of now.
+	if (USOGunRigComponent* Shown = Weapon ? Weapon->GetRig() : nullptr)
+	{
+		FTransform Lead = FTransform::Identity, Left = FTransform::Identity;
+		if (bShowing && bShowFlight && Weapon->IsReloading() && Ads < 0.99f)
+		{
+			const FTransform Frame = ShowFrame(Character);
+			if (bFlightBegan)
+			{
+				FlightHold = Hold.GetRelativeTransform(Frame);
+				bFlightBegan = false;
+			}
+			const float In = ReloadK * ReloadK * (3.0f - 2.0f * ReloadK);
+			FTransform Laid;
+			Laid.Blend(FTransform::Identity, ReloadPose(Character).Inverse() * Hold, In);
+			const FTransform RigNow = Shown->GetComponentTransform();
+			const FTransform OnHold = RigNow.GetRelativeTransform(Hold);
+			FTransform Then = (OnHold * (ReloadPose(Character, ShowTo) * Laid)).GetRelativeTransform(RigNow);
+			Then.SetScale3D(FVector::OneVector);
+			Lead.Blend(FTransform::Identity, Then, 1.0f - Ads);
+			Left = (OnHold * (FlightHold * Frame)).GetRelativeTransform(RigNow);
+			Left.SetScale3D(FVector::OneVector);
+		}
+		else
+		{
+			bFlightBegan = false;
+		}
+		Shown->SetShowLead(Lead, Left);
+	}
+}
+
+FTransform USOViewmodelComponent::ShowFrame(const ASOCharacter* Character) const
+{
+	const FTransform Eye = Character->GetEyeTransform(false);
+	FRotator View = Eye.Rotator();
+	View.Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Pitch), -35.0f, 35.0f);
+	View.Roll = 0.0f;
+	return FTransform(View.Quaternion(), Eye.GetLocation());
 }
 
 bool USOViewmodelComponent::GetShoulderPoints(const ASOCharacter* Character, FVector& OutPocket, FVector& OutChest) const
@@ -709,8 +796,10 @@ void USOViewmodelComponent::KeepReloadWork(const ASOWeapon* Weapon, const USOGun
 	ReloadWorkRig = Rig;
 }
 
-FTransform USOViewmodelComponent::ReloadPose(const ASOCharacter* Character) const
+FTransform USOViewmodelComponent::ReloadPose(const ASOCharacter* Character, const float* Show) const
 {
+	// (Show: another show than the one the gun is in now, ShowNow: where the gun would be in it)
+	const float* S = Show ? Show : ShowNow;
 	// The show (ShowNow): where the FIRING hand holds the gun (the top of its grip: the rig's origin) in the picture at the
 	// player's field of view and the picture's shape, so far ahead of the eyes, in the view's frame (its pitch held within
 	// 35 degrees: the arms carry the gun up and down with the look only so far), and the gun turned about that hand. The
@@ -735,11 +824,11 @@ FTransform USOViewmodelComponent::ReloadPose(const ASOCharacter* Character) cons
 		}
 	}
 	const float TanH = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(Character->GetHipFov(), 40.0f, 140.0f) * 0.5f)), TanV = TanH / Aspect;
-	const float Ahead = FMath::Clamp(ShowNow[0], 15.0f, 80.0f);
-	const FVector Target = Eye.GetLocation() + ViewQ.RotateVector(FVector(Ahead, (2.0f * ShowNow[1] - 1.0f) * Ahead * TanH, -(2.0f * ShowNow[2] - 1.0f) * Ahead * TanV));
+	const float Ahead = FMath::Clamp(S[0], 15.0f, 80.0f);
+	const FVector Target = Eye.GetLocation() + ViewQ.RotateVector(FVector(Ahead, (2.0f * S[1] - 1.0f) * Ahead * TanH, -(2.0f * S[2] - 1.0f) * Ahead * TanV));
 	// The gun's turn: the muzzle up and in, then rolled about its own bore, the top to the right (the left flank and the
 	// underside to the eyes) or, negative, to the left
-	const FQuat Turn = ViewQ * FRotator(ShowNow[3], -ShowNow[4], 0.0f).Quaternion() * FQuat(FVector::ForwardVector, -FMath::DegreesToRadians(ShowNow[5]));
+	const FQuat Turn = ViewQ * FRotator(S[3], -S[4], 0.0f).Quaternion() * FQuat(FVector::ForwardVector, -FMath::DegreesToRadians(S[5]));
 	FTransform Pose(Turn, Target);
 	// The part the reload works stays in the picture (the owner, 2026-11-24: "so reload is visible and the player can see
 	// the magazine fully"): where the gun turned about the firing hand leaves it outside (a launcher's flap far along its
@@ -952,9 +1041,10 @@ FTransform USOViewmodelComponent::InFiringRange(const ASOCharacter* Character, c
 	// whatever the gun does, so a gun turned where no wrist follows (looked over in an inspect, pointed at the floor from
 	// the chest, carried across the body) would ask the arm solve's guard to turn the hand off the grip instead. Here the
 	// hold is tried against the firing arm as an arm is measured (SOArmBones: the forearm's twist, the wrist's two ways),
-	// at the elbow's best place round the arm; what is past the range is taken out of the GUN's turn, about the palm's
-	// place on the grip, so the hand stays whole on its handle and the gun points as far as the arm lets it. Off the
-	// sights only: on them the gun lies on the eye's line and the stance carries the arm.
+	// at the elbow the body has; what is past the range is taken out of the GUN's turn, about the palm's place on the
+	// grip, so the hand stays whole on its handle and the gun points as far as the arm lets it. A long gun only while it
+	// is worked (a reload, an inspect) and a moment after, a handgun at any time (below). Off the sights only: on them the
+	// gun lies on the eye's line and the stance carries the arm.
 	FQuat Want = FQuat::Identity;
 	FVector About = Hold.GetLocation();
 	const USkeletalMeshComponent* Body = Character->GetMesh();
@@ -1020,38 +1110,45 @@ FTransform USOViewmodelComponent::InFiringRange(const ASOCharacter* Character, c
 				// the trunk, so the best swing of all is not always the one it stands at, and what the gun did not give the
 				// solve's guard took out of the hand's hold. Otherwise at the best swing of all: read at the elbow's own place
 				// on a walk, whose every step sways it, the gun was nudged a little each step and jerked in the picture)
+				// (and for a third of a second after: the work done, the firing elbow swings back out from under the gun to
+				// where the stance carries it, and on the way round the arm the wrist is asked more than it has: the pistol's
+				// hand was turned 18 degrees off its grip for six frames as its inspect ended)
 				const ASOWeapon* Worked = Character->GetWeapon();
-				const bool bWorked = Worked && Worked->IsWorkingTheGun();
+				WorkedTail = Worked && Worked->IsWorkingTheGun() ? 0.35f : FMath::Max(WorkedTail - Dt, 0.0f);
+				// (a handgun's is read at the elbow the body has at all times: crouched on the move its elbow is not where the
+				// best swing of all would have it, and what the gun did not give the guard took out of the revolver's hold,
+				// 22 degrees; eased there, below, so a step's sway does not nudge it)
+				const bool bWorked = WorkedTail > 0.0f || Rig->IsHandgun();
+				// (a gun being WORKED is turned quickly, and the elbow read here is last frame's: it gives a little inside the
+				// range, so what the frame's lag leaves is still inside it: at the range itself the pistol's inspect left the
+				// hand 18 degrees to turn off its grip at the ends of its rolls)
+				const float Edge = WorkedTail > 0.0f ? 0.93f : 1.0f;   // (a handgun at rest: the range itself, or it gave a little all the time and shook)
 				FVector Round = CS[El].GetLocation() - Sb;
 				Round -= Dir * FVector::DotProduct(Round, Dir);
 				FVector Best = Sb + Dir * Along + (Round.Normalize(1e-3f) ? Round : Down) * Height;
 				float Least = SOArmBones::Measure(Sb, Best, WristAt, LineNow, ThumbNow, false, FwdCS, UpCS).Asks(Human);
-				if (Least > 1.0f || !bWorked)
+				if (!bWorked)
 				{
-					// (unless no swing at all does better: then the best of them, the one the elbow is on its way to)
-					float Ideal = Least;
-					FVector IdealAt = Best;
 					for (int32 i = 0; i <= 36; ++i)
 					{
 						const float Sw = FMath::Lerp(-0.6f, 1.7f, i / 36.0f);
 						const FVector E = Sb + Dir * Along + (Down * FMath::Cos(Sw) + Out * FMath::Sin(Sw)) * Height;
-						if (const float Asks = SOArmBones::Measure(Sb, E, WristAt, LineNow, ThumbNow, false, FwdCS, UpCS).Asks(Human); Asks < Ideal)
+						if (const float Asks = SOArmBones::Measure(Sb, E, WristAt, LineNow, ThumbNow, false, FwdCS, UpCS).Asks(Human); Asks < Least)
 						{
-							Ideal = Asks;
-							IdealAt = E;
+							Least = Asks;
+							Best = E;
 						}
-					}
-					if (Ideal > 1.0f || !bWorked)
-					{
-						Least = Ideal;
-						Best = IdealAt;
 					}
 				}
 				// (only what is past the range itself: a shouldered gun's firing wrist is near the edge of its range wherever the
 				// elbow hangs, and a rule set inside that turned the gun off its aim at the ready, a little more or less each
 				// frame as the body moved: the gun shook in the picture)
-				static const float Edge = 1.0f;
-				if (Least > Edge)
+				// (a long gun only while it is worked, and the moment after: in ordinary movement its holds are made inside the
+				// arm's range (the stance, the low hold, the least reach), and a rifle that gave way there as the body rose
+				// out of a slide turned back on itself in the picture, three jolts out of one slide. A handgun always: held out
+				// in two hands on the body's middle line its firing wrist is near the edge of its range standing, and crouched
+				// on the move the guard turned the revolver's hand 22 degrees off its grip)
+				if (Least > Edge && bWorked)
 				{
 					const FQuat Allowed = SOArmBones::Within(Sb, Best, WristAt, HandRot, LineLocal, ThumbLocal, false, Human, Edge);
 					// (the turn that takes the hand as this hold asks it onto the one the arm allows, in the world)
@@ -1062,9 +1159,14 @@ FTransform USOViewmodelComponent::InFiringRange(const ASOCharacter* Character, c
 		}
 	}
 	Want = FQuat::Slerp(FQuat::Identity, Want, 1.0f - FMath::Clamp(Ads, 0.0f, 1.0f)).GetNormalized();
-	// (it gives at once, as far as the arm asks, and comes back eased: eased both ways it trailed a gun turned quickly in
-	// an inspect, and the hand was turned off its grip for the frames it took to catch up)
-	RangeGive = Dt > 0.25f || Want.GetAngle() >= RangeGive.GetAngle() ? Want : FQuat::Slerp(RangeGive, Want, 1.0f - FMath::Exp(-20.0f * Dt)).GetNormalized();
+	// (while the gun is WORKED it gives at once, as far as the arm asks, and comes back eased: eased both ways it trailed
+	// a gun turned quickly in an inspect, and the hand was turned off its grip for the frames it took to catch up. In
+	// ordinary movement it is eased both ways: a body setting off, coming out of a slide or starting to walk leans for a
+	// few frames, the arm asks a little more than it has and less again, and a gun that gave at once and came back eased
+	// sawed in the picture: the pistol's sight turned back three times in a fifth of a second, the rifle lurched 8 cm in a
+	// frame out of a slide)
+	const bool bAtOnce = WorkedTail > 0.0f && Want.GetAngle() >= RangeGive.GetAngle();
+	RangeGive = Dt > 0.25f || bAtOnce ? Want : FQuat::Slerp(RangeGive, Want, 1.0f - FMath::Exp(-(WorkedTail > 0.0f ? 20.0f : 12.0f) * Dt)).GetNormalized();
 	if (RangeGive.IsIdentity(1e-5f))
 	{
 		return Hold;
@@ -1091,7 +1193,13 @@ FTransform USOViewmodelComponent::InFiringReach(const ASOCharacter* Character, c
 	const FVector Shoulder = Body->GetBoneLocation(Body->GetBoneName(Sh));
 	const FVector Elbow = Body->GetBoneLocation(Body->GetBoneName(El));
 	const float Arm = static_cast<float>(FVector::Dist(Shoulder, Elbow) + FVector::Dist(Elbow, Body->GetBoneLocation(Body->GetBoneName(Wr))));
-	const FVector WristInGun = Rig->GetComponentTransform().InverseTransformPosition(R.GetLocation());
+	// (the wrist where the hand is FITTED on this grip: the fit seats it on the backstrap, up to 6 cm from where the rig
+	// has it, and a handgun's rule read 66 % of the arm where the body's wrist was at 57)
+	FVector WristInGun = Rig->GetComponentTransform().InverseTransformPosition(R.GetLocation());
+	if (const USOLocomotionAnimInstance* Anim = Cast<USOLocomotionAnimInstance>(Body->GetAnimInstance()))
+	{
+		WristInGun += Anim->GetFittedOffset(false);
+	}
 	const FVector Off = Hold.TransformPosition(WristInGun) - Shoulder;
 	const float D = static_cast<float>(Off.Size());
 	FTransform Out = Hold;
@@ -1099,9 +1207,9 @@ FTransform USOViewmodelComponent::InFiringReach(const ASOCharacter* Character, c
 	{
 		Out.AddToTranslation(-Off / FMath::Max(D, 1e-3f) * (D - FiringReach * Arm));
 	}
-	else if (D < FiringReachLeast * Arm && D > 1e-3f)
+	else if (const float Least = Rig->IsHandgun() ? HandgunReachLeast : FiringReachLeast; D < Least * Arm && D > 1e-3f)
 	{
-		Out.AddToTranslation(Off / D * (FiringReachLeast * Arm - D));
+		Out.AddToTranslation(Off / D * (Least * Arm - D));
 	}
 	return Out;
 }

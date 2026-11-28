@@ -77,6 +77,9 @@ struct SOCHARACTER_API FSOReloadShowData
 	float JoltZeta = 0.45f;
 	/** How much of the choreography's own keyed moves of the gun rides on top of the show (the shows carry the pose). */
 	float GunMoves = 0.35f;
+	/** Seconds the gun's turn runs AHEAD of the hand where the hand's next place is a handle or a slide, which the gun is
+	 *  turned right over for (USOViewmodelComponent::UpdateHold). */
+	float HandleLead = 0.12f;
 
 	/** The archetype's own, else its style's, else the default. */
 	const FSOReloadStyleShow& For(FName Archetype, FName Style) const;

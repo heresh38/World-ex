@@ -230,9 +230,51 @@ bool FSOReloadTimelineTest::RunTest(const FString& Parameters)
 	}
 	TestEqual(TEXT("seated magazine stays at rest"), FramesOffRestAfterSeat, 0);
 	const float K = 2.3f / 1.24f;
-	TestEqual(TEXT("mag drops at 0.55 of the main segment"), DropAt, 0.55f * K, 0.02f);
+	// (the old magazine is out by half way: the hand is at the pouch by 0.62, where the fresh one is taken)
+	TestEqual(TEXT("mag drops at 0.5 of the main segment"), DropAt, 0.5f * K, 0.02f);
 	TestEqual(TEXT("seat at 0.88 of the main segment"), SeatAt, 0.88f * K, 0.02f);
 	TestFalse(TEXT("finished"), Player.IsActive());
+
+	// Every channel's keys run FORWARD in time, in every gun's reload (the rifle's hand reached the pouch at 0.7 with its
+	// next key at 0.62: the sampler took it two thirds of the way up to the gun in one frame, and the fresh magazine hung
+	// in the air beside the gun meanwhile: the owner's first-person target, 2026-11-27).
+	{
+		struct FGun { const TCHAR* Arch; bool bEnergy; bool bHorror; };
+		static const FGun Guns[] = {
+			{ TEXT("rifle"), false, false }, { TEXT("carbine"), false, false }, { TEXT("dmr"), false, false }, { TEXT("ksmg"), false, false },
+			{ TEXT("bolt"), false, false }, { TEXT("pistol"), false, false }, { TEXT("revolver"), false, false }, { TEXT("pump"), false, false },
+			{ TEXT("auto"), true, false }, { TEXT("pulse"), true, false }, { TEXT("scout"), true, false }, { TEXT("handcannon"), true, false },
+			{ TEXT("shotgun"), true, false }, { TEXT("sniper"), true, false }, { TEXT("smg"), true, false }, { TEXT("sidearm"), true, false },
+			{ TEXT("energy"), true, false }, { TEXT("hmg"), true, false }, { TEXT("rocket"), true, false },
+			{ TEXT("vr_rifle"), true, false }, { TEXT("vr_sniper"), true, false }, { TEXT("vr_smg"), true, false }, { TEXT("vr_shotgun"), true, false },
+			{ TEXT("vr_lmg"), true, false }, { TEXT("vr_handcannon"), true, false }, { TEXT("vr_pistol"), true, false }, { TEXT("vr_fusion"), true, false },
+			{ TEXT("vr_rocket"), true, false },
+			{ TEXT("spitter"), false, true }, { TEXT("bile"), false, true }, { TEXT("brood"), false, true } };
+		for (const FGun& Gun : Guns)
+		{
+			for (const bool bEmpty : { false, true })
+			{
+				int32 From = -1, To = -1;
+				const TArray<FSOReloadSegment> Segments = SOReload::BuildReload(Gun.Arch, Gun.bEnergy, Gun.bHorror, bEmpty, 2.3f, 3, From, To);
+				FString Backward;
+				for (int32 S = 0; S < Segments.Num(); ++S)
+				{
+					for (const TPair<FName, TArray<FSOKey>>& Channel : Segments[S].Channels)
+					{
+						for (int32 i = 1; i < Channel.Value.Num(); ++i)
+						{
+							if (Channel.Value[i].T < Channel.Value[i - 1].T - 1e-5f)
+							{
+								Backward += FString::Printf(TEXT(" segment %d '%s' key %d at %.2f after %.2f;"), S, *Channel.Key.ToString(), i, Channel.Value[i].T, Channel.Value[i - 1].T);
+							}
+						}
+					}
+				}
+				TestTrue(FString::Printf(TEXT("%s (%s): every channel's keys run forward in time (%s)"), Gun.Arch, bEmpty ? TEXT("empty") : TEXT("loaded"),
+					Backward.IsEmpty() ? TEXT("all do") : *Backward), Backward.IsEmpty());
+			}
+		}
+	}
 
 	// Easing and glTF -> mesh conversions.
 	TestEqual(TEXT("smootherstep midpoint"), FSOReloadPlayer::Ease(ESOEase::Smoother, 0.5f), 0.5f, 1e-5f);

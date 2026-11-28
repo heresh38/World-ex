@@ -118,6 +118,12 @@ public:
 	int32 RefillFromReserve(float Share = 1.0f);
 
 	const FSOReloadPose& GetPose() const { return Reload.GetPose(); }
+	/** The reload's hand a little ahead of now (FSOReloadPlayer::PeekHand): the gun is turned for the hand's next job
+	 *  before the hand leaves for it. */
+	bool PeekReloadHand(float Seconds, FName& OutA, FName& OutB, float& OutAlpha) const { return Reload.PeekHand(Seconds, OutA, OutB, OutAlpha); }
+	/** The holder's support hand as its body has it now: the wrist and the hand's basis (FSOHandGrip::MakeBasis's) in the
+	 *  world, from the hand bone of the pose just made. False where there is no such hand. */
+	bool GetSupportHandGrip(FTransform& OutWorld) const;
 	/** The gun: ONE model, held by the body in every view (the owner, 2026-11-23: one model, one camera; there is no
 	 *  first-person copy of it). */
 	USOGunRigComponent* GetRig() const { return Rig; }
