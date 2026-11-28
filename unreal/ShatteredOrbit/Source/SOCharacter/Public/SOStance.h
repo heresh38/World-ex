@@ -24,6 +24,9 @@ struct SOCHARACTER_API FSOStance
 	FVector ReadyShift = FVector(0.0f, 0.0f, 2.0f);
 	FVector AimShift = FVector(1.5f, -2.5f, 7.0f);
 	float ReadyDip = 0.0f;
+	/** How far the ready hold comes down again in a crouch, cm (the raise is for a standing body: folded in a crouch, the
+	 *  firing arm has less room and the hand was turned off its grip to keep its wrist). */
+	float ReadyCrouch = 0.0f;
 	FVector HandHold = FVector(38.0f, 6.0f, -2.0f);
 	FVector HandAimHold = FVector(44.0f, 5.0f, 2.0f);
 	FVector RelaxOffset = FVector(-2.0f, 0.0f, -5.0f);

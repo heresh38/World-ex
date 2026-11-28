@@ -238,6 +238,9 @@ private:
 	float AirK = 0.0f, AirV = 0.0f;
 	float FwdLag = 0.0f, FwdK = 0.0f, FwdV = 0.0f;   // (the body's pace along its facing, lagged; the weight's spring)
 	float SlideK = 0.0f;
+	/** Crouched, eased (0 standing .. 1 down): the ready hold's raise comes down with it (FSOStance::ReadyCrouch). */
+	float CrouchK = 0.0f;
+	float CrouchV = 0.0f;
 	float MantleK = 0.0f;
 	float ReloadK = 0.0f;
 	/** How far an inspect (ASOWeapon::IsInspecting) has the gun: it is looked over from the ready hold, never the relaxed

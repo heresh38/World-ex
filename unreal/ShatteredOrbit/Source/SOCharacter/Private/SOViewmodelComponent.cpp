@@ -115,6 +115,7 @@ void USOViewmodelComponent::UpdateHold(float DeltaTime)
 		FwdK = FMath::Clamp(FwdK, -1.8f, 1.8f);
 	}
 	Spring(SlideK, SlideV, Move && Move->IsSliding() ? 1.0f : 0.0f, 13.0f, 0.85f, Dt);
+	Spring(CrouchK, CrouchV, Character->bIsCrouched ? 1.0f : 0.0f, 8.0f, 0.95f, Dt);
 	Spring(MantleK, MantleV, Move && Move->IsMantling() ? 1.0f : 0.0f, 16.0f, 0.9f, Dt);
 	SlideK = FMath::Clamp(SlideK, -0.1f, 1.1f);
 	MantleK = FMath::Clamp(MantleK, -0.1f, 1.1f);
@@ -565,6 +566,8 @@ FTransform USOViewmodelComponent::HoldTransform(const ASOCharacter* Character, c
 		// bows with the aim, USOLocomotionAnimInstance (up to 95 % of it to 70 degrees), and a raise kept upright pushed
 		// the butt up the bowed chest toward the face: the firing arm folded into the body, its wrist bent past 85)
 		FVector Shift = FMath::Lerp(St.ReadyShift, St.AimShift, Ads);
+		// (the ready hold's raise is a standing body's: it comes down again in a crouch, eased)
+		Shift.Z -= St.ReadyCrouch * FMath::Clamp(CrouchK, 0.0f, 1.0f) * (1.0f - Ads);
 		if (PitchDeg < 0.0f && Ads > 0.0f)
 		{
 			const float BowDeg = FMath::Clamp(PitchDeg, FMath::Lerp(-40.0f, -70.0f, Ads), 0.0f) * FMath::Lerp(0.6f, 0.95f, Ads) * Ads;

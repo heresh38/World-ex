@@ -97,8 +97,16 @@ existing classes, never second systems.
   measured for every gun (`ShatteredOrbit.Hold.GunInThePicture` at the hip, `ShatteredOrbit.Reload.TheWorkInView` in a
   reload), and it is got by where the gun is held and where the one camera sits: never a second model or camera, never
   a hand off the gun, never a joint past its range. What one body and one camera at the eyes cannot show is said
-  plainly with its measure: a shouldered long gun's butt lies behind the picture's corner (at the hip the rifle shows
-  58-62 % of itself, the sniper 62-66, the pistol 92, the heavy machine gun 35-39: still to raise).
+  plainly with its measure: a shouldered long gun's butt lies behind the picture's corner. The hip pass of 2026-11-28
+  (`Data/stances.json`: the long guns held 4 to 7 cm higher at the ready, `readyShift`, eased down again in a crouch,
+  `readyCrouch`; the camera framed 14 cm back in the head, `frameBack`, the SMG 9; the sight near 55 % down,
+  `frameDown`; the relaxed handguns raised): at the ready / relaxed the rifle shows 70 / 77 % of itself (58 / 62
+  before), the sniper 72 / 76, the SMG 66 / 64, the shotgun 69 / 69, the launcher 65 / 69, the pistol 94 / 79, the
+  heavy machine gun 47 / 56 (35 / 38), and the TOP of the firing fist is in the picture for every long gun but the
+  heavy machine gun and the launcher (every long gun's whole firing hand was under the picture's foot: `HANDSEEN`
+  lines). The firing wrist itself stays under the foot: forward is shut by the support arm's reach (it is at .87 of
+  the arm already) and 3 cm higher turns the firing hand off its grip crouched. The test holds six tenths of a long
+  gun standing (the heavy machine gun 44 %), the support hand and the fist's top; `-SOHipOnly=<arch>,...`, `HIPGEOM`.
 - **One colour palette a set** (the owner, 2026-11-15: "all guns in the set need to have the same color pallet and shoot
   the same color, this is our rule going forward"): every gun of a set (its `"set"`; a gun of no set: its class's
   family, light / kinetic / horror) fires the same colour and carries the same light. `Data/game_data.json`

@@ -366,9 +366,58 @@ bool FSOGunInThePictureTest::RunTest(const FString& Parameters)
 		}
 		return 100.0f * In / FMath::Max(All, 1);
 	};
-	FRandomStream Rng(17);
-	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("smg"), TEXT("pistol"), TEXT("shotgun"), TEXT("hmg"), TEXT("sniper"), TEXT("rocket") })
+	// where a point of the body lies in the picture: its share across and down (over 1 down: under the picture's foot)
+	auto InFrame = [&](const FVector& World)
 	{
+		const FTransform Cam = Player->GetCamera()->GetComponentTransform();
+		const float TanX = FMath::Tan(FMath::DegreesToRadians(Player->GetCamera()->FieldOfView * 0.5f)), TanY = TanX * 9.0f / 16.0f;
+		const FVector P = Cam.InverseTransformPosition(World);
+		return P.X > 1.0 ? FVector2D(0.5 + 0.5 * (P.Y / P.X) / TanX, 0.5 - 0.5 * (P.Z / P.X) / TanY) : FVector2D(9.0, 9.0);
+	};
+	// both hands in the picture (the owner, 2026-11-27: "the player hands/guns need to be fully visible at all times"): the
+	// worst of each hand's wrist and its knuckles (index and little finger), as a share down the picture
+	auto HandsDown = [&](float& OutFiring, float& OutSupport, FString& OutSay)
+	{
+		const USkeletalMeshComponent* Body = Player->GetMesh();
+		OutFiring = OutSupport = 0.0f;
+		OutSay.Reset();
+		// (the top of the firing fist: its index knuckle, where the hand meets the gun under the receiver)
+		if (Body->GetBoneIndex(TEXT("index_01_R")) != INDEX_NONE)
+		{
+			OutSay = FString::Printf(TEXT("the firing fist's top %.0f %% down, "), 100.0 * InFrame(Body->GetBoneLocation(TEXT("index_01_R"))).Y);
+		}
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			float Worst = 0.0f;
+			FVector2D Wrist(0.0, 0.0);
+			for (const TCHAR* Bone : { TEXT("hand"), TEXT("index_01"), TEXT("pinky_01") })
+			{
+				const FName Name(*FString::Printf(TEXT("%s_%s"), Bone, Side == 0 ? TEXT("R") : TEXT("L")));
+				if (Body->GetBoneIndex(Name) != INDEX_NONE)
+				{
+					const FVector2D At = InFrame(Body->GetBoneLocation(Name));
+					Worst = FMath::Max(Worst, static_cast<float>(At.Y));
+					if (FCString::Strcmp(Bone, TEXT("hand")) == 0)
+					{
+						Wrist = At;
+					}
+				}
+			}
+			(Side == 0 ? OutFiring : OutSupport) = Worst;
+			OutSay += FString::Printf(TEXT("%s wrist %.0f %% across %.0f %% down (its knuckles to %.0f %%)%s"), Side == 0 ? TEXT("firing") : TEXT("support"),
+				100.0 * Wrist.X, 100.0 * Wrist.Y, 100.0f * Worst, Side == 0 ? TEXT(", ") : TEXT(""));
+		}
+	};
+	FRandomStream Rng(17);
+	FString Only;
+	FParse::Value(FCommandLine::Get(), TEXT("SOHipOnly="), Only, false);
+	for (const TCHAR* Arch : { TEXT("rifle"), TEXT("smg"), TEXT("pistol"), TEXT("shotgun"), TEXT("hmg"), TEXT("sniper"), TEXT("rocket"), TEXT("carbine"), TEXT("dmr"), TEXT("auto"),
+		TEXT("pump"), TEXT("bolt"), TEXT("revolver") })
+	{
+		if (!Only.IsEmpty() && !(TEXT(",") + Only + TEXT(",")).Contains(FString(TEXT(",")) + Arch + TEXT(",")))
+		{
+			continue;
+		}
 		Player->SetActorLocation(FVector(0.0f, 0.0f, 92.0f));
 		PC->SetControlRotation(FRotator::ZeroRotator);
 		ASOWeapon* Gun = Player->EquipInstance(USOLootLibrary::MakeWeapon(Arch, 2, 20, Rng));
@@ -386,14 +435,49 @@ bool FSOGunInThePictureTest::RunTest(const FString& Parameters)
 		Player->MarkCombat();
 		W.Run(1.0f, [&]() { Player->MarkCombat(); Face(); });
 		const float ReadyStill = InPicture(Gun);
+		float FiringDown = 0.0f, SupportDown = 0.0f;
+		FString HandsSay;
+		HandsDown(FiringDown, SupportDown, HandsSay);
+		const float FistTop = Player->GetMesh()->GetBoneIndex(TEXT("index_01_R")) != INDEX_NONE ? static_cast<float>(InFrame(Player->GetMesh()->GetBoneLocation(TEXT("index_01_R"))).Y) : 0.0f;
+		AddInfo(FString::Printf(TEXT("HANDSEEN %s at the ready: %s"), Arch, *HandsSay));
+		{
+			// (where everything is, in the actor's own frame, cm: forward, right, up: for working a hold out on paper)
+			const FTransform ToActor = Player->GetActorTransform().Inverse();
+			auto At = [&](const FVector& World) { const FVector P = ToActor.TransformPosition(World); return FString::Printf(TEXT("(%.0f %.0f %.0f)"), P.X, P.Y, P.Z); };
+			const USkeletalMeshComponent* Body = Player->GetMesh();
+			AddInfo(FString::Printf(TEXT("HIPGEOM %s: camera %s eyes %s | firing shoulder %s elbow %s wrist %s | support shoulder %s wrist %s | grip top %s muzzle %s"), Arch,
+				*At(Player->GetCamera()->GetComponentLocation()), *At(Player->GetEyeTransform(false).GetLocation()),
+				*At(Body->GetBoneLocation(TEXT("upperarm_R"))), *At(Body->GetBoneLocation(TEXT("forearm_R"))), *At(Body->GetBoneLocation(TEXT("hand_R"))),
+				*At(Body->GetBoneLocation(TEXT("upperarm_L"))), *At(Body->GetBoneLocation(TEXT("hand_L"))),
+				*At(Gun->GetRig()->GetComponentLocation()), *At(Gun->GetRig()->GetMuzzleLocation())));
+		}
 		float ReadyWalk = 100.0f;
 		W.Run(0.9f, [&]() { Player->MarkCombat(); Player->AddMovementInput(Player->GetActorForwardVector(), 1.0f); Face(); ReadyWalk = FMath::Min(ReadyWalk, InPicture(Gun)); });
 		AddInfo(FString::Printf(TEXT("GUNSEEN %s: relaxed %.0f %% standing, %.0f %% walking at least; at the ready %.0f %% standing, %.0f %% walking at least"),
 			Arch, RelaxedStill, RelaxedWalk, ReadyStill, ReadyWalk));
-		TestTrue(FString::Printf(TEXT("%s relaxed: %.0f %% of the gun in the picture standing, %.0f %% walking (15 at least)"), Arch, RelaxedStill, RelaxedWalk),
-			RelaxedStill >= 15.0f && RelaxedWalk >= 15.0f);
-		TestTrue(FString::Printf(TEXT("%s at the ready: %.0f %% of the gun in the picture standing, %.0f %% walking (15 at least)"), Arch, ReadyStill, ReadyWalk),
-			ReadyStill >= 15.0f && ReadyWalk >= 15.0f);
+		// How much of it must be seen (the owner's hard rule, 2026-11-27: "the entire gun and not 20% of it"; the hip pass
+		// of 2026-11-28 raised the long guns' hold and framed the camera further back in the head). A shouldered long gun's
+		// butt is behind the picture's corner, so: six tenths of a long gun standing, a little less on the move (the heavy
+		// machine gun, most of whose bulk is behind and under its grip: 44 %); a handgun nearly all of it at the ready,
+		// more than half relaxed.
+		const USOGunRigComponent* SeenRig = Gun->GetRig();
+		const bool bHand = SeenRig && SeenRig->IsHandgun(), bBulky = FCString::Strcmp(Arch, TEXT("hmg")) == 0;
+		const float Still = bHand ? 85.0f : bBulky ? 44.0f : 60.0f, Walk = bHand ? 80.0f : bBulky ? 40.0f : 55.0f;
+		const float RelaxStill = bHand ? 60.0f : bBulky ? 50.0f : 60.0f, RelaxWalk = bHand ? 52.0f : bBulky ? 45.0f : 55.0f;
+		TestTrue(FString::Printf(TEXT("%s relaxed: %.0f %% of the gun in the picture standing, %.0f %% walking (%.0f and %.0f at least)"), Arch, RelaxedStill, RelaxedWalk, RelaxStill, RelaxWalk),
+			RelaxedStill >= RelaxStill && RelaxedWalk >= RelaxWalk);
+		TestTrue(FString::Printf(TEXT("%s at the ready: %.0f %% of the gun in the picture standing, %.0f %% walking (%.0f and %.0f at least)"), Arch, ReadyStill, ReadyWalk, Still, Walk),
+			ReadyStill >= Still && ReadyWalk >= Walk);
+		// (and the support hand whole in the picture at the ready, as it is for every gun)
+		// (to within a fiftieth of the picture's height: a handgun's support hand cups the butt at the picture's foot)
+		TestTrue(FString::Printf(TEXT("%s at the ready: the support hand in the picture (its knuckles to %.0f %% down)"), Arch, 100.0f * SupportDown), SupportDown <= 1.02f);
+		// (and the top of the firing fist, where the hand meets the gun under the receiver: before the hip pass the whole
+		// firing hand of every long gun was under the picture's foot. The wrist itself is lower still, as a shouldered
+		// gun's is; a gun whose bulk hangs behind its grip, the heavy machine gun, the launcher, keeps its fist under it)
+		if (!bBulky && FCString::Strcmp(Arch, TEXT("rocket")) != 0 && Player->GetMesh()->GetBoneIndex(TEXT("index_01_R")) != INDEX_NONE)
+		{
+			TestTrue(FString::Printf(TEXT("%s at the ready: the top of the firing fist in the picture (%.0f %% down)"), Arch, 100.0f * FistTop), FistTop <= 1.02f);
+		}
 		Player->CancelCombat();
 		W.Run(0.3f, Face);
 	}
@@ -597,8 +681,9 @@ bool FSOSteadyAtAnyFovTest::RunTest(const FString& Parameters)
 				// (framed: the sight near its class's place in the picture whatever the field of view, the long guns as the
 				// handguns are: FSOStance::FrameDown / FrameAcross; the camera goes at most 5 cm under the eyes (the owner,
 				// 2026-11-23: "it feels like the player is very short"), so narrow, a long gun is seen nearer the picture's foot)
+				// (from 45 % down: the long guns are held higher since 2026-11-28, their sights near 55 %, so more of each is seen)
 				TestTrue(FString::Printf(TEXT("%s: the gun framed in the picture (its sight %.0f %% across, %.0f %% down)"), *Label, 100.0f * Across, 100.0f * Down),
-					Down > 0.55f && Down < (Fov < 90.0f ? 0.93f : 0.8f) && Across > 0.45f && Across < (bLong ? (Fov < 90.0f ? 0.9f : 0.78f) : 0.65f));
+					Down > 0.45f && Down < (Fov < 90.0f ? 0.93f : 0.8f) && Across > 0.45f && Across < (bLong ? (Fov < 90.0f ? 0.9f : 0.78f) : 0.65f));
 			}
 		}
 	}

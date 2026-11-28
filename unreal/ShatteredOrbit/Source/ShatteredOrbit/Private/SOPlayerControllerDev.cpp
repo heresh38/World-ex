@@ -1357,6 +1357,13 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 		float Drop = 0.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("SOEyeDrop="), Drop);
 		const int32 DropTag = FMath::RoundToInt(Drop);
+		// (-SOLookPitch=<deg>: the view pitched for every picture: the framed camera sits back in the head, and looking
+		// down it must not see into its own body)
+		float LookPitch = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SOLookPitch="), LookPitch))
+		{
+			SetControlRotation(FRotator(LookPitch, GetControlRotation().Yaw, 0.0f));
+		}
 		auto GunView = [this, Hero](const FString& Label)
 		{
 			const ASOCharacter* H = Hero();
@@ -1409,7 +1416,7 @@ void ASOPlayerController::SOCaptureSeries(int32 bQuitWhenDone, int32 Set)
 			{
 				H->EyeFromHead.Z -= Drop;
 				*Start = H->GetActorLocation();
-				*Facing = FRotator(0.0f, GetControlRotation().Yaw, 0.0f);
+				*Facing = FRotator(LookPitch, GetControlRotation().Yaw, 0.0f);
 			}
 			SetViewTarget(Hero());
 		});

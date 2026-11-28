@@ -83,6 +83,7 @@ namespace
 				S.ReadyShift = Vec(O, TEXT("readyShift"), S.ReadyShift);
 				S.AimShift = Vec(O, TEXT("aimShift"), S.AimShift);
 				Num(O, TEXT("readyDip"), S.ReadyDip);
+				Num(O, TEXT("readyCrouch"), S.ReadyCrouch);
 				S.HandHold = Vec(O, TEXT("handHold"), S.HandHold);
 				S.HandAimHold = Vec(O, TEXT("handAimHold"), S.HandAimHold);
 				S.RelaxOffset = Vec(O, TEXT("relaxOffset"), S.RelaxOffset);

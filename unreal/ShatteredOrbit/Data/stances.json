@@ -18,11 +18,12 @@
   },
   "classes": {
     "smg": {
-      "readyShift": [2, -3, 7],
+      "readyCrouch": 4,
+      "readyShift": [2, -3, 11],
       "aimShift": [1.5, -2.5, 7.5],
       "readyDip": 0,
       "relaxOffset": [-2, 4, 0],
-      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxRot": [-4, -20, -10], "frameDown": 0.55, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 9,
       "elbowSwing": [0.7, 0.35],
       "elbowSwingAim": [0.6, 0.3],
       "wristShare": [0.0, 0.0],
@@ -42,11 +43,12 @@
       "turnStep": 18
     },
     "rifle": {
-      "readyShift": [2, 0, 7],
+      "readyCrouch": 4,
+      "readyShift": [2, 0, 11],
       "aimShift": [1.5, -2.5, 7],
       "readyDip": 0,
       "relaxOffset": [-2, 4, 0],
-      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxRot": [-4, -20, -10], "frameDown": 0.55, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 14,
       "elbowSwing": [0.7, 0.35],
       "elbowSwingAim": [0.6, 0.3],
       "wristShare": [0.0, 0.0],
@@ -66,11 +68,12 @@
       "turnStep": 18
     },
     "lmg": {
-      "readyShift": [2, 0, 5.5],
+      "readyCrouch": 6,
+      "readyShift": [2, 0, 11],
       "aimShift": [1, -2, 5.5],
       "readyDip": 2,
       "relaxOffset": [-2, 4, 0],
-      "relaxRot": [-3, -17, -8], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxRot": [-3, -17, -8], "frameDown": 0.48, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 14,
       "elbowSwing": [0.65, 0.55],
       "elbowSwingAim": [0.55, 0.5],
       "wristShare": [0.0, 0.0],
@@ -90,11 +93,12 @@
       "turnStep": 18
     },
     "sniper": {
-      "readyShift": [2, 0, 5],
+      "readyCrouch": 5,
+      "readyShift": [2, 0, 10],
       "aimShift": [1.5, -3, 8],
       "readyDip": 0,
       "relaxOffset": [-2, 4, 0],
-      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8, "relaxReach": 0.87,
+      "relaxRot": [-4, -20, -10], "frameDown": 0.55, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 14, "relaxReach": 0.87,
       "elbowSwing": [0.7, 0.35],
       "elbowSwingAim": [0.6, 0.3],
       "wristShare": [0.0, 0.0],
@@ -114,11 +118,12 @@
       "turnStep": 18
     },
     "shotgun": {
-      "readyShift": [2, 0, 7],
+      "readyCrouch": 4,
+      "readyShift": [2, 0, 11],
       "aimShift": [1.5, -2.5, 7],
       "readyDip": 0,
       "relaxOffset": [-2, 4, 0],
-      "relaxRot": [-4, -20, -10], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8,
+      "relaxRot": [-4, -20, -10], "frameDown": 0.5, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 14,
       "elbowSwing": [0.7, 0.4],
       "elbowSwingAim": [0.6, 0.35],
       "wristShare": [0.0, 0.0],
@@ -140,8 +145,8 @@
     "pistol": {
       "handHold": [54, 4, 3],
       "handAimHold": [58, 3, 6], "frameDown": 0.65, "frameDrop": 5,
-      "relaxOffset": [-2, 8, -4],
-      "relaxRot": [-14, -14, -10],
+      "relaxOffset": [-2, 8, -1],
+      "relaxRot": [-9, -14, -10],
       "elbowSwing": [0.5, 0.45],
       "elbowSwingAim": [0.45, 0.4],
       "wristShare": [0.3, 0.0],
@@ -161,11 +166,12 @@
       "turnStep": 18
     },
     "heavy": {
-      "readyShift": [2, 0, 5.5],
+      "readyCrouch": 5.5,
+      "readyShift": [2, 0, 12.5],
       "aimShift": [0.5, -1.5, 6],
       "readyDip": 2,
       "relaxOffset": [-2, 0, -2],
-      "relaxRot": [-5, -17, -8], "frameDown": 0.7, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 8, "relaxPivot": 1, "relaxReach": 0.88,
+      "relaxRot": [-5, -17, -8], "frameDown": 0.48, "frameDrop": 5, "frameAcross": 0.62, "frameSide": 4, "frameBack": 14, "relaxPivot": 1, "relaxReach": 0.88,
       "elbowSwing": [0.65, 0.55],
       "elbowSwingAim": [0.55, 0.5],
       "wristShare": [0.0, 0.0],
